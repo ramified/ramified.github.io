@@ -195,6 +195,7 @@
   };
   const ONLINE_CLIENT_ID_KEY = 'ramified-minigames-online-client-id';
   const ONLINE_MAX_SNAPSHOT_BYTES = 760 * 1024;
+  const ONLINE_JOIN_RETRY_ATTEMPTS = 4;
 
   function gluePair(group, first, second, options = {}) {
     const pair = { group, first, second };
@@ -690,6 +691,8 @@
       reconnectTimer: null,
       applyingRemoteState: false,
       pendingStateMessages: [],
+      roomDisplaySettings: null,
+      pendingJoin: null,
       statusState: 'offline',
       statusText: ''
     };
@@ -884,6 +887,7 @@
       return;
     }
     const snapshot = debugExportPayload();
+    onlineState.roomDisplaySettings = onlineDisplaySettingsFromSnapshot(snapshot);
     const snapshotBytes = jsonByteLength(snapshot);
     if (snapshotBytes > ONLINE_MAX_SNAPSHOT_BYTES) {
       syncOnlineStatus(`Current game snapshot is too large (${snapshotBytes} bytes).`, 'error');
@@ -912,7 +916,7 @@
       onlineState.version = Number.isInteger(payload.version) ? payload.version : 0;
       onlineState.gameMode = gameModeFromUrlParam(payload.gameMode) || gameModeValue(game);
       syncOnlineRoleOptions(onlineState.gameMode);
-      await connectOnlineSocket(code, payload.role || requestedRole);
+      await connectOnlineSocketWithRetry(code, payload.role || requestedRole);
     } catch (error) {
       syncOnlineStatus(error && error.message ? error.message : 'Room creation failed.', 'error');
       syncOnlineControls();
@@ -948,7 +952,7 @@
     try {
       syncOnlineStatus('Joining room...', 'idle');
       syncOnlineControls();
-      await connectOnlineSocket(code, selectedOnlineRole());
+      await connectOnlineSocketWithRetry(code, selectedOnlineRole());
     } catch (error) {
       syncOnlineStatus(error && error.message ? error.message : 'Join failed.', 'error');
       syncOnlineControls();
@@ -975,6 +979,7 @@
       closeOnlineSocket({ keepRoom: true, intentional: true });
       const code = normalizeOnlineRoomCode(roomCode);
       clearQueuedOnlineStateMessages();
+      onlineState.roomDisplaySettings = null;
       const wasJoinedRoom = onlineState.joined && onlineState.roomCode === code;
       onlineState.roomCode = wasJoinedRoom ? code : '';
       onlineState.pendingRoomCode = code;
@@ -994,19 +999,20 @@
       }
       onlineState.intentionalClose = false;
       onlineState.socket = socket;
-      const timeout = setTimeout(() => {
-        if (socket.readyState !== WebSocket.OPEN) {
-          reject(new Error('WebSocket connection timed out.'));
+      onlineState.pendingJoin = {
+        socket,
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+          rejectPendingOnlineJoin(socket, new Error('Room join timed out.'));
           try {
             socket.close(4000, 'timeout');
           } catch (_) {
             // Ignore close failures for already-closed sockets.
           }
-        }
-      }, 8000);
+        }, 9000)
+      };
       socket.addEventListener('open', () => {
-        clearTimeout(timeout);
-        onlineState.connecting = false;
         onlineSendRaw({
           type: 'hello',
           clientId: onlineState.clientId,
@@ -1018,13 +1024,12 @@
       });
       socket.addEventListener('message', (event) => handleOnlineSocketMessage(event));
       socket.addEventListener('error', () => {
-        clearTimeout(timeout);
         onlineState.connecting = false;
+        rejectPendingOnlineJoin(socket, new Error('WebSocket error.'));
         syncOnlineStatus('WebSocket error.', 'error');
         syncOnlineControls();
       });
       socket.addEventListener('close', (event) => {
-        clearTimeout(timeout);
         const wasIntentional = !!(socket.__ramifiedIntentionalClose || (onlineState && onlineState.intentionalClose));
         if (onlineState && onlineState.socket === socket) onlineState.socket = null;
         if (!onlineState) return;
@@ -1043,6 +1048,7 @@
         }
         const reason = event && event.reason ? event.reason : 'connection closed';
         if (!onlineState.joined) {
+          rejectPendingOnlineJoin(socket, new Error(reason));
           const failedCode = onlineState.pendingRoomCode || onlineState.roomCode;
           onlineState.pendingRoomCode = '';
           onlineState.roomCode = '';
@@ -1060,6 +1066,57 @@
     });
   }
 
+  async function connectOnlineSocketWithRetry(roomCode, requestedRole = 'auto', attempts = ONLINE_JOIN_RETRY_ATTEMPTS) {
+    let lastError = null;
+    const code = normalizeOnlineRoomCode(roomCode);
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        if (attempt > 1) {
+          syncOnlineStatus(`Connection closed; retrying ${attempt}/${attempts}...`, 'idle');
+          syncOnlineControls();
+        }
+        await connectOnlineSocket(code, requestedRole);
+        return;
+      } catch (error) {
+        lastError = error;
+        if (!shouldRetryOnlineJoin(error) || attempt >= attempts) break;
+        await waitOnlineRetryDelay(350 * attempt);
+      }
+    }
+    throw lastError || new Error('Could not join room.');
+  }
+
+  function shouldRetryOnlineJoin(error) {
+    const message = String(error && error.message || '').trim().toLowerCase();
+    if (!message) return true;
+    if (message.includes('room not found') || message.includes('unsupported') || message.includes('invalid')) return false;
+    return message.includes('connection closed')
+      || message.includes('websocket')
+      || message.includes('timed out')
+      || message.includes('abnormal')
+      || message.includes('network');
+  }
+
+  function waitOnlineRetryDelay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms || 0)));
+  }
+
+  function resolvePendingOnlineJoin(socket) {
+    if (!onlineState || !onlineState.pendingJoin || onlineState.pendingJoin.socket !== socket) return;
+    const pending = onlineState.pendingJoin;
+    onlineState.pendingJoin = null;
+    if (pending.timer) clearTimeout(pending.timer);
+    pending.resolve();
+  }
+
+  function rejectPendingOnlineJoin(socket, error) {
+    if (!onlineState || !onlineState.pendingJoin || onlineState.pendingJoin.socket !== socket) return;
+    const pending = onlineState.pendingJoin;
+    onlineState.pendingJoin = null;
+    if (pending.timer) clearTimeout(pending.timer);
+    pending.reject(error instanceof Error ? error : new Error(String(error || 'Could not join room.')));
+  }
+
   function closeOnlineSocket(options = {}) {
     if (!onlineState) return;
     if (onlineState.reconnectTimer) {
@@ -1070,6 +1127,7 @@
     const socket = onlineState.socket;
     onlineState.socket = null;
     onlineState.connecting = false;
+    if (socket) rejectPendingOnlineJoin(socket, new Error('Connection replaced.'));
     if (socket && socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) {
       try {
         socket.__ramifiedIntentionalClose = true;
@@ -1086,6 +1144,7 @@
       onlineState.gameMode = '';
       onlineState.version = 0;
       onlineState.joined = false;
+      onlineState.roomDisplaySettings = null;
     }
   }
 
@@ -1133,6 +1192,7 @@
       onlineState.roomCode = normalizeOnlineRoomCode(message.roomCode || onlineState.pendingRoomCode || onlineState.roomCode);
       onlineState.pendingRoomCode = '';
       onlineState.joined = true;
+      onlineState.connecting = false;
       onlineState.role = message.role || 'spectator';
       onlineState.version = normalizeOnlineVersion(message.version, onlineState.version);
       onlineState.gameMode = gameModeFromUrlParam(message.gameMode) || onlineState.gameMode || selectedGameMode();
@@ -1141,6 +1201,7 @@
       syncOnlineStatus('Joined room.', 'idle');
       syncOnlineControls();
       syncControls();
+      resolvePendingOnlineJoin(onlineState.socket);
       return;
     }
     if (message.type === 'state') {
@@ -1228,7 +1289,9 @@
     try {
       const imported = gameStateFromDebugImportPayload(message.snapshot);
       onlineState.gameMode = gameModeFromUrlParam(message.gameMode || message.snapshot.gameMode) || gameModeValue(imported.state);
+      if (!action) onlineState.roomDisplaySettings = onlineDisplaySettingsFromSnapshot(message.snapshot);
       applyImportedDebugState(imported, {
+        applyDisplaySettings: shouldApplyOnlineSnapshotDisplaySettings(message, action),
         recordHistory: false,
         status: 'online state synced',
         info: onlineGameSummary(imported.state),
@@ -1554,7 +1617,7 @@
       syncOnlineStatus('Spectators cannot submit moves.', 'error');
       return;
     }
-    const snapshot = debugExportPayload();
+    const snapshot = onlineSnapshotWithRoomDisplaySettings(debugExportPayload());
     const snapshotBytes = jsonByteLength(snapshot);
     if (snapshotBytes > ONLINE_MAX_SNAPSHOT_BYTES) {
       syncOnlineStatus(`Move not sent: snapshot is too large (${snapshotBytes} bytes).`, 'error');
@@ -1581,6 +1644,62 @@
     const expected = onlineExpectedRoleForGame(game, actionType);
     if (expected && onlineState.role !== expected) return `${onlineRoleLabel(expected)} to move`;
     return '';
+  }
+
+  function onlineDisplaySettingsFromSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null;
+    const source = snapshot.settings && typeof snapshot.settings === 'object' && !Array.isArray(snapshot.settings)
+      ? snapshot.settings
+      : {};
+    const settings = {};
+    [
+      'displayStyle',
+      'pieceRadiusPercent',
+      'fideChessPieceDisplay',
+      'fideChessPuzzleAttackBorders',
+      'moveNumberLabels'
+    ].forEach((key) => {
+      if (source[key] != null) settings[key] = clonePlain(source[key]);
+    });
+    [
+      'displayStyle',
+      'placementDisplayStyle',
+      'boardDisplay',
+      'pieceRadiusPercent',
+      'pieceSizePercent',
+      'pieceSize',
+      'fideChessPieceDisplay',
+      'chessPieceDisplay',
+      'pieceDisplay',
+      'fideChessPuzzleAttackBorders',
+      'puzzleAttackBorders',
+      'attackBorders',
+      'moveNumberLabels'
+    ].forEach((key) => {
+      if (snapshot[key] != null && settings[key] == null) settings[key] = clonePlain(snapshot[key]);
+    });
+    return Object.keys(settings).length ? settings : null;
+  }
+
+  function onlineSnapshotWithRoomDisplaySettings(snapshot) {
+    if (!onlineState || !onlineState.roomDisplaySettings || !snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+      return snapshot;
+    }
+    const next = { ...snapshot };
+    const existing = snapshot.settings && typeof snapshot.settings === 'object' && !Array.isArray(snapshot.settings)
+      ? snapshot.settings
+      : {};
+    next.settings = {
+      ...existing,
+      ...clonePlain(onlineState.roomDisplaySettings)
+    };
+    return next;
+  }
+
+  function shouldApplyOnlineSnapshotDisplaySettings(message, action) {
+    if (action) return false;
+    const reason = String(message && message.reason || '').trim().toLowerCase();
+    return !reason || reason === 'join' || reason === 'resync';
   }
 
   function onlineExpectedRoleForGame(state, actionType = 'move') {
@@ -2902,8 +3021,10 @@
     } else if (refs.gomokuDisplay && isFideChessPuzzle(imported.state)) {
       refs.gomokuDisplay.value = 'center';
     }
-    if (refs.moveNumberLabels && typeof imported.moveNumberLabels === 'boolean') {
-      refs.moveNumberLabels.checked = imported.moveNumberLabels;
+    const moveNumberLabels = firstPresentValue(imported, ['moveNumberLabels', 'showMoveNumberLabels'])
+      ?? firstPresentValue(settings, ['moveNumberLabels', 'showMoveNumberLabels']);
+    if (refs.moveNumberLabels && moveNumberLabels != null) {
+      refs.moveNumberLabels.checked = normalizeBooleanSetting(moveNumberLabels, refs.moveNumberLabels.checked);
     }
     const pieceRadius = firstPresentValue(imported, ['pieceRadiusPercent', 'pieceSizePercent', 'pieceSize'])
       ?? firstPresentValue(settings, ['pieceRadiusPercent', 'pieceSizePercent', 'pieceSize']);
@@ -5920,8 +6041,10 @@
     syncConnectFourFallInputFromGame();
     syncGoKomiInputFromGame();
     syncGoScoringMethodInputFromGame();
-    applyDefaultPlacementPieceSizeForMode(gameModeValue(game));
-    syncImportedDisplaySettings(imported);
+    if (options.applyDisplaySettings !== false) {
+      applyDefaultPlacementPieceSizeForMode(gameModeValue(game));
+      syncImportedDisplaySettings(imported);
+    }
     render();
     const info = options.info || debugExportInfo(game);
     syncStatus(options.status || 'status imported', info, debugMode ? 'debug' : phaseBadge(game.phase));
