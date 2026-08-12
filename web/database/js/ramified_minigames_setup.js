@@ -184,14 +184,16 @@
     GAME_MODES.GO,
     GAME_MODES.CONNECT_FOUR,
     GAME_MODES.REVERSI,
-    GAME_MODES.FIDE_CHESS
+    GAME_MODES.FIDE_CHESS,
+    GAME_MODES.CHINESE_CHECKERS
   ]);
   const ONLINE_PLAYER_ROLES_BY_MODE = {
     [GAME_MODES.GOMOKU]: ['black', 'white'],
     [GAME_MODES.GO]: ['black', 'white'],
     [GAME_MODES.CONNECT_FOUR]: ['red', 'yellow'],
     [GAME_MODES.REVERSI]: ['black', 'white'],
-    [GAME_MODES.FIDE_CHESS]: ['white', 'black']
+    [GAME_MODES.FIDE_CHESS]: ['white', 'black'],
+    [GAME_MODES.CHINESE_CHECKERS]: CHINESE_CHECKERS_DEFAULT_COLORS
   };
   const ONLINE_CLIENT_ID_KEY = 'ramified-minigames-online-client-id';
   const ONLINE_MAX_SNAPSHOT_BYTES = 760 * 1024;
@@ -383,7 +385,6 @@
   let chineseCheckersSelectedPlayers = null;
   let chineseCheckersSelectedPlayersPresetKey = '';
   let canvasDisplayMode = 'normal';
-  let fullscreenTarget = 'canvas';
   let fullscreenReturnMode = 'normal';
   let fullscreenActionExpanded = false;
   let fullscreenActionAutoCollapseTimer = null;
@@ -396,7 +397,6 @@
     refs.canvas = document.getElementById('mosaic-canvas');
     refs.ctx = refs.canvas ? refs.canvas.getContext('2d') : null;
     refs.canvasWrap = document.getElementById('canvas-wrap');
-    refs.canvasPanel = refs.canvas && refs.canvas.closest ? refs.canvas.closest('.canvas-panel') : document.querySelector('.canvas-panel');
     refs.canvasViewButtons = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-canvas-display-mode]')) : [];
     refs.fullscreenActionShell = document.getElementById('fullscreen-action-shell');
     refs.fullscreenActionToggle = document.getElementById('fullscreen-action-toggle');
@@ -446,6 +446,7 @@
     refs.goConfirmScore = document.getElementById('go-confirm-score');
     refs.connectFourFall = document.getElementById('connect-four-fall-dir');
     refs.connectFourAlignFall = document.getElementById('connect-four-align-fall');
+    refs.connectFourHoleEdit = document.getElementById('connect-four-hole-edit');
     refs.chineseCheckersMoveTime = document.getElementById('chinese-checkers-move-time');
     refs.chineseCheckersMoveTimeValue = document.getElementById('chinese-checkers-move-time-value');
     refs.chineseCheckersJumpPause = document.getElementById('chinese-checkers-jump-pause');
@@ -467,9 +468,12 @@
     refs.canvasStartBegin = document.getElementById('canvas-start-begin');
     refs.setupAlert = document.getElementById('game-setup-alert');
     refs.onlineRoomCode = document.getElementById('online-room-code');
-    refs.onlineRole = document.getElementById('online-role');
+    refs.onlineRoleOptions = document.getElementById('online-role-options');
     refs.onlineCreateRoom = document.getElementById('online-create-room');
     refs.onlineJoinRoom = document.getElementById('online-join-room');
+    refs.onlineChineseStartRow = document.getElementById('online-chinese-start-row');
+    refs.onlineKeepUnclaimedColors = document.getElementById('online-keep-unclaimed-colors');
+    refs.onlineStartClaimedColors = document.getElementById('online-start-claimed-colors');
     refs.onlineLeaveRoom = document.getElementById('online-leave-room');
     refs.onlineStatus = document.getElementById('online-status');
     refs.speed = document.getElementById('animation-speed');
@@ -479,7 +483,6 @@
     refs.debugToggle = document.getElementById('debug-toggle');
     refs.debugTools = document.getElementById('debug-tools');
     refs.debugTileValue = document.getElementById('debug-tile-value');
-    refs.fullscreenTarget = document.getElementById('fullscreen-target');
     refs.sokobanObjectSize = document.getElementById('sokoban-object-size');
     refs.sokobanObjectSizeValue = document.getElementById('sokoban-object-size-value');
     refs.sokobanGlowInner = document.getElementById('sokoban-glow-inner');
@@ -562,6 +565,7 @@
     if (refs.goConfirmScore) refs.goConfirmScore.addEventListener('click', confirmGoScoreFromUi);
     if (refs.connectFourFall) refs.connectFourFall.addEventListener('change', handleConnectFourFallChange);
     if (refs.connectFourAlignFall) refs.connectFourAlignFall.addEventListener('change', handleConnectFourAlignFallChange);
+    if (refs.connectFourHoleEdit) refs.connectFourHoleEdit.addEventListener('change', handleConnectFourHoleEditChange);
     if (refs.chineseCheckersMoveTime) refs.chineseCheckersMoveTime.addEventListener('input', syncChineseCheckersTimingOutput);
     if (refs.chineseCheckersJumpPause) refs.chineseCheckersJumpPause.addEventListener('input', syncChineseCheckersTimingOutput);
     if (refs.chineseCheckersFullHints) refs.chineseCheckersFullHints.addEventListener('change', handleChineseCheckersFullHintsChange);
@@ -573,8 +577,9 @@
     if (refs.canvasStartBegin) refs.canvasStartBegin.addEventListener('click', handleCanvasStartBeginClick);
     if (refs.onlineCreateRoom) refs.onlineCreateRoom.addEventListener('click', createOnlineRoomFromUi);
     if (refs.onlineJoinRoom) refs.onlineJoinRoom.addEventListener('click', joinOnlineRoomFromUi);
+    if (refs.onlineStartClaimedColors) refs.onlineStartClaimedColors.addEventListener('click', startOnlineChineseCheckersWithClaimedColorsFromUi);
     if (refs.onlineLeaveRoom) refs.onlineLeaveRoom.addEventListener('click', leaveOnlineRoomFromUi);
-    if (refs.onlineRole) refs.onlineRole.addEventListener('change', syncOnlineControls);
+    if (refs.onlineRoleOptions) refs.onlineRoleOptions.addEventListener('change', handleOnlineRoleOptionsChange);
     if (refs.onlineRoomCode) refs.onlineRoomCode.addEventListener('input', syncOnlineControls);
     if (refs.speed) refs.speed.addEventListener('input', syncSpeedOutput);
     if (refs.stepMode) refs.stepMode.addEventListener('change', syncControls);
@@ -608,7 +613,6 @@
     refs.canvasViewButtons.forEach((button) => {
       button.addEventListener('click', () => handleCanvasDisplayModeButton(button));
     });
-    if (refs.fullscreenTarget) refs.fullscreenTarget.addEventListener('change', handleFullscreenTargetChange);
     if (refs.fullscreenActionToggle) refs.fullscreenActionToggle.addEventListener('click', toggleFullscreenActionBar);
     if (refs.fullscreenUndo) refs.fullscreenUndo.addEventListener('click', undoFromFullscreenAction);
     if (refs.fullscreenRedo) refs.fullscreenRedo.addEventListener('click', redoFromFullscreenAction);
@@ -682,6 +686,10 @@
       roomCode: '',
       pendingRoomCode: '',
       role: '',
+      roles: [],
+      roomRoles: {},
+      readyToPlay: true,
+      unclaimedRoles: [],
       gameMode: '',
       version: 0,
       socket: null,
@@ -734,7 +742,16 @@
   }
 
   function onlineModeRoles(mode) {
-    return ONLINE_PLAYER_ROLES_BY_MODE[mode] ? ONLINE_PLAYER_ROLES_BY_MODE[mode].slice() : [];
+    const normalized = gameModeFromUrlParam(mode) || mode;
+    if (normalized === GAME_MODES.CHINESE_CHECKERS) {
+      if (isChineseCheckersGame(game)) return chineseCheckersPlayerColors(game);
+      try {
+        return selectedChineseCheckersPlayerColors(selectedPreset());
+      } catch (_) {
+        return CHINESE_CHECKERS_DEFAULT_COLORS.slice();
+      }
+    }
+    return ONLINE_PLAYER_ROLES_BY_MODE[normalized] ? ONLINE_PLAYER_ROLES_BY_MODE[normalized].slice() : [];
   }
 
   function onlineModeSupported(mode) {
@@ -756,21 +773,45 @@
   }
 
   function syncOnlineRoleOptions(mode = null) {
-    if (!refs.onlineRole) return;
+    if (!refs.onlineRoleOptions) return;
     const targetMode = mode || (onlineState && onlineState.gameMode) || selectedGameMode();
-    const previous = refs.onlineRole.value || 'auto';
     const roles = onlineModeRoles(targetMode);
-    refs.onlineRole.innerHTML = '';
-    const options = [{ value: 'auto', label: 'auto side' }]
-      .concat(roles.map((role) => ({ value: role, label: onlineRoleLabel(role) })))
-      .concat([{ value: 'spectator', label: 'spectator' }]);
-    options.forEach((entry) => {
-      const option = document.createElement('option');
-      option.value = entry.value;
-      option.textContent = entry.label;
-      refs.onlineRole.appendChild(option);
+    const previousAll = selectedOnlineRolePreferences();
+    const previous = targetMode === GAME_MODES.CHINESE_CHECKERS ? previousAll : previousAll.slice(0, 1);
+    refs.onlineRoleOptions.innerHTML = '';
+    if (!roles.length) {
+      refs.onlineRoleOptions.textContent = 'auto side';
+      return;
+    }
+    roles.forEach((role) => {
+      const normalized = normalizePlacementColor(role);
+      if (!normalized) return;
+      const label = document.createElement('label');
+      label.className = 'opt-row';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = normalized;
+      input.dataset.onlineRole = normalized;
+      input.checked = previous.includes(normalized);
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(` ${onlineRoleLabel(normalized)}`));
+      refs.onlineRoleOptions.appendChild(label);
     });
-    refs.onlineRole.value = options.some((entry) => entry.value === previous) ? previous : 'auto';
+  }
+
+  function handleOnlineRoleOptionsChange(event) {
+    const target = event && event.target;
+    if (!target || target.type !== 'checkbox' || !target.checked) {
+      syncOnlineControls();
+      return;
+    }
+    const mode = (onlineState && onlineState.gameMode) || selectedGameMode();
+    if (mode !== GAME_MODES.CHINESE_CHECKERS && refs.onlineRoleOptions) {
+      Array.from(refs.onlineRoleOptions.querySelectorAll('input[type=checkbox]')).forEach((input) => {
+        if (input !== target) input.checked = false;
+      });
+    }
+    syncOnlineControls();
   }
 
   function onlineRoleLabel(role) {
@@ -779,8 +820,17 @@
     if (text === 'black') return 'black';
     if (text === 'red') return 'red';
     if (text === 'yellow') return 'yellow';
+    if (text === 'blue') return 'blue';
+    if (text === 'green') return 'green';
     if (text === 'spectator') return 'spectator';
     return text || 'auto side';
+  }
+
+  function onlineRolesLabel(roles) {
+    const list = normalizeOnlineRoles(roles);
+    if (!list.length) return 'auto side';
+    if (list.length === 1 && list[0] === 'spectator') return 'spectator';
+    return list.map(onlineRoleLabel).join(', ');
   }
 
   function onlineRoomCodeFromInput() {
@@ -788,12 +838,51 @@
   }
 
   function normalizeOnlineRoomCode(value) {
-    return String(value || '').trim().toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, 8);
+    return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  }
+
+  function normalizeOnlineRoles(value) {
+    const result = [];
+    const add = (roleValue) => {
+      const role = String(roleValue || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').slice(0, 32);
+      if (role && !result.includes(role)) result.push(role);
+    };
+    if (Array.isArray(value)) value.forEach(add);
+    else if (typeof value === 'string') value.split(/[,\s]+/).forEach(add);
+    return result;
+  }
+
+  function selectedOnlineRolePreferences() {
+    if (!refs.onlineRoleOptions || !refs.onlineRoleOptions.querySelectorAll) return [];
+    const roles = onlineModeRoles((onlineState && onlineState.gameMode) || selectedGameMode());
+    return Array.from(refs.onlineRoleOptions.querySelectorAll('input[type=checkbox]:checked'))
+      .map((input) => normalizePlacementColor(input.value || input.dataset.onlineRole))
+      .filter((role, index, list) => role && roles.includes(role) && list.indexOf(role) === index);
   }
 
   function selectedOnlineRole() {
-    const value = refs.onlineRole ? refs.onlineRole.value : 'auto';
-    return value || 'auto';
+    const selected = selectedOnlineRolePreferences();
+    return selected[0] || 'auto';
+  }
+
+  function selectedOnlineRolesRequested() {
+    return selectedOnlineRolePreferences();
+  }
+
+  function onlineAssignedRolesFromMessage(message) {
+    const roles = normalizeOnlineRoles(message && (message.rolesAssigned || message.assignedRoles));
+    if (roles.length) return roles;
+    const role = normalizeOnlineRoles(message && message.role);
+    return role.length ? role : ['spectator'];
+  }
+
+  function onlineStateHasPlayableRole() {
+    return !!(onlineState && Array.isArray(onlineState.roles) && onlineState.roles.some((role) => role && role !== 'spectator'));
+  }
+
+  function onlineStateOwnsRole(role) {
+    const normalized = normalizePlacementColor(role);
+    return !!(normalized && onlineState && Array.isArray(onlineState.roles) && onlineState.roles.includes(normalized));
   }
 
   function onlineIsInRoom() {
@@ -817,9 +906,10 @@
   function onlineStatusText() {
     if (!onlineState) return 'Online play unavailable.';
     if (onlineState.joined && onlineState.roomCode) {
-      const role = onlineState.role ? ` as ${onlineRoleLabel(onlineState.role)}` : '';
+      const role = onlineState.roles && onlineState.roles.length ? ` as ${onlineRolesLabel(onlineState.roles)}` : '';
       const version = Number.isInteger(onlineState.version) ? `, v${onlineState.version}` : '';
-      return `Room ${onlineState.roomCode}${role}${version}. ${onlineState.statusText || ''}`.trim();
+      const waiting = onlineState.readyToPlay === false ? ' Waiting for colors.' : '';
+      return `Room ${onlineState.roomCode}${role}${version}.${waiting} ${onlineState.statusText || ''}`.trim();
     }
     if (onlineState.connecting && onlineState.pendingRoomCode) {
       return `Room ${onlineState.pendingRoomCode}. ${onlineState.statusText || 'Connecting...'}`.trim();
@@ -847,7 +937,17 @@
     if (refs.onlineJoinRoom) refs.onlineJoinRoom.disabled = !configured || active || roomInput.length < 4;
     if (refs.onlineLeaveRoom) refs.onlineLeaveRoom.disabled = !active;
     if (refs.onlineRoomCode) refs.onlineRoomCode.disabled = active;
-    if (refs.onlineRole) refs.onlineRole.disabled = active;
+    if (refs.onlineRoleOptions && refs.onlineRoleOptions.querySelectorAll) {
+      Array.from(refs.onlineRoleOptions.querySelectorAll('input[type=checkbox]')).forEach((input) => {
+        input.disabled = active;
+      });
+    }
+    const waitingChinese = onlineIsInRoom()
+      && onlineState.readyToPlay === false
+      && onlineState.gameMode === GAME_MODES.CHINESE_CHECKERS;
+    if (refs.onlineChineseStartRow) refs.onlineChineseStartRow.hidden = !waitingChinese;
+    if (refs.onlineStartClaimedColors) refs.onlineStartClaimedColors.disabled = !waitingChinese || !onlineStateHasPlayableRole();
+    if (refs.onlineKeepUnclaimedColors) refs.onlineKeepUnclaimedColors.disabled = !waitingChinese || !onlineStateHasPlayableRole();
     if (refs.onlineStatus) {
       refs.onlineStatus.textContent = onlineStatusText();
       refs.onlineStatus.dataset.state = onlineStatusDataState();
@@ -874,14 +974,14 @@
       return;
     }
     if (!onlineSelectedModeSupported()) {
-      syncOnlineStatus('Online play supports Gomoku, Go, Connect Four, Reversi, and non-puzzle FIDE Chess.', 'error');
+      syncOnlineStatus('Online play supports Gomoku, Go, Connect Four, Reversi, Chinese Checkers, and non-puzzle FIDE Chess.', 'error');
       syncStatus('online unsupported', 'choose a supported two-player game', 'warn');
       syncOnlineControls();
       return;
     }
     if (!ensureOnlineRoomGameStarted()) return;
     if (!onlineStateSupported(game)) {
-      syncOnlineStatus('Online play supports Gomoku, Go, Connect Four, Reversi, and non-puzzle FIDE Chess.', 'error');
+      syncOnlineStatus('Online play supports Gomoku, Go, Connect Four, Reversi, Chinese Checkers, and non-puzzle FIDE Chess.', 'error');
       syncStatus('online unsupported', 'choose a supported two-player game', 'warn');
       syncOnlineControls();
       return;
@@ -893,7 +993,8 @@
       syncOnlineStatus(`Current game snapshot is too large (${snapshotBytes} bytes).`, 'error');
       return;
     }
-    const requestedRole = selectedOnlineRole();
+    const rolesRequested = selectedOnlineRolesRequested();
+    const requestedRole = rolesRequested[0] || 'auto';
     syncOnlineStatus('Creating room...', 'idle');
     syncOnlineControls();
     try {
@@ -903,6 +1004,7 @@
         body: JSON.stringify({
           clientId: onlineState.clientId,
           role: requestedRole,
+          rolesRequested,
           gameMode: gameModeValue(game),
           snapshot,
           summary: onlineGameSummary(game)
@@ -915,8 +1017,13 @@
       if (refs.onlineRoomCode) refs.onlineRoomCode.value = code;
       onlineState.version = Number.isInteger(payload.version) ? payload.version : 0;
       onlineState.gameMode = gameModeFromUrlParam(payload.gameMode) || gameModeValue(game);
+      onlineState.roles = onlineAssignedRolesFromMessage(payload);
+      onlineState.role = onlineState.roles[0] || 'spectator';
+      onlineState.roomRoles = payload.roles && typeof payload.roles === 'object' ? { ...payload.roles } : {};
+      onlineState.readyToPlay = payload.readyToPlay !== false;
+      onlineState.unclaimedRoles = normalizeOnlineRoles(payload.unclaimedRoles);
       syncOnlineRoleOptions(onlineState.gameMode);
-      await connectOnlineSocketWithRetry(code, payload.role || requestedRole);
+      await connectOnlineSocketWithRetry(code, onlineState.roles.length ? onlineState.roles : rolesRequested);
     } catch (error) {
       syncOnlineStatus(error && error.message ? error.message : 'Room creation failed.', 'error');
       syncOnlineControls();
@@ -952,7 +1059,7 @@
     try {
       syncOnlineStatus('Joining room...', 'idle');
       syncOnlineControls();
-      await connectOnlineSocketWithRetry(code, selectedOnlineRole());
+      await connectOnlineSocketWithRetry(code, selectedOnlineRolesRequested());
     } catch (error) {
       syncOnlineStatus(error && error.message ? error.message : 'Join failed.', 'error');
       syncOnlineControls();
@@ -970,7 +1077,7 @@
     });
   }
 
-  function connectOnlineSocket(roomCode, requestedRole = 'auto') {
+  function connectOnlineSocket(roomCode, requestedRoles = []) {
     return new Promise((resolve, reject) => {
       if (!onlineState || !onlineState.baseUrl) {
         reject(new Error('Online Worker URL is not configured.'));
@@ -984,6 +1091,10 @@
       onlineState.roomCode = wasJoinedRoom ? code : '';
       onlineState.pendingRoomCode = code;
       onlineState.role = '';
+      onlineState.roles = [];
+      onlineState.roomRoles = {};
+      onlineState.readyToPlay = true;
+      onlineState.unclaimedRoles = [];
       onlineState.joined = false;
       onlineState.connecting = true;
       onlineState.gameMode = onlineState.gameMode || selectedGameMode();
@@ -1013,10 +1124,12 @@
         }, 9000)
       };
       socket.addEventListener('open', () => {
+        const rolesRequested = normalizeOnlineRoles(requestedRoles).filter((role) => role !== 'auto' && role !== 'spectator');
         onlineSendRaw({
           type: 'hello',
           clientId: onlineState.clientId,
-          role: requestedRole || 'auto'
+          role: rolesRequested[0] || 'auto',
+          rolesRequested
         });
         syncOnlineStatus('Connected; waiting for room state...', 'idle');
         syncOnlineControls();
@@ -1040,6 +1153,10 @@
             onlineState.pendingRoomCode = '';
             onlineState.roomCode = '';
             onlineState.role = '';
+            onlineState.roles = [];
+            onlineState.roomRoles = {};
+            onlineState.readyToPlay = true;
+            onlineState.unclaimedRoles = [];
             onlineState.joined = false;
           }
           syncOnlineStatus(leftRoom ? 'Left online room.' : 'Ready to create or join an online room.', onlineState.baseUrl ? 'idle' : 'offline');
@@ -1053,6 +1170,10 @@
           onlineState.pendingRoomCode = '';
           onlineState.roomCode = '';
           onlineState.role = '';
+          onlineState.roles = [];
+          onlineState.roomRoles = {};
+          onlineState.readyToPlay = true;
+          onlineState.unclaimedRoles = [];
           onlineState.version = 0;
           syncOnlineStatus(failedCode ? `Could not join room ${failedCode}: ${reason}.` : reason, 'error');
           syncOnlineControls();
@@ -1066,7 +1187,7 @@
     });
   }
 
-  async function connectOnlineSocketWithRetry(roomCode, requestedRole = 'auto', attempts = ONLINE_JOIN_RETRY_ATTEMPTS) {
+  async function connectOnlineSocketWithRetry(roomCode, requestedRoles = [], attempts = ONLINE_JOIN_RETRY_ATTEMPTS) {
     let lastError = null;
     const code = normalizeOnlineRoomCode(roomCode);
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -1075,7 +1196,7 @@
           syncOnlineStatus(`Connection closed; retrying ${attempt}/${attempts}...`, 'idle');
           syncOnlineControls();
         }
-        await connectOnlineSocket(code, requestedRole);
+        await connectOnlineSocket(code, requestedRoles);
         return;
       } catch (error) {
         lastError = error;
@@ -1141,6 +1262,10 @@
       onlineState.roomCode = '';
       onlineState.pendingRoomCode = '';
       onlineState.role = '';
+      onlineState.roles = [];
+      onlineState.roomRoles = {};
+      onlineState.readyToPlay = true;
+      onlineState.unclaimedRoles = [];
       onlineState.gameMode = '';
       onlineState.version = 0;
       onlineState.joined = false;
@@ -1154,7 +1279,8 @@
       onlineSendRaw({
         type: 'leave',
         clientId: onlineState.clientId,
-        role: onlineState.role
+        role: onlineState.role,
+        rolesAssigned: onlineState.roles
       });
     }
     closeOnlineSocket({ keepRoom: false, intentional: true });
@@ -1167,11 +1293,11 @@
   function scheduleOnlineReconnect() {
     if (!onlineState || !onlineState.roomCode || onlineState.reconnectTimer) return;
     const code = onlineState.roomCode;
-    const role = onlineState.role || selectedOnlineRole();
+    const roles = onlineState.roles && onlineState.roles.length ? onlineState.roles.slice() : selectedOnlineRolesRequested();
     onlineState.reconnectTimer = setTimeout(() => {
       if (!onlineState) return;
       onlineState.reconnectTimer = null;
-      connectOnlineSocket(code, role).catch((error) => {
+      connectOnlineSocket(code, roles).catch((error) => {
         syncOnlineStatus(error && error.message ? error.message : 'Reconnect failed.', 'error');
         syncOnlineControls();
       });
@@ -1193,9 +1319,14 @@
       onlineState.pendingRoomCode = '';
       onlineState.joined = true;
       onlineState.connecting = false;
-      onlineState.role = message.role || 'spectator';
+      onlineState.roles = onlineAssignedRolesFromMessage(message);
+      onlineState.role = onlineState.roles[0] || 'spectator';
+      onlineState.roomRoles = message.roles && typeof message.roles === 'object' ? { ...message.roles } : {};
+      onlineState.readyToPlay = message.readyToPlay !== false;
+      onlineState.unclaimedRoles = normalizeOnlineRoles(message.unclaimedRoles);
       onlineState.version = normalizeOnlineVersion(message.version, onlineState.version);
       onlineState.gameMode = gameModeFromUrlParam(message.gameMode) || onlineState.gameMode || selectedGameMode();
+      if (onlineState.readyToPlay !== false) hideOnlineChineseCheckersStartPrompt();
       if (refs.onlineRoomCode) refs.onlineRoomCode.value = onlineState.roomCode;
       syncOnlineRoleOptions(onlineState.gameMode);
       syncOnlineStatus('Joined room.', 'idle');
@@ -1210,6 +1341,8 @@
     }
     if (message.type === 'accepted') {
       onlineState.version = normalizeOnlineVersion(message.version, onlineState.version + 1);
+      updateOnlineRoomMetaFromMessage(message);
+      if (onlineState.readyToPlay !== false) hideOnlineChineseCheckersStartPrompt();
       syncOnlineStatus('Move accepted.', 'idle');
       syncOnlineControls();
       syncControls();
@@ -1226,6 +1359,7 @@
       return;
     }
     if (message.type === 'presence') {
+      updateOnlineRoomMetaFromMessage(message);
       syncOnlineStatus(onlinePresenceText(message), 'idle');
       syncOnlineControls();
       return;
@@ -1261,6 +1395,7 @@
 
   function applyOnlineSnapshotMessage(message) {
     if (!message || !message.snapshot) return;
+    updateOnlineRoomMetaFromMessage(message);
     const action = message.action && typeof message.action === 'object' && !Array.isArray(message.action)
       ? message.action
       : null;
@@ -1298,6 +1433,7 @@
         focus: false
       });
       syncOnlineRoleOptions(onlineState.gameMode);
+      if (onlineState.readyToPlay !== false) hideOnlineChineseCheckersStartPrompt();
       syncOnlineStatus('State synchronized.', 'idle');
     } catch (error) {
       syncOnlineStatus(error && error.message ? error.message : 'Could not apply online state.', 'error');
@@ -1305,6 +1441,19 @@
       onlineState.applyingRemoteState = false;
       syncOnlineControls();
       syncControls();
+    }
+  }
+
+  function updateOnlineRoomMetaFromMessage(message) {
+    if (!onlineState || !message || typeof message !== 'object') return;
+    if (message.roles && typeof message.roles === 'object') onlineState.roomRoles = { ...message.roles };
+    if (Object.prototype.hasOwnProperty.call(message, 'readyToPlay')) onlineState.readyToPlay = message.readyToPlay !== false;
+    if (Object.prototype.hasOwnProperty.call(message, 'unclaimedRoles')) {
+      onlineState.unclaimedRoles = normalizeOnlineRoles(message.unclaimedRoles);
+    }
+    if (Object.prototype.hasOwnProperty.call(message, 'rolesAssigned') || Object.prototype.hasOwnProperty.call(message, 'assignedRoles')) {
+      onlineState.roles = onlineAssignedRolesFromMessage(message);
+      onlineState.role = onlineState.roles[0] || 'spectator';
     }
   }
 
@@ -1346,6 +1495,7 @@
       else if (mode === GAME_MODES.GO) applied = replayOnlineGoAction(action);
       else if (mode === GAME_MODES.REVERSI) applied = replayOnlineReversiAction(action);
       else if (mode === GAME_MODES.FIDE_CHESS) applied = replayOnlineFideChessAction(action);
+      else if (mode === GAME_MODES.CHINESE_CHECKERS) applied = replayOnlineChineseCheckersAction(action);
     } catch (_) {
       applied = false;
     } finally {
@@ -1479,6 +1629,34 @@
     return true;
   }
 
+  function replayOnlineChineseCheckersAction(action) {
+    if (!isChineseCheckersGame(game)) return false;
+    const type = String(action.type || '').trim().toLowerCase();
+    if (type === 'chinese-checkers-start') return false;
+    if (type === 'chinese-checkers-end-jump') {
+      if (!isChineseCheckersJumping(game)) return false;
+      pushUndoSnapshot(onlineActionHistoryLabel(action));
+      game = finishChineseCheckersJump(game);
+      syncStatusForCurrentGame();
+      render();
+      refreshDebugExportIfNeeded();
+      return true;
+    }
+    if (type !== 'chinese-checkers-move') return false;
+    const from = onlineActionIndex(action.from);
+    const to = onlineActionIndex(action.to);
+    if (!Number.isInteger(from) || !Number.isInteger(to)) return false;
+    const result = moveChineseCheckerMarble(game, from, to, { stepwise: !!action.stepwise });
+    if (!result.changed) return false;
+    pushUndoSnapshot(onlineActionHistoryLabel(action));
+    game = result.state;
+    startChineseCheckersMoveAnimation(result);
+    syncStatusForCurrentGame();
+    render();
+    refreshDebugExportIfNeeded();
+    return true;
+  }
+
   function onlineActionIndex(value) {
     const index = Number(value);
     return Number.isInteger(index) ? index : null;
@@ -1500,7 +1678,7 @@
       syncControls();
       return;
     }
-    if (onlineState.role === 'spectator') {
+    if (!onlineStateHasPlayableRole()) {
       syncStatus(`${normalized} unavailable`, 'spectators cannot request history changes', 'warn');
       syncOnlineStatus('Spectators cannot request undo/redo.', 'error');
       syncControls();
@@ -1510,6 +1688,7 @@
       type: 'historyRequest',
       clientId: onlineState.clientId,
       role: onlineState.role,
+      rolesAssigned: onlineState.roles,
       kind: normalized,
       baseVersion: onlineState.version,
       summary: onlineGameSummary(game)
@@ -1532,6 +1711,7 @@
       type: 'approvalResponse',
       clientId: onlineState.clientId,
       role: onlineState.role,
+      rolesAssigned: onlineState.roles,
       requestId,
       allow: !!allowed
     });
@@ -1577,6 +1757,7 @@
     if (type === 'pass') return 'online Go pass';
     if (type.indexOf('go-') === 0) return 'online Go scoring edit';
     if (type.indexOf('fide-') === 0) return 'online FIDE Chess move';
+    if (type.indexOf('chinese-checkers') === 0) return 'online Chinese Checkers move';
     return 'online move';
   }
 
@@ -1585,8 +1766,12 @@
     const filled = Object.keys(roles)
       .filter((role) => roles[role] && role !== 'spectator')
       .map(onlineRoleLabel);
-    if (!filled.length) return 'Room is open.';
-    return `Players: ${filled.join(', ')}.`;
+    const unclaimed = normalizeOnlineRoles(message && message.unclaimedRoles).map(onlineRoleLabel);
+    const waiting = message && message.readyToPlay === false && unclaimed.length
+      ? ` Waiting for ${unclaimed.join(', ')}.`
+      : '';
+    if (!filled.length) return `Room is open.${waiting}`.trim();
+    return `Players: ${filled.join(', ')}.${waiting}`.trim();
   }
 
   function normalizeOnlineVersion(value, fallback) {
@@ -1613,7 +1798,7 @@
       syncOnlineControls();
       return;
     }
-    if (onlineState.role === 'spectator') {
+    if (!onlineStateHasPlayableRole()) {
       syncOnlineStatus('Spectators cannot submit moves.', 'error');
       return;
     }
@@ -1627,6 +1812,7 @@
       type: 'proposeMove',
       clientId: onlineState.clientId,
       role: onlineState.role,
+      rolesAssigned: onlineState.roles,
       baseVersion: onlineState.version,
       action: action || { type: 'move' },
       snapshot,
@@ -1640,9 +1826,10 @@
     if (!onlineState || !onlineIsInRoom()) return '';
     if (!onlineSocketOpen()) return 'online room is disconnected';
     if (!onlineStateSupported(game)) return 'this game is not supported online';
-    if (onlineState.role === 'spectator') return 'spectators cannot move';
+    if (!onlineStateHasPlayableRole()) return 'spectators cannot move';
+    if (isChineseCheckersGame(game) && onlineState.readyToPlay === false) return 'online Chinese Checkers is waiting for colors';
     const expected = onlineExpectedRoleForGame(game, actionType);
-    if (expected && onlineState.role !== expected) return `${onlineRoleLabel(expected)} to move`;
+    if (expected && !onlineStateOwnsRole(expected)) return `${onlineRoleLabel(expected)} to move`;
     return '';
   }
 
@@ -1707,6 +1894,96 @@
     if (isGoGame(state) && state.scoringReview && onlineGoReviewAction(actionType)) return '';
     const role = normalizePlacementColor(state.turn);
     return onlineModeRoles(gameModeValue(state)).includes(role) ? role : '';
+  }
+
+  function showOnlineChineseCheckersStartPrompt(marble = null) {
+    if (!isChineseCheckersGame(game) || !onlineIsInRoom()) return;
+    if (refs.onlineChineseStartRow) refs.onlineChineseStartRow.hidden = false;
+    if (refs.onlineKeepUnclaimedColors) refs.onlineKeepUnclaimedColors.checked = false;
+    const claimed = onlineClaimedRoomRoles();
+    const claimedLabel = claimed.length ? onlineRolesLabel(claimed) : 'no colors';
+    const clicked = marble && marble.color ? `; clicked ${onlineRoleLabel(marble.color)}` : '';
+    syncStatus('Chinese Checkers waiting', `begin with claimed colors (${claimedLabel})${clicked}`, 'warn');
+    syncOnlineStatus('Not all colors are claimed. Use begin claimed colors if you really want to start now.', 'error');
+    syncOnlineControls();
+    if (refs.onlineStartClaimedColors) refs.onlineStartClaimedColors.focus();
+  }
+
+  function hideOnlineChineseCheckersStartPrompt() {
+    if (refs.onlineChineseStartRow) refs.onlineChineseStartRow.hidden = true;
+  }
+
+  function startOnlineChineseCheckersWithClaimedColorsFromUi() {
+    if (!isChineseCheckersGame(game) || !onlineIsInRoom()) return;
+    if (!onlineSocketOpen()) {
+      syncOnlineStatus('Reconnect before beginning claimed colors.', 'error');
+      syncOnlineControls();
+      return;
+    }
+    const owned = normalizeChineseCheckersPlayers(onlineState && onlineState.roles, game.camps)
+      .filter((color) => color !== 'spectator' && chineseCheckersPlayerColors(game).includes(color));
+    const claimed = onlineClaimedRoomRoles().filter((color) => chineseCheckersPlayerColors(game).includes(color));
+    if (!owned.length) {
+      syncOnlineStatus('Claim at least one color before beginning.', 'error');
+      syncControls();
+      return;
+    }
+    if (!claimed.length) {
+      syncOnlineStatus('Claim at least one color before beginning.', 'error');
+      syncControls();
+      return;
+    }
+    pushUndoSnapshot('Chinese Checkers online partial start');
+    const keepUnclaimed = !!(refs.onlineKeepUnclaimedColors && refs.onlineKeepUnclaimedColors.checked);
+    game = normalizeChineseCheckersForClaimedOnlineStart(game, claimed, keepUnclaimed);
+    hideOnlineChineseCheckersStartPrompt();
+    onlineState.readyToPlay = true;
+    syncStatus('Chinese Checkers online start', keepUnclaimed ? 'unclaimed marbles stay as blockers' : 'unclaimed marbles removed', 'ready');
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'chinese-checkers-start',
+      gameMode: GAME_MODES.CHINESE_CHECKERS,
+      role: owned[0] || claimed[0] || '',
+      keepUnclaimedColors: keepUnclaimed,
+      claimedRoles: claimed.join(',')
+    });
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function normalizeChineseCheckersForClaimedOnlineStart(sourceState, claimedColors, keepUnclaimed) {
+    const state = cloneGameState(sourceState);
+    const claimed = normalizeChineseCheckersPlayers(claimedColors, state.camps)
+      .filter((color) => chineseCheckersPlayerColors(state).includes(color));
+    state.playerColors = claimed.length ? claimed : chineseCheckersPlayerColors(state);
+    state.openingOrder = chineseCheckersOpeningOrder(state).filter((color) => state.playerColors.includes(color));
+    state.turn = normalizeChineseCheckersTurn(state.turn, state.playerColors);
+    if (!state.playerColors.includes(state.turn)) state.turn = state.playerColors[0] || 'red';
+    state.selectedIndex = null;
+    state.jumpChain = null;
+    state.lastMove = null;
+    state.winner = '';
+    state.winningLine = [];
+    state.resultDismissed = false;
+    if (!keepUnclaimed) {
+      const active = new Set(state.playerColors);
+      state.marbles = (state.marbles || []).filter((marble) => active.has(marble.color));
+    }
+    if (isChineseCheckersOpeningRound(state)) state.turn = chineseCheckersNextOpeningColor(state);
+    return state;
+  }
+
+  function onlineClaimedRoomRoles() {
+    if (!onlineState) return [];
+    const available = isChineseCheckersGame(game)
+      ? chineseCheckersPlayerColors(game)
+      : onlineModeRoles(onlineState.gameMode || selectedGameMode());
+    const roleMap = onlineState.roomRoles && typeof onlineState.roomRoles === 'object' ? onlineState.roomRoles : {};
+    const claimed = normalizeOnlineRoles(Object.keys(roleMap).filter((role) => roleMap[role]))
+      .filter((role) => available.includes(role));
+    if (claimed.length) return claimed;
+    return normalizeOnlineRoles(onlineState.roles).filter((role) => available.includes(role));
   }
 
   function onlineGoReviewAction(actionType) {
@@ -2418,6 +2695,7 @@
     }
     const connectFourHoles = isConnectFourGame(game) ? new Set(game.holes || []) : new Set();
     if (selectedGameMode() === GAME_MODES.CONNECT_FOUR && !connectFourHoles.size) {
+      enableConnectFourHoleEditingForWarning();
       showSetupAlert('click tiles to add input holes before beginning');
       syncStatus('add holes', 'click tiles to add input holes before beginning', 'warn');
       render();
@@ -4106,7 +4384,11 @@
 
   function debugModeInfo() {
     if (isGomokuGame(game)) return 'export or import Gomoku status';
-    if (isConnectFourGame(game)) return 'export or import Connect Four status';
+    if (isConnectFourGame(game)) {
+      return connectFourHoleEditingEnabled()
+        ? 'click setup tiles to add or remove Connect Four input holes'
+        : 'export or import Connect Four status; enable add/remove holes to edit input holes';
+    }
     if (isGoGame(game)) return 'export or import Go status';
     if (isReversiGame(game)) return 'export or import Reversi status';
     if (isChineseCheckersGame(game)) return 'export or import Chinese Checkers status';
@@ -4122,6 +4404,49 @@
     }
     if (refs.debugTools) refs.debugTools.hidden = !debugMode;
     if (refs.debugTileValue) refs.debugTileValue.disabled = !debugMode || !is2048Game(game);
+    syncConnectFourHoleEditControl();
+  }
+
+  function syncConnectFourHoleEditControl() {
+    if (!refs.connectFourHoleEdit) return;
+    const modeConnectFour = selectedGameMode() === GAME_MODES.CONNECT_FOUR || isConnectFourGame(game);
+    const available = !!(debugMode && modeConnectFour && isConnectFourGame(game) && game.phase === 'setup' && !onlineIsInRoom());
+    refs.connectFourHoleEdit.disabled = !available;
+    if (!modeConnectFour) refs.connectFourHoleEdit.checked = false;
+  }
+
+  function connectFourHoleEditingEnabled() {
+    return !!(
+      debugMode
+      && refs.connectFourHoleEdit
+      && refs.connectFourHoleEdit.checked
+      && !refs.connectFourHoleEdit.disabled
+      && isConnectFourGame(game)
+      && game.phase === 'setup'
+      && !onlineIsInRoom()
+    );
+  }
+
+  function enableConnectFourHoleEditingForWarning() {
+    debugMode = true;
+    if (refs.connectFourHoleEdit) refs.connectFourHoleEdit.checked = true;
+    syncDebugModeUi();
+  }
+
+  function handleConnectFourHoleEditChange() {
+    if (!refs.connectFourHoleEdit) return;
+    if (refs.connectFourHoleEdit.checked && !connectFourHoleEditingEnabled()) {
+      refs.connectFourHoleEdit.checked = false;
+    }
+    hideCanvasStartPrompt();
+    if (connectFourHoleEditingEnabled()) {
+      syncStatus('add/remove holes', connectFourHoleInfo(game), 'setup');
+    } else {
+      syncStatusForCurrentGame();
+    }
+    render();
+    syncControls();
+    if (refs.canvas) refs.canvas.focus();
   }
 
   function handleCanvasDisplayModeButton(button) {
@@ -4133,21 +4458,9 @@
     setCanvasDisplayMode(mode);
   }
 
-  function handleFullscreenTargetChange() {
-    fullscreenTarget = selectedFullscreenTarget();
-    syncCanvasDisplayModeUi();
-    if (currentFullscreenElement()) {
-      syncStatus('fullscreen target', 'change applies the next time fullscreen opens', phaseBadge(game && game.phase));
-    }
-  }
-
   function normalizeCanvasDisplayMode(value) {
     const mode = String(value || '').trim().toLowerCase();
     return mode === 'fit-viewport' || mode === 'fullscreen' ? mode : 'normal';
-  }
-
-  function selectedFullscreenTarget() {
-    return refs.fullscreenTarget && refs.fullscreenTarget.value === 'panel' ? 'panel' : 'canvas';
   }
 
   function setCanvasDisplayMode(mode) {
@@ -4174,12 +4487,11 @@
       }
       return;
     }
-    const target = canvasFullscreenTargetElement();
+    const target = refs.canvasWrap || refs.canvas;
     if (!target || typeof target.requestFullscreen !== 'function') {
       syncStatus('fullscreen unavailable', 'this browser does not allow fullscreen for the canvas', 'warn');
       return;
     }
-    fullscreenTarget = selectedFullscreenTarget();
     fullscreenReturnMode = canvasDisplayMode === 'fullscreen' ? 'normal' : canvasDisplayMode;
     canvasDisplayMode = 'fullscreen';
     syncCanvasDisplayModeUi();
@@ -4207,12 +4519,6 @@
     return typeof document !== 'undefined' ? document.fullscreenElement : null;
   }
 
-  function canvasFullscreenTargetElement() {
-    return selectedFullscreenTarget() === 'panel'
-      ? (refs.canvasPanel || refs.canvasWrap || refs.canvas)
-      : (refs.canvasWrap || refs.canvas);
-  }
-
   function handleFullscreenChange() {
     if (currentFullscreenElement()) {
       canvasDisplayMode = 'fullscreen';
@@ -4225,7 +4531,6 @@
   }
 
   function syncCanvasDisplayModeUi() {
-    fullscreenTarget = selectedFullscreenTarget();
     const fullscreenActive = !!currentFullscreenElement();
     const activeMode = fullscreenActive ? 'fullscreen' : canvasDisplayMode;
     if (typeof document !== 'undefined' && document.body && document.body.classList) {
@@ -4239,9 +4544,6 @@
         button.classList.toggle('active', active);
         button.setAttribute('aria-pressed', active ? 'true' : 'false');
       });
-    }
-    if (refs.fullscreenTarget && refs.fullscreenTarget.value !== fullscreenTarget) {
-      refs.fullscreenTarget.value = fullscreenTarget;
     }
     if (!fullscreenActive) collapseFullscreenActionBar({ focusCanvas: false, skipPlacement: true });
     requestFullscreenActionPlacement();
@@ -4604,7 +4906,7 @@
       hideCanvasStartPrompt();
       return false;
     }
-    if (isConnectFourGame(game) && tileFromCanvasEvent(event)) {
+    if (isConnectFourGame(game) && connectFourHoleEditingEnabled() && tileFromCanvasEvent(event)) {
       hideCanvasStartPrompt();
       return false;
     }
@@ -4790,6 +5092,11 @@
   function handleConnectFourCanvasClick(event) {
     if (!game || currentAnimation) return;
     if (game.phase === 'setup') {
+      if (!connectFourHoleEditingEnabled()) {
+        showCanvasStartPrompt();
+        if (refs.canvas) refs.canvas.focus();
+        return;
+      }
       const target = tileFromCanvasEvent(event);
       if (!target) return;
       toggleConnectFourHole(target);
@@ -5104,6 +5411,38 @@
     const target = tileFromCanvasEvent(event);
     if (!target) return;
     const marble = chineseCheckerMarbleAt(game, target.index);
+    if (onlineIsInRoom() && isChineseCheckersGame(game)) {
+      if (!onlineSocketOpen()) {
+        syncStatus('online Chinese Checkers blocked', 'online room is disconnected', 'warn');
+        syncOnlineStatus('online room is disconnected', 'error');
+        syncOnlineControls();
+        return;
+      }
+      if (!onlineStateHasPlayableRole()) {
+        syncStatus('online Chinese Checkers blocked', 'spectators cannot move', 'warn');
+        syncOnlineStatus('Spectators cannot move.', 'error');
+        syncOnlineControls();
+        return;
+      }
+      if (onlineState.readyToPlay === false) {
+        if (marble && onlineStateOwnsRole(marble.color)) showOnlineChineseCheckersStartPrompt(marble);
+        else {
+          syncStatus('Chinese Checkers waiting', 'choose one of your claimed colors or wait for more players', 'warn');
+          syncOnlineStatus('Not all colors are claimed yet.', 'error');
+          syncOnlineControls();
+        }
+        return;
+      }
+      const activeColor = isChineseCheckersJumping(game)
+        ? game.turn
+        : (marble && !Number.isInteger(game.selectedIndex) ? marble.color : game.turn);
+      if (activeColor && !onlineStateOwnsRole(activeColor)) {
+        syncStatus('online Chinese Checkers blocked', `${onlineRoleLabel(activeColor)} is controlled by another player`, 'warn');
+        syncOnlineStatus(`${onlineRoleLabel(activeColor)} is controlled by another player.`, 'error');
+        syncOnlineControls();
+        return;
+      }
+    }
     if (isChineseCheckersJumping(game)) {
       handleChineseCheckersJumpContinuationClick(target, marble);
       return;
@@ -5150,6 +5489,15 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'chinese-checkers-move',
+      gameMode: GAME_MODES.CHINESE_CHECKERS,
+      role: result.marble ? result.marble.color : '',
+      from,
+      to: target.index,
+      stepwise: !shouldUseChineseCheckersFullChainHints(),
+      label: target.label
+    });
   }
 
   function handleFideChessCanvasClick(event) {
@@ -5411,6 +5759,12 @@
   function handleChineseCheckersJumpContinuationClick(target, marble) {
     const chain = game && game.jumpChain;
     if (!chain || !Number.isInteger(chain.currentIndex)) return;
+    if (onlineIsInRoom() && !onlineStateOwnsRole(game.turn)) {
+      syncStatus('online Chinese Checkers blocked', `${onlineRoleLabel(game.turn)} is controlled by another player`, 'warn');
+      syncOnlineStatus(`${onlineRoleLabel(game.turn)} is controlled by another player.`, 'error');
+      syncOnlineControls();
+      return;
+    }
     if (marble && marble.color === game.turn && target.index !== chain.currentIndex) {
       syncStatus('Chinese Checkers jumping', 'continue this jump or use end jump', 'ready');
       return;
@@ -5427,6 +5781,15 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'chinese-checkers-move',
+      gameMode: GAME_MODES.CHINESE_CHECKERS,
+      role: result.marble ? result.marble.color : game.turn,
+      from: chain.currentIndex,
+      to: target.index,
+      stepwise: true,
+      label: target.label
+    });
   }
 
   function toggleConnectFourHole(target) {
@@ -5589,7 +5952,8 @@
         type: 'history-undo',
         gameMode: gameModeValue(game),
         approvedRequestId: options.requestId || '',
-        role: onlineState ? onlineState.role : ''
+        role: onlineState ? onlineState.role : '',
+        rolesAssigned: onlineState ? onlineState.roles : []
       });
     }
   }
@@ -5615,7 +5979,8 @@
         type: 'history-redo',
         gameMode: gameModeValue(game),
         approvedRequestId: options.requestId || '',
-        role: onlineState ? onlineState.role : ''
+        role: onlineState ? onlineState.role : '',
+        rolesAssigned: onlineState ? onlineState.roles : []
       });
     }
   }
@@ -5642,6 +6007,34 @@
     const clone = { id: piece.id, index: piece.index, color: piece.color };
     const moveNumber = normalizeOptionalMoveNumber(piece.moveNumber);
     if (moveNumber) clone.moveNumber = moveNumber;
+    return clone;
+  }
+
+  function cloneLastMove(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const clone = {
+      kind: typeof value.kind === 'string' ? value.kind : ''
+    };
+    [
+      'from',
+      'to',
+      'pieceId',
+      'marbleId',
+      'rookId',
+      'rookFrom',
+      'rookTo',
+      'moveNumber'
+    ].forEach((key) => {
+      if (Number.isInteger(value[key])) clone[key] = value[key];
+    });
+    ['color', 'side', 'piece', 'castle', 'promotion'].forEach((key) => {
+      if (typeof value[key] === 'string' && value[key]) clone[key] = value[key];
+    });
+    if (value.activeJump === true) clone.activeJump = true;
+    if (Array.isArray(value.path)) clone.path = value.path.filter(Number.isInteger);
+    if (Array.isArray(value.segments)) clone.segments = cloneChineseCheckerMoveSegments(value.segments);
+    if (value.route) clone.route = cloneFideChessRoute(value.route);
+    if (value.rookRoute) clone.rookRoute = cloneFideChessRoute(value.rookRoute);
     return clone;
   }
 
@@ -6223,6 +6616,7 @@
         nextMarbleId: game.nextMarbleId || 1,
         selectedIndex: Number.isInteger(game.selectedIndex) ? game.selectedIndex : null,
         jumpChain: cloneChineseCheckersJumpChain(game.jumpChain),
+        lastMove: cloneLastMove(game.lastMove),
         playerColors: chineseCheckersPlayerColors(game),
         openingOrder: chineseCheckersOpeningOrder(game),
         camps: chineseCheckersCampsExport(game.camps, preset.cols),
@@ -6248,6 +6642,7 @@
         resultDismissed: !!game.resultDismissed,
         selectedIndex: Number.isInteger(game.selectedIndex) ? game.selectedIndex : null,
         selectedPieceId: normalizePositiveInteger(game.selectedPieceId, 0) || null,
+        lastMove: cloneLastMove(game.lastMove),
         nextPieceId: game.nextPieceId || 1,
         enPassant: game.enPassant ? { ...game.enPassant } : null,
         halfmoveClock: Math.max(0, Number(game.halfmoveClock) || 0),
@@ -6795,6 +7190,7 @@
         openingOrder,
         selectedIndex: jumpChain ? jumpChain.currentIndex : normalizeStatusOptionalBoardIndex(payload.selectedIndex, preset),
         jumpChain,
+        lastMove: cloneLastMove(payload.lastMove),
         turn: jumpChain && jumpingMarble ? jumpingMarble.color : normalizeChineseCheckersTurn(payload.turn, playerColors),
         winner: phase === 'gameover' ? normalizeChineseCheckersWinner(winner, playerColors) : '',
         winningLine: [],
@@ -6841,6 +7237,7 @@
         nextPieceId,
         selectedIndex: normalizeStatusOptionalBoardIndex(payload.selectedIndex, preset),
         selectedPieceId: normalizePositiveInteger(payload.selectedPieceId, 0) || null,
+        lastMove: cloneLastMove(payload.lastMove),
         turn: normalizeFideChessSide(payload.turn) || 'white',
         winner: phase === 'gameover' ? winner : '',
         result: phase === 'gameover' ? sanitizeImportedText(payload.result || '', '') : '',
@@ -8049,11 +8446,13 @@
       else if (isConnectFourGame(game)) drawConnectFourHoles(ctx, geometry, game);
       if (!isConnectFourDropAnimation() && !isChineseCheckersGame(game)) drawPlacementWinningLine(ctx, geometry, game);
       if (isGoGame(game)) drawGoScoreOverlay(ctx, geometry, game);
+      drawPlacementLastMoveUnderlays(ctx, geometry, game);
       drawPlacementSelectionOverlays(ctx, geometry, game);
       drawFideChessPuzzleWaitingTray(ctx, geometry, game);
       drawPlacementPieces(ctx, geometry, placementPieces(game));
       drawFideChessPendingPromotion(ctx, geometry, game);
       drawFideChessDraggedPiece(ctx, geometry, game);
+      drawPlacementLastMovePieceMarkers(ctx, geometry, game);
       if (isGoGame(game)) drawGoDeadStoneMarks(ctx, geometry, game);
       drawPlacementMoveNumberLabels(ctx, geometry, game);
       drawPlacementAnimationOverlays(ctx, geometry);
@@ -10092,6 +10491,370 @@
       ctx.lineTo(point.x - size, point.y + size);
       ctx.stroke();
     });
+    ctx.restore();
+  }
+
+  function drawPlacementLastMoveUnderlays(ctx, geom, state) {
+    if (isFideChessGame(state)) {
+      drawFideChessLastMoveUnderlay(ctx, geom, state);
+      return;
+    }
+    if (isChineseCheckersGame(state)) {
+      drawChineseCheckersLastMoveUnderlay(ctx, geom, state);
+    }
+  }
+
+  function drawFideChessLastMoveUnderlay(ctx, geom, state) {
+    if (isFideChessPuzzle(state)) return;
+    const lastMove = cloneLastMove(state && state.lastMove);
+    if (!lastMove || lastMove.kind !== 'fide-move') return;
+    if (!validBoardIndex(state, lastMove.from) || !validBoardIndex(state, lastMove.to)) return;
+    ctx.save();
+    drawLastMoveTileOverlay(ctx, geom, lastMove.from, {
+      fill: 'rgba(31,122,140,0.11)',
+      stroke: 'rgba(31,122,140,0.36)',
+      radiusScale: 0.86
+    });
+    drawLastMoveTileOverlay(ctx, geom, lastMove.to, {
+      fill: 'rgba(31,122,140,0.2)',
+      stroke: 'rgba(31,122,140,0.62)',
+      radiusScale: 0.9
+    });
+    drawLastMoveRoute(ctx, geom, state, lastMove.route, lastMove.from, lastMove.to, {
+      color: 'rgba(31,122,140,0.58)',
+      lineWidth: Math.max(1.4, geom.radius * 0.045),
+      trim: geom.radius * 0.28
+    });
+    if (Number.isInteger(lastMove.rookFrom) && Number.isInteger(lastMove.rookTo)) {
+      drawLastMoveTileOverlay(ctx, geom, lastMove.rookFrom, {
+        fill: 'rgba(196,127,23,0.08)',
+        stroke: 'rgba(196,127,23,0.28)',
+        radiusScale: 0.72
+      });
+      drawLastMoveTileOverlay(ctx, geom, lastMove.rookTo, {
+        fill: 'rgba(196,127,23,0.12)',
+        stroke: 'rgba(196,127,23,0.4)',
+        radiusScale: 0.76
+      });
+      drawLastMoveRoute(ctx, geom, state, lastMove.rookRoute, lastMove.rookFrom, lastMove.rookTo, {
+        color: 'rgba(196,127,23,0.42)',
+        lineWidth: Math.max(1.1, geom.radius * 0.034),
+        trim: geom.radius * 0.3,
+        arrowScale: 0.78
+      });
+    }
+    ctx.restore();
+  }
+
+  function drawChineseCheckersLastMoveUnderlay(ctx, geom, state) {
+    const lastMove = cloneLastMove(state && state.lastMove);
+    if (!lastMove || lastMove.kind !== 'chinese-checkers-move') return;
+    if (!validBoardIndex(state, lastMove.from) || !validBoardIndex(state, lastMove.to)) return;
+    const active = !!lastMove.activeJump && isChineseCheckersJumping(state);
+    ctx.save();
+    drawLastMoveTileOverlay(ctx, geom, lastMove.from, {
+      fill: 'rgba(31,122,140,0.08)',
+      stroke: 'rgba(31,122,140,0.26)',
+      radiusScale: 0.68
+    });
+    drawLastMoveTileOverlay(ctx, geom, lastMove.to, {
+      fill: active ? 'rgba(31,122,140,0.2)' : 'rgba(31,122,140,0.14)',
+      stroke: active ? 'rgba(31,122,140,0.72)' : 'rgba(31,122,140,0.46)',
+      radiusScale: active ? 0.9 : 0.76
+    });
+    const segments = Array.isArray(lastMove.segments) && lastMove.segments.length
+      ? lastMove.segments
+      : [{ from: lastMove.from, to: lastMove.to, path: lastMove.path || [lastMove.from, lastMove.to], transitions: [] }];
+    segments.forEach((segment) => {
+      drawLastMoveRoute(ctx, geom, state, segment, segment.from, segment.to, {
+        color: active ? 'rgba(31,122,140,0.62)' : 'rgba(31,122,140,0.48)',
+        lineWidth: Math.max(1.2, geom.radius * 0.038),
+        trim: geom.radius * 0.26,
+        arrowScale: active ? 0.9 : 0.75
+      });
+    });
+    drawChineseCheckersLastMovePathDots(ctx, geom, lastMove.path, active);
+    ctx.restore();
+  }
+
+  function drawPlacementLastMovePieceMarkers(ctx, geom, state) {
+    if (isChineseCheckersGame(state)) {
+      drawChineseCheckersLastMovePieceMarker(ctx, geom, state);
+      return;
+    }
+    const piece = lastMoveNumberPlacementPiece(state);
+    if (!piece || hiddenPlacementPieceIds().has(piece.id)) return;
+    const point = placementPiecePoint(geom, piece.index);
+    if (!point) return;
+    drawLastMovePieceDot(ctx, geom, point, piece, {
+      forceDark: isConnectFourGame(state)
+    });
+  }
+
+  function lastMoveNumberPlacementPiece(state) {
+    if (
+      !isGomokuGame(state)
+      && !isConnectFourGame(state)
+      && !isGoGame(state)
+      && !isReversiGame(state)
+    ) return null;
+    return (placementPieces(state) || []).reduce((best, piece) => {
+      const moveNumber = normalizeOptionalMoveNumber(piece && piece.moveNumber);
+      if (!moveNumber) return best;
+      const bestMove = normalizeOptionalMoveNumber(best && best.moveNumber);
+      if (!best || moveNumber > bestMove || (moveNumber === bestMove && (piece.id || 0) > (best.id || 0))) return piece;
+      return best;
+    }, null);
+  }
+
+  function drawChineseCheckersLastMovePieceMarker(ctx, geom, state) {
+    const lastMove = cloneLastMove(state && state.lastMove);
+    if (!lastMove || lastMove.kind !== 'chinese-checkers-move') return;
+    if (Number.isInteger(lastMove.marbleId) && hiddenPlacementPieceIds().has(lastMove.marbleId)) return;
+    const point = placementPiecePoint(geom, lastMove.to);
+    if (!point) return;
+    const marble = Number.isInteger(lastMove.marbleId)
+      ? (state.marbles || []).find((item) => item.id === lastMove.marbleId)
+      : chineseCheckerMarbleAt(state, lastMove.to);
+    const active = !!lastMove.activeJump && isChineseCheckersJumping(state);
+    drawLastMovePieceRing(ctx, geom, point, marble || { color: lastMove.color || state.turn }, {
+      active,
+      radiusScale: active ? 1.28 : 1.12
+    });
+  }
+
+  function drawLastMoveTileOverlay(ctx, geom, index, options = {}) {
+    const cell = geom && geom.cells ? geom.cells[index] : null;
+    if (!cell) return;
+    const radiusScale = Number.isFinite(options.radiusScale) ? options.radiusScale : 0.86;
+    const points = tilePoints(cell.x, cell.y, geom.radius * radiusScale, geom.lattice);
+    ctx.save();
+    ctx.beginPath();
+    points.forEach((point, pointIndex) => {
+      if (pointIndex === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = options.fill || 'rgba(31,122,140,0.14)';
+    ctx.strokeStyle = options.stroke || 'rgba(31,122,140,0.42)';
+    ctx.lineWidth = Math.max(1, geom.radius * 0.026);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawLastMoveRoute(ctx, geom, state, route, fallbackFrom, fallbackTo, options = {}) {
+    const segments = lastMoveRouteRenderSegments(state, geom, route, fallbackFrom, fallbackTo);
+    if (!segments.length) return;
+    const arrowMode = options.arrowMode || 'last';
+    segments.forEach((segment, index) => {
+      drawLastMoveRouteSegment(ctx, geom, segment.start, segment.end, {
+        ...options,
+        arrowHead: arrowMode === 'all' || index === segments.length - 1,
+        trimStart: segment.trimStart,
+        trimEnd: segment.trimEnd
+      });
+    });
+  }
+
+  function lastMoveRouteRenderSegments(state, geom, route, fallbackFrom, fallbackTo) {
+    const safeRoute = route && typeof route === 'object' && !Array.isArray(route) ? route : null;
+    if (safeRoute && safeRoute.kind === 'knight') {
+      return lastMoveKnightRouteSegments(state, geom, safeRoute, fallbackFrom, fallbackTo);
+    }
+    if (safeRoute && safeRoute.kind === 'diagonal' && Array.isArray(safeRoute.steps) && safeRoute.steps.length) {
+      return safeRoute.steps.flatMap((step) => (
+        lastMoveAnnotatedLineSegments(state, geom, step.start, step.end, step)
+      ));
+    }
+    if (safeRoute && safeRoute.kind === 'diagonal') {
+      return lastMoveAnnotatedLineSegments(state, geom, safeRoute.start, safeRoute.end, safeRoute);
+    }
+    const routeStart = Number.isInteger(safeRoute && safeRoute.start)
+      ? safeRoute.start
+      : (Number.isInteger(safeRoute && safeRoute.from) ? safeRoute.from : fallbackFrom);
+    const routeEnd = Number.isInteger(safeRoute && safeRoute.end)
+      ? safeRoute.end
+      : (Number.isInteger(safeRoute && safeRoute.to) ? safeRoute.to : fallbackTo);
+    if (safeRoute && Number.isInteger(routeStart) && Number.isInteger(routeEnd)) {
+      return lastMoveAnnotatedLineSegments(state, geom, routeStart, routeEnd, {
+        ...safeRoute,
+        kind: safeRoute.kind || 'axis',
+        start: routeStart,
+        end: routeEnd
+      });
+    }
+    const path = Array.isArray(safeRoute && safeRoute.path) && safeRoute.path.length > 1
+      ? safeRoute.path
+      : [fallbackFrom, fallbackTo];
+    const segments = [];
+    for (let index = 0; index + 1 < path.length; index += 1) {
+      if (!Number.isInteger(path[index]) || !Number.isInteger(path[index + 1])) continue;
+      segments.push(...lastMoveAnnotatedLineSegments(state, geom, path[index], path[index + 1]));
+    }
+    return segments;
+  }
+
+  function lastMoveKnightRouteSegments(state, geom, route, fallbackFrom, fallbackTo) {
+    const transitions = Array.isArray(route && route.transitions) ? route.transitions : [];
+    const path = Array.isArray(route && route.path) && route.path.length === transitions.length + 1
+      ? route.path.slice()
+      : [fallbackFrom].concat(transitions.map((transition) => transition.to)).filter(Number.isInteger);
+    if (!transitions.length || path.length < 2) {
+      return lastMoveAnnotatedLineSegments(state, geom, fallbackFrom, fallbackTo);
+    }
+    const legs = knightRouteLegs(route, transitions.length);
+    return legs.flatMap((leg) => {
+      const startOffset = Math.max(0, Math.min(transitions.length - 1, leg.start));
+      const endOffset = Math.max(startOffset + 1, Math.min(transitions.length, leg.end));
+      const from = path[startOffset];
+      const to = path[endOffset];
+      if (!Number.isInteger(from) || !Number.isInteger(to)) return [];
+      const legRoute = {
+        ...route,
+        kind: 'axis',
+        start: from,
+        end: to,
+        path: path.slice(startOffset, endOffset + 1),
+        transitions: transitions.slice(startOffset, endOffset)
+      };
+      return lastMoveAnnotatedLineSegments(state, geom, from, to, legRoute);
+    });
+  }
+
+  function knightRouteLegs(route, transitionCount) {
+    const explicit = Array.isArray(route && route.knightLegs)
+      ? route.knightLegs
+        .map((leg) => ({
+          start: Math.max(0, Math.min(transitionCount - 1, Number(leg && leg.start))),
+          end: Math.max(1, Math.min(transitionCount, Number(leg && leg.end)))
+        }))
+        .filter((leg) => Number.isInteger(leg.start) && Number.isInteger(leg.end) && leg.end > leg.start)
+      : [];
+    if (explicit.length) return explicit;
+    const directions = Array.isArray(route && route.knightDirections) && route.knightDirections.length === transitionCount
+      ? route.knightDirections
+      : Array.isArray(route && route.directions) && route.directions.length === transitionCount
+        ? route.directions
+        : [];
+    const legs = [];
+    let start = 0;
+    for (let index = 1; index <= transitionCount; index += 1) {
+      const changed = index === transitionCount || directions[index] !== directions[index - 1];
+      if (!changed) continue;
+      legs.push({ start, end: index });
+      start = index;
+    }
+    return legs.length ? legs : [{ start: 0, end: transitionCount }];
+  }
+
+  function lastMoveAnnotatedLineSegments(state, geom, fromIndex, toIndex, route = null) {
+    return placementLineRenderSegments(state, geom, fromIndex, toIndex, route)
+      .map((segment) => ({
+        ...segment,
+        trimStart: lastMovePointIsTileCenter(geom, segment.start, fromIndex),
+        trimEnd: lastMovePointIsTileCenter(geom, segment.end, toIndex)
+      }));
+  }
+
+  function lastMovePointIsTileCenter(geom, point, index) {
+    return Number.isInteger(index) && samePoint(point, placementPiecePoint(geom, index));
+  }
+
+  function drawLastMoveRouteSegment(ctx, geom, start, end, options = {}) {
+    if (!start || !end) return;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 0.01) return;
+    const ux = dx / length;
+    const uy = dy / length;
+    const trim = Math.max(0, Math.min(length * 0.32, Number.isFinite(options.trim) ? options.trim : geom.radius * 0.24));
+    const trimStart = options.trimStart === false ? 0 : trim;
+    const trimEnd = options.trimEnd === false ? 0 : trim;
+    const from = {
+      x: start.x + ux * trimStart,
+      y: start.y + uy * trimStart
+    };
+    const to = {
+      x: end.x - ux * trimEnd,
+      y: end.y - uy * trimEnd
+    };
+    if (Math.hypot(to.x - from.x, to.y - from.y) < 0.01) return;
+    const color = options.color || 'rgba(31,122,140,0.52)';
+    const arrowScale = Number.isFinite(options.arrowScale) ? options.arrowScale : 1;
+    const arrowSize = Math.max(4, geom.radius * 0.16 * arrowScale);
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = Number.isFinite(options.lineWidth) ? options.lineWidth : Math.max(1.2, geom.radius * 0.04);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    if (options.arrowHead !== false && length > arrowSize * 2.2) {
+      const base = {
+        x: to.x - ux * arrowSize,
+        y: to.y - uy * arrowSize
+      };
+      const normal = { x: -uy, y: ux };
+      ctx.beginPath();
+      ctx.moveTo(to.x, to.y);
+      ctx.lineTo(base.x + normal.x * arrowSize * 0.45, base.y + normal.y * arrowSize * 0.45);
+      ctx.lineTo(base.x - normal.x * arrowSize * 0.45, base.y - normal.y * arrowSize * 0.45);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawChineseCheckersLastMovePathDots(ctx, geom, path, active) {
+    const indices = Array.isArray(path) ? path.slice(1, -1).filter(Number.isInteger) : [];
+    if (!indices.length) return;
+    ctx.save();
+    ctx.fillStyle = active ? 'rgba(31,122,140,0.72)' : 'rgba(31,122,140,0.52)';
+    ctx.strokeStyle = 'rgba(255,253,248,0.86)';
+    ctx.lineWidth = Math.max(1, geom.radius * 0.028);
+    indices.forEach((index) => {
+      const point = placementPiecePoint(geom, index);
+      if (!point) return;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, geom.radius * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function drawLastMovePieceDot(ctx, geom, point, piece, options = {}) {
+    const lightPiece = options.forceDark || (piece && (piece.color === 'white' || piece.color === 'yellow'));
+    const radius = placementPieceBaseRadius(geom);
+    ctx.save();
+    ctx.fillStyle = lightPiece ? 'rgba(23,22,21,0.92)' : 'rgba(255,253,248,0.94)';
+    ctx.strokeStyle = lightPiece ? 'rgba(255,253,248,0.8)' : 'rgba(17,17,17,0.52)';
+    ctx.lineWidth = Math.max(1.2, geom.radius * 0.035);
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, Math.max(3.2, radius * 0.18), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawLastMovePieceRing(ctx, geom, point, piece, options = {}) {
+    const active = !!options.active;
+    const radiusScale = Number.isFinite(options.radiusScale) ? options.radiusScale : 1.12;
+    const colors = placementPieceColors(piece && piece.color);
+    const radius = placementPieceBaseRadius(geom) * radiusScale;
+    ctx.save();
+    ctx.strokeStyle = active ? '#1f7a8c' : colors.stroke;
+    ctx.fillStyle = active ? 'rgba(31,122,140,0.12)' : 'rgba(255,253,248,0.12)';
+    ctx.lineWidth = Math.max(active ? 2.4 : 1.8, geom.radius * (active ? 0.085 : 0.062));
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -12282,6 +13045,7 @@
       nextPieceId: nextFideChessPieceId(pieces),
       selectedIndex: null,
       selectedPieceId: null,
+      lastMove: null,
       turn: 'white',
       winner: '',
       result: '',
@@ -12891,6 +13655,10 @@
       ...route,
       path: Array.isArray(route.path) ? route.path.slice() : [],
       directions: Array.isArray(route.directions) ? route.directions.slice() : [],
+      knightDirections: Array.isArray(route.knightDirections) ? route.knightDirections.slice() : undefined,
+      knightLegs: Array.isArray(route.knightLegs)
+        ? route.knightLegs.map((leg) => ({ ...(leg || {}) }))
+        : undefined,
       sourceOrder: Array.isArray(route.sourceOrder) ? route.sourceOrder.slice() : undefined,
       outputDirections: Array.isArray(route.outputDirections) ? route.outputDirections.slice() : undefined,
       transitions: Array.isArray(route.transitions)
@@ -13086,6 +13854,8 @@
       const route = placementRouteByDirections(state, piece.index, dirs, { kind: 'knight', transport: true });
       if (!route || route.end === piece.index) return;
       route.path = [piece.index].concat((route.transitions || []).map((transition) => transition.to));
+      route.knightDirections = dirs.slice();
+      route.knightLegs = knightRouteLegsFromDirections(dirs);
       const routeKey = `${route.end}:${route.directions.join(',')}:${(route.transitions || []).map((step) => `${step.from}-${step.to}-${step.outDir}`).join('|')}`;
       if (seenRoutes.has(routeKey)) return;
       seenRoutes.add(routeKey);
@@ -13093,6 +13863,18 @@
       if (!occupant || options.attacksOnly || occupant.side !== piece.side) moves.push(fideChessMove(state, piece, route.end, { route: cloneFideChessRoute(route) }));
     });
     return dedupeFideChessMoves(moves);
+  }
+
+  function knightRouteLegsFromDirections(dirs) {
+    const values = Array.isArray(dirs) ? dirs : [];
+    const legs = [];
+    let start = 0;
+    for (let index = 1; index <= values.length; index += 1) {
+      if (index < values.length && values[index] === values[index - 1]) continue;
+      legs.push({ start, end: index });
+      start = index;
+    }
+    return legs;
   }
 
   function fideChessPawnMoves(state, piece, options = {}) {
@@ -13282,6 +14064,7 @@
     delete mutablePiece.waitingOrder;
     mutablePiece.hasMoved = true;
     mutablePiece.moveNumber = (next.round || 0) + 1;
+    next.lastMove = null;
     next.round = Math.max(0, Number(next.round) || 0) + 1;
     next.selectedIndex = null;
     next.selectedPieceId = null;
@@ -13306,6 +14089,7 @@
     mutablePiece.waitingOrder = nextFideChessWaitingOrder(next);
     mutablePiece.hasMoved = true;
     mutablePiece.moveNumber = (next.round || 0) + 1;
+    next.lastMove = null;
     next.round = Math.max(0, Number(next.round) || 0) + 1;
     next.selectedIndex = null;
     next.selectedPieceId = null;
@@ -13335,6 +14119,7 @@
     delete mutablePiece.waitingOrder;
     mutablePiece.hasMoved = true;
     mutablePiece.moveNumber = (next.round || 0) + 1;
+    next.lastMove = null;
     next.round = Math.max(0, Number(next.round) || 0) + 1;
     next.selectedIndex = null;
     next.selectedPieceId = null;
@@ -13363,6 +14148,7 @@
         piece.hasMoved = true;
         piece.moveNumber = (next.round || 0) + 1;
       });
+    next.lastMove = null;
     next.round = Math.max(0, Number(next.round) || 0) + 1;
     next.selectedIndex = null;
     next.selectedPieceId = null;
@@ -13446,10 +14232,34 @@
     return Number.isInteger(transitionForward) ? transitionForward : fideChessPawnForwardDir(piece);
   }
 
+  function fideChessLastMoveFromMove(state, move, piece, options = {}) {
+    if (!move || !piece) return null;
+    const lastMove = {
+      kind: 'fide-move',
+      pieceId: piece.id,
+      piece: piece.kind || move.kind || '',
+      side: piece.side || move.side || '',
+      from: move.from,
+      to: move.to,
+      moveNumber: options.switchTurn === false ? normalizeOptionalMoveNumber(piece.moveNumber) : (state.round || 0) + 1,
+      route: cloneFideChessRoute(move.route)
+    };
+    if (move.castle) lastMove.castle = move.castle;
+    if (move.promotion) lastMove.promotion = normalizeFideChessPromotionKind(options.promotionKind);
+    if (move.castle && Number.isInteger(move.rookId)) {
+      lastMove.rookId = move.rookId;
+      if (Number.isInteger(move.rookFrom)) lastMove.rookFrom = move.rookFrom;
+      if (Number.isInteger(move.rookTo)) lastMove.rookTo = move.rookTo;
+      if (move.rookRoute) lastMove.rookRoute = cloneFideChessRoute(move.rookRoute);
+    }
+    return cloneLastMove(lastMove);
+  }
+
   function applyFideChessMoveToState(state, move, options = {}) {
     const piece = fideChessPieceById(state, move.pieceId);
     if (!piece) return false;
     const movingSide = piece.side;
+    const lastMove = fideChessLastMoveFromMove(state, move, piece, options);
     const capturedId = move.enPassant ? move.enPassantCaptureId : move.captureId;
     if (Number.isInteger(capturedId)) {
       state.pieces = state.pieces.filter((entry) => entry.id !== capturedId);
@@ -13495,6 +14305,7 @@
       state.turn = oppositeFideChessSide(movingSide);
       state.selectedIndex = null;
       state.resultDismissed = false;
+      state.lastMove = lastMove;
       if (options.record !== false) appendFideChessRecordMove(state, move, mutablePiece, capturedId);
       if (options.finalize !== false) finalizeFideChessPosition(state);
     }
@@ -13582,6 +14393,7 @@
       nextPieceId: source.nextPieceId || nextFideChessPieceId(source.pieces),
       selectedIndex: Number.isInteger(source.selectedIndex) ? source.selectedIndex : null,
       selectedPieceId: normalizePositiveInteger(source.selectedPieceId, 0) || null,
+      lastMove: cloneLastMove(source.lastMove),
       turn: FIDE_CHESS_COLORS.includes(source.turn) ? source.turn : 'white',
       winner: FIDE_CHESS_COLORS.includes(source.winner) ? source.winner : '',
       result: source.result || '',
@@ -13655,6 +14467,7 @@
       openingOrder: [],
       selectedIndex: null,
       jumpChain: null,
+      lastMove: null,
       turn: playerColors[0] || 'red',
       winner: '',
       winningLine: [],
@@ -16137,6 +16950,9 @@
     const chainSegments = activeJump
       ? cloneChineseCheckerMoveSegments(sourceState.jumpChain && sourceState.jumpChain.segments).concat(cloneChineseCheckerMoveSegments(move.segments))
       : cloneChineseCheckerMoveSegments(move.segments);
+    const moveStart = activeJump && sourceState.jumpChain && Number.isInteger(sourceState.jumpChain.startIndex)
+      ? sourceState.jumpChain.startIndex
+      : from;
     if (chineseCheckersPlayerWins(state, moving.color)) {
       completeChineseCheckersOpeningTurn(state, moving.color);
       state.selectedIndex = null;
@@ -16165,6 +16981,16 @@
       state.turn = nextChineseCheckersTurnAfterCompletedMove(state, moving.color);
       state.ending = '';
     }
+    state.lastMove = cloneLastMove({
+      kind: 'chinese-checkers-move',
+      marbleId: moving.id,
+      color: moving.color,
+      from: moveStart,
+      to,
+      path: chineseCheckersPathFromSegments(chainSegments, moveStart, to),
+      segments: chainSegments,
+      activeJump: !!state.jumpChain
+    });
     return { changed: true, state, move: cloneChineseCheckerMove(move), marble: movedMarble };
   }
 
@@ -16297,6 +17123,19 @@
       jumped: Number.isInteger(jumped) ? jumped : null,
       transitions: Array.isArray(transitions) ? transitions.map(clonePlacementTransition) : []
     };
+  }
+
+  function chineseCheckersPathFromSegments(segments, fallbackFrom, fallbackTo) {
+    const path = [];
+    (Array.isArray(segments) ? segments : []).forEach((segment) => {
+      const segmentPath = Array.isArray(segment && segment.path) ? segment.path : [];
+      segmentPath.forEach((index) => {
+        if (Number.isInteger(index) && path[path.length - 1] !== index) path.push(index);
+      });
+    });
+    if (!path.length && Number.isInteger(fallbackFrom)) path.push(fallbackFrom);
+    if (Number.isInteger(fallbackTo) && path[path.length - 1] !== fallbackTo) path.push(fallbackTo);
+    return path;
   }
 
   function cloneChineseCheckerMove(move) {
@@ -17915,12 +18754,19 @@
 
   function endChineseCheckersJumpFromUi() {
     if (!isChineseCheckersGame(game) || !isChineseCheckersJumping(game) || currentAnimation) return;
+    if (rejectOnlineLocalAction('online Chinese Checkers end jump blocked')) return;
+    const role = game.turn;
     pushUndoSnapshot(`Chinese Checkers ${game.turn} end jump`);
     game = finishChineseCheckersJump(game);
     syncStatusForCurrentGame();
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'chinese-checkers-end-jump',
+      gameMode: GAME_MODES.CHINESE_CHECKERS,
+      role
+    });
     if (refs.canvas) refs.canvas.focus();
   }
 
@@ -17930,6 +18776,7 @@
     const chain = state.jumpChain;
     const moving = (state.marbles || []).find((marble) => marble.id === chain.marbleId) || null;
     const color = moving ? moving.color : state.turn;
+    const lastMove = cloneLastMove(state.lastMove);
     state.selectedIndex = null;
     state.jumpChain = null;
     state.round += 1;
@@ -17945,6 +18792,10 @@
       state.phase = 'ready';
       state.turn = nextChineseCheckersTurnAfterCompletedMove(state, color);
       state.ending = '';
+    }
+    if (lastMove) {
+      lastMove.activeJump = false;
+      state.lastMove = lastMove;
     }
     return state;
   }
@@ -19179,6 +20030,7 @@
         openingOrder: chineseCheckersOpeningOrder(source),
         selectedIndex: Number.isInteger(source.selectedIndex) ? source.selectedIndex : null,
         jumpChain: cloneChineseCheckersJumpChain(source.jumpChain),
+        lastMove: cloneLastMove(source.lastMove),
         turn: normalizeChineseCheckersTurn(source.turn, chineseCheckersPlayerColors(source)),
         winner: normalizeChineseCheckersWinner(source.winner, chineseCheckersPlayerColors(source)),
         winningLine: [],
@@ -21024,7 +21876,7 @@
     syncSokobanEnergyGlowOutput();
     syncSokobanBeamOutput();
     if (refs.nextStep) refs.nextStep.disabled = !modeDirectional || !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
-    const onlineHistoryBlocked = onlineRoomActive && onlineState && onlineState.role === 'spectator';
+    const onlineHistoryBlocked = onlineRoomActive && onlineState && !onlineStateHasPlayableRole();
     if (refs.undo) refs.undo.disabled = onlineHistoryBlocked || !undoStack.length;
     if (refs.redo) refs.redo.disabled = onlineHistoryBlocked || !redoStack.length;
     if (refs.fullscreenUndo) refs.fullscreenUndo.disabled = onlineHistoryBlocked || !undoStack.length;
@@ -21050,6 +21902,7 @@
         button.disabled = disabled || !Number.isInteger(dir);
       });
     }
+    if (!onlineRoomActive && !(onlineState && onlineState.connecting)) syncOnlineRoleOptions(selectedGameMode());
     syncOnlineControls();
   }
 
@@ -21840,6 +22693,7 @@
         openingOrder: chineseCheckersOpeningOrder(state),
         selectedIndex: Number.isInteger(state.selectedIndex) ? state.selectedIndex : null,
         jumpChain: cloneChineseCheckersJumpChain(state.jumpChain),
+        lastMove: cloneLastMove(state.lastMove),
         turn: state.turn,
         winner: state.winner || '',
         winningLine: (state.winningLine || []).slice(),
@@ -21868,6 +22722,7 @@
         removed: Array.from(state.removed).sort((a, b) => a - b),
         selectedIndex: Number.isInteger(state.selectedIndex) ? state.selectedIndex : null,
         selectedPieceId: normalizePositiveInteger(state.selectedPieceId, 0) || null,
+        lastMove: cloneLastMove(state.lastMove),
         turn: state.turn,
         winner: state.winner || '',
         result: state.result || '',

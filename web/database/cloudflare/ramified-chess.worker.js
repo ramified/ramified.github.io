@@ -16,7 +16,8 @@ const SUPPORTED_GAME_MODES = new Set([
   'go',
   'connect-four',
   'reversi',
-  'fide-chess'
+  'fide-chess',
+  'chinese-checkers'
 ]);
 
 const PLAYER_ROLES_BY_MODE = {
@@ -24,7 +25,8 @@ const PLAYER_ROLES_BY_MODE = {
   go: ['black', 'white'],
   'connect-four': ['red', 'yellow'],
   reversi: ['black', 'white'],
-  'fide-chess': ['white', 'black']
+  'fide-chess': ['white', 'black'],
+  'chinese-checkers': ['red', 'yellow']
 };
 
 const ROOM_CODE_ALPHABET = '0123456789';
@@ -45,14 +47,14 @@ export default {
         return await createRoom(request, env);
       }
 
-      const roomMetaMatch = /^\/api\/rooms\/([A-Z2-9]{4,8})$/i.exec(path);
+      const roomMetaMatch = /^\/api\/rooms\/([A-Z0-9]{4,8})$/i.exec(path);
       if (request.method === 'GET' && roomMetaMatch) {
         const roomCode = normalizeRoomCode(roomMetaMatch[1]);
         const stub = env.GAME_ROOM.get(env.GAME_ROOM.idFromName(roomCode));
         return addCors(await stub.fetch(new Request(`https://room/meta?roomCode=${roomCode}`)));
       }
 
-      const wsMatch = /^\/ws\/([A-Z2-9]{4,8})$/i.exec(path);
+      const wsMatch = /^\/ws\/([A-Z0-9]{4,8})$/i.exec(path);
       if (request.method === 'GET' && wsMatch) {
         if (request.headers.get('Upgrade') !== 'websocket') {
           return jsonResponse({ error: 'Expected WebSocket upgrade.' }, 426);
@@ -114,7 +116,7 @@ export class GameRoom {
     if (!clientId) return jsonResponse({ error: 'Missing client id.' }, 400);
 
     const roles = {};
-    const role = assignRequestedRole(roles, gameMode, body.role, clientId);
+    const rolesAssigned = assignRequestedRoles(roles, gameMode, body.rolesRequested || body.role, clientId, snapshot);
     const now = new Date().toISOString();
     this.room = {
       roomCode,
@@ -123,18 +125,24 @@ export class GameRoom {
       snapshot,
       summary: sanitizeText(body.summary, 220),
       roles,
+      readyToPlay: gameMode !== 'chinese-checkers',
       pendingApproval: null,
       approvedHistory: null,
       createdAt: now,
       updatedAt: now
     };
+    updateRoomReadiness(this.room);
     await this.saveRoom();
-    return jsonResponse(publicRoomPayload(this.room, { role }));
+    return jsonResponse(publicRoomPayload(this.room, {
+      role: rolesAssigned[0] || 'spectator',
+      rolesAssigned
+    }));
   }
 
   async handleMeta() {
     await this.loadRoom();
     if (!this.room) return jsonResponse({ error: 'Room not found.' }, 404);
+    updateRoomReadiness(this.room);
     return jsonResponse(publicRoomPayload(this.room));
   }
 
@@ -149,6 +157,7 @@ export class GameRoom {
     const attachment = {
       clientId,
       role: '',
+      roles: [],
       joined: false,
       connectedAt: new Date().toISOString()
     };
@@ -224,23 +233,35 @@ export class GameRoom {
 
   async handleHello(ws, payload) {
     const clientId = normalizeClientId(payload.clientId) || safeAttachment(ws).clientId;
+    const rolesAssigned = assignRequestedRoles(
+      this.room.roles,
+      this.room.gameMode,
+      payload.rolesRequested || payload.role,
+      clientId,
+      this.room.snapshot
+    );
     const attachment = {
       ...safeAttachment(ws),
       clientId,
-      role: assignRequestedRole(this.room.roles, this.room.gameMode, payload.role, clientId),
+      role: rolesAssigned[0] || 'spectator',
+      roles: rolesAssigned,
       joined: true
     };
     this.sessions.set(ws, attachment);
     ws.serializeAttachment(attachment);
     this.room.updatedAt = new Date().toISOString();
+    updateRoomReadiness(this.room);
     await this.saveRoom();
     this.safeSend(ws, {
       type: 'joined',
       roomCode: this.room.roomCode,
       gameMode: this.room.gameMode,
       role: attachment.role,
+      rolesAssigned: attachment.roles,
       version: this.room.version,
-      roles: publicRoles(this.room.roles)
+      roles: publicRoles(this.room.roles),
+      readyToPlay: this.room.readyToPlay !== false,
+      unclaimedRoles: unclaimedRoomRoles(this.room)
     });
     this.sendState(ws, { reason: 'join' });
     this.broadcastPresence();
@@ -252,8 +273,9 @@ export class GameRoom {
       this.safeSend(ws, { type: 'rejected', error: 'Join the room before moving.', version: this.room.version, snapshot: this.room.snapshot });
       return;
     }
-    const role = normalizeRole(attachment.role);
-    if (!role || role === 'spectator') {
+    const roles = attachmentRoles(attachment);
+    const role = roles[0] || 'spectator';
+    if (!roles.length) {
       this.safeSend(ws, { type: 'rejected', error: 'Spectators cannot move.', version: this.room.version, snapshot: this.room.snapshot });
       return;
     }
@@ -267,7 +289,7 @@ export class GameRoom {
       this.safeSend(ws, { type: 'rejected', error: historyIssue, version: this.room.version, snapshot: this.room.snapshot });
       return;
     }
-    const turnIssue = historyActionType(action.type) ? '' : this.turnIssue(role, action);
+    const turnIssue = historyActionType(action.type) ? '' : this.turnIssue(roles, action, payload.snapshot);
     if (turnIssue) {
       this.safeSend(ws, { type: 'rejected', error: turnIssue, version: this.room.version, snapshot: this.room.snapshot });
       return;
@@ -284,6 +306,10 @@ export class GameRoom {
     this.room.summary = sanitizeText(payload.summary, 220);
     this.room.updatedAt = new Date().toISOString();
     if (historyActionType(action.type)) this.room.approvedHistory = null;
+    if (this.room.gameMode === 'chinese-checkers' && action.type === 'chinese-checkers-start') {
+      this.room.readyToPlay = true;
+    }
+    updateRoomReadiness(this.room);
     await this.saveRoom();
 
     const stateMessage = {
@@ -295,16 +321,26 @@ export class GameRoom {
       summary: this.room.summary,
       action,
       clientId: attachment.clientId,
-      role
+      role,
+      roles: publicRoles(this.room.roles),
+      readyToPlay: this.room.readyToPlay !== false,
+      unclaimedRoles: unclaimedRoomRoles(this.room)
     };
     this.broadcast(stateMessage);
-    this.safeSend(ws, { type: 'accepted', version: this.room.version, action });
+    this.safeSend(ws, {
+      type: 'accepted',
+      version: this.room.version,
+      action,
+      roles: publicRoles(this.room.roles),
+      readyToPlay: this.room.readyToPlay !== false,
+      unclaimedRoles: unclaimedRoomRoles(this.room)
+    });
   }
 
   async handleHistoryRequest(ws, payload) {
     const attachment = safeAttachment(ws);
     const kind = payload.kind === 'redo' ? 'redo' : 'undo';
-    if (!attachment.joined || attachment.role === 'spectator') {
+    if (!attachment.joined || !attachmentHasPlayableRole(attachment)) {
       this.safeSend(ws, { type: 'historyRejected', kind, error: 'Only players can request undo/redo.' });
       return;
     }
@@ -318,9 +354,10 @@ export class GameRoom {
       return;
     }
     const approvers = this.playerSockets().filter(({ attachment: item }) => (
-      item.clientId !== attachment.clientId && item.role !== 'spectator'
+      item.clientId !== attachment.clientId && attachmentHasPlayableRole(item)
     ));
-    if (!approvers.length) {
+    const approverClientIds = uniqueStrings(approvers.map(({ attachment: item }) => item.clientId));
+    if (!approverClientIds.length) {
       this.safeSend(ws, { type: 'historyRejected', kind, error: 'No opponent is connected to approve this request.' });
       return;
     }
@@ -330,6 +367,9 @@ export class GameRoom {
       kind,
       requesterClientId: attachment.clientId,
       requesterRole: attachment.role,
+      requesterRoles: attachmentRoles(attachment),
+      approverClientIds,
+      approvedClientIds: [],
       baseVersion: this.room.version,
       expiresAt: Date.now() + APPROVAL_TTL_MS,
       summary: sanitizeText(payload.summary || this.room.summary, 220)
@@ -341,6 +381,7 @@ export class GameRoom {
         requestId,
         kind,
         requesterRole: attachment.role,
+        requesterRoles: attachmentRoles(attachment),
         version: this.room.version,
         summary: this.room.pendingApproval.summary
       });
@@ -350,7 +391,7 @@ export class GameRoom {
       requestId,
       kind,
       version: this.room.version,
-      message: `Waiting for opponent to approve ${kind}.`
+      message: `Waiting for ${approverClientIds.length} player${approverClientIds.length === 1 ? '' : 's'} to approve ${kind}.`
     });
   }
 
@@ -362,12 +403,23 @@ export class GameRoom {
       this.safeSend(ws, { type: 'approvalResolved', allowed: false, message: 'No matching history request is pending.' });
       return;
     }
-    if (attachment.clientId === pending.requesterClientId || attachment.role === 'spectator') {
+    if (attachment.clientId === pending.requesterClientId || !attachmentHasPlayableRole(attachment)) {
       this.safeSend(ws, { type: 'approvalResolved', allowed: false, message: 'This client cannot approve the request.' });
+      return;
+    }
+    if (Array.isArray(pending.approverClientIds) && !pending.approverClientIds.includes(attachment.clientId)) {
+      this.safeSend(ws, { type: 'approvalResolved', allowed: false, message: 'This client was not asked to approve the request.' });
       return;
     }
     const requester = this.findSocketByClientId(pending.requesterClientId);
     if (payload.allow) {
+      pending.approvedClientIds = uniqueStrings((pending.approvedClientIds || []).concat(attachment.clientId));
+      const remaining = (pending.approverClientIds || []).filter((clientId) => !pending.approvedClientIds.includes(clientId));
+      if (remaining.length) {
+        await this.saveRoom();
+        this.safeSend(ws, { type: 'approvalResolved', allowed: true, message: `${pending.kind} approval recorded; waiting for ${remaining.length} more.` });
+        return;
+      }
       this.room.approvedHistory = {
         requestId: pending.requestId,
         kind: pending.kind,
@@ -412,10 +464,23 @@ export class GameRoom {
     return '';
   }
 
-  turnIssue(role, action) {
+  turnIssue(roles, action, nextSnapshot) {
+    const owned = normalizeRoles(roles);
+    if (this.room.gameMode === 'chinese-checkers' && action.type === 'chinese-checkers-start') {
+      if (!owned.length) return 'Claim at least one color before beginning.';
+      const claimed = claimedRoomRoles(this.room);
+      const nextPlayers = rolesForGame('chinese-checkers', nextSnapshot);
+      if (!nextPlayers.length) return 'Chinese Checkers start needs at least one claimed color.';
+      const unclaimedInSnapshot = nextPlayers.filter((role) => !claimed.includes(role));
+      if (unclaimedInSnapshot.length) return 'Partial start can only keep claimed colors active.';
+      return '';
+    }
+    if (this.room.gameMode === 'chinese-checkers' && this.room.readyToPlay === false) {
+      return 'Chinese Checkers is waiting for the remaining colors.';
+    }
     if (goReviewActionType(action.type) && this.room.snapshot && this.room.snapshot.scoringReview) return '';
     const expected = normalizeRole(this.room.snapshot && this.room.snapshot.turn);
-    if (expected && expected !== role) return `${expected} to move.`;
+    if (expected && !owned.includes(expected)) return `${expected} to move.`;
     return '';
   }
 
@@ -426,6 +491,7 @@ export class GameRoom {
       if (this.room.roles[role] === attachment.clientId) delete this.room.roles[role];
     });
     this.room.updatedAt = new Date().toISOString();
+    updateRoomReadiness(this.room);
     await this.saveRoom();
     this.broadcastPresence();
   }
@@ -437,6 +503,7 @@ export class GameRoom {
   }
 
   sendState(ws, extra = {}) {
+    const attachment = safeAttachment(ws);
     this.safeSend(ws, {
       type: 'state',
       roomCode: this.room.roomCode,
@@ -444,6 +511,11 @@ export class GameRoom {
       version: this.room.version,
       snapshot: this.room.snapshot,
       summary: this.room.summary,
+      role: attachment.role || 'spectator',
+      rolesAssigned: attachmentRoles(attachment),
+      roles: publicRoles(this.room.roles),
+      readyToPlay: this.room.readyToPlay !== false,
+      unclaimedRoles: unclaimedRoomRoles(this.room),
       ...extra
     });
   }
@@ -461,6 +533,8 @@ export class GameRoom {
       type: 'presence',
       roomCode: this.room.roomCode,
       roles: publicRoles(this.room.roles),
+      readyToPlay: this.room.readyToPlay !== false,
+      unclaimedRoles: unclaimedRoomRoles(this.room),
       connected: this.playerSockets().length
     });
   }
@@ -557,22 +631,107 @@ function normalizeAction(action) {
   return result;
 }
 
-function assignRequestedRole(roles, gameMode, requestedRole, clientId) {
-  const available = PLAYER_ROLES_BY_MODE[gameMode] || [];
-  const requested = normalizeRole(requestedRole);
-  const existing = available.find((role) => roles[role] === clientId);
-  if (existing) return existing;
-  if (requested === 'spectator') return 'spectator';
-  if (available.includes(requested) && (!roles[requested] || roles[requested] === clientId)) {
-    roles[requested] = clientId;
-    return requested;
+function assignRequestedRoles(roles, gameMode, requestedRoles, clientId, snapshot) {
+  const available = rolesForGame(gameMode, snapshot);
+  if (!available.length) return ['spectator'];
+  const rawRequested = normalizeRoles(requestedRoles);
+  if (rawRequested.includes('spectator')) {
+    available.forEach((role) => {
+      if (roles[role] === clientId) delete roles[role];
+    });
+    return ['spectator'];
   }
-  const open = available.find((role) => !roles[role]);
-  if (open) {
-    roles[open] = clientId;
-    return open;
+  const requested = rawRequested.filter((role) => role !== 'auto');
+  const existing = available.filter((role) => roles[role] === clientId);
+  if (gameMode !== 'chinese-checkers') {
+    if (existing.length) return [existing[0]];
+    const requestedOpen = requested.find((role) => available.includes(role) && !roles[role]);
+    const chosen = requestedOpen || randomOpenRole(roles, available);
+    if (chosen) {
+      roles[chosen] = clientId;
+      return [chosen];
+    }
+    return ['spectator'];
   }
-  return 'spectator';
+  requested.forEach((role) => {
+    if (available.includes(role) && (!roles[role] || roles[role] === clientId)) roles[role] = clientId;
+  });
+  let assigned = available.filter((role) => roles[role] === clientId);
+  if (!assigned.length && !requested.length) {
+    const chosen = randomOpenRole(roles, available);
+    if (chosen) roles[chosen] = clientId;
+    assigned = available.filter((role) => roles[role] === clientId);
+  }
+  return assigned.length ? assigned : ['spectator'];
+}
+
+function rolesForGame(gameMode, snapshot) {
+  const mode = normalizeGameMode(gameMode);
+  if (mode === 'chinese-checkers') {
+    const fromSnapshot = normalizeRoles(snapshot && (snapshot.playerColors || snapshot.chineseCheckersPlayers));
+    return fromSnapshot.length ? fromSnapshot : (PLAYER_ROLES_BY_MODE[mode] || []).slice();
+  }
+  return PLAYER_ROLES_BY_MODE[mode] ? PLAYER_ROLES_BY_MODE[mode].slice() : [];
+}
+
+function randomOpenRole(roles, available) {
+  const open = (available || []).filter((role) => !roles[role]);
+  if (!open.length) return '';
+  const bytes = new Uint8Array(1);
+  crypto.getRandomValues(bytes);
+  return open[bytes[0] % open.length] || '';
+}
+
+function unclaimedRoomRoles(room) {
+  if (!room) return [];
+  return rolesForGame(room.gameMode, room.snapshot).filter((role) => !room.roles || !room.roles[role]);
+}
+
+function claimedRoomRoles(room) {
+  if (!room) return [];
+  return rolesForGame(room.gameMode, room.snapshot).filter((role) => room.roles && room.roles[role]);
+}
+
+function updateRoomReadiness(room) {
+  if (!room) return;
+  if (room.gameMode !== 'chinese-checkers') {
+    room.readyToPlay = true;
+    return;
+  }
+  if (room.readyToPlay === true) return;
+  room.readyToPlay = unclaimedRoomRoles(room).length === 0;
+}
+
+function normalizeRoles(value) {
+  const result = [];
+  const add = (roleValue) => {
+    const role = normalizeRole(roleValue);
+    if (role && !result.includes(role)) result.push(role);
+  };
+  if (Array.isArray(value)) value.forEach(add);
+  else if (typeof value === 'string') value.split(/[,\s]+/).forEach(add);
+  else if (value != null) add(value);
+  return result;
+}
+
+function attachmentRoles(attachment) {
+  const roles = normalizeRoles(attachment && (attachment.roles || attachment.rolesAssigned));
+  if (roles.length) return roles.filter((role) => role !== 'spectator');
+  const role = normalizeRole(attachment && attachment.role);
+  return role && role !== 'spectator' ? [role] : [];
+}
+
+function attachmentHasPlayableRole(attachment) {
+  return attachmentRoles(attachment).length > 0;
+}
+
+function uniqueStrings(values) {
+  const result = [];
+  (values || []).forEach((value) => {
+    const text = String(value || '').trim();
+    if (text && !result.includes(text)) result.push(text);
+  });
+  return result;
 }
 
 function publicRoomPayload(room, extra = {}) {
@@ -582,6 +741,8 @@ function publicRoomPayload(room, extra = {}) {
     version: room.version,
     summary: room.summary || '',
     roles: publicRoles(room.roles),
+    readyToPlay: room.readyToPlay !== false,
+    unclaimedRoles: unclaimedRoomRoles(room),
     createdAt: room.createdAt,
     updatedAt: room.updatedAt,
     ...extra
@@ -603,7 +764,7 @@ function randomRoomCode() {
 }
 
 function normalizeRoomCode(value) {
-  return String(value || '').trim().toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, 8);
+  return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
 }
 
 function normalizeGameMode(value) {

@@ -69,6 +69,18 @@
       min-width: 0;
     }
 
+    .online-role-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      min-width: 0;
+    }
+
+    .online-role-options .opt-row {
+      margin: 0;
+      white-space: nowrap;
+    }
+
     body.canvas-fit-viewport {
       overflow: hidden;
     }
@@ -94,8 +106,7 @@
       padding-right: 2px;
     }
 
-    body.canvas-fit-viewport .canvas-panel,
-    .canvas-panel:fullscreen {
+    body.canvas-fit-viewport .canvas-panel {
       display: flex;
       flex-direction: column;
       min-height: 0;
@@ -106,8 +117,7 @@
     }
 
     body.canvas-fit-viewport #canvas-wrap,
-    #canvas-wrap:fullscreen,
-    .canvas-panel:fullscreen #canvas-wrap {
+    #canvas-wrap:fullscreen {
       flex: 1 1 auto;
       min-height: 0;
       display: flex;
@@ -126,26 +136,8 @@
       background: #111111;
     }
 
-    .canvas-panel:fullscreen {
-      width: 100vw;
-      height: 100vh;
-      border: 0;
-      border-radius: 0;
-      background: #111111;
-      color: #f7f4ef;
-      box-shadow: none;
-    }
-
-    .canvas-panel:fullscreen header.panel-title,
-    .canvas-panel:fullscreen .mosaic-underbar {
-      background: #161616;
-      border-color: rgba(255,255,255,0.16);
-      color: #d8d0c4;
-    }
-
     body.canvas-fit-viewport #mosaic-canvas,
-    #canvas-wrap:fullscreen #mosaic-canvas,
-    .canvas-panel:fullscreen #mosaic-canvas {
+    #canvas-wrap:fullscreen #mosaic-canvas {
       width: var(--canvas-display-width, 100%) !important;
       height: var(--canvas-display-height, auto) !important;
       max-width: 100%;
@@ -362,8 +354,7 @@
       color: #fff;
     }
 
-    #canvas-wrap.fullscreen-action-gutter:fullscreen,
-    .canvas-panel:fullscreen #canvas-wrap.fullscreen-action-gutter {
+    #canvas-wrap.fullscreen-action-gutter:fullscreen {
       padding-top: 56px;
     }
 
@@ -1745,12 +1736,8 @@
           <button class="btn" id="redo-step" type="button" disabled>redo</button>
         </div>
         <div class="mosaic-debug-panel" id="debug-tools" hidden>
-          <div class="mosaic-inline-row" id="fullscreen-target-row">
-            <span class="input-label">Fullscreen</span>
-            <select class="mosaic-editor-input" id="fullscreen-target" aria-label="Fullscreen target">
-              <option value="canvas" selected>canvas only</option>
-              <option value="panel">canvas panel</option>
-            </select>
+          <div class="mosaic-debug-step-row" id="connect-four-hole-edit-row" data-mode-control="connect-four" hidden>
+            <label class="opt-row"><input type="checkbox" id="connect-four-hole-edit"> add/remove holes</label>
           </div>
           <div class="mosaic-debug-step-row" id="step-mode-row" data-mode-control="directional">
             <label class="opt-row"><input type="checkbox" id="step-mode"> step-by-step</label>
@@ -1867,14 +1854,15 @@
         </div>
         <div class="mosaic-inline-row">
           <span class="input-label">Side</span>
-          <select id="online-role" aria-label="Online player side">
-            <option value="auto" selected>auto side</option>
-            <option value="spectator">spectator</option>
-          </select>
+          <span class="online-role-options" id="online-role-options" aria-label="Online player side"></span>
         </div>
         <div class="online-action-grid">
           <button class="btn" id="online-create-room" type="button">create room</button>
           <button class="btn" id="online-join-room" type="button">join room</button>
+        </div>
+        <div class="mosaic-inline-row" id="online-chinese-start-row" hidden>
+          <label class="opt-row"><input type="checkbox" id="online-keep-unclaimed-colors"> keep unclaimed colors</label>
+          <button class="btn" id="online-start-claimed-colors" type="button">begin claimed colors</button>
         </div>
         <button class="btn" id="online-leave-room" type="button" disabled>leave room</button>
         <div class="online-status-line" id="online-status" data-state="offline" role="status" aria-live="polite">Online Worker URL is not configured.</div>
