@@ -42,7 +42,7 @@ export default {
 
     try {
       if (request.method === 'POST' && path === '/api/rooms') {
-        return createRoom(request, env);
+        return await createRoom(request, env);
       }
 
       const roomMetaMatch = /^\/api\/rooms\/([A-Z2-9]{4,8})$/i.exec(path);
@@ -84,11 +84,17 @@ export class GameRoom {
   }
 
   async fetch(request) {
-    const url = new URL(request.url);
-    if (url.pathname === '/init' && request.method === 'POST') return this.handleInit(request);
-    if (url.pathname === '/meta' && request.method === 'GET') return this.handleMeta();
-    if (/^\/ws\//.test(url.pathname) && request.headers.get('Upgrade') === 'websocket') return this.handleWebSocket(request);
-    return jsonResponse({ error: 'Room endpoint not found.' }, 404);
+    try {
+      const url = new URL(request.url);
+      if (url.pathname === '/init' && request.method === 'POST') return this.handleInit(request);
+      if (url.pathname === '/meta' && request.method === 'GET') return this.handleMeta();
+      if (/^\/ws\//.test(url.pathname) && request.headers.get('Upgrade') === 'websocket') return this.handleWebSocket(request);
+      return jsonResponse({ error: 'Room endpoint not found.' }, 404);
+    } catch (error) {
+      return jsonResponse({
+        error: `Room error: ${error && error.message ? error.message : 'Durable Object exception.'}`
+      }, 500);
+    }
   }
 
   async handleInit(request) {
