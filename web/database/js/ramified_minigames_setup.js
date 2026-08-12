@@ -679,10 +679,12 @@
       ),
       clientId: onlineClientId(),
       roomCode: '',
+      pendingRoomCode: '',
       role: '',
       gameMode: '',
       version: 0,
       socket: null,
+      joined: false,
       connecting: false,
       intentionalClose: false,
       reconnectTimer: null,
@@ -742,6 +744,13 @@
     return true;
   }
 
+  function onlineSelectedModeSupported() {
+    const mode = selectedGameMode();
+    if (!onlineModeSupported(mode)) return false;
+    if (mode === GAME_MODES.FIDE_CHESS && selectedFideChessPresetIsPuzzle()) return false;
+    return true;
+  }
+
   function syncOnlineRoleOptions(mode = null) {
     if (!refs.onlineRole) return;
     const targetMode = mode || (onlineState && onlineState.gameMode) || selectedGameMode();
@@ -784,7 +793,7 @@
   }
 
   function onlineIsInRoom() {
-    return !!(onlineState && onlineState.roomCode);
+    return !!(onlineState && onlineState.joined && onlineState.roomCode);
   }
 
   function onlineSocketOpen() {
@@ -803,10 +812,13 @@
 
   function onlineStatusText() {
     if (!onlineState) return 'Online play unavailable.';
-    if (onlineState.roomCode) {
+    if (onlineState.joined && onlineState.roomCode) {
       const role = onlineState.role ? ` as ${onlineRoleLabel(onlineState.role)}` : '';
       const version = Number.isInteger(onlineState.version) ? `, v${onlineState.version}` : '';
       return `Room ${onlineState.roomCode}${role}${version}. ${onlineState.statusText || ''}`.trim();
+    }
+    if (onlineState.connecting && onlineState.pendingRoomCode) {
+      return `Room ${onlineState.pendingRoomCode}. ${onlineState.statusText || 'Connecting...'}`.trim();
     }
     return onlineState.statusText || (onlineState.baseUrl ? 'Ready to create or join an online room.' : 'Online Worker URL is not configured.');
   }
@@ -822,11 +834,11 @@
   function syncOnlineControls() {
     if (!onlineState) return;
     const configured = !!onlineState.baseUrl;
-    const active = onlineIsInRoom();
+    const active = onlineIsInRoom() || !!onlineState.connecting;
     const roomInput = onlineRoomCodeFromInput();
     if (refs.onlineRoomCode && refs.onlineRoomCode.value !== roomInput) refs.onlineRoomCode.value = roomInput;
     if (refs.onlineCreateRoom) {
-      refs.onlineCreateRoom.disabled = !configured || active || !onlineStateSupported(game) || !game || game.phase === 'setup';
+      refs.onlineCreateRoom.disabled = !configured || active || !onlineSelectedModeSupported();
     }
     if (refs.onlineJoinRoom) refs.onlineJoinRoom.disabled = !configured || active || roomInput.length < 4;
     if (refs.onlineLeaveRoom) refs.onlineLeaveRoom.disabled = !active;
@@ -857,12 +869,13 @@
       syncOnlineControls();
       return;
     }
-    if (!game || game.phase === 'setup') {
-      syncOnlineStatus('Begin a supported two-player game before creating a room.', 'error');
-      syncStatus('online room unavailable', 'begin the game first', 'warn');
+    if (!onlineSelectedModeSupported()) {
+      syncOnlineStatus('Online play supports Gomoku, Go, Connect Four, Reversi, and non-puzzle FIDE Chess.', 'error');
+      syncStatus('online unsupported', 'choose a supported two-player game', 'warn');
       syncOnlineControls();
       return;
     }
+    if (!ensureOnlineRoomGameStarted()) return;
     if (!onlineStateSupported(game)) {
       syncOnlineStatus('Online play supports Gomoku, Go, Connect Four, Reversi, and non-puzzle FIDE Chess.', 'error');
       syncStatus('online unsupported', 'choose a supported two-player game', 'warn');
@@ -903,6 +916,20 @@
       syncOnlineStatus(error && error.message ? error.message : 'Room creation failed.', 'error');
       syncOnlineControls();
     }
+  }
+
+  function ensureOnlineRoomGameStarted() {
+    if (game && game.phase !== 'setup') return true;
+    const mode = selectedGameMode();
+    syncOnlineStatus('Starting selected game before creating the room...', 'idle');
+    beginGameFromUi();
+    if (game && game.phase !== 'setup' && onlineStateSupported(game)) return true;
+    const info = mode === GAME_MODES.CONNECT_FOUR
+      ? 'add input holes, or choose a Connect Four preset that already has holes'
+      : 'finish setup before creating an online room';
+    syncOnlineStatus(info, 'error');
+    syncControls();
+    return false;
   }
 
   async function joinOnlineRoomFromUi() {
@@ -946,9 +973,11 @@
       }
       closeOnlineSocket({ keepRoom: true, intentional: true });
       const code = normalizeOnlineRoomCode(roomCode);
-      onlineState.roomCode = code;
+      const wasJoinedRoom = onlineState.joined && onlineState.roomCode === code;
+      onlineState.roomCode = wasJoinedRoom ? code : '';
+      onlineState.pendingRoomCode = code;
       onlineState.role = '';
-      onlineState.intentionalClose = false;
+      onlineState.joined = false;
       onlineState.connecting = true;
       onlineState.gameMode = onlineState.gameMode || selectedGameMode();
       syncOnlineStatus('Opening WebSocket...', 'idle');
@@ -961,6 +990,7 @@
         reject(error);
         return;
       }
+      onlineState.intentionalClose = false;
       onlineState.socket = socket;
       const timeout = setTimeout(() => {
         if (socket.readyState !== WebSocket.OPEN) {
@@ -998,11 +1028,29 @@
         if (!onlineState) return;
         onlineState.connecting = false;
         if (wasIntentional) {
-          syncOnlineStatus(onlineState.roomCode ? 'Left online room.' : 'Ready to create or join an online room.', onlineState.baseUrl ? 'idle' : 'offline');
+          const leftRoom = onlineState.joined && onlineState.roomCode;
+          if (!leftRoom) {
+            onlineState.pendingRoomCode = '';
+            onlineState.roomCode = '';
+            onlineState.role = '';
+            onlineState.joined = false;
+          }
+          syncOnlineStatus(leftRoom ? 'Left online room.' : 'Ready to create or join an online room.', onlineState.baseUrl ? 'idle' : 'offline');
           syncOnlineControls();
           return;
         }
         const reason = event && event.reason ? event.reason : 'connection closed';
+        if (!onlineState.joined) {
+          const failedCode = onlineState.pendingRoomCode || onlineState.roomCode;
+          onlineState.pendingRoomCode = '';
+          onlineState.roomCode = '';
+          onlineState.role = '';
+          onlineState.version = 0;
+          syncOnlineStatus(failedCode ? `Could not join room ${failedCode}: ${reason}.` : reason, 'error');
+          syncOnlineControls();
+          syncControls();
+          return;
+        }
         syncOnlineStatus(`${reason}; reconnecting...`, 'error');
         syncOnlineControls();
         scheduleOnlineReconnect();
@@ -1030,9 +1078,11 @@
     }
     if (!options.keepRoom) {
       onlineState.roomCode = '';
+      onlineState.pendingRoomCode = '';
       onlineState.role = '';
       onlineState.gameMode = '';
       onlineState.version = 0;
+      onlineState.joined = false;
     }
   }
 
@@ -1077,7 +1127,9 @@
     }
     if (!message || typeof message !== 'object') return;
     if (message.type === 'joined') {
-      onlineState.roomCode = normalizeOnlineRoomCode(message.roomCode || onlineState.roomCode);
+      onlineState.roomCode = normalizeOnlineRoomCode(message.roomCode || onlineState.pendingRoomCode || onlineState.roomCode);
+      onlineState.pendingRoomCode = '';
+      onlineState.joined = true;
       onlineState.role = message.role || 'spectator';
       onlineState.version = normalizeOnlineVersion(message.version, onlineState.version);
       onlineState.gameMode = gameModeFromUrlParam(message.gameMode) || onlineState.gameMode || selectedGameMode();
