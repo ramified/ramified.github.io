@@ -689,6 +689,7 @@
       intentionalClose: false,
       reconnectTimer: null,
       applyingRemoteState: false,
+      pendingStateMessages: [],
       statusState: 'offline',
       statusText: ''
     };
@@ -973,6 +974,7 @@
       }
       closeOnlineSocket({ keepRoom: true, intentional: true });
       const code = normalizeOnlineRoomCode(roomCode);
+      clearQueuedOnlineStateMessages();
       const wasJoinedRoom = onlineState.joined && onlineState.roomCode === code;
       onlineState.roomCode = wasJoinedRoom ? code : '';
       onlineState.pendingRoomCode = code;
@@ -1077,6 +1079,7 @@
       }
     }
     if (!options.keepRoom) {
+      clearQueuedOnlineStateMessages();
       onlineState.roomCode = '';
       onlineState.pendingRoomCode = '';
       onlineState.role = '';
@@ -1201,12 +1204,29 @@
       ? message.action
       : null;
     const originClientId = String(message.clientId || (action && action.clientId) || '');
+    const localActionEcho = !!(originClientId && onlineState && originClientId === onlineState.clientId && action);
     const remoteAction = !!(originClientId && onlineState && originClientId !== onlineState.clientId && action);
+    onlineState.version = normalizeOnlineVersion(message.version, onlineState.version);
+    const messageMode = gameModeFromUrlParam(message.gameMode || message.snapshot.gameMode);
+    if (messageMode) onlineState.gameMode = messageMode;
+    if (localActionEcho) {
+      syncOnlineRoleOptions(onlineState.gameMode);
+      syncOnlineStatus('Move accepted.', 'idle');
+      syncOnlineControls();
+      syncControls();
+      return;
+    }
+    if (currentAnimation) {
+      queueOnlineStateMessage(message);
+      syncOnlineStatus('Move received; waiting for local animation.', 'idle');
+      syncOnlineControls();
+      return;
+    }
+    if (remoteAction && tryApplyOnlineRemoteAction(action, message.snapshot, message)) return;
     if (remoteAction) prepareOnlineHistoryForRemoteAction(action);
     onlineState.applyingRemoteState = true;
     try {
       const imported = gameStateFromDebugImportPayload(message.snapshot);
-      onlineState.version = normalizeOnlineVersion(message.version, onlineState.version);
       onlineState.gameMode = gameModeFromUrlParam(message.gameMode || message.snapshot.gameMode) || gameModeValue(imported.state);
       applyImportedDebugState(imported, {
         recordHistory: false,
@@ -1223,6 +1243,182 @@
       syncOnlineControls();
       syncControls();
     }
+  }
+
+  function queueOnlineStateMessage(message) {
+    if (!onlineState) return;
+    if (!Array.isArray(onlineState.pendingStateMessages)) onlineState.pendingStateMessages = [];
+    onlineState.pendingStateMessages.push(message);
+    if (onlineState.pendingStateMessages.length > 8) {
+      onlineState.pendingStateMessages.splice(0, onlineState.pendingStateMessages.length - 8);
+    }
+  }
+
+  function clearQueuedOnlineStateMessages() {
+    if (onlineState) onlineState.pendingStateMessages = [];
+  }
+
+  function flushQueuedOnlineStateMessages() {
+    if (!onlineState || currentAnimation || !Array.isArray(onlineState.pendingStateMessages)) return;
+    const message = onlineState.pendingStateMessages.shift();
+    if (!message) return;
+    applyOnlineSnapshotMessage(message);
+    if (!currentAnimation && onlineState.pendingStateMessages.length && typeof window !== 'undefined') {
+      window.setTimeout(flushQueuedOnlineStateMessages, 0);
+    }
+  }
+
+  function tryApplyOnlineRemoteAction(action, snapshot, message) {
+    if (!onlineState || !action || !game || currentAnimation) return false;
+    const type = String(action.type || '').trim().toLowerCase();
+    if (type === 'history-undo' || type === 'history-redo') return false;
+    if (!onlineStateSupported(game) || game.phase === 'setup') return false;
+    const mode = gameModeFromUrlParam(action.gameMode || (message && message.gameMode) || (snapshot && snapshot.gameMode)) || gameModeValue(game);
+    if (!mode || mode !== gameModeValue(game)) return false;
+    let applied = false;
+    onlineState.applyingRemoteState = true;
+    try {
+      if (mode === GAME_MODES.GOMOKU) applied = replayOnlineGomokuAction(action);
+      else if (mode === GAME_MODES.CONNECT_FOUR) applied = replayOnlineConnectFourAction(action);
+      else if (mode === GAME_MODES.GO) applied = replayOnlineGoAction(action);
+      else if (mode === GAME_MODES.REVERSI) applied = replayOnlineReversiAction(action);
+      else if (mode === GAME_MODES.FIDE_CHESS) applied = replayOnlineFideChessAction(action);
+    } catch (_) {
+      applied = false;
+    } finally {
+      onlineState.applyingRemoteState = false;
+    }
+    if (!applied) return false;
+    onlineState.version = normalizeOnlineVersion(message && message.version, onlineState.version);
+    onlineState.gameMode = mode;
+    syncOnlineRoleOptions(mode);
+    syncOnlineStatus('Opponent move synchronized.', 'idle');
+    syncOnlineControls();
+    syncControls();
+    return true;
+  }
+
+  function replayOnlineGomokuAction(action) {
+    if (!isGomokuGame(game) || String(action.type || '').trim().toLowerCase() !== 'place') return false;
+    const index = onlineActionIndex(action.index);
+    if (!Number.isInteger(index)) return false;
+    const result = placeGomokuStone(game, index);
+    if (!result.changed) return false;
+    pushUndoSnapshot(onlineActionHistoryLabel(action));
+    game = result.state;
+    if (game.phase === 'gameover') {
+      if (game.winner) syncStatus(`${gomokuColorLabel(game.winner)} wins`, `${game.round} move${game.round === 1 ? '' : 's'}`, 'over');
+      else syncStatus('Gomoku draw', `${game.round} moves`, 'over');
+    } else {
+      syncStatus(`Gomoku move ${game.round}`, gomokuTurnInfo(game), 'ready');
+    }
+    render();
+    refreshDebugExportIfNeeded();
+    return true;
+  }
+
+  function replayOnlineConnectFourAction(action) {
+    if (!isConnectFourGame(game) || String(action.type || '').trim().toLowerCase() !== 'drop') return false;
+    const index = onlineActionIndex(action.index);
+    if (!Number.isInteger(index)) return false;
+    const result = placeConnectFourToken(game, index);
+    if (!result.changed) return false;
+    pushUndoSnapshot(onlineActionHistoryLabel(action));
+    game = result.state;
+    startConnectFourDropAnimation(result);
+    if (game.phase === 'gameover') {
+      if (game.winner) syncStatus(`${connectFourColorLabel(game.winner)} wins`, `${game.round} drop${game.round === 1 ? '' : 's'}`, 'over');
+      else syncStatus('Connect Four draw', `${game.round} drops`, 'over');
+    } else {
+      const routeInfo = result.drop && result.drop.path && result.drop.path.length > 1
+        ? `${connectFourTurnInfo(game)}; fell ${result.drop.path.length - 1} step${result.drop.path.length === 2 ? '' : 's'}`
+        : connectFourTurnInfo(game);
+      syncStatus(`Connect Four drop ${game.round}`, routeInfo, 'ready');
+    }
+    render();
+    refreshDebugExportIfNeeded();
+    return true;
+  }
+
+  function replayOnlineGoAction(action) {
+    if (!isGoGame(game)) return false;
+    const type = String(action.type || '').trim().toLowerCase();
+    let result = null;
+    if (type === 'place') {
+      const index = onlineActionIndex(action.index);
+      if (!Number.isInteger(index)) return false;
+      result = placeGoStone(game, index);
+    } else if (type === 'pass') {
+      result = passGoTurn(game);
+    } else if (type === 'go-confirm-score') {
+      result = confirmGoScore(game);
+    } else if (type === 'go-dead-group') {
+      const index = onlineActionIndex(action.index);
+      if (!Number.isInteger(index)) return false;
+      result = toggleGoDeadGroup(game, index);
+    } else if (type === 'go-territory') {
+      const index = onlineActionIndex(action.index);
+      if (!Number.isInteger(index)) return false;
+      result = setGoTerritoryOverride(game, index, action.owner);
+    } else if (type === 'go-scoring-method') {
+      result = setGoScoringMethodFromRecord(game, action.method);
+    } else {
+      return false;
+    }
+    if (!result || !result.changed) return false;
+    pushUndoSnapshot(onlineActionHistoryLabel(action));
+    game = result.state;
+    if (isGoGame(game) && game.scoringReview) activateGoScoringReviewControls();
+    syncGoScoringMethodInputFromGame();
+    syncStatusForCurrentGame();
+    render();
+    refreshDebugExportIfNeeded();
+    return true;
+  }
+
+  function replayOnlineReversiAction(action) {
+    if (!isReversiGame(game) || String(action.type || '').trim().toLowerCase() !== 'place') return false;
+    const index = onlineActionIndex(action.index);
+    if (!Number.isInteger(index)) return false;
+    const result = placeReversiDisc(game, index);
+    if (!result.changed) return false;
+    pushUndoSnapshot(onlineActionHistoryLabel(action));
+    game = result.state;
+    startReversiFlipAnimation(result);
+    syncStatusForCurrentGame();
+    render();
+    refreshDebugExportIfNeeded();
+    return true;
+  }
+
+  function replayOnlineFideChessAction(action) {
+    if (!isFideChessGame(game) || isFideChessPuzzle(game)) return false;
+    const type = String(action.type || '').trim().toLowerCase();
+    if (type !== 'fide-move' && type !== 'fide-promotion') return false;
+    const from = onlineActionIndex(action.from);
+    const to = onlineActionIndex(action.to);
+    if (!Number.isInteger(from) || !Number.isInteger(to)) return false;
+    const movingPiece = fideChessPieceAt(game, from);
+    const result = moveFideChessPiece(game, from, to, {
+      promotionKind: type === 'fide-promotion' ? action.promotionKind : ''
+    });
+    if (!result.changed) return false;
+    const rookPiece = result.move && Number.isInteger(result.move.rookId)
+      ? fideChessPieceById(game, result.move.rookId)
+      : null;
+    pushUndoSnapshot(onlineActionHistoryLabel(action));
+    clearFideChessPendingPromotion({ render: false });
+    game = result.state;
+    startFideChessMoveAnimation(result, movingPiece, rookPiece);
+    syncStatusForCurrentGame();
+    render();
+    refreshDebugExportIfNeeded();
+    return true;
+  }
+
+  function onlineActionIndex(value) {
+    const index = Number(value);
+    return Number.isInteger(index) ? index : null;
   }
 
   function requestOnlineHistoryChange(kind) {
@@ -3689,6 +3885,7 @@
       render();
       syncControls();
       refreshDebugExportIfNeeded();
+      flushQueuedOnlineStateMessages();
       return;
     }
     if (event.kind !== 'spawn') applyEvent(game, event);
@@ -4391,14 +4588,6 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
-    onlineSendLocalAction({
-      type: 'fide-move',
-      gameMode: GAME_MODES.FIDE_CHESS,
-      role: movedPiece ? movedPiece.side : '',
-      from,
-      to,
-      label
-    });
   }
 
   function handleCanvasHover(event) {
@@ -4928,6 +5117,14 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'fide-move',
+      gameMode: GAME_MODES.FIDE_CHESS,
+      role: movedPiece ? movedPiece.side : '',
+      from,
+      to,
+      label
+    });
   }
 
   function handleFideChessPuzzleCanvasClick(event) {
