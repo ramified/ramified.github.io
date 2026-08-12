@@ -152,6 +152,51 @@
       white-space: nowrap;
     }
 
+    .ramification-search-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .ramification-search-row .btn {
+      min-width: 74px;
+      padding: 5px 10px;
+    }
+
+    .ramification-search-row .btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.56;
+    }
+
+    .ramification-status-line {
+      min-height: 20px;
+      margin-top: 7px;
+    }
+
+    .ramification-status-line.is-error {
+      color: var(--accent2);
+    }
+
+    .ramification-status-line.is-ok {
+      color: var(--accent);
+    }
+
+    .ramification-details {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .ramification-details summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      list-style-position: inside;
+    }
+
     .ramification-preset-row {
       display: flex;
       gap: 6px;
@@ -239,6 +284,14 @@
       border-bottom: none;
     }
 
+    .ramification-table .left {
+      text-align: left;
+    }
+
+    .ramification-table .nowrap {
+      white-space: nowrap;
+    }
+
     .ramification-scroll {
       max-height: min(410px, 54vh);
       overflow: auto;
@@ -312,6 +365,15 @@
     <section class="card" draggable="true">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
+        <div class="input-label">LMFDB field</div>
+        <div class="ramification-search-row">
+          <input id="lmfdb-query" class="ramification-input" type="text" value="2.2.5.1" placeholder="2.2.5.1, Qi, Qsqrt5, x^2-x-1" spellcheck="false" autocomplete="off">
+          <button id="lmfdb-search" class="btn" type="button">search</button>
+        </div>
+        <div class="result-meta ramification-status-line" id="lmfdb-search-status"></div>
+
+        <details id="quadratic-fallback" class="ramification-details" open>
+          <summary>Offline quadratic fallback</summary>
         <div class="ramification-inline-row">
           <span class="input-label">Extension</span>
           <select id="extension-type" class="ramification-select">
@@ -332,6 +394,7 @@
           <button class="btn btn-ghost" type="button" data-d="-1">\(\sqrt{-1}\)</button>
           <button class="btn btn-ghost" type="button" data-d="-3">\(\sqrt{-3}\)</button>
         </div>
+        </details>
         <div class="ramification-place-editor">
           <div class="input-label">Finite places</div>
           <div class="ramification-place-row">
@@ -347,6 +410,11 @@
     <section class="card" draggable="true">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Field Invariants</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body" id="field-invariants"></div>
+    </section>
+
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Decomposition Chart</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body" id="decomposition-table"></div>
     </section>
 
     <section class="card collapsed" draggable="true">
@@ -368,7 +436,7 @@
 </main>
 
 <footer>
-  Browser-side ramification-place calculator styled with the shared Young diagram UI.
+  LMFDB-backed ramification-place calculator with an offline quadratic fallback.
   <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
 </footer>
 
@@ -383,6 +451,9 @@
       skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
     }
   };
+</script>
+<script>
+  window.RAMIFICATION_LMFDB_PROXY_URL = 'https://lmfdb-proxy.ramified.workers.dev';
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js"></script>

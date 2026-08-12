@@ -1,0 +1,11 @@
+name = "ramified-chess"
+main = "ramified-chess.worker.js"
+compatibility_date = "2026-08-12"
+
+[[durable_objects.bindings]]
+name = "GAME_ROOM"
+class_name = "GameRoom"
+
+[exports.GameRoom]
+type = "durable-object"
+storage = "sqlite"

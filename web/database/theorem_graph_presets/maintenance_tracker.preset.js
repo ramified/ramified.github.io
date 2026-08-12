@@ -130,7 +130,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 519.5,
+      "x": 519.6,
       "y": 55.2
     },
     {
@@ -152,8 +152,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 330.1,
-      "y": 90.4
+      "x": 330.2,
+      "y": 90.5
     },
     {
       "id": "n62",
@@ -164,7 +164,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "export button being on the left of the update button\nwhen click a node or arrow, if node/arrow card is collapsed then it auto expands itself;\nwhen click a citation in node/arrow card, if reference card is collapsed then it auto expands itself(and node/arrow card preserve itself);"
+          "text": "- [x] export button being on the left of the update button\n- [x] when click a node or arrow, if node/arrow card is collapsed then it auto expands itself;\n- [x] when click a citation in node/arrow card, if reference card is collapsed then it auto expands itself(and node/arrow card preserve itself);"
         }
       ],
       "setting": "",
@@ -172,8 +172,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
       "x": 676,
       "y": 150.9
     },
@@ -302,7 +302,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "Add fundamental weights, simple roots and roots(as a point set, use can also choose \"positive\").\nIf both weight lattice and cover root lattice (for the same Dynkin type) appear, then only the extra vertices of the weight lattice will appear, those coincided vertices will only appear for the UI of root lattice\nAdd KL polynomials and length expression, from https://www.jgibson.id.au/lievis/affine_weyl"
+          "text": "- [x] Add fundamental weights, simple roots and roots(as a point set, use can also choose \"positive\").\n- [x] If both weight lattice and cover root lattice (for the same Dynkin type) appear, then only the extra vertices of the weight lattice will appear, those coincided vertices will only appear for the UI of root lattice\n- [x] Add KL polynomials and length expression, from https://www.jgibson.id.au/lievis/affine_weyl"
         }
       ],
       "setting": "",
@@ -310,9 +310,9 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 576.9,
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 577,
       "y": 251.6
     },
     {
@@ -390,7 +390,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 503,
+      "x": 502.9,
       "y": 153.3
     }
   ],
@@ -499,7 +499,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     }
   ],
   "view": {
-    "selectedId": "n63",
+    "selectedId": "n66",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasHeight": 382,

@@ -3,7 +3,13 @@
 
   const $ = (id) => document.getElementById(id);
   const state = {
+    source: 'quadratic',
     rawD: 2,
+    lmfdbQuery: '2.2.5.1',
+    lmfdbField: null,
+    lmfdbStatus: '',
+    lmfdbStatusKind: '',
+    lmfdbLoading: false,
     primeBound: 11,
     showInfinite: true,
     selectedKey: 'p:2',
@@ -19,10 +25,16 @@
     ramified: { fill: '#8b3a2a', stroke: '#6b2a1f', label: 'ramified' },
     split: { fill: '#3d6b4f', stroke: '#294936', label: 'split' },
     inert: { fill: '#4d6478', stroke: '#314253', label: 'inert' },
-    complex: { fill: '#8b3a2a', stroke: '#6b2a1f', label: 'complex' }
+    unramified: { fill: '#6b5f83', stroke: '#4b425d', label: 'unramified mixed' },
+    complex: { fill: '#8b3a2a', stroke: '#6b2a1f', label: 'complex' },
+    unknown: { fill: '#7a6f65', stroke: '#5f564d', label: 'unknown' }
   };
 
-  function normalizedField() {
+  function lmfdbProxyUrl() {
+    return String(window.RAMIFICATION_LMFDB_PROXY_URL || '').trim().replace(/\/+$/, '');
+  }
+
+  function normalizedQuadraticField() {
     const raw = Math.trunc(Number(state.rawD) || 0);
     if (raw === 0 || raw === 1) {
       return { error: 'd must be an integer different from 0 and 1.' };
@@ -34,15 +46,30 @@
     const realPlaces = d > 0 ? 2 : 0;
     const complexPlaces = d > 0 ? 0 : 1;
     return {
+      source: 'quadratic',
       raw,
       d,
+      label: null,
+      degree: 2,
+      coeffs: [-d, 0, 1],
       discriminant,
+      discriminantText: String(discriminant),
       realPlaces,
       complexPlaces,
+      r1: realPlaces,
+      r2: complexPlaces,
       signature: `(${realPlaces}, ${complexPlaces})`,
       ring: mod4 === 1 ? `Z[(1+sqrt(${d}))/2]` : `Z[sqrt(${d})]`,
-      polynomial: `x^2 - (${d})`
+      polynomial: `x^2 - (${d})`,
+      ramps: factorInteger(discriminant).map(([p]) => p),
+      localAlgs: [],
+      frobs: []
     };
+  }
+
+  function activeField() {
+    if (state.source === 'lmfdb' && state.lmfdbField) return state.lmfdbField;
+    return normalizedQuadraticField();
   }
 
   function squarefreePart(value) {
@@ -190,76 +217,118 @@
     return `(${p})`;
   }
 
-  function finitePlace(field, p) {
+  function quadraticFinitePlace(field, p) {
     const D = field.discriminant;
     if (D % p === 0) {
-      return {
-        key: `p:${p}`,
-        label: baseIdealLatex(p),
-        base: `\\(${baseIdealLatex(p)}\\)`,
+      const ideals = primeIdealLabels(field, p, 'ramified');
+      const components = assignComponentLabels([{ e: 2, f: 1, label: ideals[0], source: 'quadratic discriminant', ramified: true }]);
+      return finitePlaceRecord({
+        p,
         kind: 'ramified',
-        e: 2,
-        f: 1,
-        g: 1,
-        ideals: primeIdealLabels(field, p, 'ramified'),
-        detail: `\\(${p}\\) divides \\(\\operatorname{Disc}(K)=${D}\\).`
-      };
+        components,
+        detail: `\\(${p}\\) divides \\(\\operatorname{Disc}(K)=${D}\\).`,
+        source: 'quadratic discriminant'
+      });
     }
     if (p === 2) {
       const mod8 = positiveMod(D, 8);
       if (mod8 === 1) {
-        return {
-          key: 'p:2',
-          label: baseIdealLatex(2),
-          base: `\\(${baseIdealLatex(2)}\\)`,
+        const ideals = primeIdealLabels(field, 2, 'split');
+        const components = assignComponentLabels(ideals.map((label) => ({ e: 1, f: 1, label, source: 'quadratic congruence' })));
+        return finitePlaceRecord({
+          p,
           kind: 'split',
-          e: 1,
-          f: 1,
-          g: 2,
-          ideals: primeIdealLabels(field, 2, 'split'),
-          detail: '\\(\\operatorname{Disc}(K) \\equiv 1 \\pmod 8\\).'
-        };
+          components,
+          detail: '\\(\\operatorname{Disc}(K) \\equiv 1 \\pmod 8\\).',
+          source: 'quadratic congruence'
+        });
       }
-      return {
-        key: 'p:2',
-        label: baseIdealLatex(2),
-        base: `\\(${baseIdealLatex(2)}\\)`,
+      const components = assignComponentLabels([{ e: 1, f: 2, label: baseIdealLatex(2), source: 'quadratic congruence' }]);
+      return finitePlaceRecord({
+        p,
         kind: 'inert',
-        e: 1,
-        f: 2,
-        g: 1,
-        ideals: primeIdealLabels(field, 2, 'inert'),
-        detail: '\\(\\operatorname{Disc}(K) \\equiv 5 \\pmod 8\\).'
-      };
+        components,
+        detail: '\\(\\operatorname{Disc}(K) \\equiv 5 \\pmod 8\\).',
+        source: 'quadratic congruence'
+      });
     }
     const chi = legendreSymbol(D, p);
     if (chi === 1) {
-      return {
-        key: `p:${p}`,
-        label: baseIdealLatex(p),
-        base: `\\(${baseIdealLatex(p)}\\)`,
+      const ideals = primeIdealLabels(field, p, 'split');
+      const components = assignComponentLabels(ideals.map((label) => ({ e: 1, f: 1, label, source: 'Kronecker symbol' })));
+      return finitePlaceRecord({
+        p,
         kind: 'split',
-        e: 1,
-        f: 1,
-        g: 2,
-        ideals: primeIdealLabels(field, p, 'split'),
-        detail: `The Kronecker symbol \\(\\left(\\frac{D}{${p}}\\right)=1\\).`
-      };
+        components,
+        detail: `The Kronecker symbol \\(\\left(\\frac{D}{${p}}\\right)=1\\).`,
+        source: 'Kronecker symbol'
+      });
     }
+    const components = assignComponentLabels([{ e: 1, f: 2, label: baseIdealLatex(p), source: 'Kronecker symbol' }]);
+    return finitePlaceRecord({
+      p,
+      kind: 'inert',
+      components,
+      detail: `The Kronecker symbol \\(\\left(\\frac{D}{${p}}\\right)=-1\\).`,
+      source: 'Kronecker symbol'
+    });
+  }
+
+  function lmfdbFinitePlace(field, p) {
+    const ramified = field.ramps.includes(p) || discriminantDivisibleBy(field, p);
+    let components = [];
+    let source = '';
+    let detail = '';
+
+    if (ramified) {
+      components = localAlgebraComponents(field, p);
+      if (components.length) {
+        source = 'LMFDB local_algs';
+        detail = `LMFDB local algebra label${components.length === 1 ? '' : 's'}: ${components.map((item) => item.rawLabel).join(', ')}.`;
+      } else {
+        components = polynomialFactorComponents(field, p, true);
+        source = 'polynomial mod p';
+        detail = `\\(${p}\\) is listed as ramified; local algebra labels were not available.`;
+      }
+    } else {
+      components = frobeniusComponents(field, p);
+      if (components.length) {
+        source = 'LMFDB frobs';
+        detail = `LMFDB frobs gives splitting type \\(${splittingTypeText(components)}\\).`;
+      } else {
+        components = polynomialFactorComponents(field, p, false);
+        source = 'polynomial mod p';
+        detail = `Computed by factoring the defining polynomial modulo \\(${p}\\).`;
+      }
+    }
+
+    if (!components.length) {
+      components = [{ e: ramified ? null : 1, f: null, source, ramified }];
+    }
+
+    components = assignComponentLabels(components);
+    const kind = kindFromComponents(components, field.degree, ramified);
+    return finitePlaceRecord({ p, kind, components, detail, source });
+  }
+
+  function finitePlaceRecord({ p, kind, components, detail, source }) {
     return {
       key: `p:${p}`,
       label: baseIdealLatex(p),
       base: `\\(${baseIdealLatex(p)}\\)`,
-      kind: 'inert',
-      e: 1,
-      f: 2,
-      g: 1,
-      ideals: primeIdealLabels(field, p, 'inert'),
-      detail: `The Kronecker symbol \\(\\left(\\frac{D}{${p}}\\right)=-1\\).`
+      kind,
+      e: commonComponentValue(components, 'e'),
+      f: commonComponentValue(components, 'f'),
+      g: components.length,
+      components,
+      ideals: components.map((component) => component.label),
+      splittingType: splittingTypeText(components),
+      detail,
+      source
     };
   }
 
-  function infinitePlace(field) {
+  function quadraticInfinitePlace(field) {
     if (field.d > 0) {
       return {
         key: 'inf',
@@ -269,8 +338,14 @@
         e: 1,
         f: 1,
         g: 2,
+        components: [
+          { e: 1, f: 1, label: 'v_1', source: 'signature' },
+          { e: 1, f: 1, label: 'v_2', source: 'signature' }
+        ],
         ideals: ['v_1', 'v_2'],
-        detail: 'The field has two real embeddings.'
+        splittingType: '1+1',
+        detail: 'The field has two real embeddings.',
+        source: 'signature'
       };
     }
     return {
@@ -281,18 +356,146 @@
       e: 2,
       f: 1,
       g: 1,
+      components: [{ e: 2, f: 1, label: 'w', source: 'signature', ramified: true }],
       ideals: ['w'],
-      detail: 'The real place becomes complex.'
+      splittingType: '2',
+      detail: 'The real place becomes complex.',
+      source: 'signature'
+    };
+  }
+
+  function lmfdbInfinitePlace(field) {
+    const components = [];
+    for (let index = 0; index < field.r1; index++) {
+      components.push({ e: 1, f: 1, label: field.r1 === 1 ? 'v' : `v_${index + 1}`, source: 'signature' });
+    }
+    for (let index = 0; index < field.r2; index++) {
+      components.push({ e: 2, f: 1, label: field.r2 === 1 ? 'w' : `w_${index + 1}`, source: 'signature', ramified: true });
+    }
+    const kind = field.r2 && !field.r1 ? 'complex' : field.r2 ? 'unramified' : 'split';
+    return {
+      key: 'inf',
+      label: '\\infty',
+      base: '\\(\\infty\\)',
+      kind,
+      e: commonComponentValue(components, 'e'),
+      f: 1,
+      g: components.length,
+      components,
+      ideals: components.map((component) => component.label),
+      splittingType: field.r2 ? `${field.r1} real, ${field.r2} complex` : `${field.r1} real`,
+      detail: `The field has signature \\((${field.r1}, ${field.r2})\\).`,
+      source: 'signature'
     };
   }
 
   function buildPlaces(field) {
     const hiddenSet = new Set(state.hiddenPrimes);
     const primeSet = new Set(primesUpTo(state.primeBound).filter((p) => !hiddenSet.has(p)));
+    if (field.source === 'lmfdb') {
+      field.ramps.forEach((p) => {
+        if (!hiddenSet.has(p)) primeSet.add(p);
+      });
+    }
     state.extraPrimes.forEach((p) => primeSet.add(p));
-    const places = [...primeSet].sort((a, b) => a - b).map((p) => finitePlace(field, p));
-    if (state.showInfinite) places.push(infinitePlace(field));
+    const finiteBuilder = field.source === 'lmfdb' ? lmfdbFinitePlace : quadraticFinitePlace;
+    const places = [...primeSet].sort((a, b) => a - b).map((p) => finiteBuilder(field, p));
+    if (state.showInfinite) {
+      places.push(field.source === 'lmfdb' ? lmfdbInfinitePlace(field) : quadraticInfinitePlace(field));
+    }
     return places;
+  }
+
+  function discriminantDivisibleBy(field, p) {
+    if (Number.isSafeInteger(field.discriminant)) return Math.abs(field.discriminant) % p === 0;
+    return false;
+  }
+
+  function localAlgebraComponents(field, p) {
+    return field.localAlgs
+      .filter((label) => String(label).startsWith(`${p}.`))
+      .map((rawLabel) => {
+        const parts = String(rawLabel).split('.');
+        const f = Number(parts[1]);
+        const e = Number.parseInt(parts[2], 10);
+        return {
+          e: Number.isFinite(e) ? e : null,
+          f: Number.isFinite(f) ? f : null,
+          source: 'LMFDB local_algs',
+          rawLabel,
+          ramified: Number.isFinite(e) ? e > 1 : true
+        };
+      });
+  }
+
+  function frobeniusComponents(field, p) {
+    const entry = field.frobs.find((item) => Array.isArray(item) && Number(item[0]) === p);
+    const data = entry?.[1];
+    if (!Array.isArray(data) || data.length === 0 || data[0] === 0) return [];
+    const components = [];
+    data.forEach((piece) => {
+      if (!Array.isArray(piece) || piece.length < 2) return;
+      const f = Number(piece[0]);
+      const count = Math.max(0, Math.floor(Number(piece[1]) || 0));
+      if (!Number.isFinite(f) || f <= 0) return;
+      for (let index = 0; index < count; index++) {
+        components.push({ e: 1, f, source: 'LMFDB frobs' });
+      }
+    });
+    return components;
+  }
+
+  function polynomialFactorComponents(field, p, ramified) {
+    if (!Array.isArray(field.coeffs) || field.coeffs.length < 2) return [];
+    return factorDegreesModPrime(field.coeffs, p).map((f) => ({
+      e: ramified ? null : 1,
+      f,
+      source: 'polynomial mod p',
+      ramified
+    }));
+  }
+
+  function assignComponentLabels(components) {
+    const count = components.length;
+    return components.map((component, index) => ({
+      ...component,
+      label: component.label || (count === 1 ? '\\mathfrak{p}' : `\\mathfrak{p}_{${index + 1}}`)
+    }));
+  }
+
+  function commonComponentValue(components, key) {
+    if (!components.length) return null;
+    const first = components[0][key];
+    if (first == null) return null;
+    return components.every((component) => component[key] === first) ? first : null;
+  }
+
+  function kindFromComponents(components, degree, ramified) {
+    if (ramified || components.some((component) => component.ramified || component.e > 1)) return 'ramified';
+    if (!components.length || components.some((component) => !component.f)) return 'unknown';
+    if (components.length === degree && components.every((component) => component.e === 1 && component.f === 1)) return 'split';
+    if (components.length === 1 && components[0].e === 1 && components[0].f === degree) return 'inert';
+    if (components.every((component) => component.e === 1)) return 'unramified';
+    return 'unknown';
+  }
+
+  function splittingTypeText(components) {
+    const groups = new Map();
+    components.forEach((component) => {
+      const e = component.e == null ? '?' : component.e;
+      const f = component.f == null ? '?' : component.f;
+      const key = component.e === 1 || component.e == null ? String(f) : `${e}e${f}`;
+      groups.set(key, (groups.get(key) || 0) + 1);
+    });
+    return [...groups.entries()].map(([key, count]) => count === 1 ? key : `${key}^${count}`).join(' + ') || '?';
+  }
+
+  function componentEfText(components) {
+    return components.map((component) => {
+      const e = component.e == null ? '?' : component.e;
+      const f = component.f == null ? '?' : component.f;
+      return `(${e},${f})`;
+    }).join(', ');
   }
 
   function htmlRows(rows) {
@@ -306,10 +509,15 @@
   }
 
   function fieldLabel(field) {
+    if (field.source === 'lmfdb') return `LMFDB ${field.label}`;
     return `Q(sqrt(${field.d}))`;
   }
 
   function fieldLatex(field) {
+    if (field.source === 'lmfdb') {
+      if (field.label === '1.1.1.1') return '\\mathbb{Q}';
+      return `K_{${field.label}}`;
+    }
     return `\\mathbb{Q}(\\sqrt{${field.d}})`;
   }
 
@@ -320,31 +528,42 @@
   }
 
   function polynomialLatex(field) {
+    if (field.source === 'lmfdb') return coeffsToPolynomialLatex(field.coeffs);
     return field.d < 0 ? `x^2+${Math.abs(field.d)}` : `x^2-${field.d}`;
   }
 
   function render() {
-    const field = normalizedField();
+    const field = activeField();
     if (field.error) {
       renderError(field.error);
+      renderLmfdbStatus();
       return;
     }
     state.places = buildPlaces(field);
     if (!state.places.some((place) => place.key === state.selectedKey)) {
-      state.selectedKey = state.places[0]?.key || 'p:2';
+      state.selectedKey = preferredSelectedKey(field);
     }
     syncControls(field);
     renderInvariants(field);
+    renderDecompositionTable();
     renderPlaceChips();
     renderSelectedPlace();
     drawCanvas(field);
     renderExport(field);
   }
 
+  function preferredSelectedKey(field) {
+    const ramified = state.places.find((place) => place.kind === 'ramified' && place.key.startsWith('p:'));
+    if (field.source === 'lmfdb' && ramified) return ramified.key;
+    return state.places[0]?.key || 'p:2';
+  }
+
   function renderError(message) {
     $('ramification-status').textContent = 'invalid field';
     $('ramification-input-note').textContent = message;
     $('field-invariants').innerHTML = `<p class="err">${escapeHtml(message)}</p>`;
+    const table = $('decomposition-table');
+    if (table) table.innerHTML = '';
     const chipList = $('place-chip-list');
     if (chipList) chipList.innerHTML = '';
     $('selected-place-data').innerHTML = '';
@@ -356,6 +575,7 @@
   }
 
   function syncControls(field) {
+    $('lmfdb-query').value = state.lmfdbQuery;
     $('quadratic-d').value = String(state.rawD);
     state.primeBound = Math.min(31, Math.max(2, Math.floor(Number(state.primeBound) || 11)));
     $('prime-bound').value = String(state.primeBound);
@@ -363,15 +583,52 @@
     $('show-infinite').checked = state.showInfinite;
     $('ramification-status').innerHTML = `\\(${fieldLatex(field)}\\)`;
     typeset($('ramification-status'));
-    $('ramification-input-note').innerHTML = field.raw === field.d
-      ? 'quadratic field over \\(\\mathbb{Q}\\)'
-      : `same field as \\(d=${field.d}\\)`;
-    typeset($('ramification-input-note'));
+    if (field.source === 'lmfdb') {
+      const warningText = field.warnings.length ? `; ${field.warnings[0]}` : '';
+      $('ramification-input-note').textContent = `LMFDB label ${field.label}${warningText}`;
+    } else {
+      $('ramification-input-note').innerHTML = field.raw === field.d
+        ? 'quadratic field over \\(\\mathbb{Q}\\)'
+        : `same field as \\(d=${field.d}\\)`;
+      typeset($('ramification-input-note'));
+    }
     const finiteCount = state.places.filter((place) => place.key.startsWith('p:')).length;
     $('ramification-count-label').textContent = `finite primes shown: ${finiteCount}`;
+    renderLmfdbStatus();
+  }
+
+  function renderLmfdbStatus() {
+    const status = $('lmfdb-search-status');
+    const searchButton = $('lmfdb-search');
+    const hasProxy = !!lmfdbProxyUrl();
+    searchButton.disabled = !hasProxy || state.lmfdbLoading;
+    status.classList.toggle('is-error', state.lmfdbStatusKind === 'error' || !hasProxy);
+    status.classList.toggle('is-ok', state.lmfdbStatusKind === 'ok');
+    if (!hasProxy) {
+      status.textContent = 'LMFDB proxy URL is not configured.';
+    } else if (state.lmfdbLoading) {
+      status.textContent = 'Searching LMFDB...';
+    } else {
+      status.textContent = state.lmfdbStatus || 'LMFDB proxy ready.';
+    }
   }
 
   function renderInvariants(field) {
+    if (field.source === 'lmfdb') {
+      $('field-invariants').innerHTML = htmlRows([
+        ['Field', `\\(${fieldLatex(field)}\\)`],
+        ['LMFDB label', field.label],
+        ['Polynomial', `\\(${polynomialLatex(field)}\\)`],
+        ['\\(\\operatorname{Disc}(K)\\)', `\\(${field.discriminantText}\\)`],
+        ['Signature', `\\(${field.signature}\\)`],
+        ['Ramified finite primes', field.ramps.map((p) => `\\(${p}\\)`).join(', ') || 'none'],
+        ['Degree', `\\(${field.degree}\\)`],
+        ['Galois label', field.galoisLabel || 'n/a']
+      ]);
+      typeset($('field-invariants'));
+      return;
+    }
+
     $('field-invariants').innerHTML = htmlRows([
       ['Field', `\\(${fieldLatex(field)}\\)`],
       ['Polynomial', `\\(${polynomialLatex(field)}\\)`],
@@ -382,6 +639,45 @@
       ['Degree', '\\(2\\)']
     ]);
     typeset($('field-invariants'));
+  }
+
+  function renderDecompositionTable() {
+    const finitePlaces = state.places.filter((place) => place.key.startsWith('p:'));
+    const target = $('decomposition-table');
+    if (!target) return;
+    if (!finitePlaces.length) {
+      target.innerHTML = '<p class="hint">No finite places shown.</p>';
+      return;
+    }
+    target.innerHTML = `
+      <div class="ramification-scroll">
+        <table class="ramification-table">
+          <thead>
+            <tr>
+              <th>p</th>
+              <th>behavior</th>
+              <th>type</th>
+              <th>g</th>
+              <th class="left">(e_i,f_i)</th>
+              <th class="left">source</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${finitePlaces.map((place) => `
+              <tr data-place-row="${escapeHtml(place.key)}">
+                <td class="nowrap">\\(${escapeHtml(place.label)}\\)</td>
+                <td>${escapeHtml(PLACE_STYLE[place.kind]?.label || place.kind)}</td>
+                <td class="nowrap">\\(${escapeHtml(place.splittingType)}\\)</td>
+                <td>${place.g}</td>
+                <td class="left nowrap">\\(${escapeHtml(componentEfText(place.components))}\\)</td>
+                <td class="left">${escapeHtml(place.source || 'n/a')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    typeset(target);
   }
 
   function renderPlaceChips() {
@@ -409,9 +705,12 @@
     $('ramification-selected-label').innerHTML = `selected place: \\(${escapeHtml(place.label)}\\)`;
     $('selected-place-data').innerHTML = htmlRows([
       ['base place', place.base],
-      ['behavior', PLACE_STYLE[place.kind].label],
-      ['\\((e,f,g)\\)', `\\((${place.e},${place.f},${place.g})\\)`],
+      ['behavior', PLACE_STYLE[place.kind]?.label || place.kind],
+      ['splitting type', `\\(${place.splittingType}\\)`],
+      ['\\(g\\)', `\\(${place.g}\\)`],
+      ['\\((e_i,f_i)\\)', `\\(${componentEfText(place.components)}\\)`],
       ['places above', `\\(${place.ideals.join(', ')}\\)`],
+      ['source', place.source || 'n/a'],
       ['criterion', place.detail]
     ]);
     typeset($('selected-place-data'));
@@ -435,7 +734,7 @@
     const topY = 122;
     const bottomY = 254;
     const topLabelY = 56;
-    const startX = (W - span) / 2;
+    const startX = placeCount === 1 ? W / 2 : (W - span) / 2;
 
     state.canvasWidth = W;
     state.canvasHeight = H;
@@ -455,7 +754,7 @@
     let cursorX = placeCount === 1 ? W / 2 : startX;
     state.places.forEach((place, index) => {
       const x = cursorX;
-      const glyphW = needsSplitLabelRoom(place) ? 122 : 78;
+      const glyphW = glyphWidth(place);
       const placeLabels = drawPlaceGlyph(ctx, place, x, topY, bottomY, glyphW, topLabelY, place.key === state.selectedKey);
       labels.push(...placeLabels);
       state.hitboxes.push({ key: place.key, x: x - glyphW / 2, y: topLabelY - 28, w: glyphW, h: bottomY - topLabelY + 78 });
@@ -464,28 +763,46 @@
     renderCanvasLabels(labels);
   }
 
-  function needsSplitLabelRoom(place) {
-    return !!place && place.key !== 'inf' && place.g === 2;
+  function glyphWidth(place) {
+    const count = displayComponents(place).length;
+    if (place.key === 'inf') return Math.max(78, count * 44 + 34);
+    if (place.g > 4) return 122;
+    return Math.max(78, count * 48 + 30);
+  }
+
+  function displayComponents(place) {
+    if (!place.components || place.components.length <= 4) return place.components || [];
+    return [{
+      e: commonComponentValue(place.components, 'e'),
+      f: commonComponentValue(place.components, 'f'),
+      label: `\\mathfrak{p}_{1},\\ldots,\\mathfrak{p}_{${place.components.length}}`,
+      source: place.source,
+      ramified: place.kind === 'ramified'
+    }];
   }
 
   function weightedGaps(places, availableSpan) {
     if (places.length <= 1) return [];
     const weights = places.slice(0, -1).map((place, index) => {
       const next = places[index + 1];
-      return 1 + (needsSplitLabelRoom(place) || needsSplitLabelRoom(next) ? 0.42 : 0);
+      return 1 + (displayComponents(place).length + displayComponents(next).length - 2) * 0.22;
     });
     const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
     const rawGaps = weights.map((weight) => availableSpan * weight / totalWeight);
-    return rawGaps.map((gap) => Math.max(42, gap));
+    return rawGaps.map((gap) => Math.max(46, gap));
   }
 
   function drawPlaceGlyph(ctx, place, cx, topY, bottomY, glyphW, topLabelY, selected) {
-    const style = PLACE_STYLE[place.kind];
-    const splitOffset = needsSplitLabelRoom(place) ? 48 : 24;
-    const tops = place.g === 2
-      ? [{ x: cx - splitOffset, y: topY, latex: place.ideals[0] }, { x: cx + splitOffset, y: topY, latex: place.ideals[1] }]
-      : [{ x: cx, y: topY, latex: place.ideals[0] }];
-    const branchLineWidth = place.kind === 'ramified' || place.kind === 'complex' ? 2.1 : 2;
+    const style = PLACE_STYLE[place.kind] || PLACE_STYLE.unknown;
+    const visibleComponents = displayComponents(place);
+    const topCount = Math.max(1, visibleComponents.length);
+    const spacing = topCount <= 1 ? 0 : Math.min(54, glyphW / Math.max(1.4, topCount - 0.15));
+    const tops = visibleComponents.map((component, index) => ({
+      x: cx + (index - (topCount - 1) / 2) * spacing,
+      y: topY,
+      latex: component.label,
+      component
+    }));
     const labels = [];
 
     ctx.save();
@@ -495,12 +812,13 @@
     }
 
     ctx.strokeStyle = style.stroke;
-    ctx.lineWidth = selected ? branchLineWidth + 0.8 : branchLineWidth;
+    ctx.lineWidth = selected ? 2.8 : 2;
     ctx.lineCap = 'round';
-    ctx.setLineDash(place.kind === 'inert' ? [7, 6] : []);
+    ctx.setLineDash(place.kind === 'inert' || place.kind === 'unknown' ? [7, 6] : []);
 
     tops.forEach((point) => {
-      if (place.kind === 'ramified' || place.kind === 'complex') {
+      const ramifiedBranch = point.component.ramified || point.component.e > 1 || place.kind === 'complex';
+      if (ramifiedBranch) {
         drawBranch(ctx, cx, bottomY, point.x, point.y, -3.2);
         drawBranch(ctx, cx, bottomY, point.x, point.y, 3.2);
       } else {
@@ -577,29 +895,169 @@
   }
 
   function renderExport(field) {
-    const payload = {
-      calculator: 'Place ramification calculator',
-      extension: `${fieldLabel(field)} / Q`,
-      squarefreeD: field.d,
-      discriminant: field.discriminant,
-      signature: field.signature,
-      primeBound: state.primeBound,
-      showInfinite: state.showInfinite,
-      places: state.places.map((place) => ({
-        place: place.label,
-        behavior: PLACE_STYLE[place.kind].label,
-        e: place.e,
-        f: place.f,
-        g: place.g,
-        detail: place.detail
-      }))
-    };
+    const places = state.places.map((place) => ({
+      place: place.label,
+      behavior: PLACE_STYLE[place.kind]?.label || place.kind,
+      splittingType: place.splittingType,
+      g: place.g,
+      components: place.components.map((component) => ({
+        label: component.label,
+        e: component.e,
+        f: component.f,
+        source: component.source,
+        rawLabel: component.rawLabel || null
+      })),
+      detail: place.detail
+    }));
+
+    const payload = field.source === 'lmfdb'
+      ? {
+        calculator: 'Place ramification calculator',
+        source: 'LMFDB',
+        query: field.query,
+        queryType: field.queryType,
+        lmfdbLabel: field.label,
+        lmfdbUrl: field.lmfdbUrl,
+        field: {
+          degree: field.degree,
+          coeffs: field.coeffs,
+          discriminant: field.discriminantText,
+          signature: field.signature,
+          ramifiedPrimes: field.ramps,
+          galoisLabel: field.galoisLabel
+        },
+        primeBound: state.primeBound,
+        showInfinite: state.showInfinite,
+        places,
+        raw: {
+          local_algs: field.localAlgs,
+          frobs: field.frobs
+        }
+      }
+      : {
+        calculator: 'Place ramification calculator',
+        source: 'quadratic',
+        extension: `${fieldLabel(field)} / Q`,
+        squarefreeD: field.d,
+        discriminant: field.discriminant,
+        signature: field.signature,
+        primeBound: state.primeBound,
+        showInfinite: state.showInfinite,
+        places
+      };
     $('ramification-export-out').value = JSON.stringify(payload, null, 2);
   }
 
+  async function searchLmfdbField() {
+    if (state.lmfdbLoading) return;
+    const proxy = lmfdbProxyUrl();
+    state.lmfdbQuery = $('lmfdb-query').value.trim();
+    if (!proxy) {
+      state.lmfdbStatus = 'LMFDB proxy URL is not configured.';
+      state.lmfdbStatusKind = 'error';
+      renderLmfdbStatus();
+      return;
+    }
+    if (!state.lmfdbQuery) {
+      state.lmfdbStatus = 'Enter an LMFDB label, nickname, or monic integer polynomial.';
+      state.lmfdbStatusKind = 'error';
+      renderLmfdbStatus();
+      return;
+    }
+
+    state.lmfdbLoading = true;
+    state.lmfdbStatus = '';
+    state.lmfdbStatusKind = '';
+    renderLmfdbStatus();
+    try {
+      const endpoint = buildProxyFieldUrl(proxy, state.lmfdbQuery);
+      const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || `LMFDB proxy returned HTTP ${response.status}.`);
+      }
+      const field = normalizeLmfdbPayload(payload);
+      state.source = 'lmfdb';
+      state.lmfdbField = field;
+      state.hiddenPrimes = [];
+      state.selectedKey = `p:${field.ramps[0] || primesUpTo(state.primeBound)[0] || 2}`;
+      state.lmfdbStatus = payload.warnings?.length
+        ? `Loaded ${field.label}; ${payload.warnings[0]}`
+        : `Loaded ${field.label}.`;
+      state.lmfdbStatusKind = 'ok';
+      const fallback = $('quadratic-fallback');
+      if (fallback) fallback.open = false;
+    } catch (error) {
+      state.lmfdbStatus = error.message || 'LMFDB search failed.';
+      state.lmfdbStatusKind = 'error';
+    } finally {
+      state.lmfdbLoading = false;
+      render();
+    }
+  }
+
+  function buildProxyFieldUrl(proxy, query) {
+    const clean = proxy.replace(/\/+$/, '');
+    const endpoint = clean.endsWith('/field') ? clean : `${clean}/field`;
+    const url = new URL(endpoint);
+    url.searchParams.set('q', query);
+    return url.toString();
+  }
+
+  function normalizeLmfdbPayload(payload) {
+    const record = payload.field || null;
+    if (!record || !record.label) throw new Error('LMFDB proxy response did not include a field record.');
+    const coeffs = Array.isArray(record.coeffs) ? record.coeffs.map(Number) : [];
+    const degree = Number(record.degree || Math.max(0, coeffs.length - 1));
+    const r2 = Number(record.r2 || 0);
+    const r1 = Math.max(0, degree - 2 * r2);
+    const discAbsNumber = Number(record.disc_abs);
+    const discSign = Number(record.disc_sign || 1) < 0 ? -1 : 1;
+    const safeDisc = Number.isSafeInteger(discAbsNumber) ? discSign * discAbsNumber : null;
+    const discriminantText = safeDisc == null
+      ? `${discSign < 0 ? '-' : ''}${record.disc_abs}`
+      : String(safeDisc);
+    const ramps = Array.isArray(record.ramps)
+      ? record.ramps.map(Number).filter((p) => Number.isFinite(p)).sort((a, b) => a - b)
+      : [];
+    return {
+      source: 'lmfdb',
+      label: String(record.label),
+      lmfdbUrl: `https://www.lmfdb.org/NumberField/${encodeURIComponent(record.label)}`,
+      query: payload.query || state.lmfdbQuery,
+      queryType: payload.queryType || 'label',
+      normalizedInput: payload.normalizedInput || record.label,
+      degree,
+      coeffs,
+      discriminant: safeDisc,
+      discriminantText,
+      r1,
+      r2,
+      signature: `(${r1}, ${r2})`,
+      ramps,
+      localAlgs: Array.isArray(record.local_algs) ? record.local_algs.map(String) : [],
+      frobs: Array.isArray(payload.extra?.frobs) ? payload.extra.frobs : [],
+      galoisLabel: record.galois_label || '',
+      warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
+      rawField: record,
+      rawExtra: payload.extra || null
+    };
+  }
+
   function bindInputs() {
+    $('lmfdb-query').addEventListener('input', (event) => {
+      state.lmfdbQuery = event.target.value;
+    });
+    $('lmfdb-query').addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      searchLmfdbField();
+    });
+    $('lmfdb-search').addEventListener('click', searchLmfdbField);
     $('quadratic-d').addEventListener('change', (event) => {
+      state.source = 'quadratic';
       state.rawD = Math.trunc(Number(event.target.value) || 0);
+      state.selectedKey = state.rawD < 0 ? 'inf' : 'p:2';
       render();
     });
     $('prime-bound').addEventListener('input', (event) => {
@@ -634,13 +1092,14 @@
     });
     document.querySelectorAll('[data-d]').forEach((button) => {
       button.addEventListener('click', () => {
+        state.source = 'quadratic';
         state.rawD = Number(button.dataset.d);
         state.selectedKey = state.rawD < 0 ? 'inf' : 'p:2';
         render();
       });
     });
     $('ramification-refresh-export').addEventListener('click', () => {
-      const field = normalizedField();
+      const field = activeField();
       if (!field.error) renderExport(field);
     });
     $('ramification-select-export').addEventListener('click', () => {
@@ -650,7 +1109,7 @@
     });
     $('ramification-canvas').addEventListener('click', handleCanvasClick);
     window.addEventListener('resize', () => {
-      const field = normalizedField();
+      const field = activeField();
       if (!field.error) drawCanvas(field);
     });
   }
@@ -687,6 +1146,126 @@
       state.selectedKey = hit.key;
       render();
     }
+  }
+
+  function coeffsToPolynomialLatex(coeffs) {
+    if (!Array.isArray(coeffs) || !coeffs.length) return '?';
+    const terms = [];
+    for (let degree = coeffs.length - 1; degree >= 0; degree--) {
+      const coeff = Number(coeffs[degree]);
+      if (!coeff) continue;
+      const abs = Math.abs(coeff);
+      const sign = coeff < 0 ? '-' : '+';
+      let body;
+      if (degree === 0) {
+        body = String(abs);
+      } else {
+        const coeffText = abs === 1 ? '' : String(abs);
+        body = `${coeffText}x${degree === 1 ? '' : `^{${degree}}`}`;
+      }
+      terms.push({ sign, body });
+    }
+    if (!terms.length) return '0';
+    return terms.map((term, index) => {
+      if (index === 0) return term.sign === '-' ? `-${term.body}` : term.body;
+      return `${term.sign}${term.body}`;
+    }).join('');
+  }
+
+  function factorDegreesModPrime(coeffs, p) {
+    let poly = normalizePolyMod(coeffs, p);
+    const degrees = [];
+    let guard = 0;
+    while (poly.length > 1 && guard++ < 40) {
+      let changed = false;
+      for (let root = 0; root < p; root++) {
+        while (poly.length > 1 && polyEvalMod(poly, root, p) === 0) {
+          const divided = polyDivMod(poly, [positiveMod(-root, p), 1], p);
+          if (divided.remainder.length) break;
+          degrees.push(1);
+          poly = divided.quotient;
+          changed = true;
+        }
+      }
+      if (changed) continue;
+
+      const degree = poly.length - 1;
+      if (degree <= 1) {
+        degrees.push(degree);
+        break;
+      }
+
+      let found = false;
+      for (let trialDegree = 2; trialDegree <= Math.floor(degree / 2) && !found; trialDegree++) {
+        const attempts = Math.pow(p, trialDegree);
+        if (attempts > 70000) continue;
+        for (let code = 0; code < attempts; code++) {
+          const divisor = monicPolynomialFromCode(code, trialDegree, p);
+          const divided = polyDivMod(poly, divisor, p);
+          if (!divided.remainder.length) {
+            degrees.push(trialDegree);
+            poly = divided.quotient;
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found) {
+        degrees.push(degree);
+        break;
+      }
+    }
+    return degrees.filter((degree) => degree > 0).sort((a, b) => a - b);
+  }
+
+  function normalizePolyMod(coeffs, p) {
+    const poly = coeffs.map((coeff) => positiveMod(Math.trunc(Number(coeff) || 0), p));
+    while (poly.length && poly[poly.length - 1] === 0) poly.pop();
+    return poly.length ? poly : [0];
+  }
+
+  function polyEvalMod(poly, x, p) {
+    let out = 0;
+    for (let index = poly.length - 1; index >= 0; index--) {
+      out = positiveMod(out * x + poly[index], p);
+    }
+    return out;
+  }
+
+  function monicPolynomialFromCode(code, degree, p) {
+    const coeffs = [];
+    let value = code;
+    for (let index = 0; index < degree; index++) {
+      coeffs.push(value % p);
+      value = Math.floor(value / p);
+    }
+    coeffs.push(1);
+    return coeffs;
+  }
+
+  function polyDivMod(dividend, divisor, p) {
+    const rem = normalizePolyMod(dividend, p);
+    const div = normalizePolyMod(divisor, p);
+    const quotient = Array(Math.max(0, rem.length - div.length + 1)).fill(0);
+    const divLeadInv = modInverse(div[div.length - 1], p);
+    for (let offset = rem.length - div.length; offset >= 0; offset--) {
+      const coeff = positiveMod(rem[div.length - 1 + offset] * divLeadInv, p);
+      quotient[offset] = coeff;
+      for (let j = 0; j < div.length; j++) {
+        rem[j + offset] = positiveMod(rem[j + offset] - coeff * div[j], p);
+      }
+    }
+    while (rem.length && rem[rem.length - 1] === 0) rem.pop();
+    while (quotient.length && quotient[quotient.length - 1] === 0) quotient.pop();
+    return { quotient: quotient.length ? quotient : [0], remainder: rem };
+  }
+
+  function modInverse(value, p) {
+    const normalized = positiveMod(value, p);
+    for (let candidate = 1; candidate < p; candidate++) {
+      if ((normalized * candidate) % p === 1) return candidate;
+    }
+    return 1;
   }
 
   function bindCards() {

@@ -179,6 +179,22 @@
   const PLACEMENT_COLOR_ORDER = new Map(PLACEMENT_KNOWN_COLORS.map((color, index) => [color, index]));
   const CONNECT_FOUR_WIN_LENGTH = 4;
   const CONNECT_FOUR_COLORS = ['red', 'yellow'];
+  const ONLINE_SUPPORTED_GAME_MODES = new Set([
+    GAME_MODES.GOMOKU,
+    GAME_MODES.GO,
+    GAME_MODES.CONNECT_FOUR,
+    GAME_MODES.REVERSI,
+    GAME_MODES.FIDE_CHESS
+  ]);
+  const ONLINE_PLAYER_ROLES_BY_MODE = {
+    [GAME_MODES.GOMOKU]: ['black', 'white'],
+    [GAME_MODES.GO]: ['black', 'white'],
+    [GAME_MODES.CONNECT_FOUR]: ['red', 'yellow'],
+    [GAME_MODES.REVERSI]: ['black', 'white'],
+    [GAME_MODES.FIDE_CHESS]: ['white', 'black']
+  };
+  const ONLINE_CLIENT_ID_KEY = 'ramified-minigames-online-client-id';
+  const ONLINE_MAX_SNAPSHOT_BYTES = 760 * 1024;
 
   function gluePair(group, first, second, options = {}) {
     const pair = { group, first, second };
@@ -373,6 +389,7 @@
   let fullscreenActionPlacementFrame = null;
   let fullscreenRestartPending = false;
   let fullscreenRestartConfirmTimer = null;
+  let onlineState = null;
 
   function init() {
     refs.canvas = document.getElementById('mosaic-canvas');
@@ -448,6 +465,12 @@
     refs.canvasStartRules = document.getElementById('canvas-start-rules');
     refs.canvasStartBegin = document.getElementById('canvas-start-begin');
     refs.setupAlert = document.getElementById('game-setup-alert');
+    refs.onlineRoomCode = document.getElementById('online-room-code');
+    refs.onlineRole = document.getElementById('online-role');
+    refs.onlineCreateRoom = document.getElementById('online-create-room');
+    refs.onlineJoinRoom = document.getElementById('online-join-room');
+    refs.onlineLeaveRoom = document.getElementById('online-leave-room');
+    refs.onlineStatus = document.getElementById('online-status');
     refs.speed = document.getElementById('animation-speed');
     refs.speedValue = document.getElementById('animation-speed-value');
     refs.stepMode = document.getElementById('step-mode');
@@ -547,6 +570,11 @@
     if (refs.highlightNewBoxes) refs.highlightNewBoxes.addEventListener('change', render);
     if (refs.begin) refs.begin.addEventListener('click', beginGameFromUi);
     if (refs.canvasStartBegin) refs.canvasStartBegin.addEventListener('click', handleCanvasStartBeginClick);
+    if (refs.onlineCreateRoom) refs.onlineCreateRoom.addEventListener('click', createOnlineRoomFromUi);
+    if (refs.onlineJoinRoom) refs.onlineJoinRoom.addEventListener('click', joinOnlineRoomFromUi);
+    if (refs.onlineLeaveRoom) refs.onlineLeaveRoom.addEventListener('click', leaveOnlineRoomFromUi);
+    if (refs.onlineRole) refs.onlineRole.addEventListener('change', syncOnlineControls);
+    if (refs.onlineRoomCode) refs.onlineRoomCode.addEventListener('input', syncOnlineControls);
     if (refs.speed) refs.speed.addEventListener('input', syncSpeedOutput);
     if (refs.stepMode) refs.stepMode.addEventListener('change', syncControls);
     if (refs.sokobanObjectSize) refs.sokobanObjectSize.addEventListener('input', () => {
@@ -617,6 +645,7 @@
     syncPlacementPieceSizeOutput();
     syncDebugModeUi();
     syncCanvasDisplayModeUi();
+    initOnlinePlay();
     setPresetSelectLoading();
     const catalogLoad = ensurePresetCatalogLoaded();
     if (catalogLoad && typeof catalogLoad.then === 'function') {
@@ -641,6 +670,709 @@
         if (card) card.classList.toggle('collapsed');
       });
     });
+  }
+
+  function initOnlinePlay() {
+    onlineState = {
+      baseUrl: normalizeOnlineWorkerUrl(
+        typeof window !== 'undefined' ? window.RAMIFIED_MINIGAMES_ONLINE_URL : ''
+      ),
+      clientId: onlineClientId(),
+      roomCode: '',
+      role: '',
+      gameMode: '',
+      version: 0,
+      socket: null,
+      connecting: false,
+      intentionalClose: false,
+      reconnectTimer: null,
+      applyingRemoteState: false,
+      statusState: 'offline',
+      statusText: ''
+    };
+    syncOnlineRoleOptions();
+    syncOnlineStatus(
+      onlineState.baseUrl ? 'Ready to create or join an online room.' : 'Online Worker URL is not configured.',
+      onlineState.baseUrl ? 'idle' : 'offline'
+    );
+    syncOnlineControls();
+  }
+
+  function normalizeOnlineWorkerUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw || raw === 'https://your-worker.workers.dev') return '';
+    try {
+      const url = new URL(raw);
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') return '';
+      url.pathname = url.pathname.replace(/\/+$/, '');
+      url.search = '';
+      url.hash = '';
+      return url.toString().replace(/\/+$/, '');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function onlineClientId() {
+    const fallback = `client-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+    if (typeof window === 'undefined') return fallback;
+    try {
+      const stored = window.localStorage && window.localStorage.getItem(ONLINE_CLIENT_ID_KEY);
+      if (stored && /^[a-z0-9._:-]{8,80}$/i.test(stored)) return stored;
+      const next = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : fallback;
+      if (window.localStorage) window.localStorage.setItem(ONLINE_CLIENT_ID_KEY, next);
+      return next;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function onlineModeRoles(mode) {
+    return ONLINE_PLAYER_ROLES_BY_MODE[mode] ? ONLINE_PLAYER_ROLES_BY_MODE[mode].slice() : [];
+  }
+
+  function onlineModeSupported(mode) {
+    return ONLINE_SUPPORTED_GAME_MODES.has(mode);
+  }
+
+  function onlineStateSupported(state = game) {
+    if (!state) return false;
+    if (!onlineModeSupported(gameModeValue(state))) return false;
+    if (isFideChessGame(state) && isFideChessPuzzle(state)) return false;
+    return true;
+  }
+
+  function syncOnlineRoleOptions(mode = null) {
+    if (!refs.onlineRole) return;
+    const targetMode = mode || (onlineState && onlineState.gameMode) || selectedGameMode();
+    const previous = refs.onlineRole.value || 'auto';
+    const roles = onlineModeRoles(targetMode);
+    refs.onlineRole.innerHTML = '';
+    const options = [{ value: 'auto', label: 'auto side' }]
+      .concat(roles.map((role) => ({ value: role, label: onlineRoleLabel(role) })))
+      .concat([{ value: 'spectator', label: 'spectator' }]);
+    options.forEach((entry) => {
+      const option = document.createElement('option');
+      option.value = entry.value;
+      option.textContent = entry.label;
+      refs.onlineRole.appendChild(option);
+    });
+    refs.onlineRole.value = options.some((entry) => entry.value === previous) ? previous : 'auto';
+  }
+
+  function onlineRoleLabel(role) {
+    const text = String(role || '').trim().toLowerCase();
+    if (text === 'white') return 'white';
+    if (text === 'black') return 'black';
+    if (text === 'red') return 'red';
+    if (text === 'yellow') return 'yellow';
+    if (text === 'spectator') return 'spectator';
+    return text || 'auto side';
+  }
+
+  function onlineRoomCodeFromInput() {
+    return normalizeOnlineRoomCode(refs.onlineRoomCode ? refs.onlineRoomCode.value : '');
+  }
+
+  function normalizeOnlineRoomCode(value) {
+    return String(value || '').trim().toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, 8);
+  }
+
+  function selectedOnlineRole() {
+    const value = refs.onlineRole ? refs.onlineRole.value : 'auto';
+    return value || 'auto';
+  }
+
+  function onlineIsInRoom() {
+    return !!(onlineState && onlineState.roomCode);
+  }
+
+  function onlineSocketOpen() {
+    return !!(onlineState && onlineState.socket && onlineState.socket.readyState === WebSocket.OPEN);
+  }
+
+  function syncOnlineStatus(text, state = 'idle') {
+    if (!onlineState) return;
+    onlineState.statusText = text || '';
+    onlineState.statusState = state || 'idle';
+    if (refs.onlineStatus) {
+      refs.onlineStatus.textContent = onlineStatusText();
+      refs.onlineStatus.dataset.state = onlineStatusDataState();
+    }
+  }
+
+  function onlineStatusText() {
+    if (!onlineState) return 'Online play unavailable.';
+    if (onlineState.roomCode) {
+      const role = onlineState.role ? ` as ${onlineRoleLabel(onlineState.role)}` : '';
+      const version = Number.isInteger(onlineState.version) ? `, v${onlineState.version}` : '';
+      return `Room ${onlineState.roomCode}${role}${version}. ${onlineState.statusText || ''}`.trim();
+    }
+    return onlineState.statusText || (onlineState.baseUrl ? 'Ready to create or join an online room.' : 'Online Worker URL is not configured.');
+  }
+
+  function onlineStatusDataState() {
+    if (!onlineState) return 'offline';
+    if (onlineState.statusState === 'error') return 'error';
+    if (onlineSocketOpen()) return 'connected';
+    if (onlineState.baseUrl) return 'idle';
+    return 'offline';
+  }
+
+  function syncOnlineControls() {
+    if (!onlineState) return;
+    const configured = !!onlineState.baseUrl;
+    const active = onlineIsInRoom();
+    const roomInput = onlineRoomCodeFromInput();
+    if (refs.onlineRoomCode && refs.onlineRoomCode.value !== roomInput) refs.onlineRoomCode.value = roomInput;
+    if (refs.onlineCreateRoom) {
+      refs.onlineCreateRoom.disabled = !configured || active || !onlineStateSupported(game) || !game || game.phase === 'setup';
+    }
+    if (refs.onlineJoinRoom) refs.onlineJoinRoom.disabled = !configured || active || roomInput.length < 4;
+    if (refs.onlineLeaveRoom) refs.onlineLeaveRoom.disabled = !active;
+    if (refs.onlineRoomCode) refs.onlineRoomCode.disabled = active;
+    if (refs.onlineRole) refs.onlineRole.disabled = active;
+    if (refs.onlineStatus) {
+      refs.onlineStatus.textContent = onlineStatusText();
+      refs.onlineStatus.dataset.state = onlineStatusDataState();
+    }
+  }
+
+  function onlineHttpUrl(path) {
+    const base = onlineState && onlineState.baseUrl ? onlineState.baseUrl : '';
+    if (!base) throw new Error('Online Worker URL is not configured.');
+    return new URL(path, `${base}/`).toString();
+  }
+
+  function onlineWebSocketUrl(roomCode) {
+    const url = new URL(`ws/${encodeURIComponent(roomCode)}`, `${onlineState.baseUrl}/`);
+    url.protocol = url.protocol === 'http:' ? 'ws:' : 'wss:';
+    url.searchParams.set('clientId', onlineState.clientId);
+    return url.toString();
+  }
+
+  async function createOnlineRoomFromUi() {
+    if (!onlineState || !onlineState.baseUrl) {
+      syncOnlineStatus('Set window.RAMIFIED_MINIGAMES_ONLINE_URL before using online play.', 'error');
+      syncOnlineControls();
+      return;
+    }
+    if (!game || game.phase === 'setup') {
+      syncOnlineStatus('Begin a supported two-player game before creating a room.', 'error');
+      syncStatus('online room unavailable', 'begin the game first', 'warn');
+      syncOnlineControls();
+      return;
+    }
+    if (!onlineStateSupported(game)) {
+      syncOnlineStatus('Online play supports Gomoku, Go, Connect Four, Reversi, and non-puzzle FIDE Chess.', 'error');
+      syncStatus('online unsupported', 'choose a supported two-player game', 'warn');
+      syncOnlineControls();
+      return;
+    }
+    const snapshot = debugExportPayload();
+    const snapshotBytes = jsonByteLength(snapshot);
+    if (snapshotBytes > ONLINE_MAX_SNAPSHOT_BYTES) {
+      syncOnlineStatus(`Current game snapshot is too large (${snapshotBytes} bytes).`, 'error');
+      return;
+    }
+    const requestedRole = selectedOnlineRole();
+    syncOnlineStatus('Creating room...', 'idle');
+    syncOnlineControls();
+    try {
+      const response = await fetch(onlineHttpUrl('api/rooms'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: onlineState.clientId,
+          role: requestedRole,
+          gameMode: gameModeValue(game),
+          snapshot,
+          summary: onlineGameSummary(game)
+        })
+      });
+      const payload = await onlineReadJsonResponse(response);
+      if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+      const code = normalizeOnlineRoomCode(payload.roomCode);
+      if (!code) throw new Error('Worker did not return a room code.');
+      if (refs.onlineRoomCode) refs.onlineRoomCode.value = code;
+      onlineState.version = Number.isInteger(payload.version) ? payload.version : 0;
+      onlineState.gameMode = gameModeFromUrlParam(payload.gameMode) || gameModeValue(game);
+      syncOnlineRoleOptions(onlineState.gameMode);
+      await connectOnlineSocket(code, payload.role || requestedRole);
+    } catch (error) {
+      syncOnlineStatus(error && error.message ? error.message : 'Room creation failed.', 'error');
+      syncOnlineControls();
+    }
+  }
+
+  async function joinOnlineRoomFromUi() {
+    if (!onlineState || !onlineState.baseUrl) {
+      syncOnlineStatus('Set window.RAMIFIED_MINIGAMES_ONLINE_URL before joining online play.', 'error');
+      syncOnlineControls();
+      return;
+    }
+    const code = onlineRoomCodeFromInput();
+    if (code.length < 4) {
+      syncOnlineStatus('Enter a room code first.', 'error');
+      syncOnlineControls();
+      return;
+    }
+    try {
+      syncOnlineStatus('Joining room...', 'idle');
+      syncOnlineControls();
+      await connectOnlineSocket(code, selectedOnlineRole());
+    } catch (error) {
+      syncOnlineStatus(error && error.message ? error.message : 'Join failed.', 'error');
+      syncOnlineControls();
+    }
+  }
+
+  function onlineReadJsonResponse(response) {
+    return response.text().then((text) => {
+      if (!text) return {};
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        return { error: text.slice(0, 200) };
+      }
+    });
+  }
+
+  function connectOnlineSocket(roomCode, requestedRole = 'auto') {
+    return new Promise((resolve, reject) => {
+      if (!onlineState || !onlineState.baseUrl) {
+        reject(new Error('Online Worker URL is not configured.'));
+        return;
+      }
+      closeOnlineSocket({ keepRoom: true, intentional: true });
+      const code = normalizeOnlineRoomCode(roomCode);
+      onlineState.roomCode = code;
+      onlineState.role = '';
+      onlineState.intentionalClose = false;
+      onlineState.connecting = true;
+      onlineState.gameMode = onlineState.gameMode || selectedGameMode();
+      syncOnlineStatus('Opening WebSocket...', 'idle');
+      syncOnlineControls();
+      let socket;
+      try {
+        socket = new WebSocket(onlineWebSocketUrl(code));
+      } catch (error) {
+        onlineState.connecting = false;
+        reject(error);
+        return;
+      }
+      onlineState.socket = socket;
+      const timeout = setTimeout(() => {
+        if (socket.readyState !== WebSocket.OPEN) {
+          reject(new Error('WebSocket connection timed out.'));
+          try {
+            socket.close(4000, 'timeout');
+          } catch (_) {
+            // Ignore close failures for already-closed sockets.
+          }
+        }
+      }, 8000);
+      socket.addEventListener('open', () => {
+        clearTimeout(timeout);
+        onlineState.connecting = false;
+        onlineSendRaw({
+          type: 'hello',
+          clientId: onlineState.clientId,
+          role: requestedRole || 'auto'
+        });
+        syncOnlineStatus('Connected; waiting for room state...', 'idle');
+        syncOnlineControls();
+        resolve();
+      });
+      socket.addEventListener('message', (event) => handleOnlineSocketMessage(event));
+      socket.addEventListener('error', () => {
+        clearTimeout(timeout);
+        onlineState.connecting = false;
+        syncOnlineStatus('WebSocket error.', 'error');
+        syncOnlineControls();
+      });
+      socket.addEventListener('close', (event) => {
+        clearTimeout(timeout);
+        const wasIntentional = !!(socket.__ramifiedIntentionalClose || (onlineState && onlineState.intentionalClose));
+        if (onlineState && onlineState.socket === socket) onlineState.socket = null;
+        if (!onlineState) return;
+        onlineState.connecting = false;
+        if (wasIntentional) {
+          syncOnlineStatus(onlineState.roomCode ? 'Left online room.' : 'Ready to create or join an online room.', onlineState.baseUrl ? 'idle' : 'offline');
+          syncOnlineControls();
+          return;
+        }
+        const reason = event && event.reason ? event.reason : 'connection closed';
+        syncOnlineStatus(`${reason}; reconnecting...`, 'error');
+        syncOnlineControls();
+        scheduleOnlineReconnect();
+      });
+    });
+  }
+
+  function closeOnlineSocket(options = {}) {
+    if (!onlineState) return;
+    if (onlineState.reconnectTimer) {
+      clearTimeout(onlineState.reconnectTimer);
+      onlineState.reconnectTimer = null;
+    }
+    onlineState.intentionalClose = options.intentional !== false;
+    const socket = onlineState.socket;
+    onlineState.socket = null;
+    onlineState.connecting = false;
+    if (socket && socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) {
+      try {
+        socket.__ramifiedIntentionalClose = true;
+        socket.close(1000, 'client closed');
+      } catch (_) {
+        // Socket may already be gone.
+      }
+    }
+    if (!options.keepRoom) {
+      onlineState.roomCode = '';
+      onlineState.role = '';
+      onlineState.gameMode = '';
+      onlineState.version = 0;
+    }
+  }
+
+  function leaveOnlineRoomFromUi() {
+    if (!onlineState) return;
+    if (onlineSocketOpen()) {
+      onlineSendRaw({
+        type: 'leave',
+        clientId: onlineState.clientId,
+        role: onlineState.role
+      });
+    }
+    closeOnlineSocket({ keepRoom: false, intentional: true });
+    syncOnlineRoleOptions(selectedGameMode());
+    syncOnlineStatus(onlineState.baseUrl ? 'Ready to create or join an online room.' : 'Online Worker URL is not configured.', onlineState.baseUrl ? 'idle' : 'offline');
+    syncOnlineControls();
+    syncControls();
+  }
+
+  function scheduleOnlineReconnect() {
+    if (!onlineState || !onlineState.roomCode || onlineState.reconnectTimer) return;
+    const code = onlineState.roomCode;
+    const role = onlineState.role || selectedOnlineRole();
+    onlineState.reconnectTimer = setTimeout(() => {
+      if (!onlineState) return;
+      onlineState.reconnectTimer = null;
+      connectOnlineSocket(code, role).catch((error) => {
+        syncOnlineStatus(error && error.message ? error.message : 'Reconnect failed.', 'error');
+        syncOnlineControls();
+      });
+    }, 1500);
+  }
+
+  function handleOnlineSocketMessage(event) {
+    let message;
+    try {
+      message = JSON.parse(event.data);
+    } catch (_) {
+      syncOnlineStatus('Received malformed online message.', 'error');
+      syncOnlineControls();
+      return;
+    }
+    if (!message || typeof message !== 'object') return;
+    if (message.type === 'joined') {
+      onlineState.roomCode = normalizeOnlineRoomCode(message.roomCode || onlineState.roomCode);
+      onlineState.role = message.role || 'spectator';
+      onlineState.version = normalizeOnlineVersion(message.version, onlineState.version);
+      onlineState.gameMode = gameModeFromUrlParam(message.gameMode) || onlineState.gameMode || selectedGameMode();
+      if (refs.onlineRoomCode) refs.onlineRoomCode.value = onlineState.roomCode;
+      syncOnlineRoleOptions(onlineState.gameMode);
+      syncOnlineStatus('Joined room.', 'idle');
+      syncOnlineControls();
+      syncControls();
+      return;
+    }
+    if (message.type === 'state') {
+      applyOnlineSnapshotMessage(message);
+      return;
+    }
+    if (message.type === 'accepted') {
+      onlineState.version = normalizeOnlineVersion(message.version, onlineState.version + 1);
+      syncOnlineStatus('Move accepted.', 'idle');
+      syncOnlineControls();
+      syncControls();
+      return;
+    }
+    if (message.type === 'rejected') {
+      onlineState.version = normalizeOnlineVersion(message.version, onlineState.version);
+      syncOnlineStatus(message.error || 'Online move rejected.', 'error');
+      if (message.snapshot) applyOnlineSnapshotMessage({ ...message, type: 'state' });
+      else {
+        syncOnlineControls();
+        syncControls();
+      }
+      return;
+    }
+    if (message.type === 'presence') {
+      syncOnlineStatus(onlinePresenceText(message), 'idle');
+      syncOnlineControls();
+      return;
+    }
+    if (message.type === 'approvalRequest') {
+      respondToOnlineHistoryRequest(message);
+      return;
+    }
+    if (message.type === 'approvalPending') {
+      syncOnlineStatus(message.message || `Waiting for opponent to approve ${message.kind || 'history'} request.`, 'idle');
+      syncOnlineControls();
+      return;
+    }
+    if (message.type === 'historyApproved') {
+      applyApprovedOnlineHistory(message);
+      return;
+    }
+    if (message.type === 'historyRejected') {
+      syncOnlineStatus(message.error || `${message.kind || 'History'} request was rejected.`, 'error');
+      syncControls();
+      return;
+    }
+    if (message.type === 'approvalResolved') {
+      syncOnlineStatus(message.message || 'History request resolved.', message.allowed ? 'idle' : 'error');
+      syncControls();
+      return;
+    }
+    if (message.type === 'error') {
+      syncOnlineStatus(message.error || 'Online room error.', 'error');
+      syncOnlineControls();
+    }
+  }
+
+  function applyOnlineSnapshotMessage(message) {
+    if (!message || !message.snapshot) return;
+    const action = message.action && typeof message.action === 'object' && !Array.isArray(message.action)
+      ? message.action
+      : null;
+    const originClientId = String(message.clientId || (action && action.clientId) || '');
+    const remoteAction = !!(originClientId && onlineState && originClientId !== onlineState.clientId && action);
+    if (remoteAction) prepareOnlineHistoryForRemoteAction(action);
+    onlineState.applyingRemoteState = true;
+    try {
+      const imported = gameStateFromDebugImportPayload(message.snapshot);
+      onlineState.version = normalizeOnlineVersion(message.version, onlineState.version);
+      onlineState.gameMode = gameModeFromUrlParam(message.gameMode || message.snapshot.gameMode) || gameModeValue(imported.state);
+      applyImportedDebugState(imported, {
+        recordHistory: false,
+        status: 'online state synced',
+        info: onlineGameSummary(imported.state),
+        focus: false
+      });
+      syncOnlineRoleOptions(onlineState.gameMode);
+      syncOnlineStatus('State synchronized.', 'idle');
+    } catch (error) {
+      syncOnlineStatus(error && error.message ? error.message : 'Could not apply online state.', 'error');
+    } finally {
+      onlineState.applyingRemoteState = false;
+      syncOnlineControls();
+      syncControls();
+    }
+  }
+
+  function requestOnlineHistoryChange(kind) {
+    if (!onlineState || !onlineIsInRoom()) return;
+    const normalized = kind === 'redo' ? 'redo' : 'undo';
+    const stack = normalized === 'redo' ? redoStack : undoStack;
+    if (!stack.length) {
+      syncStatus(`${normalized} unavailable`, `no ${normalized} history`, 'warn');
+      syncOnlineStatus(`No ${normalized} history is available.`, 'error');
+      syncControls();
+      return;
+    }
+    if (!onlineSocketOpen()) {
+      syncStatus(`${normalized} unavailable`, 'online room is disconnected', 'warn');
+      syncOnlineStatus('Reconnect before requesting undo/redo.', 'error');
+      syncControls();
+      return;
+    }
+    if (onlineState.role === 'spectator') {
+      syncStatus(`${normalized} unavailable`, 'spectators cannot request history changes', 'warn');
+      syncOnlineStatus('Spectators cannot request undo/redo.', 'error');
+      syncControls();
+      return;
+    }
+    onlineSendRaw({
+      type: 'historyRequest',
+      clientId: onlineState.clientId,
+      role: onlineState.role,
+      kind: normalized,
+      baseVersion: onlineState.version,
+      summary: onlineGameSummary(game)
+    });
+    syncOnlineStatus(`Requested ${normalized}; waiting for opponent approval.`, 'idle');
+    syncControls();
+  }
+
+  function respondToOnlineHistoryRequest(message) {
+    if (!onlineState || !onlineSocketOpen()) return;
+    const requestId = String(message.requestId || '');
+    if (!requestId) return;
+    const kind = message.kind === 'redo' ? 'redo' : 'undo';
+    const requester = onlineRoleLabel(message.requesterRole || 'opponent');
+    const text = `${requester} requests ${kind}. Allow this ${kind}?`;
+    const allowed = typeof window !== 'undefined' && typeof window.confirm === 'function'
+      ? window.confirm(text)
+      : false;
+    onlineSendRaw({
+      type: 'approvalResponse',
+      clientId: onlineState.clientId,
+      role: onlineState.role,
+      requestId,
+      allow: !!allowed
+    });
+    syncOnlineStatus(allowed ? `Allowed ${kind}; waiting for synchronized board.` : `Rejected ${kind}.`, allowed ? 'idle' : 'error');
+    syncControls();
+  }
+
+  function applyApprovedOnlineHistory(message) {
+    if (!onlineState || !onlineIsInRoom()) return;
+    const kind = message.kind === 'redo' ? 'redo' : 'undo';
+    syncOnlineStatus(`${kind} approved; applying.`, 'idle');
+    if (kind === 'redo') redoPreviousUndo({ onlineApproved: true, requestId: message.requestId || '' });
+    else undoPreviousStep({ onlineApproved: true, requestId: message.requestId || '' });
+    syncControls();
+  }
+
+  function prepareOnlineHistoryForRemoteAction(action) {
+    const type = String(action.type || '').trim().toLowerCase();
+    if (type === 'history-undo') {
+      if (undoStack.length) {
+        const snapshot = undoStack.pop();
+        pushRedoSnapshot(snapshot.label || 'online undo');
+        restoreHistorySnapshot(snapshot, 'online undo approved', 'opponent undo applied');
+      }
+      return;
+    }
+    if (type === 'history-redo') {
+      if (redoStack.length) {
+        const snapshot = redoStack.pop();
+        pushUndoSnapshotForRedo(snapshot.label || 'online redo');
+        restoreHistorySnapshot(snapshot, 'online redo approved', 'opponent redo applied');
+      }
+      return;
+    }
+    if (onlineStateSupported(game) && game && game.phase !== 'setup') {
+      pushUndoSnapshot(onlineActionHistoryLabel(action));
+    }
+  }
+
+  function onlineActionHistoryLabel(action) {
+    const type = String(action && action.type || 'move').trim().toLowerCase();
+    if (type === 'drop') return 'online Connect Four drop';
+    if (type === 'pass') return 'online Go pass';
+    if (type.indexOf('go-') === 0) return 'online Go scoring edit';
+    if (type.indexOf('fide-') === 0) return 'online FIDE Chess move';
+    return 'online move';
+  }
+
+  function onlinePresenceText(message) {
+    const roles = message && message.roles && typeof message.roles === 'object' ? message.roles : {};
+    const filled = Object.keys(roles)
+      .filter((role) => roles[role] && role !== 'spectator')
+      .map(onlineRoleLabel);
+    if (!filled.length) return 'Room is open.';
+    return `Players: ${filled.join(', ')}.`;
+  }
+
+  function normalizeOnlineVersion(value, fallback) {
+    const number = Number(value);
+    return Number.isInteger(number) && number >= 0 ? number : fallback;
+  }
+
+  function onlineSendRaw(message) {
+    if (!onlineSocketOpen()) return false;
+    try {
+      onlineState.socket.send(JSON.stringify(message));
+      return true;
+    } catch (error) {
+      syncOnlineStatus(error && error.message ? error.message : 'Could not send online message.', 'error');
+      syncOnlineControls();
+      return false;
+    }
+  }
+
+  function onlineSendLocalAction(action) {
+    if (!onlineState || onlineState.applyingRemoteState || !onlineIsInRoom()) return;
+    if (!onlineSocketOpen()) {
+      syncOnlineStatus('Move was played locally, but the online socket is disconnected.', 'error');
+      syncOnlineControls();
+      return;
+    }
+    if (onlineState.role === 'spectator') {
+      syncOnlineStatus('Spectators cannot submit moves.', 'error');
+      return;
+    }
+    const snapshot = debugExportPayload();
+    const snapshotBytes = jsonByteLength(snapshot);
+    if (snapshotBytes > ONLINE_MAX_SNAPSHOT_BYTES) {
+      syncOnlineStatus(`Move not sent: snapshot is too large (${snapshotBytes} bytes).`, 'error');
+      return;
+    }
+    onlineSendRaw({
+      type: 'proposeMove',
+      clientId: onlineState.clientId,
+      role: onlineState.role,
+      baseVersion: onlineState.version,
+      action: action || { type: 'move' },
+      snapshot,
+      summary: onlineGameSummary(game)
+    });
+    syncOnlineStatus('Move sent; waiting for acceptance.', 'idle');
+    syncOnlineControls();
+  }
+
+  function onlineLocalPlayIssue(actionType = 'move') {
+    if (!onlineState || !onlineIsInRoom()) return '';
+    if (!onlineSocketOpen()) return 'online room is disconnected';
+    if (!onlineStateSupported(game)) return 'this game is not supported online';
+    if (onlineState.role === 'spectator') return 'spectators cannot move';
+    const expected = onlineExpectedRoleForGame(game, actionType);
+    if (expected && onlineState.role !== expected) return `${onlineRoleLabel(expected)} to move`;
+    return '';
+  }
+
+  function onlineExpectedRoleForGame(state, actionType = 'move') {
+    if (!state || state.phase !== 'ready') return '';
+    if (isGoGame(state) && state.scoringReview && onlineGoReviewAction(actionType)) return '';
+    const role = normalizePlacementColor(state.turn);
+    return onlineModeRoles(gameModeValue(state)).includes(role) ? role : '';
+  }
+
+  function onlineGoReviewAction(actionType) {
+    return actionType === 'go-dead-group'
+      || actionType === 'go-territory'
+      || actionType === 'go-confirm-score'
+      || actionType === 'go-scoring-method';
+  }
+
+  function rejectOnlineLocalAction(status, actionType = 'move') {
+    const issue = onlineLocalPlayIssue(actionType);
+    if (!issue) return false;
+    syncStatus(status || 'online turn blocked', issue, 'warn');
+    syncOnlineStatus(issue, 'error');
+    syncOnlineControls();
+    if (refs.canvas) refs.canvas.focus();
+    return true;
+  }
+
+  function onlineGameSummary(state) {
+    if (!state) return '';
+    const mode = gameTypeForGameMode(gameModeValue(state));
+    const round = state.round || 0;
+    const phase = state.phase || 'setup';
+    const turn = state.turn ? `${onlineRoleLabel(state.turn)} to move` : phase;
+    if (state.phase === 'gameover') return `${mode}: game over after ${round}`;
+    return `${mode}: ${turn}, move ${round}`;
+  }
+
+  function jsonByteLength(value) {
+    const text = JSON.stringify(value);
+    if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(text).length;
+    return text.length;
   }
 
   function resetToPreview() {
@@ -1431,6 +2163,12 @@
 
   function resetCurrentGameFromShortcut() {
     if (!game) return false;
+    if (onlineIsInRoom()) {
+      syncStatus('restart unavailable online', 'leave the room before restarting', 'warn');
+      syncOnlineStatus('Restart is disabled while an online room is active.', 'error');
+      syncControls();
+      return false;
+    }
     const previous = game;
     if (previous.phase === 'setup') {
       resetToPreview();
@@ -1486,6 +2224,7 @@
     applyDefaultPlacementDisplayForMode();
     applyDefaultPlacementPieceSizeForMode();
     syncDefaultPresetForGameMode();
+    syncOnlineRoleOptions();
     if (refs.importGameMode) refs.importGameMode.value = selectedGameMode();
     resetToPreview();
   }
@@ -1578,6 +2317,7 @@
     }
     setImportToolsVisible(false);
     syncBoardSizeInputForSelectedPreset();
+    syncOnlineRoleOptions();
     resetToPreview();
   }
 
@@ -2231,6 +2971,14 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'fide-promotion',
+      gameMode: GAME_MODES.FIDE_CHESS,
+      role: movingPiece ? movingPiece.side : pending.side,
+      from: pending.from,
+      to: pending.to,
+      promotionKind
+    });
   }
 
   function cancelFideChessPendingPromotion() {
@@ -3591,6 +4339,14 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'fide-move',
+      gameMode: GAME_MODES.FIDE_CHESS,
+      role: movedPiece ? movedPiece.side : '',
+      from,
+      to,
+      label
+    });
   }
 
   function handleCanvasHover(event) {
@@ -3641,6 +4397,7 @@
       }
       return;
     }
+    if (rejectOnlineLocalAction('online Gomoku turn blocked')) return;
     const target = tileFromCanvasEvent(event);
     if (!target) return;
     const result = placeGomokuStone(game, target.index);
@@ -3659,6 +4416,13 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'place',
+      gameMode: GAME_MODES.GOMOKU,
+      role: result.stone.color,
+      index: target.index,
+      label: target.label
+    });
   }
 
   function handleConnectFourCanvasClick(event) {
@@ -3677,6 +4441,7 @@
       }
       return;
     }
+    if (rejectOnlineLocalAction('online Connect Four turn blocked')) return;
     const target = tileFromCanvasEvent(event);
     if (!target) return;
     if (!connectFourHasHole(game, target.index)) {
@@ -3710,6 +4475,13 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'drop',
+      gameMode: GAME_MODES.CONNECT_FOUR,
+      role: result.token.color,
+      index: target.index,
+      label: target.label
+    });
   }
 
   function handleGoCanvasClick(event) {
@@ -3741,6 +4513,7 @@
       syncStatus('Go score review', 'mark dead groups or confirm score', 'ready');
       return;
     }
+    if (rejectOnlineLocalAction('online Go turn blocked')) return;
     const result = placeGoStone(game, target.index);
     if (!result.changed) {
       syncStatus('Go move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
@@ -3752,10 +4525,19 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'place',
+      gameMode: GAME_MODES.GO,
+      role: result.stone.color,
+      index: target.index,
+      label: target.label
+    });
   }
 
   function passGoFromUi() {
     if (!isGoGame(game) || currentAnimation) return;
+    if (rejectOnlineLocalAction('online Go pass blocked')) return;
+    const passRole = game.turn;
     const result = passGoTurn(game);
     if (!result.changed) {
       syncStatus('Go pass rejected', result.message || 'pass is unavailable', phaseBadge(game.phase));
@@ -3768,11 +4550,17 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'pass',
+      gameMode: GAME_MODES.GO,
+      role: passRole
+    });
     if (refs.canvas) refs.canvas.focus();
   }
 
   function confirmGoScoreFromUi() {
     if (!isGoGame(game) || currentAnimation || game.phase === 'setup' || game.phase === 'gameover') return;
+    if (rejectOnlineLocalAction('online Go score blocked', 'go-confirm-score')) return;
     const result = confirmGoScore(game);
     if (!result.changed) {
       syncStatus('Go score unavailable', result.message || 'score cannot be confirmed yet', phaseBadge(game.phase));
@@ -3784,11 +4572,16 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'go-confirm-score',
+      gameMode: GAME_MODES.GO
+    });
     if (refs.canvas) refs.canvas.focus();
   }
 
   function handleGoDeadGroupCanvasClick(target) {
     if (!isGoGame(game) || !target) return;
+    if (rejectOnlineLocalAction('online Go dead group blocked', 'go-dead-group')) return;
     const result = toggleGoDeadGroup(game, target.index);
     if (!result.changed) {
       syncStatus('Go dead group', result.message || 'click a stone group to mark it dead or alive', phaseBadge(game.phase));
@@ -3804,6 +4597,12 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'go-dead-group',
+      gameMode: GAME_MODES.GO,
+      index: target.index,
+      markedDead: !!result.markedDead
+    });
     if (refs.canvas) refs.canvas.focus();
   }
 
@@ -3819,11 +4618,22 @@
     if (isGoGame(game)) {
       const previous = normalizeGoScoringMethod(game.scoringMethod);
       if (previous !== method) {
+        if (game.phase !== 'setup' && rejectOnlineLocalAction('online Go scoring blocked', 'go-scoring-method')) {
+          if (refs.goScoringMethod) refs.goScoringMethod.value = previous;
+          return;
+        }
         if (game.phase !== 'setup') pushUndoSnapshot('Go scoring method');
         game.scoringMethod = method;
         game.finalScore = null;
         if (game.phase !== 'gameover') game.territory = scoreGoGame(game).territory;
         if (game.phase !== 'setup') appendGameRecordMove(game, { action: 'set-scoring-method', method });
+        if (game.phase !== 'setup') {
+          onlineSendLocalAction({
+            type: 'go-scoring-method',
+            gameMode: GAME_MODES.GO,
+            method
+          });
+        }
       }
       syncStatus('Go scoring method', method === 'nearest' ? 'nearest-stone Voronoi selected' : 'inverse-square influence selected', phaseBadge(game.phase));
     }
@@ -3863,6 +4673,7 @@
 
   function handleGoTerritoryOverrideCanvasClick(target) {
     if (!isGoGame(game) || !target) return;
+    if (rejectOnlineLocalAction('online Go territory blocked', 'go-territory')) return;
     const result = toggleGoTerritoryOverride(game, target.index);
     if (!result.changed) {
       syncStatus('Go territory edit', result.message || 'click an empty or dead scoring point', phaseBadge(game.phase));
@@ -3874,6 +4685,12 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'go-territory',
+      gameMode: GAME_MODES.GO,
+      index: target.index,
+      owner: result.owner
+    });
     if (refs.canvas) refs.canvas.focus();
   }
 
@@ -3887,6 +4704,7 @@
       }
       return;
     }
+    if (rejectOnlineLocalAction('online Reversi turn blocked')) return;
     const target = tileFromCanvasEvent(event);
     if (!target) return;
     const result = placeReversiDisc(game, target.index);
@@ -3902,6 +4720,13 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+    onlineSendLocalAction({
+      type: 'place',
+      gameMode: GAME_MODES.REVERSI,
+      role: result.disc.color,
+      index: target.index,
+      label: target.label
+    });
   }
 
   function handleChineseCheckersCanvasClick(event) {
@@ -3980,6 +4805,7 @@
       handleFideChessPuzzleCanvasClick(event);
       return;
     }
+    if (rejectOnlineLocalAction('online FIDE Chess turn blocked')) return;
     const target = tileFromCanvasEvent(event);
     if (!target) return;
     const piece = fideChessPieceAt(game, target.index);
@@ -4018,6 +4844,7 @@
   }
 
   function playFideChessMove(from, to, target = null) {
+    if (rejectOnlineLocalAction('online FIDE Chess turn blocked')) return;
     const result = moveFideChessPiece(game, from, to, {
       deferPromotion: true
     });
@@ -4371,7 +5198,11 @@
     if (refs.canvas) refs.canvas.focus();
   }
 
-  function undoPreviousStep() {
+  function undoPreviousStep(options = {}) {
+    if (onlineIsInRoom() && !options.onlineApproved) {
+      requestOnlineHistoryChange('undo');
+      return;
+    }
     const snapshot = undoStack.pop();
     if (!snapshot) {
       syncControls();
@@ -4383,9 +5214,21 @@
       'undo complete',
       `restored before ${snapshot.label || 'previous step'}`
     );
+    if (options.onlineApproved) {
+      onlineSendLocalAction({
+        type: 'history-undo',
+        gameMode: gameModeValue(game),
+        approvedRequestId: options.requestId || '',
+        role: onlineState ? onlineState.role : ''
+      });
+    }
   }
 
-  function redoPreviousUndo() {
+  function redoPreviousUndo(options = {}) {
+    if (onlineIsInRoom() && !options.onlineApproved) {
+      requestOnlineHistoryChange('redo');
+      return;
+    }
     const snapshot = redoStack.pop();
     if (!snapshot) {
       syncControls();
@@ -4397,6 +5240,14 @@
       'redo complete',
       `reapplied ${snapshot.label || 'previous step'}`
     );
+    if (options.onlineApproved) {
+      onlineSendLocalAction({
+        type: 'history-redo',
+        gameMode: gameModeValue(game),
+        approvedRequestId: options.requestId || '',
+        role: onlineState ? onlineState.role : ''
+      });
+    }
   }
 
   function clearUndoHistory() {
@@ -4797,8 +5648,8 @@
     return lattice.dirNames[modulo(Number(dir), lattice.sides)] || String(dir);
   }
 
-  function applyImportedDebugState(imported) {
-    if (game) pushUndoSnapshot('status import');
+  function applyImportedDebugState(imported, options = {}) {
+    if (game && options.recordHistory !== false) pushUndoSnapshot(options.historyLabel || 'status import');
     stopPlayback();
     clearFideChessPendingPromotion({ render: false });
     importedPreset = imported.state.preset;
@@ -4823,11 +5674,11 @@
     applyDefaultPlacementPieceSizeForMode(gameModeValue(game));
     syncImportedDisplaySettings(imported);
     render();
-    const info = debugExportInfo(game);
-    syncStatus('status imported', info, debugMode ? 'debug' : phaseBadge(game.phase));
+    const info = options.info || debugExportInfo(game);
+    syncStatus(options.status || 'status imported', info, debugMode ? 'debug' : phaseBadge(game.phase));
     syncControls();
     refreshDebugExportIfNeeded();
-    if (refs.canvas) refs.canvas.focus();
+    if (options.focus !== false && refs.canvas) refs.canvas.focus();
   }
 
   function refreshDebugExportIfNeeded() {
@@ -19730,12 +20581,14 @@
     const modePlacement = modeGomoku || modeConnectFour || modeGo || modeReversi || modeChineseCheckers || modeFideChess;
     const boundaryGlueBoard = catalogAvailable && selectedPresetIsBoundaryGlueBoard();
     const boundaryRectangle = boundaryGlueBoard && selectedBoundaryGlueShape() === 'rectangle';
+    const onlineRoomActive = onlineIsInRoom();
     syncConnectFourFallOptions();
     if (refs.begin) {
       refs.begin.textContent = game && game.phase !== 'setup' ? 'stop the game' : 'begin the game';
-      refs.begin.disabled = !catalogAvailable;
+      refs.begin.disabled = !catalogAvailable || onlineRoomActive;
     }
-    if (refs.select) refs.select.disabled = !catalogAvailable;
+    if (refs.gameMode) refs.gameMode.disabled = onlineRoomActive;
+    if (refs.select) refs.select.disabled = !catalogAvailable || onlineRoomActive;
     if (refs.mode2048Controls) {
       refs.mode2048Controls.forEach((control) => {
         control.hidden = !mode2048;
@@ -19799,11 +20652,12 @@
     syncSokobanEnergyGlowOutput();
     syncSokobanBeamOutput();
     if (refs.nextStep) refs.nextStep.disabled = !modeDirectional || !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
-    if (refs.undo) refs.undo.disabled = !undoStack.length;
-    if (refs.redo) refs.redo.disabled = !redoStack.length;
-    if (refs.fullscreenUndo) refs.fullscreenUndo.disabled = !undoStack.length;
-    if (refs.fullscreenRedo) refs.fullscreenRedo.disabled = !redoStack.length;
-    if (refs.fullscreenRestart) refs.fullscreenRestart.disabled = !game;
+    const onlineHistoryBlocked = onlineRoomActive && onlineState && onlineState.role === 'spectator';
+    if (refs.undo) refs.undo.disabled = onlineHistoryBlocked || !undoStack.length;
+    if (refs.redo) refs.redo.disabled = onlineHistoryBlocked || !redoStack.length;
+    if (refs.fullscreenUndo) refs.fullscreenUndo.disabled = onlineHistoryBlocked || !undoStack.length;
+    if (refs.fullscreenRedo) refs.fullscreenRedo.disabled = onlineHistoryBlocked || !redoStack.length;
+    if (refs.fullscreenRestart) refs.fullscreenRestart.disabled = onlineRoomActive || !game;
     if (refs.exportState) refs.exportState.disabled = !game;
     if (refs.refreshState) refs.refreshState.disabled = !game;
     if (refs.copyState) refs.copyState.disabled = !game && !(refs.debugExport && refs.debugExport.value);
@@ -19824,6 +20678,7 @@
         button.disabled = disabled || !Number.isInteger(dir);
       });
     }
+    syncOnlineControls();
   }
 
   function syncSpeedOutput() {
