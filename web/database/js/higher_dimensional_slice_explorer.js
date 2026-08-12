@@ -64,8 +64,9 @@
   const VECTOR_INPUT_MODES = new Set(["manual", "import", "targets"]);
   const MATRIX_INPUT_MODES = new Set(["manual", "import", "targets"]);
   const MATRIX_PRESET_KINDS = new Set(["manual", "simple-roots", "fundamental-weights"]);
-  const LATTICE_BASIS_MODES = new Set(["matrix-input", "matrix-object", "dynkin"]);
+  const LATTICE_BASIS_MODES = new Set(["matrix-input", "matrix-object", "dynkin", "lmfdb-field"]);
   const LATTICE_DYNKIN_KINDS = new Set(["root", "weight"]);
+  const EMBEDDING_COORDINATE_MODES = new Set(["raw", "minkowski"]);
   const ROOT_SET_SIGN_MODES = new Set(["all", "positive"]);
   const VIEWPORT_BOUND_SHAPES = new Set(["box", "disk"]);
   const LATTICE_BOUND_SHAPES = new Set(["box", "ball"]);
@@ -124,6 +125,7 @@
   const finiteRootSetCache = new Map();
   const finiteWeylKlCalculatorCache = new Map();
   const matrixTargetDrafts = new Map();
+  const lmfdbFieldSearchDrafts = new Map();
   let finiteWeylKlScheduledFrame = 0;
   let finiteWeylKlScheduledKey = "";
   let finiteWeylKlImmediateKey = "";
@@ -286,6 +288,7 @@
   function normalizeLatticeBasisMode(mode) {
     if (mode === "matrix input") return "matrix-input";
     if (mode === "matrix object") return "matrix-object";
+    if (mode === "LMFDB field" || mode === "lmfdb") return "lmfdb-field";
     return LATTICE_BASIS_MODES.has(mode) ? mode : "matrix-input";
   }
 
@@ -293,6 +296,11 @@
     if (kind === "root lattice") return "root";
     if (kind === "weight lattice") return "weight";
     return LATTICE_DYNKIN_KINDS.has(kind) ? kind : "root";
+  }
+
+  function normalizeEmbeddingCoordinateMode(mode) {
+    if (mode === "scaled" || mode === "sqrt2" || mode === "minkowski scaled") return "minkowski";
+    return EMBEDDING_COORDINATE_MODES.has(mode) ? mode : "raw";
   }
 
   function normalizeRootSetSignMode(mode) {
@@ -2224,6 +2232,356 @@
     return Array.from({ length: n }, (_, index) => String(labels[index] || `${fallbackPrefix}_${index + 1}`));
   }
 
+  function lmfdbProxyUrl() {
+    return String(window.SLICE_LMFDB_PROXY_URL || window.RAMIFICATION_LMFDB_PROXY_URL || "").trim().replace(/\/+$/, "");
+  }
+
+  function buildLmfdbProxyFieldUrl(proxy, query) {
+    const clean = proxy.replace(/\/+$/, "");
+    const endpoint = clean.endsWith("/field") ? clean : `${clean}/field`;
+    const url = new URL(endpoint);
+    url.searchParams.set("q", query);
+    return url.toString();
+  }
+
+  function lmfdbFieldSearchDraftFor(object) {
+    const key = object?.id || "missing";
+    const existing = lmfdbFieldSearchDrafts.get(key);
+    if (existing) return existing;
+    const draft = {
+      loading: false,
+      status: "",
+      statusKind: "",
+      pendingField: null,
+    };
+    lmfdbFieldSearchDrafts.set(key, draft);
+    return draft;
+  }
+
+  function numberFromLmfdbValue(value, fallback = NaN) {
+    if (value && typeof value === "object" && "data" in value) {
+      const literal = Number(value.data);
+      return Number.isFinite(literal) ? literal : fallback;
+    }
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+  }
+
+  function normalizeLmfdbFieldData(field) {
+    if (!field || typeof field !== "object") return null;
+    const degree = Math.round(numberFromLmfdbValue(field.degree, 0));
+    const r2 = clamp(Math.round(numberFromLmfdbValue(field.r2, 0)), 0, Math.floor(degree / 2));
+    const r1 = Math.max(0, Math.round(numberFromLmfdbValue(field.r1, degree - 2 * r2)));
+    const coeffs = Array.isArray(field.coeffs)
+      ? field.coeffs.map((value) => numberFromLmfdbValue(value, NaN))
+      : [];
+    const integralBasis = Array.isArray(field.integralBasis)
+      ? field.integralBasis.map((value) => String(value))
+      : [];
+    const embeddings = normalizeStoredLmfdbEmbeddings(field.embeddings, r1, r2);
+    if (!field.label || degree < 1) return null;
+    return {
+      label: String(field.label),
+      url: String(field.url || `https://www.lmfdb.org/NumberField/${encodeURIComponent(String(field.label))}`),
+      query: String(field.query || field.label),
+      queryType: String(field.queryType || "label"),
+      normalizedInput: String(field.normalizedInput || field.label),
+      degree,
+      r1,
+      r2,
+      coeffs,
+      integralBasis,
+      embeddings,
+      warnings: Array.isArray(field.warnings) ? field.warnings.map(String) : [],
+    };
+  }
+
+  function normalizeStoredLmfdbEmbeddings(embeddings, r1, r2) {
+    const real = Array.isArray(embeddings?.real)
+      ? embeddings.real.map((value) => numberFromLmfdbValue(value, NaN)).filter(Number.isFinite)
+      : [];
+    const complex = Array.isArray(embeddings?.complex)
+      ? embeddings.complex.map((value) => ({
+          re: numberFromLmfdbValue(value?.re ?? value?.real ?? value?.[0], NaN),
+          im: numberFromLmfdbValue(value?.im ?? value?.imag ?? value?.[1], NaN),
+        })).filter((value) => Number.isFinite(value.re) && Number.isFinite(value.im))
+      : [];
+    return {
+      real: real.slice(0, r1),
+      complex: complex.slice(0, r2),
+    };
+  }
+
+  function normalizeLmfdbPayloadForLattice(payload) {
+    const record = payload?.field || null;
+    if (!record || !record.label) throw new Error("LMFDB proxy response did not include a field record.");
+    const coeffs = Array.isArray(record.coeffs) ? record.coeffs.map((value) => numberFromLmfdbValue(value, NaN)) : [];
+    const degree = Math.round(numberFromLmfdbValue(record.degree, Math.max(0, coeffs.length - 1)));
+    const r2 = clamp(Math.round(numberFromLmfdbValue(record.r2, 0)), 0, Math.floor(degree / 2));
+    const r1 = Math.max(0, degree - 2 * r2);
+    const integralBasis = Array.isArray(payload.extra?.zk) ? payload.extra.zk.map((value) => String(value)) : [];
+    if (!Number.isInteger(degree) || degree < 2) throw new Error("Only number fields of degree 2 through 8 can be loaded as lattices.");
+    if (degree > 8) throw new Error(`LMFDB field ${record.label} has degree ${degree}; this calculator supports degree at most 8.`);
+    if (integralBasis.length !== degree) throw new Error("LMFDB response did not include a full zk integral basis.");
+    if (coeffs.length !== degree + 1 || coeffs.some((value) => !Number.isFinite(value))) {
+      throw new Error("LMFDB response did not include usable defining-polynomial coefficients.");
+    }
+    integralBasis.forEach((expression, index) => {
+      parseLmfdbBasisExpression(expression, degree, `zk_${index + 1}`);
+    });
+    const embeddings = lmfdbEmbeddingsFromPayload(record, { degree, r1, r2, coeffs });
+    return {
+      label: String(record.label),
+      url: `https://www.lmfdb.org/NumberField/${encodeURIComponent(String(record.label))}`,
+      query: String(payload.query || record.label),
+      queryType: String(payload.queryType || "label"),
+      normalizedInput: String(payload.normalizedInput || record.label),
+      degree,
+      r1,
+      r2,
+      coeffs,
+      integralBasis,
+      embeddings,
+      warnings: Array.isArray(payload.warnings) ? payload.warnings.map(String) : [],
+    };
+  }
+
+  function lmfdbEmbeddingsFromPayload(record, field) {
+    const realParts = Array.isArray(record.embeddings_gen_real)
+      ? record.embeddings_gen_real.map((value) => numberFromLmfdbValue(value, NaN))
+      : [];
+    const imagParts = Array.isArray(record.embeddings_gen_imag)
+      ? record.embeddings_gen_imag.map((value) => numberFromLmfdbValue(value, NaN))
+      : [];
+    const count = Math.max(realParts.length, imagParts.length);
+    if (count) {
+      const roots = Array.from({ length: count }, (_, index) => ({
+        re: numberFromLmfdbValue(realParts[index], 0),
+        im: numberFromLmfdbValue(imagParts[index], 0),
+      })).filter((root) => Number.isFinite(root.re) && Number.isFinite(root.im));
+      try {
+        return canonicalNumberFieldEmbeddings(roots, field.r1, field.r2);
+      } catch (_) {}
+    }
+    return fallbackLmfdbEmbeddingsFromPolynomial(field);
+  }
+
+  function fallbackLmfdbEmbeddingsFromPolynomial(field) {
+    const roots = polynomialRootsFromCoeffs(field.coeffs);
+    return canonicalNumberFieldEmbeddings(roots, field.r1, field.r2);
+  }
+
+  function canonicalNumberFieldEmbeddings(roots, r1, r2) {
+    const tolerance = 1e-7;
+    const normalizedRoots = roots
+      .map((root) => ({
+        re: Math.abs(numberFromLmfdbValue(root.re, NaN)) < tolerance ? 0 : numberFromLmfdbValue(root.re, NaN),
+        im: Math.abs(numberFromLmfdbValue(root.im, NaN)) < tolerance ? 0 : numberFromLmfdbValue(root.im, NaN),
+      }))
+      .filter((root) => Number.isFinite(root.re) && Number.isFinite(root.im));
+    const real = normalizedRoots
+      .filter((root) => Math.abs(root.im) <= tolerance)
+      .map((root) => root.re)
+      .sort((a, b) => a - b);
+    if (real.length < r1) {
+      const nearReal = normalizedRoots
+        .filter((root) => Math.abs(root.im) > tolerance)
+        .sort((a, b) => Math.abs(a.im) - Math.abs(b.im))
+        .slice(0, r1 - real.length)
+        .map((root) => root.re);
+      real.push(...nearReal);
+      real.sort((a, b) => a - b);
+    }
+    let complex = normalizedRoots
+      .filter((root) => Math.abs(root.im) > tolerance && root.im > 0)
+      .map((root) => ({ re: root.re, im: Math.abs(root.im) }))
+      .sort((a, b) => a.re === b.re ? a.im - b.im : a.re - b.re);
+    if (complex.length < r2) {
+      const extras = normalizedRoots
+        .filter((root) => Math.abs(root.im) > tolerance && !complex.some((entry) =>
+          Math.abs(entry.re - root.re) <= tolerance && Math.abs(entry.im - Math.abs(root.im)) <= tolerance
+        ))
+        .map((root) => ({ re: root.re, im: Math.abs(root.im) }))
+        .sort((a, b) => a.re === b.re ? a.im - b.im : a.re - b.re);
+      complex = [...complex, ...extras];
+    }
+    if (real.length < r1 || complex.length < r2) {
+      throw new Error("Could not determine enough real and complex generator embeddings.");
+    }
+    return {
+      real: real.slice(0, r1),
+      complex: complex.slice(0, r2),
+    };
+  }
+
+  function complex(re = 0, im = 0) {
+    return { re, im };
+  }
+
+  function complexAdd(a, b) {
+    return { re: a.re + b.re, im: a.im + b.im };
+  }
+
+  function complexSubtract(a, b) {
+    return { re: a.re - b.re, im: a.im - b.im };
+  }
+
+  function complexMultiply(a, b) {
+    return {
+      re: a.re * b.re - a.im * b.im,
+      im: a.re * b.im + a.im * b.re,
+    };
+  }
+
+  function complexDivide(a, b) {
+    const denominator = b.re * b.re + b.im * b.im;
+    if (denominator <= 1e-30) return complex(0, 0);
+    return {
+      re: (a.re * b.re + a.im * b.im) / denominator,
+      im: (a.im * b.re - a.re * b.im) / denominator,
+    };
+  }
+
+  function complexAbs(a) {
+    return Math.hypot(a.re, a.im);
+  }
+
+  function evaluatePolynomialAtComplex(coeffs, root) {
+    let value = complex(0, 0);
+    for (let index = coeffs.length - 1; index >= 0; index -= 1) {
+      value = complexAdd(complexMultiply(value, root), complex(coeffs[index], 0));
+    }
+    return value;
+  }
+
+  function polynomialRootsFromCoeffs(coeffs) {
+    const degree = coeffs.length - 1;
+    const leading = coeffs[degree];
+    if (degree < 1 || !Number.isFinite(leading) || Math.abs(leading) <= 1e-14) {
+      throw new Error("Defining polynomial is not usable for embedding fallback.");
+    }
+    const normalized = coeffs.map((value) => value / leading);
+    const radius = 1 + Math.max(0, ...normalized.slice(0, degree).map((value) => Math.abs(value)));
+    let roots = Array.from({ length: degree }, (_, index) => {
+      const angle = (2 * Math.PI * (index + 0.31)) / degree;
+      return complex(radius * Math.cos(angle), radius * Math.sin(angle));
+    });
+    for (let iteration = 0; iteration < 180; iteration += 1) {
+      let maxDelta = 0;
+      const previous = roots.map((root) => ({ ...root }));
+      roots = previous.map((root, index) => {
+        let denominator = complex(1, 0);
+        for (let other = 0; other < previous.length; other += 1) {
+          if (other === index) continue;
+          denominator = complexMultiply(denominator, complexSubtract(root, previous[other]));
+        }
+        if (complexAbs(denominator) <= 1e-24) {
+          denominator = complex(1e-12, 1e-12 * (index + 1));
+        }
+        const delta = complexDivide(evaluatePolynomialAtComplex(normalized, root), denominator);
+        maxDelta = Math.max(maxDelta, complexAbs(delta));
+        return complexSubtract(root, delta);
+      });
+      if (maxDelta <= 1e-12) break;
+    }
+    return roots;
+  }
+
+  function normalizeLmfdbBasisExpression(rawExpression) {
+    return String(rawExpression || "")
+      .replace(/\\\(/g, "")
+      .replace(/\\\)/g, "")
+      .replace(/\\left/g, "")
+      .replace(/\\right/g, "")
+      .replace(/\\cdot/g, "*")
+      .replace(/−/g, "-")
+      .replace(/\\frac\{([+-]?\d+)\}\{([+-]?\d+)\}/g, "$1/$2")
+      .replace(/[{}]/g, "")
+      .replace(/\s+/g, "");
+  }
+
+  function parseLmfdbBasisExpression(rawExpression, degree, label = "zk") {
+    const source = normalizeLmfdbBasisExpression(rawExpression);
+    if (!source) throw new Error(`${label} is empty.`);
+    if (/[^0-9aA+\-*/.^]/.test(source)) throw new Error(`${label} contains unsupported syntax.`);
+    const coeffs = Array(degree).fill(0);
+    const terms = source.match(/[+-]?[^+-]+/g) || [];
+    terms.forEach((term) => {
+      let sign = 1;
+      let body = term;
+      if (body.startsWith("+")) body = body.slice(1);
+      if (body.startsWith("-")) {
+        sign = -1;
+        body = body.slice(1);
+      }
+      if (!body) throw new Error(`${label} has an empty term.`);
+      const generatorIndex = body.search(/[aA]/);
+      let exponent = 0;
+      let coefficientText = body;
+      if (generatorIndex >= 0) {
+        coefficientText = body.slice(0, generatorIndex);
+        let tail = body.slice(generatorIndex + 1);
+        exponent = 1;
+        if (tail.startsWith("^")) {
+          const exponentMatch = /^\^(\d+)/.exec(tail);
+          if (!exponentMatch) throw new Error(`${label} has unsupported generator syntax.`);
+          exponent = Number(exponentMatch[1]);
+          tail = tail.slice(exponentMatch[0].length);
+        }
+        coefficientText = `${coefficientText}${tail}`;
+        if (exponent >= degree) throw new Error(`${label} uses a^${exponent}, outside the degree-${degree} power basis.`);
+      }
+      coeffs[exponent] += sign * parseLmfdbRationalProduct(coefficientText || "1", label);
+    });
+    return coeffs;
+  }
+
+  function parseLmfdbRationalProduct(rawValue, label = "zk") {
+    let source = String(rawValue || "1").replace(/^\*+|\*+$/g, "");
+    if (!source) source = "1";
+    const factors = source.split("*").filter((part) => part !== "");
+    if (!factors.length) factors.push("1");
+    return factors.reduce((total, factor) => {
+      const normalized = factor.startsWith("/") ? `1${factor}` : factor;
+      const parsed = parseRationalNumber(normalized);
+      if (!parsed.ok || !Number.isFinite(parsed.value)) throw new Error(`${label} has an invalid rational coefficient.`);
+      return total * parsed.value;
+    }, 1);
+  }
+
+  function lmfdbBasisRowsFromField(field, coordinateMode = "raw", n = state.ambientDim) {
+    const normalized = normalizeLmfdbFieldData(field);
+    if (!normalized) throw new Error("No LMFDB field has been loaded.");
+    if (normalized.degree !== n) {
+      throw new Error(`LMFDB field degree ${normalized.degree} does not match current R^${n}.`);
+    }
+    if (normalized.integralBasis.length !== n) {
+      throw new Error("LMFDB field is missing a full zk integral basis.");
+    }
+    const mode = normalizeEmbeddingCoordinateMode(coordinateMode);
+    const scaleComplex = mode === "minkowski" ? Math.SQRT2 : 1;
+    const embeddings = (normalized.embeddings.real.length === normalized.r1 && normalized.embeddings.complex.length === normalized.r2)
+      ? normalized.embeddings
+      : fallbackLmfdbEmbeddingsFromPolynomial(normalized);
+    const columns = normalized.integralBasis.map((expression, index) => {
+      const polynomial = parseLmfdbBasisExpression(expression, n, `zk_${index + 1}`);
+      const coordinates = [];
+      embeddings.real.forEach((root) => {
+        coordinates.push(evaluatePolynomialAtComplex(polynomial, complex(root, 0)).re);
+      });
+      embeddings.complex.forEach((root) => {
+        const value = evaluatePolynomialAtComplex(polynomial, complex(root.re, root.im));
+        coordinates.push(scaleComplex * value.re, scaleComplex * value.im);
+      });
+      return coordinates.map((value) => (Math.abs(value) < 1e-12 ? 0 : value));
+    });
+    return validateFullRankMatrixRows(matrixRowsFromColumns(columns, n), n, "LMFDB integral basis");
+  }
+
+  function embeddingCoordinateModeLabel(mode) {
+    return normalizeEmbeddingCoordinateMode(mode) === "minkowski" ? "sqrt(2)-scaled" : "raw Re/Im";
+  }
+
   function dynkinTypeObjects(n = state.ambientDim) {
     return state.objects.filter((object) =>
       objectTypeKey(object) === "dynkin-type" &&
@@ -2782,6 +3140,7 @@
     const references = dynkinReferenceOptions(n);
     return [
       { value: "matrix-input", label: "matrix input" },
+      { value: "lmfdb-field", label: "LMFDB field" },
       ...references.flatMap((reference) => [
         { value: `root|${reference.value}`, label: `root lattice: ${reference.label}` },
         { value: `weight|${reference.value}`, label: `weight lattice: ${reference.label}` },
@@ -2823,6 +3182,7 @@
   function parseLatticeAddVariant(value, n = state.ambientDim) {
     const text = String(value || "matrix-input");
     if (text === "matrix-input") return { basisMode: "matrix-input" };
+    if (text === "lmfdb-field") return { basisMode: "lmfdb-field" };
     const [kind, reference] = text.split("|");
     const dynkinLatticeKind = normalizeDynkinLatticeKind(kind);
     return {
@@ -3300,6 +3660,9 @@
       dynkinType: basisMode === "dynkin" ? reference.dynkinType : defaultDynkinRawType(n),
       dynkinRank: n,
       dynkinLatticeKind,
+      lmfdbQuery: "Qi",
+      lmfdbField: null,
+      embeddingCoordinateMode: "raw",
       showLatticePoints: true,
       latticeBoundShape: "ball",
       latticeBoundRadius: 2,
@@ -3308,6 +3671,9 @@
       base.name = dynkinLatticeKind === "weight" ? "weight lattice" : "root lattice";
       base.basisRows = latticeBasisRowsFromDynkin(base, n);
       base.description = `${base.name} for ${weylDynkinLabel(base.dynkinType, n)}, generated from Dynkin data.`;
+    } else if (basisMode === "lmfdb-field") {
+      base.name = "LMFDB field lattice";
+      base.description = `Full integer-ring lattice from an LMFDB number field search.`;
     }
     return base;
   }
@@ -4999,6 +5365,241 @@
     }
   }
 
+  function syncLmfdbLatticeDisplayName(object) {
+    if (!object || objectTypeKey(object) !== "lattice") return;
+    const current = String(object.name || "").trim().toLowerCase();
+    if (!current || current === "lattice" || current === "lmfdb field lattice" || current === "o_f lattice") {
+      object.name = "O_F lattice";
+      if (object.data) object.data.name = object.name;
+    }
+  }
+
+  function applyLmfdbFieldToLattice(objectId, field, options = {}) {
+    let object = state.objects.find((candidate) => candidate.id === objectId);
+    if (!object || objectTypeKey(object) !== "lattice") {
+      state.lastWarning = "LMFDB lattice object is no longer available.";
+      renderAll();
+      return false;
+    }
+    const normalized = normalizeLmfdbFieldData(field);
+    if (!normalized) throw new Error("No usable LMFDB field was loaded.");
+    const mode = normalizeEmbeddingCoordinateMode(object.data?.embeddingCoordinateMode);
+    const rows = lmfdbBasisRowsFromField(normalized, mode, normalized.degree);
+    if (normalized.degree !== state.ambientDim) {
+      if (!options.allowResize) throw new Error(`Field degree ${normalized.degree} does not match current R^${state.ambientDim}.`);
+      changeAmbientDimension(normalized.degree);
+      object = state.objects.find((candidate) => candidate.id === objectId);
+      if (!object || objectTypeKey(object) !== "lattice") {
+        state.lastWarning = "LMFDB lattice object disappeared after resizing.";
+        renderAll();
+        return false;
+      }
+    }
+    const draft = lmfdbFieldSearchDraftFor(object);
+    draft.pendingField = null;
+    draft.status = normalized.warnings.length
+      ? `Loaded ${normalized.label}; ${normalized.warnings[0]}`
+      : `Loaded ${normalized.label}.`;
+    draft.statusKind = "ok";
+    commitLatticeParamChange(object, (latticeData) => {
+      clearMatrixTargetDraft(object, "basisRows");
+      latticeData.basisMode = "lmfdb-field";
+      latticeData.lmfdbQuery = normalized.query || normalized.label;
+      latticeData.lmfdbField = normalized;
+      latticeData.embeddingCoordinateMode = mode;
+      latticeData.basisRows = rows;
+      latticeData.basisTargetLabels = [];
+      syncLmfdbLatticeDisplayName(object);
+    }, {
+      message: `${object.name} loaded from LMFDB ${normalized.label} in ${embeddingCoordinateModeLabel(mode)} coordinates.`,
+    });
+    return true;
+  }
+
+  async function searchLmfdbFieldForLattice(objectId) {
+    const object = state.objects.find((candidate) => candidate.id === objectId);
+    if (!object || objectTypeKey(object) !== "lattice") return;
+    const data = object.data || {};
+    const draft = lmfdbFieldSearchDraftFor(object);
+    if (draft.loading) return;
+    const proxy = lmfdbProxyUrl();
+    data.lmfdbQuery = String(data.lmfdbQuery || "").trim();
+    if (!proxy) {
+      draft.status = "LMFDB proxy URL is not configured.";
+      draft.statusKind = "error";
+      draft.pendingField = null;
+      renderAll();
+      return;
+    }
+    if (!data.lmfdbQuery) {
+      draft.status = "Enter an LMFDB label, nickname, or monic integer polynomial.";
+      draft.statusKind = "error";
+      draft.pendingField = null;
+      renderAll();
+      return;
+    }
+    draft.loading = true;
+    draft.status = "Searching LMFDB...";
+    draft.statusKind = "";
+    draft.pendingField = null;
+    renderAll();
+    let applied = false;
+    try {
+      const response = await fetch(buildLmfdbProxyFieldUrl(proxy, data.lmfdbQuery), {
+        headers: { Accept: "application/json" },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || `LMFDB proxy returned HTTP ${response.status}.`);
+      const field = normalizeLmfdbPayloadForLattice(payload);
+      if (field.degree !== state.ambientDim) {
+        draft.pendingField = field;
+        draft.status = `LMFDB ${field.label} has degree ${field.degree}; current ambient space is R^${state.ambientDim}.`;
+        draft.statusKind = "confirm";
+      } else {
+        draft.loading = false;
+        applied = applyLmfdbFieldToLattice(objectId, field);
+      }
+    } catch (error) {
+      draft.status = error.message || "LMFDB search failed.";
+      draft.statusKind = "error";
+      draft.pendingField = null;
+    } finally {
+      draft.loading = false;
+      if (!applied) renderAll();
+    }
+  }
+
+  function buildLmfdbLatticeControls(panel, object) {
+    const data = object.data || {};
+    data.lmfdbQuery = String(data.lmfdbQuery || "Qi");
+    data.embeddingCoordinateMode = normalizeEmbeddingCoordinateMode(data.embeddingCoordinateMode);
+    const draft = lmfdbFieldSearchDraftFor(object);
+
+    const searchRow = document.createElement("div");
+    searchRow.className = "slice-row";
+    const searchLabel = document.createElement("span");
+    searchLabel.className = "slice-row-label";
+    searchLabel.textContent = "LMFDB";
+    const searchControls = document.createElement("div");
+    searchControls.className = "slice-control-line";
+    const input = document.createElement("input");
+    input.className = "slice-input";
+    input.type = "text";
+    input.spellcheck = false;
+    input.autocomplete = "off";
+    input.value = data.lmfdbQuery;
+    input.placeholder = "2.0.4.1, Qi, Qsqrt5, x^2-x-1";
+    input.setAttribute("aria-label", "LMFDB number field query");
+    input.addEventListener("input", () => {
+      data.lmfdbQuery = input.value;
+      draft.pendingField = null;
+      if (draft.statusKind === "confirm") {
+        draft.status = "";
+        draft.statusKind = "";
+      }
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      searchLmfdbFieldForLattice(object.id);
+    });
+    const button = document.createElement("button");
+    button.className = "slice-btn";
+    button.type = "button";
+    button.textContent = draft.loading ? "searching" : "search";
+    button.disabled = draft.loading || !lmfdbProxyUrl();
+    button.addEventListener("click", () => searchLmfdbFieldForLattice(object.id));
+    searchControls.append(input, button);
+    searchRow.append(searchLabel, searchControls);
+    panel.append(searchRow);
+
+    const statusRow = document.createElement("div");
+    statusRow.className = "slice-row";
+    const statusLabel = document.createElement("span");
+    statusLabel.className = "slice-row-label";
+    statusLabel.textContent = "field";
+    const status = document.createElement("span");
+    status.className = "slice-target-note";
+    const loaded = normalizeLmfdbFieldData(data.lmfdbField);
+    status.textContent = !lmfdbProxyUrl()
+      ? "LMFDB proxy URL is not configured."
+      : draft.status || (loaded
+        ? `LMFDB ${loaded.label}, degree ${loaded.degree}, signature (${loaded.r1}, ${loaded.r2})`
+        : "search to load O_F from LMFDB");
+    statusRow.append(statusLabel, status);
+    panel.append(statusRow);
+
+    if (draft.pendingField) {
+      const confirmRow = document.createElement("div");
+      confirmRow.className = "slice-row";
+      const label = document.createElement("span");
+      label.className = "slice-row-label";
+      label.textContent = "dimension";
+      const controls = document.createElement("div");
+      controls.className = "slice-control-line";
+      const confirm = document.createElement("button");
+      confirm.className = "slice-btn";
+      confirm.type = "button";
+      confirm.textContent = `set n=${draft.pendingField.degree} and load`;
+      confirm.addEventListener("click", () => {
+        try {
+          applyLmfdbFieldToLattice(object.id, draft.pendingField, { allowResize: true });
+        } catch (error) {
+          draft.status = error.message || "LMFDB field load failed.";
+          draft.statusKind = "error";
+          renderAll();
+        }
+      });
+      const cancel = document.createElement("button");
+      cancel.className = "slice-btn";
+      cancel.type = "button";
+      cancel.textContent = "cancel";
+      cancel.addEventListener("click", () => {
+        draft.pendingField = null;
+        draft.status = "LMFDB load cancelled.";
+        draft.statusKind = "";
+        renderAll();
+      });
+      const note = document.createElement("span");
+      note.className = "slice-target-note";
+      note.textContent = `loaded field degree ${draft.pendingField.degree}; current n is ${state.ambientDim}`;
+      controls.append(confirm, cancel, note);
+      confirmRow.append(label, controls);
+      panel.append(confirmRow);
+    }
+
+    const modeRow = document.createElement("div");
+    modeRow.className = "slice-row";
+    const modeLabel = document.createElement("span");
+    modeLabel.className = "slice-row-label";
+    modeLabel.textContent = "complex";
+    const modeControls = document.createElement("div");
+    modeControls.className = "slice-segmented";
+    modeControls.setAttribute("aria-label", "Complex embedding coordinate mode");
+    [
+      ["raw", "raw Re/Im"],
+      ["minkowski", "sqrt(2) scaled"],
+    ].forEach(([mode, label]) => {
+      const modeButton = document.createElement("button");
+      modeButton.className = "slice-segment";
+      modeButton.type = "button";
+      modeButton.dataset.embeddingCoordinateMode = mode;
+      modeButton.textContent = label;
+      modeButton.classList.toggle("active", data.embeddingCoordinateMode === mode);
+      modeButton.addEventListener("click", () => {
+        commitLatticeParamChange(object, (latticeData) => {
+          latticeData.basisMode = "lmfdb-field";
+          latticeData.embeddingCoordinateMode = normalizeEmbeddingCoordinateMode(mode);
+        }, {
+          message: `${object.name} complex embedding coordinates set to ${label}.`,
+        });
+      });
+      modeControls.append(modeButton);
+    });
+    modeRow.append(modeLabel, modeControls);
+    panel.append(modeRow);
+  }
+
   function buildDynkinLatticeKindControls(panel, object) {
     const data = object.data;
     const row = document.createElement("div");
@@ -5149,6 +5750,7 @@
       ["matrix-input", "matrix input"],
       ["matrix-object", "matrix object"],
       ["dynkin", "Dynkin"],
+      ["lmfdb-field", "LMFDB field"],
     ].forEach(([mode, label]) => {
       const button = document.createElement("button");
       button.className = "slice-segment";
@@ -5165,6 +5767,9 @@
           }
           if (latticeData.basisMode === "dynkin" && !latticeData.dynkinSourceId) {
             applyDynkinReferenceToData(latticeData, defaultDynkinReferenceValue(state.ambientDim), state.ambientDim);
+          }
+          if (latticeData.basisMode === "lmfdb-field" && !latticeData.lmfdbQuery) {
+            latticeData.lmfdbQuery = "Qi";
           }
           if (latticeData.basisMode === "dynkin") {
             latticeData.showLatticePoints = true;
@@ -5272,6 +5877,8 @@
       });
       line.append(label, select);
       panel.append(line);
+    } else if (data.basisMode === "lmfdb-field") {
+      buildLmfdbLatticeControls(panel, object);
     } else {
       buildDynkinLatticeKindControls(panel, object);
       buildDynkinReferencePicker(panel, object, {
@@ -6160,6 +6767,19 @@
         validateFullRankMatrixRows(data.basisRows, state.ambientDim, `${object.name} basis`);
         data.latticeStatus = `${data.dynkinLatticeKind} lattice linked to ${reference.label}`;
         data.description = `${data.dynkinLatticeKind === "weight" ? "Weight" : "Root"} lattice for ${weylDynkinLabel(data.dynkinType, state.ambientDim)}, generated from Dynkin data.`;
+      } else if (data.basisMode === "lmfdb-field") {
+        const field = normalizeLmfdbFieldData(data.lmfdbField);
+        data.embeddingCoordinateMode = normalizeEmbeddingCoordinateMode(data.embeddingCoordinateMode);
+        if (!field) {
+          data.latticeStatus = "LMFDB field not loaded; search for a number field";
+          data.basisRows = validateFullRankMatrixRows(data.basisRows, state.ambientDim, `${object.name} placeholder basis`);
+          return "";
+        }
+        data.lmfdbField = field;
+        data.lmfdbQuery = data.lmfdbQuery || field.query || field.label;
+        data.basisRows = lmfdbBasisRowsFromField(field, data.embeddingCoordinateMode, state.ambientDim);
+        data.latticeStatus = `O_F lattice for LMFDB ${field.label}, ${embeddingCoordinateModeLabel(data.embeddingCoordinateMode)}`;
+        data.description = `Integer-ring lattice O_F for LMFDB ${field.label}, embedded with ${embeddingCoordinateModeLabel(data.embeddingCoordinateMode)} complex coordinates.`;
       } else {
         data.basisRows = validateFullRankMatrixRows(data.basisRows, state.ambientDim, `${object.name} basis`);
         data.latticeStatus = "manual matrix basis";
@@ -6477,6 +7097,9 @@
       dynkinType: normalizeWeylDynkinType(reference.dynkinType, n),
       dynkinRank: n,
       dynkinLatticeKind,
+      lmfdbQuery: String(data.lmfdbQuery || "Qi"),
+      lmfdbField: normalizeLmfdbFieldData(data.lmfdbField),
+      embeddingCoordinateMode: normalizeEmbeddingCoordinateMode(data.embeddingCoordinateMode),
       showLatticePoints: basisMode === "dynkin" ? true : data.showLatticePoints !== false,
       latticeBoundShape: normalizeLatticeBoundShape(data.latticeBoundShape),
       latticeBoundRadius: normalizeLatticeBoundRadius(data.latticeBoundRadius),

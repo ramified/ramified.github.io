@@ -7,6 +7,8 @@ const FIELD_COLUMNS = [
   'disc_abs',
   'disc_sign',
   'coeffs',
+  'embeddings_gen_real',
+  'embeddings_gen_imag',
   'ramps',
   'local_algs',
   'r2',
