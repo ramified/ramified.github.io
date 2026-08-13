@@ -116,7 +116,10 @@ export class GameRoom {
     if (!clientId) return jsonResponse({ error: 'Missing client id.' }, 400);
 
     const roles = {};
+    const playerNames = {};
     const rolesAssigned = assignRequestedRoles(roles, gameMode, body.rolesRequested || body.role, clientId, snapshot);
+    const playerName = normalizePlayerName(body.playerName, clientId);
+    playerNames[clientId] = playerName;
     const now = new Date().toISOString();
     this.room = {
       roomCode,
@@ -125,6 +128,7 @@ export class GameRoom {
       snapshot,
       summary: sanitizeText(body.summary, 220),
       roles,
+      playerNames,
       readyToPlay: gameMode !== 'chinese-checkers',
       pendingApproval: null,
       approvedHistory: null,
@@ -197,6 +201,14 @@ export class GameRoom {
       await this.handleHello(ws, payload);
       return;
     }
+    if (payload.type === 'claimRoles') {
+      await this.handleClaimRoles(ws, payload);
+      return;
+    }
+    if (payload.type === 'updateName') {
+      await this.handleUpdateName(ws, payload);
+      return;
+    }
     if (payload.type === 'proposeMove') {
       await this.handleProposeMove(ws, payload);
       return;
@@ -233,6 +245,9 @@ export class GameRoom {
 
   async handleHello(ws, payload) {
     const clientId = normalizeClientId(payload.clientId) || safeAttachment(ws).clientId;
+    const playerName = normalizePlayerName(payload.playerName, clientId);
+    if (!this.room.playerNames || typeof this.room.playerNames !== 'object') this.room.playerNames = {};
+    this.room.playerNames[clientId] = playerName;
     const rolesAssigned = assignRequestedRoles(
       this.room.roles,
       this.room.gameMode,
@@ -243,6 +258,7 @@ export class GameRoom {
     const attachment = {
       ...safeAttachment(ws),
       clientId,
+      playerName,
       role: rolesAssigned[0] || 'spectator',
       roles: rolesAssigned,
       joined: true
@@ -260,10 +276,99 @@ export class GameRoom {
       rolesAssigned: attachment.roles,
       version: this.room.version,
       roles: publicRoles(this.room.roles),
+      rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
       readyToPlay: this.room.readyToPlay !== false,
       unclaimedRoles: unclaimedRoomRoles(this.room)
     });
     this.sendState(ws, { reason: 'join' });
+    this.broadcastPresence();
+  }
+
+  async handleClaimRoles(ws, payload) {
+    const attachment = safeAttachment(ws);
+    if (!attachment.joined) {
+      this.safeSend(ws, { type: 'error', error: 'Join the room before choosing colors.' });
+      return;
+    }
+    if (this.room.gameMode !== 'chinese-checkers') {
+      this.safeSend(ws, { type: 'error', error: 'Color claiming is only available for Chinese Checkers.' });
+      return;
+    }
+    if (this.room.readyToPlay !== false) {
+      this.safeSend(ws, { type: 'error', error: 'Chinese Checkers has already begun.' });
+      return;
+    }
+    const clientId = normalizeClientId(payload.clientId) || attachment.clientId;
+    if (clientId !== attachment.clientId) {
+      this.safeSend(ws, { type: 'error', error: 'Client id does not match this connection.' });
+      return;
+    }
+    if (!this.room.playerNames || typeof this.room.playerNames !== 'object') this.room.playerNames = {};
+    this.room.playerNames[clientId] = normalizePlayerName(payload.playerName, clientId);
+    const rolesAssigned = claimRequestedChineseCheckersRoles(
+      this.room.roles,
+      payload.rolesRequested || payload.role,
+      clientId,
+      this.room.snapshot
+    );
+    const nextAttachment = {
+      ...attachment,
+      playerName: this.room.playerNames[clientId],
+      role: rolesAssigned[0] || 'spectator',
+      roles: rolesAssigned,
+      joined: true
+    };
+    this.sessions.set(ws, nextAttachment);
+    ws.serializeAttachment(nextAttachment);
+    this.room.updatedAt = new Date().toISOString();
+    updateRoomReadiness(this.room);
+    await this.saveRoom();
+    this.safeSend(ws, {
+      type: 'rolesConfirmed',
+      roomCode: this.room.roomCode,
+      gameMode: this.room.gameMode,
+      role: nextAttachment.role,
+      rolesAssigned: nextAttachment.roles,
+      version: this.room.version,
+      roles: publicRoles(this.room.roles),
+      rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
+      readyToPlay: this.room.readyToPlay !== false,
+      unclaimedRoles: unclaimedRoomRoles(this.room)
+    });
+    this.broadcastPresence();
+  }
+
+  async handleUpdateName(ws, payload) {
+    const attachment = safeAttachment(ws);
+    if (!attachment.joined) {
+      this.safeSend(ws, { type: 'error', error: 'Join the room before setting a name.' });
+      return;
+    }
+    const clientId = normalizeClientId(payload.clientId) || attachment.clientId;
+    if (clientId !== attachment.clientId) {
+      this.safeSend(ws, { type: 'error', error: 'Client id does not match this connection.' });
+      return;
+    }
+    if (!this.room.playerNames || typeof this.room.playerNames !== 'object') this.room.playerNames = {};
+    const playerName = normalizePlayerName(payload.playerName, clientId);
+    this.room.playerNames[clientId] = playerName;
+    const nextAttachment = { ...attachment, playerName };
+    this.sessions.set(ws, nextAttachment);
+    ws.serializeAttachment(nextAttachment);
+    this.room.updatedAt = new Date().toISOString();
+    await this.saveRoom();
+    this.safeSend(ws, {
+      type: 'nameUpdated',
+      roomCode: this.room.roomCode,
+      gameMode: this.room.gameMode,
+      role: nextAttachment.role || 'spectator',
+      rolesAssigned: attachmentRoles(nextAttachment),
+      version: this.room.version,
+      roles: publicRoles(this.room.roles),
+      rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
+      readyToPlay: this.room.readyToPlay !== false,
+      unclaimedRoles: unclaimedRoomRoles(this.room)
+    });
     this.broadcastPresence();
   }
 
@@ -323,6 +428,7 @@ export class GameRoom {
       clientId: attachment.clientId,
       role,
       roles: publicRoles(this.room.roles),
+      rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
       readyToPlay: this.room.readyToPlay !== false,
       unclaimedRoles: unclaimedRoomRoles(this.room)
     };
@@ -332,6 +438,7 @@ export class GameRoom {
       version: this.room.version,
       action,
       roles: publicRoles(this.room.roles),
+      rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
       readyToPlay: this.room.readyToPlay !== false,
       unclaimedRoles: unclaimedRoomRoles(this.room)
     });
@@ -478,6 +585,21 @@ export class GameRoom {
     if (this.room.gameMode === 'chinese-checkers' && this.room.readyToPlay === false) {
       return 'Chinese Checkers is waiting for the remaining colors.';
     }
+    if (this.room.gameMode === 'chinese-checkers') {
+      const actionRole = chineseCheckersActionRole(action, nextSnapshot);
+      if (!actionRole) return 'Chinese Checkers move needs a color.';
+      if (!owned.includes(actionRole)) return `${actionRole} is controlled by another player.`;
+      const available = rolesForGame('chinese-checkers', this.room.snapshot);
+      if (!available.includes(actionRole)) return `${actionRole} is not active in this room.`;
+      if (isChineseCheckersOpeningRoundSnapshot(this.room.snapshot)) {
+        const opened = chineseCheckersOpeningOrder(this.room.snapshot);
+        if (opened.includes(actionRole)) return `${actionRole} already moved in the opening round.`;
+        return '';
+      }
+      const expected = normalizeRole(this.room.snapshot && this.room.snapshot.turn);
+      if (expected && actionRole !== expected) return `${expected} to move.`;
+      return '';
+    }
     if (goReviewActionType(action.type) && this.room.snapshot && this.room.snapshot.scoringReview) return '';
     const expected = normalizeRole(this.room.snapshot && this.room.snapshot.turn);
     if (expected && !owned.includes(expected)) return `${expected} to move.`;
@@ -514,6 +636,7 @@ export class GameRoom {
       role: attachment.role || 'spectator',
       rolesAssigned: attachmentRoles(attachment),
       roles: publicRoles(this.room.roles),
+      rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
       readyToPlay: this.room.readyToPlay !== false,
       unclaimedRoles: unclaimedRoomRoles(this.room),
       ...extra
@@ -533,6 +656,7 @@ export class GameRoom {
       type: 'presence',
       roomCode: this.room.roomCode,
       roles: publicRoles(this.room.roles),
+      rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
       readyToPlay: this.room.readyToPlay !== false,
       unclaimedRoles: unclaimedRoomRoles(this.room),
       connected: this.playerSockets().length
@@ -657,11 +781,21 @@ function assignRequestedRoles(roles, gameMode, requestedRoles, clientId, snapsho
     if (available.includes(role) && (!roles[role] || roles[role] === clientId)) roles[role] = clientId;
   });
   let assigned = available.filter((role) => roles[role] === clientId);
-  if (!assigned.length && !requested.length) {
-    const chosen = randomOpenRole(roles, available);
-    if (chosen) roles[chosen] = clientId;
-    assigned = available.filter((role) => roles[role] === clientId);
-  }
+  return assigned.length ? assigned : ['spectator'];
+}
+
+function claimRequestedChineseCheckersRoles(roles, requestedRoles, clientId, snapshot) {
+  const available = rolesForGame('chinese-checkers', snapshot);
+  if (!available.length) return ['spectator'];
+  const requested = normalizeRoles(requestedRoles).filter((role) => role !== 'auto');
+  available.forEach((role) => {
+    if (roles[role] === clientId) delete roles[role];
+  });
+  if (requested.includes('spectator')) return ['spectator'];
+  requested.forEach((role) => {
+    if (available.includes(role) && !roles[role]) roles[role] = clientId;
+  });
+  const assigned = available.filter((role) => roles[role] === clientId);
   return assigned.length ? assigned : ['spectator'];
 }
 
@@ -690,6 +824,31 @@ function unclaimedRoomRoles(room) {
 function claimedRoomRoles(room) {
   if (!room) return [];
   return rolesForGame(room.gameMode, room.snapshot).filter((role) => room.roles && room.roles[role]);
+}
+
+function chineseCheckersOpeningOrder(snapshot) {
+  const players = rolesForGame('chinese-checkers', snapshot);
+  return normalizeRoles(snapshot && snapshot.openingOrder).filter((role) => players.includes(role));
+}
+
+function chineseCheckersPendingOpeningRoles(snapshot) {
+  const players = rolesForGame('chinese-checkers', snapshot);
+  const opened = chineseCheckersOpeningOrder(snapshot);
+  return players.filter((role) => !opened.includes(role));
+}
+
+function isChineseCheckersOpeningRoundSnapshot(snapshot) {
+  if (!snapshot || snapshot.phase === 'setup' || snapshot.phase === 'gameover') return false;
+  return chineseCheckersPendingOpeningRoles(snapshot).length > 0;
+}
+
+function chineseCheckersActionRole(action, nextSnapshot) {
+  const direct = normalizeRole(action && action.role);
+  if (direct) return direct;
+  const lastMove = nextSnapshot && nextSnapshot.lastMove && typeof nextSnapshot.lastMove === 'object'
+    ? nextSnapshot.lastMove
+    : null;
+  return normalizeRole(lastMove && lastMove.color);
 }
 
 function updateRoomReadiness(room) {
@@ -741,6 +900,7 @@ function publicRoomPayload(room, extra = {}) {
     version: room.version,
     summary: room.summary || '',
     roles: publicRoles(room.roles),
+    rolePlayers: publicRolePlayers(room.roles, room.playerNames),
     readyToPlay: room.readyToPlay !== false,
     unclaimedRoles: unclaimedRoomRoles(room),
     createdAt: room.createdAt,
@@ -753,6 +913,16 @@ function publicRoles(roles) {
   const result = {};
   Object.keys(roles || {}).forEach((role) => {
     result[role] = !!roles[role];
+  });
+  return result;
+}
+
+function publicRolePlayers(roles, playerNames) {
+  const result = {};
+  Object.keys(roles || {}).forEach((role) => {
+    const clientId = roles[role];
+    if (!clientId) return;
+    result[role] = normalizePlayerName(playerNames && playerNames[clientId], clientId);
   });
   return result;
 }
@@ -778,6 +948,13 @@ function normalizeRole(value) {
 function normalizeClientId(value) {
   const id = String(value || '').trim();
   return /^[a-zA-Z0-9._:-]{8,100}$/.test(id) ? id : '';
+}
+
+function normalizePlayerName(value, clientId = '') {
+  const name = sanitizeText(value, 32).replace(/\s+/g, ' ').trim();
+  if (name) return name;
+  const suffix = String(clientId || '').replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase();
+  return suffix ? `Player ${suffix}` : 'Player';
 }
 
 function historyActionType(type) {

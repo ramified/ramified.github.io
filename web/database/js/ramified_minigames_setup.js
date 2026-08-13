@@ -196,6 +196,7 @@
     [GAME_MODES.CHINESE_CHECKERS]: CHINESE_CHECKERS_DEFAULT_COLORS
   };
   const ONLINE_CLIENT_ID_KEY = 'ramified-minigames-online-client-id';
+  const ONLINE_PLAYER_NAME_KEY = 'ramified-minigames-online-player-name';
   const ONLINE_MAX_SNAPSHOT_BYTES = 760 * 1024;
   const ONLINE_JOIN_RETRY_ATTEMPTS = 4;
 
@@ -469,9 +470,11 @@
     refs.setupAlert = document.getElementById('game-setup-alert');
     refs.onlineCard = document.getElementById('online-play-card');
     refs.onlineRoomCode = document.getElementById('online-room-code');
+    refs.onlinePlayerName = document.getElementById('online-player-name');
     refs.onlineRoleOptions = document.getElementById('online-role-options');
     refs.onlineCreateRoom = document.getElementById('online-create-room');
     refs.onlineJoinRoom = document.getElementById('online-join-room');
+    refs.onlineConfirmRoles = document.getElementById('online-confirm-roles');
     refs.onlineChineseStartRow = document.getElementById('online-chinese-start-row');
     refs.onlineKeepUnclaimedColors = document.getElementById('online-keep-unclaimed-colors');
     refs.onlineStartClaimedColors = document.getElementById('online-start-claimed-colors');
@@ -578,10 +581,13 @@
     if (refs.canvasStartBegin) refs.canvasStartBegin.addEventListener('click', handleCanvasStartBeginClick);
     if (refs.onlineCreateRoom) refs.onlineCreateRoom.addEventListener('click', createOnlineRoomFromUi);
     if (refs.onlineJoinRoom) refs.onlineJoinRoom.addEventListener('click', joinOnlineRoomFromUi);
+    if (refs.onlineConfirmRoles) refs.onlineConfirmRoles.addEventListener('click', confirmOnlineChineseCheckersRolesFromUi);
     if (refs.onlineStartClaimedColors) refs.onlineStartClaimedColors.addEventListener('click', startOnlineChineseCheckersWithClaimedColorsFromUi);
     if (refs.onlineLeaveRoom) refs.onlineLeaveRoom.addEventListener('click', leaveOnlineRoomFromUi);
     if (refs.onlineRoleOptions) refs.onlineRoleOptions.addEventListener('change', handleOnlineRoleOptionsChange);
     if (refs.onlineRoomCode) refs.onlineRoomCode.addEventListener('input', syncOnlineControls);
+    if (refs.onlinePlayerName) refs.onlinePlayerName.addEventListener('input', handleOnlinePlayerNameInput);
+    if (refs.onlinePlayerName) refs.onlinePlayerName.addEventListener('change', sendOnlinePlayerNameUpdate);
     if (refs.speed) refs.speed.addEventListener('input', syncSpeedOutput);
     if (refs.stepMode) refs.stepMode.addEventListener('change', syncControls);
     if (refs.sokobanObjectSize) refs.sokobanObjectSize.addEventListener('input', () => {
@@ -679,16 +685,19 @@
   }
 
   function initOnlinePlay() {
+    const clientId = onlineClientId();
     onlineState = {
       baseUrl: normalizeOnlineWorkerUrl(
         typeof window !== 'undefined' ? window.RAMIFIED_MINIGAMES_ONLINE_URL : ''
       ),
-      clientId: onlineClientId(),
+      clientId,
+      playerName: onlineStoredPlayerName(clientId),
       roomCode: '',
       pendingRoomCode: '',
       role: '',
       roles: [],
       roomRoles: {},
+      rolePlayers: {},
       readyToPlay: true,
       unclaimedRoles: [],
       gameMode: '',
@@ -705,6 +714,7 @@
       statusState: 'offline',
       statusText: ''
     };
+    if (refs.onlinePlayerName) refs.onlinePlayerName.value = onlineState.playerName;
     syncOnlineRoleOptions();
     syncOnlineStatus(
       onlineState.baseUrl ? 'Ready to create or join an online room.' : 'Online Worker URL is not configured.',
@@ -742,6 +752,58 @@
     }
   }
 
+  function onlineStoredPlayerName(clientId = '') {
+    const fallback = onlineDefaultPlayerName(clientId);
+    if (typeof window === 'undefined') return fallback;
+    try {
+      const stored = normalizeOnlinePlayerName(window.localStorage && window.localStorage.getItem(ONLINE_PLAYER_NAME_KEY));
+      if (stored) return stored;
+      if (window.localStorage) window.localStorage.setItem(ONLINE_PLAYER_NAME_KEY, fallback);
+      return fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function onlineDefaultPlayerName(clientId = '') {
+    const id = clientId || (onlineState && onlineState.clientId ? String(onlineState.clientId) : '');
+    const suffix = id.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase();
+    return suffix ? `Player ${suffix}` : 'Player';
+  }
+
+  function normalizeOnlinePlayerName(value) {
+    return String(value || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 32);
+  }
+
+  function currentOnlinePlayerName() {
+    const inputName = refs.onlinePlayerName ? normalizeOnlinePlayerName(refs.onlinePlayerName.value) : '';
+    const name = inputName || normalizeOnlinePlayerName(onlineState && onlineState.playerName) || onlineDefaultPlayerName();
+    if (onlineState) onlineState.playerName = name;
+    return name;
+  }
+
+  function handleOnlinePlayerNameInput() {
+    if (!onlineState) return;
+    onlineState.playerName = currentOnlinePlayerName();
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(ONLINE_PLAYER_NAME_KEY, onlineState.playerName);
+      }
+    } catch (_) {
+      // Local storage may be unavailable in private contexts.
+    }
+    syncOnlineControls();
+  }
+
+  function sendOnlinePlayerNameUpdate() {
+    if (!onlineState || !onlineIsInRoom() || !onlineSocketOpen()) return;
+    onlineSendRaw({
+      type: 'updateName',
+      clientId: onlineState.clientId,
+      playerName: currentOnlinePlayerName()
+    });
+  }
+
   function onlineModeRoles(mode) {
     const normalized = gameModeFromUrlParam(mode) || mode;
     if (normalized === GAME_MODES.CHINESE_CHECKERS) {
@@ -753,6 +815,21 @@
       }
     }
     return ONLINE_PLAYER_ROLES_BY_MODE[normalized] ? ONLINE_PLAYER_ROLES_BY_MODE[normalized].slice() : [];
+  }
+
+  function onlineRoleChoicesForMode(mode) {
+    const normalized = gameModeFromUrlParam(mode) || mode;
+    if (normalized !== GAME_MODES.CHINESE_CHECKERS || !onlineState) return onlineModeRoles(normalized);
+    const roles = [];
+    const add = (role) => {
+      const normalizedRole = normalizePlacementColor(role);
+      if (normalizedRole && !roles.includes(normalizedRole)) roles.push(normalizedRole);
+    };
+    onlineModeRoles(normalized).forEach(add);
+    normalizeOnlineRoles(onlineState.unclaimedRoles).forEach(add);
+    Object.keys(onlineState.roomRoles || {}).forEach(add);
+    normalizeOnlineRoles(onlineState.roles).forEach(add);
+    return roles.length ? roles : CHINESE_CHECKERS_DEFAULT_COLORS.slice();
   }
 
   function onlineModeSupported(mode) {
@@ -776,8 +853,10 @@
   function syncOnlineRoleOptions(mode = null) {
     if (!refs.onlineRoleOptions) return;
     const targetMode = mode || (onlineState && onlineState.gameMode) || selectedGameMode();
-    const roles = onlineModeRoles(targetMode);
-    const previousAll = selectedOnlineRolePreferences();
+    const chineseRoomClaiming = onlineChineseCheckersCanClaimRoles(targetMode);
+    const roles = onlineRoleChoicesForMode(targetMode);
+    let previousAll = selectedOnlineRolePreferences();
+    if (onlineIsInRoom() && !previousAll.length) previousAll = normalizeOnlineRoles(onlineState.roles);
     const previous = targetMode === GAME_MODES.CHINESE_CHECKERS ? previousAll : previousAll.slice(0, 1);
     refs.onlineRoleOptions.innerHTML = '';
     if (!roles.length) {
@@ -789,13 +868,23 @@
       if (!normalized) return;
       const label = document.createElement('label');
       label.className = 'opt-row';
+      const claimedByOther = onlineRoleClaimedByOther(normalized);
+      const owner = onlineRoleOwnerLabel(normalized);
+      if (claimedByOther) label.dataset.claimed = 'other';
       const input = document.createElement('input');
       input.type = 'checkbox';
       input.value = normalized;
       input.dataset.onlineRole = normalized;
-      input.checked = previous.includes(normalized);
+      input.checked = onlineStateOwnsRole(normalized) || (previous.includes(normalized) && !claimedByOther);
+      input.disabled = claimedByOther || (onlineIsInRoom() && targetMode === GAME_MODES.CHINESE_CHECKERS && !chineseRoomClaiming);
       label.appendChild(input);
       label.appendChild(document.createTextNode(` ${onlineRoleLabel(normalized)}`));
+      if (owner) {
+        const ownerNode = document.createElement('span');
+        ownerNode.className = 'online-role-owner';
+        ownerNode.textContent = ` ${owner}`;
+        label.appendChild(ownerNode);
+      }
       refs.onlineRoleOptions.appendChild(label);
     });
   }
@@ -811,8 +900,34 @@
       Array.from(refs.onlineRoleOptions.querySelectorAll('input[type=checkbox]')).forEach((input) => {
         if (input !== target) input.checked = false;
       });
+    } else if (onlineRoleClaimedByOther(target.value || target.dataset.onlineRole)) {
+      target.checked = false;
     }
     syncOnlineControls();
+  }
+
+  function onlineChineseCheckersCanClaimRoles(mode = null) {
+    const targetMode = gameModeFromUrlParam(mode || (onlineState && onlineState.gameMode) || selectedGameMode());
+    return !!(
+      targetMode === GAME_MODES.CHINESE_CHECKERS
+      && onlineIsInRoom()
+      && onlineSocketOpen()
+      && onlineState.readyToPlay === false
+    );
+  }
+
+  function onlineRoleClaimedByOther(role) {
+    const normalized = normalizePlacementColor(role);
+    if (!normalized || !onlineState || !onlineState.roomRoles) return false;
+    return !!onlineState.roomRoles[normalized] && !onlineStateOwnsRole(normalized);
+  }
+
+  function onlineRoleOwnerLabel(role) {
+    const normalized = normalizePlacementColor(role);
+    if (!normalized || !onlineState || !onlineState.roomRoles || !onlineState.roomRoles[normalized]) return '';
+    if (onlineStateOwnsRole(normalized)) return '(you)';
+    const name = onlineState.rolePlayers && normalizeOnlinePlayerName(onlineState.rolePlayers[normalized]);
+    return name ? `(${name})` : '(claimed)';
   }
 
   function onlineRoleLabel(role) {
@@ -855,7 +970,7 @@
 
   function selectedOnlineRolePreferences() {
     if (!refs.onlineRoleOptions || !refs.onlineRoleOptions.querySelectorAll) return [];
-    const roles = onlineModeRoles((onlineState && onlineState.gameMode) || selectedGameMode());
+    const roles = onlineRoleChoicesForMode((onlineState && onlineState.gameMode) || selectedGameMode());
     return Array.from(refs.onlineRoleOptions.querySelectorAll('input[type=checkbox]:checked'))
       .map((input) => normalizePlacementColor(input.value || input.dataset.onlineRole))
       .filter((role, index, list) => role && roles.includes(role) && list.indexOf(role) === index);
@@ -868,6 +983,32 @@
 
   function selectedOnlineRolesRequested() {
     return selectedOnlineRolePreferences();
+  }
+
+  function onlinePendingRoleClaimsChanged() {
+    if (!onlineState || onlineState.gameMode !== GAME_MODES.CHINESE_CHECKERS) return false;
+    const selected = selectedOnlineRolePreferences().filter((role) => role !== 'spectator').sort();
+    const assigned = normalizeOnlineRoles(onlineState.roles).filter((role) => role !== 'spectator').sort();
+    if (selected.length !== assigned.length) return true;
+    return selected.some((role, index) => role !== assigned[index]);
+  }
+
+  function confirmOnlineChineseCheckersRolesFromUi() {
+    if (!onlineChineseCheckersCanClaimRoles()) {
+      syncOnlineStatus('Colors can only be changed before Chinese Checkers begins.', 'error');
+      syncOnlineControls();
+      return;
+    }
+    const rolesRequested = selectedOnlineRolePreferences().filter((role) => !onlineRoleClaimedByOther(role));
+    onlineSendRaw({
+      type: 'claimRoles',
+      clientId: onlineState.clientId,
+      playerName: currentOnlinePlayerName(),
+      role: rolesRequested[0] || 'spectator',
+      rolesRequested
+    });
+    syncOnlineStatus('Confirming colors...', 'idle');
+    syncOnlineControls();
   }
 
   function onlineAssignedRolesFromMessage(message) {
@@ -884,6 +1025,12 @@
   function onlineStateOwnsRole(role) {
     const normalized = normalizePlacementColor(role);
     return !!(normalized && onlineState && Array.isArray(onlineState.roles) && onlineState.roles.includes(normalized));
+  }
+
+  function onlineChineseCheckersColorPlayableForLocal(color) {
+    const normalized = normalizePlacementColor(color);
+    if (!normalized || !onlineIsInRoom() || !onlineState || onlineState.gameMode !== GAME_MODES.CHINESE_CHECKERS) return true;
+    return !onlineState.roomRoles || !onlineState.roomRoles[normalized] || onlineStateOwnsRole(normalized);
   }
 
   function onlineIsInRoom() {
@@ -907,10 +1054,11 @@
   function onlineStatusText() {
     if (!onlineState) return 'Online play unavailable.';
     if (onlineState.joined && onlineState.roomCode) {
+      const player = onlineState.playerName ? `${onlineState.playerName}, ` : '';
       const role = onlineState.roles && onlineState.roles.length ? ` as ${onlineRolesLabel(onlineState.roles)}` : '';
       const version = Number.isInteger(onlineState.version) ? `, v${onlineState.version}` : '';
       const waiting = onlineState.readyToPlay === false ? ' Waiting for colors.' : '';
-      return `Room ${onlineState.roomCode}${role}${version}.${waiting} ${onlineState.statusText || ''}`.trim();
+      return `${player}Room ${onlineState.roomCode}${role}${version}.${waiting} ${onlineState.statusText || ''}`.trim();
     }
     if (onlineState.connecting && onlineState.pendingRoomCode) {
       return `Room ${onlineState.pendingRoomCode}. ${onlineState.statusText || 'Connecting...'}`.trim();
@@ -940,14 +1088,21 @@
     if (refs.onlineJoinRoom) refs.onlineJoinRoom.disabled = !visible || !configured || active || roomInput.length < 4;
     if (refs.onlineLeaveRoom) refs.onlineLeaveRoom.disabled = !active;
     if (refs.onlineRoomCode) refs.onlineRoomCode.disabled = active;
+    if (refs.onlinePlayerName) refs.onlinePlayerName.disabled = !visible || !configured;
     if (refs.onlineRoleOptions && refs.onlineRoleOptions.querySelectorAll) {
       Array.from(refs.onlineRoleOptions.querySelectorAll('input[type=checkbox]')).forEach((input) => {
-        input.disabled = active;
+        const role = input.value || input.dataset.onlineRole;
+        const canClaimRole = onlineChineseCheckersCanClaimRoles() && !onlineRoleClaimedByOther(role);
+        input.disabled = !visible || !configured || onlineRoleClaimedByOther(role) || (!!active && !canClaimRole);
       });
     }
     const waitingChinese = onlineIsInRoom()
       && onlineState.readyToPlay === false
       && onlineState.gameMode === GAME_MODES.CHINESE_CHECKERS;
+    if (refs.onlineConfirmRoles) {
+      refs.onlineConfirmRoles.hidden = !waitingChinese;
+      refs.onlineConfirmRoles.disabled = !waitingChinese || !onlineSocketOpen() || !onlinePendingRoleClaimsChanged();
+    }
     if (refs.onlineChineseStartRow) refs.onlineChineseStartRow.hidden = !waitingChinese;
     if (refs.onlineStartClaimedColors) refs.onlineStartClaimedColors.disabled = !waitingChinese || !onlineStateHasPlayableRole();
     if (refs.onlineKeepUnclaimedColors) refs.onlineKeepUnclaimedColors.disabled = !waitingChinese || !onlineStateHasPlayableRole();
@@ -1012,6 +1167,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           clientId: onlineState.clientId,
+          playerName: currentOnlinePlayerName(),
           role: requestedRole,
           rolesRequested,
           gameMode: gameModeValue(game),
@@ -1029,6 +1185,7 @@
       onlineState.roles = onlineAssignedRolesFromMessage(payload);
       onlineState.role = onlineState.roles[0] || 'spectator';
       onlineState.roomRoles = payload.roles && typeof payload.roles === 'object' ? { ...payload.roles } : {};
+      onlineState.rolePlayers = payload.rolePlayers && typeof payload.rolePlayers === 'object' ? { ...payload.rolePlayers } : {};
       onlineState.readyToPlay = payload.readyToPlay !== false;
       onlineState.unclaimedRoles = normalizeOnlineRoles(payload.unclaimedRoles);
       syncOnlineRoleOptions(onlineState.gameMode);
@@ -1102,6 +1259,7 @@
       onlineState.role = '';
       onlineState.roles = [];
       onlineState.roomRoles = {};
+      onlineState.rolePlayers = {};
       onlineState.readyToPlay = true;
       onlineState.unclaimedRoles = [];
       onlineState.joined = false;
@@ -1137,6 +1295,7 @@
         onlineSendRaw({
           type: 'hello',
           clientId: onlineState.clientId,
+          playerName: currentOnlinePlayerName(),
           role: rolesRequested[0] || 'auto',
           rolesRequested
         });
@@ -1164,6 +1323,7 @@
             onlineState.role = '';
             onlineState.roles = [];
             onlineState.roomRoles = {};
+            onlineState.rolePlayers = {};
             onlineState.readyToPlay = true;
             onlineState.unclaimedRoles = [];
             onlineState.joined = false;
@@ -1181,6 +1341,7 @@
           onlineState.role = '';
           onlineState.roles = [];
           onlineState.roomRoles = {};
+          onlineState.rolePlayers = {};
           onlineState.readyToPlay = true;
           onlineState.unclaimedRoles = [];
           onlineState.version = 0;
@@ -1273,6 +1434,7 @@
       onlineState.role = '';
       onlineState.roles = [];
       onlineState.roomRoles = {};
+      onlineState.rolePlayers = {};
       onlineState.readyToPlay = true;
       onlineState.unclaimedRoles = [];
       onlineState.gameMode = '';
@@ -1331,6 +1493,7 @@
       onlineState.roles = onlineAssignedRolesFromMessage(message);
       onlineState.role = onlineState.roles[0] || 'spectator';
       onlineState.roomRoles = message.roles && typeof message.roles === 'object' ? { ...message.roles } : {};
+      onlineState.rolePlayers = message.rolePlayers && typeof message.rolePlayers === 'object' ? { ...message.rolePlayers } : {};
       onlineState.readyToPlay = message.readyToPlay !== false;
       onlineState.unclaimedRoles = normalizeOnlineRoles(message.unclaimedRoles);
       onlineState.version = normalizeOnlineVersion(message.version, onlineState.version);
@@ -1367,9 +1530,29 @@
       }
       return;
     }
+    if (message.type === 'rolesConfirmed') {
+      updateOnlineRoomMetaFromMessage(message);
+      syncOnlineRoleOptions(onlineState.gameMode);
+      if (onlineState.readyToPlay !== false) hideOnlineChineseCheckersStartPrompt();
+      syncOnlineStatus(`Colors confirmed: ${onlineRolesLabel(onlineState.roles)}.`, 'idle');
+      render();
+      syncOnlineControls();
+      syncControls();
+      return;
+    }
+    if (message.type === 'nameUpdated') {
+      updateOnlineRoomMetaFromMessage(message);
+      syncOnlineRoleOptions(onlineState.gameMode);
+      syncOnlineStatus('Name updated.', 'idle');
+      render();
+      syncOnlineControls();
+      return;
+    }
     if (message.type === 'presence') {
       updateOnlineRoomMetaFromMessage(message);
+      syncOnlineRoleOptions(onlineState.gameMode);
       syncOnlineStatus(onlinePresenceText(message), 'idle');
+      render();
       syncOnlineControls();
       return;
     }
@@ -1456,6 +1639,7 @@
   function updateOnlineRoomMetaFromMessage(message) {
     if (!onlineState || !message || typeof message !== 'object') return;
     if (message.roles && typeof message.roles === 'object') onlineState.roomRoles = { ...message.roles };
+    if (message.rolePlayers && typeof message.rolePlayers === 'object') onlineState.rolePlayers = { ...message.rolePlayers };
     if (Object.prototype.hasOwnProperty.call(message, 'readyToPlay')) onlineState.readyToPlay = message.readyToPlay !== false;
     if (Object.prototype.hasOwnProperty.call(message, 'unclaimedRoles')) {
       onlineState.unclaimedRoles = normalizeOnlineRoles(message.unclaimedRoles);
@@ -1772,9 +1956,13 @@
 
   function onlinePresenceText(message) {
     const roles = message && message.roles && typeof message.roles === 'object' ? message.roles : {};
+    const rolePlayers = message && message.rolePlayers && typeof message.rolePlayers === 'object' ? message.rolePlayers : {};
     const filled = Object.keys(roles)
       .filter((role) => roles[role] && role !== 'spectator')
-      .map(onlineRoleLabel);
+      .map((role) => {
+        const name = normalizeOnlinePlayerName(rolePlayers[role]);
+        return name ? `${onlineRoleLabel(role)} ${name}` : onlineRoleLabel(role);
+      });
     const unclaimed = normalizeOnlineRoles(message && message.unclaimedRoles).map(onlineRoleLabel);
     const waiting = message && message.readyToPlay === false && unclaimed.length
       ? ` Waiting for ${unclaimed.join(', ')}.`
@@ -1901,6 +2089,7 @@
   function onlineExpectedRoleForGame(state, actionType = 'move') {
     if (!state || state.phase !== 'ready') return '';
     if (isGoGame(state) && state.scoringReview && onlineGoReviewAction(actionType)) return '';
+    if (isChineseCheckersGame(state) && isChineseCheckersOpeningRound(state)) return '';
     const role = normalizePlacementColor(state.turn);
     return onlineModeRoles(gameModeValue(state)).includes(role) ? role : '';
   }
@@ -10879,6 +11068,11 @@
       ctx.restore();
       return;
     }
+    const selectedMarble = chineseCheckerMarbleAt(state, state.selectedIndex);
+    if (selectedMarble && !onlineChineseCheckersColorPlayableForLocal(selectedMarble.color)) {
+      ctx.restore();
+      return;
+    }
     const selectedPoint = placementPiecePoint(geom, state.selectedIndex);
     const moveMap = chineseCheckersHintMoveMap(state, state.selectedIndex);
     ctx.lineWidth = Math.max(1.5, geom.radius * 0.06);
@@ -11114,6 +11308,7 @@
     }
     const color = normalizePlacementColor(isChineseCheckersOpeningRound(state) && selectedMarble ? selectedMarble.color : state.turn);
     if (!color || state.phase === 'gameover') return;
+    if (!onlineChineseCheckersColorPlayableForLocal(color)) return;
     const colors = placementPieceColors(color);
     const target = chineseCheckersCampSet(state.camps, 'targets', color);
     ctx.save();
@@ -11155,6 +11350,7 @@
     ctx.save();
     ctx.lineWidth = Math.max(1.8, geom.radius * 0.065);
     (state.marbles || []).forEach((marble) => {
+      if (!onlineChineseCheckersColorPlayableForLocal(marble.color)) return;
       if (!pending.has(marble.color) || !chineseCheckersHintMoveMap(state, marble.index).size) return;
       const point = placementPiecePoint(geom, marble.index);
       if (!point) return;

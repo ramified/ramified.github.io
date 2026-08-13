@@ -81,6 +81,15 @@
       white-space: nowrap;
     }
 
+    .online-role-options .opt-row[data-claimed="other"] {
+      color: var(--muted);
+    }
+
+    .online-role-owner {
+      color: var(--muted);
+      font-size: 0.74rem;
+    }
+
     body.canvas-fit-viewport {
       overflow: hidden;
     }
@@ -1853,6 +1862,10 @@
           <input class="mosaic-editor-input" id="online-room-code" type="text" maxlength="8" autocomplete="off" spellcheck="false" placeholder="room code" aria-label="Online room code">
         </div>
         <div class="mosaic-inline-row">
+          <span class="input-label">Name</span>
+          <input class="mosaic-editor-input" id="online-player-name" type="text" maxlength="32" autocomplete="off" spellcheck="false" placeholder="player name" aria-label="Online player name">
+        </div>
+        <div class="mosaic-inline-row">
           <span class="input-label">Side</span>
           <span class="online-role-options" id="online-role-options" aria-label="Online player side"></span>
         </div>
@@ -1860,6 +1873,7 @@
           <button class="btn" id="online-create-room" type="button">create room</button>
           <button class="btn" id="online-join-room" type="button">join room</button>
         </div>
+        <button class="btn" id="online-confirm-roles" type="button" hidden>confirm colors</button>
         <div class="mosaic-inline-row" id="online-chinese-start-row" hidden>
           <label class="opt-row"><input type="checkbox" id="online-keep-unclaimed-colors"> keep unclaimed colors</label>
           <button class="btn" id="online-start-claimed-colors" type="button">begin claimed colors</button>

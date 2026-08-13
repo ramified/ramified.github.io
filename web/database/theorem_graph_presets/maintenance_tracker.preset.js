@@ -23,6 +23,14 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "id": "n4",
       "type": "example",
       "label": "Sheaf Calculator",
+      "details": [
+        {
+          "id": "bug",
+          "label": "bug",
+          "type": "checkbox",
+          "text": "For Hodge numbers chart, the formula for c_1^2 and c_2 is wrong"
+        }
+      ],
       "setting": "Add related objects: embedding into \\mathbb{P}^n, AJ, ramification locus, actual vector bundle.\nIdentification of some sheaves with others in the step-by-step calculation: ramification locus, \\Omega_{\\mathbb{P}^n}, etc.",
       "condition": "",
       "result": "",
@@ -30,8 +38,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 84,
-      "y": 54.1,
+      "x": 83.9,
+      "y": 54,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -65,8 +73,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 117.1,
-      "y": 270.8
+      "x": 116.9,
+      "y": 270.1
     },
     {
       "id": "n39",
@@ -87,8 +95,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 283.1,
-      "y": 334.9
+      "x": 282.7,
+      "y": 334
     },
     {
       "id": "n58",
@@ -102,8 +110,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 287,
-      "y": 54.1
+      "x": 286.6,
+      "y": 54
     },
     {
       "id": "n60",
@@ -126,8 +134,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 591.6,
-      "y": 81.7
+      "x": 589.9,
+      "y": 81.4
     },
     {
       "id": "n63",
@@ -148,8 +156,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 487,
-      "y": 334.9,
+      "x": 486.4,
+      "y": 334,
       "childGraph": {
         "title": "double click",
         "nodes": [
@@ -276,8 +284,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 633.7,
-      "y": 261.1
+      "x": 632.9,
+      "y": 260.4
     },
     {
       "id": "n66",
@@ -298,8 +306,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 362.6,
-      "y": 110.1
+      "x": 362.2,
+      "y": 109.8
     },
     {
       "id": "n68",
@@ -320,8 +328,36 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 366,
-      "y": 246.7
+      "x": 365.5,
+      "y": 246
+    },
+    {
+      "id": "n69",
+      "type": "misc",
+      "label": "prompt",
+      "details": [
+        {
+          "id": "goal",
+          "label": "goal",
+          "type": "checkbox",
+          "text": "In Theorem Graph Calculator, add a link before the \"send feedback\" hyperlink, which suggests user how to use the AI to generate the theorem graph, and what AI should usually do to create an ideal json text"
+        },
+        {
+          "id": "functions",
+          "label": "functions",
+          "type": "checkbox",
+          "text": "told AI that:\nThis page support ref, it is recommended to give a reference for each goal in detail(which page or which chapter, for example). If all goals use a citation for one whole book, then user may not find what they want quickly\nThis page support MathJax rendering\nWhen generating roadmaps, focus on the examples and definitions; the AI can provide user a list of definition, and check if user know or not know. A quick recall of unknown definition(with reference) can help user to understand quickly\nThe goal can be more realizable, avoid \"understand ...\" (It has several kind of understanding. Reader can written down the theorem and its proof, or check the logic of each step, or check where the conditions are used, these are all called \"understanding\"). Unless user specifies, if a question has concrete answer(correct/false, or a concrete number), then just tell the user(like \"compute the degree of map\" can be changed to \"verify that the degree of the map is 3\")\nThis website should also make a introduction about the structure of json text, so that AI don't need to search for the js document for writing it."
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 521.7,
+      "y": 160.8
     }
   ],
   "arrows": [
@@ -375,13 +411,30 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
+    },
+    {
+      "id": "a49",
+      "sourceId": "n69",
+      "targetId": "n60",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
     }
   ],
   "view": {
-    "selectedId": "n65",
+    "selectedId": "n4",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 389,
+    "canvasHeight": 388,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 1.9381,
     "relativeNodePositions": {
@@ -402,7 +455,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
         "y": 0.1392
       },
       "n60": {
-        "x": 0.7856,
+        "x": 0.7845,
         "y": 0.2099
       },
       "n63": {
@@ -420,6 +473,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "n68": {
         "x": 0.486,
         "y": 0.6341
+      },
+      "n69": {
+        "x": 0.6938,
+        "y": 0.4145
       }
     },
     "selectedReferenceKeys": []

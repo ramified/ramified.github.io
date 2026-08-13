@@ -136,6 +136,43 @@
       white-space: normal;
     }
 
+    .slice-info-row {
+      display: grid;
+      grid-template-columns: minmax(82px, max-content) minmax(0, 1fr);
+      align-items: start;
+      gap: 5px 10px;
+      min-width: 0;
+      font-size: 0.82rem;
+      line-height: 1.55;
+    }
+
+    .slice-info-label {
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .slice-info-value {
+      min-width: 0;
+      color: var(--text);
+      overflow-wrap: anywhere;
+    }
+
+    .slice-info-value code,
+    .slice-info-value .slice-math {
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.74rem;
+    }
+
+    .slice-card-note {
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.45;
+    }
+
     .slice-card-body {
       display: flex;
       flex-direction: column;
@@ -980,6 +1017,19 @@
           <div class="slice-row stack">
             <span class="slice-row-label">warnings</span>
             <div id="debug-warnings" class="slice-warning">Projection and exact/numeric 2D slice layers are active.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card collapsed" id="slice-weight-info-card">
+        <div class="card-head" tabindex="0" role="button" aria-expanded="false">
+          <span class="drag-handle" title="drag card">&#8942;&#8942;</span>
+          <span class="card-head-label">weight info in 2d slice</span>
+          <i class="toggle-icon">&#9662;</i>
+        </div>
+        <div class="card-body slice-card-body">
+          <div id="slice-weight-info-out">
+            <span class="slice-card-note">Click a Dynkin root or weight lattice point in the projection canvas.</span>
           </div>
         </div>
       </section>

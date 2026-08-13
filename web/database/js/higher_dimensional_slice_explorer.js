@@ -89,6 +89,12 @@
   const WEYL_KL_CACHE_LIMIT = 64;
   const WEYL_KL_PENDING_STATUS = "Computing KL polynomial, please wait...";
   const WEYL_KL_STATUS_ROW_CHAR_LIMIT = 52;
+  const WEIGHT_INFO_DIMENSION_MODES = new Set(["none", "dots", "numbers"]);
+  const WEIGHT_INFO_FREUDENTHAL_CAP = 20000;
+  const WEIGHT_INFO_PROJECTION_POINT_CAP = 6000;
+  const WEIGHT_INFO_PROJECTION_BOX_CAP = 250000;
+  const WEIGHT_INFO_PROJECTION_BOX_WARNING = 60000;
+  const WEIGHT_INFO_EPS = 1e-7;
   const RATIONAL_WHEEL_STEP = 0.1;
   const RATIONAL_WHEEL_MIN = -6;
   const RATIONAL_WHEEL_MAX = 6;
@@ -124,6 +130,7 @@
   const voronoiRelevantVectorCache = new Map();
   const finiteRootSetCache = new Map();
   const finiteWeylKlCalculatorCache = new Map();
+  const dynkinWeightCharacterCache = new Map();
   const matrixTargetDrafts = new Map();
   const lmfdbFieldSearchDrafts = new Map();
   let finiteWeylKlScheduledFrame = 0;
@@ -185,6 +192,7 @@
     weylChamberPickCandidates: [],
     activeWeylChamber: null,
     weylKlTargetChamber: null,
+    weightInfoDimensionMode: "none",
     lastWarning: "Projection and exact/numeric 2D slice layers are active.",
     lastWarningMath: null,
   };
@@ -7401,6 +7409,14 @@
     bindCardCollapse();
 
     $("clear-canvas").addEventListener("click", clearCanvasObjects);
+    $("slice-weight-info-card")?.addEventListener("click", (event) => {
+      const button = typeof event.target?.closest === "function"
+        ? event.target.closest("[data-weight-info-dimension-mode]")
+        : null;
+      if (!button) return;
+      state.weightInfoDimensionMode = normalizeWeightInfoDimensionMode(button.dataset.weightInfoDimensionMode);
+      renderAll();
+    });
 
     $("source-mode-controls").addEventListener("click", (event) => {
       const button = event.target.closest("[data-source-mode]");
@@ -7938,7 +7954,8 @@
     const currentKind = normalizeDynkinLatticeKind(data.dynkinLatticeKind);
     const dynkinType = normalizeWeylDynkinType(data.dynkinType, state.ambientDim);
     const companion = matchingVisibleDynkinCompanionLattice(object);
-    const kinds = companion ? ["root", "weight"] : [currentKind];
+    const companionKind = currentKind === "weight" ? "root" : "weight";
+    const kinds = companion ? [currentKind, companionKind] : [currentKind];
     const entries = kinds.map((kind) => {
       const labelPrefix = kind === "weight" ? "omega" : "alpha";
       const labelTex = kind === "weight" ? "\\omega" : "\\alpha";
@@ -7948,15 +7965,11 @@
       }));
       const preferred = kind === currentKind ? candidate.latticeCoefficients : null;
       const coordinates = dynkinLatticeCoordinates(kind, dynkinType, candidate.ambient, preferred);
-      const expression = latticeCoefficientExpressionDisplay(coordinates, labels);
-      return {
-        plain: `${labelPrefix}: ${expression.plain}`,
-        tex: `${labelTex}\\colon ${expression.tex}`,
-      };
+      return latticeCoefficientExpressionDisplay(coordinates, labels);
     });
     return {
-      plain: entries.map((entry) => entry.plain).join("; "),
-      tex: entries.map((entry) => entry.tex).join(";\\quad "),
+      plain: `= ${entries.map((entry) => entry.plain).join(" = ")}`,
+      tex: `= ${entries.map((entry) => entry.tex).join(" = ")}`,
     };
   }
 
@@ -8030,6 +8043,764 @@
     return { plain, tex };
   }
 
+  function normalizeWeightInfoDimensionMode(mode) {
+    return WEIGHT_INFO_DIMENSION_MODES.has(mode) ? mode : "none";
+  }
+
+  function dynkinVectorKey(vector) {
+    return (vector || []).map((value) => {
+      const cleaned = cleanLatticeCoefficient(value);
+      return Number.isInteger(cleaned) ? String(cleaned) : fmt(cleaned, 8);
+    }).join(",");
+  }
+
+  function dynkinCartanMatrix(dynkinType, n = state.ambientDim) {
+    const type = normalizeWeylDynkinType(dynkinType, n);
+    const make = (rank, callback) => Array.from({ length: rank }, (_, row) =>
+      Array.from({ length: rank }, (_, col) => callback(row, col))
+    );
+    if (type === "A") return make(n, (row, col) => (row === col ? 2 : Math.abs(row - col) === 1 ? -1 : 0));
+    if (type === "B") {
+      const matrix = make(n, (row, col) => (row === col ? 2 : Math.abs(row - col) === 1 ? -1 : 0));
+      if (n >= 2) {
+        matrix[n - 2][n - 1] = -2;
+        matrix[n - 1][n - 2] = -1;
+      }
+      return matrix;
+    }
+    if (type === "C") {
+      const matrix = make(n, (row, col) => (row === col ? 2 : Math.abs(row - col) === 1 ? -1 : 0));
+      if (n >= 2) {
+        matrix[n - 2][n - 1] = -1;
+        matrix[n - 1][n - 2] = -2;
+      }
+      return matrix;
+    }
+    if (type === "D") {
+      const matrix = make(n, (row, col) => (row === col ? 2 : 0));
+      for (let index = 0; index < n - 2; index += 1) {
+        matrix[index][index + 1] = -1;
+        matrix[index + 1][index] = -1;
+      }
+      if (n >= 3) {
+        matrix[n - 3][n - 1] = -1;
+        matrix[n - 1][n - 3] = -1;
+      }
+      return matrix;
+    }
+    if (type === "G") return [[2, -1], [-3, 2]];
+    if (type === "F") return [[2, -1, 0, 0], [-1, 2, -2, 0], [0, -1, 2, -1], [0, 0, -1, 2]];
+    return eCartanMatrix(n);
+  }
+
+  function solveLinearSystem(rows, vector, label = "linear system") {
+    try {
+      return multiplyMatrixVector(inverseMatrix(rows, label), vector);
+    } catch {
+      return null;
+    }
+  }
+
+  function dynkinSimpleToLabels(simpleCoordinates, cartanRows) {
+    return multiplyMatrixVector(transposeMatrix(cartanRows), simpleCoordinates);
+  }
+
+  function dynkinLabelsToSimpleCoordinates(labels, cartanRows) {
+    return solveLinearSystem(transposeMatrix(cartanRows), labels, "Dynkin-label to simple-root coordinates");
+  }
+
+  function integralVectorOrNull(vector, tolerance = WEIGHT_INFO_EPS) {
+    if (!Array.isArray(vector)) return null;
+    const rounded = vector.map((value) => Math.round(finiteNumber(value, NaN)));
+    return vector.every((value, index) => Number.isFinite(value) && Math.abs(value - rounded[index]) <= tolerance)
+      ? rounded
+      : null;
+  }
+
+  function isNonnegativeIntVector(vector) {
+    return Array.isArray(vector) && vector.every((value) => Number.isInteger(value) && value >= 0);
+  }
+
+  function isDominantDynkinLabels(labels) {
+    return isNonnegativeIntVector(labels);
+  }
+
+  function dynkinCartanSymmetrizer(cartanRows) {
+    const n = cartanRows.length;
+    const weights = Array(n).fill(null);
+    weights[0] = 1;
+    const queue = [0];
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const row = queue[cursor];
+      for (let col = 0; col < n; col += 1) {
+        if (row === col || !cartanRows[row][col] || !cartanRows[col][row]) continue;
+        const value = (weights[row] * cartanRows[col][row]) / cartanRows[row][col];
+        if (weights[col] == null) {
+          weights[col] = value;
+          queue.push(col);
+        }
+      }
+    }
+    return weights.map((value) => value ?? 1);
+  }
+
+  function simpleRootGramFromCartan(cartanRows) {
+    const symmetrizer = dynkinCartanSymmetrizer(cartanRows);
+    return cartanRows.map((row, rowIndex) => row.map((_, colIndex) => cartanRows[rowIndex][colIndex] * symmetrizer[colIndex]));
+  }
+
+  function quadraticForm(rows, vector) {
+    let total = 0;
+    for (let row = 0; row < vector.length; row += 1) {
+      if (!vector[row]) continue;
+      for (let col = 0; col < vector.length; col += 1) {
+        if (vector[col]) total += vector[row] * rows[row][col] * vector[col];
+      }
+    }
+    return total;
+  }
+
+  function dynkinInnerProductFromCartan(cartanRows) {
+    const gram = simpleRootGramFromCartan(cartanRows);
+    const transposeCartan = transposeMatrix(cartanRows);
+    return (leftLabels, rightLabels) => {
+      const leftSimple = solveLinearSystem(transposeCartan, leftLabels, "Dynkin inner product");
+      const rightSimple = solveLinearSystem(transposeCartan, rightLabels, "Dynkin inner product");
+      if (!leftSimple || !rightSimple) return NaN;
+      let total = 0;
+      for (let row = 0; row < cartanRows.length; row += 1) {
+        for (let col = 0; col < cartanRows.length; col += 1) {
+          total += leftSimple[row] * gram[row][col] * rightSimple[col];
+        }
+      }
+      return total;
+    };
+  }
+
+  function positiveRootSimpleCoordinates(cartanRows) {
+    const n = cartanRows.length;
+    const roots = new Map();
+    const queue = [];
+    for (let index = 0; index < n; index += 1) {
+      const root = Array(n).fill(0);
+      root[index] = 1;
+      roots.set(dynkinVectorKey(root), root);
+      queue.push(root);
+    }
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const root = queue[cursor];
+      for (let index = 0; index < n; index += 1) {
+        const bracket = root.reduce((sum, value, col) => sum + value * cartanRows[col][index], 0);
+        const reflected = root.slice();
+        reflected[index] -= bracket;
+        if (reflected.every((value) => value >= 0)) {
+          const key = dynkinVectorKey(reflected);
+          if (!roots.has(key)) {
+            roots.set(key, reflected);
+            queue.push(reflected);
+          }
+        }
+      }
+    }
+    return Array.from(roots.values()).sort((left, right) =>
+      left.reduce((sum, value) => sum + value, 0) - right.reduce((sum, value) => sum + value, 0)
+    );
+  }
+
+  function reflectDynkinLabels(labels, index, cartanRows) {
+    const coordinate = labels[index] || 0;
+    return labels.map((value, col) => value - coordinate * cartanRows[index][col]);
+  }
+
+  function cleanDynkinLabels(labels) {
+    return labels.map((value) => cleanLatticeCoefficient(value));
+  }
+
+  function dominantDynkinRepresentative(cartanRows, labels) {
+    let current = cleanDynkinLabels(labels);
+    const seen = new Set();
+    for (let step = 0; step < 400; step += 1) {
+      const key = dynkinVectorKey(current);
+      if (seen.has(key)) return null;
+      seen.add(key);
+      const index = current.findIndex((value) => value < -WEIGHT_INFO_EPS);
+      if (index < 0) return cleanDynkinLabels(current);
+      current = cleanDynkinLabels(reflectDynkinLabels(current, index, cartanRows));
+    }
+    return null;
+  }
+
+  function factorialBigInt(value) {
+    let result = 1n;
+    for (let index = 2; index <= value; index += 1) result *= BigInt(index);
+    return result;
+  }
+
+  function powerBigInt(base, exponent) {
+    let result = 1n;
+    for (let index = 0; index < exponent; index += 1) result *= BigInt(base);
+    return result;
+  }
+
+  function cartanEdgeWeight(cartanRows, row, col) {
+    return Math.abs((cartanRows[row][col] || 0) * (cartanRows[col][row] || 0));
+  }
+
+  function dynkinComponentAdjacency(cartanRows, nodes) {
+    const adjacency = new Map(nodes.map((node) => [node, []]));
+    for (let left = 0; left < nodes.length; left += 1) {
+      for (let right = left + 1; right < nodes.length; right += 1) {
+        const row = nodes[left];
+        const col = nodes[right];
+        const weight = cartanEdgeWeight(cartanRows, row, col);
+        if (weight > 0) {
+          adjacency.get(row).push({ node: col, weight });
+          adjacency.get(col).push({ node: row, weight });
+        }
+      }
+    }
+    return adjacency;
+  }
+
+  function dynkinComponents(cartanRows, nodes) {
+    const nodeSet = new Set(nodes);
+    const seen = new Set();
+    const components = [];
+    for (const start of nodes) {
+      if (seen.has(start)) continue;
+      const component = [];
+      const stack = [start];
+      seen.add(start);
+      while (stack.length) {
+        const node = stack.pop();
+        component.push(node);
+        for (const candidate of nodeSet) {
+          if (seen.has(candidate)) continue;
+          if (cartanEdgeWeight(cartanRows, node, candidate) > 0) {
+            seen.add(candidate);
+            stack.push(candidate);
+          }
+        }
+      }
+      components.push(component.sort((left, right) => left - right));
+    }
+    return components;
+  }
+
+  function isPathAdjacency(adjacency, nodes) {
+    if (nodes.length === 1) return true;
+    const degrees = nodes.map((node) => adjacency.get(node).length).sort((left, right) => left - right);
+    return degrees[0] === 1 && degrees[1] === 1 && degrees.slice(2).every((degree) => degree === 2);
+  }
+
+  function doubleEdgeTouchesPathEnd(adjacency, nodes) {
+    for (const node of nodes) {
+      for (const edge of adjacency.get(node)) {
+        if (node < edge.node && edge.weight === 2) {
+          return adjacency.get(node).length === 1 || adjacency.get(edge.node).length === 1;
+        }
+      }
+    }
+    return false;
+  }
+
+  function armLengthsFromBranch(adjacency, branch) {
+    const arms = [];
+    for (const first of adjacency.get(branch).map((edge) => edge.node)) {
+      let length = 1;
+      let previous = branch;
+      let current = first;
+      while (adjacency.get(current).length > 1) {
+        const next = adjacency.get(current).map((edge) => edge.node).find((node) => node !== previous);
+        if (next === undefined) break;
+        previous = current;
+        current = next;
+        length += 1;
+      }
+      arms.push(length);
+    }
+    return arms.sort((left, right) => left - right);
+  }
+
+  function irreducibleWeylOrderFromCartan(cartanRows, nodes) {
+    const n = nodes.length;
+    if (n === 0) return 1n;
+    if (n === 1) return 2n;
+    const adjacency = dynkinComponentAdjacency(cartanRows, nodes);
+    const edgeWeights = [];
+    for (let left = 0; left < nodes.length; left += 1) {
+      for (let right = left + 1; right < nodes.length; right += 1) {
+        const weight = cartanEdgeWeight(cartanRows, nodes[left], nodes[right]);
+        if (weight > 0) edgeWeights.push(weight);
+      }
+    }
+    const maxEdge = Math.max(...edgeWeights);
+    if (n === 2) {
+      if (maxEdge === 1) return 6n;
+      if (maxEdge === 2) return 8n;
+      if (maxEdge === 3) return 12n;
+    }
+    if (maxEdge > 1) {
+      if (n === 4 && isPathAdjacency(adjacency, nodes) && maxEdge === 2 && !doubleEdgeTouchesPathEnd(adjacency, nodes)) return 1152n;
+      if (isPathAdjacency(adjacency, nodes) && maxEdge === 2) return powerBigInt(2, n) * factorialBigInt(n);
+    }
+    if (maxEdge === 1) {
+      if (isPathAdjacency(adjacency, nodes)) return factorialBigInt(n + 1);
+      const branchNodes = nodes.filter((node) => adjacency.get(node).length === 3);
+      if (branchNodes.length === 1) {
+        const arms = armLengthsFromBranch(adjacency, branchNodes[0]).join(",");
+        if (arms.startsWith("1,1,")) return powerBigInt(2, n - 1) * factorialBigInt(n);
+        if (arms === "1,2,2") return 51840n;
+        if (arms === "1,2,3") return 2903040n;
+        if (arms === "1,2,4") return 696729600n;
+      }
+    }
+    throw new Error("Unsupported Dynkin subdiagram for Weyl-order shortcut.");
+  }
+
+  function weylGroupOrderFromCartan(cartanRows, nodes = null) {
+    const useNodes = nodes || Array.from({ length: cartanRows.length }, (_, index) => index);
+    if (!useNodes.length) return 1n;
+    return dynkinComponents(cartanRows, useNodes).reduce(
+      (product, component) => product * irreducibleWeylOrderFromCartan(cartanRows, component),
+      1n
+    );
+  }
+
+  function weylOrbitSizeDominantDynkin(labels, cartanRows) {
+    const zeroNodes = labels.map((value, index) => value === 0 ? index : -1).filter((index) => index >= 0);
+    return (weylGroupOrderFromCartan(cartanRows) / weylGroupOrderFromCartan(cartanRows, zeroNodes)).toString();
+  }
+
+  function gcdBigInt(left, right) {
+    let a = left < 0n ? -left : left;
+    let b = right < 0n ? -right : right;
+    while (b) [a, b] = [b, a % b];
+    return a;
+  }
+
+  function normalizeFraction(fraction) {
+    let [numerator, denominator] = fraction;
+    if (denominator < 0n) {
+      numerator = -numerator;
+      denominator = -denominator;
+    }
+    const divisor = gcdBigInt(numerator, denominator);
+    return [numerator / divisor, denominator / divisor];
+  }
+
+  function multiplyFractionByRatio(fraction, numerator, denominator) {
+    let [leftNumerator, leftDenominator] = normalizeFraction(fraction);
+    let rightNumerator = BigInt(numerator);
+    let rightDenominator = BigInt(denominator);
+    [rightNumerator, rightDenominator] = normalizeFraction([rightNumerator, rightDenominator]);
+    let divisor = gcdBigInt(rightNumerator, leftDenominator);
+    rightNumerator /= divisor;
+    leftDenominator /= divisor;
+    divisor = gcdBigInt(leftNumerator, rightDenominator);
+    leftNumerator /= divisor;
+    rightDenominator /= divisor;
+    return normalizeFraction([leftNumerator * rightNumerator, leftDenominator * rightDenominator]);
+  }
+
+  function weylDimensionFraction(labels, cartanRows) {
+    const positiveCoroots = positiveRootSimpleCoordinates(transposeMatrix(cartanRows));
+    let dimension = [1n, 1n];
+    for (const coroot of positiveCoroots) {
+      const numerator = coroot.reduce((sum, value, index) => sum + value * (labels[index] + 1), 0);
+      const denominator = coroot.reduce((sum, value) => sum + value, 0);
+      dimension = multiplyFractionByRatio(dimension, numerator, denominator);
+    }
+    return normalizeFraction(dimension);
+  }
+
+  function weylDimensionDynkin(labels, cartanRows) {
+    const [numerator, denominator] = weylDimensionFraction(labels, cartanRows);
+    return denominator === 1n ? numerator.toString() : `${numerator.toString()}/${denominator.toString()}`;
+  }
+
+  function boundedWeightProjectionCandidates(highestLabels, cartanRows, cap = WEIGHT_INFO_PROJECTION_POINT_CAP) {
+    const n = cartanRows.length;
+    const gram = simpleRootGramFromCartan(cartanRows);
+    const center = dynkinLabelsToSimpleCoordinates(highestLabels, cartanRows);
+    if (!center) throw new Error("Could not express the highest weight in simple-root coordinates.");
+    const radiusSquared = quadraticForm(gram, center) + 1e-8;
+    const bounds = [];
+    let boxSize = 1;
+    let statusNote = "";
+    for (let index = 0; index < n; index += 1) {
+      const unit = Array(n).fill(0);
+      unit[index] = 1;
+      const inverseColumn = solveLinearSystem(gram, unit, "projection norm bound");
+      if (!inverseColumn || !(inverseColumn[index] > 0)) throw new Error("Could not bound the projection norm ball.");
+      const span = Math.sqrt(radiusSquared * inverseColumn[index]) + 1e-9;
+      const lower = Math.max(0, Math.ceil(center[index] - span - 1e-9));
+      const upper = Math.floor(center[index] + span + 1e-9);
+      bounds.push([lower, upper]);
+      boxSize *= Math.max(0, upper - lower + 1);
+      if (boxSize > WEIGHT_INFO_PROJECTION_BOX_CAP) {
+        throw new Error(`Projected dimension norm-bound box has ${boxSize} candidates before pruning; choose a smaller dominant weight.`);
+      }
+    }
+    if (boxSize >= WEIGHT_INFO_PROJECTION_BOX_WARNING) {
+      statusNote = `Projected dimension norm-bound box has ${boxSize.toLocaleString()} candidates before pruning; computation may be slow.`;
+    }
+    const points = [];
+    const visit = (index, delta) => {
+      if (index === n) {
+        const simpleCoordinates = center.map((value, col) => value - delta[col]);
+        if (quadraticForm(gram, simpleCoordinates) > radiusSquared) return;
+        const labels = highestLabels.map((value, col) => value - dynkinSimpleToLabels(delta, cartanRows)[col]);
+        points.push({ labels: cleanDynkinLabels(labels), delta: delta.slice() });
+        if (points.length > cap) {
+          throw new Error(`Projected dimension norm ball contains more than ${cap} candidate weights; choose a smaller dominant weight.`);
+        }
+        return;
+      }
+      const [lower, upper] = bounds[index];
+      for (let value = lower; value <= upper; value += 1) {
+        delta[index] = value;
+        visit(index + 1, delta);
+      }
+      delta[index] = 0;
+    };
+    visit(0, Array(n).fill(0));
+    points.sort((left, right) => dynkinVectorKey(left.labels).localeCompare(dynkinVectorKey(right.labels)));
+    return { points, bounds, boxSize, radiusSquared, statusNote };
+  }
+
+  function buildWeightInfoFreudenthalContext(highestLabels, cartanRows) {
+    const inner = dynkinInnerProductFromCartan(cartanRows);
+    const rho = Array(cartanRows.length).fill(1);
+    const rootsDynkin = positiveRootSimpleCoordinates(cartanRows).map((root) => dynkinSimpleToLabels(root, cartanRows));
+    return {
+      cartanRows,
+      highest: highestLabels.slice(),
+      highestKey: dynkinVectorKey(highestLabels),
+      highestNorm: inner(highestLabels, highestLabels),
+      highestRhoNorm: inner(add(highestLabels, rho), add(highestLabels, rho)),
+      rho,
+      rootsDynkin,
+      inner,
+    };
+  }
+
+  function isReachableFromHighestWeight(context, labels) {
+    const cleanLabels = cleanDynkinLabels(labels);
+    if (!cleanLabels.every((value) => Number.isInteger(value) && value >= -WEIGHT_INFO_EPS)) return false;
+    const difference = dynkinLabelsToSimpleCoordinates(subtract(context.highest, cleanLabels), context.cartanRows);
+    return isNonnegativeIntVector(integralVectorOrNull(difference));
+  }
+
+  function weightInfoMultiplicityFreudenthal(context) {
+    const memo = new Map([[context.highestKey, 1]]);
+    const visiting = new Set();
+    const multiplicity = (rawLabels) => {
+      const labels = cleanDynkinLabels(rawLabels);
+      const key = dynkinVectorKey(labels);
+      if (memo.has(key)) return memo.get(key);
+      if (visiting.has(key)) return 0;
+      if (!isReachableFromHighestWeight(context, labels)) {
+        memo.set(key, 0);
+        if (memo.size > WEIGHT_INFO_FREUDENTHAL_CAP) throw new Error(`Freudenthal recursion exceeded ${WEIGHT_INFO_FREUDENTHAL_CAP} dominant orbit representatives; choose a smaller dominant weight.`);
+        return 0;
+      }
+      const labelsNorm = context.inner(labels, labels);
+      if (labelsNorm > context.highestNorm + WEIGHT_INFO_EPS) {
+        memo.set(key, 0);
+        if (memo.size > WEIGHT_INFO_FREUDENTHAL_CAP) throw new Error(`Freudenthal recursion exceeded ${WEIGHT_INFO_FREUDENTHAL_CAP} dominant orbit representatives; choose a smaller dominant weight.`);
+        return 0;
+      }
+      const labelsRho = add(labels, context.rho);
+      const denominator = context.highestRhoNorm - context.inner(labelsRho, labelsRho);
+      if (denominator <= WEIGHT_INFO_EPS) {
+        memo.set(key, 0);
+        if (memo.size > WEIGHT_INFO_FREUDENTHAL_CAP) throw new Error(`Freudenthal recursion exceeded ${WEIGHT_INFO_FREUDENTHAL_CAP} dominant orbit representatives; choose a smaller dominant weight.`);
+        return 0;
+      }
+      visiting.add(key);
+      let sum = 0;
+      for (const root of context.rootsDynkin) {
+        for (let step = 1; ; step += 1) {
+          const beta = add(labels, scale(root, step));
+          if (context.inner(beta, beta) > context.highestNorm + WEIGHT_INFO_EPS) break;
+          if (step > 10000) throw new Error("Freudenthal recursion did not reach the norm bound; choose a smaller dominant weight.");
+          const dominant = dominantDynkinRepresentative(context.cartanRows, beta);
+          if (!dominant) continue;
+          const value = multiplicity(dominant);
+          if (!value) continue;
+          sum += context.inner(beta, root) * value;
+        }
+      }
+      visiting.delete(key);
+      const rawValue = (2 * sum) / denominator;
+      const value = Number.isFinite(rawValue) ? Math.max(0, Math.round(rawValue)) : 0;
+      memo.set(key, value);
+      if (memo.size > WEIGHT_INFO_FREUDENTHAL_CAP) throw new Error(`Freudenthal recursion exceeded ${WEIGHT_INFO_FREUDENTHAL_CAP} dominant orbit representatives; choose a smaller dominant weight.`);
+      return value;
+    };
+    multiplicity.memo = memo;
+    return multiplicity;
+  }
+
+  function dynkinWeightProjectionCharacter(info) {
+    if (!info?.dominant) return { status: "dimensions require a dominant highest weight gamma", entries: [] };
+    const cacheKey = `${info.dynkinType}:${info.rank}:${dynkinVectorKey(info.gammaLabels)}`;
+    if (dynkinWeightCharacterCache.has(cacheKey)) return dynkinWeightCharacterCache.get(cacheKey);
+    try {
+      const bounded = boundedWeightProjectionCandidates(info.gammaLabels, info.cartanRows);
+      const context = buildWeightInfoFreudenthalContext(info.gammaLabels, info.cartanRows);
+      const multiplicity = weightInfoMultiplicityFreudenthal(context);
+      const basisRows = fundamentalWeightMatrixRows(info.dynkinType, info.rank);
+      const entries = [];
+      for (const candidate of bounded.points) {
+        const dominant = dominantDynkinRepresentative(info.cartanRows, candidate.labels);
+        if (!dominant) continue;
+        const value = multiplicity(dominant);
+        if (value <= 0) continue;
+        entries.push({
+          labels: candidate.labels.slice(),
+          ambient: multiplyMatrixVector(basisRows, candidate.labels),
+          value,
+          key: dynkinVectorKey(candidate.labels),
+        });
+        if (entries.length > WEIGHT_INFO_PROJECTION_POINT_CAP) {
+          throw new Error(`Projected dimensions contain more than ${WEIGHT_INFO_PROJECTION_POINT_CAP} points; choose a smaller dominant weight.`);
+        }
+      }
+      const result = {
+        status: "computed",
+        entries,
+        candidateCount: bounded.points.length,
+        statusNote: bounded.statusNote,
+      };
+      if (dynkinWeightCharacterCache.size > 24) dynkinWeightCharacterCache.clear();
+      dynkinWeightCharacterCache.set(cacheKey, result);
+      return result;
+    } catch (error) {
+      return { status: error.message, entries: [] };
+    }
+  }
+
+  function formatDynkinVectorDisplay(vector) {
+    const values = vector.map((value) => latticeCoefficientText(value));
+    return {
+      plain: `[${values.join(", ")}]`,
+      tex: `\\left[${values.join(", ")}\\right]`,
+    };
+  }
+
+  function dynkinBasisExpressionDisplay(coefficients, prefix) {
+    const symbol = prefix === "omega" ? "\\omega" : "\\alpha";
+    const labels = Array.from({ length: state.ambientDim }, (_, index) => ({
+      plain: `${prefix}_${index + 1}`,
+      tex: `${symbol}_{${index + 1}}`,
+    }));
+    return latticeCoefficientExpressionDisplay(coefficients, labels);
+  }
+
+  function isDynkinLatticePickCandidate(candidate) {
+    if (!candidate?.latticePoint) return false;
+    const object = state.objects.find((item) => item.id === candidate.objectId);
+    return !!object &&
+      objectTypeKey(object) === "lattice" &&
+      normalizeLatticeBasisMode(object.data?.basisMode) === "dynkin";
+  }
+
+  function dynkinWeightInfoForCandidate(candidate) {
+    if (!isDynkinLatticePickCandidate(candidate)) return null;
+    const object = state.objects.find((item) => item.id === candidate.objectId);
+    const data = object?.data || {};
+    const dynkinType = normalizeWeylDynkinType(data.dynkinType, state.ambientDim);
+    const kind = normalizeDynkinLatticeKind(data.dynkinLatticeKind);
+    try {
+      const omegaCoordinates = dynkinLatticeCoordinates(
+        "weight",
+        dynkinType,
+        candidate.ambient,
+        kind === "weight" ? candidate.latticeCoefficients : null
+      );
+      const alphaCoordinates = dynkinLatticeCoordinates(
+        "root",
+        dynkinType,
+        candidate.ambient,
+        kind === "root" ? candidate.latticeCoefficients : null
+      );
+      const gammaLabels = integralVectorOrNull(omegaCoordinates) || cleanDynkinLabels(omegaCoordinates);
+      const cartanRows = dynkinCartanMatrix(dynkinType, state.ambientDim);
+      const simpleCoordinates = dynkinLabelsToSimpleCoordinates(gammaLabels, cartanRows);
+      const simpleIntegral = integralVectorOrNull(simpleCoordinates);
+      const inner = dynkinInnerProductFromCartan(cartanRows);
+      const normValue = Math.sqrt(Math.max(0, inner(gammaLabels, gammaLabels)));
+      const dominant = isDominantDynkinLabels(gammaLabels);
+      let orbitSize = "not computed";
+      try {
+        const dominantRepresentative = dominantDynkinRepresentative(cartanRows, gammaLabels);
+        orbitSize = dominantRepresentative ? weylOrbitSizeDominantDynkin(dominantRepresentative, cartanRows) : "not computed";
+      } catch {
+        orbitSize = "not computed";
+      }
+      return {
+        object,
+        candidate,
+        kind,
+        dynkinType,
+        rank: state.ambientDim,
+        cartanRows,
+        gammaLabels,
+        omegaCoordinates,
+        alphaCoordinates,
+        simpleIntegral,
+        normValue,
+        dominant,
+        dimension: dominant ? weylDimensionDynkin(gammaLabels, cartanRows) : "not dominant",
+        orbitSize,
+        gammaDisplay: dynkinBasisExpressionDisplay(gammaLabels, "omega"),
+        alphaDisplay: simpleIntegral ? dynkinBasisExpressionDisplay(simpleIntegral, "alpha") : null,
+      };
+    } catch (error) {
+      return {
+        object,
+        candidate,
+        kind,
+        dynkinType,
+        rank: state.ambientDim,
+        error: error.message,
+      };
+    }
+  }
+
+  function appendWeightInfoRow(container, label, value) {
+    const row = document.createElement("div");
+    row.className = "slice-info-row";
+    const labelElement = document.createElement("span");
+    labelElement.className = "slice-info-label";
+    labelElement.textContent = label;
+    const valueElement = document.createElement("span");
+    valueElement.className = "slice-info-value";
+    if (typeof Node !== "undefined" && value instanceof Node) {
+      valueElement.append(value);
+    } else if (value && typeof value === "object" && ("plain" in value || "tex" in value)) {
+      const math = document.createElement("span");
+      setMathText(math, value.plain || "", value.tex || labelToTex(value.plain || ""));
+      valueElement.append(math);
+    } else {
+      valueElement.textContent = String(value ?? "");
+    }
+    row.append(labelElement, valueElement);
+    container.append(row);
+  }
+
+  function weightInfoDimensionControls() {
+    state.weightInfoDimensionMode = normalizeWeightInfoDimensionMode(state.weightInfoDimensionMode);
+    const controls = document.createElement("div");
+    controls.className = "slice-segmented";
+    controls.setAttribute("aria-label", "Weight dimension projection overlay");
+    [
+      ["none", "none"],
+      ["dots", "dots"],
+      ["numbers", "numbers"],
+    ].forEach(([mode, label]) => {
+      const button = document.createElement("button");
+      button.className = `slice-segment${state.weightInfoDimensionMode === mode ? " active" : ""}`;
+      button.type = "button";
+      button.dataset.weightInfoDimensionMode = mode;
+      button.textContent = label;
+      button.setAttribute("aria-pressed", state.weightInfoDimensionMode === mode ? "true" : "false");
+      controls.append(button);
+    });
+    return controls;
+  }
+
+  function renderWeightInfoCard(candidate = currentSelectedCandidate()) {
+    const output = $("slice-weight-info-out");
+    if (!output) return;
+    output.innerHTML = "";
+    const info = dynkinWeightInfoForCandidate(candidate);
+    if (!info) {
+      const note = document.createElement("span");
+      note.className = "slice-card-note";
+      note.textContent = "Click a Dynkin root or weight lattice point in the projection canvas.";
+      output.append(note);
+      return;
+    }
+    appendWeightInfoRow(output, "source", `${info.object.name} / ${info.candidate.label}`);
+    appendWeightInfoRow(output, "type", weylDynkinLabel(info.dynkinType, info.rank));
+    if (info.error) {
+      appendWeightInfoRow(output, "status", info.error);
+      return;
+    }
+    appendWeightInfoRow(output, "gamma", info.gammaDisplay);
+    appendWeightInfoRow(output, "Dynkin", formatDynkinVectorDisplay(info.gammaLabels));
+    appendWeightInfoRow(output, "simple", info.alphaDisplay || "not in root lattice");
+    appendWeightInfoRow(output, "|gamma|", fmt(info.normValue, 6));
+    appendWeightInfoRow(output, "dim V^gamma", info.dimension);
+    appendWeightInfoRow(output, "|W.gamma|", info.orbitSize);
+    appendWeightInfoRow(output, "dimensions", weightInfoDimensionControls());
+    if (state.weightInfoDimensionMode !== "none") {
+      const character = dynkinWeightProjectionCharacter(info);
+      if (character.status === "computed") {
+        appendWeightInfoRow(output, "projection", `${character.entries.length} points from ${character.candidateCount} candidates`);
+        if (character.statusNote) appendWeightInfoRow(output, "status", character.statusNote);
+      } else {
+        appendWeightInfoRow(output, "status", character.status || "dimension overlay unavailable");
+      }
+    }
+  }
+
+  function weightInfoDimensionDotRadius(value) {
+    const dim = Math.abs(finiteNumber(value, 1));
+    if (dim <= 1) return 5.8;
+    if (dim === 2) return 7.8;
+    if (dim === 3) return 9.2;
+    if (dim === 4) return 10.4;
+    return 12.0;
+  }
+
+  function drawWeightInfoDimensionOverlay(ctx, view) {
+    state.weightInfoDimensionMode = normalizeWeightInfoDimensionMode(state.weightInfoDimensionMode);
+    if (state.weightInfoDimensionMode === "none") return;
+    const info = dynkinWeightInfoForCandidate(currentSelectedCandidate());
+    if (!info || info.error || !info.dominant) return;
+    const character = dynkinWeightProjectionCharacter(info);
+    if (character.status !== "computed" || !character.entries.length) return;
+    const mode = state.weightInfoDimensionMode;
+    const selectedKey = dynkinVectorKey(info.gammaLabels);
+    const ratio = view.ratio || 1;
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (const entry of character.entries) {
+      const projected = projectAmbient(entry.ambient, view);
+      if (projected.frameCoords && !viewportPointInside(projected.frameCoords, state.viewport.boxRadius)) continue;
+      const selected = entry.key === selectedKey;
+      if (mode === "numbers") {
+        const text = String(entry.value);
+        ctx.font = `${Math.max(13, 13 * ratio)}px "JetBrains Mono", Consolas, monospace`;
+        const radius = Math.max(11.5 * ratio, ctx.measureText(text).width / 2 + 7.2 * ratio);
+        ctx.beginPath();
+        ctx.arc(projected.x, projected.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#dfeef9";
+        ctx.fill();
+        ctx.strokeStyle = selected ? "#111" : "#1f5f9c";
+        ctx.lineWidth = selected ? 2.0 * ratio : 1.35 * ratio;
+        ctx.stroke();
+        ctx.fillStyle = "#111";
+        ctx.fillText(text, projected.x, projected.y + 0.4 * ratio);
+      } else {
+        const radius = weightInfoDimensionDotRadius(entry.value) * ratio;
+        ctx.beginPath();
+        ctx.arc(projected.x, projected.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#dfeef9";
+        ctx.fill();
+        ctx.strokeStyle = "#1f5f9c";
+        ctx.lineWidth = selected ? 2.0 * ratio : 1.35 * ratio;
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   function frameMatrixToString(columns) {
     const rows = frameRows(columns);
     const header = `      ${columns.map((_, index) => `v${index + 1}`.padStart(7, " ")).join(" ")}`;
@@ -8041,9 +8812,12 @@
 
   function updateDebug() {
     const counts = collectCounts();
+    const picked = currentSelectedCandidate();
+    const pickedDisplay = pickedCandidateDisplay(picked);
+    const pickedStatus = pickedCandidateStatusDisplay(picked);
     const latticeWarningText = counts.latticeWarnings.length
       ? counts.latticeWarnings[0]
-      : `${counts.latticeProjectionDrawn}/${counts.latticeProjectionVisible} visible lattice pts from ${counts.latticeProjectionGenerated} ambient${counts.latticeProjectionSuppressed ? ` / ${counts.latticeProjectionSuppressed} root-owned hidden` : ""} / ${counts.sliceVoronoiHalfspaces} Voronoi halfspaces`;
+      : `${counts.latticeProjectionDrawn}/${counts.latticeProjectionVisible} visible lattice pts from ${counts.latticeProjectionGenerated} ambient${counts.latticeProjectionSuppressed ? ` / ${counts.latticeProjectionSuppressed} root-owned hidden` : ""} / ${counts.sliceVoronoiHalfspaces} Voronoi halfspaces${counts.latticeInfoMessages.length ? `; ${counts.latticeInfoMessages[0]}` : ""}`;
     const latticeCapText = counts.latticeProjectionDisplayCapped
       ? `drawing capped at ${counts.latticeProjectionDrawn}/${counts.latticeProjectionVisible} visible; reduce that lattice point-bound radius`
       : counts.latticeEnumerationCapped
@@ -8089,7 +8863,9 @@
       : statusMessage;
     $("debug-warnings").textContent = warningMessage;
     const sourceStatus = $("source-status");
-    if (!highlightWarning && counts.sliceWeylKlStatusFormula && warningMessage === klStatus) {
+    if (pickedStatus) {
+      renderSourceStatusMath(sourceStatus, pickedStatus.plain, pickedStatus.tex);
+    } else if (!highlightWarning && counts.sliceWeylKlStatusFormula && warningMessage === klStatus) {
       renderSourceStatusFormula(sourceStatus, counts.sliceWeylKlStatusFormula);
     } else if (!highlightWarning && counts.sliceWeylKlStatusParts && warningMessage === klStatus) {
       renderSourceStatusParts(sourceStatus, counts.sliceWeylKlStatusParts);
@@ -8099,9 +8875,7 @@
       renderSourceStatusText(sourceStatus, warningMessage);
     }
     $("debug-warnings").classList.toggle("highlight", highlightWarning);
-    $("source-status").classList.toggle("highlight", highlightWarning);
-    const picked = currentSelectedCandidate();
-    const pickedDisplay = pickedCandidateDisplay(picked);
+    $("source-status").classList.toggle("highlight", highlightWarning && !pickedStatus);
     const targetText = state.activeVectorTarget
       ? `${state.activeVectorTarget.objectName} / ${state.activeVectorTarget.slotLabel}`
       : "";
@@ -8122,6 +8896,7 @@
       { plain: `${viewportBoundLabel()} ${fmt(state.viewport.boxRadius, 2)}`, tex: `\\mathrm{${texText(viewportBoundLabel())}}\\ ${fmt(state.viewport.boxRadius, 2)}` },
       ...(pickedDisplay ? [{ plain: `picked ${pickedDisplay.plain}`, tex: `\\text{picked }${pickedDisplay.tex}` }] : []),
     ]);
+    renderWeightInfoCard(picked);
     queueMathTypeset();
   }
 
@@ -8275,6 +9050,7 @@
       latticeProjectionDisplayCapped: false,
       latticeEnumerationCapped: false,
       latticeWarnings: [],
+      latticeInfoMessages: [],
       latticeBuildMs: 0,
       voronoiProjectionVertices: 0,
       voronoiProjectionEdges: 0,
@@ -8301,7 +9077,10 @@
           counts.latticeProjectionSuppressed += finiteNumber(lattice.suppressedByRootLattice, 0);
           counts.latticeProjectionDisplayCapped = counts.latticeProjectionDisplayCapped || !!lattice.displayCapped;
           counts.latticeEnumerationCapped = counts.latticeEnumerationCapped || !!lattice.enumerationCapped;
-          if (lattice.status) counts.latticeWarnings.push(lattice.status);
+          if (lattice.status) {
+            if (lattice.infoOnly) counts.latticeInfoMessages.push(lattice.status);
+            else counts.latticeWarnings.push(lattice.status);
+          }
           if (object.data?.latticeStatus && /warning|missing|capped|rank/i.test(object.data.latticeStatus)) {
             counts.latticeWarnings.push(object.data.latticeStatus);
           }
@@ -8430,6 +9209,8 @@
     for (const object of state.objects) {
       if (object.visibleSlice && canDrawExact2DSlice(object)) drawExactSliceObject(ctx, view, object, { registerPick: true });
     }
+
+    drawWeightInfoDimensionOverlay(ctx, view);
 
     if (state.sourceMode === "add") drawObject(ctx, view, makePreviewObject(), { preview: true, registerPick: false });
     drawSelectedVertex(ctx, view);
@@ -10091,6 +10872,7 @@
         visible: 0,
         drawn: 0,
         suppressedByRootLattice: 0,
+        infoOnly: false,
         showPoints: true,
       };
       latticeProjectionStatsCache.set(object.id, {
@@ -10159,6 +10941,7 @@
       bounds: enumeration.bounds,
       maxShell: enumeration.maxShell,
       complete: !capped,
+      infoOnly: !enumeration.capped && !displayCapped && !!suppressionText,
       showPoints: data.showLatticePoints !== false,
     };
     latticeProjectionStatsCache.set(object.id, {
@@ -11864,6 +12647,7 @@
       const pickStatus = pickedCandidateStatusDisplay(candidate);
       state.lastWarning = pickStatus?.plain || `Picked ${candidate.objectName} / ${candidate.label}.`;
       state.lastWarningMath = pickStatus || null;
+      if (isDynkinLatticePickCandidate(candidate)) openCardByLabel("weight info in 2d slice");
       syncObjectSelect();
       syncObjectPanel();
       syncSourceMode();
