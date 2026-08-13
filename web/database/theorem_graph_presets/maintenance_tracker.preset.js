@@ -30,8 +30,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 66.9,
-      "y": 55.2,
+      "x": 84,
+      "y": 54.1,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -65,8 +65,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 106.4,
-      "y": 279
+      "x": 117.1,
+      "y": 270.8
     },
     {
       "id": "n39",
@@ -87,8 +87,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 263.2,
-      "y": 326.8
+      "x": 283.1,
+      "y": 334.9
     },
     {
       "id": "n58",
@@ -102,8 +102,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 255.2,
-      "y": 55.2
+      "x": 287,
+      "y": 54.1
     },
     {
       "id": "n60",
@@ -114,68 +114,20 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [x] checkbox can use right click to turn it into a yellow question symbol(The current \"[x]\" are quite different compared with previous one, looks like the symbol get smaller and the border is missing, could you fix it?)\n- [x] delete selected button is replaced by the return button in the subgraph, but we still need this delete selected button"
-        },
-        {
-          "id": "bug",
-          "label": "bug",
-          "type": "checkbox",
-          "text": "- [x] citation should be checked, if they are not used they should be removed\n- [x] When user change the \"cite as\" row all the node refering this reference will change the expression so that the reference link is not broken\n- [x] when deleted, the warning should also tell user which nodes or arrows cite this reference, so that user can clear them before delete it\n- [x] connect bug: when user is in modification of one node and try to connect the two other nodes, the modified node will cover the first node(where the arrow comes from), this is bad\n- [x] the graph and the subgraph can have different main canvas height, and don't affact each other\n- [x] dashed lines should have weaker force in the run layout process, and dotted lines even weaker"
+          "text": "\\cite{...} in reference chart can be touched. When touched, it shows the name of nodes/arrows which cites this article"
         }
       ],
       "setting": "",
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 519.6,
-      "y": 55.2
-    },
-    {
-      "id": "n61",
-      "type": "misc",
-      "label": "extra",
-      "details": [
-        {
-          "id": "goal",
-          "label": "goal",
-          "type": "checkbox",
-          "text": "allow user to move one node inside or outside"
-        }
+      "citationKeys": [
+        "..."
       ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 330.2,
-      "y": 90.5
-    },
-    {
-      "id": "n62",
-      "type": "misc",
-      "label": "others",
-      "details": [
-        {
-          "id": "goals",
-          "label": "goals",
-          "type": "checkbox",
-          "text": "- [x] export button being on the left of the update button\n- [x] when click a node or arrow, if node/arrow card is collapsed then it auto expands itself;\n- [x] when click a citation in node/arrow card, if reference card is collapsed then it auto expands itself(and node/arrow card preserve itself);"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 676,
-      "y": 150.9
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 591.6,
+      "y": 81.7
     },
     {
       "id": "n63",
@@ -196,8 +148,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 435.4,
-      "y": 325.2,
+      "x": 487,
+      "y": 334.9,
       "childGraph": {
         "title": "double click",
         "nodes": [
@@ -294,28 +246,6 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       }
     },
     {
-      "id": "n64",
-      "type": "misc",
-      "label": "Higher-Dimensional Slice Calculator",
-      "details": [
-        {
-          "id": "goals",
-          "label": "goals",
-          "type": "checkbox",
-          "text": "- [x] Add fundamental weights, simple roots and roots(as a point set, use can also choose \"positive\").\n- [x] If both weight lattice and cover root lattice (for the same Dynkin type) appear, then only the extra vertices of the weight lattice will appear, those coincided vertices will only appear for the UI of root lattice\n- [x] Add KL polynomials and length expression, from https://www.jgibson.id.au/lievis/affine_weyl"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 577,
-      "y": 251.6
-    },
-    {
       "id": "n65",
       "type": "misc",
       "label": "Acknowledgements",
@@ -330,7 +260,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "3-2d",
           "label": "3/2d",
           "type": "checkbox",
-          "text": "Isoball 4\nStephen's Sausage Roll\nThe Geometer's Sketchpad"
+          "text": "Isoball 4\nStephen's Sausage Roll\nThe Geometer's Sketchpad\nPlotTropCurve"
         },
         {
           "id": "updates",
@@ -346,8 +276,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 595.1,
-      "y": 326.8
+      "x": 633.7,
+      "y": 261.1
     },
     {
       "id": "n66",
@@ -358,7 +288,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goal",
           "label": "goal",
           "type": "checkbox",
-          "text": "change the field extension to two different field, with a single primitive generator\nTry to identify number field with labels in LMFDB\nfor a number field gives the lattice"
+          "text": "- [ ] change the field extension to two different field, with a single primitive generator\n- [x] Try to identify number field with labels in LMFDB\n- [x] for a number field gives the lattice"
         }
       ],
       "setting": "",
@@ -368,19 +298,19 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 324,
-      "y": 217.3
+      "x": 362.6,
+      "y": 110.1
     },
     {
-      "id": "n67",
+      "id": "n68",
       "type": "misc",
-      "label": "prompt",
+      "label": "Ramified Minigames",
       "details": [
         {
-          "id": "ex",
-          "label": "ex",
+          "id": "bugs",
+          "label": "bugs",
           "type": "checkbox",
-          "text": "Continue. I think this counterexample may also work for arbitrary big genus curve? If so could you also so the counterexample for arbitrary genus?"
+          "text": "For Chinese checker game:\nLooks like the player who join the room can no longer pick the sides, but this is weird, as the player who join the room don't has the correct game, the color choice is confusing. The code should allow player who join the room pick the color after join the room and then confirm\nIt is weird that player who join the room can only move after the player who create the room move, I still wish every player can move\nAnd if a color is controlled by another player, then there should be no highlight for this color on this side\nAdd the name for the player, so user knows who is playing\nHow do you usually indicate when it's the opponent's turn in online Go games? Like a \"not allowed\" cursor?"
         }
       ],
       "setting": "",
@@ -390,8 +320,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 502.9,
-      "y": 153.3
+      "x": 366,
+      "y": 246.7
     }
   ],
   "arrows": [
@@ -445,114 +375,51 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
-    },
-    {
-      "id": "a50",
-      "sourceId": "n61",
-      "targetId": "n60",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a51",
-      "sourceId": "n62",
-      "targetId": "n60",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a52",
-      "sourceId": "n66",
-      "targetId": "n64",
-      "label": "",
-      "remark": "realize two important lattices in number theory",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
     }
   ],
   "view": {
-    "selectedId": "n66",
+    "selectedId": "n65",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 382,
+    "canvasHeight": 389,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 1.8901,
+    "canvasAspectRatio": 1.9381,
     "relativeNodePositions": {
       "n4": {
-        "x": 0.0927,
-        "y": 0.1444
+        "x": 0.1116,
+        "y": 0.1392
       },
       "n37": {
-        "x": 0.1474,
-        "y": 0.7304
+        "x": 0.1555,
+        "y": 0.6962
       },
       "n39": {
-        "x": 0.3646,
-        "y": 0.8556
+        "x": 0.3759,
+        "y": 0.8608
       },
       "n58": {
-        "x": 0.3534,
-        "y": 0.1444
+        "x": 0.3811,
+        "y": 0.1392
       },
       "n60": {
-        "x": 0.7196,
-        "y": 0.1444
-      },
-      "n61": {
-        "x": 0.4573,
-        "y": 0.2368
-      },
-      "n62": {
-        "x": 0.9363,
-        "y": 0.3949
+        "x": 0.7856,
+        "y": 0.2099
       },
       "n63": {
-        "x": 0.6031,
-        "y": 0.8514
-      },
-      "n64": {
-        "x": 0.7991,
-        "y": 0.6587
+        "x": 0.6468,
+        "y": 0.8608
       },
       "n65": {
-        "x": 0.8242,
-        "y": 0.8556
+        "x": 0.8416,
+        "y": 0.6711
       },
       "n66": {
-        "x": 0.4488,
-        "y": 0.5688
+        "x": 0.4816,
+        "y": 0.283
       },
-      "n67": {
-        "x": 0.6966,
-        "y": 0.4012
+      "n68": {
+        "x": 0.486,
+        "y": 0.6341
       }
     },
     "selectedReferenceKeys": []

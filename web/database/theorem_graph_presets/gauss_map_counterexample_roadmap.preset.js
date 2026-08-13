@@ -41,7 +41,7 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "color": "#8b3a2a",
       "fillColor": "#fbefee",
       "x": 327.6,
-      "y": 29.1,
+      "y": 54,
       "childGraph": {
         "title": "1. Canonical systems refresh",
         "nodes": [
@@ -182,7 +182,7 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "color": "#46786e",
       "fillColor": "#eef7f4",
       "x": 114.8,
-      "y": 96.7
+      "y": 96.6
     },
     {
       "id": "n5",
@@ -230,10 +230,10 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
         "ColomboPirolaPreviato1994",
         "Maier2003"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 243,
-      "y": 175.6
+      "color": "#46786e",
+      "fillColor": "#eef7f4",
+      "x": 241.2,
+      "y": 218.1
     },
     {
       "id": "n7",
@@ -283,8 +283,8 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
         "AriasEtAl2016",
         "blueprint"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
+      "color": "#46786e",
+      "fillColor": "#eef7f4",
       "x": 453.6,
       "y": 262.8
     },
@@ -320,7 +320,7 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
       "x": 277.6,
-      "y": 329.3
+      "y": 329.7
     },
     {
       "id": "n10",
@@ -344,8 +344,8 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 508.8,
-      "y": 414.7
+      "x": 508.9,
+      "y": 412
     },
     {
       "id": "n11",
@@ -369,8 +369,8 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 292,
-      "y": 443.8
+      "x": 291.9,
+      "y": 412
     }
   ],
   "arrows": [
@@ -563,7 +563,7 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
     }
   ],
   "view": {
-    "selectedId": "n7",
+    "selectedId": "n9",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasHeight": 466,
@@ -572,7 +572,7 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
     "relativeNodePositions": {
       "n1": {
         "x": 0.4356,
-        "y": 0.0624
+        "y": 0.1159
       },
       "n2": {
         "x": 0.8536,
@@ -591,8 +591,8 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
         "y": 0.7027
       },
       "n6": {
-        "x": 0.3232,
-        "y": 0.3768
+        "x": 0.3208,
+        "y": 0.468
       },
       "n7": {
         "x": 0.8793,
@@ -604,15 +604,15 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       },
       "n9": {
         "x": 0.3692,
-        "y": 0.7067
+        "y": 0.7075
       },
       "n10": {
         "x": 0.6767,
-        "y": 0.8898
+        "y": 0.8841
       },
       "n11": {
         "x": 0.3882,
-        "y": 0.9524
+        "y": 0.8841
       }
     },
     "selectedReferenceKeys": []
@@ -948,4 +948,3 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
     }
   ]
 };
-
