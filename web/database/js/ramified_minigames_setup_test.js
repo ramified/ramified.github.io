@@ -444,6 +444,27 @@ function testGameOverWhenFullAndBlocked() {
   assert.strictEqual(game.simulateRound(state, game.DIRS.W, { spawn: false }).changed, false);
 }
 
+function testBombKeepsFullBoardPlayable() {
+  const state = game.createGameState('classic-4x4');
+  const bombIndex = game.indexOf(2, 2, 4);
+  const values = [
+    2, 4, 2, 4,
+    4, 0, 4, 2,
+    2, 4, 2, 4,
+    4, 2, 4, 2
+  ];
+  state.boxes = values
+    .map((value, index) => value ? { id: index + 1, index, value } : null)
+    .filter(Boolean);
+  state.bombs = [{ index: bombIndex, kind: game.BOMB_KINDS.BLUE, value: 2 }];
+  state.nextBoxId = 17;
+  assert.strictEqual(game.emptyExistingIndices(state).length, 0);
+  assert.strictEqual(game.isGameOver(state), false);
+  game.directionsForPreset(state.preset).forEach((dir) => {
+    assert.strictEqual(game.simulateRound(state, dir, { spawn: false }).changed, false);
+  });
+}
+
 function testOrdinaryMergeOnce() {
   const state = stateWithBoxes('classic-4x4', [
     box(1, 1, 1, 2),
@@ -6493,6 +6514,7 @@ function run() {
   testRoundSpawnWeights();
   testNoSpawnAfterNoop();
   testGameOverWhenFullAndBlocked();
+  testBombKeepsFullBoardPlayable();
   testOrdinaryMergeOnce();
   testNewlyMergedTileBlocksLaterPush();
   testLongGluedChainConvergesBeforeBackMerge();

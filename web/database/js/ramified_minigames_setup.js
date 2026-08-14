@@ -21293,6 +21293,7 @@
 
   function isGameOver(state) {
     if (!state || emptyExistingIndices(state).length) return false;
+    if (is2048Game(state) && bombCount(state) > 0) return false;
     if (explosionModeDirections(state).length) return false;
     return directionsForPreset(state.preset).every((dir) => !simulateRound(state, dir, { spawn: false }).changed);
   }
