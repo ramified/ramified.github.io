@@ -28,17 +28,62 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
   "nodes": [
     {
       "id": "lem_schoen_family",
-      "type": "lemma",
-      "label": "schoen-family",
-      "setting": "A one-parameter Schoen surface family inside principally polarized abelian fourfolds.",
-      "condition": "Choose a symmetric smoothing with conormal Gauss degree eight.",
-      "result": "The family gives the geometric stage for the half-spin construction and preserves the needed symmetry and non-degeneracy.",
-      "proofSketch": "Use the explicit Schoen degeneration and the Albanese embedding to control the central fiber and the smoothing.",
+      "type": "misc",
+      "label": "Schoen surface",
+      "details": [
+        {
+          "id": "goal",
+          "label": "goal",
+          "type": "checkbox",
+          "text": "compute the hodge numbers of Schoen surfaces\nprove that the ambient abelian variety is of Weil type"
+        },
+        {
+          "id": "setting",
+          "label": "setting",
+          "type": "textbox",
+          "text": "A one-parameter Schoen surface family inside principally polarized abelian fourfolds."
+        },
+        {
+          "id": "condition",
+          "label": "condition",
+          "type": "textbox",
+          "text": "Choose a symmetric smoothing with conormal Gauss degree eight."
+        },
+        {
+          "id": "result",
+          "label": "result",
+          "type": "textbox",
+          "text": "The family gives the geometric stage for the half-spin construction and preserves the needed symmetry and non-degeneracy."
+        },
+        {
+          "id": "proof-sketch",
+          "label": "proof sketch",
+          "type": "textbox",
+          "text": "Use the explicit Schoen degeneration and the Albanese embedding to control the central fiber and the smoothing."
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
       "citationKeys": [],
-      "color": "#1f2937",
-      "fillColor": "#f8fafc",
-      "x": 186.1,
-      "y": 178.2
+      "color": "#46786e",
+      "fillColor": "#eef7f4",
+      "x": 185.4,
+      "y": 218.9,
+      "childGraph": {
+        "title": "Schoen surface",
+        "nodes": [],
+        "arrows": [],
+        "view": {
+          "selectedId": "",
+          "layoutAvoidOverlap": true,
+          "layoutRunning": false,
+          "canvasHeight": 560,
+          "canvasRatioLocked": false,
+          "canvasAspectRatio": 1.7143
+        }
+      }
     },
     {
       "id": "lem_wd4_monodromy",
@@ -49,24 +94,24 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
       "result": "The exact monodromy is the even signed Weyl group W(D_4).",
       "proofSketch": "Irreducibility plus nonsquare discriminant gives S_4 on pairs, and local A_1 monodromy supplies the even sign changes.",
       "citationKeys": [],
-      "color": "#1f2937",
-      "fillColor": "#f8fafc",
+      "color": "#8b5f2a",
+      "fillColor": "#fff7df",
       "x": 383.1,
       "y": 95.8
     },
     {
       "id": "lem_normalized_middle",
       "type": "lemma",
-      "label": "normalized-middle-specialization",
+      "label": "normalized middle specialization",
       "setting": "A finite base change labels the signed Gauss fibers and forms the half-spin sums.",
       "condition": "Specialize the two half-spin conormal cycles along the Schoen degeneration.",
       "result": "The middle Segre difference specializes to an explicit class on J x J.",
       "proofSketch": "Normalize the finite incidence correspondence, confine excess terms, then determine the three multiplicities.",
       "citationKeys": [],
-      "color": "#1f2937",
-      "fillColor": "#f8fafc",
+      "color": "#8b5f2a",
+      "fillColor": "#fff7df",
       "x": 223,
-      "y": 305.2
+      "y": 305.9
     },
     {
       "id": "lem_nonzero_middle",
@@ -77,8 +122,8 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
       "result": "The middle Segre difference is nonzero.",
       "proofSketch": "The class restricts to theta squared over two on the diagonal slice, yielding a nonzero intersection number.",
       "citationKeys": [],
-      "color": "#1f2937",
-      "fillColor": "#f8fafc",
+      "color": "#8b5f2a",
+      "fillColor": "#fff7df",
       "x": 497.1,
       "y": 315
     },
@@ -91,9 +136,9 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
       "result": "The conjecture is disproved: the two projectivized Lagrangian cycles need not have the same homology class.",
       "proofSketch": "Combine the family, monodromy, specialization, and nonzero middle Segre difference; equality would specialize to zero, contradiction.",
       "citationKeys": [],
-      "color": "#1f2937",
-      "fillColor": "#f8fafc",
-      "x": 568.8,
+      "color": "#8b5f2a",
+      "fillColor": "#fff7df",
+      "x": 570.1,
       "y": 201.6
     }
   ],
@@ -192,7 +237,7 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
     },
     "nodeSerial": 6,
     "arrowSerial": 9,
-    "selectedId": "lem_nonzero_middle",
+    "selectedId": "lem_schoen_family",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasHeight": 369,

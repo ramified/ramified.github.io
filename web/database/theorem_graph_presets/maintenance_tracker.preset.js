@@ -38,7 +38,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 83.9,
+      "x": 83.3,
       "y": 54,
       "childGraph": {
         "title": "Sheaf Calculator",
@@ -73,8 +73,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 116.9,
-      "y": 270.1
+      "x": 115.5,
+      "y": 263.4
     },
     {
       "id": "n39",
@@ -95,8 +95,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 282.7,
-      "y": 334
+      "x": 278.2,
+      "y": 327
     },
     {
       "id": "n58",
@@ -110,7 +110,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 286.6,
+      "x": 280.2,
       "y": 54
     },
     {
@@ -134,8 +134,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 589.9,
-      "y": 81.4
+      "x": 627.2,
+      "y": 54
     },
     {
       "id": "n63",
@@ -156,8 +156,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 486.4,
-      "y": 334,
+      "x": 490.1,
+      "y": 327,
       "childGraph": {
         "title": "double click",
         "nodes": [
@@ -284,8 +284,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 632.9,
-      "y": 260.4
+      "x": 650.1,
+      "y": 267.8
     },
     {
       "id": "n66",
@@ -306,8 +306,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 362.2,
-      "y": 109.8
+      "x": 364.6,
+      "y": 100.8
     },
     {
       "id": "n68",
@@ -318,7 +318,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "bugs",
           "label": "bugs",
           "type": "checkbox",
-          "text": "For Chinese checker game:\nLooks like the player who join the room can no longer pick the sides, but this is weird, as the player who join the room don't has the correct game, the color choice is confusing. The code should allow player who join the room pick the color after join the room and then confirm\nIt is weird that player who join the room can only move after the player who create the room move, I still wish every player can move\nAnd if a color is controlled by another player, then there should be no highlight for this color on this side\nAdd the name for the player, so user knows who is playing\nHow do you usually indicate when it's the opponent's turn in online Go games? Like a \"not allowed\" cursor?"
+          "text": "- [x] For Chinese checker game:\n- [x] Looks like the player who join the room can no longer pick the sides, but this is weird, as the player who join the room don't has the correct game, the color choice is confusing. The code should allow player who join the room pick the color after join the room and then confirm\n- [x] It is weird that player who join the room can only move after the player who create the room move, I still wish every player can move\n- [x] And if a color is controlled by another player, then there should be no highlight for this color on this side\n- [x] Add the name for the player, so user knows who is playing\n- [x] How do you usually indicate when it's the opponent's turn in online Go games? Like a \"not allowed\" cursor?"
         }
       ],
       "setting": "",
@@ -326,10 +326,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 365.5,
-      "y": 246
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 355.4,
+      "y": 247.4
     },
     {
       "id": "n69",
@@ -356,8 +356,21 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 521.7,
-      "y": 160.8
+      "x": 498.9,
+      "y": 184.2,
+      "childGraph": {
+        "title": "prompt",
+        "nodes": [],
+        "arrows": [],
+        "view": {
+          "selectedId": "",
+          "layoutAvoidOverlap": true,
+          "layoutRunning": false,
+          "canvasHeight": 560,
+          "canvasRatioLocked": false,
+          "canvasAspectRatio": 1.7143
+        }
+      }
     }
   ],
   "arrows": [
@@ -431,52 +444,52 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     }
   ],
   "view": {
-    "selectedId": "n4",
+    "selectedId": "n66",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 388,
+    "canvasHeight": 381,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 1.9381,
+    "canvasAspectRatio": 1.9764,
     "relativeNodePositions": {
       "n4": {
-        "x": 0.1116,
-        "y": 0.1392
+        "x": 0.1106,
+        "y": 0.1417
       },
       "n37": {
-        "x": 0.1555,
-        "y": 0.6962
+        "x": 0.1534,
+        "y": 0.6914
       },
       "n39": {
-        "x": 0.3759,
-        "y": 0.8608
+        "x": 0.3694,
+        "y": 0.8583
       },
       "n58": {
-        "x": 0.3811,
-        "y": 0.1392
+        "x": 0.3721,
+        "y": 0.1417
       },
       "n60": {
-        "x": 0.7845,
-        "y": 0.2099
+        "x": 0.8329,
+        "y": 0.1417
       },
       "n63": {
-        "x": 0.6468,
-        "y": 0.8608
+        "x": 0.6508,
+        "y": 0.8583
       },
       "n65": {
-        "x": 0.8416,
-        "y": 0.6711
+        "x": 0.8633,
+        "y": 0.7028
       },
       "n66": {
-        "x": 0.4816,
-        "y": 0.283
+        "x": 0.4841,
+        "y": 0.2645
       },
       "n68": {
-        "x": 0.486,
-        "y": 0.6341
+        "x": 0.472,
+        "y": 0.6494
       },
       "n69": {
-        "x": 0.6938,
-        "y": 0.4145
+        "x": 0.6626,
+        "y": 0.4834
       }
     },
     "selectedReferenceKeys": []
