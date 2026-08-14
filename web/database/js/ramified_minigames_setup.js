@@ -80,6 +80,16 @@
     SOKOBAN: 'sokoban',
     FIDE_CHESS: 'fide-chess'
   };
+  const BOMB_KINDS = {
+    BLUE: 'blue',
+    RED: 'red'
+  };
+  const BOMB_ART_OPTIONS = [
+    { id: 'png-1', label: 'PNG skull', kind: 'png', src: 'assets/ramified_minigames/bomb-option-1.png' },
+    { id: 'png-2', label: 'PNG stripe', kind: 'png', src: 'assets/ramified_minigames/bomb-option-2.png' },
+    { id: 'png-3', label: 'PNG vortex', kind: 'png', src: 'assets/ramified_minigames/bomb-option-3.png' },
+    { id: 'canvas-1', label: 'canvas spark', kind: 'canvas' }
+  ];
   const PLACEMENT_PIECE_RADIUS_DEFAULT = 43;
   const PLACEMENT_PIECE_RADIUS_MIN = 24;
   const PLACEMENT_PIECE_RADIUS_MAX = 100;
@@ -396,6 +406,7 @@
   let fullscreenRestartPending = false;
   let fullscreenRestartConfirmTimer = null;
   let onlineState = null;
+  const bombImageCache = new Map();
 
   function init() {
     refs.canvas = document.getElementById('mosaic-canvas');
@@ -493,6 +504,8 @@
     refs.debugToggle = document.getElementById('debug-toggle');
     refs.debugTools = document.getElementById('debug-tools');
     refs.debugTileValue = document.getElementById('debug-tile-value');
+    refs.debugBombTool = document.getElementById('debug-bomb-tool');
+    refs.bombArtStyle = document.getElementById('bomb-art-style');
     refs.sokobanObjectSize = document.getElementById('sokoban-object-size');
     refs.sokobanObjectSizeValue = document.getElementById('sokoban-object-size-value');
     refs.sokobanGlowInner = document.getElementById('sokoban-glow-inner');
@@ -583,6 +596,8 @@
     if (refs.chineseCheckersEndJump) refs.chineseCheckersEndJump.addEventListener('click', endChineseCheckersJumpFromUi);
     if (refs.boxStyle) refs.boxStyle.addEventListener('change', render);
     if (refs.highlightNewBoxes) refs.highlightNewBoxes.addEventListener('change', render);
+    if (refs.debugBombTool) refs.debugBombTool.addEventListener('change', syncDebugModeUi);
+    if (refs.bombArtStyle) refs.bombArtStyle.addEventListener('change', render);
     if (refs.begin) refs.begin.addEventListener('click', beginGameFromUi);
     if (refs.canvasStartBegin) refs.canvasStartBegin.addEventListener('click', handleCanvasStartBeginClick);
     if (refs.onlineCreateRoom) refs.onlineCreateRoom.addEventListener('click', createOnlineRoomFromUi);
@@ -667,6 +682,7 @@
     syncOnlineTurnFeedbackDurationOutput();
     syncDebugModeUi();
     syncCanvasDisplayModeUi();
+    initBombImages();
     initOnlinePlay();
     setPresetSelectLoading();
     const catalogLoad = ensurePresetCatalogLoaded();
@@ -3363,6 +3379,7 @@
       'existingTiles',
       'nextBoxId',
       'newBoxIds',
+      'bombs',
       'stones',
       'tokens',
       'discs',
@@ -4844,7 +4861,7 @@
     if (isChineseCheckersGame(game)) return 'export or import Chinese Checkers status';
     if (isFideChessGame(game)) return 'export or import FIDE Chess status';
     if (isSokobanGame(game)) return 'step through Sokoban movement and inspect directions';
-    return 'click a tile to assign the tile value';
+    return 'click a tile to assign a value or bomb';
   }
 
   function syncDebugModeUi() {
@@ -4854,6 +4871,8 @@
     }
     if (refs.debugTools) refs.debugTools.hidden = !debugMode;
     if (refs.debugTileValue) refs.debugTileValue.disabled = !debugMode || !is2048Game(game);
+    if (refs.debugBombTool) refs.debugBombTool.disabled = !debugMode || !is2048Game(game);
+    if (refs.bombArtStyle) refs.bombArtStyle.disabled = !debugMode || !is2048Game(game);
     if (refs.onlineTurnFeedbackDuration) refs.onlineTurnFeedbackDuration.disabled = !debugMode;
     if (refs.onlineTurnFeedbackPreview) refs.onlineTurnFeedbackPreview.disabled = !debugMode;
     syncConnectFourHoleEditControl();
@@ -5341,7 +5360,7 @@
         ? 'Rearrange all queens so no queen threatens another across the transported square-board routes.'
         : 'Move FIDE chess pieces across transported square-board routes. Checkmate wins; stalemate and dead positions draw.';
     } else {
-      rules = 'Slide boxes with arrow keys, move buttons, or a swipe. Matching powers of two merge across the glued board.';
+      rules = 'Slide boxes with arrow keys, move buttons, or a swipe. Matching powers of two merge; explosions leave clickable bombs.';
     }
     return {
       title: `${gameName} quick rules`,
@@ -5414,16 +5433,63 @@
       handleSokobanCanvasClick(event);
       return;
     }
+    if (is2048Game(game)) {
+      handle2048CanvasClick(event);
+      return;
+    }
+  }
+
+  function handle2048CanvasClick(event) {
+    if (!game) return;
+    const target = tileFromCanvasEvent(event);
+    if (!target) return;
+    if (debugMode) {
+      handle2048DebugCanvasClick(target);
+      return;
+    }
+    if (handle2048BombClick(target) && event && event.preventDefault) event.preventDefault();
+  }
+
+  function handle2048BombClick(target) {
+    if (!target || !game || game.phase !== 'ready' || currentAnimation || eventQueue.length || stepPaused) return false;
+    const bomb = bombAtIndex(game, target.index);
+    if (!bomb) return false;
+    const result = detonateBombAt(game, target.index);
+    if (!result.changed) return false;
+    pushUndoSnapshot(`${bomb.kind} bomb ${target.label}`);
+    game = result.state;
+    game.phase = 'ready';
+    game.ending = '';
+    clearNoMoveTrial();
+    const cleared = result.clearedBoxIds.length;
+    const detail = bomb.kind === BOMB_KINDS.RED
+      ? `${cleared} adjacent number${cleared === 1 ? '' : 's'} cleared`
+      : 'tile restored';
+    syncStatus(`${bomb.kind} bomb`, detail, 'ready');
+    startBombDetonationFeedback(target.index, bomb, result);
+    syncControls();
+    refreshDebugExportIfNeeded();
+    return true;
+  }
+
+  function handle2048DebugCanvasClick(target) {
     if (!debugMode || !game) return;
     if (currentAnimation) {
       syncStatus('debug waits', 'finish the active animation or undo first', 'debug');
       return;
     }
     if (!is2048Game(game)) return;
-    const target = tileFromCanvasEvent(event);
-    if (!target) return;
     if (game.removed.has(target.index)) {
       syncStatus('debug tile blocked', `${target.label} is removed`, 'debug');
+      return;
+    }
+    const tool = selectedDebugBombTool();
+    if (tool !== 'number') {
+      debugSetBombAtTarget(target, tool);
+      return;
+    }
+    if (bombAtIndex(game, target.index)) {
+      syncStatus('debug tile blocked', `${target.label} has a bomb`, 'debug');
       return;
     }
     const value = normalizedDebugTileValue();
@@ -5460,6 +5526,35 @@
       game.debugMessage = `debug: ${target.label} = ${value}`;
       syncStatus(`debug: ${target.label} = ${value}`, `${game.boxes.length} active box${game.boxes.length === 1 ? '' : 'es'}`, 'debug');
     }
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
+  function debugSetBombAtTarget(target, tool) {
+    const existing = bombAtIndex(game, target.index);
+    stopPlayback();
+    if (tool === 'clear') {
+      if (!existing) {
+        syncStatus(`debug: ${target.label} has no bomb`, `${bombCount(game)} bomb${bombCount(game) === 1 ? '' : 's'}`, 'debug');
+        return;
+      }
+      pushUndoSnapshot(`debug clear bomb ${target.label}`);
+      removeBombAtIndex(game, target.index);
+      game.debugMessage = `debug: ${target.label} bomb cleared`;
+      syncStatus(`debug: ${target.label} bomb cleared`, `${bombCount(game)} bomb${bombCount(game) === 1 ? '' : 's'}`, 'debug');
+    } else {
+      const kind = normalizeBombKind(tool);
+      if (!kind) return;
+      pushUndoSnapshot(`debug ${kind} bomb ${target.label}`);
+      removeBoxesAtIndex(game, target.index);
+      setBombAtIndex(game, target.index, kind, kind === BOMB_KINDS.RED ? 128 : 2);
+      game.debugMessage = `debug: ${target.label} = ${kind} bomb`;
+      syncStatus(`debug: ${target.label} = ${kind} bomb`, `${bombCount(game)} bomb${bombCount(game) === 1 ? '' : 's'}`, 'debug');
+    }
+    game.phase = 'ready';
+    game.ending = '';
+    clearNoMoveTrial();
     render();
     syncControls();
     refreshDebugExportIfNeeded();
@@ -6344,8 +6439,164 @@
     return raw;
   }
 
+  function selectedDebugBombTool() {
+    const value = refs.debugBombTool ? refs.debugBombTool.value : 'number';
+    if (value === BOMB_KINDS.BLUE || value === BOMB_KINDS.RED || value === 'clear') return value;
+    return 'number';
+  }
+
+  function selectedBombArtStyle() {
+    const value = refs.bombArtStyle ? refs.bombArtStyle.value : 'png-1';
+    return BOMB_ART_OPTIONS.some((option) => option.id === value) ? value : 'png-1';
+  }
+
+  function uniqueIntegerList(values) {
+    return Array.from(new Set(Array.isArray(values) ? values : []))
+      .filter((value) => Number.isInteger(value));
+  }
+
+  function initBombImages() {
+    if (typeof Image === 'undefined') return;
+    BOMB_ART_OPTIONS
+      .filter((option) => option.kind === 'png' && option.src)
+      .forEach((option) => {
+        if (bombImageCache.has(option.id)) return;
+        const image = new Image();
+        image.onload = render;
+        image.onerror = render;
+        image.src = option.src;
+        bombImageCache.set(option.id, image);
+      });
+  }
+
   function isPowerOfTwo(value) {
     return Number.isSafeInteger(value) && value > 0 && Math.log2(value) % 1 === 0;
+  }
+
+  function normalizeBombKind(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === BOMB_KINDS.RED) return BOMB_KINDS.RED;
+    if (normalized === BOMB_KINDS.BLUE) return BOMB_KINDS.BLUE;
+    return '';
+  }
+
+  function bombKindForExplosionValue(value) {
+    return Number(value) > 64 ? BOMB_KINDS.RED : BOMB_KINDS.BLUE;
+  }
+
+  function cloneBomb(bomb) {
+    return {
+      index: Number.isInteger(bomb && bomb.index) ? bomb.index : -1,
+      kind: normalizeBombKind(bomb && bomb.kind) || bombKindForExplosionValue(bomb && bomb.value),
+      value: Math.max(0, Number(bomb && bomb.value) || 0)
+    };
+  }
+
+  function bombAtIndex(state, index) {
+    if (!state || !Array.isArray(state.bombs)) return null;
+    return state.bombs.find((bomb) => bomb.index === index) || null;
+  }
+
+  function bombCount(state) {
+    return Array.isArray(state && state.bombs) ? state.bombs.length : 0;
+  }
+
+  function bombIndexSet(state) {
+    return new Set((state && Array.isArray(state.bombs) ? state.bombs : []).map((bomb) => bomb.index));
+  }
+
+  function isBombBlockedIndex(state, index) {
+    return !!(is2048Game(state) && bombAtIndex(state, index));
+  }
+
+  function is2048BlockedIndex(state, index) {
+    return !!(
+      state
+      && (
+        (state.removed instanceof Set && state.removed.has(index))
+        || isBombBlockedIndex(state, index)
+      )
+    );
+  }
+
+  function setBombAtIndex(state, index, kind, value = 0) {
+    if (!state || !Number.isInteger(index)) return null;
+    if (!Array.isArray(state.bombs)) state.bombs = [];
+    const normalizedKind = normalizeBombKind(kind) || bombKindForExplosionValue(value);
+    const bomb = {
+      index,
+      kind: normalizedKind,
+      value: Math.max(0, Number(value) || 0)
+    };
+    state.bombs = state.bombs.filter((item) => item.index !== index);
+    state.bombs.push(bomb);
+    state.bombs.sort((left, right) => left.index - right.index || left.kind.localeCompare(right.kind));
+    return bomb;
+  }
+
+  function removeBombAtIndex(state, index) {
+    if (!state || !Array.isArray(state.bombs)) return null;
+    const existing = bombAtIndex(state, index);
+    if (!existing) return null;
+    state.bombs = state.bombs.filter((bomb) => bomb.index !== index);
+    return existing;
+  }
+
+  function detonateBombAt(sourceState, index) {
+    const sourceBomb = bombAtIndex(sourceState, index);
+    if (!sourceBomb) {
+      return {
+        changed: false,
+        state: sourceState,
+        bomb: null,
+        clearedBoxIds: [],
+        clearedIndices: [],
+        rangeIndices: [],
+        message: 'no bomb there'
+      };
+    }
+    const state = cloneGameState(sourceState);
+    const bomb = removeBombAtIndex(state, index);
+    const clearedBoxIds = [];
+    const clearedIndices = [];
+    const rangeIndices = [];
+    if (bomb && bomb.kind === BOMB_KINDS.RED) {
+      const clearIndices = blastIndicesWithinDistance(state, index, 1);
+      clearIndices.forEach((clearIndex) => {
+        if (!rangeIndices.includes(clearIndex)) rangeIndices.push(clearIndex);
+      });
+      const clearBoxes = boxesAtIndices(state, clearIndices);
+      clearBoxes.forEach((box) => {
+        clearedBoxIds.push(box.id);
+        if (!clearedIndices.includes(box.index)) clearedIndices.push(box.index);
+        removeBox(state, box.id);
+      });
+    }
+    return {
+      changed: true,
+      state,
+      bomb: bomb || cloneBomb(sourceBomb),
+      clearedBoxIds,
+      clearedIndices,
+      rangeIndices,
+      message: bomb && bomb.kind === BOMB_KINDS.RED
+        ? `${clearedBoxIds.length} adjacent number${clearedBoxIds.length === 1 ? '' : 's'} cleared`
+        : 'tile restored'
+    };
+  }
+
+  function startBombDetonationFeedback(index, bomb, result) {
+    const kind = normalizeBombKind(bomb && bomb.kind) || BOMB_KINDS.BLUE;
+    startPlacementFeedback({
+      kind: 'bombDetonation',
+      index,
+      bombKind: kind,
+      value: Math.max(0, Number(bomb && bomb.value) || 0),
+      rangeIndices: uniqueIntegerList(result && result.rangeIndices),
+      clearedIndices: uniqueIntegerList(result && result.clearedIndices),
+      startedAt: now(),
+      duration: eventDuration({ kind: 'detonateBomb', bombKind: kind })
+    });
   }
 
   function createHistorySnapshot(label) {
@@ -7181,6 +7432,9 @@
       existingTiles: existingTileCount(game),
       nextBoxId: game.nextBoxId,
       newBoxIds: Array.from(game.newBoxIds || []).sort((a, b) => a - b),
+      bombs: (game.bombs || [])
+        .map((bomb) => bombExport(bomb, preset.cols))
+        .sort((a, b) => a.index - b.index || a.kind.localeCompare(b.kind)),
       boxes: game.boxes
         .map((box) => boxExport(box, preset.cols))
         .sort((a, b) => a.index - b.index || a.id - b.id),
@@ -7203,6 +7457,15 @@
       index: box.index,
       ...rowCol(box.index, cols),
       value: box.value
+    };
+  }
+
+  function bombExport(bomb, cols) {
+    return {
+      index: bomb.index,
+      ...rowCol(bomb.index, cols),
+      kind: normalizeBombKind(bomb.kind) || bombKindForExplosionValue(bomb.value),
+      value: Math.max(0, Number(bomb.value) || 0)
     };
   }
 
@@ -7832,6 +8095,7 @@
       };
     }
     const boxes = normalizeStatusBoxes(payload.boxes, preset, removed);
+    const bombs = normalizeStatusBombs(payload.bombs, preset, removed, boxes);
     const nextBoxId = Math.max(
       normalizeNonnegativeInteger(payload.nextBoxId, 1),
       boxes.reduce((max, box) => Math.max(max, box.id + 1), 1)
@@ -7842,6 +8106,7 @@
       phase: normalizeStatusPhase(payload.phase),
       removed,
       boxes,
+      bombs,
       newBoxIds,
       nextBoxId,
       score: normalizeNonnegativeInteger(payload.score, 0),
@@ -8171,6 +8436,25 @@
       if (usedIds.has(id)) throw new Error(`status box id ${id} is duplicated`);
       usedIds.add(id);
       return { id, index: tileIndex, value };
+    });
+  }
+
+  function normalizeStatusBombs(entries, preset, removed, boxes = []) {
+    if (entries == null) return [];
+    if (!Array.isArray(entries)) throw new Error('status bombs must be an array');
+    const used = new Set();
+    const occupied = new Set((boxes || []).map((box) => box.index));
+    return entries.map((entry, index) => {
+      const tile = normalizeImportedTileRef(entry, preset.rows, preset.cols);
+      if (!tile) throw new Error(`status bomb ${index + 1} has an invalid tile`);
+      const tileIndex = indexOf(tile.row, tile.col, preset.cols);
+      if (removed.has(tileIndex)) throw new Error(`status bomb ${index + 1} is on a removed tile`);
+      if (occupied.has(tileIndex)) throw new Error(`status bomb ${index + 1} overlaps a number box`);
+      if (used.has(tileIndex)) throw new Error(`status bomb ${index + 1} duplicates another bomb`);
+      used.add(tileIndex);
+      const value = Math.max(0, Number(entry && entry.value) || 0);
+      const kind = normalizeBombKind(entry && entry.kind) || bombKindForExplosionValue(value);
+      return { index: tileIndex, kind, value };
     });
   }
 
@@ -8908,6 +9192,9 @@
     const ctx = refs.ctx;
     ctx.clearRect(0, 0, logicalWidth, logicalHeight);
     const explosionMode = is2048Game(game) && isExplosionModeActive(game);
+    const bombBlocked = is2048Game(game) ? bombIndexSet(game) : new Set();
+    const boardBlocked = new Set(Array.from(removed));
+    bombBlocked.forEach((index) => boardBlocked.add(index));
     ctx.fillStyle = explosionMode ? '#fff0ee' : '#fffdf8';
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
@@ -8918,11 +9205,15 @@
     const polishedVertexDisplay = vertexDisplay && displayStyle === 'polished-vertex';
     if (!vertexDisplay) {
       geometry.cells.forEach((cell, index) => {
-        if (cell) drawTile(ctx, geometry, cell.row, cell.col, removed.has(index), explosionMode, displayStyle);
+        if (cell) {
+          drawTile(ctx, geometry, cell.row, cell.col, boardBlocked.has(index), explosionMode, displayStyle, {
+            markRemoved: removed.has(index)
+          });
+        }
       });
     }
 
-    drawBackgroundBoundaries(ctx, geometry, preset, removed);
+    drawBackgroundBoundaries(ctx, geometry, preset, boardBlocked);
     drawGlueEdges(ctx, geometry, preset, hoveredGlue);
     if (isPlacementGame(game)) {
       if (polishedVertexDisplay) drawPolishedPlacementVertexBoard(ctx, geometry, game);
@@ -8947,6 +9238,7 @@
         drawDebugDirectionIndicators(ctx, geometry);
       } else {
         drawNumberBoxes(ctx, geometry, game ? game.boxes : []);
+        drawBombs(ctx, geometry, game ? game.bombs : []);
         drawAnimationOverlays(ctx, geometry);
         drawDebugDirectionIndicators(ctx, geometry);
       }
@@ -9174,7 +9466,7 @@
     };
   }
 
-  function drawTile(ctx, geom, row, col, removed, explosionMode = false, displayStyle = 'center') {
+  function drawTile(ctx, geom, row, col, removed, explosionMode = false, displayStyle = 'center', options = {}) {
     const cell = geom.cells[indexOf(row, col, geom.cols)];
     const points = tilePoints(cell.x, cell.y, geom.radius * 0.96, geom.lattice);
     ctx.beginPath();
@@ -9189,7 +9481,7 @@
     ctx.lineWidth = 1;
     ctx.fill();
     ctx.stroke();
-    if (!removed) return;
+    if (!removed || options.markRemoved === false) return;
     const mark = geom.radius * 0.28;
     ctx.strokeStyle = 'rgba(128,98,69,0.35)';
     ctx.lineWidth = 1;
@@ -9289,6 +9581,178 @@
         highlight: shouldHighlightBox(box)
       });
     });
+  }
+
+  function drawBombs(ctx, geom, bombs) {
+    const items = Array.isArray(bombs) ? bombs : [];
+    if (!items.length) return;
+    const hidden = hiddenBombIndicesForAnimation();
+    items.forEach((bomb) => {
+      if (hidden.has(bomb.index)) return;
+      drawBombAtIndex(ctx, geom, bomb.index, bomb.kind, 1);
+    });
+  }
+
+  function hiddenBombIndicesForAnimation() {
+    const hidden = new Set();
+    if (!currentAnimation || !currentAnimation.event) return hidden;
+    const event = currentAnimation.event;
+    if (event.kind === 'placeBomb') hidden.add(event.index);
+    return hidden;
+  }
+
+  function drawBombAtIndex(ctx, geom, index, kind, scale = 1) {
+    const cell = geom.cells[index];
+    if (!cell) return;
+    drawBombAtPoint(ctx, geom, cell, kind, scale);
+  }
+
+  function drawBombAtPoint(ctx, geom, point, kind, scale = 1) {
+    const bombKind = normalizeBombKind(kind) || BOMB_KINDS.BLUE;
+    const artId = selectedBombArtStyle();
+    const option = BOMB_ART_OPTIONS.find((item) => item.id === artId) || BOMB_ART_OPTIONS[0];
+    drawBombBlockedHalo(ctx, geom, point, bombKind, scale);
+    if (option && option.kind === 'png' && drawPngBomb(ctx, geom, point, bombKind, scale, option)) return;
+    drawCanvasSparkBomb(ctx, geom, point, bombKind, scale);
+  }
+
+  function drawBombBlockedHalo(ctx, geom, point, kind, scale) {
+    const color = kind === BOMB_KINDS.RED ? '#b23a48' : '#1f7a8c';
+    ctx.save();
+    ctx.globalAlpha *= 0.75;
+    ctx.fillStyle = kind === BOMB_KINDS.RED ? 'rgba(178,58,72,0.13)' : 'rgba(31,122,140,0.13)';
+    ctx.strokeStyle = kind === BOMB_KINDS.RED ? 'rgba(178,58,72,0.48)' : 'rgba(31,122,140,0.48)';
+    ctx.lineWidth = Math.max(1.2, geom.radius * 0.045);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = geom.radius * 0.16;
+    boxPath(ctx, point, geom.radius * 1.46 * scale, geom.lattice);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawPngBomb(ctx, geom, point, kind, scale, option) {
+    const image = bombImageCache.get(option.id);
+    if (!image || !image.complete || !image.naturalWidth || !image.naturalHeight) return false;
+    const size = geom.radius * 1.62 * scale;
+    ctx.save();
+    ctx.globalAlpha *= 0.95;
+    ctx.drawImage(image, point.x - size / 2, point.y - size / 2, size, size);
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.fillStyle = kind === BOMB_KINDS.RED ? 'rgba(255,48,54,0.42)' : 'rgba(0,172,219,0.42)';
+    ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
+    ctx.restore();
+    return true;
+  }
+
+  function bombTint(kind) {
+    return kind === BOMB_KINDS.RED
+      ? { glow: '#ff3b30', core: '#d94736', spark: '#ffd166', dark: '#25141a' }
+      : { glow: '#1f9fbd', core: '#2b9eb3', spark: '#d8f6ff', dark: '#15252e' };
+  }
+
+  function drawCanvasSparkBomb(ctx, geom, point, kind, scale) {
+    const tint = bombTint(kind);
+    const radius = geom.radius * 0.52 * scale;
+    ctx.save();
+    ctx.translate(point.x, point.y);
+    drawRoundBombBody(ctx, radius, tint);
+    ctx.strokeStyle = '#6b412b';
+    ctx.lineWidth = Math.max(2, radius * 0.16);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(radius * 0.16, -radius * 0.9);
+    ctx.quadraticCurveTo(radius * 0.34, -radius * 1.22, radius * 0.72, -radius * 1.28);
+    ctx.stroke();
+    drawBombSpark(ctx, radius * 0.86, -radius * 1.34, radius * 0.26, tint);
+    ctx.restore();
+  }
+
+  function drawCanvasFuseBomb(ctx, geom, point, kind, scale) {
+    const tint = bombTint(kind);
+    const radius = geom.radius * 0.5 * scale;
+    ctx.save();
+    ctx.translate(point.x, point.y);
+    drawRoundBombBody(ctx, radius, tint);
+    ctx.fillStyle = '#20252c';
+    roundedRectPath(ctx, -radius * 0.34, -radius * 0.88, radius * 0.68, radius * 0.34, radius * 0.12);
+    ctx.fill();
+    ctx.strokeStyle = tint.glow;
+    ctx.lineWidth = Math.max(2, radius * 0.12);
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 0.64, Math.PI * 0.05, Math.PI * 0.95);
+    ctx.stroke();
+    drawBombSpark(ctx, radius * 0.04, -radius * 1.18, radius * 0.2, tint);
+    ctx.restore();
+  }
+
+  function drawCanvasVortexBomb(ctx, geom, point, kind, scale) {
+    const tint = bombTint(kind);
+    const radius = geom.radius * 0.52 * scale;
+    ctx.save();
+    ctx.translate(point.x, point.y);
+    drawRoundBombBody(ctx, radius, tint);
+    ctx.strokeStyle = tint.glow;
+    ctx.lineWidth = Math.max(2, radius * 0.16);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let step = 0; step < 26; step += 1) {
+      const t = step / 25;
+      const angle = t * Math.PI * 2.2;
+      const r = radius * (0.08 + t * 0.62);
+      const x = Math.cos(angle) * r;
+      const y = Math.sin(angle) * r;
+      if (step === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    drawBombSpark(ctx, radius * 0.68, -radius * 1.12, radius * 0.22, tint);
+    ctx.restore();
+  }
+
+  function drawRoundBombBody(ctx, radius, tint) {
+    const gradient = ctx.createRadialGradient
+      ? ctx.createRadialGradient(-radius * 0.34, -radius * 0.38, radius * 0.12, 0, 0, radius)
+      : null;
+    if (gradient && typeof gradient.addColorStop === 'function') {
+      gradient.addColorStop(0, '#f3fbff');
+      gradient.addColorStop(0.18, '#5b6570');
+      gradient.addColorStop(0.62, tint.dark);
+      gradient.addColorStop(1, '#090b0f');
+    }
+    ctx.save();
+    ctx.shadowColor = tint.glow;
+    ctx.shadowBlur = radius * 0.38;
+    ctx.fillStyle = gradient && typeof gradient.addColorStop === 'function' ? gradient : tint.dark;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = tint.glow;
+    ctx.lineWidth = Math.max(1.2, radius * 0.08);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBombSpark(ctx, x, y, radius, tint) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = tint.spark;
+    ctx.strokeStyle = tint.glow;
+    ctx.lineWidth = Math.max(1, radius * 0.18);
+    ctx.beginPath();
+    for (let i = 0; i < 8; i += 1) {
+      const angle = (Math.PI * 2 * i) / 8;
+      const r = i % 2 === 0 ? radius : radius * 0.38;
+      const px = Math.cos(angle) * r;
+      const py = Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawSokobanGame(ctx, geom, state) {
@@ -12136,7 +12600,19 @@
       if (age >= duration) return false;
       const progress = Math.max(0, Math.min(1, age / duration));
       if (feedback.kind === 'onlineTurnBlocked') drawOnlineTurnFeedback(ctx, geom, feedback, progress);
+      if (feedback.kind === 'bombDetonation') drawBombDetonationFeedback(ctx, geom, feedback, progress);
       return true;
+    });
+  }
+
+  function drawBombDetonationFeedback(ctx, geom, feedback, progress) {
+    drawBombBlastEffect(ctx, geom, {
+      center: feedback.index,
+      kind: feedback.bombKind,
+      value: feedback.value,
+      rangeIndices: feedback.rangeIndices || [],
+      clearedIndices: feedback.clearedIndices || [],
+      progress
     });
   }
 
@@ -12945,6 +13421,17 @@
       drawRemovalFlash(ctx, geom, event.index, progress);
       return;
     }
+    if (event.kind === 'placeBomb') {
+      drawBombBlastEffect(ctx, geom, {
+        center: event.index,
+        kind: event.bombKind,
+        value: event.value,
+        rangeIndices: event.rangeIndices || [],
+        progress
+      });
+      drawBombAtIndex(ctx, geom, event.index, event.bombKind, Math.max(0.12, progress));
+      return;
+    }
     if (event.kind === 'clearNumbers') {
       event.indices.forEach((index) => drawRemovalFlash(ctx, geom, index, progress * 0.72));
       return;
@@ -12998,6 +13485,8 @@
     } else if (event.kind === 'explode') {
       drawDebugExplosionArrows(ctx, geom, event);
     } else if (event.kind === 'removeTile') {
+      drawDebugTileTarget(ctx, geom, event.index, debugIndicatorColor('explode'));
+    } else if (event.kind === 'placeBomb') {
       drawDebugTileTarget(ctx, geom, event.index, debugIndicatorColor('explode'));
     } else if (event.kind === 'clearNumbers') {
       (event.indices || []).forEach((index) => drawDebugTileTarget(ctx, geom, index, debugIndicatorColor('clear')));
@@ -13200,6 +13689,7 @@
     if (event.kind === 'merge') hideMergeBoxes(hidden, event);
     if (event.kind === 'explode') hideExplosionBoxes(hidden, event);
     if (event.kind === 'removeTile' && event.removeBoxIds) event.removeBoxIds.forEach((id) => hidden.add(id));
+    if (event.kind === 'placeBomb' && event.removeBoxIds) event.removeBoxIds.forEach((id) => hidden.add(id));
     if (event.kind === 'clearNumbers' && event.removeBoxIds) event.removeBoxIds.forEach((id) => hidden.add(id));
     if (event.kind === 'spawn') hidden.add(event.boxId);
     return hidden;
@@ -13246,7 +13736,13 @@
     const flashProgress = event.moves && event.moves.length
       ? Math.max(0, (progress - 0.42) / 0.58)
       : progress;
-    drawExplosionFlash(ctx, geom, event.center, flashProgress, event.value);
+    drawBombBlastEffect(ctx, geom, {
+      center: event.center,
+      kind: event.large ? BOMB_KINDS.RED : bombKindForExplosionValue(event.value),
+      value: event.value,
+      rangeIndices: event.rangeIndices || [],
+      progress: flashProgress
+    });
   }
 
   function drawGluedMove(ctx, geom, move, progress) {
@@ -13461,6 +13957,179 @@
     ctx.restore();
   }
 
+  function drawBombBlastEffect(ctx, geom, options = {}) {
+    const centerIndex = options.center;
+    const center = geom.cells[centerIndex];
+    if (!center) return;
+    const kind = normalizeBombKind(options.kind) || bombKindForExplosionValue(options.value);
+    const progress = clampNumber(options.progress, 0, 1, 0);
+    const palette = bombEffectPalette(kind);
+    const rangeIndices = uniqueIntegerList(options.rangeIndices);
+    const cleared = new Set(uniqueIntegerList(options.clearedIndices));
+    const pulse = Math.max(0, Math.sin(progress * Math.PI));
+    rangeIndices.forEach((index) => drawBlastRay(ctx, geom, centerIndex, index, progress, pulse, palette));
+    rangeIndices.forEach((index) => drawBlastTileFlash(ctx, geom, index, progress, pulse, palette, cleared.has(index)));
+    drawBombShockwave(ctx, geom, center, progress, pulse, palette, rangeIndices.length > 0);
+    drawBombSparkBurst(ctx, geom, center, progress, pulse, palette);
+  }
+
+  function bombEffectPalette(kind) {
+    if (kind === BOMB_KINDS.RED) {
+      return {
+        fill: 'rgba(255,59,48,0.34)',
+        strongFill: 'rgba(255,107,53,0.5)',
+        stroke: 'rgba(178,58,72,0.92)',
+        glow: 'rgba(255,48,54,0.68)',
+        spark: 'rgba(255,209,102,0.95)',
+        ring: 'rgba(255,253,248,0.78)'
+      };
+    }
+    return {
+      fill: 'rgba(31,159,189,0.3)',
+      strongFill: 'rgba(94,234,212,0.44)',
+      stroke: 'rgba(31,122,140,0.9)',
+      glow: 'rgba(0,172,219,0.64)',
+      spark: 'rgba(216,246,255,0.92)',
+      ring: 'rgba(255,253,248,0.72)'
+    };
+  }
+
+  function drawBlastRay(ctx, geom, centerIndex, index, progress, pulse, palette) {
+    if (pulse <= 0.001) return;
+    const segments = blastRayRenderSegments(geom, centerIndex, index);
+    if (!segments.length) return;
+    const reach = easeOut(clampNumber((progress - 0.05) / 0.48, 0, 1, 0));
+    ctx.save();
+    ctx.globalAlpha = pulse * 0.72;
+    ctx.strokeStyle = palette.stroke;
+    ctx.shadowColor = palette.glow;
+    ctx.shadowBlur = Math.max(4, geom.radius * 0.22);
+    ctx.lineWidth = Math.max(2, geom.radius * 0.08);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (ctx.setLineDash) ctx.setLineDash([geom.radius * 0.18, geom.radius * 0.14]);
+    segments.forEach((segment) => drawBlastRaySegment(ctx, geom, segment, reach));
+    if (ctx.setLineDash) ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function blastRayRenderSegments(geom, centerIndex, targetIndex) {
+    const routed = game && placementLineRenderSegments(game, geom, centerIndex, targetIndex);
+    if (Array.isArray(routed) && routed.length) return routed;
+    const center = geom.cells[centerIndex];
+    const target = geom.cells[targetIndex];
+    if (!center || !target) return [];
+    return [{
+      start: { x: center.x, y: center.y },
+      end: { x: target.x, y: target.y }
+    }];
+  }
+
+  function drawBlastRaySegment(ctx, geom, segment, reach) {
+    if (!segment || !segment.start || !segment.end) return;
+    const dx = segment.end.x - segment.start.x;
+    const dy = segment.end.y - segment.start.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 0.01) return;
+    const ux = dx / length;
+    const uy = dy / length;
+    const startTrim = Math.min(length * 0.18, geom.radius * 0.34);
+    const endTrim = Math.min(length * 0.08, geom.radius * 0.18);
+    const travel = Math.max(0, length - startTrim - endTrim) * reach;
+    if (travel < 0.01) return;
+    const start = {
+      x: segment.start.x + ux * startTrim,
+      y: segment.start.y + uy * startTrim
+    };
+    const end = {
+      x: segment.start.x + ux * (startTrim + travel),
+      y: segment.start.y + uy * (startTrim + travel)
+    };
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+  }
+
+  function drawBlastTileFlash(ctx, geom, index, progress, pulse, palette, cleared) {
+    const cell = geom.cells[index];
+    if (!cell || pulse <= 0.001) return;
+    const scale = cleared ? 1.58 : 1.42;
+    ctx.save();
+    ctx.globalAlpha = pulse * (cleared ? 0.72 : 0.42);
+    ctx.fillStyle = cleared ? palette.strongFill : palette.fill;
+    ctx.strokeStyle = cleared ? palette.stroke : palette.glow;
+    ctx.lineWidth = Math.max(1.6, geom.radius * (cleared ? 0.085 : 0.055));
+    boxPath(ctx, cell, geom.radius * scale, geom.lattice);
+    ctx.fill();
+    ctx.stroke();
+    if (cleared) {
+      const slash = geom.radius * (0.34 + easeOut(progress) * 0.18);
+      ctx.strokeStyle = palette.ring;
+      ctx.lineWidth = Math.max(1.4, geom.radius * 0.055);
+      ctx.beginPath();
+      ctx.moveTo(cell.x - slash, cell.y - slash * 0.58);
+      ctx.lineTo(cell.x + slash, cell.y + slash * 0.58);
+      ctx.moveTo(cell.x + slash * 0.58, cell.y - slash);
+      ctx.lineTo(cell.x - slash * 0.58, cell.y + slash);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawBombShockwave(ctx, geom, center, progress, pulse, palette, hasRange) {
+    const eased = easeOut(progress);
+    const baseRadius = geom.radius * (hasRange ? 0.7 : 0.52);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 0.58 * (1 - eased));
+    ctx.fillStyle = palette.fill;
+    ctx.shadowColor = palette.glow;
+    ctx.shadowBlur = Math.max(6, geom.radius * 0.32);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, geom.radius * (0.42 + eased * (hasRange ? 1.85 : 1.28)), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 0.82 * pulse);
+    ctx.strokeStyle = palette.ring;
+    ctx.lineWidth = Math.max(1.8, geom.radius * 0.07);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, baseRadius + eased * geom.radius * (hasRange ? 1.75 : 1.05), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = palette.stroke;
+    ctx.lineWidth = Math.max(1.4, geom.radius * 0.045);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, geom.radius * (0.28 + eased * 0.72), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBombSparkBurst(ctx, geom, center, progress, pulse, palette) {
+    if (pulse <= 0.001) return;
+    const directions = geom.lattice && Array.isArray(geom.lattice.angles)
+      ? geom.lattice.angles
+      : [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, pulse * 1.12);
+    ctx.strokeStyle = palette.spark;
+    ctx.lineWidth = Math.max(1.4, geom.radius * 0.055);
+    ctx.lineCap = 'round';
+    directions.forEach((angle, index) => {
+      const stagger = ((index % 2) * 0.08);
+      const local = clampNumber((progress - stagger) / 0.72, 0, 1, 0);
+      const start = geom.radius * (0.22 + local * 0.18);
+      const end = geom.radius * (0.64 + easeOut(local) * 0.72);
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      ctx.beginPath();
+      ctx.moveTo(center.x + cos * start, center.y + sin * start);
+      ctx.lineTo(center.x + cos * end, center.y + sin * end);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
   function drawRemovalFlash(ctx, geom, index, progress) {
     const cell = geom.cells[index];
     if (!cell) return;
@@ -13556,6 +14225,7 @@
       phase: 'setup',
       removed: initialRemovedSet(preset),
       boxes: [],
+      bombs: [],
       newBoxIds: new Set(),
       nextBoxId: 1,
       score: 0,
@@ -16552,7 +17222,7 @@
     const total = state.preset.rows * state.preset.cols;
     const empty = [];
     for (let index = 0; index < total; index += 1) {
-      if (!state.removed.has(index) && !occupied.has(index)) empty.push(index);
+      if (!is2048BlockedIndex(state, index) && !occupied.has(index)) empty.push(index);
     }
     return empty;
   }
@@ -19670,13 +20340,14 @@
           explosion.center,
           explosion.value,
           explosion.removeBoxIds,
-          explosion.moves
+          explosion.moves,
+          explosionRangeIndices(state, explosion.center, explosion.value)
         ));
       const moveEntries = moves.map((result) => {
         const boxId = result.boxId || (result.actor && result.actor.id);
         if (explodedBoxIds.has(boxId)) return { result, boxId, skipped: true };
         const box = findBox(state, boxId);
-        if (!box || state.removed.has(result.transition.index)) {
+        if (!box || is2048BlockedIndex(state, result.transition.index)) {
           return { result, boxId, box, skipped: true, deleteActor: !!result.actor };
         }
         const from = Number.isInteger(result.from)
@@ -20195,13 +20866,19 @@
     };
   }
 
-  function explosionAnimationEvent(center, value, removeBoxIds, moves = []) {
+  function explosionRangeIndices(state, center, value) {
+    if (bombKindForExplosionValue(value) !== BOMB_KINDS.RED) return [];
+    return blastIndicesWithinDistance(state, center, 1);
+  }
+
+  function explosionAnimationEvent(center, value, removeBoxIds, moves = [], rangeIndices = []) {
     return {
       kind: 'explode',
       center,
       value,
       large: value > 64,
       removeBoxIds: Array.from(new Set(removeBoxIds)),
+      rangeIndices: uniqueIntegerList(rangeIndices),
       moves: moves.map(animationMoveFromResult)
     };
   }
@@ -20268,21 +20945,19 @@
 
   function addExplosionEvents(state, events, center, value, removeBoxIds, moves = [], options = {}) {
     const centerIds = new Set(removeBoxIds);
-    const large = value > 64;
-    const blastRadius = Math.max(0, normalizeNonnegativeInteger(options.blastRadius, large ? 1 : 0));
-    const clearIndices = blastRadius > 0 ? blastIndicesWithinDistance(state, center, blastRadius) : [];
-    const clearBoxIds = boxesAtIndices(state, clearIndices).map((box) => box.id);
-    if (options.animate !== false) events.push(explosionAnimationEvent(center, value, Array.from(centerIds), moves));
-    events.push({ kind: 'removeTile', index: center, removeBoxIds: Array.from(centerIds), value });
-    if (clearIndices.length) {
-      events.push({
-        kind: 'clearNumbers',
-        indices: clearIndices,
-        removeBoxIds: clearBoxIds
-      });
-    }
-    Array.from(centerIds).concat(clearBoxIds).forEach((id) => removeBox(state, id));
-    state.removed.add(center);
+    const bombKind = bombKindForExplosionValue(value);
+    const rangeIndices = explosionRangeIndices(state, center, value);
+    if (options.animate !== false) events.push(explosionAnimationEvent(center, value, Array.from(centerIds), moves, rangeIndices));
+    events.push({
+      kind: 'placeBomb',
+      index: center,
+      bombKind,
+      removeBoxIds: Array.from(centerIds),
+      rangeIndices,
+      value
+    });
+    Array.from(centerIds).forEach((id) => removeBox(state, id));
+    setBombAtIndex(state, center, bombKind, value);
   }
 
   function applyEvent(targetState, event) {
@@ -20301,7 +20976,7 @@
       return;
     }
     if (event.kind === 'move') {
-      if (targetState.removed.has(event.to)) return;
+      if (is2048BlockedIndex(targetState, event.to)) return;
       if (boxesAtIndex(targetState, event.to).some((box) => box.id !== event.boxId)) return;
       const box = findBox(targetState, event.boxId);
       if (box) box.index = event.to;
@@ -20316,6 +20991,11 @@
       targetState.removed.add(event.index);
       return;
     }
+    if (event.kind === 'placeBomb') {
+      event.removeBoxIds.forEach((id) => removeBox(targetState, id));
+      setBombAtIndex(targetState, event.index, event.kindName || event.bombKind, event.value);
+      return;
+    }
     if (event.kind === 'clearNumbers') {
       event.removeBoxIds.forEach((id) => removeBox(targetState, id));
       return;
@@ -20325,7 +21005,7 @@
       return;
     }
     if (event.kind === 'spawn') {
-      if (!findBox(targetState, event.boxId) && !targetState.removed.has(event.index)) {
+      if (!findBox(targetState, event.boxId) && !is2048BlockedIndex(targetState, event.index)) {
         targetState.boxes.push({ id: event.boxId, index: event.index, value: event.value });
         targetState.nextBoxId = Math.max(targetState.nextBoxId, event.boxId + 1);
       }
@@ -20410,12 +21090,12 @@
       });
       moves.forEach((move) => {
         if (blocked.has(move.boxId)) return;
-        if (!findBox(targetState, move.boxId) || targetState.removed.has(move.to)) return;
+        if (!findBox(targetState, move.boxId) || is2048BlockedIndex(targetState, move.to)) return;
         movingAway.add(move.boxId);
       });
       moves.forEach((move) => {
         if (blocked.has(move.boxId)) return;
-        if (!findBox(targetState, move.boxId) || targetState.removed.has(move.to)) {
+        if (!findBox(targetState, move.boxId) || is2048BlockedIndex(targetState, move.to)) {
           blocked.add(move.boxId);
           changed = true;
           return;
@@ -20485,7 +21165,7 @@
     const direct = directNeighborIndex(state, index, dir);
     if (direct != null) return { kind: 'direct', index: direct, dir };
     const partner = gluedPartner(preset, index, dir);
-    if (!partner || state.removed.has(partner.index)) return null;
+    if (!partner || is2048BlockedIndex(state, partner.index)) return null;
     return {
       kind: 'glued',
       index: partner.index,
@@ -20505,7 +21185,7 @@
     const next = neighbor(pos.row, pos.col, dir, preset);
     if (!next) return null;
     const nextIndex = indexOf(next.row, next.col, preset.cols);
-    if (state.removed.has(nextIndex)) return null;
+    if (is2048BlockedIndex(state, nextIndex)) return null;
     if (cutEdgeKeySet(preset).has(cutKey(index, nextIndex))) return null;
     return nextIndex;
   }
@@ -20535,7 +21215,7 @@
         if (item.distance >= maxDistance) return;
         for (const dir of directionsForPreset(state.preset)) {
           const next = surfaceSuccessor(state, item.index, dir);
-          if (!next || next.index === center || state.removed.has(next.index) || seen.has(next.index)) continue;
+          if (!next || next.index === center || is2048BlockedIndex(state, next.index) || seen.has(next.index)) continue;
           seen.add(next.index);
           out.add(next.index);
           nextFrontier.push({ index: next.index, distance: item.distance + 1 });
@@ -20631,7 +21311,17 @@
     const afterBoxes = after.boxes
       .map((box) => `${box.id}:${box.index}:${box.value}:${Number.isInteger(box.z) ? box.z : ''}`)
       .sort();
-    return beforeBoxes.some((entry, index) => entry !== afterBoxes[index]);
+    if (beforeBoxes.some((entry, index) => entry !== afterBoxes[index])) return true;
+    const beforeBombs = bombSignatureEntries(before);
+    const afterBombs = bombSignatureEntries(after);
+    if (beforeBombs.length !== afterBombs.length) return true;
+    return beforeBombs.some((entry, index) => entry !== afterBombs[index]);
+  }
+
+  function bombSignatureEntries(state) {
+    return (state && Array.isArray(state.bombs) ? state.bombs : [])
+      .map((bomb) => `${bomb.index}:${normalizeBombKind(bomb.kind) || BOMB_KINDS.BLUE}:${Math.max(0, Number(bomb.value) || 0)}`)
+      .sort();
   }
 
   function cloneGameState(source) {
@@ -20809,6 +21499,7 @@
       phase: source.phase,
       removed: new Set(source.removed),
       boxes: source.boxes.map((box) => ({ id: box.id, index: box.index, value: box.value })),
+      bombs: (source.bombs || []).map(cloneBomb).filter((bomb) => bomb.index >= 0),
       newBoxIds: new Set(source.newBoxIds || []),
       nextBoxId: source.nextBoxId,
       score: source.score,
@@ -20830,7 +21521,7 @@
     const total = state.preset.rows * state.preset.cols;
     const empty = [];
     for (let index = 0; index < total; index += 1) {
-      if (!state.removed.has(index) && !occupied.has(index)) empty.push(index);
+      if (!is2048BlockedIndex(state, index) && !occupied.has(index)) empty.push(index);
     }
     return empty;
   }
@@ -22484,12 +23175,12 @@
     if (refs.scoreLabel) refs.scoreLabel.textContent = 'Score';
     if (refs.highestLabel) refs.highestLabel.textContent = 'Highest tile';
     if (refs.existingLabel) refs.existingLabel.textContent = 'Existing tiles';
-    if (refs.removedLabel) refs.removedLabel.textContent = 'Removed tiles';
+    if (refs.removedLabel) refs.removedLabel.textContent = 'Blocked tiles';
     if (refs.roundLabel) refs.roundLabel.textContent = 'Round';
     if (refs.score) refs.score.textContent = String(game.score || 0);
     if (refs.highest) refs.highest.textContent = String(highestValue(game));
     if (refs.existing) refs.existing.textContent = String(existingTileCount(game));
-    if (refs.removed) refs.removed.textContent = String(game.removed.size);
+    if (refs.removed) refs.removed.textContent = String(blockedTileCount(game));
     if (refs.round) refs.round.textContent = String(game.round || 0);
   }
 
@@ -22947,6 +23638,8 @@
     }
     if (event.kind === 'bounceGroup') return Math.max(100, base * 0.9);
     if (event.kind === 'explode') return Math.max(120, base * 0.85);
+    if (event.kind === 'detonateBomb') return Math.max(event.bombKind === BOMB_KINDS.RED ? 220 : 150, base * (event.bombKind === BOMB_KINDS.RED ? 1.05 : 0.78));
+    if (event.kind === 'placeBomb') return Math.max(140, base * 0.76);
     if (event.kind === 'removeTile' || event.kind === 'clearNumbers') return Math.max(90, base * 0.55);
     if (event.kind === 'spawn') return Math.max(100, base * 0.72);
     return base;
@@ -22977,7 +23670,18 @@
   }
 
   function existingTileCount(state) {
-    return (state.preset.rows * state.preset.cols) - state.removed.size;
+    return (state.preset.rows * state.preset.cols) - blockedTileCount(state);
+  }
+
+  function blockedTileCount(state) {
+    if (!state || !state.preset) return 0;
+    const blocked = new Set(state.removed || []);
+    if (is2048Game(state)) {
+      (state.bombs || []).forEach((bomb) => {
+        if (Number.isInteger(bomb.index)) blocked.add(bomb.index);
+      });
+    }
+    return blocked.size;
   }
 
   function dirLabel(dir, preset) {
@@ -23477,6 +24181,13 @@
       boxes: state.boxes
         .map((box) => ({ id: box.id, index: box.index, value: box.value }))
         .sort((a, b) => a.index - b.index || a.id - b.id),
+      bombs: (state.bombs || [])
+        .map((bomb) => ({
+          index: bomb.index,
+          kind: normalizeBombKind(bomb.kind) || bombKindForExplosionValue(bomb.value),
+          value: Math.max(0, Number(bomb.value) || 0)
+        }))
+        .sort((a, b) => a.index - b.index || a.kind.localeCompare(b.kind)),
       newBoxIds: Array.from(state.newBoxIds || []).sort((a, b) => a - b),
       removed: Array.from(state.removed).sort((a, b) => a - b),
       score: state.score,
@@ -23531,6 +24242,7 @@
     createRng,
     centeredReversiOpening,
     directNeighborIndex,
+    detonateBombAt,
     dirFromKey,
     directionsForPreset,
     emptyExistingIndices,
@@ -23580,6 +24292,10 @@
     randomPresetForMode,
     randomSetupChoice,
     rowCol,
+    BOMB_ART_OPTIONS,
+    BOMB_KINDS,
+    blockedTileCount,
+    bombAtIndex,
     simulateRound,
     sokobanEnergyBeamObjects,
     sokobanSolved,

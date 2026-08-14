@@ -1786,6 +1786,24 @@
               <option value="1048576">1048576</option>
             </select>
           </div>
+          <div class="mosaic-inline-row" id="debug-bomb-row" data-mode-control="2048">
+            <span class="input-label">Tile tool</span>
+            <select class="mosaic-editor-input" id="debug-bomb-tool" aria-label="Debug tile tool">
+              <option value="number" selected>number / empty</option>
+              <option value="blue">place blue bomb</option>
+              <option value="red">place red bomb</option>
+              <option value="clear">clear bomb</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row" id="bomb-art-row" data-mode-control="2048">
+            <span class="input-label">Bomb art</span>
+            <select class="mosaic-editor-input" id="bomb-art-style" aria-label="Bomb art style">
+              <option value="png-1" selected>PNG skull</option>
+              <option value="png-2">PNG stripe</option>
+              <option value="png-3">PNG vortex</option>
+              <option value="canvas-1">canvas spark</option>
+            </select>
+          </div>
           <div class="mosaic-debug-step-row" id="sokoban-object-size-row" data-mode-control="sokoban" hidden>
             <span class="input-label">Object size</span>
             <span class="background-slider-controls">
@@ -1955,7 +1973,7 @@
         <div class="stat-row"><span class="stat-label" id="score-label">Score</span><span class="stat-value" id="score-value">0</span></div>
         <div class="stat-row"><span class="stat-label" id="highest-tile-label">Highest tile</span><span class="stat-value" id="highest-tile-value">0</span></div>
         <div class="stat-row"><span class="stat-label" id="existing-tile-label">Existing tiles</span><span class="stat-value" id="existing-tile-value">0</span></div>
-        <div class="stat-row"><span class="stat-label" id="removed-tile-label">Removed tiles</span><span class="stat-value" id="removed-tile-value">0</span></div>
+        <div class="stat-row"><span class="stat-label" id="removed-tile-label">Blocked tiles</span><span class="stat-value" id="removed-tile-value">0</span></div>
         <div class="stat-row"><span class="stat-label" id="round-label">Round</span><span class="stat-value" id="round-value">0</span></div>
       </div>
     </section>

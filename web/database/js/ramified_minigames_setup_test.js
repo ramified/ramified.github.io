@@ -35,6 +35,24 @@ function valuesAt(state, cols = state.preset.cols) {
     .sort();
 }
 
+function bombsAt(state, cols = state.preset.cols) {
+  return (game.stateSummary(state).bombs || [])
+    .map((item) => {
+      const pos = game.rowCol(item.index, cols);
+      return `${pos.row},${pos.col}:${item.kind}:${item.value}`;
+    })
+    .sort();
+}
+
+function indicesAt(indices, cols) {
+  return (indices || [])
+    .map((index) => {
+      const pos = game.rowCol(index, cols);
+      return `${pos.row},${pos.col}`;
+    })
+    .sort();
+}
+
 function stonesAt(state, cols = state.preset.cols) {
   return state.stones
     .map((item) => {
@@ -608,16 +626,18 @@ function testVacatingResidentSurvivesIncomingExplosion() {
   const result = game.simulateRound(state, game.DIRS.S, { spawn: false });
   assert.strictEqual(result.changed, true);
   assert.deepStrictEqual(valuesAt(result.state), ['4,1:4']);
-  assert.ok(result.state.removed.has(game.indexOf(2, 1, 4)));
+  assert.strictEqual(result.state.removed.has(game.indexOf(2, 1, 4)), false);
   assert.strictEqual(result.state.removed.has(game.indexOf(3, 1, 4)), false);
+  assert.deepStrictEqual(bombsAt(result.state), ['2,1:blue:2']);
   const impactGroup = result.events.find((event) => event.kind === 'moveGroup' && event.explosions && event.explosions.length);
   assert.ok(impactGroup);
   assert.strictEqual(impactGroup.explosions[0].value, 2);
   assert.deepStrictEqual(impactGroup.explosions[0].moves.map((move) => move.boxId).sort((a, b) => a - b), [16, 22]);
   assert.ok(!result.events.some((event) => event.kind === 'explode' && event.value === 2));
-  const explosionRemoval = result.events.find((event) => event.kind === 'removeTile' && event.index === game.indexOf(2, 1, 4));
-  assert.ok(explosionRemoval);
-  assert.deepStrictEqual(explosionRemoval.removeBoxIds.sort((a, b) => a - b), [16, 22]);
+  const bombPlacement = result.events.find((event) => event.kind === 'placeBomb' && event.index === game.indexOf(2, 1, 4));
+  assert.ok(bombPlacement);
+  assert.strictEqual(bombPlacement.bombKind, 'blue');
+  assert.deepStrictEqual(bombPlacement.removeBoxIds.sort((a, b) => a - b), [16, 22]);
   assert.strictEqual(allBounceMoves(result.events).length, 0);
 }
 
@@ -894,17 +914,19 @@ function testExplosionModeForFullCycleBoard() {
   assert.strictEqual(game.isExplosionModeActive(state), true);
   assert.strictEqual(game.isGameOver(state), false);
 
+  const structuralRemovedSize = state.removed.size;
   const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
   assert.strictEqual(result.changed, true);
   assert.ok(result.events.some((event) => event.kind === 'moveGroup'));
   assert.ok(result.events.some((event) => event.kind === 'explode' && event.value <= 4));
-  assert.ok(result.events.some((event) => event.kind === 'removeTile'));
-  const clearEvents = result.events.filter((event) => event.kind === 'clearNumbers');
-  assert.ok(clearEvents.length);
-  assert.ok(clearEvents.some((event) => event.removeBoxIds.length > 0));
-  assert.strictEqual(result.state.boxes.length, 0);
-  assert.ok(result.state.removed.size > 0);
-  assert.strictEqual(game.isExplosionModeActive(result.state), false);
+  assert.ok(result.events.some((event) => event.kind === 'placeBomb'));
+  assert.ok(!result.events.some((event) => event.kind === 'removeTile'));
+  assert.ok(!result.events.some((event) => event.kind === 'clearNumbers'));
+  assert.strictEqual(result.state.removed.size, structuralRemovedSize);
+  assert.ok((result.state.bombs || []).length > 0);
+  assert.ok(result.state.boxes.length < state.boxes.length);
+  assert.ok(result.state.boxes.every((item) => !game.bombAtIndex(result.state, item.index)));
+  assert.strictEqual(game.isGameOver(result.state), false);
 }
 
 function testDownMoveAfterExplosionDoesNotStack() {
@@ -930,7 +952,8 @@ function testDownMoveAfterExplosionDoesNotStack() {
 
   const result = game.simulateRound(state, game.DIRS.S, { spawn: false });
   assert.strictEqual(result.changed, true);
-  assert.deepStrictEqual(Array.from(result.state.removed).sort((a, b) => a - b), [
+  assert.deepStrictEqual(Array.from(result.state.removed).sort((a, b) => a - b), []);
+  assert.deepStrictEqual((result.state.bombs || []).map((bomb) => bomb.index).sort((a, b) => a - b), [
     game.indexOf(4, 1, 4),
     game.indexOf(4, 2, 4),
     game.indexOf(4, 3, 4),
@@ -1012,7 +1035,8 @@ function testExplosionMoverVacatesSourceForBounceResolution() {
   const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
   const removedBoxes = result.state.boxes.filter((item) => result.state.removed.has(item.index));
   assert.deepStrictEqual(removedBoxes, []);
-  assert.ok(result.state.removed.has(game.indexOf(1, 2, 4)));
+  assert.strictEqual(result.state.removed.has(game.indexOf(1, 2, 4)), false);
+  assert.deepStrictEqual(bombsAt(result.state), ['1,2:blue:2']);
   assert.ok(!result.state.boxes.some((item) => item.id === 1 || item.id === 5));
   assert.deepStrictEqual(valuesAt(result.state), ['1,1:8', '1,4:2']);
 }
@@ -1225,7 +1249,8 @@ function testTorusGlueLoopExplosion() {
   const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
   assert.strictEqual(result.changed, true);
   assert.strictEqual(result.state.boxes.length, 0);
-  assert.ok(result.state.removed.has(game.indexOf(1, 4, 4)));
+  assert.strictEqual(result.state.removed.has(game.indexOf(1, 4, 4)), false);
+  assert.deepStrictEqual(bombsAt(result.state), ['1,4:blue:2']);
   assert.ok(result.events.some((event) => event.kind === 'explode'));
 }
 
@@ -3134,6 +3159,18 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameSource.includes("card.classList.toggle('collapsed')"));
   assert.ok(minigameHtml.includes('id="step-mode-row" data-mode-control="2048"'));
   assert.ok(minigameHtml.includes('<option value="">empty</option>'));
+  assert.ok(minigameHtml.includes('id="debug-bomb-row" data-mode-control="2048"'));
+  assert.ok(minigameHtml.includes('id="debug-bomb-tool"'));
+  assert.ok(minigameHtml.includes('<option value="blue">place blue bomb</option>'));
+  assert.ok(minigameHtml.includes('<option value="red">place red bomb</option>'));
+  assert.ok(minigameHtml.includes('id="bomb-art-row" data-mode-control="2048"'));
+  assert.ok(minigameHtml.includes('id="bomb-art-style"'));
+  assert.ok(minigameHtml.includes('<option value="png-1" selected>PNG skull</option>'));
+  assert.ok(minigameHtml.includes('<option value="png-3">PNG vortex</option>'));
+  assert.ok(minigameHtml.includes('<option value="canvas-1">canvas spark</option>'));
+  assert.ok(!minigameHtml.includes('<option value="canvas-2">canvas fuse</option>'));
+  assert.ok(!minigameHtml.includes('<option value="canvas-3">canvas vortex</option>'));
+  assert.ok(minigameHtml.includes('id="removed-tile-label">Blocked tiles</span>'));
   assert.ok(!mosaicHtml.includes('id="export-background-preset"'));
   assert.ok(mosaicHtml.includes('id="export-type"'));
   assert.ok(mosaicHtml.includes('<option value="minigame">For minigames</option>'));
@@ -3546,7 +3583,8 @@ function testSimultaneousDifferentExplosion() {
   const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
   assert.strictEqual(result.changed, true);
   assert.strictEqual(result.state.boxes.length, 0);
-  assert.ok(result.state.removed.has(game.indexOf(2, 2, 3)));
+  assert.strictEqual(result.state.removed.has(game.indexOf(2, 2, 3)), false);
+  assert.deepStrictEqual(bombsAt(result.state, 3), ['2,2:blue:2']);
   const impactGroup = result.events.find((event) => event.kind === 'moveGroup' && event.explosions && event.explosions.length);
   assert.ok(impactGroup);
   const explosion = impactGroup.explosions.find((event) => event.value === 2);
@@ -3557,7 +3595,7 @@ function testSimultaneousDifferentExplosion() {
   assert.ok(!result.events.some((event) => event.kind === 'explode' && event.value === 2));
 }
 
-function testLargeExplosionClearsSurfaceNeighbors() {
+function testLargeExplosionCreatesRedBombAndClickClearsSurfaceNeighbors() {
   const preset = {
     id: 'large-blast-test',
     label: 'large-blast-test',
@@ -3584,14 +3622,113 @@ function testLargeExplosionClearsSurfaceNeighbors() {
   state.nextBoxId = 5;
   const result = game.simulateRound(state, game.DIRS.E, { spawn: false });
   assert.strictEqual(result.changed, true);
-  assert.ok(result.state.removed.has(game.indexOf(2, 2, 3)));
-  assert.deepStrictEqual(result.state.boxes, []);
-  const clear = result.events.find((event) => event.kind === 'clearNumbers');
-  assert.ok(clear);
-  assert.ok(clear.indices.includes(game.indexOf(1, 2, 3)));
-  assert.ok(clear.indices.includes(game.indexOf(2, 3, 3)));
+  assert.strictEqual(result.state.removed.has(game.indexOf(2, 2, 3)), false);
+  assert.deepStrictEqual(valuesAt(result.state, 3), ['1,2:4', '2,3:8']);
+  assert.deepStrictEqual(bombsAt(result.state, 3), ['2,2:red:128']);
+  assert.ok(!result.events.some((event) => event.kind === 'clearNumbers'));
+  const redExplosion = result.events
+    .flatMap((event) => event.kind === 'moveGroup' ? (event.explosions || []) : (event.kind === 'explode' ? [event] : []))
+    .find((event) => event.value === 128);
+  assert.ok(redExplosion);
+  assert.deepStrictEqual(indicesAt(redExplosion.rangeIndices, 3), ['1,2', '2,1', '2,3', '3,2']);
+  const detonation = game.detonateBombAt(result.state, game.indexOf(2, 2, 3));
+  assert.strictEqual(detonation.changed, true);
+  assert.deepStrictEqual(indicesAt(detonation.rangeIndices, 3), ['1,2', '2,1', '2,3', '3,2']);
+  assert.deepStrictEqual(detonation.clearedBoxIds.sort((a, b) => a - b), [3, 4]);
+  assert.deepStrictEqual(indicesAt(detonation.clearedIndices, 3), ['1,2', '2,3']);
+  assert.deepStrictEqual(valuesAt(detonation.state, 3), []);
+  assert.deepStrictEqual(bombsAt(detonation.state, 3), []);
   assert.ok(!result.state.removed.has(game.indexOf(1, 2, 3)));
   assert.ok(!result.state.removed.has(game.indexOf(2, 3, 3)));
+}
+
+function testBlueBombClickRestoresWithoutMoveOrSpawn() {
+  const state = stateWithBoxes('classic-4x4', [
+    box(1, 1, 1, 2),
+    box(2, 2, 2, 4)
+  ]);
+  state.phase = 'ready';
+  state.score = 12;
+  state.round = 7;
+  state.nextBoxId = 3;
+  state.bombs = [{ index: game.indexOf(1, 2, 4), kind: game.BOMB_KINDS.BLUE, value: 2 }];
+  const result = game.detonateBombAt(state, game.indexOf(1, 2, 4));
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(result.clearedBoxIds, []);
+  assert.deepStrictEqual(result.rangeIndices, []);
+  assert.deepStrictEqual(bombsAt(result.state), []);
+  assert.deepStrictEqual(valuesAt(result.state), ['1,1:2', '2,2:4']);
+  assert.strictEqual(result.state.score, 12);
+  assert.strictEqual(result.state.round, 7);
+  assert.strictEqual(result.state.nextBoxId, 3);
+  assert.strictEqual(result.state.removed.has(game.indexOf(1, 2, 4)), false);
+}
+
+function testBombsBlockMovementSpawnAndGlue() {
+  const direct = stateWithBoxes('classic-4x4', [
+    box(1, 1, 1, 2)
+  ]);
+  direct.bombs = [{ index: game.indexOf(1, 2, 4), kind: game.BOMB_KINDS.BLUE, value: 2 }];
+  const blockedMove = game.simulateRound(direct, game.DIRS.E, { spawn: false });
+  assert.strictEqual(blockedMove.changed, false);
+  assert.deepStrictEqual(valuesAt(blockedMove.state), ['1,1:2']);
+
+  const spawnState = stateWithBoxes('classic-4x4', [
+    box(1, 2, 1, 2),
+    box(2, 2, 2, 2)
+  ]);
+  spawnState.bombs = [{ index: game.indexOf(1, 1, 4), kind: game.BOMB_KINDS.BLUE, value: 2 }];
+  const spawnResult = game.simulateRound(spawnState, game.DIRS.W, { spawn: true, rng: () => 0 });
+  assert.strictEqual(spawnResult.changed, true);
+  assert.ok(!spawnResult.state.boxes.some((item) => item.index === game.indexOf(1, 1, 4)));
+  assert.ok(!game.emptyExistingIndices(spawnResult.state).includes(game.indexOf(1, 1, 4)));
+
+  const gluedPreset = {
+    id: 'bomb-glue-block',
+    label: 'bomb glue block',
+    lattice: 'square',
+    rows: 2,
+    cols: 2,
+    surface: 'bomb glue block',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      {
+        first: { row: 1, col: 2, dir: game.DIRS.E },
+        second: { row: 2, col: 2, dir: game.DIRS.W }
+      }
+    ]
+  };
+  const glued = stateWithBoxes(gluedPreset, [
+    box(1, 1, 2, 2, 2)
+  ]);
+  glued.bombs = [{ index: game.indexOf(2, 2, 2), kind: game.BOMB_KINDS.RED, value: 128 }];
+  const gluedResult = game.simulateRound(glued, game.DIRS.E, { spawn: false });
+  assert.strictEqual(gluedResult.changed, false);
+  assert.deepStrictEqual(valuesAt(gluedResult.state, 2), ['1,2:2']);
+}
+
+function testBombStatusImportCloneAndSummary() {
+  const imported = game.gameStateFromDebugImportPayload({
+    gameMode: '2048',
+    preset: { id: 'classic-4x4', rows: 4, cols: 4, label: 'classic 4x4', surface: 'test' },
+    phase: 'ready',
+    removed: [],
+    boxes: [{ id: 1, row: 2, col: 2, value: 8 }],
+    bombs: [{ row: 1, col: 1, kind: 'red', value: 128 }],
+    nextBoxId: 2,
+    score: 0,
+    round: 0
+  }).state;
+  assert.deepStrictEqual(bombsAt(imported), ['1,1:red:128']);
+  assert.deepStrictEqual(game.stateSummary(imported).bombs, [
+    { index: game.indexOf(1, 1, 4), kind: 'red', value: 128 }
+  ]);
+  const clone = game.cloneGameState(imported);
+  assert.deepStrictEqual(bombsAt(clone), ['1,1:red:128']);
+  const detonated = game.detonateBombAt(clone, game.indexOf(1, 1, 4)).state;
+  assert.deepStrictEqual(bombsAt(imported), ['1,1:red:128']);
+  assert.deepStrictEqual(bombsAt(detonated), []);
 }
 
 function testSpawnAfterValidRound() {
@@ -3621,7 +3758,14 @@ function makeElement(id, extra = {}) {
     label: '',
     children: [],
     options: [],
-    style: {},
+    style: {
+      setProperty(name, value) {
+        this[name] = String(value);
+      },
+      removeProperty(name) {
+        delete this[name];
+      }
+    },
     clientWidth: 720,
     parentElement: null,
     listeners: {},
@@ -3701,6 +3845,8 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('speed-row', { attributes: { 'data-mode-control': '2048' } }),
     makeElement('step-mode-row', { attributes: { 'data-mode-control': '2048' } }),
     makeElement('debug-tile-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('debug-bomb-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('bomb-art-row', { attributes: { 'data-mode-control': '2048' } }),
     makeElement('move-row', { attributes: { 'data-mode-control': '2048' } })
   ];
   const modeGomokuControls = [
@@ -3793,6 +3939,8 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('debug-toggle'),
     makeElement('debug-tools'),
     makeElement('debug-tile-value', { value: '128' }),
+    makeElement('debug-bomb-tool', { value: 'number' }),
+    makeElement('bomb-art-style', { value: 'png-1' }),
     makeElement('undo-step'),
     makeElement('redo-step'),
     makeElement('export-state'),
@@ -4769,6 +4917,8 @@ function testHeadlessDomStepControls() {
     makeElement('speed-row', { attributes: { 'data-mode-control': '2048' } }),
     makeElement('step-mode-row', { attributes: { 'data-mode-control': '2048' } }),
     makeElement('debug-tile-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('debug-bomb-row', { attributes: { 'data-mode-control': '2048' } }),
+    makeElement('bomb-art-row', { attributes: { 'data-mode-control': '2048' } }),
     makeElement('move-row', { attributes: { 'data-mode-control': '2048' } })
   ];
   const modeGomokuControls = [
@@ -4831,6 +4981,8 @@ function testHeadlessDomStepControls() {
     makeElement('debug-toggle'),
     makeElement('debug-tools'),
     makeElement('debug-tile-value', { value: '128' }),
+    makeElement('debug-bomb-tool', { value: 'number' }),
+    makeElement('bomb-art-style', { value: 'png-1' }),
     makeElement('undo-step'),
     makeElement('redo-step'),
     makeElement('export-state'),
@@ -4955,6 +5107,25 @@ function testHeadlessDomStepControls() {
   exported = JSON.parse(elements.get('debug-export-output').value);
   assert.strictEqual(exported.boxes.find((item) => item.row === 1 && item.col === 1).value, 2);
 
+  elements.get('debug-bomb-tool').value = 'blue';
+  canvas.listeners.click({ clientX: 36, clientY: 41 });
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(elements.get('status-line').textContent, 'debug: r1 c1 = blue bomb');
+  assert.deepStrictEqual(exported.bombs.map((bomb) => `${bomb.row},${bomb.col}:${bomb.kind}:${bomb.value}`), ['1,1:blue:2']);
+  assert.strictEqual(exported.boxes.some((item) => item.row === 1 && item.col === 1), false);
+
+  elements.get('debug-bomb-tool').value = 'clear';
+  canvas.listeners.click({ clientX: 36, clientY: 41 });
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(elements.get('status-line').textContent, 'debug: r1 c1 bomb cleared');
+  assert.deepStrictEqual(exported.bombs, []);
+
+  elements.get('debug-bomb-tool').value = 'number';
+  elements.get('debug-tile-value').value = '2';
+  canvas.listeners.click({ clientX: 36, clientY: 41 });
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.boxes.find((item) => item.row === 1 && item.col === 1).value, 2);
+
   let preventedRepeat = false;
   documentListeners.keydown({
     key: 'ArrowRight',
@@ -5070,7 +5241,11 @@ function testHeadlessDomStepControls() {
   assert.strictEqual(elements.get('gomoku-display-row').hidden, false);
   assert.strictEqual(elements.get('step-mode-row').hidden, true);
   assert.strictEqual(elements.get('debug-tile-row').hidden, true);
+  assert.strictEqual(elements.get('debug-bomb-row').hidden, true);
+  assert.strictEqual(elements.get('bomb-art-row').hidden, true);
   assert.strictEqual(elements.get('debug-tile-value').disabled, true);
+  assert.strictEqual(elements.get('debug-bomb-tool').disabled, true);
+  assert.strictEqual(elements.get('bomb-art-style').disabled, true);
   elements.get('surface-preset-select').value = 'gomoku-m4-15x15';
   elements.get('surface-preset-select').listeners.change();
   assert.strictEqual(elements.get('gomoku-size-row').hidden, true);
@@ -6442,7 +6617,10 @@ function run() {
   testStepPauseRendersAfterSelectingNextEvent();
   testStationaryDifferentBlocks();
   testSimultaneousDifferentExplosion();
-  testLargeExplosionClearsSurfaceNeighbors();
+  testLargeExplosionCreatesRedBombAndClickClearsSurfaceNeighbors();
+  testBlueBombClickRestoresWithoutMoveOrSpawn();
+  testBombsBlockMovementSpawnAndGlue();
+  testBombStatusImportCloneAndSummary();
   testSpawnAfterValidRound();
   testHeadlessDomStepControls();
   console.log('ramified_minigames_setup_test: all tests passed');
