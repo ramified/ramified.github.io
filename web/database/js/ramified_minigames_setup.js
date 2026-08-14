@@ -175,6 +175,9 @@
   const CHINESE_CHECKERS_MOVE_TIME_DEFAULT = 100;
   const CHINESE_CHECKERS_JUMP_PAUSE_DEFAULT = 120;
   const REVERSI_INVALID_MARK_DURATION = 460;
+  const ONLINE_TURN_FEEDBACK_DURATION_DEFAULT = 1000;
+  const ONLINE_TURN_FEEDBACK_DURATION_MIN = 600;
+  const ONLINE_TURN_FEEDBACK_DURATION_MAX = 2400;
   const PLACEMENT_KNOWN_COLORS = ['black', 'white', 'red', 'yellow', 'blue', 'green'];
   const PLACEMENT_COLOR_ORDER = new Map(PLACEMENT_KNOWN_COLORS.map((color, index) => [color, index]));
   const CONNECT_FOUR_WIN_LENGTH = 4;
@@ -480,6 +483,9 @@
     refs.onlineStartClaimedColors = document.getElementById('online-start-claimed-colors');
     refs.onlineLeaveRoom = document.getElementById('online-leave-room');
     refs.onlineStatus = document.getElementById('online-status');
+    refs.onlineTurnFeedbackDuration = document.getElementById('online-turn-feedback-duration');
+    refs.onlineTurnFeedbackDurationValue = document.getElementById('online-turn-feedback-duration-value');
+    refs.onlineTurnFeedbackPreview = document.getElementById('online-turn-feedback-preview');
     refs.speed = document.getElementById('animation-speed');
     refs.speedValue = document.getElementById('animation-speed-value');
     refs.stepMode = document.getElementById('step-mode');
@@ -588,6 +594,9 @@
     if (refs.onlineRoomCode) refs.onlineRoomCode.addEventListener('input', syncOnlineControls);
     if (refs.onlinePlayerName) refs.onlinePlayerName.addEventListener('input', handleOnlinePlayerNameInput);
     if (refs.onlinePlayerName) refs.onlinePlayerName.addEventListener('change', sendOnlinePlayerNameUpdate);
+    if (refs.onlineTurnFeedbackDuration) refs.onlineTurnFeedbackDuration.addEventListener('input', syncOnlineTurnFeedbackDurationOutput);
+    if (refs.onlineTurnFeedbackDuration) refs.onlineTurnFeedbackDuration.addEventListener('change', syncOnlineTurnFeedbackDurationOutput);
+    if (refs.onlineTurnFeedbackPreview) refs.onlineTurnFeedbackPreview.addEventListener('click', previewOnlineTurnFeedback);
     if (refs.speed) refs.speed.addEventListener('input', syncSpeedOutput);
     if (refs.stepMode) refs.stepMode.addEventListener('change', syncControls);
     if (refs.sokobanObjectSize) refs.sokobanObjectSize.addEventListener('input', () => {
@@ -655,6 +664,7 @@
     syncSokobanBeamOutput();
     syncChineseCheckersTimingOutput();
     syncPlacementPieceSizeOutput();
+    syncOnlineTurnFeedbackDurationOutput();
     syncDebugModeUi();
     syncCanvasDisplayModeUi();
     initOnlinePlay();
@@ -942,6 +952,25 @@
     return text || 'auto side';
   }
 
+  function onlineRolePlayerName(role) {
+    const normalized = normalizePlacementColor(role);
+    if (!normalized || !onlineState || !onlineState.rolePlayers) return '';
+    return normalizeOnlinePlayerName(onlineState.rolePlayers[normalized]);
+  }
+
+  function onlineRolePlayerLabel(role, fallbackLabel = '', parentheticalLabel = '') {
+    const normalized = normalizePlacementColor(role);
+    const label = String(fallbackLabel || onlineRoleLabel(normalized)).trim();
+    const name = onlineRolePlayerName(normalized);
+    if (!name) return label;
+    const side = String(parentheticalLabel || label || onlineRoleLabel(normalized)).trim().toLowerCase();
+    return side ? `${name} (${side})` : name;
+  }
+
+  function onlineRoleActionLabel(role, actionText = 'to move', fallbackLabel = '', parentheticalLabel = '') {
+    return `${onlineRolePlayerLabel(role, fallbackLabel, parentheticalLabel)} ${actionText}`.trim();
+  }
+
   function onlineRolesLabel(roles) {
     const list = normalizeOnlineRoles(roles);
     if (!list.length) return 'auto side';
@@ -1075,7 +1104,10 @@
   }
 
   function syncOnlineControls() {
-    if (!onlineState) return;
+    if (!onlineState) {
+      syncCanvasCursor();
+      return;
+    }
     const configured = !!onlineState.baseUrl;
     const active = onlineIsInRoom() || !!onlineState.connecting;
     const visible = onlinePlayCardVisible();
@@ -1110,6 +1142,7 @@
       refs.onlineStatus.textContent = onlineStatusText();
       refs.onlineStatus.dataset.state = onlineStatusDataState();
     }
+    syncCanvasCursor();
   }
 
   function onlinePlayCardVisible() {
@@ -1556,6 +1589,18 @@
       syncOnlineControls();
       return;
     }
+    if (message.type === 'playerLeft') {
+      handleOnlinePlayerLeft(message);
+      return;
+    }
+    if (message.type === 'playerDisconnected') {
+      handleOnlinePlayerConnectionNotice(message, 'disconnected');
+      return;
+    }
+    if (message.type === 'playerReconnected') {
+      handleOnlinePlayerConnectionNotice(message, 'reconnected');
+      return;
+    }
     if (message.type === 'approvalRequest') {
       respondToOnlineHistoryRequest(message);
       return;
@@ -1636,7 +1681,7 @@
     }
   }
 
-  function updateOnlineRoomMetaFromMessage(message) {
+  function updateOnlineRoomMetaFromMessage(message, options = {}) {
     if (!onlineState || !message || typeof message !== 'object') return;
     if (message.roles && typeof message.roles === 'object') onlineState.roomRoles = { ...message.roles };
     if (message.rolePlayers && typeof message.rolePlayers === 'object') onlineState.rolePlayers = { ...message.rolePlayers };
@@ -1644,7 +1689,8 @@
     if (Object.prototype.hasOwnProperty.call(message, 'unclaimedRoles')) {
       onlineState.unclaimedRoles = normalizeOnlineRoles(message.unclaimedRoles);
     }
-    if (Object.prototype.hasOwnProperty.call(message, 'rolesAssigned') || Object.prototype.hasOwnProperty.call(message, 'assignedRoles')) {
+    if (options.applyAssignedRoles !== false
+      && (Object.prototype.hasOwnProperty.call(message, 'rolesAssigned') || Object.prototype.hasOwnProperty.call(message, 'assignedRoles'))) {
       onlineState.roles = onlineAssignedRolesFromMessage(message);
       onlineState.role = onlineState.roles[0] || 'spectator';
     }
@@ -1895,7 +1941,8 @@
     const requestId = String(message.requestId || '');
     if (!requestId) return;
     const kind = message.kind === 'redo' ? 'redo' : 'undo';
-    const requester = onlineRoleLabel(message.requesterRole || 'opponent');
+    const requesterRole = normalizePlacementColor(message.requesterRole);
+    const requester = requesterRole ? onlineRolePlayerLabel(requesterRole, onlineRoleLabel(requesterRole)) : 'opponent';
     const text = `${requester} requests ${kind}. Allow this ${kind}?`;
     const allowed = typeof window !== 'undefined' && typeof window.confirm === 'function'
       ? window.confirm(text)
@@ -2026,7 +2073,7 @@
     if (!onlineStateHasPlayableRole()) return 'spectators cannot move';
     if (isChineseCheckersGame(game) && onlineState.readyToPlay === false) return 'online Chinese Checkers is waiting for colors';
     const expected = onlineExpectedRoleForGame(game, actionType);
-    if (expected && !onlineStateOwnsRole(expected)) return `${onlineRoleLabel(expected)} to move`;
+    if (expected && !onlineStateOwnsRole(expected)) return onlineTurnActionText(game, expected);
     return '';
   }
 
@@ -2092,6 +2139,61 @@
     if (isChineseCheckersGame(state) && isChineseCheckersOpeningRound(state)) return '';
     const role = normalizePlacementColor(state.turn);
     return onlineModeRoles(gameModeValue(state)).includes(role) ? role : '';
+  }
+
+  function onlineChineseCheckersOpeningBlockedForLocal(state = game) {
+    if (!onlineState || !onlineIsInRoom() || !onlineSocketOpen()) return false;
+    if (!isChineseCheckersGame(state) || !isChineseCheckersOpeningRound(state)) return false;
+    if (onlineState.readyToPlay === false || !onlineStateHasPlayableRole()) return false;
+    const expected = onlineChineseCheckersOpeningExpectedRole(state);
+    if (expected) return !onlineStateOwnsRole(expected);
+    const pending = chineseCheckersPendingOpeningColors(state);
+    return pending.length > 0 && !pending.some((color) => onlineStateOwnsRole(color));
+  }
+
+  function onlineChineseCheckersOpeningExpectedRole(state = game) {
+    if (!isChineseCheckersGame(state) || !isChineseCheckersOpeningRound(state)) return '';
+    const selectedMarble = Number.isInteger(state.selectedIndex) ? chineseCheckerMarbleAt(state, state.selectedIndex) : null;
+    if (selectedMarble && !chineseCheckersOpeningSelectionIssue(state, selectedMarble.color)) {
+      return normalizePlacementColor(selectedMarble.color);
+    }
+    const pending = chineseCheckersPendingOpeningColors(state);
+    return pending.length === 1 ? normalizePlacementColor(pending[0]) : '';
+  }
+
+  function onlineTurnActionText(state, role = null) {
+    const turnRole = normalizePlacementColor(role || (state && state.turn));
+    if (!turnRole) return 'player to move';
+    if (isGoGame(state)) return onlineRoleActionLabel(turnRole, 'to play', goColorLabel(turnRole));
+    if (isConnectFourGame(state)) return onlineRoleActionLabel(turnRole, 'to drop', connectFourColorLabel(turnRole));
+    if (isFideChessGame(state) && !isFideChessPuzzle(state)) {
+      return onlineRoleActionLabel(turnRole, 'to move', fideChessSideLabel(turnRole), fideChessSideLabel(turnRole).toLowerCase());
+    }
+    if (isChineseCheckersGame(state) && isChineseCheckersJumping(state)) {
+      return onlineRoleActionLabel(turnRole, 'jumping', chineseCheckersColorLabel(turnRole));
+    }
+    if (isChineseCheckersGame(state)) {
+      return onlineRoleActionLabel(turnRole, 'to move', chineseCheckersColorLabel(turnRole));
+    }
+    return onlineRoleActionLabel(turnRole, 'to move', onlineRoleLabel(turnRole));
+  }
+
+  function onlineGameTurnSummaryText(state) {
+    if (!state || !state.turn) return state && state.phase ? state.phase : '';
+    if (isGoGame(state) && state.scoringReview) return 'score review';
+    if (isChineseCheckersGame(state)) return chineseCheckersTurnInfo(state);
+    return onlineTurnActionText(state);
+  }
+
+  function onlineBoardMoveBlockedForCursor(state = game) {
+    if (!onlineState || !onlineIsInRoom() || !onlineSocketOpen()) return false;
+    if (!state || state.phase !== 'ready' || !onlineStateSupported(state)) return false;
+    if (isGoGame(state) && state.scoringReview) return false;
+    if (isChineseCheckersGame(state) && onlineState.readyToPlay === false) return false;
+    if (!onlineStateHasPlayableRole()) return true;
+    if (onlineChineseCheckersOpeningBlockedForLocal(state)) return true;
+    const expected = onlineExpectedRoleForGame(state);
+    return !!(expected && !onlineStateOwnsRole(expected));
   }
 
   function showOnlineChineseCheckersStartPrompt(marble = null) {
@@ -2196,6 +2298,7 @@
     if (!issue) return false;
     syncStatus(status || 'online turn blocked', issue, 'warn');
     syncOnlineStatus(issue, 'error');
+    startOnlineTurnFeedback(onlineTurnFeedbackForLocalBlock(actionType, issue));
     syncOnlineControls();
     if (refs.canvas) refs.canvas.focus();
     return true;
@@ -2206,7 +2309,7 @@
     const mode = gameTypeForGameMode(gameModeValue(state));
     const round = state.round || 0;
     const phase = state.phase || 'setup';
-    const turn = state.turn ? `${onlineRoleLabel(state.turn)} to move` : phase;
+    const turn = state.turn ? onlineGameTurnSummaryText(state) : phase;
     if (state.phase === 'gameover') return `${mode}: game over after ${round}`;
     return `${mode}: ${turn}, move ${round}`;
   }
@@ -3140,7 +3243,7 @@
 
   function handleConnectFourAlignFallChange() {
     hoveredGlue = null;
-    syncGlueHoverCursor();
+    syncCanvasCursor();
     render();
   }
 
@@ -3627,7 +3730,7 @@
       moved: false
     };
     captureSwipePointer(event.pointerId);
-    if (refs.canvas && refs.canvas.style) refs.canvas.style.cursor = 'grabbing';
+    syncCanvasCursor();
     return true;
   }
 
@@ -3654,7 +3757,7 @@
     const drag = fideChessDrag;
     releaseSwipePointer(drag.pointerId);
     resetFideChessDrag({ render: false });
-    syncGlueHoverCursor();
+    syncCanvasCursor();
     if (!drag.moved) return;
     suppressUpcomingCanvasClick();
     if (event.preventDefault) event.preventDefault();
@@ -3721,14 +3824,14 @@
     const pointerId = fideChessDrag && fideChessDrag.pointerId;
     releaseSwipePointer(pointerId);
     resetFideChessDrag();
-    syncGlueHoverCursor();
+    syncCanvasCursor();
     if (event && event.preventDefault) event.preventDefault();
   }
 
   function resetFideChessDrag(options = {}) {
     const hadDrag = !!fideChessDrag;
     fideChessDrag = null;
-    if (refs.canvas && refs.canvas.style && refs.canvas.style.cursor === 'grabbing') refs.canvas.style.cursor = '';
+    syncCanvasCursor();
     if (hadDrag && options.render !== false) render();
   }
 
@@ -4143,6 +4246,155 @@
       startedAt: now(),
       duration: REVERSI_INVALID_MARK_DURATION
     });
+  }
+
+  function startOnlineTurnFeedback(feedback) {
+    const payload = onlineTurnFeedbackPayload(feedback);
+    if (!payload) return;
+    placementFeedbacks = activePlacementFeedbacks().filter((feedback) => feedback.kind !== 'onlineTurnBlocked');
+    startPlacementFeedback({
+      kind: 'onlineTurnBlocked',
+      ...payload,
+      startedAt: now(),
+      duration: selectedOnlineTurnFeedbackDuration()
+    });
+  }
+
+  function onlineTurnFeedbackText(message) {
+    return String(message || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function onlineTurnFeedbackPayload(feedback) {
+    if (feedback && typeof feedback === 'object' && !Array.isArray(feedback)) {
+      const text = onlineTurnFeedbackText(feedback.text);
+      if (!text) return null;
+      return {
+        text,
+        pieceColor: normalizePlacementColor(feedback.pieceColor)
+      };
+    }
+    const text = onlineTurnFeedbackText(feedback);
+    return text ? { text, pieceColor: '' } : null;
+  }
+
+  function previewOnlineTurnFeedback() {
+    const feedback = onlineTurnFeedbackPreview(game);
+    startOnlineTurnFeedback(feedback);
+    syncStatus('turn notice preview', feedback.text, 'debug');
+    if (refs.canvas) refs.canvas.focus();
+  }
+
+  function onlineTurnFeedbackPreview(state) {
+    const role = onlineTurnFeedbackPreviewRole(state);
+    return onlineTurnFeedbackForRole(state, role, { playerName: 'Alice' });
+  }
+
+  function onlineTurnFeedbackPreviewRole(state) {
+    const turn = normalizePlacementColor(state && state.turn);
+    if (turn) return turn;
+    if (isConnectFourGame(state)) return 'red';
+    if (isFideChessGame(state)) return 'white';
+    if (isChineseCheckersGame(state)) return 'red';
+    return 'black';
+  }
+
+  function onlineTurnFeedbackForLocalBlock(actionType, issue) {
+    const expected = onlineExpectedRoleForGame(game, actionType);
+    if (expected && !onlineStateOwnsRole(expected)) return onlineTurnFeedbackForRole(game, expected);
+    return { text: onlineTurnFeedbackText(issue), pieceColor: '' };
+  }
+
+  function onlineTurnFeedbackForRole(state, role = null, options = {}) {
+    const turnRole = normalizePlacementColor(role || (state && state.turn));
+    if (!turnRole) return { text: 'player to move', pieceColor: '' };
+    const playerName = Object.prototype.hasOwnProperty.call(options, 'playerName')
+      ? normalizeOnlinePlayerName(options.playerName)
+      : onlineRolePlayerName(turnRole);
+    if (!onlineTurnFeedbackUsesPiece(state)) {
+      if (playerName) {
+        const label = isFideChessGame(state) ? fideChessSideLabel(turnRole).toLowerCase() : onlineRoleLabel(turnRole);
+        return {
+          text: `${playerName} (${label}) ${onlineTurnFeedbackActionText(state)}${onlineTurnFeedbackSuffixText(state)}`,
+          pieceColor: ''
+        };
+      }
+      return { text: onlineTurnActionText(state, turnRole), pieceColor: '' };
+    }
+    const text = `${playerName ? `${playerName} ` : ''}${onlineTurnFeedbackActionText(state)}${onlineTurnFeedbackSuffixText(state)}`;
+    return {
+      text: onlineTurnFeedbackText(text),
+      pieceColor: turnRole
+    };
+  }
+
+  function onlineTurnFeedbackUsesPiece(state) {
+    return isGomokuGame(state)
+      || isGoGame(state)
+      || isConnectFourGame(state)
+      || isReversiGame(state)
+      || isChineseCheckersGame(state);
+  }
+
+  function onlineTurnFeedbackActionText(state) {
+    if (isGoGame(state)) return 'to play';
+    if (isConnectFourGame(state)) return 'to drop';
+    if (isChineseCheckersGame(state) && isChineseCheckersJumping(state)) return 'jumping';
+    return 'to move';
+  }
+
+  function onlineTurnFeedbackSuffixText(state) {
+    if (isGoGame(state)) return `; komi ${formatKomi(state.komi)}`;
+    if (isConnectFourGame(state)) return `; falling ${dirLabel(state.fallDir, state.preset)}`;
+    if (isChineseCheckersGame(state) && isChineseCheckersJumping(state)) return '; choose next jump or end jump';
+    return '';
+  }
+
+  function handleOnlinePlayerLeft(message) {
+    updateOnlineRoomMetaFromMessage(message);
+    syncOnlineRoleOptions(onlineState.gameMode);
+    const name = normalizeOnlinePlayerName(message && message.playerName) || 'A player';
+    const roles = normalizeOnlineRoles(message && message.rolesReleased);
+    const wasPlayer = !!(message && message.wasPlayer) || roles.length > 0;
+    const roleText = roles.length ? ` (${roles.map(onlineRoleLabel).join(', ')})` : '';
+    const notice = `${name}${roleText} left the room`;
+    startOnlineTurnFeedback(notice);
+    syncStatus(
+      'player left',
+      wasPlayer ? `${notice}. Everyone should leave this room too.` : notice,
+      wasPlayer ? 'warn' : 'ready'
+    );
+    syncOnlineStatus(
+      wasPlayer ? `${notice}. Everyone should leave this room too.` : notice,
+      wasPlayer ? 'error' : 'idle'
+    );
+    render();
+    syncOnlineControls();
+    syncControls();
+  }
+
+  function handleOnlinePlayerConnectionNotice(message, state) {
+    updateOnlineRoomMetaFromMessage(message, { applyAssignedRoles: false });
+    syncOnlineRoleOptions(onlineState.gameMode);
+    const name = normalizeOnlinePlayerName(message && message.playerName) || 'A player';
+    const roles = normalizeOnlineRoles(message && message.rolesAssigned);
+    const roleText = roles.length ? ` (${roles.map(onlineRoleLabel).join(', ')})` : '';
+    const disconnected = state === 'disconnected';
+    const notice = disconnected
+      ? `${name}${roleText} disconnected`
+      : `${name}${roleText} reconnected`;
+    startOnlineTurnFeedback(notice);
+    syncStatus(
+      disconnected ? 'player disconnected' : 'player reconnected',
+      disconnected ? `${notice}; waiting for reconnect.` : notice,
+      disconnected ? 'warn' : 'ready'
+    );
+    syncOnlineStatus(
+      disconnected ? `${notice}; waiting for reconnect.` : notice,
+      disconnected ? 'error' : 'idle'
+    );
+    render();
+    syncOnlineControls();
+    syncControls();
   }
 
   function startPlacementFeedback(feedback) {
@@ -4602,6 +4854,8 @@
     }
     if (refs.debugTools) refs.debugTools.hidden = !debugMode;
     if (refs.debugTileValue) refs.debugTileValue.disabled = !debugMode || !is2048Game(game);
+    if (refs.onlineTurnFeedbackDuration) refs.onlineTurnFeedbackDuration.disabled = !debugMode;
+    if (refs.onlineTurnFeedbackPreview) refs.onlineTurnFeedbackPreview.disabled = !debugMode;
     syncConnectFourHoleEditControl();
   }
 
@@ -5228,14 +5482,14 @@
     } : null;
     if (sameGlueHover(hoveredGlue, normalized)) return;
     hoveredGlue = normalized;
-    syncGlueHoverCursor();
+    syncCanvasCursor();
     render();
   }
 
   function clearGlueHover() {
     if (!hoveredGlue) return;
     hoveredGlue = null;
-    syncGlueHoverCursor();
+    syncCanvasCursor();
     render();
   }
 
@@ -5245,8 +5499,17 @@
     return left.groupKey === right.groupKey && left.edgeKey === right.edgeKey && left.presetKey === right.presetKey;
   }
 
-  function syncGlueHoverCursor() {
-    if (refs.canvas && refs.canvas.style) refs.canvas.style.cursor = hoveredGlue ? 'help' : '';
+  function syncCanvasCursor() {
+    if (!refs.canvas || !refs.canvas.style) return;
+    if (fideChessDrag) {
+      refs.canvas.style.cursor = 'grabbing';
+    } else if (hoveredGlue) {
+      refs.canvas.style.cursor = 'help';
+    } else if (onlineBoardMoveBlockedForCursor()) {
+      refs.canvas.style.cursor = 'not-allowed';
+    } else {
+      refs.canvas.style.cursor = '';
+    }
   }
 
   function handleGomokuCanvasClick(event) {
@@ -5607,8 +5870,7 @@
       return;
     }
     const target = tileFromCanvasEvent(event);
-    if (!target) return;
-    const marble = chineseCheckerMarbleAt(game, target.index);
+    const marble = target ? chineseCheckerMarbleAt(game, target.index) : null;
     if (onlineIsInRoom() && isChineseCheckersGame(game)) {
       if (!onlineSocketOpen()) {
         syncStatus('online Chinese Checkers blocked', 'online room is disconnected', 'warn');
@@ -5631,16 +5893,37 @@
         }
         return;
       }
-      const activeColor = isChineseCheckersJumping(game)
-        ? game.turn
-        : (marble && !Number.isInteger(game.selectedIndex) ? marble.color : game.turn);
+      const openingRound = isChineseCheckersOpeningRound(game);
+      const openingExpectedRole = openingRound ? onlineChineseCheckersOpeningExpectedRole(game) : '';
+      if (openingRound && !openingExpectedRole && onlineChineseCheckersOpeningBlockedForLocal(game)) {
+        syncStatus('Chinese Checkers waiting', 'wait for others to move', 'warn');
+        syncOnlineStatus('Wait for others to move.', 'error');
+        startOnlineTurnFeedback('wait for others to move');
+        syncOnlineControls();
+        return;
+      }
+      let activeColor = '';
+      if (isChineseCheckersJumping(game)) {
+        activeColor = game.turn;
+      } else if (openingRound) {
+        if (openingExpectedRole) {
+          activeColor = openingExpectedRole;
+        } else if (marble && onlineStateOwnsRole(marble.color)) {
+          activeColor = marble.color;
+        }
+      } else {
+        activeColor = game.turn;
+      }
       if (activeColor && !onlineStateOwnsRole(activeColor)) {
-        syncStatus('online Chinese Checkers blocked', `${onlineRoleLabel(activeColor)} is controlled by another player`, 'warn');
-        syncOnlineStatus(`${onlineRoleLabel(activeColor)} is controlled by another player.`, 'error');
+        const owner = onlineRolePlayerLabel(activeColor, chineseCheckersColorLabel(activeColor));
+        syncStatus('online Chinese Checkers blocked', `${owner} is controlled by another player`, 'warn');
+        syncOnlineStatus(`${owner} is controlled by another player.`, 'error');
+        startOnlineTurnFeedback(onlineTurnFeedbackForRole(game, activeColor));
         syncOnlineControls();
         return;
       }
     }
+    if (!target) return;
     if (isChineseCheckersJumping(game)) {
       handleChineseCheckersJumpContinuationClick(target, marble);
       return;
@@ -5723,7 +6006,8 @@
         return;
       }
       if (piece.side !== game.turn) {
-        syncStatus('FIDE Chess selection', `${fideChessSideLabel(game.turn)} to move`, 'ready');
+        const side = fideChessSideLabel(game.turn);
+        syncStatus('FIDE Chess selection', onlineRoleActionLabel(game.turn, 'to move', side, side.toLowerCase()), 'ready');
         return;
       }
       const moves = fideChessLegalMovesForPiece(game, piece);
@@ -5958,8 +6242,10 @@
     const chain = game && game.jumpChain;
     if (!chain || !Number.isInteger(chain.currentIndex)) return;
     if (onlineIsInRoom() && !onlineStateOwnsRole(game.turn)) {
-      syncStatus('online Chinese Checkers blocked', `${onlineRoleLabel(game.turn)} is controlled by another player`, 'warn');
-      syncOnlineStatus(`${onlineRoleLabel(game.turn)} is controlled by another player.`, 'error');
+      const owner = onlineRolePlayerLabel(game.turn, chineseCheckersColorLabel(game.turn));
+      syncStatus('online Chinese Checkers blocked', `${owner} is controlled by another player`, 'warn');
+      syncOnlineStatus(`${owner} is controlled by another player.`, 'error');
+      startOnlineTurnFeedback(onlineTurnFeedbackForRole(game, game.turn));
       syncOnlineControls();
       return;
     }
@@ -8600,7 +8886,7 @@
     if (!preset) return;
     if (hoveredGlue && !activeGlueHoverForPreset(preset, hoveredGlue)) {
       hoveredGlue = null;
-      syncGlueHoverCursor();
+      syncCanvasCursor();
     }
     const removed = game ? game.removed : initialRemovedSet(preset);
     const dpr = Math.min(Math.max((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1, 1), 2.5);
@@ -8666,6 +8952,7 @@
       }
     }
     ctx.restore();
+    drawCanvasFeedbackOverlays(ctx, geometry);
     const gameOverPopupDismissed = game && game.resultDismissed && (isPlacementGame(game) || isSokobanGame(game));
     if (game && game.phase === 'gameover' && !currentAnimation && !gameOverPopupDismissed) {
       drawGameOverPopup(ctx, geometry, game);
@@ -11841,6 +12128,18 @@
     });
   }
 
+  function drawCanvasFeedbackOverlays(ctx, geom) {
+    const current = now();
+    placementFeedbacks = placementFeedbacks.filter((feedback) => {
+      const duration = Number.isFinite(feedback.duration) ? Math.max(1, feedback.duration) : REVERSI_INVALID_MARK_DURATION;
+      const age = current - feedback.startedAt;
+      if (age >= duration) return false;
+      const progress = Math.max(0, Math.min(1, age / duration));
+      if (feedback.kind === 'onlineTurnBlocked') drawOnlineTurnFeedback(ctx, geom, feedback, progress);
+      return true;
+    });
+  }
+
   function drawReversiInvalidMoveFeedback(ctx, geom, index, progress) {
     const point = placementPiecePoint(geom, index);
     if (!point) return;
@@ -11859,6 +12158,198 @@
     ctx.lineTo(point.x - size, point.y + size);
     ctx.stroke();
     ctx.restore();
+  }
+
+  function drawOnlineTurnFeedback(ctx, geom, feedback, progress) {
+    const payload = onlineTurnFeedbackPayload(feedback);
+    const text = payload ? payload.text : '';
+    if (!text || !geom) return;
+    const metrics = onlineTurnFeedbackMetrics(geom);
+    const maxBoxWidth = Math.max(80, Math.min(
+      Math.max(80, geom.width - metrics.margin * 2),
+      geom.width * metrics.maxWidthRatio
+    ));
+    const pieceColor = payload.pieceColor;
+    const pieceRadius = pieceColor ? Math.max(8, Math.round(metrics.fontSize * 0.42)) : 0;
+    const pieceGap = pieceColor ? Math.max(8, Math.round(pieceRadius * 0.72)) : 0;
+    const pieceWidth = pieceColor ? pieceRadius * 2 + pieceGap : 0;
+    const maxTextWidth = Math.max(40, maxBoxWidth - metrics.paddingX * 2 - pieceWidth);
+    const layout = fittedOnlineTurnFeedbackLayout(
+      ctx,
+      text,
+      maxTextWidth,
+      metrics.fontSize,
+      metrics.minFontSize,
+      metrics.maxLines
+    );
+    if (!layout.lines.length) return;
+    ctx.font = onlineTurnFeedbackFont(layout.fontSize);
+    const lineHeight = Math.max(layout.fontSize + 2, layout.fontSize * metrics.lineHeight);
+    const textWidth = layout.lines.reduce((width, line) => (
+      Math.max(width, measureTextWidth(ctx, line, layout.fontSize))
+    ), 0);
+    const contentWidth = textWidth + pieceWidth;
+    const boxWidth = Math.min(maxBoxWidth, Math.max(metrics.minWidth, contentWidth + metrics.paddingX * 2));
+    const boxHeight = metrics.paddingY * 2 + lineHeight * layout.lines.length;
+    const fadeIn = Math.min(1, progress / 0.12);
+    const fadeOut = Math.min(1, (1 - progress) / 0.28);
+    const alpha = easeOut(Math.min(fadeIn, fadeOut));
+    if (alpha <= 0.01) return;
+    const scale = 0.96 + easeOut(Math.min(1, progress / 0.18)) * 0.04;
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(geom.width / 2, geom.height / 2);
+    ctx.scale(scale, scale);
+    ctx.shadowColor = metrics.shadowColor;
+    ctx.shadowBlur = metrics.shadowBlur;
+    ctx.shadowOffsetY = metrics.shadowOffsetY;
+    roundedRectPath(ctx, -boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, metrics.radius);
+    ctx.fillStyle = metrics.fill;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.lineWidth = metrics.lineWidth;
+    ctx.strokeStyle = metrics.stroke;
+    ctx.stroke();
+    const groupLeft = -contentWidth / 2;
+    let textCenterX = 0;
+    if (pieceColor) {
+      drawOnlineTurnFeedbackPiece(ctx, geom, pieceColor, groupLeft + pieceRadius, 0, pieceRadius);
+      textCenterX = groupLeft + (pieceRadius * 2) + pieceGap + textWidth / 2;
+    }
+    ctx.fillStyle = metrics.text;
+    ctx.font = onlineTurnFeedbackFont(layout.fontSize);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const firstY = -((layout.lines.length - 1) * lineHeight) / 2;
+    layout.lines.forEach((line, index) => {
+      ctx.fillText(line, textCenterX, firstY + index * lineHeight + layout.fontSize * 0.02, maxTextWidth);
+    });
+    ctx.restore();
+  }
+
+  function drawOnlineTurnFeedbackPiece(ctx, geom, color, x, y, radius) {
+    const colors = placementPieceColors(color);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.shadowColor = 'rgba(45,34,22,0.2)';
+    ctx.shadowBlur = Math.max(1.5, radius * 0.22);
+    ctx.shadowOffsetY = Math.max(0.8, radius * 0.08);
+    const gradient = ctx.createRadialGradient
+      ? ctx.createRadialGradient(
+        -radius * 0.26,
+        -radius * 0.32,
+        radius * 0.12,
+        0,
+        0,
+        radius
+      )
+      : null;
+    if (colors.stops && gradient && gradient.addColorStop) {
+      colors.stops.forEach((stop) => gradient.addColorStop(stop.offset, stop.color));
+    }
+    ctx.strokeStyle = colors.stroke;
+    ctx.fillStyle = gradient || colors.fallback;
+    ctx.lineWidth = Math.max(1.1, Math.min(radius * 0.16, geom.radius * 0.06));
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function onlineTurnFeedbackMetrics(geom) {
+    const width = Math.max(1, geom && Number.isFinite(geom.width) ? geom.width : 1);
+    const height = Math.max(1, geom && Number.isFinite(geom.height) ? geom.height : width);
+    const shortSide = Math.min(width, height);
+    const fontSize = Math.round(clampNumber(shortSide * 0.074, 22, 44, 32));
+    return {
+      fontSize,
+      minFontSize: Math.max(15, Math.round(fontSize * 0.62)),
+      maxLines: 2,
+      maxWidthRatio: 0.84,
+      minWidth: shortSide * 0.46,
+      paddingX: Math.max(20, shortSide * 0.048),
+      paddingY: Math.max(14, shortSide * 0.03),
+      radius: Math.max(10, shortSide * 0.02),
+      lineHeight: 1.14,
+      lineWidth: Math.max(1.4, shortSide * 0.0038),
+      fill: 'rgba(255, 253, 248, 0.96)',
+      stroke: 'rgba(178, 58, 72, 0.62)',
+      text: '#211915',
+      shadowColor: 'rgba(50, 39, 31, 0.24)',
+      shadowBlur: Math.max(12, shortSide * 0.032),
+      shadowOffsetY: Math.max(3, shortSide * 0.009),
+      margin: Math.max(16, shortSide * 0.042)
+    };
+  }
+
+  function fittedOnlineTurnFeedbackLayout(ctx, text, maxWidth, maxFontSize, minFontSize, maxLines) {
+    const maxFont = Math.round(Math.max(1, maxFontSize));
+    const minFont = Math.round(Math.max(1, Math.min(maxFont, minFontSize)));
+    const linesLimit = Math.max(1, Math.round(maxLines || 1));
+    for (let fontSize = maxFont; fontSize >= minFont; fontSize -= 1) {
+      ctx.font = onlineTurnFeedbackFont(fontSize);
+      const lines = wrappedOnlineTurnFeedbackLines(ctx, text, maxWidth, linesLimit, fontSize, false);
+      if (lines.length && lines.every((line) => measureTextWidth(ctx, line, fontSize) <= maxWidth)) {
+        return { fontSize, lines };
+      }
+    }
+    ctx.font = onlineTurnFeedbackFont(minFont);
+    return {
+      fontSize: minFont,
+      lines: wrappedOnlineTurnFeedbackLines(ctx, text, maxWidth, linesLimit, minFont, true)
+    };
+  }
+
+  function onlineTurnFeedbackFont(fontSize) {
+    return `800 ${Math.max(1, Math.round(fontSize))}px "Inter", "Segoe UI", sans-serif`;
+  }
+
+  function wrappedOnlineTurnFeedbackLines(ctx, text, maxWidth, maxLines, fontSize, truncate) {
+    const words = String(text || '').split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const lines = [];
+    let line = '';
+    for (let wordIndex = 0; wordIndex < words.length; wordIndex += 1) {
+      const word = words[wordIndex];
+      const candidate = line ? `${line} ${word}` : word;
+      if (!line || measureTextWidth(ctx, candidate, fontSize) <= maxWidth) {
+        line = candidate;
+        continue;
+      }
+      lines.push(line);
+      line = word;
+      if (lines.length >= maxLines) {
+        line = words.slice(wordIndex).join(' ');
+        break;
+      }
+    }
+    if (line) lines.push(line);
+    let limited = lines.slice(0, maxLines);
+    if (lines.length > maxLines) {
+      limited = lines.slice(0, Math.max(0, maxLines - 1));
+      limited.push(lines.slice(Math.max(0, maxLines - 1)).join(' '));
+    }
+    if (!truncate) return limited;
+    return limited.map((lineText) => truncateOnlineTurnFeedbackLine(ctx, lineText, maxWidth, fontSize));
+  }
+
+  function truncateOnlineTurnFeedbackLine(ctx, text, maxWidth, fontSize) {
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (measureTextWidth(ctx, clean, fontSize) <= maxWidth) return clean;
+    const suffix = '...';
+    if (measureTextWidth(ctx, suffix, fontSize) > maxWidth) return '';
+    let low = 0;
+    let high = clean.length;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      const candidate = clean.slice(0, mid).replace(/\s+$/, '') + suffix;
+      if (measureTextWidth(ctx, candidate, fontSize) <= maxWidth) low = mid;
+      else high = mid - 1;
+    }
+    return clean.slice(0, low).replace(/\s+$/, '') + suffix;
   }
 
   function drawChineseCheckersMoveAnimation(ctx, geom, event, rawProgress) {
@@ -14625,7 +15116,8 @@
   function fideChessTurnInfo(state) {
     if (isFideChessPuzzle(state)) return fideChessPuzzleTurnInfo(state);
     const check = fideChessIsSideInCheck(state, state.turn) ? ', in check' : '';
-    return `${fideChessSideLabel(state.turn)} to move${check}`;
+    const side = fideChessSideLabel(state.turn);
+    return `${onlineRoleActionLabel(state.turn, 'to move', side, side.toLowerCase())}${check}`;
   }
 
   function fideChessPuzzleTurnInfo(state) {
@@ -16039,7 +16531,7 @@
 
   function connectFourTurnInfo(state) {
     const dir = dirLabel(state.fallDir, state.preset);
-    return `${connectFourColorLabel(state.turn)} to drop; falling ${dir}`;
+    return `${onlineRoleActionLabel(state.turn, 'to drop', connectFourColorLabel(state.turn))}; falling ${dir}`;
   }
 
   function connectFourHoleInfo(state) {
@@ -16078,7 +16570,7 @@
   }
 
   function gomokuTurnInfo(state) {
-    return `${gomokuColorLabel(state.turn)} to move`;
+    return onlineRoleActionLabel(state.turn, 'to move', gomokuColorLabel(state.turn));
   }
 
   function gomokuStoneCounts(state) {
@@ -16511,7 +17003,7 @@
 
   function goTurnInfo(state) {
     if (state && state.scoringReview) return 'score review; mark dead groups or confirm score';
-    return `${goColorLabel(state.turn)} to play; komi ${formatKomi(state.komi)}`;
+    return `${onlineRoleActionLabel(state.turn, 'to play', goColorLabel(state.turn))}; komi ${formatKomi(state.komi)}`;
   }
 
   function goDeadStoneIdSet(state) {
@@ -17093,8 +17585,8 @@
 
   function reversiTurnInfo(state) {
     return state.passCount
-      ? `${reversiColorLabel(state.turn)} to move; opponent passed`
-      : `${reversiColorLabel(state.turn)} to move`;
+      ? `${onlineRoleActionLabel(state.turn, 'to move', reversiColorLabel(state.turn))}; opponent passed`
+      : onlineRoleActionLabel(state.turn, 'to move', reversiColorLabel(state.turn));
   }
 
   function moveChineseCheckerMarble(sourceState, fromIndex, toIndex, options = {}) {
@@ -18906,33 +19398,37 @@
   }
 
   function chineseCheckersTurnLabel(state) {
-    if (isChineseCheckersJumping(state)) return chineseCheckersColorLabel(state.turn);
+    if (isChineseCheckersJumping(state)) {
+      return onlineRolePlayerLabel(state.turn, chineseCheckersColorLabel(state.turn));
+    }
     if (isChineseCheckersOpeningRound(state)) {
       const selectedMarble = Number.isInteger(state.selectedIndex) ? chineseCheckerMarbleAt(state, state.selectedIndex) : null;
       if (selectedMarble && !chineseCheckersOpeningSelectionIssue(state, selectedMarble.color)) {
-        return chineseCheckersColorLabel(selectedMarble.color);
+        return onlineRolePlayerLabel(selectedMarble.color, chineseCheckersColorLabel(selectedMarble.color));
       }
       const pending = chineseCheckersPendingOpeningColors(state);
-      return pending.length === 1 ? chineseCheckersColorLabel(pending[0]) : 'opening';
+      return pending.length === 1
+        ? onlineRolePlayerLabel(pending[0], chineseCheckersColorLabel(pending[0]))
+        : 'opening';
     }
-    return chineseCheckersColorLabel(state.turn);
+    return onlineRolePlayerLabel(state.turn, chineseCheckersColorLabel(state.turn));
   }
 
   function chineseCheckersTurnInfo(state) {
     if (isChineseCheckersJumping(state)) {
-      return `${chineseCheckersColorLabel(state.turn)} jumping; choose next jump or end jump`;
+      return `${onlineRoleActionLabel(state.turn, 'jumping', chineseCheckersColorLabel(state.turn))}; choose next jump or end jump`;
     }
     if (isChineseCheckersOpeningRound(state)) {
       const selectedMarble = Number.isInteger(state.selectedIndex) ? chineseCheckerMarbleAt(state, state.selectedIndex) : null;
       if (selectedMarble && !chineseCheckersOpeningSelectionIssue(state, selectedMarble.color)) {
-        return `${chineseCheckersColorLabel(selectedMarble.color)} to move; marble selected`;
+        return `${onlineRoleActionLabel(selectedMarble.color, 'to move', chineseCheckersColorLabel(selectedMarble.color))}; marble selected`;
       }
       const pending = chineseCheckersPendingOpeningColors(state);
-      if (pending.length === 1) return `${chineseCheckersColorLabel(pending[0])} to move`;
+      if (pending.length === 1) return onlineRoleActionLabel(pending[0], 'to move', chineseCheckersColorLabel(pending[0]));
       return 'choose any new color to move';
     }
     const selected = Number.isInteger(state.selectedIndex) ? '; marble selected' : '';
-    return `${chineseCheckersColorLabel(state.turn)} to move${selected}`;
+    return `${onlineRoleActionLabel(state.turn, 'to move', chineseCheckersColorLabel(state.turn))}${selected}`;
   }
 
   function isChineseCheckersJumping(state) {
@@ -21793,23 +22289,25 @@
 
   function renderChineseCheckersInfoLine(container, infoText) {
     if (!isChineseCheckersGame(game)) return false;
-    const match = /^([a-z0-9_-]+)\s+((?:to move\b|jumping\b)[\s\S]*)$/i.exec(infoText || '');
+    const match = /^(?:(.+?)\s+\(([a-z0-9_-]+)\)|([a-z0-9_-]+))\s+((?:to move\b|jumping\b)[\s\S]*)$/i.exec(infoText || '');
     if (!match) return false;
-    const color = normalizePlacementColor(match[1]);
+    const color = normalizePlacementColor(match[2] || match[3]);
     if (!color || !chineseCheckersPlayerColors(game).includes(color)) return false;
+    const player = normalizeOnlinePlayerName(match[1]);
+    const label = player ? `${player} (${chineseCheckersColorLabel(color)})` : chineseCheckersColorLabel(color);
     const doc = container.ownerDocument || (typeof document !== 'undefined' ? document : null);
     if (!doc || !doc.createElement || !doc.createTextNode) return false;
     const colors = placementPieceColors(color);
     const piece = doc.createElement('span');
     piece.className = 'chinese-checkers-status-piece';
-    piece.textContent = `${chineseCheckersColorLabel(color)} `;
-    piece.title = chineseCheckersColorLabel(color);
-    piece.setAttribute('aria-label', chineseCheckersColorLabel(color));
+    piece.textContent = `${label} `;
+    piece.title = label;
+    piece.setAttribute('aria-label', label);
     piece.style.background = placementPieceStatusGradient(colors);
     piece.style.borderColor = colors.stroke;
     container.textContent = '';
     container.appendChild(piece);
-    container.appendChild(doc.createTextNode(match[2]));
+    container.appendChild(doc.createTextNode(match[4]));
     return true;
   }
 
@@ -22114,6 +22612,22 @@
   function syncSpeedOutput() {
     if (!refs.speed || !refs.speedValue) return;
     refs.speedValue.textContent = `${refs.speed.value} ms`;
+  }
+
+  function selectedOnlineTurnFeedbackDuration() {
+    const value = refs.onlineTurnFeedbackDuration ? Number(refs.onlineTurnFeedbackDuration.value) : ONLINE_TURN_FEEDBACK_DURATION_DEFAULT;
+    return clampInteger(
+      value,
+      ONLINE_TURN_FEEDBACK_DURATION_MIN,
+      ONLINE_TURN_FEEDBACK_DURATION_MAX,
+      ONLINE_TURN_FEEDBACK_DURATION_DEFAULT
+    );
+  }
+
+  function syncOnlineTurnFeedbackDurationOutput() {
+    const duration = selectedOnlineTurnFeedbackDuration();
+    if (refs.onlineTurnFeedbackDuration) refs.onlineTurnFeedbackDuration.value = String(duration);
+    if (refs.onlineTurnFeedbackDurationValue) refs.onlineTurnFeedbackDurationValue.textContent = `${duration} ms`;
   }
 
   function syncPlacementPieceSizeOutput() {

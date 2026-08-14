@@ -132,6 +132,7 @@ export class GameRoom {
       readyToPlay: gameMode !== 'chinese-checkers',
       pendingApproval: null,
       approvedHistory: null,
+      disconnected: {},
       createdAt: now,
       updatedAt: now
     };
@@ -226,7 +227,11 @@ export class GameRoom {
       return;
     }
     if (payload.type === 'leave') {
-      await this.releaseSocketRole(ws);
+      const attachment = safeAttachment(ws);
+      const nextAttachment = { ...attachment, leaving: true };
+      this.sessions.set(ws, nextAttachment);
+      ws.serializeAttachment(nextAttachment);
+      await this.releaseSocketRole(ws, { announce: true });
       ws.close(1000, 'left room');
       return;
     }
@@ -234,11 +239,13 @@ export class GameRoom {
   }
 
   async webSocketClose(ws) {
+    await this.announceSocketDisconnect(ws, 'disconnected');
     this.sessions.delete(ws);
     this.broadcastPresence();
   }
 
   async webSocketError(ws) {
+    await this.announceSocketDisconnect(ws, 'connection error');
     this.sessions.delete(ws);
     this.broadcastPresence();
   }
@@ -248,6 +255,7 @@ export class GameRoom {
     const playerName = normalizePlayerName(payload.playerName, clientId);
     if (!this.room.playerNames || typeof this.room.playerNames !== 'object') this.room.playerNames = {};
     this.room.playerNames[clientId] = playerName;
+    const reconnected = !!(this.room.disconnected && this.room.disconnected[clientId]);
     const rolesAssigned = assignRequestedRoles(
       this.room.roles,
       this.room.gameMode,
@@ -266,6 +274,7 @@ export class GameRoom {
     this.sessions.set(ws, attachment);
     ws.serializeAttachment(attachment);
     this.room.updatedAt = new Date().toISOString();
+    if (reconnected && this.room.disconnected) delete this.room.disconnected[clientId];
     updateRoomReadiness(this.room);
     await this.saveRoom();
     this.safeSend(ws, {
@@ -281,6 +290,7 @@ export class GameRoom {
       unclaimedRoles: unclaimedRoomRoles(this.room)
     });
     this.sendState(ws, { reason: 'join' });
+    if (reconnected) this.broadcastPlayerReconnect(attachment);
     this.broadcastPresence();
   }
 
@@ -606,16 +616,81 @@ export class GameRoom {
     return '';
   }
 
-  async releaseSocketRole(ws) {
+  async releaseSocketRole(ws, options = {}) {
     const attachment = safeAttachment(ws);
     if (!attachment || !attachment.clientId || !this.room || !this.room.roles) return;
+    const rolesReleased = attachmentRoles(attachment);
+    const playerName = normalizePlayerName(attachment.playerName, attachment.clientId);
     Object.keys(this.room.roles).forEach((role) => {
       if (this.room.roles[role] === attachment.clientId) delete this.room.roles[role];
     });
     this.room.updatedAt = new Date().toISOString();
     updateRoomReadiness(this.room);
     await this.saveRoom();
+    if (options.announce) {
+      this.broadcast({
+        type: 'playerLeft',
+        roomCode: this.room.roomCode,
+        playerName,
+        rolesReleased,
+        wasPlayer: rolesReleased.length > 0,
+        roles: publicRoles(this.room.roles),
+        rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
+        readyToPlay: this.room.readyToPlay !== false,
+        unclaimedRoles: unclaimedRoomRoles(this.room),
+        connected: Math.max(0, this.playerSockets().length - 1)
+      });
+    }
     this.broadcastPresence();
+  }
+
+  async announceSocketDisconnect(ws, reason = 'disconnected') {
+    await this.loadRoom();
+    const attachment = safeAttachment(ws);
+    if (!this.room || !attachment || !attachment.joined || attachment.leaving) return;
+    const rolesAssigned = attachmentRoles(attachment);
+    const playerName = normalizePlayerName(attachment.playerName, attachment.clientId);
+    if (!this.room.disconnected || typeof this.room.disconnected !== 'object' || Array.isArray(this.room.disconnected)) {
+      this.room.disconnected = {};
+    }
+    this.room.disconnected[attachment.clientId] = {
+      playerName,
+      rolesAssigned,
+      reason: sanitizeText(reason, 80),
+      disconnectedAt: new Date().toISOString()
+    };
+    this.room.updatedAt = new Date().toISOString();
+    await this.saveRoom();
+    this.broadcast({
+      type: 'playerDisconnected',
+      roomCode: this.room.roomCode,
+      playerName,
+      rolesAssigned,
+      wasPlayer: rolesAssigned.length > 0,
+      reason: sanitizeText(reason, 80),
+      roles: publicRoles(this.room.roles),
+      rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
+      readyToPlay: this.room.readyToPlay !== false,
+      unclaimedRoles: unclaimedRoomRoles(this.room),
+      connected: Math.max(0, this.playerSockets().length - 1)
+    });
+  }
+
+  broadcastPlayerReconnect(attachment) {
+    if (!this.room || !attachment || !attachment.joined) return;
+    const rolesAssigned = attachmentRoles(attachment);
+    this.broadcast({
+      type: 'playerReconnected',
+      roomCode: this.room.roomCode,
+      playerName: normalizePlayerName(attachment.playerName, attachment.clientId),
+      rolesAssigned,
+      wasPlayer: rolesAssigned.length > 0,
+      roles: publicRoles(this.room.roles),
+      rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
+      readyToPlay: this.room.readyToPlay !== false,
+      unclaimedRoles: unclaimedRoomRoles(this.room),
+      connected: this.playerSockets().length
+    });
   }
 
   expireApprovals() {

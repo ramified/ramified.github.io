@@ -1752,6 +1752,14 @@
             <label class="opt-row"><input type="checkbox" id="step-mode"> step-by-step</label>
             <button class="btn" id="next-step" type="button" disabled>next step</button>
           </div>
+          <div class="mosaic-inline-row" id="online-turn-feedback-row">
+            <span class="input-label">Turn notice</span>
+            <span class="background-slider-controls">
+              <input type="range" id="online-turn-feedback-duration" min="600" max="2400" step="100" value="1000" aria-label="Online turn notice duration">
+              <output id="online-turn-feedback-duration-value">1000 ms</output>
+            </span>
+            <button class="btn" id="online-turn-feedback-preview" type="button">preview</button>
+          </div>
           <div class="mosaic-inline-row" id="debug-tile-row" data-mode-control="2048">
             <span class="input-label">Tile value</span>
             <select class="mosaic-editor-input" id="debug-tile-value" aria-label="Debug tile value">
