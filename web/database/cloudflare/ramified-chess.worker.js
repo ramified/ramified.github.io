@@ -34,6 +34,9 @@ const ROOM_CODE_LENGTH = 6;
 const MAX_JSON_BYTES = 850 * 1024;
 const APPROVAL_TTL_MS = 45 * 1000;
 const APPROVED_HISTORY_TTL_MS = 20 * 1000;
+const ROOM_INDEX_OBJECT_NAME = '__room-index__';
+const ROOM_INDEX_STORAGE_KEY = 'rooms';
+const ROOM_INDEX_MAX_ROOMS = 200;
 
 export default {
   async fetch(request, env) {
@@ -45,6 +48,10 @@ export default {
     try {
       if (request.method === 'POST' && path === '/api/rooms') {
         return await createRoom(request, env);
+      }
+
+      if (request.method === 'GET' && path === '/api/rooms') {
+        return await listRooms(env);
       }
 
       const roomMetaMatch = /^\/api\/rooms\/([A-Z0-9]{4,8})$/i.exec(path);
@@ -88,6 +95,8 @@ export class GameRoom {
   async fetch(request) {
     try {
       const url = new URL(request.url);
+      if (url.pathname === '/room-index/register' && request.method === 'POST') return this.handleRoomIndexRegister(request);
+      if (url.pathname === '/room-index/list' && request.method === 'GET') return this.handleRoomIndexList();
       if (url.pathname === '/init' && request.method === 'POST') return this.handleInit(request);
       if (url.pathname === '/meta' && request.method === 'GET') return this.handleMeta();
       if (/^\/ws\//.test(url.pathname) && request.headers.get('Upgrade') === 'websocket') return this.handleWebSocket(request);
@@ -149,6 +158,23 @@ export class GameRoom {
     if (!this.room) return jsonResponse({ error: 'Room not found.' }, 404);
     updateRoomReadiness(this.room);
     return jsonResponse(publicRoomPayload(this.room));
+  }
+
+  async handleRoomIndexRegister(request) {
+    const body = await readJson(request);
+    const entry = normalizeRoomIndexEntry(body);
+    if (!entry) return jsonResponse({ error: 'Invalid room index entry.' }, 400);
+    const existing = await this.ctx.storage.get(ROOM_INDEX_STORAGE_KEY);
+    const rooms = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {};
+    rooms[entry.roomCode] = entry;
+    await this.ctx.storage.put(ROOM_INDEX_STORAGE_KEY, pruneRoomIndex(rooms));
+    return jsonResponse({ ok: true });
+  }
+
+  async handleRoomIndexList() {
+    const existing = await this.ctx.storage.get(ROOM_INDEX_STORAGE_KEY);
+    const rooms = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {};
+    return jsonResponse({ rooms: roomIndexList(rooms) });
   }
 
   async handleWebSocket(request) {
@@ -782,9 +808,39 @@ async function createRoom(request, env) {
       body: JSON.stringify({ ...body, roomCode, gameMode })
     });
     const response = await stub.fetch(initRequest);
-    if (response.status !== 409) return addCors(response);
+    if (response.status !== 409) {
+      if (response.ok) {
+        try {
+          await registerRoomInIndex(env, await response.clone().json());
+        } catch (_) {
+          // Room creation already succeeded; discovery can recover on the next room creation.
+        }
+      }
+      return addCors(response);
+    }
   }
   return jsonResponse({ error: 'Could not allocate a room code; try again.' }, 503);
+}
+
+async function listRooms(env) {
+  const stub = roomIndexStub(env);
+  const response = await stub.fetch(new Request('https://room-index/room-index/list'));
+  return addCors(response);
+}
+
+async function registerRoomInIndex(env, room) {
+  const entry = normalizeRoomIndexEntry(room);
+  if (!entry) return;
+  const stub = roomIndexStub(env);
+  await stub.fetch(new Request('https://room-index/room-index/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry)
+  }));
+}
+
+function roomIndexStub(env) {
+  return env.GAME_ROOM.get(env.GAME_ROOM.idFromName(ROOM_INDEX_OBJECT_NAME));
 }
 
 async function readJson(request) {
@@ -982,6 +1038,43 @@ function publicRoomPayload(room, extra = {}) {
     updatedAt: room.updatedAt,
     ...extra
   };
+}
+
+function normalizeRoomIndexEntry(source) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
+  const roomCode = normalizeRoomCode(source.roomCode || source.code);
+  const gameMode = normalizeGameMode(source.gameMode || source.mode);
+  if (!roomCode || !SUPPORTED_GAME_MODES.has(gameMode)) return null;
+  const updatedAt = normalizeTimestamp(source.updatedAt || source.createdAt);
+  return {
+    roomCode,
+    gameMode,
+    summary: sanitizeText(source.summary, 220),
+    updatedAt
+  };
+}
+
+function roomIndexList(rooms) {
+  const list = [];
+  Object.keys(rooms || {}).forEach((key) => {
+    const entry = normalizeRoomIndexEntry(rooms[key] || { roomCode: key });
+    if (entry) list.push(entry);
+  });
+  list.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.roomCode.localeCompare(b.roomCode));
+  return list;
+}
+
+function pruneRoomIndex(rooms) {
+  return roomIndexList(rooms).slice(0, ROOM_INDEX_MAX_ROOMS).reduce((result, entry) => {
+    result[entry.roomCode] = entry;
+    return result;
+  }, {});
+}
+
+function normalizeTimestamp(value) {
+  const text = String(value || '').trim();
+  const time = Date.parse(text);
+  return Number.isFinite(time) ? new Date(time).toISOString() : new Date().toISOString();
 }
 
 function publicRoles(roles) {

@@ -11,7 +11,7 @@ window.THEOREM_GRAPH_PRESETS = [
 },
 { label: "Quartic double solid", key: "quartic_double_solid", file: "quartic_double_solid.preset.js" },
 { label: "daily tasks", key: "daily_tasks", file: "daily_tasks.preset.js" },
-{ label: "Half-Spin Symmetry for Conormal Cycles: Roadmap", key: "half_spin_symmetry_for_conormal_cycles_roadmap", file: "half_spin_symmetry_for_conormal_cycles_roadmap.preset.js" },
+{ label: "Half-Spin Symmetry for Conormal Cycles", key: "half_spin_symmetry_for_conormal_cycles", file: "half_spin_symmetry_for_conormal_cycles.preset.js" },
 { label: "Gauss-Map Counterexample Roadmap", key: "gauss_map_counterexample_roadmap", file: "gauss_map_counterexample_roadmap.preset.js" },
 { label: "Fukaya Categories of Surfaces", key: "fukaya_categories_of_surfaces", file: "fukaya_categories_of_surfaces.preset.js" },
 { label: "Integral S_n Forms", key: "integral_s_n_forms", file: "integral_s_n_forms.preset.js" },

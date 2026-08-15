@@ -463,6 +463,11 @@ function testBombKeepsFullBoardPlayable() {
   game.directionsForPreset(state.preset).forEach((dir) => {
     assert.strictEqual(game.simulateRound(state, dir, { spawn: false }).changed, false);
   });
+  state.bombs = [];
+  state.boxes.push({ id: 17, index: bombIndex, value: 2 });
+  state.nextBoxId = 18;
+  assert.strictEqual(game.emptyExistingIndices(state).length, 0);
+  assert.strictEqual(game.isGameOver(state), true);
 }
 
 function testOrdinaryMergeOnce() {
@@ -1060,6 +1065,95 @@ function testExplosionMoverVacatesSourceForBounceResolution() {
   assert.deepStrictEqual(bombsAt(result.state), ['1,2:blue:2']);
   assert.ok(!result.state.boxes.some((item) => item.id === 1 || item.id === 5));
   assert.deepStrictEqual(valuesAt(result.state), ['1,1:8', '1,4:2']);
+}
+
+function randomGluePushedCollisionState(pushedValue) {
+  const preset = {
+    id: 'random-glue-pushed-collision',
+    label: 'random glue pushed collision',
+    lattice: 'square',
+    rows: 4,
+    cols: 4,
+    surface: 'random boundary glue',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [
+      { group: 0, first: { row: 4, col: 2, dir: game.DIRS.S }, second: { row: 1, col: 2, dir: game.DIRS.N } },
+      { group: 1, first: { row: 1, col: 4, dir: game.DIRS.E }, second: { row: 4, col: 1, dir: game.DIRS.W } },
+      { group: 2, first: { row: 2, col: 1, dir: game.DIRS.W }, second: { row: 4, col: 4, dir: game.DIRS.S } },
+      { group: 3, first: { row: 4, col: 4, dir: game.DIRS.E }, second: { row: 1, col: 4, dir: game.DIRS.N } },
+      { group: 4, first: { row: 1, col: 1, dir: game.DIRS.W }, second: { row: 4, col: 1, dir: game.DIRS.S } },
+      { group: 5, first: { row: 4, col: 3, dir: game.DIRS.S }, second: { row: 1, col: 1, dir: game.DIRS.N } },
+      { group: 6, first: { row: 3, col: 4, dir: game.DIRS.E }, second: { row: 3, col: 1, dir: game.DIRS.W } },
+      { group: 7, first: { row: 1, col: 3, dir: game.DIRS.N }, second: { row: 2, col: 4, dir: game.DIRS.E } }
+    ]
+  };
+  const state = stateWithBoxes(preset, [
+    box(11, 1, 4, pushedValue),
+    box(62, 2, 3, 8),
+    box(72, 4, 1, 2),
+    box(67, 4, 4, 4)
+  ]);
+  state.bombs = [
+    { index: game.indexOf(1, 3, 4), kind: game.BOMB_KINDS.BLUE, value: 8 },
+    { index: game.indexOf(2, 1, 4), kind: game.BOMB_KINDS.BLUE, value: 2 },
+    { index: game.indexOf(3, 4, 4), kind: game.BOMB_KINDS.BLUE, value: 16 },
+    { index: game.indexOf(4, 2, 4), kind: game.BOMB_KINDS.BLUE, value: 2 },
+    { index: game.indexOf(4, 3, 4), kind: game.BOMB_KINDS.BLUE, value: 2 }
+  ];
+  state.nextBoxId = 73;
+  state.score = 312;
+  return state;
+}
+
+function testPushedMoveCollisionCreatesBomb() {
+  const result = game.simulateRound(randomGluePushedCollisionState(32), game.DIRS.E, { spawn: false });
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(valuesAt(result.state), ['1,4:4', '4,1:2']);
+  assert.deepStrictEqual(stackedTileSummaries(result.state), []);
+  assert.ok(!result.state.boxes.some((item) => item.id === 11 || item.id === 62));
+  assert.deepStrictEqual(bombsAt(result.state), [
+    '1,3:blue:8',
+    '2,1:blue:2',
+    '2,4:blue:8',
+    '3,4:blue:16',
+    '4,2:blue:2',
+    '4,3:blue:2'
+  ]);
+
+  const impactGroup = result.events.find((event) => event.kind === 'moveGroup' && event.explosions && event.explosions.length);
+  assert.ok(impactGroup);
+  assert.ok(impactGroup.moves.some((move) => move.boxId === 67 && move.to === game.indexOf(1, 4, 4)));
+  const explosion = impactGroup.explosions.find((event) => event.center === game.indexOf(2, 4, 4));
+  assert.ok(explosion);
+  assert.strictEqual(explosion.value, 8);
+  assert.deepStrictEqual(explosion.removeBoxIds.sort((a, b) => a - b), [11, 62]);
+  assert.deepStrictEqual(explosion.moves.map((move) => move.boxId).sort((a, b) => a - b), [11, 62]);
+  const bombPlacement = result.events.find((event) => event.kind === 'placeBomb' && event.index === game.indexOf(2, 4, 4));
+  assert.ok(bombPlacement);
+  assert.strictEqual(bombPlacement.value, 8);
+  assert.deepStrictEqual(bombPlacement.removeBoxIds.sort((a, b) => a - b), [11, 62]);
+}
+
+function testPushedMoveCollisionCanMerge() {
+  const result = game.simulateRound(randomGluePushedCollisionState(8), game.DIRS.E, { spawn: false });
+  assert.strictEqual(result.changed, true);
+  assert.deepStrictEqual(valuesAt(result.state), ['1,4:4', '2,4:16', '4,1:2']);
+  assert.deepStrictEqual(stackedTileSummaries(result.state), []);
+  assert.deepStrictEqual(bombsAt(result.state), [
+    '1,3:blue:8',
+    '2,1:blue:2',
+    '3,4:blue:16',
+    '4,2:blue:2',
+    '4,3:blue:2'
+  ]);
+  assert.strictEqual(result.state.score, 328);
+
+  const merge = allMergeEvents(result.events).find((event) => event.to === game.indexOf(2, 4, 4));
+  assert.ok(merge);
+  assert.strictEqual(merge.newValue, 16);
+  assert.deepStrictEqual(merge.moves.map((move) => move.boxId).sort((a, b) => a - b), [11, 62]);
+  assert.ok(!result.events.some((event) => event.kind === 'explode'));
 }
 
 function testMergeAndMoveShareAnimationStep() {
@@ -3775,6 +3869,7 @@ function makeElement(id, extra = {}) {
     disabled: false,
     hidden: false,
     attributes: {},
+    dataset: {},
     textContent: '',
     label: '',
     children: [],
@@ -3826,6 +3921,22 @@ function makeElement(id, extra = {}) {
         this.options.push(...child.options);
       }
       return child;
+    },
+    querySelectorAll(selector) {
+      const matches = [];
+      const visit = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (
+          selector === 'input[type=checkbox]'
+          && node.tagName === 'INPUT'
+          && node.type === 'checkbox'
+        ) {
+          matches.push(node);
+        }
+        (node.children || []).forEach(visit);
+      };
+      this.children.forEach(visit);
+      return matches;
     },
     focus() {},
     select() {},
@@ -3982,7 +4093,24 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('highest-tile-value'),
     makeElement('existing-tile-value'),
     makeElement('removed-tile-value'),
-    makeElement('round-value')
+    makeElement('round-value'),
+    makeElement('online-play-card'),
+    makeElement('online-room-code'),
+    makeElement('online-room-select', { tagName: 'SELECT', hidden: true }),
+    makeElement('online-player-name'),
+    makeElement('online-role-options'),
+    makeElement('online-create-room'),
+    makeElement('online-search-room'),
+    makeElement('online-join-room'),
+    makeElement('online-leave-room'),
+    makeElement('online-confirm-roles'),
+    makeElement('online-chinese-start-row'),
+    makeElement('online-keep-unclaimed-colors'),
+    makeElement('online-start-claimed-colors'),
+    makeElement('online-status'),
+    makeElement('online-turn-feedback-duration', { value: '1000' }),
+    makeElement('online-turn-feedback-duration-value'),
+    makeElement('online-turn-feedback-preview')
   ].forEach((element) => elements.set(element.id, element));
   moveButtons.forEach((button) => elements.set(button.id, button));
   mode2048Controls.forEach((control) => elements.set(control.id, control));
@@ -4005,13 +4133,18 @@ function createHeadlessDomHarness(options = {}) {
       return 1;
     },
     clearTimeout() {},
+    URL,
     URLSearchParams,
+    fetch: options.fetch || (() => Promise.reject(new Error('fetch not configured'))),
     document: {
       getElementById(id) {
         return elements.get(id) || null;
       },
       createElement(tagName) {
         return makeElement('', { tagName: String(tagName || '').toUpperCase() });
+      },
+      createTextNode(text) {
+        return makeElement('', { tagName: '#text', textContent: String(text || '') });
       },
       addEventListener(type, handler) {
         documentListeners[type] = handler;
@@ -4031,8 +4164,21 @@ function createHeadlessDomHarness(options = {}) {
     window: {
       devicePixelRatio: 1,
       location: { search: options.locationSearch || '' },
+      RAMIFIED_MINIGAMES_ONLINE_URL: options.onlineUrl || '',
       RAMIFIED_MINIGAME_PRESETS: presetRegistrySource,
       RAMIFIED_MINIGAME_PRESET_DATA: presetDataByKey,
+      localStorage: {
+        _values: {},
+        getItem(key) {
+          return Object.prototype.hasOwnProperty.call(this._values, key) ? this._values[key] : null;
+        },
+        setItem(key, value) {
+          this._values[key] = String(value);
+        },
+        removeItem(key) {
+          delete this._values[key];
+        }
+      },
       addEventListener(type, handler) {
         windowListeners[type] = handler;
       },
@@ -4047,6 +4193,156 @@ function createHeadlessDomHarness(options = {}) {
   context.Math.random = () => (randoms.length ? randoms.shift() : 0.1);
   vm.runInNewContext(source, context);
   return { elements, canvas, moveButtons, documentListeners, windowListeners, calls, context };
+}
+
+function fakeJsonResponse(payload, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: () => Promise.resolve(JSON.stringify(payload))
+  };
+}
+
+async function invokeHeadlessListener(element, type = 'click') {
+  element.listeners[type]();
+  for (let index = 0; index < 5; index += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+async function testOnlineControlsVisibleForSinglePlayerModes() {
+  const fetchCalls = [];
+  let harness = createHeadlessDomHarness({
+    onlineUrl: 'https://example.test/worker',
+    fetch(url, init) {
+      fetchCalls.push({ url, init });
+      return Promise.resolve(fakeJsonResponse({ roomCode: '123456' }));
+    }
+  });
+  harness.elements.get('game-mode-select').value = '2048';
+  harness.elements.get('game-mode-select').listeners.change();
+  assert.strictEqual(harness.elements.get('game-mode-select').value, '2048');
+  assert.strictEqual(harness.elements.get('online-play-card').hidden, false);
+  assert.strictEqual(harness.elements.get('online-create-room').disabled, false);
+  assert.strictEqual(harness.elements.get('online-search-room').disabled, false);
+  assert.strictEqual(harness.elements.get('online-join-room').disabled, true);
+  await invokeHeadlessListener(harness.elements.get('online-create-room'));
+  assert.strictEqual(fetchCalls.length, 0);
+  assert.ok(harness.elements.get('online-status').textContent.includes('one-player game'));
+  assert.strictEqual(harness.elements.get('status-line').textContent, 'online create unavailable');
+
+  harness = createHeadlessDomHarness({
+    gameMode: 'sokoban',
+    onlineUrl: 'https://example.test/worker',
+    fetch(url, init) {
+      fetchCalls.push({ url, init });
+      return Promise.resolve(fakeJsonResponse({ roomCode: '123456' }));
+    }
+  });
+  harness.elements.get('game-mode-select').value = 'sokoban';
+  harness.elements.get('game-mode-select').listeners.change();
+  assert.strictEqual(harness.elements.get('online-play-card').hidden, false);
+  assert.strictEqual(harness.elements.get('online-create-room').disabled, false);
+  assert.strictEqual(harness.elements.get('online-search-room').disabled, false);
+  await invokeHeadlessListener(harness.elements.get('online-create-room'));
+  assert.strictEqual(fetchCalls.length, 0);
+  assert.ok(harness.elements.get('online-status').textContent.includes('one-player game'));
+}
+
+async function testOnlineRoomSearchPopulatesSelect() {
+  const fetchCalls = [];
+  const harness = createHeadlessDomHarness({
+    onlineUrl: 'https://example.test/worker',
+    fetch(url, init) {
+      fetchCalls.push({ url, init });
+      return Promise.resolve(fakeJsonResponse({
+        rooms: [
+          { roomCode: '123456', gameMode: 'gomoku', summary: 'open game' },
+          { roomCode: '777777', gameMode: 'go', summary: 'territory' }
+        ]
+      }));
+    }
+  });
+  await invokeHeadlessListener(harness.elements.get('online-search-room'));
+  const select = harness.elements.get('online-room-select');
+  assert.strictEqual(fetchCalls.length, 1);
+  assert.strictEqual(fetchCalls[0].url, 'https://example.test/worker/api/rooms');
+  assert.strictEqual(fetchCalls[0].init, undefined);
+  assert.strictEqual(select.hidden, false);
+  assert.strictEqual(select.options.length, 2);
+  assert.deepStrictEqual(select.options.map((option) => option.textContent), ['123456 - Gomoku', '777777 - Go']);
+  assert.strictEqual(select.value, '123456');
+  assert.strictEqual(harness.elements.get('online-room-code').value, '123456');
+  assert.ok(harness.elements.get('online-status').textContent.includes('Found 2 online rooms'));
+  select.value = '777777';
+  select.listeners.change();
+  assert.strictEqual(harness.elements.get('online-room-code').value, '777777');
+}
+
+async function testOnlineRoomSearchEmptyResults() {
+  const harness = createHeadlessDomHarness({
+    onlineUrl: 'https://example.test',
+    fetch() {
+      return Promise.resolve(fakeJsonResponse({ rooms: [] }));
+    }
+  });
+  await invokeHeadlessListener(harness.elements.get('online-search-room'));
+  assert.strictEqual(harness.elements.get('online-room-select').hidden, true);
+  assert.strictEqual(harness.elements.get('online-room-select').options.length, 0);
+  assert.ok(harness.elements.get('online-status').textContent.includes('No online rooms'));
+}
+
+async function testOnlineRoomSearchFailureHidesSelect() {
+  const harness = createHeadlessDomHarness({
+    onlineUrl: 'https://example.test',
+    fetch() {
+      return Promise.reject(new Error('network down'));
+    }
+  });
+  await invokeHeadlessListener(harness.elements.get('online-search-room'));
+  assert.strictEqual(harness.elements.get('online-room-select').hidden, true);
+  assert.strictEqual(harness.elements.get('online-room-select').options.length, 0);
+  assert.ok(harness.elements.get('online-status').textContent.includes('network down'));
+}
+
+function blockedBonusStatusPayload(withBomb = false) {
+  return {
+    preset: {
+      label: withBomb ? 'bomb blocked bonus import' : 'bonus ending import',
+      lattice: 'square',
+      rows: 4,
+      cols: 4,
+      surface: 'full blocked grid'
+    },
+    phase: 'ready',
+    round: 11,
+    score: 20,
+    nextBoxId: 17,
+    boxes: Array.from({ length: 16 }, (_, index) => {
+      if (withBomb && index === 5) return null;
+      const row = Math.floor(index / 4) + 1;
+      const col = (index % 4) + 1;
+      return { id: index + 1, row, col, value: (row + col) % 2 ? 2 : 4 };
+    }).filter(Boolean),
+    bombs: withBomb ? [{ row: 2, col: 2, kind: 'blue', value: 2 }] : [],
+    removed: [],
+    queue: { eventIndex: 0, stepPaused: false, events: [] }
+  };
+}
+
+function test2048BonusEndingEligibilityWithBombs() {
+  const withBomb = game.gameStateFromDebugImportPayload(blockedBonusStatusPayload(true)).state;
+  assert.strictEqual(game.emptyExistingIndices(withBomb).length, 0);
+  assert.strictEqual(game.isGameOver(withBomb), false);
+  assert.strictEqual(game.canOfferBonusEnding(withBomb), false);
+  game.directionsForPreset(withBomb.preset).forEach((dir) => {
+    assert.strictEqual(game.simulateRound(withBomb, dir, { spawn: false }).changed, false);
+  });
+
+  const withoutBomb = game.gameStateFromDebugImportPayload(blockedBonusStatusPayload(false)).state;
+  assert.strictEqual(game.emptyExistingIndices(withoutBomb).length, 0);
+  assert.strictEqual(game.isGameOver(withoutBomb), true);
+  assert.strictEqual(game.canOfferBonusEnding(withoutBomb), true);
 }
 
 function pointerEvent(x, y, extra = {}) {
@@ -5213,6 +5509,44 @@ function testHeadlessDomStepControls() {
   exported = JSON.parse(elements.get('debug-export-output').value);
   assert.strictEqual(exported.warnings[0].kind, 'stacked-boxes');
   assert.strictEqual(exported.boxes.length, 3);
+
+  elements.get('debug-export-output').value = JSON.stringify({
+    preset: {
+      label: 'bomb blocked bonus import',
+      lattice: 'square',
+      rows: 4,
+      cols: 4,
+      surface: 'full blocked grid with bomb'
+    },
+    phase: 'ready',
+    round: 11,
+    score: 20,
+    nextBoxId: 17,
+    boxes: Array.from({ length: 16 }, (_, index) => {
+      if (index === 5) return null;
+      const row = Math.floor(index / 4) + 1;
+      const col = (index % 4) + 1;
+      return { id: index + 1, row, col, value: (row + col) % 2 ? 2 : 4 };
+    }).filter(Boolean),
+    bombs: [{ row: 2, col: 2, kind: 'blue', value: 2 }],
+    removed: [],
+    queue: { eventIndex: 0, stepPaused: false, events: [] }
+  });
+  elements.get('import-state').listeners.click();
+  ['N', 'W', 'E'].forEach((dir, index) => {
+    moveButtons.find((button) => button.getAttribute('data-move-dir') === dir).listeners.click();
+    assert.strictEqual(elements.get('status-line').textContent, 'no move');
+    assert.strictEqual(elements.get('info-line').textContent, `${index + 1}/4 directions unchanged`);
+  });
+  moveButtons.find((button) => button.getAttribute('data-move-dir') === 'S').listeners.click();
+  assert.strictEqual(elements.get('status-line').textContent, 'bombs remain');
+  assert.strictEqual(elements.get('info-line').textContent, 'detonate 1 bomb before bonus ending');
+  assert.strictEqual(elements.get('status-badge').textContent, 'ready');
+  elements.get('export-state').listeners.click();
+  exported = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(exported.phase, 'ready');
+  assert.notStrictEqual(exported.ending, 'bonus');
+  assert.strictEqual(exported.bombs.length, 1);
 
   elements.get('debug-export-output').value = JSON.stringify({
     preset: {
@@ -6509,7 +6843,7 @@ function testSokobanBeamInteriorsCanCrossButStillBlockEnergyBridges() {
   }).sort(), ['1,3', '2,2', '4,3']);
 }
 
-function run() {
+async function run() {
   testInitialSpawnWeights();
   testRoundSpawnWeights();
   testNoSpawnAfterNoop();
@@ -6531,6 +6865,8 @@ function run() {
   testDownMoveAfterExplosionDoesNotStack();
   testBlockedResidentWithSuccessorPreventsGroupExplosion();
   testExplosionMoverVacatesSourceForBounceResolution();
+  testPushedMoveCollisionCreatesBomb();
+  testPushedMoveCollisionCanMerge();
   testMergeAndMoveShareAnimationStep();
   testMoveEventsAreGroupedByTick();
   testBouncesAndMovesShareTickAnimation();
@@ -6547,6 +6883,11 @@ function run() {
   testRandomGluePresetCoversBoundary();
   testRandomGluePresetIsDeterministicWithGlueRng();
   testBoundaryGlueBoardPresetSizingAndGlueModes();
+  test2048BonusEndingEligibilityWithBombs();
+  await testOnlineControlsVisibleForSinglePlayerModes();
+  await testOnlineRoomSearchPopulatesSelect();
+  await testOnlineRoomSearchEmptyResults();
+  await testOnlineRoomSearchFailureHidesSelect();
   testGoCaptureSuicideKoAndScoring();
   testGoGluedCaptureUsesSurfaceSuccessor();
   testReversiOpeningFlipsAndScoring();
@@ -6648,4 +6989,7 @@ function run() {
   console.log('ramified_minigames_setup_test: all tests passed');
 }
 
-run();
+run().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

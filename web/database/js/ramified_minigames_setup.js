@@ -388,6 +388,7 @@
   let noMoveDirs = new Set();
   let eventQueueChangedBoard = false;
   let pendingBonusGameOver = false;
+  let pendingBonusBlockedByBombs = false;
   let hoveredGlue = null;
   let swipeGesture = null;
   let fideChessDrag = null;
@@ -484,9 +485,11 @@
     refs.setupAlert = document.getElementById('game-setup-alert');
     refs.onlineCard = document.getElementById('online-play-card');
     refs.onlineRoomCode = document.getElementById('online-room-code');
+    refs.onlineRoomSelect = document.getElementById('online-room-select');
     refs.onlinePlayerName = document.getElementById('online-player-name');
     refs.onlineRoleOptions = document.getElementById('online-role-options');
     refs.onlineCreateRoom = document.getElementById('online-create-room');
+    refs.onlineSearchRoom = document.getElementById('online-search-room');
     refs.onlineJoinRoom = document.getElementById('online-join-room');
     refs.onlineConfirmRoles = document.getElementById('online-confirm-roles');
     refs.onlineChineseStartRow = document.getElementById('online-chinese-start-row');
@@ -601,12 +604,14 @@
     if (refs.begin) refs.begin.addEventListener('click', beginGameFromUi);
     if (refs.canvasStartBegin) refs.canvasStartBegin.addEventListener('click', handleCanvasStartBeginClick);
     if (refs.onlineCreateRoom) refs.onlineCreateRoom.addEventListener('click', createOnlineRoomFromUi);
+    if (refs.onlineSearchRoom) refs.onlineSearchRoom.addEventListener('click', searchOnlineRoomsFromUi);
     if (refs.onlineJoinRoom) refs.onlineJoinRoom.addEventListener('click', joinOnlineRoomFromUi);
     if (refs.onlineConfirmRoles) refs.onlineConfirmRoles.addEventListener('click', confirmOnlineChineseCheckersRolesFromUi);
     if (refs.onlineStartClaimedColors) refs.onlineStartClaimedColors.addEventListener('click', startOnlineChineseCheckersWithClaimedColorsFromUi);
     if (refs.onlineLeaveRoom) refs.onlineLeaveRoom.addEventListener('click', leaveOnlineRoomFromUi);
     if (refs.onlineRoleOptions) refs.onlineRoleOptions.addEventListener('change', handleOnlineRoleOptionsChange);
     if (refs.onlineRoomCode) refs.onlineRoomCode.addEventListener('input', syncOnlineControls);
+    if (refs.onlineRoomSelect) refs.onlineRoomSelect.addEventListener('change', handleOnlineRoomSelectChange);
     if (refs.onlinePlayerName) refs.onlinePlayerName.addEventListener('input', handleOnlinePlayerNameInput);
     if (refs.onlinePlayerName) refs.onlinePlayerName.addEventListener('change', sendOnlinePlayerNameUpdate);
     if (refs.onlineTurnFeedbackDuration) refs.onlineTurnFeedbackDuration.addEventListener('input', syncOnlineTurnFeedbackDurationOutput);
@@ -736,6 +741,8 @@
       applyingRemoteState: false,
       pendingStateMessages: [],
       roomDisplaySettings: null,
+      roomSearchResults: [],
+      searchingRooms: false,
       pendingJoin: null,
       statusState: 'offline',
       statusText: ''
@@ -874,6 +881,30 @@
     if (!onlineModeSupported(mode)) return false;
     if (mode === GAME_MODES.FIDE_CHESS && selectedFideChessPresetIsPuzzle()) return false;
     return true;
+  }
+
+  function onlineRoomCreationIssueForMode(mode, state = null) {
+    const normalized = gameModeFromUrlParam(mode) || mode;
+    if (normalized === GAME_MODES.NUMBER_2048 || normalized === GAME_MODES.SOKOBAN) {
+      return 'This is a one-player game, so it cannot create a room. Search or join a multiplayer room instead.';
+    }
+    const fidePuzzle = normalized === GAME_MODES.FIDE_CHESS
+      && (state ? isFideChessPuzzle(state) : selectedFideChessPresetIsPuzzle());
+    if (fidePuzzle) {
+      return 'This FIDE Chess puzzle is a one-player game, so it cannot create a room. Search or join a multiplayer room instead.';
+    }
+    if (!onlineModeSupported(normalized)) {
+      return 'Room creation supports Gomoku, Go, Connect Four, Reversi, Chinese Checkers, and non-puzzle FIDE Chess.';
+    }
+    return '';
+  }
+
+  function onlineSelectedRoomCreationIssue() {
+    return onlineRoomCreationIssueForMode(selectedGameMode());
+  }
+
+  function onlineStateRoomCreationIssue(state = game) {
+    return state ? onlineRoomCreationIssueForMode(gameModeValue(state), state) : onlineSelectedRoomCreationIssue();
   }
 
   function syncOnlineRoleOptions(mode = null) {
@@ -1127,15 +1158,19 @@
     const configured = !!onlineState.baseUrl;
     const active = onlineIsInRoom() || !!onlineState.connecting;
     const visible = onlinePlayCardVisible();
+    const creationIssue = onlineSelectedRoomCreationIssue();
     if (refs.onlineCard) refs.onlineCard.hidden = !visible;
     const roomInput = onlineRoomCodeFromInput();
     if (refs.onlineRoomCode && refs.onlineRoomCode.value !== roomInput) refs.onlineRoomCode.value = roomInput;
     if (refs.onlineCreateRoom) {
-      refs.onlineCreateRoom.disabled = !visible || !configured || active || !onlineSelectedModeSupported();
+      refs.onlineCreateRoom.disabled = !visible || !configured || active;
+      refs.onlineCreateRoom.title = creationIssue || '';
     }
+    if (refs.onlineSearchRoom) refs.onlineSearchRoom.disabled = !visible || !configured || active || !!onlineState.searchingRooms;
     if (refs.onlineJoinRoom) refs.onlineJoinRoom.disabled = !visible || !configured || active || roomInput.length < 4;
     if (refs.onlineLeaveRoom) refs.onlineLeaveRoom.disabled = !active;
     if (refs.onlineRoomCode) refs.onlineRoomCode.disabled = active;
+    if (refs.onlineRoomSelect) refs.onlineRoomSelect.disabled = active;
     if (refs.onlinePlayerName) refs.onlinePlayerName.disabled = !visible || !configured;
     if (refs.onlineRoleOptions && refs.onlineRoleOptions.querySelectorAll) {
       Array.from(refs.onlineRoleOptions.querySelectorAll('input[type=checkbox]')).forEach((input) => {
@@ -1163,8 +1198,7 @@
 
   function onlinePlayCardVisible() {
     if (!onlineState) return false;
-    if (onlineIsInRoom() || onlineState.connecting) return true;
-    return onlineSelectedModeSupported();
+    return true;
   }
 
   function onlineHttpUrl(path) {
@@ -1186,16 +1220,18 @@
       syncOnlineControls();
       return;
     }
-    if (!onlineSelectedModeSupported()) {
-      syncOnlineStatus('Online play supports Gomoku, Go, Connect Four, Reversi, Chinese Checkers, and non-puzzle FIDE Chess.', 'error');
-      syncStatus('online unsupported', 'choose a supported two-player game', 'warn');
+    const selectedIssue = onlineSelectedRoomCreationIssue();
+    if (selectedIssue) {
+      syncOnlineStatus(selectedIssue, 'error');
+      syncStatus('online create unavailable', 'one-player game cannot create a room', 'warn');
       syncOnlineControls();
       return;
     }
     if (!ensureOnlineRoomGameStarted()) return;
-    if (!onlineStateSupported(game)) {
-      syncOnlineStatus('Online play supports Gomoku, Go, Connect Four, Reversi, Chinese Checkers, and non-puzzle FIDE Chess.', 'error');
-      syncStatus('online unsupported', 'choose a supported two-player game', 'warn');
+    const stateIssue = onlineStateRoomCreationIssue(game);
+    if (stateIssue) {
+      syncOnlineStatus(stateIssue, 'error');
+      syncStatus('online create unavailable', 'choose a supported multiplayer game', 'warn');
       syncOnlineControls();
       return;
     }
@@ -1279,6 +1315,93 @@
       syncOnlineStatus(error && error.message ? error.message : 'Join failed.', 'error');
       syncOnlineControls();
     }
+  }
+
+  async function searchOnlineRoomsFromUi() {
+    if (!onlineState || !onlineState.baseUrl) {
+      syncOnlineStatus('Set window.RAMIFIED_MINIGAMES_ONLINE_URL before searching online rooms.', 'error');
+      syncOnlineControls();
+      return;
+    }
+    onlineState.searchingRooms = true;
+    syncOnlineStatus('Searching rooms...', 'idle');
+    syncOnlineControls();
+    try {
+      const response = await fetch(onlineHttpUrl('api/rooms'));
+      const payload = await onlineReadJsonResponse(response);
+      if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+      const rooms = normalizeOnlineRoomSearchResults(payload.rooms);
+      onlineState.roomSearchResults = rooms;
+      syncOnlineRoomSelect(rooms);
+      if (rooms.length) {
+        syncOnlineStatus(`Found ${rooms.length} online room${rooms.length === 1 ? '' : 's'}.`, 'idle');
+      } else {
+        syncOnlineStatus('No online rooms are available right now.', 'idle');
+      }
+    } catch (error) {
+      onlineState.roomSearchResults = [];
+      syncOnlineRoomSelect([]);
+      syncOnlineStatus(error && error.message ? error.message : 'Room search failed.', 'error');
+    } finally {
+      onlineState.searchingRooms = false;
+      syncOnlineControls();
+    }
+  }
+
+  function normalizeOnlineRoomSearchResults(rooms) {
+    if (!Array.isArray(rooms)) return [];
+    const seen = new Set();
+    const result = [];
+    rooms.forEach((room) => {
+      if (!room || typeof room !== 'object') return;
+      const roomCode = normalizeOnlineRoomCode(room.roomCode || room.code);
+      if (!roomCode || seen.has(roomCode)) return;
+      seen.add(roomCode);
+      const gameMode = gameModeFromUrlParam(room.gameMode || room.mode) || '';
+      result.push({
+        roomCode,
+        gameMode,
+        summary: String(room.summary || '').trim(),
+        updatedAt: String(room.updatedAt || '').trim()
+      });
+    });
+    return result;
+  }
+
+  function onlineRoomSearchLabel(room) {
+    const roomCode = normalizeOnlineRoomCode(room && room.roomCode);
+    const mode = gameModeFromUrlParam(room && room.gameMode);
+    return `${roomCode} - ${gameTypeForGameMode(mode)}`;
+  }
+
+  function syncOnlineRoomSelect(rooms = null) {
+    if (!refs.onlineRoomSelect) return;
+    const list = Array.isArray(rooms) ? rooms : (onlineState && Array.isArray(onlineState.roomSearchResults)
+      ? onlineState.roomSearchResults
+      : []);
+    refs.onlineRoomSelect.innerHTML = '';
+    if (!list.length) {
+      refs.onlineRoomSelect.hidden = true;
+      return;
+    }
+    list.forEach((room) => {
+      const option = document.createElement('option');
+      option.value = room.roomCode;
+      option.textContent = onlineRoomSearchLabel(room);
+      refs.onlineRoomSelect.appendChild(option);
+    });
+    const current = onlineRoomCodeFromInput();
+    const selected = list.find((room) => room.roomCode === current) || list[0];
+    refs.onlineRoomSelect.value = selected.roomCode;
+    refs.onlineRoomSelect.hidden = false;
+    if (refs.onlineRoomCode) refs.onlineRoomCode.value = selected.roomCode;
+  }
+
+  function handleOnlineRoomSelectChange() {
+    if (refs.onlineRoomSelect && refs.onlineRoomCode) {
+      refs.onlineRoomCode.value = normalizeOnlineRoomCode(refs.onlineRoomSelect.value);
+    }
+    syncOnlineControls();
   }
 
   function onlineReadJsonResponse(response) {
@@ -4054,6 +4177,7 @@
   function clearNoMoveTrial() {
     noMoveDirs = new Set();
     pendingBonusGameOver = false;
+    pendingBonusBlockedByBombs = false;
   }
 
   function recordNoMoveDirection(dir) {
@@ -4064,6 +4188,20 @@
   function noMoveTrialText(state) {
     const total = directionsForPreset(state.preset).length;
     return `${noMoveDirs.size}/${total} directions unchanged`;
+  }
+
+  function bonusEndingBlockedByBombs(state) {
+    return !!(is2048Game(state) && bombCount(state) > 0);
+  }
+
+  function canOfferBonusEnding(state) {
+    return !!state && !bonusEndingBlockedByBombs(state);
+  }
+
+  function syncBonusBlockedByBombsStatus() {
+    const count = bombCount(game);
+    const suffix = count === 1 ? '' : 's';
+    syncStatus('bombs remain', `detonate ${count} bomb${suffix} before bonus ending`, 'ready');
   }
 
   function finishGameAs(ending) {
@@ -4092,7 +4230,8 @@
         eventQueue = result.events;
         eventIndex = 0;
         eventQueueChangedBoard = false;
-        pendingBonusGameOver = triedAllDirections;
+        pendingBonusGameOver = triedAllDirections && canOfferBonusEnding(game);
+        pendingBonusBlockedByBombs = triedAllDirections && !canOfferBonusEnding(game);
         const step = isStepMode();
         stepPaused = step;
         game.phase = step ? 'paused' : 'animating';
@@ -4109,6 +4248,12 @@
         return;
       }
       if (triedAllDirections) {
+        if (!canOfferBonusEnding(game)) {
+          syncBonusBlockedByBombsStatus();
+          syncControls();
+          render();
+          return;
+        }
         finishGameAs('bonus');
         syncControls();
         render();
@@ -4800,7 +4945,22 @@
     eventQueueChangedBoard = false;
     if (pendingBonusGameOver) {
       pendingBonusGameOver = false;
-      finishGameAs('bonus');
+      if (canOfferBonusEnding(game)) {
+        finishGameAs('bonus');
+      } else {
+        game.phase = 'ready';
+        game.ending = '';
+        syncBonusBlockedByBombsStatus();
+      }
+    } else if (pendingBonusBlockedByBombs) {
+      pendingBonusBlockedByBombs = false;
+      if (canOfferBonusEnding(game)) {
+        finishGameAs('bonus');
+      } else {
+        game.phase = 'ready';
+        game.ending = '';
+        syncBonusBlockedByBombsStatus();
+      }
     } else if (changedBoard && isSokobanGame(game)) {
       if (sokobanSolved(game)) {
         game.phase = 'gameover';
@@ -4835,6 +4995,7 @@
     stepPaused = false;
     eventQueueChangedBoard = false;
     pendingBonusGameOver = false;
+    pendingBonusBlockedByBombs = false;
   }
 
   function toggleDebugMode() {
@@ -20334,15 +20495,6 @@
       const moveEvents = [];
       const bouncingBoxIds = new Set(bounces.map((result) => result.boxId || (result.actor && result.actor.id)));
       const bounceEvents = bounces.map(animationMoveFromResult);
-      const explosionAnimations = explosions
-        .filter((explosion) => explosion.moves && explosion.moves.length)
-        .map((explosion) => explosionAnimationEvent(
-          explosion.center,
-          explosion.value,
-          explosion.removeBoxIds,
-          explosion.moves,
-          explosionRangeIndices(state, explosion.center, explosion.value)
-        ));
       const moveEntries = moves.map((result) => {
         const boxId = result.boxId || (result.actor && result.actor.id);
         if (explodedBoxIds.has(boxId)) return { result, boxId, skipped: true };
@@ -20365,12 +20517,36 @@
         blockedMoveIds,
         extraMovingAwayBoxIds(pushMerges, explosions)
       );
+      const targetCollisions = resolveMoveEntryTargetCollisions(moveEntries, blockedMoveIds);
+      targetCollisions.merges.forEach((merge) => {
+        addMergeEvent(state, mergeEvents, merge, mergeLocked, active);
+        changed = true;
+      });
+      targetCollisions.explosions.forEach((explosion) => {
+        explosions.push(explosion);
+        explosion.removeBoxIds.forEach((id) => {
+          active.delete(id);
+          explodedBoxIds.add(id);
+        });
+        changed = true;
+      });
+      const settledMoveIds = targetCollisions.moveIds;
+      const explosionAnimations = explosions
+        .filter((explosion) => explosion.moves && explosion.moves.length)
+        .map((explosion) => explosionAnimationEvent(
+          explosion.center,
+          explosion.value,
+          explosion.removeBoxIds,
+          explosion.moves,
+          explosionRangeIndices(state, explosion.center, explosion.value)
+        ));
       moveEntries.forEach((entry) => {
         if (entry.skipped) {
           if (entry.deleteActor && entry.result.actor) active.delete(entry.result.actor.id);
           return;
         }
         const { result, boxId, box, from, value } = entry;
+        if (settledMoveIds.has(boxId)) return;
         if (blockedMoveIds.has(boxId)) {
           bounceEvents.push(animationMoveFromResult({
             ...result,
@@ -20720,6 +20896,72 @@
       });
     }
     return blocked;
+  }
+
+  function resolveMoveEntryTargetCollisions(moveEntries, blockedMoveIds) {
+    const groups = new Map();
+    moveEntries.forEach((entry) => {
+      if (entry.skipped || blockedMoveIds.has(entry.boxId)) return;
+      const transition = entry.result && entry.result.transition;
+      if (!transition || !Number.isInteger(transition.index)) return;
+      const group = groups.get(transition.index) || [];
+      group.push(entry);
+      groups.set(transition.index, group);
+    });
+
+    const moveIds = new Set();
+    const merges = [];
+    const explosions = [];
+    groups.forEach((group, target) => {
+      if (group.length < 2) return;
+      group.forEach((entry) => moveIds.add(entry.boxId));
+      const values = group.map((entry) => entry.value);
+      const moves = group.map(moveResultFromEntry);
+      if (group.length === 2 && values[0] === values[1]) {
+        const movingActors = group.map(actorFromMoveEntry);
+        merges.push({
+          kind: 'merge',
+          actor: movingActors[0],
+          movingActors,
+          moves,
+          target,
+          value: values[0],
+          newValue: values[0] * 2,
+          targetBoxId: null
+        });
+        return;
+      }
+      explosions.push({
+        kind: 'explode',
+        actor: actorFromMoveEntry(group[0]),
+        center: target,
+        value: Math.min(...values),
+        removeBoxIds: Array.from(new Set(group.map((entry) => entry.boxId))),
+        moves
+      });
+    });
+    return { moveIds, merges, explosions };
+  }
+
+  function actorFromMoveEntry(entry) {
+    const transition = entry.result && entry.result.transition;
+    return {
+      id: entry.boxId,
+      index: entry.from,
+      value: entry.value,
+      dir: transition ? transition.dir : undefined
+    };
+  }
+
+  function moveResultFromEntry(entry) {
+    return {
+      kind: 'move',
+      actor: actorFromMoveEntry(entry),
+      boxId: entry.boxId,
+      value: entry.value,
+      from: entry.from,
+      transition: entry.result.transition
+    };
   }
 
   function extendBlockedMovesByOccupiedTargets(state, moveEntries, blocked, extraMovingAwayIds = new Set()) {
@@ -24297,6 +24539,7 @@
     BOMB_KINDS,
     blockedTileCount,
     bombAtIndex,
+    canOfferBonusEnding,
     simulateRound,
     sokobanEnergyBeamObjects,
     sokobanSolved,

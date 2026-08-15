@@ -59,6 +59,12 @@
       letter-spacing: 0;
     }
 
+    .online-room-fields {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+
     .online-action-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1885,7 +1891,10 @@
       <div class="card-body online-play-panel">
         <div class="mosaic-inline-row">
           <span class="input-label">Room</span>
-          <input class="mosaic-editor-input" id="online-room-code" type="text" maxlength="8" autocomplete="off" spellcheck="false" placeholder="room code" aria-label="Online room code">
+          <span class="online-room-fields">
+            <input class="mosaic-editor-input online-room-code" id="online-room-code" type="text" maxlength="8" autocomplete="off" spellcheck="false" placeholder="room code" aria-label="Online room code">
+            <select class="mosaic-editor-input" id="online-room-select" aria-label="Available online rooms" hidden></select>
+          </span>
         </div>
         <div class="mosaic-inline-row">
           <span class="input-label">Name</span>
@@ -1897,14 +1906,17 @@
         </div>
         <div class="online-action-grid">
           <button class="btn" id="online-create-room" type="button">create room</button>
+          <button class="btn" id="online-search-room" type="button">search room</button>
+        </div>
+        <div class="online-action-grid">
           <button class="btn" id="online-join-room" type="button">join room</button>
+          <button class="btn" id="online-leave-room" type="button" disabled>leave room</button>
         </div>
         <button class="btn" id="online-confirm-roles" type="button" hidden>confirm colors</button>
         <div class="mosaic-inline-row" id="online-chinese-start-row" hidden>
           <label class="opt-row"><input type="checkbox" id="online-keep-unclaimed-colors"> keep unclaimed colors</label>
           <button class="btn" id="online-start-claimed-colors" type="button">begin claimed colors</button>
         </div>
-        <button class="btn" id="online-leave-room" type="button" disabled>leave room</button>
         <div class="online-status-line" id="online-status" data-state="offline" role="status" aria-live="polite">Online Worker URL is not configured.</div>
       </div>
     </section>

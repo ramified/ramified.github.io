@@ -1,27 +1,29 @@
-// Save this file as theorem_graph_presets/half_spin_symmetry_for_conormal_cycles_roadmap.preset.js
+// Save this file as theorem_graph_presets/half_spin_symmetry_for_conormal_cycles.preset.js
 // Add this entry to theorem_graph_presets/presets.js:
-// { label: "Half-Spin Symmetry for Conormal Cycles: Roadmap", key: "half_spin_symmetry_for_conormal_cycles_roadmap", file: "half_spin_symmetry_for_conormal_cycles_roadmap.preset.js" }
+// { label: "Half-Spin Symmetry for Conormal Cycles", key: "half_spin_symmetry_for_conormal_cycles", file: "half_spin_symmetry_for_conormal_cycles.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
-window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap = {
+window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
   "schemaVersion": 9,
-  "title": "Half-Spin Symmetry for Conormal Cycles: Roadmap",
+  "title": "Half-Spin Symmetry for Conormal Cycles",
   "titleNode": {
     "id": "__title__",
     "type": "title",
-    "label": "Half-Spin Symmetry for Conormal Cycles: Roadmap",
+    "label": "Half-Spin Symmetry for Conormal Cycles",
     "details": [
       {
         "id": "result",
         "label": "result",
         "type": "textbox",
-        "text": "Roadmap of the verified disproof blueprint."
+        "text": "Roadmap of the verified disproof blueprint.\n\\cite{AIexplains}"
       }
     ],
     "setting": "",
     "condition": "",
     "result": "",
     "proofSketch": "",
-    "citationKeys": [],
+    "citationKeys": [
+      "AIexplains"
+    ],
     "color": "#111827",
     "fillColor": "#ffffff"
   },
@@ -35,7 +37,7 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
           "id": "goal",
           "label": "goal",
           "type": "checkbox",
-          "text": "compute the hodge numbers of Schoen surfaces\nprove that the ambient abelian variety is of Weil type"
+          "text": "- [x] compute the hodge numbers of Schoen surfaces\\cite[Proposition 2.1]{CMLR15}\nprove that $V$ is smoothable\\cite[Theorem 2.2]{CMLR15}, actually \\cite{Schoen07}\n- [ ] prove that the ambient abelian variety is of Weil type\nprove that Schoen surfaces are Albanese exotic (I guess of Weil type)\\cite[Proof of Prop 2.4]{CMLR15}, actually \\cite[Theorem 1.1, (iii)]{Schoen07}"
         },
         {
           "id": "setting",
@@ -66,14 +68,67 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [],
+      "citationKeys": [
+        "CMLR15",
+        "Schoen07"
+      ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 185.4,
-      "y": 218.9,
+      "x": 171.2,
+      "y": 78.9,
       "childGraph": {
         "title": "Schoen surface",
-        "nodes": [],
+        "nodes": [
+          {
+            "id": "n1",
+            "type": "misc",
+            "label": "Castelnuovo–de Franchis inequality",
+            "details": [
+              {
+                "id": "cite",
+                "label": "cite",
+                "type": "textbox",
+                "text": "In introduction of \\cite{MLPP12}:\nBy the classical Castelnuovo-De Franchis theorem (cf. \\cite[Proposition X.9]{Beau96}),\nif S has no irrational pencil of genus > 1 then the inequality pg(S) ≥ 2q(S) − 3\n\nbut a cleaner reference for the precise assertion is this one:\nhttps://perso.imj-prg.fr/wp-content/uploads/debarre-pub/1.pdf"
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "MLPP12",
+              "Beau96"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 236.6,
+            "y": 215.5
+          },
+          {
+            "id": "n2",
+            "type": "misc",
+            "label": "description of dualizing sheaf of reducible surface",
+            "details": [
+              {
+                "id": "citation",
+                "label": "citation",
+                "type": "list",
+                "text": "Need to read \\cite{ACFR02}. This one has many figures and examples"
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "ACFR02"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 301.7,
+            "y": 348.1
+          }
+        ],
         "arrows": [],
         "view": {
           "selectedId": "",
@@ -96,8 +151,8 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 383.1,
-      "y": 95.8
+      "x": 382.6,
+      "y": 54
     },
     {
       "id": "lem_normalized_middle",
@@ -110,8 +165,8 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 223,
-      "y": 305.9
+      "x": 223.9,
+      "y": 222
     },
     {
       "id": "lem_nonzero_middle",
@@ -124,8 +179,8 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 497.1,
-      "y": 315
+      "x": 550,
+      "y": 230
     },
     {
       "id": "thm_counterexample",
@@ -138,8 +193,8 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 570.1,
-      "y": 201.6
+      "x": 593.3,
+      "y": 81.9
     }
   ],
   "arrows": [
@@ -237,12 +292,34 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
     },
     "nodeSerial": 6,
     "arrowSerial": 9,
-    "selectedId": "lem_schoen_family",
+    "selectedId": "lem_normalized_middle",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 369,
-    "canvasRatioLocked": false,
-    "canvasAspectRatio": 1.8,
+    "canvasHeight": 316,
+    "canvasRatioLocked": true,
+    "canvasAspectRatio": 2.3829,
+    "relativeNodePositions": {
+      "lem_schoen_family": {
+        "x": 0.2273,
+        "y": 0.2498
+      },
+      "lem_wd4_monodromy": {
+        "x": 0.5081,
+        "y": 0.1709
+      },
+      "lem_normalized_middle": {
+        "x": 0.2973,
+        "y": 0.7025
+      },
+      "lem_nonzero_middle": {
+        "x": 0.7304,
+        "y": 0.7278
+      },
+      "thm_counterexample": {
+        "x": 0.7879,
+        "y": 0.259
+      }
+    },
     "selectedReferenceKeys": []
   },
   "references": [
@@ -281,11 +358,19 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
       ]
     },
     {
-      "key": "CMLR2013",
+      "key": "CMLR15",
       "author": "Ciliberto--Mendes Lopes--Roulleau",
       "title": "On Schoen surfaces",
       "year": "2013",
-      "citeKey": "CMLR2013",
+      "citeKey": "CMLR15",
+      "details": [
+        {
+          "id": "remark",
+          "label": "remark",
+          "type": "textbox",
+          "text": "a more geometric approach to Schoen's construction"
+        }
+      ],
       "url": "https://arxiv.org/abs/1303.1750",
       "source": "web",
       "rawBibtex": "@misc{CMLR2013, title={On Schoen surfaces}, author={Ciliberto and Mendes Lopes and Roulleau}, year={2013}, eprint={1303.1750}, archivePrefix={arXiv}}",
@@ -328,6 +413,81 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles_roadmap 
           "url": "https://arxiv.org/abs/2108.02087",
           "source": "web",
           "label": "arXiv:2108.02087"
+        }
+      ]
+    },
+    {
+      "key": "Beau96",
+      "author": "Beauville, Arnaud",
+      "title": "Complex algebraic surfaces.",
+      "year": "1996",
+      "citeKey": "Beau96",
+      "url": "",
+      "source": "bibtex",
+      "rawBibtex": "@book{zbMATH00916043,\n author = {Beauville, Arnaud},\n title = {Complex algebraic surfaces.},\n edition = {2nd ed.},\n fseries = {London Mathematical Society Student Texts},\n series = {Lond. Math. Soc. Stud. Texts},\n issn = {0963-1631},\n volume = {34},\n isbn = {0-521-49842-2; 0-521-49510-5},\n year = {1996},\n publisher = {Cambridge: Cambridge Univ. Press},\n language = {English},\n keywords = {14J25,32J15,14-02,14J10,32-02},\n zbMATH = {916043},\n Zbl = {0849.14014}\n}",
+      "links": []
+    },
+    {
+      "key": "MLPP12",
+      "author": "Lopes, Margarida Mendes and Pardini, Rita and Pirola, Gian Pietro",
+      "title": "On surfaces of general type with \\(q=5\\)",
+      "year": "2012",
+      "citeKey": "MLPP12",
+      "url": "",
+      "source": "bibtex",
+      "rawBibtex": "@article{zbMATH06142480,\n author = {Lopes, Margarida Mendes and Pardini, Rita and Pirola, Gian Pietro},\n title = {On surfaces of general type with {{\\(q=5\\)}}},\n fjournal = {Annali della Scuola Normale Superiore di Pisa. Classe di Scienze. Serie V},\n journal = {Ann. Sc. Norm. Super. Pisa, Cl. Sci. (5)},\n issn = {0391-173X},\n volume = {11},\n number = {4},\n pages = {999--1007},\n year = {2012},\n language = {English},\n doi = {10.2422/2036-2145.201102_003},\n keywords = {14J29},\n zbMATH = {6142480},\n Zbl = {1272.14030}\n}",
+      "links": []
+    },
+    {
+      "key": "ACFR02",
+      "author": "Calabri, Alberto and Ciliberto, Ciro and Flamini, Flaminio and Miranda, Rick",
+      "title": "On the geometric genus of reducible surfaces and degenerations of surface to unions of planes",
+      "year": "2004",
+      "citeKey": "ACFR02",
+      "url": "",
+      "source": "bibtex",
+      "rawBibtex": "@incollection{zbMATH02135193,\n author = {Calabri, Alberto and Ciliberto, Ciro and Flamini, Flaminio and Miranda, Rick},\n title = {On the geometric genus of reducible surfaces and degenerations of surface to unions of planes},\n booktitle = {The Fano conference. Papers of the conference organized to commemorate the 50th anniversary of the death of Gino Fano (1871--1952), Torino, Italy, September 29--October 5, 2002},\n isbn = {88-900876-1-7},\n pages = {277--312},\n year = {2004},\n publisher = {Torino: Universit{\\`a} di Torino, Dipartimento di Matematica},\n language = {English},\n keywords = {14N20,14D06,14J10},\n zbMATH = {2135193},\n Zbl = {1071.14057}\n}",
+      "links": []
+    },
+    {
+      "key": "Schoen07",
+      "author": "Schoen, Chad",
+      "title": "A family of surfaces constructed from genus 2 curves",
+      "year": "2007",
+      "citeKey": "Schoen07",
+      "details": [
+        {
+          "id": "typo",
+          "label": "typo",
+          "type": "textbox",
+          "text": "\\cite[remark 2.3]{CMLR2013}: In [23, Proposition 10.1, (ii)], it is stated that for the general Schoen surface S one has rk(NS(S)) = 2.\nAs one can directly see with an argument as in [14], the right statement is instead that rk(NS(S)) = 1 (that was\nalso pointed to us in [24])."
+        }
+      ],
+      "url": "https://pismin.com/10.1142/S0129167X07004175",
+      "source": "web",
+      "rawBibtex": "@article{zbMATH05168128,\n author = {Schoen, Chad},\n title = {A family of surfaces constructed from genus 2 curves},\n fjournal = {International Journal of Mathematics},\n journal = {Int. J. Math.},\n issn = {0129-167X},\n volume = {18},\n number = {5},\n pages = {585--612},\n year = {2007},\n language = {English},\n doi = {10.1142/S0129167X07004175},\n keywords = {14J29,32J15,32G05,32G10,14K12,14C30},\n zbMATH = {5168128},\n Zbl = {1118.14042}\n}",
+      "links": [
+        {
+          "url": "https://pismin.com/10.1142/S0129167X07004175",
+          "source": "web",
+          "label": "scihub"
+        }
+      ]
+    },
+    {
+      "key": "AIexplains",
+      "author": "",
+      "title": "openai",
+      "year": "",
+      "citeKey": "AIexplains",
+      "url": "https://chatgpt.com/share/6a809b0f-b6bc-83eb-9aa9-58413b9a4f60",
+      "source": "web",
+      "rawBibtex": "",
+      "links": [
+        {
+          "url": "https://chatgpt.com/share/6a809b0f-b6bc-83eb-9aa9-58413b9a4f60",
+          "source": "web",
+          "label": ""
         }
       ]
     }
