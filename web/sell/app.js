@@ -6,66 +6,67 @@
 const SHOP_CONFIG = {
   wechatName: "XxxxXxxxx-Zzzz",
   products: [
-    {
-      id: "books",
-      image: "books.jpg",
-      price: 3,
-      name: { en: "Books", zh: "书籍" },
-      description: {
-        en: "A small selection of books, 3 euro for each book, 7 for all",
-        zh: "一些保存良好的全彩二手书籍，3欧一本，多买可以优惠"
-      }
+  {
+    id: "books",
+    image: "books.jpg",
+    price: 3,
+    name: { en: "Books", zh: "书籍" },
+    description: {
+      en: "A small selection of books, 3 euro for each book, 7 for all",
+      zh: "一些保存良好的全彩二手书籍，3欧一本，多买可以优惠"
     },
-    {
-      id: "cup-and-others",
-      image: "cup_and_others.jpg",
-      price: 2,
-      name: { en: "Cups & others", zh: "杯子及杂物" },
-      description: {
-        en: "Cups and a few useful small household objects.",
-        zh: "杯子和一些实用的家居小物，买其他物品可送，单买2欧打包"
-      }
-    },
-    {
-      id: "electric-grill",
-      image: "electric_grill.jpg",
-      price: 30,
-      name: { en: "Electric grill", zh: "电烤炉" },
-      description: {
-        en: "Electric grill only used once, ready for a barbecue party.",
-        zh: "崭新电烤炉，只用过一次，适合barbecue"
-      }
-    },
-    {
-      id: "pot",
-      image: "pot.jpg",
-      price: 7,
-      name: { en: "Pot", zh: "锅" },
-      description: {
-        en: "A practical cooking pot.",
-        zh: "实用的烹饪锅,适合煮泡面"
-      }
-    },
-    {
-      id: "rice-cooker",
-      image: "rice_cooker.jpg",
-      price: 5,
-      name: { en: "Rice cooker", zh: "电饭煲" },
-      description: {
-        en: "Rice cooker for everyday meals.",
-        zh: "适合日常使用的电饭煲。"
-      }
-    },
-    {
-      id: "umeshu",
-      image: "Umeshu.jpg",
-      price: 13,
-      name: { en: "Umeshu", zh: "梅酒" },
-      description: {
-        en: "Umeshu bottle, offered for 13 euros.",
-        zh: "梅酒一瓶，价格13欧元。"
-      }
+    quantity: 3,
+  },
+  {
+    id: "cup-and-others",
+    image: "cup_and_others.jpg",
+    price: 2,
+    name: { en: "Cups & others", zh: "杯子及杂物" },
+    description: {
+      en: "Cups and a few useful small household objects.",
+      zh: "杯子和一些实用的家居小物，买其他物品可送，单买2欧打包"
     }
+  },
+  {
+    id: "electric-grill",
+    image: "electric_grill.jpg",
+    price: 30,
+    name: { en: "Electric grill", zh: "电烤炉" },
+    description: {
+      en: "Electric grill only used once, ready for a barbecue party.",
+      zh: "崭新电烤炉，只用过一次，适合barbecue"
+    }
+  },
+  {
+    id: "pot",
+    image: "pot.jpg",
+    price: 7,
+    name: { en: "Pot", zh: "锅" },
+    description: {
+      en: "A practical cooking pot.",
+      zh: "实用的烹饪锅,适合煮泡面"
+    }
+  },
+  {
+    id: "rice-cooker",
+    image: "rice_cooker.jpg",
+    price: 5,
+    name: { en: "Rice cooker", zh: "电饭煲" },
+    description: {
+      en: "Rice cooker for everyday meals.",
+      zh: "适合日常使用的电饭煲。"
+    }
+  },
+  {
+    id: "umeshu",
+    image: "Umeshu.jpg",
+    price: 13,
+    name: { en: "Umeshu", zh: "梅酒" },
+    description: {
+      en: "Umeshu bottle, offered for 13 euros.",
+      zh: "梅酒一瓶，价格13欧元。"
+    }
+  }
   ]
 };
 
@@ -98,7 +99,8 @@ const translations = {
     priceNeeded: "price needed",
     addedToast: "Added to cart",
     removedToast: "Removed from cart",
-    clearedToast: "Cart cleared"
+    clearedToast: "Cart cleared",
+    pickupNote: "Pickup only in Adlershof (12489 Berlin)",
   },
   zh: {
     eyebrow: "二手物品",
@@ -128,7 +130,8 @@ const translations = {
     priceNeeded: "价格待定",
     addedToast: "已加入购物车",
     removedToast: "已从购物车移除",
-    clearedToast: "购物车已清空"
+    clearedToast: "购物车已清空",
+    pickupNote: "Adlershof 区域（12489 Berlin）自取",
   }
 };
 
@@ -252,6 +255,7 @@ function setLanguage(lang) {
 
   renderProducts();
   renderCart();
+  document.getElementById("pickupNote").textContent = t("pickupNote");
 }
 
 function renderProducts() {
@@ -284,8 +288,8 @@ function renderProducts() {
     const titleWrap = document.createElement("div");
     titleWrap.className = "product-title-wrap";
     titleWrap.innerHTML = `
-      <p class="product-index">${String(index + 1).padStart(2, "0")}</p>
-      <h3 class="product-title">${productTitle(product)}</h3>
+    <p class="product-index">${String(index + 1).padStart(2, "0")}</p>
+    <h3 class="product-title">${productTitle(product)}</h3>
     `;
 
     const toggle = document.createElement("button");
@@ -309,7 +313,11 @@ function renderProducts() {
     actions.className = "product-actions";
     const stock = document.createElement("span");
     stock.className = "stock-label";
-    stock.textContent = t("oneAvailable");
+    const quantity = product.quantity ?? 1;
+    stock.textContent =
+    state.lang === "zh"
+    ? `${quantity} 件`
+    : `${quantity} available`;
 
     const addButton = document.createElement("button");
     addButton.className = `add-button${inCart ? " is-added" : ""}`;
@@ -319,9 +327,9 @@ function renderProducts() {
     addButton.setAttribute(
       "aria-label",
       inCart
-        ? `${product.name[state.lang]} — ${t("cancelAddition")}`
-        : `${t("addToCart")} — ${product.name[state.lang]}`
-    );
+      ? `${product.name[state.lang]} — ${t("cancelAddition")}`
+      : `${t("addToCart")} — ${product.name[state.lang]}`
+      );
     addButton.title = inCart ? t("cancelAddition") : t("addToCart");
     addButton.addEventListener("click", () => {
       if (state.cart.includes(product.id)) removeFromCart(product.id);
@@ -367,7 +375,7 @@ function renderCart() {
     remove.setAttribute(
       "aria-label",
       state.lang === "zh" ? `${t("remove")} ${product.name.zh}` : `${t("remove")} ${product.name.en}`
-    );
+      );
     remove.addEventListener("click", () => removeFromCart(id));
 
     item.append(name, price, remove);
@@ -377,8 +385,8 @@ function renderCart() {
   cartCount.textContent = state.cart.length;
   cartCount.setAttribute("aria-label", `${state.cart.length} items`);
   cartTotal.textContent = hasUnknownPrice
-    ? (state.lang === "zh" ? `€${total} + 待定价格` : `€${total} + pending prices`)
-    : `€${total}`;
+  ? (state.lang === "zh" ? `€${total} + 待定价格` : `€${total} + pending prices`)
+  : `€${total}`;
 }
 
 function resetCartDragStyles() {

@@ -640,3 +640,8 @@ main {
     transition: none !important;
   }
 }
+.pickup-note {
+  margin-bottom: 8px;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
