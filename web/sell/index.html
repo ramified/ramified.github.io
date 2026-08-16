@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="A small bilingual second-hand shop." />
+  <title>Second-hand objects · 二手物品</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-copy">
+      <p class="eyebrow" data-i18n="eyebrow">SECOND-HAND COLLECTION</p>
+      <h1 data-i18n="siteTitle">Objects looking for a new home</h1>
+      <p class="intro" data-i18n="intro">One of each item. Add what you want to the cart, then send me a screenshot on WeChat.</p>
+    </div>
+
+    <div class="header-actions" aria-label="Site controls">
+      <div class="language-switch" role="group" aria-label="Language">
+        <button class="chip lang-button is-active" type="button" data-lang="en" aria-pressed="true">EN</button>
+        <button class="chip lang-button" type="button" data-lang="zh" aria-pressed="false">中文</button>
+      </div>
+      <button id="cartButton" class="cart-button" type="button" aria-controls="cartPanel" aria-expanded="false">
+        <span data-i18n="cart">Cart</span>
+        <span id="cartCount" class="cart-count" aria-label="0 items">0</span>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section class="catalog-section" aria-labelledby="catalogHeading">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker" data-i18n="availableNow">AVAILABLE NOW</p>
+          <h2 id="catalogHeading" data-i18n="catalog">Second-hand objects</h2>
+        </div>
+        <p class="mobile-hint" data-i18n="mobileHint">On a narrow screen, tap a card to reveal its photo.</p>
+      </div>
+
+      <div id="productGrid" class="product-grid" aria-live="polite"></div>
+    </section>
+
+    <section class="contact-card" aria-labelledby="contactHeading">
+      <div>
+        <p class="section-kicker" data-i18n="contactKicker">CONTACT</p>
+        <h2 id="contactHeading" data-i18n="contactTitle">Ready to reserve something?</h2>
+      </div>
+      <div class="contact-details">
+        <p class="wechat-line"><span data-i18n="wechat">WeChat</span>: <strong id="wechatName">XxxxXxxxx-Zzzz</strong></p>
+        <p class="screenshot-hint" data-i18n="screenshotHint">Please take a screenshot of your cart and send it to me on WeChat.</p>
+      </div>
+    </section>
+  </main>
+
+  <aside id="cartPanel" class="cart-panel" aria-hidden="true" aria-labelledby="cartHeading">
+    <div class="cart-backdrop" data-close-cart></div>
+    <section class="cart-sheet" role="dialog" aria-modal="true" aria-labelledby="cartHeading">
+      <div class="cart-header">
+        <div>
+          <p class="section-kicker" data-i18n="yourSelection">YOUR SELECTION</p>
+          <h2 id="cartHeading" data-i18n="cartTitle">Shopping cart</h2>
+        </div>
+        <button class="icon-button" type="button" data-close-cart aria-label="Close cart">×</button>
+      </div>
+
+      <div id="cartItems" class="cart-items"></div>
+      <p id="emptyCart" class="empty-cart" data-i18n="emptyCart">Your cart is empty.</p>
+
+      <div class="cart-footer">
+        <div class="cart-total-row">
+          <span data-i18n="total">Total</span>
+          <strong id="cartTotal">€0</strong>
+        </div>
+        <p class="cart-note" data-i18n="cartNote">Items are reserved only after we confirm on WeChat.</p>
+        <div class="cart-footer-actions">
+          <button id="clearCart" class="secondary-button" type="button" data-i18n="clearCart">Clear cart</button>
+          <button id="contactShortcut" class="primary-button" type="button" data-i18n="showContact">Show contact</button>
+        </div>
+      </div>
+    </section>
+  </aside>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
