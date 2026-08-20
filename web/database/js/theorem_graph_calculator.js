@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const SCHEMA_VERSION = 9;
+  const SCHEMA_VERSION = 10;
   const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
   const DEFAULT_PRESET_KEY = 'maintenance_tracker';
@@ -11,6 +11,7 @@
   const TITLE_NODE_ID = '__title__';
   const TITLE_NODE_TYPE = 'title';
   const CURRENT_NODE_EXPORT_KIND = 'current-node';
+  const SELECTED_REFERENCES_EXPORT_KIND = 'selected-references';
   const NODE_NEST_HOVER_DELAY = 1000;
   const NODE_DROP_ANIMATION_MS = 180;
   const BREADCRUMB_DROP_TOLERANCE_X = 28;
@@ -46,6 +47,8 @@
     conjecture: { label: 'Conjecture', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
     definition: { label: 'Definition', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
     example: { label: 'Example', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
+    object: { label: 'Object', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
+    property: { label: 'Property', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE },
     misc: { label: 'Misc', fill: DEFAULT_NODE_FILL, stroke: DEFAULT_NODE_STROKE, band: DEFAULT_NODE_STROKE }
   };
   const NODE_TYPE_KEYS = Object.keys(NODE_TYPES).filter((key) => key !== TITLE_NODE_TYPE);
@@ -55,6 +58,27 @@
     { key: 'result', label: 'result' },
     { key: 'proofSketch', label: 'proof sketch' }
   ];
+  const LEGACY_NODE_DETAIL_FIELD_BY_LABEL = new Map(
+    LEGACY_NODE_DETAIL_FIELDS.flatMap(({ key, label }) => [
+      [key.toLowerCase(), key],
+      [label.toLowerCase(), key],
+      [label.toLowerCase().replace(/\s+/g, ''), key]
+    ])
+  );
+  const DEFAULT_NODE_TYPE_ROW_CONFIG = {
+    theorem: LEGACY_NODE_DETAIL_FIELDS.map(({ key, label }) => ({ id: key, label, field: key, type: 'textbox' })),
+    object: [
+      { id: 'definition', label: 'definition', type: 'textbox' },
+      { id: 'examples', label: 'examples', type: 'textbox' },
+      { id: 'properties', label: 'properties', type: 'textbox' }
+    ],
+    property: [
+      { id: 'definition', label: 'definition', type: 'textbox' },
+      { id: 'criteria', label: 'criteria', type: 'textbox' },
+      { id: 'examples', label: 'examples', type: 'textbox' }
+    ],
+    misc: []
+  };
   const MISC_DETAIL_TYPES = new Set(['textbox', 'list', 'enumeration', 'checkbox']);
   const KNOWN_NODE_KEYS = new Set([
     'extra',
@@ -196,12 +220,6 @@
     { id: 'dotted-line', label: 'dotted line', body: 'dotted', head: 'none', tail: 'none' }
   ];
   const ARROW_STYLE_MAP = new Map(ARROW_STYLES.map((style) => [style.id, style]));
-  const NODE_DETAIL_LATEX_FIELDS = [
-    { key: 'setting', inputRef: 'nodeSetting', previewRef: 'nodeSettingPreview' },
-    { key: 'condition', inputRef: 'nodeCondition', previewRef: 'nodeConditionPreview' },
-    { key: 'result', inputRef: 'nodeResult', previewRef: 'nodeResultPreview' },
-    { key: 'proofSketch', inputRef: 'nodeProofSketch', previewRef: 'nodeProofSketchPreview' }
-  ];
   const TEXTAREA_AUTO_MAX_HEIGHT = 180;
 
   const state = {
@@ -218,6 +236,7 @@
     arrows: [],
     references: [],
     selectedReferenceKeys: new Set(),
+    activeReferenceUsageKey: '',
     editingReferenceKey: null,
     selectedNodeId: null,
     selectedArrowId: null,
@@ -313,15 +332,7 @@
     refs.nodeEditor = $('node-editor');
     refs.nodeType = $('node-type');
     refs.nodeLabel = $('node-label');
-    refs.nodeFixedDetailRows = Array.from(document.querySelectorAll('[data-node-fixed-detail]'));
-    refs.nodeSetting = $('node-setting');
-    refs.nodeCondition = $('node-condition');
-    refs.nodeResult = $('node-result');
-    refs.nodeProofSketch = $('node-proof-sketch');
-    refs.nodeSettingPreview = $('node-setting-preview');
-    refs.nodeConditionPreview = $('node-condition-preview');
-    refs.nodeResultPreview = $('node-result-preview');
-    refs.nodeProofSketchPreview = $('node-proof-sketch-preview');
+    refs.nodeTypeDetailList = $('node-type-detail-list');
     refs.nodeMiscEditor = $('node-misc-editor');
     refs.nodeMiscDetailName = $('node-misc-detail-name');
     refs.nodeMiscDetailType = $('node-misc-detail-type');
@@ -391,6 +402,7 @@
     refs.addLinkReference = $('add-link-reference');
     refs.clearBibtex = $('clear-bibtex');
     refs.deleteSelectedReferences = $('delete-selected-references');
+    refs.exportSelectedReferences = $('export-selected-references');
     refs.referenceMessage = $('reference-message');
     refs.referenceSelectAll = $('reference-select-all');
     refs.referenceEditForm = $('reference-edit-form');
@@ -504,6 +516,7 @@
       setReferenceMessage('Reference inputs cleared.');
     });
     if (refs.deleteSelectedReferences) refs.deleteSelectedReferences.addEventListener('click', deleteSelectedReferences);
+    if (refs.exportSelectedReferences) refs.exportSelectedReferences.addEventListener('click', exportSelectedReferencesToExportCard);
     if (refs.referenceSelectAll) {
       refs.referenceSelectAll.addEventListener('change', toggleReferenceSelectionFromMaster);
     }
@@ -547,6 +560,7 @@
         state.graphTitle = refs.graphTitle.value;
         markExportDirty();
         renderBreadcrumb();
+        updateDocumentTitle();
         syncControls();
         if (state.titleEditorActive) syncEditor();
       });
@@ -556,6 +570,7 @@
         state.titleUndoCaptured = false;
         markExportDirty();
         renderBreadcrumb();
+        updateDocumentTitle();
         syncControls();
         if (state.titleEditorActive) syncEditor();
       });
@@ -582,10 +597,6 @@
     [
       refs.nodeType,
       refs.nodeLabel,
-      refs.nodeSetting,
-      refs.nodeCondition,
-      refs.nodeResult,
-      refs.nodeProofSketch,
       refs.nodeColor,
       refs.nodeFillColor,
       refs.arrowSource,
@@ -947,10 +958,7 @@
 
   function autoResizeDetailTextareas() {
     const textareas = [
-      refs.nodeSetting,
-      refs.nodeCondition,
-      refs.nodeResult,
-      refs.nodeProofSketch,
+      ...(refs.nodeTypeDetailList ? refs.nodeTypeDetailList.querySelectorAll('textarea.theorem-textarea') : []),
       ...(refs.nodeMiscDetailList ? refs.nodeMiscDetailList.querySelectorAll('textarea.theorem-textarea') : []),
       refs.arrowRemark,
       refs.referenceEditRaw,
@@ -960,29 +968,7 @@
   }
 
   function bindLatexDetailPreviewEvents() {
-    NODE_DETAIL_LATEX_FIELDS.forEach(({ key, inputRef, previewRef }) => {
-      const input = refs[inputRef];
-      const preview = refs[previewRef];
-      if (preview) {
-        preview.addEventListener('click', () => {
-          showLatexDetailEditor(key);
-        });
-      }
-      if (input) {
-        input.addEventListener('focus', () => {
-          state.activeLatexDetailField = key;
-          syncLatexDetailFields();
-        });
-        input.addEventListener('blur', () => {
-          window.setTimeout(() => {
-            if (state.activeLatexDetailField === key && document.activeElement !== input) {
-              state.activeLatexDetailField = null;
-              syncLatexDetailFields();
-            }
-          }, 0);
-        });
-      }
-    });
+    syncLatexDetailFields();
   }
 
   function shouldAutoApplyOnChange(control) {
@@ -1006,6 +992,7 @@
           graph.title = cleanGraphTitle(value) || DEFAULT_GRAPH_TITLE;
           graph.titleNode.label = graph.title;
           syncActiveOwnerFromTitleNode();
+          updateDocumentTitle();
         }
       },
       nodes: {
@@ -1517,12 +1504,73 @@
     return normalizeType(type) === 'misc' ? legacyFieldsToMiscDetails(source) : [];
   }
 
+  function nodeTypeRowsForType(type) {
+    const normalizedType = cleanString(type) === TITLE_NODE_TYPE ? TITLE_NODE_TYPE : normalizeType(type);
+    if (normalizedType === TITLE_NODE_TYPE) return [];
+    const customRows = nodeTypeRowsRegistry();
+    let rawRows;
+    if (Object.prototype.hasOwnProperty.call(customRows, normalizedType)) {
+      rawRows = customRows[normalizedType];
+    } else if (Object.prototype.hasOwnProperty.call(DEFAULT_NODE_TYPE_ROW_CONFIG, normalizedType)) {
+      rawRows = DEFAULT_NODE_TYPE_ROW_CONFIG[normalizedType];
+    } else if (Object.prototype.hasOwnProperty.call(customRows, 'theorem')) {
+      rawRows = customRows.theorem;
+    } else {
+      rawRows = DEFAULT_NODE_TYPE_ROW_CONFIG.theorem;
+    }
+    return normalizeNodeTypeRows(rawRows);
+  }
+
+  function nodeTypeRowsRegistry() {
+    const registry = typeof window !== 'undefined' ? window.THEOREM_GRAPH_NODE_TYPE_ROWS : null;
+    return registry && typeof registry === 'object' && !Array.isArray(registry) ? registry : {};
+  }
+
+  function normalizeNodeTypeRows(rows) {
+    if (!Array.isArray(rows)) return [];
+    const used = new Set();
+    return rows
+      .map((entry, index) => normalizeNodeTypeRowEntry(entry, index, used))
+      .filter(Boolean);
+  }
+
+  function normalizeNodeTypeRowEntry(entry, index, used) {
+    const isObject = entry && typeof entry === 'object' && !Array.isArray(entry);
+    const rawLabel = isObject
+      ? cleanDetailLabel(entry.label || entry.name || entry.title || entry.key || entry.id || entry.field)
+      : cleanDetailLabel(entry);
+    const field = normalizeLegacyNodeDetailField(isObject ? (entry.field || entry.key || entry.id || rawLabel) : rawLabel);
+    const label = rawLabel || legacyNodeDetailLabel(field) || `detail ${index + 1}`;
+    const id = uniqueDetailId(cleanDetailId(isObject ? (entry.id || field || label) : (field || label)), used);
+    return {
+      id,
+      label,
+      field,
+      type: normalizeMiscDetailType(isObject ? (entry.type || entry.mode || entry.kind) : 'textbox')
+    };
+  }
+
+  function normalizeLegacyNodeDetailField(value) {
+    const clean = cleanString(value);
+    if (!clean) return '';
+    return LEGACY_NODE_DETAIL_FIELD_BY_LABEL.get(clean.toLowerCase())
+      || LEGACY_NODE_DETAIL_FIELD_BY_LABEL.get(clean.toLowerCase().replace(/\s+/g, ''))
+      || '';
+  }
+
+  function legacyNodeDetailLabel(field) {
+    const entry = LEGACY_NODE_DETAIL_FIELDS.find((item) => item.key === field);
+    return entry ? entry.label : '';
+  }
+
   function normalizeReferenceDetails(source = {}) {
     return normalizeMiscDetails({ details: Array.isArray(source.details) ? source.details : [] }, 'theorem');
   }
 
-  function legacyFieldsToMiscDetails(source = {}, used = new Set()) {
+  function legacyFieldsToMiscDetails(source = {}, used = new Set(), fields = LEGACY_NODE_DETAIL_FIELDS.map(({ key }) => key)) {
+    const fieldSet = new Set(fields);
     return LEGACY_NODE_DETAIL_FIELDS.map(({ key, label }) => {
+      if (!fieldSet.has(key)) return null;
       const text = cleanString(source[key]);
       if (!text) return null;
       return {
@@ -1769,9 +1817,16 @@
     syncEditor();
     renderReferences();
     renderBreadcrumb();
+    updateDocumentTitle();
     syncControls();
     markExportDirty();
     renderCanvas();
+  }
+
+  function updateDocumentTitle() {
+    if (typeof document === 'undefined') return;
+    const title = cleanGraphTitle(state.graphTitle) || DEFAULT_GRAPH_TITLE;
+    if (document.title !== title) document.title = title;
   }
 
   function renderCanvas() {
@@ -4119,8 +4174,6 @@
     const arrow = findArrow(state.selectedArrowId);
     const disabled = !node;
     const isTitle = isTitleNode(node);
-    const isRootTitle = isTitle && node.type === TITLE_NODE_TYPE;
-    const isMisc = !!node && (node.type === 'misc' || isRootTitle);
     refs.nodeEmptyNote.hidden = !!(node || arrow);
     refs.nodeEditor.hidden = !node;
     if (refs.nodeEditor) {
@@ -4132,9 +4185,6 @@
       if (arrow) refs.arrowEditor.dataset.arrowId = arrow.id;
       else delete refs.arrowEditor.dataset.arrowId;
     }
-    refs.nodeFixedDetailRows.forEach((row) => {
-      row.hidden = isMisc;
-    });
     if (refs.nodeMiscEditor) refs.nodeMiscEditor.hidden = !node;
     [
       refs.nodeType,
@@ -4145,14 +4195,6 @@
       if (control) control.disabled = disabled;
     });
     if (refs.nodeType && isTitle) refs.nodeType.disabled = true;
-    [
-      refs.nodeSetting,
-      refs.nodeCondition,
-      refs.nodeResult,
-      refs.nodeProofSketch
-    ].forEach((control) => {
-      if (control) control.disabled = disabled || isMisc;
-    });
     [
       refs.nodeMiscDetailName,
       refs.nodeMiscDetailType,
@@ -4184,10 +4226,7 @@
     if (!node) {
       if (refs.nodeType) refs.nodeType.value = DEFAULT_NEW_NODE_TYPE;
       if (refs.nodeLabel) refs.nodeLabel.value = '';
-      refs.nodeSetting.value = '';
-      refs.nodeCondition.value = '';
-      refs.nodeResult.value = '';
-      refs.nodeProofSketch.value = '';
+      renderNodeTypeDetailFields(null);
       renderMiscDetailFields(null);
       renderNodeCitationRows(null);
       if (refs.nodeColor) refs.nodeColor.value = DEFAULT_NODE_STROKE;
@@ -4210,10 +4249,7 @@
     }
     if (refs.nodeType) refs.nodeType.value = node.type;
     if (refs.nodeLabel) refs.nodeLabel.value = node.label;
-    refs.nodeSetting.value = node.setting;
-    refs.nodeCondition.value = node.condition;
-    refs.nodeResult.value = node.result;
-    refs.nodeProofSketch.value = node.proofSketch;
+    renderNodeTypeDetailFields(node);
     renderMiscDetailFields(node);
     renderNodeCitationRows(node);
     if (refs.nodeColor) refs.nodeColor.value = normalizeColor(node.color, (NODE_TYPES[node.type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).stroke);
@@ -4453,12 +4489,117 @@
     }) || null;
   }
 
+  function renderNodeTypeDetailFields(node) {
+    if (!refs.nodeTypeDetailList) return;
+    refs.nodeTypeDetailList.replaceChildren();
+    if (!node) return;
+    nodeTypeRowsForType(node.type).forEach((detail) => {
+      refs.nodeTypeDetailList.appendChild(createNodeTypeDetailRow(node, detail));
+    });
+    autoResizeDetailTextareas();
+    syncLatexDetailFields();
+  }
+
+  function createNodeTypeDetailRow(node, detail) {
+    const row = document.createElement('div');
+    row.className = 'theorem-field-row';
+    row.dataset.nodeId = node.id;
+    row.dataset.nodeTypeDetailId = detail.id;
+    row.dataset.nodeTypeDetailLabel = detail.label;
+    row.dataset.nodeTypeDetailField = detail.field || '';
+    row.dataset.nodeTypeDetailType = detail.type;
+
+    const label = document.createElement('label');
+    label.className = 'input-label';
+    label.textContent = detail.label;
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'theorem-textarea';
+    textarea.spellcheck = true;
+    textarea.value = nodeTypeDetailValue(node, detail);
+    textarea.dataset.nodeTypeDetailRole = 'text';
+    textarea.addEventListener('input', autoApplyDetailUpdate);
+    textarea.addEventListener('focus', () => {
+      state.activeLatexDetailField = nodeTypeDetailFieldKey(detail.id);
+      syncLatexDetailFields();
+    });
+    textarea.addEventListener('blur', () => {
+      window.setTimeout(() => {
+        if (state.activeLatexDetailField === nodeTypeDetailFieldKey(detail.id) && document.activeElement !== textarea) {
+          state.activeLatexDetailField = null;
+          syncLatexDetailFields();
+        }
+      }, 0);
+    });
+
+    const preview = document.createElement('button');
+    preview.className = 'theorem-latex-preview';
+    preview.type = 'button';
+    preview.hidden = true;
+    preview.dataset.nodeTypeDetailPreview = 'true';
+    preview.addEventListener('click', () => {
+      showLatexDetailEditor(nodeTypeDetailFieldKey(detail.id));
+    });
+    preview.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      showLatexDetailEditor(nodeTypeDetailFieldKey(detail.id));
+    });
+
+    row.append(label, textarea, preview);
+    return row;
+  }
+
+  function nodeTypeDetailValue(node, detail) {
+    if (!node || !detail) return '';
+    if (detail.field) return cleanString(node[detail.field]);
+    const match = findNodeDetailForTypeRow(node, detail);
+    return match ? cleanString(match.text) : '';
+  }
+
+  function findNodeDetailForTypeRow(node, detail) {
+    const details = Array.isArray(node && node.details) ? node.details : [];
+    const label = cleanDetailLabel(detail.label).toLowerCase();
+    return details.find((item) => item.id === detail.id)
+      || details.find((item) => cleanDetailLabel(item.label).toLowerCase() === label)
+      || null;
+  }
+
+  function nodeTypeDetailFieldKey(detailId) {
+    return `type:${cleanDetailId(detailId)}`;
+  }
+
+  function collectNodeTypeRowsFromControls() {
+    const rows = refs.nodeTypeDetailList ? refs.nodeTypeDetailList.querySelectorAll('[data-node-type-detail-id]') : [];
+    return Array.from(rows).map((row, index) => {
+      const input = row.querySelector('[data-node-type-detail-role="text"]');
+      const id = cleanDetailId(row.dataset.nodeTypeDetailId) || `detail-${index + 1}`;
+      const label = cleanDetailLabel(row.dataset.nodeTypeDetailLabel) || `detail ${index + 1}`;
+      return {
+        id,
+        label,
+        field: normalizeLegacyNodeDetailField(row.dataset.nodeTypeDetailField),
+        type: normalizeMiscDetailType(row.dataset.nodeTypeDetailType),
+        text: cleanString(input ? input.value : '')
+      };
+    });
+  }
+
+  function typeRowDetailIdsForNode(node) {
+    return new Set(
+      nodeTypeRowsForType(node ? node.type : DEFAULT_NEW_NODE_TYPE)
+        .filter((detail) => !detail.field)
+        .map((detail) => detail.id)
+    );
+  }
+
   function renderMiscDetailFields(node) {
     if (!refs.nodeMiscDetailList) return;
     refs.nodeMiscDetailList.replaceChildren();
     if (!node) return;
     if (!Array.isArray(node.details)) node.details = [];
-    node.details.forEach((detail) => {
+    const typeDetailIds = typeRowDetailIdsForNode(node);
+    node.details.filter((detail) => !typeDetailIds.has(detail.id)).forEach((detail) => {
       refs.nodeMiscDetailList.appendChild(createMiscDetailRow(node, detail));
     });
     autoResizeDetailTextareas();
@@ -4687,9 +4828,9 @@
 
   function showLatexDetailEditor(key) {
     let input = null;
-    const field = NODE_DETAIL_LATEX_FIELDS.find((item) => item.key === key);
-    if (field) {
-      input = refs[field.inputRef];
+    if (key.startsWith('type:') && refs.nodeTypeDetailList) {
+      const row = refs.nodeTypeDetailList.querySelector(`[data-node-type-detail-id="${cssEscape(key.slice(5))}"]`);
+      input = row ? row.querySelector('[data-node-type-detail-role="text"]') : null;
     } else if (key.startsWith('misc:') && refs.nodeMiscDetailList) {
       const row = refs.nodeMiscDetailList.querySelector(`[data-misc-detail-id="${cssEscape(key.slice(5))}"]`);
       input = row ? row.querySelector('[data-detail-role="text"]') : null;
@@ -4708,28 +4849,34 @@
 
   function syncLatexDetailFields() {
     const node = findEditorNode(state.selectedNodeId);
-    NODE_DETAIL_LATEX_FIELDS.forEach(({ key, inputRef, previewRef }) => {
-      const input = refs[inputRef];
-      const preview = refs[previewRef];
+    const typeRows = refs.nodeTypeDetailList ? refs.nodeTypeDetailList.querySelectorAll('[data-node-type-detail-id]') : [];
+    typeRows.forEach((row) => {
+      const detailId = row.dataset.nodeTypeDetailId || '';
+      const key = nodeTypeDetailFieldKey(detailId);
+      const input = row.querySelector('[data-node-type-detail-role="text"]');
+      const preview = row.querySelector('[data-node-type-detail-preview]');
       if (!input || !preview) return;
       const value = input.value;
-      const showPreview = !!node && node.type !== 'misc' && state.activeLatexDetailField !== key && hasDollarMath(value);
+      const type = normalizeMiscDetailType(row.dataset.nodeTypeDetailType);
+      const showPreview = !!node && state.activeLatexDetailField !== key && !!cleanString(value) && (type !== 'textbox' || hasDollarMath(value));
       input.hidden = showPreview;
       preview.hidden = !showPreview;
-      preview.disabled = !node || node.type === 'misc';
-      preview.setAttribute('aria-label', `Edit ${key}`);
+      preview.disabled = !node;
+      preview.setAttribute('aria-label', `Edit ${row.dataset.nodeTypeDetailLabel || 'detail'}`);
       if (showPreview) {
-        if (preview.dataset.sourceText !== value) {
+        if (preview.dataset.sourceText !== value || preview.dataset.detailType !== type) {
           if (window.MathJax && typeof window.MathJax.typesetClear === 'function') {
             window.MathJax.typesetClear([preview]);
           }
-          preview.textContent = value;
+          renderDetailPreviewContent(preview, value, type);
           preview.dataset.sourceText = value;
+          preview.dataset.detailType = type;
           preview.dataset.needsTypeset = 'true';
         }
       } else {
         delete preview.dataset.needsTypeset;
         delete preview.dataset.sourceText;
+        delete preview.dataset.detailType;
       }
     });
 
@@ -4918,13 +5065,13 @@
   }
 
   function typesetLatexDetailPreviews() {
-    const fixedPending = NODE_DETAIL_LATEX_FIELDS
-      .map(({ previewRef }) => refs[previewRef])
-      .filter((preview) => preview && !preview.hidden && preview.dataset.needsTypeset === 'true');
+    const typePending = refs.nodeTypeDetailList
+      ? Array.from(refs.nodeTypeDetailList.querySelectorAll('[data-node-type-detail-preview][data-needs-typeset="true"]'))
+      : [];
     const miscPending = refs.nodeMiscDetailList
       ? Array.from(refs.nodeMiscDetailList.querySelectorAll('[data-detail-preview][data-needs-typeset="true"]'))
       : [];
-    const pending = fixedPending.concat(miscPending);
+    const pending = typePending.concat(miscPending);
     if (!pending.length) return;
     if (!window.MathJax || typeof window.MathJax.typesetPromise !== 'function') {
       scheduleMathTypesetRetry();
@@ -5056,53 +5203,51 @@
   function applyNodeDetailFromControls(node) {
     const graph = isTitleNode(node) ? currentGraph() : null;
     if (graph) node = graph.titleNode;
-    const previousType = node.type;
     const isTitle = isTitleNode(node);
     const type = isTitle
       ? normalizeTitleNodeType(refs.nodeType ? refs.nodeType.value : node.type)
       : normalizeType(refs.nodeType ? refs.nodeType.value : node.type);
     const fixedValues = {
-      setting: cleanString(refs.nodeSetting ? refs.nodeSetting.value : node.setting),
-      condition: cleanString(refs.nodeCondition ? refs.nodeCondition.value : node.condition),
-      result: cleanString(refs.nodeResult ? refs.nodeResult.value : node.result),
-      proofSketch: cleanString(refs.nodeProofSketch ? refs.nodeProofSketch.value : node.proofSketch)
+      setting: cleanString(node.setting),
+      condition: cleanString(node.condition),
+      result: cleanString(node.result),
+      proofSketch: cleanString(node.proofSketch)
     };
+    const typeRows = collectNodeTypeRowsFromControls();
+    const typeDetails = [];
+    typeRows.forEach((detail) => {
+      if (detail.field) {
+        fixedValues[detail.field] = detail.text;
+      } else if (detail.text) {
+        typeDetails.push({
+          id: detail.id,
+          label: detail.label,
+          type: detail.type,
+          text: detail.text
+        });
+      }
+    });
     const currentDetails = collectMiscDetailsFromControls(node.details);
+    const targetFields = new Set(nodeTypeRowsForType(type).map((detail) => detail.field).filter(Boolean));
+    let nextDetails = appendUniqueMiscDetails(currentDetails, typeDetails);
+    const migratedFields = LEGACY_NODE_DETAIL_FIELDS.map(({ key }) => key).filter((key) => !targetFields.has(key));
+    if (migratedFields.length) {
+      nextDetails = appendUniqueMiscDetails(
+        nextDetails,
+        legacyFieldsToMiscDetails(fixedValues, new Set(nextDetails.map((detail) => detail.id)), migratedFields)
+      );
+    }
     node.type = type;
     node.label = cleanString(refs.nodeLabel ? refs.nodeLabel.value : node.label) || (isTitle ? DEFAULT_GRAPH_TITLE : node.id);
+    LEGACY_NODE_DETAIL_FIELDS.forEach(({ key }) => {
+      node[key] = targetFields.has(key) ? fixedValues[key] : '';
+    });
+    node.details = nextDetails;
     if (isTitle) {
       node.label = cleanGraphTitle(node.label) || DEFAULT_GRAPH_TITLE;
       graph.title = node.label;
       if (refs.graphTitle && refs.graphTitle.value !== node.label) refs.graphTitle.value = node.label;
-      if (type === TITLE_NODE_TYPE) {
-        node.setting = '';
-        node.condition = '';
-        node.result = '';
-        node.proofSketch = '';
-        node.details = currentDetails;
-      } else if (type === 'misc') {
-        node.setting = '';
-        node.condition = '';
-        node.result = '';
-        node.proofSketch = '';
-        node.details = previousType === 'misc'
-          ? currentDetails
-          : appendUniqueMiscDetails(currentDetails, legacyFieldsToMiscDetails(fixedValues, new Set(currentDetails.map((detail) => detail.id))));
-      } else {
-        Object.assign(node, fixedValues);
-        node.details = currentDetails;
-      }
-    } else if (type === 'misc') {
-      node.setting = '';
-      node.condition = '';
-      node.result = '';
-      node.proofSketch = '';
-      node.details = previousType === 'misc'
-        ? currentDetails
-        : appendUniqueMiscDetails(currentDetails, legacyFieldsToMiscDetails(fixedValues, new Set(currentDetails.map((detail) => detail.id))));
-    } else {
-      Object.assign(node, fixedValues);
-      node.details = currentDetails;
+      updateDocumentTitle();
     }
     node.color = normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, (NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).stroke);
     node.fillColor = normalizeNodeFillColor(refs.nodeFillColor ? refs.nodeFillColor.value : node.fillColor, (NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).fill);
@@ -5333,10 +5478,17 @@
       body.append(key, title, meta);
       const citeCommand = referenceDisplayCitationCommand(reference);
       if (citeCommand) {
-        const cite = document.createElement('div');
+        const cite = document.createElement('button');
         cite.className = 'theorem-reference-cite';
+        cite.type = 'button';
         cite.textContent = citeCommand;
+        cite.title = `Show where ${citeCommand} is cited`;
+        cite.setAttribute('aria-expanded', state.activeReferenceUsageKey === reference.key ? 'true' : 'false');
+        cite.addEventListener('click', () => toggleReferenceUsageHint(reference.key));
         body.appendChild(cite);
+      }
+      if (state.activeReferenceUsageKey === reference.key) {
+        body.appendChild(createReferenceUsageHint(reference));
       }
       const links = referenceLinks(reference);
       if (links.length) {
@@ -5375,6 +5527,36 @@
       refs.referenceList.appendChild(item);
     });
     syncReferenceMasterCheckbox();
+  }
+
+  function toggleReferenceUsageHint(referenceKey) {
+    const key = cleanString(referenceKey);
+    state.activeReferenceUsageKey = state.activeReferenceUsageKey === key ? '' : key;
+    renderReferences();
+  }
+
+  function createReferenceUsageHint(reference) {
+    const hint = document.createElement('div');
+    hint.className = 'theorem-reference-usage-hint';
+    const labels = referenceUsageLabels(reference);
+    if (!labels.length) {
+      hint.textContent = 'Not cited yet.';
+      return hint;
+    }
+    const intro = document.createElement('div');
+    intro.textContent = 'cited by';
+    const list = document.createElement('ul');
+    labels.forEach((label) => {
+      const item = document.createElement('li');
+      item.textContent = label;
+      list.appendChild(item);
+    });
+    hint.append(intro, list);
+    return hint;
+  }
+
+  function referenceUsageLabels(reference) {
+    return referenceUsages(reference).map((usage) => usage.label);
   }
 
   function openReferenceEdit(key) {
@@ -5821,6 +6003,7 @@
       state.selectedReferenceKeys.delete(state.editingReferenceKey);
       state.selectedReferenceKeys.add(nextKey);
     }
+    if (state.activeReferenceUsageKey === state.editingReferenceKey) state.activeReferenceUsageKey = nextKey;
     state.editingReferenceKey = null;
     refs.referenceEditForm.hidden = true;
     setReferenceMessage(citationsChanged || citationKeysChanged
@@ -5854,6 +6037,7 @@
     pushUndoSnapshot('delete references');
     state.references = state.references.filter((reference) => !selectedKeys.has(reference.key));
     state.selectedReferenceKeys = new Set();
+    if (selectedKeys.has(state.activeReferenceUsageKey)) state.activeReferenceUsageKey = '';
     if (selectedKeys.has(state.editingReferenceKey)) {
       state.editingReferenceKey = null;
       if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
@@ -6364,8 +6548,24 @@
     };
   }
 
+  function buildSelectedReferencesExport() {
+    const references = state.references.filter((reference) => state.selectedReferenceKeys.has(reference.key));
+    if (!references.length) {
+      throw new Error('Select at least one reference before exporting selected references.');
+    }
+    return {
+      schemaVersion: SCHEMA_VERSION,
+      exportKind: SELECTED_REFERENCES_EXPORT_KIND,
+      references: exportReferences(references)
+    };
+  }
+
   function currentNodeExportJson() {
     return JSON.stringify(buildCurrentNodeExport(), null, 2);
+  }
+
+  function selectedReferencesExportJson() {
+    return JSON.stringify(buildSelectedReferencesExport(), null, 2);
   }
 
   function exportSelectedNodeToExportCard() {
@@ -6384,8 +6584,26 @@
     }
   }
 
-  function exportReferences() {
-    return state.references.map((reference) => {
+  function exportSelectedReferencesToExportCard() {
+    if (!refs.exportOut) return;
+    try {
+      refs.exportOut.value = selectedReferencesExportJson();
+      state.exportDirty = false;
+      setExportMessage('Selected references JSON exported.');
+      setReferenceMessage('Selected references exported to Import / Export.');
+      if (window.CalculatorCards) {
+        window.CalculatorCards.openCard('#export-card', { reason: 'selected-references-export' });
+      }
+      if (refs.exportOut && typeof refs.exportOut.focus === 'function') refs.exportOut.focus();
+      syncControls();
+    } catch (error) {
+      setReferenceMessage(error.message, true);
+      setExportMessage(error.message, true);
+    }
+  }
+
+  function exportReferences(references = state.references) {
+    return references.map((reference) => {
       const details = cleanMiscDetailsForExport(reference.details);
       return {
         ...reference.extra,
@@ -6663,6 +6881,10 @@
     const importSource = normalizeImportSource(data, sourceLabel);
     data = importSource.data;
     sourceLabel = importSource.sourceLabel;
+    if (isSelectedReferencesExport(data)) {
+      applySelectedReferencesImportData(data, sourceLabel, options);
+      return;
+    }
     if (scope === 'node') {
       applyCurrentNodeImportData(data, sourceLabel);
       return;
@@ -6704,6 +6926,24 @@
     clampAllNodes();
     setExportMessage(`Loaded ${state.nodes.length} nodes and ${state.arrows.length} arrows from ${sourceLabel} into ${wholeImport ? 'the whole graph' : 'the current tab'}.`);
     setStatus(wholeImport ? 'Imported whole graph.' : 'Imported current tab.');
+    renderAll();
+    markCurrentExportClean();
+  }
+
+  function applySelectedReferencesImportData(data, sourceLabel = 'selected-reference export', options = {}) {
+    const next = normalizeSelectedReferencesImport(data);
+    if (options.recordUndo !== false) pushUndoSnapshot('reference import');
+    const beforeCount = state.references.length;
+    state.references = mergeReferencesByKey(state.references, next.references);
+    const importedKeys = new Set(next.references.map((reference) => reference.key));
+    state.selectedReferenceKeys = new Set([...state.references].filter((reference) => importedKeys.has(reference.key)).map((reference) => reference.key));
+    state.activeReferenceUsageKey = '';
+    state.editingReferenceKey = null;
+    if (refs.referenceEditForm) refs.referenceEditForm.hidden = true;
+    const added = Math.max(0, state.references.length - beforeCount);
+    const skipped = next.references.length - added;
+    setExportMessage(`Imported ${next.references.length} reference${next.references.length === 1 ? '' : 's'} from ${sourceLabel}.`);
+    setReferenceMessage(`${added} added, ${skipped} already present.`);
     renderAll();
     markCurrentExportClean();
   }
@@ -6758,6 +6998,25 @@
       && typeof data === 'object'
       && !Array.isArray(data)
       && cleanString(data.exportKind) === CURRENT_NODE_EXPORT_KIND;
+  }
+
+  function normalizeSelectedReferencesImport(data) {
+    if (!isSelectedReferencesExport(data)) {
+      throw new Error('Selected-reference import expects a selected-references export.');
+    }
+    if (data.schemaVersion && Number(data.schemaVersion) > SCHEMA_VERSION) {
+      setExportMessage(`Newer schema ${data.schemaVersion}; preserving known fields.`, true);
+    }
+    const references = normalizeReferencesImport(data).references;
+    if (!references.length) throw new Error('Selected-reference import found no valid references.');
+    return { references };
+  }
+
+  function isSelectedReferencesExport(data) {
+    return !!data
+      && typeof data === 'object'
+      && !Array.isArray(data)
+      && cleanString(data.exportKind) === SELECTED_REFERENCES_EXPORT_KIND;
   }
 
   function normalizeNodeImport(entry) {
@@ -7413,6 +7672,7 @@
       refs.deleteSelected.disabled = !(selectedArrow || (selectedNode && !isTitleNode(selectedNode)));
     }
     if (refs.deleteSelectedReferences) refs.deleteSelectedReferences.disabled = state.selectedReferenceKeys.size === 0;
+    if (refs.exportSelectedReferences) refs.exportSelectedReferences.disabled = state.selectedReferenceKeys.size === 0;
     if (refs.graphHelp) {
       refs.graphHelp.textContent = selectedArrow
         ? 'Selected arrow: edit parents, type, curve, label, offset, and color in the Node / Arrow card.'

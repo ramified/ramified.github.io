@@ -14,7 +14,7 @@ window.THEOREM_GRAPH_PRESETS = [
 ];
 ```
 
-The calculator's Export panel already produces the full contents of a `.preset.js` file.
+The calculator's Import / Export panel already produces the full contents of a `.preset.js` file.
 Copy that output into `my_graph.preset.js`.
 
 It will look like:
@@ -39,3 +39,16 @@ window.THEOREM_GRAPH_PRESET_DATA.my_graph = {
 ```
 
 The `key` in `presets.js` must match the property name used in the `.preset.js` file.
+
+You can also set the global default rows for each node type in `presets.js`:
+
+```js
+window.THEOREM_GRAPH_NODE_TYPE_ROWS = {
+  theorem: ['setting', 'condition', 'result', 'proof sketch'],
+  object: ['definition', 'examples', 'properties'],
+  property: ['definition', 'criteria', 'examples'],
+  misc: []
+};
+```
+
+These rows apply by node type across every graph. They are not per-preset overrides.

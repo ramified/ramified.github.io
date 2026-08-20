@@ -3,7 +3,7 @@
 // { label: "Maintenance Tracker", key: "maintenance_tracker", file: "maintenance_tracker.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
-  "schemaVersion": 9,
+  "schemaVersion": 10,
   "title": "Maintenance Tracker",
   "titleNode": {
     "id": "__title__",
@@ -38,8 +38,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 83.3,
-      "y": 54,
+      "x": 76.4,
+      "y": 69.5,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -73,8 +73,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 115.5,
-      "y": 263.4
+      "x": 116.6,
+      "y": 309.7
     },
     {
       "id": "n39",
@@ -95,8 +95,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 278.2,
-      "y": 327
+      "x": 292.2,
+      "y": 393.3
     },
     {
       "id": "n58",
@@ -110,8 +110,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 280.2,
-      "y": 54
+      "x": 269.1,
+      "y": 58.7
     },
     {
       "id": "n60",
@@ -122,7 +122,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "\\cite{...} in reference chart can be touched. When touched, it shows the name of nodes/arrows which cites this article"
+          "text": "- [x] \\cite{...} in reference chart can be touched. When touched, it shows the name of nodes/arrows which cites this article\n- [x] add a new type for the node: object/property\n- [x] For different type of nodes I should be able to change the default rows\n- [x] title in the tab should be the \"name of the title node\", like \"Maintenance Tracker\", but not \"Theorem Graph Calculator\"\n- [x] user should be also able to export a single reference"
         }
       ],
       "setting": "",
@@ -132,10 +132,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [
         "..."
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 627.2,
-      "y": 54
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 599.2,
+      "y": 87.8
     },
     {
       "id": "n63",
@@ -156,8 +156,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 490.1,
-      "y": 327,
+      "x": 469.6,
+      "y": 393.3,
       "childGraph": {
         "title": "double click",
         "nodes": [
@@ -284,8 +284,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 650.1,
-      "y": 267.8
+      "x": 650.4,
+      "y": 344.5
     },
     {
       "id": "n66",
@@ -306,8 +306,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 364.6,
-      "y": 100.8
+      "x": 344.5,
+      "y": 153.4
     },
     {
       "id": "n68",
@@ -318,7 +318,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "bugs",
           "label": "bugs",
           "type": "checkbox",
-          "text": "- [x] For Chinese checker game:\n- [x] Looks like the player who join the room can no longer pick the sides, but this is weird, as the player who join the room don't has the correct game, the color choice is confusing. The code should allow player who join the room pick the color after join the room and then confirm\n- [x] It is weird that player who join the room can only move after the player who create the room move, I still wish every player can move\n- [x] And if a color is controlled by another player, then there should be no highlight for this color on this side\n- [x] Add the name for the player, so user knows who is playing\n- [x] How do you usually indicate when it's the opponent's turn in online Go games? Like a \"not allowed\" cursor?"
+          "text": "add chinese version"
         }
       ],
       "setting": "",
@@ -326,10 +326,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 355.4,
-      "y": 247.4
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 304.6,
+      "y": 239.2
     },
     {
       "id": "n69",
@@ -340,13 +340,13 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goal",
           "label": "goal",
           "type": "checkbox",
-          "text": "In Theorem Graph Calculator, add a link before the \"send feedback\" hyperlink, which suggests user how to use the AI to generate the theorem graph, and what AI should usually do to create an ideal json text"
+          "text": "- [x] In Theorem Graph Calculator, add a link before the \"send feedback\" hyperlink, which suggests user how to use the AI to generate the theorem graph, and what AI should usually do to create an ideal json text"
         },
         {
           "id": "functions",
           "label": "functions",
           "type": "checkbox",
-          "text": "told AI that:\nThis page support ref, it is recommended to give a reference for each goal in detail(which page or which chapter, for example). If all goals use a citation for one whole book, then user may not find what they want quickly\nThis page support MathJax rendering\nWhen generating roadmaps, focus on the examples and definitions; the AI can provide user a list of definition, and check if user know or not know. A quick recall of unknown definition(with reference) can help user to understand quickly\nThe goal can be more realizable, avoid \"understand ...\" (It has several kind of understanding. Reader can written down the theorem and its proof, or check the logic of each step, or check where the conditions are used, these are all called \"understanding\"). Unless user specifies, if a question has concrete answer(correct/false, or a concrete number), then just tell the user(like \"compute the degree of map\" can be changed to \"verify that the degree of the map is 3\")\nThis website should also make a introduction about the structure of json text, so that AI don't need to search for the js document for writing it."
+          "text": "- [x] told AI that:\n- [x] This page support ref, it is recommended to give a reference for each goal in detail(which page or which chapter, for example). If all goals use a citation for one whole book, then user may not find what they want quickly\n- [x] This page support MathJax rendering\n- [x] When generating roadmaps, focus on the examples and definitions; the AI can provide user a list of definition, and check if user know or not know. A quick recall of unknown definition(with reference) can help user to understand quickly\n- [x] The goal can be more realizable, avoid \"understand ...\" (It has several kind of understanding. Reader can written down the theorem and its proof, or check the logic of each step, or check where the conditions are used, these are all called \"understanding\"). Unless user specifies, if a question has concrete answer(correct/false, or a concrete number), then just tell the user(like \"compute the degree of map\" can be changed to \"verify that the degree of the map is 3\")\n- [x] This website should also make a introduction about the structure of json text, so that AI don't need to search for the js document for writing it."
         }
       ],
       "setting": "",
@@ -354,10 +354,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 498.9,
-      "y": 184.2,
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 494.1,
+      "y": 222.8,
       "childGraph": {
         "title": "prompt",
         "nodes": [],
@@ -444,52 +444,52 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     }
   ],
   "view": {
-    "selectedId": "n66",
+    "selectedId": "n69",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 381,
+    "canvasHeight": 452,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 1.9764,
+    "canvasAspectRatio": 1.6674,
     "relativeNodePositions": {
       "n4": {
-        "x": 0.1106,
-        "y": 0.1417
+        "x": 0.1015,
+        "y": 0.1538
       },
       "n37": {
-        "x": 0.1534,
-        "y": 0.6914
+        "x": 0.1548,
+        "y": 0.6851
       },
       "n39": {
-        "x": 0.3694,
-        "y": 0.8583
+        "x": 0.388,
+        "y": 0.8702
       },
       "n58": {
-        "x": 0.3721,
-        "y": 0.1417
+        "x": 0.3574,
+        "y": 0.1298
       },
       "n60": {
-        "x": 0.8329,
-        "y": 0.1417
+        "x": 0.7958,
+        "y": 0.1943
       },
       "n63": {
-        "x": 0.6508,
-        "y": 0.8583
+        "x": 0.6237,
+        "y": 0.8702
       },
       "n65": {
-        "x": 0.8633,
-        "y": 0.7028
+        "x": 0.8638,
+        "y": 0.7621
       },
       "n66": {
-        "x": 0.4841,
-        "y": 0.2645
+        "x": 0.4575,
+        "y": 0.3393
       },
       "n68": {
-        "x": 0.472,
-        "y": 0.6494
+        "x": 0.4045,
+        "y": 0.5291
       },
       "n69": {
-        "x": 0.6626,
-        "y": 0.4834
+        "x": 0.6562,
+        "y": 0.493
       }
     },
     "selectedReferenceKeys": []

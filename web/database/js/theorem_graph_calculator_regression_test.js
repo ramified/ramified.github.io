@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-function loadCalculator() {
+function loadCalculator(options = {}) {
   let source = fs.readFileSync(path.join(__dirname, 'theorem_graph_calculator.js'), 'utf8');
   source = source.replace(/\}\)\(\);\s*$/, `return {
     state,
@@ -17,13 +17,18 @@ function loadCalculator() {
     makeReference,
     buildGraphExport,
     buildCurrentNodeExport,
+    buildSelectedReferencesExport,
     currentNodeExportJson,
+    selectedReferencesExportJson,
     normalizeCurrentNodeImport,
+    normalizeSelectedReferencesImport,
     importCurrentNodeIntoGraph,
+    isSelectedReferencesExport,
     pushUndoSnapshot,
     performUndo,
     colorPaletteRenderPlan,
     normalizeGraphImport,
+    nodeTypeRowsForType,
     detailCheckboxItems,
     checkboxItemsToText,
     layoutArrowSpringStrength,
@@ -35,7 +40,9 @@ function loadCalculator() {
     referenceCitationAliases,
     referenceDeleteWarningMessage,
     referenceUsages,
+    referenceUsageLabels,
     rewriteReferenceCitationsInGraph,
+    mergeReferencesByKey,
     setReferenceSelected,
     syncReferenceMasterCheckbox,
     syncGraphCitationKeys
@@ -45,6 +52,7 @@ function loadCalculator() {
     console,
     URL,
     window: {
+      THEOREM_GRAPH_NODE_TYPE_ROWS: options.nodeTypeRows,
       addEventListener() {},
       setTimeout() {}
     },
@@ -390,6 +398,111 @@ function testCurrentNodeExportJsonIsParseable() {
   assert.strictEqual(parsed.node.label, 'Portable node');
 }
 
+function testObjectAndPropertyNodeTypesRoundTrip() {
+  const api = loadCalculator();
+  const graph = api.createGraph('Typed graph');
+  graph.nodes = [
+    api.makeNode({
+      id: 'obj',
+      type: 'object',
+      label: 'Group',
+      details: [{ id: 'definition', label: 'definition', type: 'textbox', text: 'A group object.' }]
+    }),
+    api.makeNode({
+      id: 'prop',
+      type: 'property',
+      label: 'Nilpotent',
+      details: [{ id: 'criteria', label: 'criteria', type: 'textbox', text: 'Central series exists.' }]
+    })
+  ];
+
+  const exported = api.buildGraphExport(graph, { includeTitleNode: true });
+  const imported = api.normalizeGraphImport(exported);
+
+  assert.deepStrictEqual(hostArray(exported.nodes.map((node) => node.type)), ['object', 'property']);
+  assert.deepStrictEqual(hostArray(imported.nodes.map((node) => node.type)), ['object', 'property']);
+}
+
+function testNodeTypeRowsUseGlobalConfigAndFallbacks() {
+  const api = loadCalculator({
+    nodeTypeRows: {
+      theorem: ['assumption', 'conclusion'],
+      object: ['definition', 'examples'],
+      misc: []
+    }
+  });
+
+  assert.deepStrictEqual(
+    hostArray(api.nodeTypeRowsForType('object').map((row) => row.label)),
+    ['definition', 'examples']
+  );
+  assert.deepStrictEqual(
+    hostArray(api.nodeTypeRowsForType('lemma').map((row) => row.label)),
+    ['assumption', 'conclusion']
+  );
+  assert.deepStrictEqual(
+    hostArray(api.nodeTypeRowsForType('property').map((row) => row.label)),
+    ['definition', 'criteria', 'examples']
+  );
+}
+
+function testDefaultTheoremRowsStayLegacyFields() {
+  const api = loadCalculator();
+  const rows = hostArray(api.nodeTypeRowsForType('theorem')).map((row) => ({
+    label: row.label,
+    field: row.field
+  }));
+
+  assert.deepStrictEqual(rows, [
+    { label: 'setting', field: 'setting' },
+    { label: 'condition', field: 'condition' },
+    { label: 'result', field: 'result' },
+    { label: 'proof sketch', field: 'proofSketch' }
+  ]);
+}
+
+function testSelectedReferenceExportJsonAndImportNormalize() {
+  const api = loadCalculator();
+  api.state.references = [
+    api.makeReference({ key: 'ref1', citeKey: 'ref1', title: 'Reference 1' }),
+    api.makeReference({ key: 'ref2', citeKey: 'ref2', title: 'Reference 2' })
+  ];
+  api.state.selectedReferenceKeys = new Set(['ref2']);
+
+  const exported = api.buildSelectedReferencesExport();
+  const parsed = JSON.parse(api.selectedReferencesExportJson());
+  const normalized = api.normalizeSelectedReferencesImport(exported);
+  const merged = api.mergeReferencesByKey(
+    [api.makeReference({ key: 'ref1', citeKey: 'ref1', title: 'Existing' })],
+    normalized.references
+  );
+
+  assert.strictEqual(exported.exportKind, 'selected-references');
+  assert.strictEqual(parsed.exportKind, 'selected-references');
+  assert.deepStrictEqual(hostArray(exported.references.map((reference) => reference.key)), ['ref2']);
+  assert.strictEqual(api.isSelectedReferencesExport(exported), true);
+  assert.deepStrictEqual(hostArray(merged.map((reference) => reference.key)), ['ref1', 'ref2']);
+}
+
+function testReferenceUsageLabelsMatchUsageScanner() {
+  const api = loadCalculator();
+  const root = api.createGraph('Root');
+  root.nodes = [
+    api.makeNode({ id: 'a', label: 'Node A', setting: 'Read \\cite{ref1}.' }),
+    api.makeNode({ id: 'b', label: 'Node B' })
+  ];
+  root.arrows = [
+    api.makeArrow({ id: 'arr', sourceId: 'a', targetId: 'b', remark: 'Uses \\cite{ref1}.' })
+  ];
+  api.state.rootGraph = root;
+  const reference = api.makeReference({ key: 'ref1', citeKey: 'ref1', title: 'Reference' });
+
+  assert.deepStrictEqual(
+    hostArray(api.referenceUsageLabels(reference)),
+    hostArray(api.referenceUsages(reference).map((usage) => usage.label))
+  );
+}
+
 function testCurrentNodeImportAppendsAndUniquifiesId() {
   const api = loadCalculator();
   const graph = api.createGraph('Destination');
@@ -528,6 +641,11 @@ testMoveNodeIntoNodePreservesChildGraphAndRemovesSourceArrows();
 testMoveNodeToAncestorGraphUniquifiesId();
 testCurrentNodeExportIncludesNodeChildGraphAndReferences();
 testCurrentNodeExportJsonIsParseable();
+testObjectAndPropertyNodeTypesRoundTrip();
+testNodeTypeRowsUseGlobalConfigAndFallbacks();
+testDefaultTheoremRowsStayLegacyFields();
+testSelectedReferenceExportJsonAndImportNormalize();
+testReferenceUsageLabelsMatchUsageScanner();
 testCurrentNodeImportAppendsAndUniquifiesId();
 testUndoRestoresDeletedNode();
 testUndoRestoresNodeMoveIntoChildGraph();

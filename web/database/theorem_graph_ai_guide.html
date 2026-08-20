@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Copyable Prompts</title>
+  <link rel="stylesheet" href="css/site.css">
+  <style>
+    .guide-layout {
+      max-width: 1120px;
+      margin: 30px auto;
+      padding: 0 28px;
+    }
+
+    .guide-shell {
+      display: grid;
+      gap: 18px;
+    }
+
+    .guide-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      box-shadow: var(--shadow);
+      padding: 18px 20px;
+    }
+
+    .guide-section h2 {
+      margin-bottom: 8px;
+      color: var(--text);
+      font-size: 1.26rem;
+      line-height: 1.2;
+    }
+
+    .guide-section h3 {
+      margin: 14px 0 6px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.78rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .guide-section p {
+      margin: 7px 0;
+    }
+
+    .guide-section ul {
+      margin: 7px 0 0 1.1rem;
+      padding-left: 1rem;
+    }
+
+    .guide-section li {
+      margin: 4px 0;
+    }
+
+    .guide-limits {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(120px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .guide-limits label {
+      display: grid;
+      gap: 4px;
+    }
+
+    .guide-limits input {
+      width: 100%;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.78rem;
+    }
+
+    .guide-copy-block {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .guide-copy-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .guide-copy-status {
+      min-height: 1.3em;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+    }
+
+    .guide-textarea {
+      width: 100%;
+      min-height: 180px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      padding: 8px 10px;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      line-height: 1.42;
+      resize: vertical;
+    }
+
+    #topic-request {
+      min-height: 78px;
+      font-family: inherit;
+      font-size: 0.82rem;
+    }
+
+    #graph-prompt {
+      min-height: 520px;
+    }
+
+    .guide-color-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .guide-color-item {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr);
+      gap: 9px;
+      align-items: center;
+      min-width: 0;
+      padding: 7px 8px;
+      border: 1px dotted var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+    }
+
+    .guide-swatch {
+      width: 30px;
+      height: 30px;
+      border: 2px solid var(--swatch-stroke);
+      border-radius: 4px;
+      background: var(--swatch-fill);
+    }
+
+    .guide-color-title {
+      color: var(--text);
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .guide-code {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+      overflow-wrap: anywhere;
+    }
+
+    .guide-field-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .guide-field {
+      border-top: 1px dotted var(--border);
+      padding-top: 7px;
+    }
+
+    @media (max-width: 720px) {
+      .guide-layout {
+        padding: 0 16px;
+      }
+
+      .guide-limits {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Copyable Prompts</h1>
+  <span><a href="theorem_graph_calculator.html">Theorem Graph Calculator</a></span>
+</header>
+
+<main class="guide-layout">
+  <div class="guide-shell">
+    <section class="guide-section">
+      <h2>Copyable Prompts</h2>
+      <p>
+        Write the article, concept, or topic, adjust the limits, then copy the prompt into an AI chat. The best output is plain JSON that can be pasted into
+        <strong>Import / Export -&gt; JSON text</strong> in the calculator.
+      </p>
+      <div class="guide-copy-block">
+        <label class="input-label" for="topic-request">roadmap topic</label>
+        <textarea id="topic-request" class="guide-textarea" spellcheck="true">some article / some concept / some topic</textarea>
+      </div>
+      <div class="guide-limits" aria-label="Prompt size limits">
+        <label>
+          <span class="input-label">max nodes</span>
+          <input id="max-nodes" type="number" min="1" max="200" step="1" value="8">
+        </label>
+        <label>
+          <span class="input-label">max arrows</span>
+          <input id="max-arrows" type="number" min="0" max="400" step="1" value="15">
+        </label>
+        <label>
+          <span class="input-label">max references</span>
+          <input id="max-references" type="number" min="0" max="200" step="1" value="15">
+        </label>
+      </div>
+      <div class="guide-copy-block">
+        <div class="guide-copy-head">
+          <h3>Copy Prompt</h3>
+          <button class="btn btn-ghost" type="button" data-copy-target="graph-prompt">copy</button>
+        </div>
+        <textarea id="graph-prompt" class="guide-textarea" readonly spellcheck="false"></textarea>
+      </div>
+      <div class="guide-copy-status" id="copy-status" aria-live="polite"></div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  The prompt text is generated in your browser.
+  <a href="theorem_graph_calculator.html">Open calculator</a>
+</footer>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const limitInputs = [$('max-nodes'), $('max-arrows'), $('max-references')].filter(Boolean);
+  const topicRequest = $('topic-request');
+  const graphPrompt = $('graph-prompt');
+  const copyStatus = $('copy-status');
+  const DEPLOYED_GUIDE_URL = 'https://ramified.github.io/web/database/theorem_graph_ai_guide.html';
+
+  function clampInteger(input, fallback) {
+    const min = Number(input.min || 0);
+    const max = Number(input.max || 999);
+    const value = Math.round(Number(input.value));
+    if (!Number.isFinite(value)) return fallback;
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function limits() {
+    return {
+      nodes: clampInteger($('max-nodes'), 8),
+      arrows: clampInteger($('max-arrows'), 15),
+      references: clampInteger($('max-references'), 15)
+    };
+  }
+
+  function guideUrl() {
+    const href = window.location.href || '';
+    if (/^https?:\/\//i.test(href)) {
+      return href.replace(/theorem_graph_calculator\.html([?#].*)?$/i, 'theorem_graph_ai_guide.html$1');
+    }
+    return DEPLOYED_GUIDE_URL;
+  }
+
+  function topicText() {
+    const text = topicRequest ? topicRequest.value.trim() : '';
+    return text || 'some article / some concept / some topic';
+  }
+
+  function buildGraphPrompt() {
+    const count = limits();
+    const url = guideUrl();
+    return [
+      `I would like to make a roadmap of ${topicText()}, could you help me to make a roadmap using the website [${url}](${url})?`,
+      '',
+      'Please read that page first, then create import-ready JSON for Theorem Graph Calculator.',
+      '',
+      'Output rules:',
+      '- Return plain JSON only. Do not wrap it in markdown fences. Do not add commentary before or after the JSON.',
+      '- Use schemaVersion 10.',
+      `- Use at most ${count.nodes} nodes, ${count.arrows} arrows, and ${count.references} references unless I explicitly ask for more.`,
+      '- The JSON must be suitable for Import / Export -> JSON text.',
+      '- Use stable ASCII IDs for nodes and arrows, such as n1, n2, a1.',
+      '- Every arrow sourceId and targetId must match an existing node id.',
+      '- Include x and y positions for every node.',
+      '',
+      'Calculator capabilities:',
+      '- It supports references, MathJax, node colors, nested subgraphs, node types, and visible \\cite{...} citations.',
+      '- Put visible \\cite{key} text in node details, theorem-style fields, or arrow remarks when a source supports that item.',
+      '- References should be specific when possible: page, chapter, section, theorem number, or example number. Do not cite one whole book for every goal if more precise locations are available.',
+      '- Use MathJax syntax for formulas, for example $H^i(X,\\mathcal{F})$ or \\(\\pi_1(X)\\).',
+      '',
+      'Content strategy:',
+      '- For roadmaps, focus on definitions, examples, concrete checkpoints, and quick recalls of unknown definitions.',
+      '- Avoid vague goals like "understand X". Prefer actionable goals such as "write the statement", "check where each hypothesis is used", or "verify that the degree is 3".',
+      '- If a question has a concrete factual or computational answer, answer it directly first, then encode the graph node as a verification/check task if useful.',
+      '- Use object nodes for mathematical objects and property nodes for properties. Use theorem, lemma, proposition, corollary, conjecture, definition, example, or misc when those fit better.',
+      '',
+      'Color conventions:',
+      '- Examples: color "#2f5f9f", fillColor "#eef4fb".',
+      '- Has a nested subgraph: fillColor "#fff7df"; prefer this for nodes with childGraph.',
+      '- Waiting to learn: color "#7a6f65", fillColor "#f7f5f1".',
+      '- Started but unfinished: color "#3d6b4f", fillColor "#f4f7ed".',
+      '- Finished learning: color "#8b3a2a", fillColor "#fbefee".',
+      '',
+      'JSON fields to use:',
+      '- schemaVersion: use 10.',
+      '- title: graph title.',
+      '- titleNode: id "__title__", type "title", label matching title.',
+      '- nodes: each has id, type, label, details or theorem-style fields, citationKeys, color, fillColor, x, y. A node may include childGraph.',
+      '- arrows: each has id, sourceId, targetId, label, remark, body, head, tail, level, endpointScale, curve, labelOffset, labelPosition, labelAlign, color.',
+      '- references: each has key, citeKey, title, author, year, rawBibtex or links when available.',
+      '- view: include selectedId, layoutAvoidOverlap, layoutRunning, canvasHeight, canvasRatioLocked, and canvasAspectRatio.',
+      '',
+      'Current node types:',
+      '- theorem, lemma, proposition, corollary, conjecture, definition, example, object, property, misc.',
+      '',
+      'Quality checklist:',
+      '- Every visible \\cite{key} should match a reference citeKey or key.',
+      '- Arrows should express real dependencies, examples, tests, or proof uses.',
+      '- If a node uses a childGraph, prefer fillColor "#fff7df" and keep the child graph small.',
+      '- Do not invent precise page/theorem numbers if you do not know them; mark the location as approximate or ask me for the source.'
+    ].join('\n');
+  }
+
+  function updatePrompts() {
+    if (graphPrompt) graphPrompt.value = buildGraphPrompt();
+  }
+
+  function selectText(target) {
+    if (!target || typeof target.select !== 'function') return;
+    target.focus();
+    target.select();
+  }
+
+  async function copyFromTarget(targetId, button) {
+    const target = $(targetId);
+    if (!target) return;
+    const text = target.value || target.textContent || '';
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(text);
+      if (copyStatus) copyStatus.textContent = 'Copied.';
+    } catch (_) {
+      selectText(target);
+      try {
+        document.execCommand('copy');
+        if (copyStatus) copyStatus.textContent = 'Copied.';
+      } catch (error) {
+        if (copyStatus) copyStatus.textContent = 'Select the text and copy it manually.';
+      }
+    }
+    if (button) {
+      const original = button.textContent;
+      button.textContent = 'copied';
+      window.setTimeout(() => {
+        button.textContent = original;
+      }, 900);
+    }
+  }
+
+  limitInputs.forEach((input) => {
+    input.addEventListener('input', updatePrompts);
+    input.addEventListener('change', () => {
+      input.value = String(clampInteger(input, Number(input.defaultValue) || 1));
+      updatePrompts();
+    });
+  });
+
+  if (topicRequest) {
+    topicRequest.addEventListener('input', updatePrompts);
+  }
+
+  document.querySelectorAll('[data-copy-target]').forEach((button) => {
+    button.addEventListener('click', () => copyFromTarget(button.dataset.copyTarget, button));
+  });
+
+  updatePrompts();
+})();
+</script>
+</body>
+</html>

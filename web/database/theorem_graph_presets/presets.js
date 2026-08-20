@@ -1,10 +1,5 @@
 window.THEOREM_GRAPH_PRESETS = [
 {
-  label: 'Starter Dependency Graph',
-  key: 'starter_dependency_graph',
-  file: 'starter_dependency_graph.preset.js'
-},
-{
   label: 'Maintenance Tracker',
   key: 'maintenance_tracker',
   file: 'maintenance_tracker.preset.js'
@@ -16,9 +11,12 @@ window.THEOREM_GRAPH_PRESETS = [
 { label: "Fukaya Categories of Surfaces", key: "fukaya_categories_of_surfaces", file: "fukaya_categories_of_surfaces.preset.js" },
 { label: "Integral S_n Forms", key: "integral_s_n_forms", file: "integral_s_n_forms.preset.js" },
 { label: "perverse sheaf summer school preparation", key: "perverse_sheaf_summer_school_preparation", file: "perverse_sheaf_summer_school_preparation.preset.js" },
-{ 
-  label: "Francesco Denisi",
-  key: "francesco_denisi",
-  file: "francesco_denisi.preset.js" 
-}
+{ label: "property hierarchy", key: "property_hierarchy", file: "property_hierarchy.preset.js" },
 ];
+
+window.THEOREM_GRAPH_NODE_TYPE_ROWS = {
+  theorem: ['setting', 'condition', 'result', 'proof sketch'],
+  object: ['definition', 'examples', 'properties'],
+  property: ['definition', 'criteria', 'examples'],
+  misc: []
+};

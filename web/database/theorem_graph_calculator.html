@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Theorem Graph Calculator</title>
+  <title>Maintenance Tracker</title>
   <link rel="stylesheet" href="css/site.css">
   <style>
     .theorem-layout {
@@ -801,11 +801,41 @@
     }
 
     .theorem-reference-cite {
+      display: inline;
+      appearance: none;
+      -webkit-appearance: none;
+      padding: 0;
+      border: 0;
+      background: transparent;
       color: var(--accent2);
+      cursor: pointer;
       font-family: 'JetBrains Mono', Consolas, monospace;
       font-size: 0.68rem;
       line-height: 1.3;
       overflow-wrap: anywhere;
+      text-align: left;
+    }
+
+    .theorem-reference-cite:hover,
+    .theorem-reference-cite:focus-visible {
+      outline: none;
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 2px;
+    }
+
+    .theorem-reference-usage-hint {
+      margin-top: 4px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .theorem-reference-usage-hint ul {
+      margin: 2px 0 0 0.9rem;
+      padding-left: 0.8rem;
     }
 
     .theorem-reference-link {
@@ -1249,6 +1279,8 @@
               <option value="conjecture">Conjecture</option>
               <option value="definition">Definition</option>
               <option value="example">Example</option>
+              <option value="object">Object</option>
+              <option value="property">Property</option>
               <option value="misc">Misc</option>
             </select>
           </div>
@@ -1256,26 +1288,7 @@
             <label class="input-label" for="node-label">label</label>
             <input id="node-label" class="theorem-input" type="text" maxlength="80" spellcheck="false" autocomplete="off">
           </div>
-          <div class="theorem-field-row" data-node-fixed-detail>
-            <label class="input-label" for="node-setting">setting</label>
-            <textarea id="node-setting" class="theorem-textarea" spellcheck="true"></textarea>
-            <button id="node-setting-preview" class="theorem-latex-preview" type="button" hidden></button>
-          </div>
-          <div class="theorem-field-row" data-node-fixed-detail>
-            <label class="input-label" for="node-condition">condition</label>
-            <textarea id="node-condition" class="theorem-textarea" spellcheck="true"></textarea>
-            <button id="node-condition-preview" class="theorem-latex-preview" type="button" hidden></button>
-          </div>
-          <div class="theorem-field-row" data-node-fixed-detail>
-            <label class="input-label" for="node-result">result</label>
-            <textarea id="node-result" class="theorem-textarea" spellcheck="true"></textarea>
-            <button id="node-result-preview" class="theorem-latex-preview" type="button" hidden></button>
-          </div>
-          <div class="theorem-field-row" data-node-fixed-detail>
-            <label class="input-label" for="node-proof-sketch">proof sketch</label>
-            <textarea id="node-proof-sketch" class="theorem-textarea" spellcheck="true"></textarea>
-            <button id="node-proof-sketch-preview" class="theorem-latex-preview" type="button" hidden></button>
-          </div>
+          <div id="node-type-detail-list"></div>
           <div id="node-misc-editor" hidden>
             <div class="theorem-field-row">
               <label class="input-label" for="node-misc-detail-name">extra</label>
@@ -1408,6 +1421,8 @@
               <option value="conjecture">Conjecture</option>
               <option value="definition">Definition</option>
               <option value="example">Example</option>
+              <option value="object">Object</option>
+              <option value="property">Property</option>
               <option value="misc" selected>Misc</option>
             </select>
           </div>
@@ -1530,6 +1545,7 @@
           <button class="btn" id="add-reference" type="button">add BibTeX</button>
           <button class="btn" id="add-link-reference" type="button">add source</button>
           <button class="btn btn-ghost" id="clear-bibtex" type="button">clear inputs</button>
+          <button class="btn btn-ghost" id="export-selected-references" type="button">export selected</button>
           <button class="btn btn-ghost" id="delete-selected-references" type="button">delete selected</button>
         </div>
         <div class="theorem-reference-edit-form" id="reference-edit-form" hidden>
@@ -1597,9 +1613,9 @@
     </section>
 
     <section class="card collapsed" id="export-card">
-      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Import / Export</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
-        <label class="input-label" for="theorem-export-out">preset file</label>
+        <label class="input-label" for="theorem-export-out">export text</label>
         <textarea id="theorem-export-out" readonly spellcheck="false"></textarea>
         <div class="theorem-export-actions">
           <button class="btn" id="refresh-export" type="button">refresh</button>
@@ -1657,14 +1673,15 @@
             <span>current node</span>
           </label>
         </div>
-        <div class="hint" id="export-message">Export includes nodes, arrows, references, and positions. JSON import also accepts Tao paper-diagram JSON.</div>
+        <div class="hint" id="export-message">Import / export includes nodes, arrows, references, and positions. JSON import also accepts Tao paper-diagram JSON.</div>
       </div>
     </section>
   </aside>
 </main>
 
 <footer>
-  Browser-side theorem dependency graph prototype styled with the shared Young diagram UI.
+  Browser-side theorem dependency graph prototype styled with the shared Young diagram UI. | 
+  <a href="theorem_graph_ai_guide.html" target="_blank" rel="noopener">AI graph prompt</a> | 
   <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
 </footer>
 

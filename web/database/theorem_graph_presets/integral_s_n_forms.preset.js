@@ -34,7 +34,7 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
           "id": "reading",
           "label": "Reading",
           "type": "textbox",
-          "text": "\\cite{curtis-reiner,james}"
+          "text": "\\cite{CR81,james}"
         }
       ],
       "setting": "",
@@ -42,7 +42,7 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       "result": "Classify full ZS_n-lattices L ⊂ V up to ZS_n-isomorphism, not merely the rational irreducibles.",
       "proofSketch": "",
       "citationKeys": [
-        "curtis-reiner",
+        "CR81",
         "james"
       ],
       "color": "#7a6f65",
@@ -65,7 +65,7 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
           "id": "reading",
           "label": "Reading",
           "type": "textbox",
-          "text": "\\cite{curtis-reiner,reiner}"
+          "text": "\\cite{CR81,reiner}"
         }
       ],
       "setting": "",
@@ -73,7 +73,7 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       "result": "Integral isomorphism is controlled by GL_d(Z), whereas rational equivalence only sees GL_d(Q).",
       "proofSketch": "",
       "citationKeys": [
-        "curtis-reiner",
+        "CR81",
         "reiner"
       ],
       "color": "#7a6f65",
@@ -96,7 +96,7 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
           "id": "reading",
           "label": "Reading",
           "type": "textbox",
-          "text": "\\cite{curtis-reiner,reiner}"
+          "text": "\\cite{CR81,reiner}"
         }
       ],
       "setting": "",
@@ -104,7 +104,7 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       "result": "Order-theoretic language explains why lattice classification is arithmetic rather than ordinary semisimple representation theory.",
       "proofSketch": "",
       "citationKeys": [
-        "curtis-reiner",
+        "CR81",
         "reiner"
       ],
       "color": "#7a6f65",
@@ -189,7 +189,7 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
           "id": "reading",
           "label": "Reading",
           "type": "textbox",
-          "text": "\\cite{curtis-reiner,reiner}"
+          "text": "\\cite{CR81,reiner}"
         }
       ],
       "setting": "",
@@ -197,11 +197,11 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       "result": "There are only finitely many ZS_n-lattice isomorphism classes with rational span V.",
       "proofSketch": "",
       "citationKeys": [
-        "curtis-reiner",
+        "CR81",
         "reiner"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
       "x": 574.1,
       "y": 323.3
     },
@@ -469,7 +469,7 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
           "id": "reading",
           "label": "Reading",
           "type": "textbox",
-          "text": "\\cite{curtis-reiner,danz-hofmann}"
+          "text": "\\cite{CR81,danz-hofmann}"
         }
       ],
       "setting": "",
@@ -477,13 +477,110 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       "result": "The goal is to distinguish general finiteness from families where a practical explicit classification is actually known.",
       "proofSketch": "",
       "citationKeys": [
-        "curtis-reiner",
+        "CR81",
         "danz-hofmann"
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
       "x": 606.9,
       "y": 849.3
+    },
+    {
+      "id": "n17",
+      "type": "misc",
+      "label": "my graph",
+      "details": [
+        {
+          "id": "progress",
+          "label": "progress",
+          "type": "list",
+          "text": "stop at 3.C"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#8b5f2a",
+      "fillColor": "#fff7df",
+      "x": 351.9,
+      "y": 488.7,
+      "childGraph": {
+        "title": "my graph",
+        "nodes": [
+          {
+            "id": "n16",
+            "type": "theorem",
+            "label": "Jordan--Zassenhaus",
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a4d9b",
+            "fillColor": "#f4f1f8",
+            "x": 580.7,
+            "y": 308.4
+          },
+          {
+            "id": "n17",
+            "type": "definition",
+            "label": "Cartan--Brauer triangle",
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 301.7,
+            "y": 348.1
+          },
+          {
+            "id": "n18",
+            "type": "misc",
+            "label": "maximal order",
+            "details": [],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 570.2,
+            "y": 187.4
+          }
+        ],
+        "arrows": [
+          {
+            "id": "a1",
+            "sourceId": "n18",
+            "targetId": "n16",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "hook",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 15,
+            "labelPosition": 0.5,
+            "labelAlign": "left",
+            "color": "#5f574e"
+          }
+        ],
+        "view": {
+          "selectedId": "",
+          "layoutAvoidOverlap": true,
+          "layoutRunning": false,
+          "canvasHeight": 560,
+          "canvasRatioLocked": false,
+          "canvasAspectRatio": 1.7143
+        }
+      }
     }
   ],
   "arrows": [
@@ -897,10 +994,10 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
     }
   ],
   "view": {
-    "selectedId": "n12",
+    "selectedId": "n1",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 1080,
+    "canvasHeight": 1191,
     "canvasRatioLocked": false,
     "canvasAspectRatio": 0.6935,
     "selectedReferenceKeys": []
@@ -919,6 +1016,157 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
         {
           "url": "https://mathoverflow.net/questions/185692/how-can-one-determine-if-a-singularity-is-simple",
           "source": "mathoverflow",
+          "label": ""
+        }
+      ]
+    },
+    {
+      "key": "RRS2016",
+      "author": "Rito--Roulleau--Sarti",
+      "title": "Explicit Schoen surfaces",
+      "year": "2016",
+      "citeKey": "RRS2016",
+      "url": "https://arxiv.org/abs/1609.02235",
+      "source": "web",
+      "rawBibtex": "@misc{RRS2016, title={Explicit Schoen surfaces}, author={Rito and Roulleau and Sarti}, year={2016}, eprint={1609.02235}, archivePrefix={arXiv}}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/1609.02235",
+          "source": "web",
+          "label": "arXiv:1609.02235"
+        }
+      ]
+    },
+    {
+      "key": "CMLR15",
+      "author": "Ciliberto--Mendes Lopes--Roulleau",
+      "title": "On Schoen surfaces",
+      "year": "2013",
+      "citeKey": "CMLR15",
+      "details": [
+        {
+          "id": "remark",
+          "label": "remark",
+          "type": "textbox",
+          "text": "a more geometric approach to Schoen's construction"
+        }
+      ],
+      "url": "https://arxiv.org/abs/1303.1750",
+      "source": "web",
+      "rawBibtex": "@misc{CMLR2013, title={On Schoen surfaces}, author={Ciliberto and Mendes Lopes and Roulleau}, year={2013}, eprint={1303.1750}, archivePrefix={arXiv}}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/1303.1750",
+          "source": "web",
+          "label": "arXiv:1303.1750"
+        }
+      ]
+    },
+    {
+      "key": "CK2020",
+      "author": "Codogni--Kramer",
+      "title": "Semicontinuity of Gauss maps and the Schottky problem",
+      "year": "2020",
+      "citeKey": "CK2020",
+      "url": "https://arxiv.org/abs/2010.00053",
+      "source": "web",
+      "rawBibtex": "@misc{CK2020, title={Semicontinuity of Gauss maps and the Schottky problem}, author={Codogni and Kramer}, year={2020}, eprint={2010.00053}, archivePrefix={arXiv}}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/2010.00053",
+          "source": "web",
+          "label": "arXiv:2010.00053"
+        }
+      ]
+    },
+    {
+      "key": "vG2021",
+      "author": "van Geemen",
+      "title": "Weil Classes and Decomposable Abelian Fourfolds",
+      "year": "2021",
+      "citeKey": "vG2021",
+      "url": "https://arxiv.org/abs/2108.02087",
+      "source": "web",
+      "rawBibtex": "@misc{vG2021, title={Weil Classes and Decomposable Abelian Fourfolds}, author={van Geemen}, year={2021}, eprint={2108.02087}, archivePrefix={arXiv}}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/2108.02087",
+          "source": "web",
+          "label": "arXiv:2108.02087"
+        }
+      ]
+    },
+    {
+      "key": "Beau96",
+      "author": "Beauville, Arnaud",
+      "title": "Complex algebraic surfaces.",
+      "year": "1996",
+      "citeKey": "Beau96",
+      "url": "",
+      "source": "bibtex",
+      "rawBibtex": "@book{zbMATH00916043,\n author = {Beauville, Arnaud},\n title = {Complex algebraic surfaces.},\n edition = {2nd ed.},\n fseries = {London Mathematical Society Student Texts},\n series = {Lond. Math. Soc. Stud. Texts},\n issn = {0963-1631},\n volume = {34},\n isbn = {0-521-49842-2; 0-521-49510-5},\n year = {1996},\n publisher = {Cambridge: Cambridge Univ. Press},\n language = {English},\n keywords = {14J25,32J15,14-02,14J10,32-02},\n zbMATH = {916043},\n Zbl = {0849.14014}\n}",
+      "links": []
+    },
+    {
+      "key": "MLPP12",
+      "author": "Lopes, Margarida Mendes and Pardini, Rita and Pirola, Gian Pietro",
+      "title": "On surfaces of general type with \\(q=5\\)",
+      "year": "2012",
+      "citeKey": "MLPP12",
+      "url": "",
+      "source": "bibtex",
+      "rawBibtex": "@article{zbMATH06142480,\n author = {Lopes, Margarida Mendes and Pardini, Rita and Pirola, Gian Pietro},\n title = {On surfaces of general type with {{\\(q=5\\)}}},\n fjournal = {Annali della Scuola Normale Superiore di Pisa. Classe di Scienze. Serie V},\n journal = {Ann. Sc. Norm. Super. Pisa, Cl. Sci. (5)},\n issn = {0391-173X},\n volume = {11},\n number = {4},\n pages = {999--1007},\n year = {2012},\n language = {English},\n doi = {10.2422/2036-2145.201102_003},\n keywords = {14J29},\n zbMATH = {6142480},\n Zbl = {1272.14030}\n}",
+      "links": []
+    },
+    {
+      "key": "ACFR02",
+      "author": "Calabri, Alberto and Ciliberto, Ciro and Flamini, Flaminio and Miranda, Rick",
+      "title": "On the geometric genus of reducible surfaces and degenerations of surface to unions of planes",
+      "year": "2004",
+      "citeKey": "ACFR02",
+      "url": "",
+      "source": "bibtex",
+      "rawBibtex": "@incollection{zbMATH02135193,\n author = {Calabri, Alberto and Ciliberto, Ciro and Flamini, Flaminio and Miranda, Rick},\n title = {On the geometric genus of reducible surfaces and degenerations of surface to unions of planes},\n booktitle = {The Fano conference. Papers of the conference organized to commemorate the 50th anniversary of the death of Gino Fano (1871--1952), Torino, Italy, September 29--October 5, 2002},\n isbn = {88-900876-1-7},\n pages = {277--312},\n year = {2004},\n publisher = {Torino: Universit{\\`a} di Torino, Dipartimento di Matematica},\n language = {English},\n keywords = {14N20,14D06,14J10},\n zbMATH = {2135193},\n Zbl = {1071.14057}\n}",
+      "links": []
+    },
+    {
+      "key": "Schoen07",
+      "author": "Schoen, Chad",
+      "title": "A family of surfaces constructed from genus 2 curves",
+      "year": "2007",
+      "citeKey": "Schoen07",
+      "details": [
+        {
+          "id": "typo",
+          "label": "typo",
+          "type": "textbox",
+          "text": "\\cite[remark 2.3]{CMLR2013}: In [23, Proposition 10.1, (ii)], it is stated that for the general Schoen surface S one has rk(NS(S)) = 2.\nAs one can directly see with an argument as in [14], the right statement is instead that rk(NS(S)) = 1 (that was\nalso pointed to us in [24])."
+        }
+      ],
+      "url": "https://pismin.com/10.1142/S0129167X07004175",
+      "source": "web",
+      "rawBibtex": "@article{zbMATH05168128,\n author = {Schoen, Chad},\n title = {A family of surfaces constructed from genus 2 curves},\n fjournal = {International Journal of Mathematics},\n journal = {Int. J. Math.},\n issn = {0129-167X},\n volume = {18},\n number = {5},\n pages = {585--612},\n year = {2007},\n language = {English},\n doi = {10.1142/S0129167X07004175},\n keywords = {14J29,32J15,32G05,32G10,14K12,14C30},\n zbMATH = {5168128},\n Zbl = {1118.14042}\n}",
+      "links": [
+        {
+          "url": "https://pismin.com/10.1142/S0129167X07004175",
+          "source": "web",
+          "label": "scihub"
+        }
+      ]
+    },
+    {
+      "key": "AIexplains",
+      "author": "",
+      "title": "openai",
+      "year": "",
+      "citeKey": "AIexplains",
+      "url": "https://chatgpt.com/share/6a809b0f-b6bc-83eb-9aa9-58413b9a4f60",
+      "source": "web",
+      "rawBibtex": "",
+      "links": [
+        {
+          "url": "https://chatgpt.com/share/6a809b0f-b6bc-83eb-9aa9-58413b9a4f60",
+          "source": "web",
           "label": ""
         }
       ]
@@ -946,11 +1194,11 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       "links": []
     },
     {
-      "key": "curtis-reiner",
+      "key": "CR81",
       "author": "Curtis, Charles W.; Reiner, Irving",
       "title": "Methods of Representation Theory, Vol. I",
       "year": "1981",
-      "citeKey": "curtis-reiner",
+      "citeKey": "CR81",
       "url": "",
       "source": "bibtex",
       "rawBibtex": "",
