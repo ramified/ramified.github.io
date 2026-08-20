@@ -30,7 +30,7 @@ const SHOP_CONFIG = {
   {
     id: "electric-grill",
     image: "electric_grill.jpg",
-    price: 30,
+    price: 29,
     name: { en: "Electric grill", zh: "电烤炉" },
     description: {
       en: "Electric grill only used once, ready for a barbecue party.",
@@ -40,31 +40,31 @@ const SHOP_CONFIG = {
   {
     id: "pot",
     image: "pot.jpg",
-    price: 7,
+    price: 8,
     name: { en: "Pot", zh: "锅" },
     description: {
       en: "A practical cooking pot.",
       zh: "实用的烹饪锅,适合煮泡面"
     }
   },
-  {
-    id: "rice-cooker",
-    image: "rice_cooker.jpg",
-    price: 5,
-    name: { en: "Rice cooker", zh: "电饭煲" },
-    description: {
-      en: "Rice cooker for everyday meals.",
-      zh: "适合日常使用的电饭煲。"
-    }
-  },
+  // {
+  //   id: "rice-cooker",
+  //   image: "rice_cooker.jpg",
+  //   price: 5,
+  //   name: { en: "Rice cooker", zh: "电饭煲" },
+  //   description: {
+  //     en: "Rice cooker for everyday meals.",
+  //     zh: "适合日常使用的电饭煲。"
+  //   }
+  // },
   {
     id: "umeshu",
     image: "Umeshu.jpg",
-    price: 13,
+    price: 12.5,
     name: { en: "Umeshu", zh: "梅酒" },
     description: {
-      en: "Umeshu bottle, offered for 13 euros.",
-      zh: "梅酒一瓶，价格13欧元。"
+      en: "Umeshu bottle, offered for 12.5 euros.",
+      zh: "梅酒一瓶，价格12.5欧元。"
     }
   },
   {
@@ -73,8 +73,8 @@ const SHOP_CONFIG = {
     price: 35,
     name: { en: "Thick cotton quilt", zh: "厚棉被" },
     description: {
-      en: "A very thick, high-quality cotton quilt, newly bought and shipped from China. Never used because the apartment has heating. €35 with the cover, or €30 without the cover.",
-      zh: "非常厚、质量很好的棉被，从中国新买寄来，因为家里有暖气所以从未使用。带外套（被套）35欧，不需要外套则30欧。"
+      en: "A very thick, high-quality cotton quilt, newly bought and shipped from China. Never used because the apartment has heating. €35 with the cover, or €29 without the cover.",
+      zh: "非常厚、质量很好的棉被，从中国新买寄来，因为家里有暖气所以从未使用。带外套（被套）35欧，不需要外套则29欧。"
     }
   },
   {
