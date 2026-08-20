@@ -74,8 +74,8 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 171.2,
-      "y": 78.9,
+      "x": 151,
+      "y": 133.1,
       "childGraph": {
         "title": "Schoen surface",
         "nodes": [
@@ -149,10 +149,23 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "result": "The exact monodromy is the even signed Weyl group W(D_4).",
       "proofSketch": "Irreducibility plus nonsquare discriminant gives S_4 on pairs, and local A_1 monodromy supplies the even sign changes.",
       "citationKeys": [],
-      "color": "#8b5f2a",
-      "fillColor": "#fff7df",
-      "x": 382.6,
-      "y": 54
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 377.1,
+      "y": 56.9,
+      "childGraph": {
+        "title": "$W(D_4)$-monodromy",
+        "nodes": [],
+        "arrows": [],
+        "view": {
+          "selectedId": "",
+          "layoutAvoidOverlap": true,
+          "layoutRunning": false,
+          "canvasHeight": 560,
+          "canvasRatioLocked": false,
+          "canvasAspectRatio": 1.7143
+        }
+      }
     },
     {
       "id": "lem_normalized_middle",
@@ -163,10 +176,10 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "result": "The middle Segre difference specializes to an explicit class on J x J.",
       "proofSketch": "Normalize the finite incidence correspondence, confine excess terms, then determine the three multiplicities.",
       "citationKeys": [],
-      "color": "#8b5f2a",
-      "fillColor": "#fff7df",
-      "x": 223.9,
-      "y": 222
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 219.2,
+      "y": 214.3
     },
     {
       "id": "lem_nonzero_middle",
@@ -177,10 +190,10 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "result": "The middle Segre difference is nonzero.",
       "proofSketch": "The class restricts to theta squared over two on the diagonal slice, yielding a nonzero intersection number.",
       "citationKeys": [],
-      "color": "#8b5f2a",
-      "fillColor": "#fff7df",
-      "x": 550,
-      "y": 230
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 565.7,
+      "y": 223.3
     },
     {
       "id": "thm_counterexample",
@@ -191,10 +204,10 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "result": "The conjecture is disproved: the two projectivized Lagrangian cycles need not have the same homology class.",
       "proofSketch": "Combine the family, monodromy, specialization, and nonzero middle Segre difference; equality would specialize to zero, contradiction.",
       "citationKeys": [],
-      "color": "#8b5f2a",
-      "fillColor": "#fff7df",
-      "x": 593.3,
-      "y": 81.9
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 585.5,
+      "y": 77
     }
   ],
   "arrows": [
@@ -292,7 +305,7 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
     },
     "nodeSerial": 6,
     "arrowSerial": 9,
-    "selectedId": "lem_normalized_middle",
+    "selectedId": "lem_schoen_family",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasHeight": 316,
@@ -300,24 +313,24 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
     "canvasAspectRatio": 2.3829,
     "relativeNodePositions": {
       "lem_schoen_family": {
-        "x": 0.2273,
-        "y": 0.2498
+        "x": 0.2008,
+        "y": 0.4213
       },
       "lem_wd4_monodromy": {
-        "x": 0.5081,
-        "y": 0.1709
+        "x": 0.5015,
+        "y": 0.18
       },
       "lem_normalized_middle": {
-        "x": 0.2973,
-        "y": 0.7025
+        "x": 0.2915,
+        "y": 0.6783
       },
       "lem_nonzero_middle": {
-        "x": 0.7304,
-        "y": 0.7278
+        "x": 0.7522,
+        "y": 0.7066
       },
       "thm_counterexample": {
-        "x": 0.7879,
-        "y": 0.259
+        "x": 0.7786,
+        "y": 0.2438
       }
     },
     "selectedReferenceKeys": []

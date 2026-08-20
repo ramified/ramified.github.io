@@ -66,7 +66,117 @@ const SHOP_CONFIG = {
       en: "Umeshu bottle, offered for 13 euros.",
       zh: "梅酒一瓶，价格13欧元。"
     }
-  }
+  },
+  {
+    id: "thick-cotton-quilt",
+    image: "thick_cotton_quilt.jpg",
+    price: 35,
+    name: { en: "Thick cotton quilt", zh: "厚棉被" },
+    description: {
+      en: "A very thick, high-quality cotton quilt, newly bought and shipped from China. Never used because the apartment has heating. €35 with the cover, or €30 without the cover.",
+      zh: "非常厚、质量很好的棉被，从中国新买寄来，因为家里有暖气所以从未使用。带外套（被套）35欧，不需要外套则30欧。"
+    }
+  },
+  {
+    id: "red-sweater",
+    image: "red_sweater.jpg",
+    price: 2,
+    name: { en: "Red sweater", zh: "红色毛衣" },
+    description: {
+      en: "Red sweater. As far as I remember, it has never been worn.",
+      zh: "红色毛衣，印象中没有穿过。"
+    }
+  },
+  {
+    id: "padded-trousers-1",
+    image: "padded_trousers_1.jpg",
+    price: 3,
+    name: { en: "Padded winter trousers", zh: "棉裤" },
+    description: {
+      en: "Warm padded winter trousers.",
+      zh: "保暖棉裤。"
+    }
+  },
+  {
+    id: "padded-trousers-2",
+    image: "padded_trousers_2.jpg",
+    price: 3,
+    name: { en: "Padded winter trousers", zh: "另一件棉裤" },
+    description: {
+      en: "Warm padded winter trousers.",
+      zh: "保暖棉裤。"
+    }
+  },
+  {
+    id: "black-trousers",
+    image: "black_trousers.jpg",
+    price: 2,
+    name: { en: "Black trousers", zh: "黑色长裤" },
+    description: {
+      en: "Black long trousers.",
+      zh: "黑色长裤。"
+    }
+  },
+  {
+    id: "grey-trousers",
+    image: "grey_trousers.jpg",
+    price: 2,
+    name: { en: "Grey trousers", zh: "灰色长裤" },
+    description: {
+      en: "Grey long trousers.",
+      zh: "灰色长裤。"
+    }
+  },
+  {
+    id: "bosideng-down-jacket",
+    image: "bosideng_down_jacket.jpg",
+    price: 5,
+    name: { en: "Bosideng down jacket", zh: "波司登羽绒服" },
+    description: {
+      en: "Bosideng down jacket. There is some damage around the zipper, hence the low price.",
+      zh: "波司登牌羽绒服，拉链处有些破损，因此低价出售。"
+    }
+  },
+  {
+    id: "duvet-cover-pillowcase",
+    image: "duvet_cover_pillowcase.jpg",
+    price: 2,
+    name: { en: "Duvet cover & pillowcase", zh: "被套和枕头套" },
+    description: {
+      en: "Duvet cover and pillowcase set. €2, or free if your other items total more than €10.",
+      zh: "被套和枕头套，2欧。购买其他物品总价超过10欧可免费赠送。"
+    }
+  },
+  {
+    id: "pillowcases-pair",
+    image: "pillowcases_pair.jpg",
+    price: 2,
+    name: { en: "Two pillowcases", zh: "枕套（2件）" },
+    description: {
+      en: "Two pillowcases, €2 for the pair, or free if your other items total more than €8.",
+      zh: "枕套2件，共2欧。购买其他物品总价超过8欧可免费赠送。"
+    }
+  },
+  {
+    id: "fitted-sheet",
+    image: "fitted_sheet.jpg",
+    price: 2,
+    name: { en: "Fitted sheet", zh: "弹性床单" },
+    description: {
+      en: "Elasticated fitted sheet. €2, or free if your other items total more than €8.",
+      zh: "弹性床单，2欧。购买其他物品总价超过8欧可免费赠送。"
+    }
+  },
+  {
+    id: "blanket",
+    image: "blanket.jpg",
+    price: 2,
+    name: { en: "Blanket", zh: "毛毯" },
+    description: {
+      en: "Blanket, €2, or free if your other items total more than €15.",
+      zh: "毛毯，2欧。购买其他物品总价超过15欧可免费赠送。"
+    }
+  },
   ]
 };
 

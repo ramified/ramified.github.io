@@ -20,141 +20,9 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
   },
   "nodes": [
     {
-      "id": "n1",
-      "type": "misc",
-      "label": "1. Canonical systems refresh",
-      "details": [
-        {
-          "id": "goals",
-          "label": "goals",
-          "type": "checkbox",
-          "text": "- [x] Be fluent with $K_X(-p)$ and vanishing orders. \\cite{ACGH1985}\n- [x] Recall Riemann--Roch for degree $g-1$ line bundles. \\cite{ACGH1985}\n- [x] Review base-point-free pencils and degrees of associated maps. \\cite{ACGH1985}"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [
-        "ACGH1985"
-      ],
-      "color": "#8b3a2a",
-      "fillColor": "#fbefee",
-      "x": 327.6,
-      "y": 54,
-      "childGraph": {
-        "title": "1. Canonical systems refresh",
-        "nodes": [
-          {
-            "id": "n1",
-            "type": "misc",
-            "label": "test",
-            "details": [
-              {
-                "id": "render",
-                "label": "render",
-                "type": "textbox",
-                "text": "$P_{\\mathbf Q}=H^1(A_0,\\mathbf Q)\\hookrightarrow H^1(\\Gamma _0,\\mathbf Q)$\n$F^1(P_{\\mathbf C})=H^0\\bigl(\\Gamma_0,K_{\\Gamma _0}(-p_0)\\bigr)$"
-              }
-            ],
-            "setting": "",
-            "condition": "",
-            "result": "",
-            "proofSketch": "",
-            "citationKeys": [],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
-            "x": 476.8,
-            "y": 280
-          },
-          {
-            "id": "n2",
-            "type": "misc",
-            "label": "counter example",
-            "details": [
-              {
-                "id": "text",
-                "label": "text",
-                "type": "checkbox",
-                "text": "For the pair ((X,L)) and quotient $q:JX \\twoheadrightarrow A$ supplied by Lemma lem:fixed-plane-deformation, let$f\\to A$ be an Abel--Jacobi map followed by (q), and put\n\n[\nC=f(X).\n]"
-              }
-            ],
-            "setting": "",
-            "condition": "",
-            "result": "",
-            "proofSketch": "",
-            "citationKeys": [],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
-            "x": 301.7,
-            "y": 348.1
-          }
-        ],
-        "arrows": [],
-        "view": {
-          "selectedId": "",
-          "layoutAvoidOverlap": true,
-          "layoutRunning": false,
-          "canvasHeight": 560,
-          "canvasRatioLocked": false,
-          "canvasAspectRatio": 1.7143
-        }
-      }
-    },
-    {
-      "id": "n2",
-      "type": "misc",
-      "label": "2. Jacobians + quotients",
-      "details": [
-        {
-          "id": "goals",
-          "label": "goals",
-          "type": "checkbox",
-          "text": "- [x] Review the Abel--Jacobi map $X\\to JX$ and why the Abel curve generates $JX$. \\cite{ACGH1985}\n- [x] Understand quotients $q:JX\\twoheadrightarrow A$ on tangent and cotangent spaces. \\cite{BirkenhakeLange2004}\n- [x] Review complementary abelian factors up to isogeny. \\cite{BirkenhakeLange2004}"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [
-        "ACGH1985",
-        "BirkenhakeLange2004"
-      ],
-      "color": "#8b3a2a",
-      "fillColor": "#fbefee",
-      "x": 641.9,
-      "y": 65.7
-    },
-    {
-      "id": "n3",
-      "type": "misc",
-      "label": "3. Weight-one Hodge structures",
-      "details": [
-        {
-          "id": "goals",
-          "label": "goals",
-          "type": "checkbox",
-          "text": "- [x] Review $H^1_{\\mathbf C}=F^1\\oplus\\overline{F^1}$. \\cite{BirkenhakeLange2004}\n- [x] Understand why a six-dimensional rational weight-one Hodge substructure corresponds to an abelian threefold up to isogeny, and why proper Hodge substructures correspond to unwanted abelian factors.\n- [x] Explain why a polarizable rational weight-one Hodge structure gives a complex abelian variety up to isogeny. \\cite{BirkenhakeLange2004}\n- [x] Relate simplicity of the Hodge structure to simplicity of the abelian factor in this blueprint. \\cite{blueprint}"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [
-        "BirkenhakeLange2004",
-        "blueprint"
-      ],
-      "color": "#8b3a2a",
-      "fillColor": "#fbefee",
-      "x": 449,
-      "y": 121.5
-    },
-    {
       "id": "n4",
       "type": "misc",
-      "label": "4. Theta characteristics ★",
+      "label": "Theta characteristics",
       "details": [
         {
           "id": "goals",
@@ -181,19 +49,19 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 114.8,
-      "y": 96.6
+      "x": 113.9,
+      "y": 176.9
     },
     {
       "id": "n5",
       "type": "misc",
-      "label": "5. Hyperelliptic seed geometry",
+      "label": "Hyperelliptic line bundle identification",
       "details": [
         {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [ ] Review Weierstrass gap sequences and odd-degree hyperelliptic models. \\cite{ACGH1985}\n- [ ] Derive $K_{\\Gamma_0}\\simeq\\mathcal O(6p_0)$ and $L_0=\\mathcal O(3p_0)$. \\cite{blueprint}\n- [ ] Verify $h^0(L_0)=2$. \\cite{blueprint}\n- [ ] Verify $\\operatorname{Sym}^2H^0(L_0)=H^0(K_{\\Gamma_0}(-p_0))$ using $1,B,B^2$. \\cite{blueprint}"
+          "text": "- [x] Review Weierstrass gap sequences and odd-degree hyperelliptic models. \\cite{ACGH1985}\n- [x] Derive $K_{\\Gamma_0}\\simeq\\mathcal O(6p_0)$ and $L_0=\\mathcal O(3p_0)$. \\cite{blueprint}\n- [x] Verify $h^0(L_0)=2$. \\cite{blueprint}\n- [x] Verify $\\operatorname{Sym}^2H^0(L_0)=H^0(K_{\\Gamma_0}(-p_0))$ using $1,B,B^2$. \\cite{blueprint}"
         }
       ],
       "setting": "",
@@ -204,21 +72,21 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
         "ACGH1985",
         "blueprint"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 87.2,
-      "y": 327.5
+      "color": "#8b3a2a",
+      "fillColor": "#fbefee",
+      "x": 229.6,
+      "y": 49.7
     },
     {
       "id": "n6",
       "type": "misc",
-      "label": "6. Tangential covers",
+      "label": "Tangential covers",
       "details": [
         {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [ ] Understand finite covers $(\\Gamma,p)\\to(E,0)$ and tangentiality in the Treibich--Verdier sense. \\cite{EilbeckEnolskiiPreviato2001}\n- [ ] Learn the cotangent criterion $W_E^\\perp=H^0(\\Gamma,K_\\Gamma(-p))$. \\cite{ColomboPirolaPreviato1994}\n- [ ] Understand why the integer Lamé spectral curve supplies the needed hyperelliptic-to-elliptic cover. \\cite{Maier2003}\n- [ ] Understand why that spectral cover is tangential; keep the detailed integrable-systems machinery as a black box initially. \\cite{EilbeckEnolskiiPreviato2001}"
+          "text": "- [x] Understand finite covers $(\\Gamma,p)\\to(E,0)$ and tangentiality in the Treibich--Verdier sense. \\cite{EilbeckEnolskiiPreviato2001}\n- [?] Learn the cotangent criterion $W_E^\\perp=H^0(\\Gamma,K_\\Gamma(-p))$. \\cite{ColomboPirolaPreviato1994}\n- [?] Understand why the integer Lamé spectral curve supplies the needed hyperelliptic-to-elliptic cover. \\cite{Maier2003}\n- [?] Understand why that spectral cover is tangential; keep the detailed integrable-systems machinery as a black box initially. \\cite{EilbeckEnolskiiPreviato2001}"
         }
       ],
       "setting": "",
@@ -232,19 +100,19 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 241.2,
-      "y": 218.1
+      "x": 409.8,
+      "y": 167.9
     },
     {
       "id": "n7",
       "type": "misc",
-      "label": "7. Frobenius certificate",
+      "label": "Hyperelliptic construction by equations",
       "details": [
         {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [ ] Reconstruct the point counts $N_r$ and the genus-$4$ Weil polynomial in the blueprint. \\cite{blueprint}\n- [ ] Divide out the elliptic factor to obtain the complementary degree-$6$ polynomial. \\cite{blueprint}\n- [ ] Reproduce the irreducibility test modulo $3$ and deduce simplicity. \\cite{blueprint}\n- [ ] Check ordinarity and apply the threefold absolute-simplicity criterion. \\cite{AriasEtAl2016}"
+          "text": "- [x] Reconstruct the point counts $N_r$ and the genus-$4$ Weil polynomial in the blueprint. \\cite{blueprint}\n- [x] Divide out the elliptic factor to obtain the complementary degree-$6$ polynomial. \\cite{blueprint}\n- [x] Reproduce the irreducibility test modulo $3$ and deduce simplicity. \\cite{blueprint}\n- [x] Check ordinarity and apply the threefold absolute-simplicity criterion. \\cite{AriasEtAl2016}"
         }
       ],
       "setting": "",
@@ -255,15 +123,15 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
         "blueprint",
         "AriasEtAl2016"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 661.2,
-      "y": 289.7
+      "color": "#46786e",
+      "fillColor": "#eef7f4",
+      "x": 518.7,
+      "y": 39.3
     },
     {
       "id": "n8",
       "type": "misc",
-      "label": "8. Reconstruct the seed lemma",
+      "label": "Seed lemma",
       "details": [
         {
           "id": "goals",
@@ -285,19 +153,19 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 453.6,
-      "y": 262.8
+      "x": 627.2,
+      "y": 216.4
     },
     {
       "id": "n9",
       "type": "misc",
-      "label": "9. Spin deformation ★",
+      "label": "Spin deformation lemma",
       "details": [
         {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [ ] Learn enough deformation theory to interpret a local marked deformation space and upper semicontinuity. \\cite{Sernesi2006}\n- [ ] Understand spin curves locally and why parity persists in families. \\cite{Cornalba1989,Mumford1971}\n- [ ] Reproduce the blueprint's dimension count: spin space $9$, theta-null at least $8$, hence $\\dim Z\\ge8-6=2$. \\cite{blueprint}\n- [ ] Understand why $P_{\\mathbf C}=\\mathcal W\\oplus\\overline{\\mathcal W}$ along the aligned locus. \\cite{blueprint}\n- [ ] Understand the finiteness input that gives $\\dim(Z\\cap\\mathcal H_4)\\le1$. \\cite{Treibich2025}\n- [ ] Understand the Baire-category step excluding proper rational Hodge substructures. \\cite{blueprint}"
+          "text": "- [?] Learn enough deformation theory to interpret a local marked deformation space and upper semicontinuity. \\cite{Sernesi2006}\n- [?] Understand spin curves locally and why parity persists in families. \\cite{Cornalba1989,Mumford1971}\n- [ ] Reproduce the blueprint's dimension count: spin space $9$, theta-null at least $8$, hence $\\dim Z\\ge8-6=2$. \\cite{blueprint}\n- [ ] Understand why $P_{\\mathbf C}=\\mathcal W\\oplus\\overline{\\mathcal W}$ along the aligned locus. \\cite{blueprint}\n- [ ] Understand the finiteness input that gives $\\dim(Z\\cap\\mathcal H_4)\\le1$. \\cite{Treibich2025}\n- [ ] Understand the Baire-category step excluding proper rational Hodge substructures. \\cite{blueprint}"
         },
         {
           "id": "revised",
@@ -317,21 +185,21 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
         "blueprint",
         "Treibich2025"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 277.6,
-      "y": 329.7
+      "color": "#46786e",
+      "fillColor": "#eef7f4",
+      "x": 194.6,
+      "y": 306.7
     },
     {
       "id": "n10",
       "type": "misc",
-      "label": "10. Degree-3 Gauss map",
+      "label": "Degree-3 Gauss map",
       "details": [
         {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [ ] Show $L$ is base-point-free and $\\varphi_L:X\\to\\mathbf P^1$ has degree $3$. \\cite{blueprint,ACGH1985}\n- [ ] Identify $W=\\langle s^2,st,t^2\\rangle$. \\cite{blueprint}\n- [ ] Derive $\\gamma=[s^2:st:t^2]=\\nu_2\\circ\\varphi_L$. \\cite{blueprint}\n- [ ] Conclude $\\deg\\gamma=3$. \\cite{blueprint}\n- [ ] Reproduce the normalization argument for $X\\to C$. \\cite{blueprint}"
+          "text": "- [x] Show $L$ is base-point-free and $\\varphi_L:X\\to\\mathbf P^1$ has degree $3$. \\cite{blueprint,ACGH1985}\n- [x] Identify $W=\\langle s^2,st,t^2\\rangle$. \\cite{blueprint}\n- [x] Derive $\\gamma=[s^2:st:t^2]=\\nu_2\\circ\\varphi_L$. \\cite{blueprint}\n- [?] Conclude $\\deg\\gamma=3$. \\cite{blueprint}\n- [x] Reproduce the normalization argument for $X\\to C$. \\cite{blueprint}"
         }
       ],
       "setting": "",
@@ -342,21 +210,21 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
         "blueprint",
         "ACGH1985"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 508.9,
-      "y": 412
+      "color": "#8b3a2a",
+      "fillColor": "#fbefee",
+      "x": 567.1,
+      "y": 363.9
     },
     {
       "id": "n11",
       "type": "misc",
-      "label": "11. Rigidity + counterexample",
+      "label": "Final check",
       "details": [
         {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [ ] Prove scalar rigidity: $du_0=\\lambda\\operatorname{id}$ forces $u=[1]$ or $[-1]$ on the simple factor. \\cite{blueprint}\n- [ ] Review endomorphisms/automorphisms of complex abelian varieties as needed for the rigidity proof. \\cite{BirkenhakeLange2004}\n- [ ] Exclude the $[-1]$ case using the degree-$3$ Gauss map. \\cite{blueprint}\n- [ ] Exclude nonzero translations via an order-$3$ action and Riemann--Hurwitz. \\cite{blueprint}\n- [ ] Assemble the lemmas into the final counterexample. \\cite{blueprint}"
+          "text": "- [x] Exclude the $[-1]$ case using the degree-$3$ Gauss map. \\cite{blueprint}\n- [x] Exclude nonzero 10. translations via an order-$3$ action and Riemann--Hurwitz. \\cite{blueprint}\n- [x] Assemble the lemmas into the final counterexample. \\cite{blueprint}"
         }
       ],
       "setting": "",
@@ -364,101 +232,15 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [
-        "blueprint",
-        "BirkenhakeLange2004"
+        "blueprint"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 291.9,
-      "y": 412
+      "color": "#8b3a2a",
+      "fillColor": "#fbefee",
+      "x": 350.3,
+      "y": 361.3
     }
   ],
   "arrows": [
-    {
-      "id": "a1",
-      "sourceId": "n1",
-      "targetId": "n4",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a3",
-      "sourceId": "n2",
-      "targetId": "n3",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a5",
-      "sourceId": "n2",
-      "targetId": "n7",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a7",
-      "sourceId": "n3",
-      "targetId": "n6",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
-    {
-      "id": "a10",
-      "sourceId": "n4",
-      "targetId": "n5",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "none",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
-    },
     {
       "id": "a13",
       "sourceId": "n5",
@@ -514,7 +296,7 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "id": "a17",
       "sourceId": "n8",
       "targetId": "n9",
-      "label": "",
+      "label": "def",
       "remark": "",
       "body": "solid",
       "head": "arrow",
@@ -522,16 +304,16 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 0,
+      "labelOffset": -15,
       "labelPosition": 0.5,
-      "labelAlign": "left",
+      "labelAlign": "right",
       "color": "#5f574e"
     },
     {
       "id": "a18",
       "sourceId": "n9",
       "targetId": "n10",
-      "label": "",
+      "label": "verify",
       "remark": "",
       "body": "solid",
       "head": "arrow",
@@ -539,7 +321,7 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 0,
+      "labelOffset": 15,
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
@@ -563,56 +345,44 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
     }
   ],
   "view": {
-    "selectedId": "n9",
-    "layoutAvoidOverlap": true,
+    "selectedId": "n5",
+    "layoutAvoidOverlap": false,
     "layoutRunning": false,
-    "canvasHeight": 466,
+    "canvasHeight": 414,
     "canvasRatioLocked": true,
-    "canvasAspectRatio": 1.6137,
+    "canvasAspectRatio": 1.8164,
     "relativeNodePositions": {
-      "n1": {
-        "x": 0.4356,
-        "y": 0.1159
-      },
-      "n2": {
-        "x": 0.8536,
-        "y": 0.141
-      },
-      "n3": {
-        "x": 0.5971,
-        "y": 0.2607
-      },
       "n4": {
-        "x": 0.1527,
-        "y": 0.2074
+        "x": 0.1515,
+        "y": 0.4272
       },
       "n5": {
-        "x": 0.116,
-        "y": 0.7027
+        "x": 0.3053,
+        "y": 0.1199
       },
       "n6": {
-        "x": 0.3208,
-        "y": 0.468
+        "x": 0.5449,
+        "y": 0.4055
       },
       "n7": {
-        "x": 0.8793,
-        "y": 0.6217
+        "x": 0.6897,
+        "y": 0.0948
       },
       "n8": {
-        "x": 0.6032,
-        "y": 0.564
+        "x": 0.8341,
+        "y": 0.5228
       },
       "n9": {
-        "x": 0.3692,
-        "y": 0.7075
+        "x": 0.2588,
+        "y": 0.7407
       },
       "n10": {
-        "x": 0.6767,
-        "y": 0.8841
+        "x": 0.7541,
+        "y": 0.879
       },
       "n11": {
-        "x": 0.3882,
-        "y": 0.8841
+        "x": 0.4659,
+        "y": 0.8727
       }
     },
     "selectedReferenceKeys": []
@@ -631,6 +401,157 @@ window.THEOREM_GRAPH_PRESET_DATA.gauss_map_counterexample_roadmap = {
         {
           "url": "https://mathoverflow.net/questions/185692/how-can-one-determine-if-a-singularity-is-simple",
           "source": "mathoverflow",
+          "label": ""
+        }
+      ]
+    },
+    {
+      "key": "RRS2016",
+      "author": "Rito--Roulleau--Sarti",
+      "title": "Explicit Schoen surfaces",
+      "year": "2016",
+      "citeKey": "RRS2016",
+      "url": "https://arxiv.org/abs/1609.02235",
+      "source": "web",
+      "rawBibtex": "@misc{RRS2016, title={Explicit Schoen surfaces}, author={Rito and Roulleau and Sarti}, year={2016}, eprint={1609.02235}, archivePrefix={arXiv}}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/1609.02235",
+          "source": "web",
+          "label": "arXiv:1609.02235"
+        }
+      ]
+    },
+    {
+      "key": "CMLR15",
+      "author": "Ciliberto--Mendes Lopes--Roulleau",
+      "title": "On Schoen surfaces",
+      "year": "2013",
+      "citeKey": "CMLR15",
+      "details": [
+        {
+          "id": "remark",
+          "label": "remark",
+          "type": "textbox",
+          "text": "a more geometric approach to Schoen's construction"
+        }
+      ],
+      "url": "https://arxiv.org/abs/1303.1750",
+      "source": "web",
+      "rawBibtex": "@misc{CMLR2013, title={On Schoen surfaces}, author={Ciliberto and Mendes Lopes and Roulleau}, year={2013}, eprint={1303.1750}, archivePrefix={arXiv}}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/1303.1750",
+          "source": "web",
+          "label": "arXiv:1303.1750"
+        }
+      ]
+    },
+    {
+      "key": "CK2020",
+      "author": "Codogni--Kramer",
+      "title": "Semicontinuity of Gauss maps and the Schottky problem",
+      "year": "2020",
+      "citeKey": "CK2020",
+      "url": "https://arxiv.org/abs/2010.00053",
+      "source": "web",
+      "rawBibtex": "@misc{CK2020, title={Semicontinuity of Gauss maps and the Schottky problem}, author={Codogni and Kramer}, year={2020}, eprint={2010.00053}, archivePrefix={arXiv}}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/2010.00053",
+          "source": "web",
+          "label": "arXiv:2010.00053"
+        }
+      ]
+    },
+    {
+      "key": "vG2021",
+      "author": "van Geemen",
+      "title": "Weil Classes and Decomposable Abelian Fourfolds",
+      "year": "2021",
+      "citeKey": "vG2021",
+      "url": "https://arxiv.org/abs/2108.02087",
+      "source": "web",
+      "rawBibtex": "@misc{vG2021, title={Weil Classes and Decomposable Abelian Fourfolds}, author={van Geemen}, year={2021}, eprint={2108.02087}, archivePrefix={arXiv}}",
+      "links": [
+        {
+          "url": "https://arxiv.org/abs/2108.02087",
+          "source": "web",
+          "label": "arXiv:2108.02087"
+        }
+      ]
+    },
+    {
+      "key": "Beau96",
+      "author": "Beauville, Arnaud",
+      "title": "Complex algebraic surfaces.",
+      "year": "1996",
+      "citeKey": "Beau96",
+      "url": "",
+      "source": "bibtex",
+      "rawBibtex": "@book{zbMATH00916043,\n author = {Beauville, Arnaud},\n title = {Complex algebraic surfaces.},\n edition = {2nd ed.},\n fseries = {London Mathematical Society Student Texts},\n series = {Lond. Math. Soc. Stud. Texts},\n issn = {0963-1631},\n volume = {34},\n isbn = {0-521-49842-2; 0-521-49510-5},\n year = {1996},\n publisher = {Cambridge: Cambridge Univ. Press},\n language = {English},\n keywords = {14J25,32J15,14-02,14J10,32-02},\n zbMATH = {916043},\n Zbl = {0849.14014}\n}",
+      "links": []
+    },
+    {
+      "key": "MLPP12",
+      "author": "Lopes, Margarida Mendes and Pardini, Rita and Pirola, Gian Pietro",
+      "title": "On surfaces of general type with \\(q=5\\)",
+      "year": "2012",
+      "citeKey": "MLPP12",
+      "url": "",
+      "source": "bibtex",
+      "rawBibtex": "@article{zbMATH06142480,\n author = {Lopes, Margarida Mendes and Pardini, Rita and Pirola, Gian Pietro},\n title = {On surfaces of general type with {{\\(q=5\\)}}},\n fjournal = {Annali della Scuola Normale Superiore di Pisa. Classe di Scienze. Serie V},\n journal = {Ann. Sc. Norm. Super. Pisa, Cl. Sci. (5)},\n issn = {0391-173X},\n volume = {11},\n number = {4},\n pages = {999--1007},\n year = {2012},\n language = {English},\n doi = {10.2422/2036-2145.201102_003},\n keywords = {14J29},\n zbMATH = {6142480},\n Zbl = {1272.14030}\n}",
+      "links": []
+    },
+    {
+      "key": "ACFR02",
+      "author": "Calabri, Alberto and Ciliberto, Ciro and Flamini, Flaminio and Miranda, Rick",
+      "title": "On the geometric genus of reducible surfaces and degenerations of surface to unions of planes",
+      "year": "2004",
+      "citeKey": "ACFR02",
+      "url": "",
+      "source": "bibtex",
+      "rawBibtex": "@incollection{zbMATH02135193,\n author = {Calabri, Alberto and Ciliberto, Ciro and Flamini, Flaminio and Miranda, Rick},\n title = {On the geometric genus of reducible surfaces and degenerations of surface to unions of planes},\n booktitle = {The Fano conference. Papers of the conference organized to commemorate the 50th anniversary of the death of Gino Fano (1871--1952), Torino, Italy, September 29--October 5, 2002},\n isbn = {88-900876-1-7},\n pages = {277--312},\n year = {2004},\n publisher = {Torino: Universit{\\`a} di Torino, Dipartimento di Matematica},\n language = {English},\n keywords = {14N20,14D06,14J10},\n zbMATH = {2135193},\n Zbl = {1071.14057}\n}",
+      "links": []
+    },
+    {
+      "key": "Schoen07",
+      "author": "Schoen, Chad",
+      "title": "A family of surfaces constructed from genus 2 curves",
+      "year": "2007",
+      "citeKey": "Schoen07",
+      "details": [
+        {
+          "id": "typo",
+          "label": "typo",
+          "type": "textbox",
+          "text": "\\cite[remark 2.3]{CMLR2013}: In [23, Proposition 10.1, (ii)], it is stated that for the general Schoen surface S one has rk(NS(S)) = 2.\nAs one can directly see with an argument as in [14], the right statement is instead that rk(NS(S)) = 1 (that was\nalso pointed to us in [24])."
+        }
+      ],
+      "url": "https://pismin.com/10.1142/S0129167X07004175",
+      "source": "web",
+      "rawBibtex": "@article{zbMATH05168128,\n author = {Schoen, Chad},\n title = {A family of surfaces constructed from genus 2 curves},\n fjournal = {International Journal of Mathematics},\n journal = {Int. J. Math.},\n issn = {0129-167X},\n volume = {18},\n number = {5},\n pages = {585--612},\n year = {2007},\n language = {English},\n doi = {10.1142/S0129167X07004175},\n keywords = {14J29,32J15,32G05,32G10,14K12,14C30},\n zbMATH = {5168128},\n Zbl = {1118.14042}\n}",
+      "links": [
+        {
+          "url": "https://pismin.com/10.1142/S0129167X07004175",
+          "source": "web",
+          "label": "scihub"
+        }
+      ]
+    },
+    {
+      "key": "AIexplains",
+      "author": "",
+      "title": "openai",
+      "year": "",
+      "citeKey": "AIexplains",
+      "url": "https://chatgpt.com/share/6a809b0f-b6bc-83eb-9aa9-58413b9a4f60",
+      "source": "web",
+      "rawBibtex": "",
+      "links": [
+        {
+          "url": "https://chatgpt.com/share/6a809b0f-b6bc-83eb-9aa9-58413b9a4f60",
+          "source": "web",
           "label": ""
         }
       ]
