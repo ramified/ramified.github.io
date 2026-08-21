@@ -6843,7 +6843,25 @@ function testSokobanBeamInteriorsCanCrossButStillBlockEnergyBridges() {
   }).sort(), ['1,3', '2,2', '4,3']);
 }
 
+function testReusableLocalizationWiring() {
+  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  const setupSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
+  const localeSource = fs.readFileSync(require.resolve('./i18n/ramified_minigames_locales.js'), 'utf8');
+  assert.ok(html.includes('css/site_i18n.css'));
+  assert.ok(html.includes('js/site_i18n.js'));
+  assert.ok(html.includes('js/i18n/ramified_minigames_legacy_sources.js'));
+  assert.ok(html.includes('js/i18n/ramified_minigames_locales.js'));
+  assert.ok(html.includes('data-language-switch'));
+  assert.ok(html.includes('data-i18n="meta.heading"'));
+  assert.ok(setupSource.includes("document.addEventListener('site-language-change'"));
+  assert.ok(setupSource.includes('window.SiteI18n.translateSource'));
+  assert.ok(localeSource.includes("'zh-CN'"));
+  assert.ok(localeSource.includes('歧趣游境'));
+  assert.ok(localeSource.includes('同时移动所有玩家'));
+}
+
 async function run() {
+  testReusableLocalizationWiring();
   testInitialSpawnWeights();
   testRoundSpawnWeights();
   testNoSpawnAfterNoop();

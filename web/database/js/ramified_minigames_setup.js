@@ -1,6 +1,13 @@
 (() => {
   'use strict';
 
+  function tr(value) {
+    if (typeof window === 'undefined' || !window.SiteI18n || typeof window.SiteI18n.translateSource !== 'function') {
+      return String(value ?? '');
+    }
+    return window.SiteI18n.translateSource(String(value ?? ''));
+  }
+
   const DIRS = { E: 0, S: 1, W: 2, N: 3 };
   const HEX_DIRS = { E: 0, SE: 1, SW: 2, W: 3, NW: 4, NE: 5 };
   const LATTICES = {
@@ -675,6 +682,13 @@
     document.addEventListener('keydown', handleKeydown);
     document.addEventListener('keyup', handleKeyup);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('site-language-change', () => {
+      syncControls();
+      syncStats();
+      syncOnlineRoleOptions();
+      if (refs.onlineStatus) refs.onlineStatus.textContent = tr(onlineStatusText());
+      render();
+    });
     window.addEventListener('blur', clearKeyboardState);
     window.addEventListener('resize', handleWindowResize);
 
@@ -1122,7 +1136,7 @@
     onlineState.statusText = text || '';
     onlineState.statusState = state || 'idle';
     if (refs.onlineStatus) {
-      refs.onlineStatus.textContent = onlineStatusText();
+      refs.onlineStatus.textContent = tr(onlineStatusText());
       refs.onlineStatus.dataset.state = onlineStatusDataState();
     }
   }
@@ -2084,7 +2098,7 @@
     const requester = requesterRole ? onlineRolePlayerLabel(requesterRole, onlineRoleLabel(requesterRole)) : 'opponent';
     const text = `${requester} requests ${kind}. Allow this ${kind}?`;
     const allowed = typeof window !== 'undefined' && typeof window.confirm === 'function'
-      ? window.confirm(text)
+      ? window.confirm(tr(text))
       : false;
     onlineSendRaw({
       type: 'approvalResponse',
@@ -5489,17 +5503,17 @@
   function showCanvasStartPrompt() {
     if (!refs.canvasStartOverlay || !game || game.phase !== 'setup') return;
     const copy = canvasStartPromptCopy(game);
-    if (refs.canvasStartTitle) refs.canvasStartTitle.textContent = copy.title;
-    if (refs.canvasStartContext) refs.canvasStartContext.textContent = copy.context;
-    if (refs.canvasStartRules) refs.canvasStartRules.textContent = copy.rules;
+    if (refs.canvasStartTitle) refs.canvasStartTitle.textContent = tr(copy.title);
+    if (refs.canvasStartContext) refs.canvasStartContext.textContent = tr(copy.context);
+    if (refs.canvasStartRules) refs.canvasStartRules.textContent = tr(copy.rules);
     refs.canvasStartOverlay.hidden = false;
     syncStatus('begin from canvas', copy.status, 'setup');
   }
 
   function canvasStartPromptCopy(state) {
     const mode = gameModeValue(state);
-    const gameName = gameTypeForGameMode(mode);
-    const presetLabel = state && state.preset && state.preset.label ? state.preset.label : 'selected background';
+    const gameName = tr(gameTypeForGameMode(mode));
+    const presetLabel = tr(state && state.preset && state.preset.label ? state.preset.label : 'selected background');
     let rules = 'Read the quick rule, then begin the selected game on this glued mosaic.';
     if (mode === GAME_MODES.GOMOKU) {
       rules = 'Place black and white stones on empty board points. The first player to make a line of five wins.';
@@ -9097,7 +9111,7 @@
     if (!game) return;
     if (isGomokuGame(game)) {
       if (game.phase === 'setup') {
-        syncStatus(`${game.preset.label} Gomoku preview`, previewInfo(game.preset), 'setup');
+        syncStatus(localizedPreviewTitle(game.preset, GAME_MODES.GOMOKU), previewInfo(game.preset), 'setup');
         return;
       }
       if (game.phase === 'gameover') {
@@ -9110,7 +9124,7 @@
     }
     if (isConnectFourGame(game)) {
       if (game.phase === 'setup') {
-        syncStatus(`${game.preset.label} Connect Four preview`, `${previewInfo(game.preset)}; ${connectFourHoleInfo(game)}`, 'setup');
+        syncStatus(localizedPreviewTitle(game.preset, GAME_MODES.CONNECT_FOUR), `${previewInfo(game.preset)}; ${connectFourHoleInfo(game)}`, 'setup');
         return;
       }
       if (game.phase === 'gameover') {
@@ -9123,7 +9137,7 @@
     }
     if (isGoGame(game)) {
       if (game.phase === 'setup') {
-        syncStatus(`${game.preset.label} Go preview`, `${previewInfo(game.preset)}; komi ${formatKomi(game.komi)}`, 'setup');
+        syncStatus(localizedPreviewTitle(game.preset, GAME_MODES.GO), `${previewInfo(game.preset)}; komi ${formatKomi(game.komi)}`, 'setup');
         return;
       }
       if (game.phase === 'gameover') {
@@ -9136,7 +9150,7 @@
     }
     if (isReversiGame(game)) {
       if (game.phase === 'setup') {
-        syncStatus(`${game.preset.label} Reversi preview`, previewInfo(game.preset), 'setup');
+        syncStatus(localizedPreviewTitle(game.preset, GAME_MODES.REVERSI), previewInfo(game.preset), 'setup');
         return;
       }
       if (game.phase === 'gameover') {
@@ -9149,7 +9163,7 @@
     }
     if (isChineseCheckersGame(game)) {
       if (game.phase === 'setup') {
-        syncStatus(`${game.preset.label} Chinese Checkers preview`, previewInfo(game.preset), 'setup');
+        syncStatus(localizedPreviewTitle(game.preset, GAME_MODES.CHINESE_CHECKERS), previewInfo(game.preset), 'setup');
         return;
       }
       if (game.phase === 'gameover') {
@@ -9162,7 +9176,7 @@
     if (isSokobanGame(game)) {
       if (game.phase === 'setup') {
         const issue = sokobanSetupIssue(game);
-        syncStatus(`${game.preset.label} Sokoban preview`, issue ? `${previewInfo(game.preset)}; ${issue}` : previewInfo(game.preset), issue ? 'warn' : 'setup');
+        syncStatus(localizedPreviewTitle(game.preset, GAME_MODES.SOKOBAN), issue ? `${previewInfo(game.preset)}; ${issue}` : previewInfo(game.preset), issue ? 'warn' : 'setup');
         return;
       }
       if (game.phase === 'gameover') {
@@ -9177,7 +9191,7 @@
         const issue = fideChessSetupIssue(game);
         const hint = issue ? '' : fideChessSetupHint(game);
         syncStatus(
-          `${game.preset.label} FIDE Chess preview`,
+          localizedPreviewTitle(game.preset, GAME_MODES.FIDE_CHESS),
           appendTextPart(issue ? `${previewInfo(game.preset)}; ${issue}` : previewInfo(game.preset), hint),
           issue || hint ? 'warn' : 'setup'
         );
@@ -9191,7 +9205,7 @@
       return;
     }
     if (game.phase === 'setup') {
-      syncStatus(`${game.preset.label} preview`, previewInfo(game.preset), 'setup');
+      syncStatus(localizedPreviewTitle(game.preset), previewInfo(game.preset), 'setup');
       return;
     }
     if (game.phase === 'gameover') {
@@ -9204,6 +9218,13 @@
       return;
     }
     syncReadyStatus(`round ${game.round}`);
+  }
+
+  function localizedPreviewTitle(preset, mode = '') {
+    const parts = [tr(preset && preset.label ? preset.label : 'selected background')];
+    if (mode) parts.push(tr(gameTypeForGameMode(mode)));
+    parts.push(tr('preview'));
+    return parts.filter(Boolean).join(' ');
   }
 
   function syncReadyStatus(statusText) {
@@ -11383,7 +11404,7 @@
       fontSize -= 1;
       ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
     }
-    ctx.fillText(text, button.x + button.width / 2, button.y + button.height / 2);
+    ctx.fillText(tr(text), button.x + button.width / 2, button.y + button.height / 2);
   }
 
   function fideChessPuzzleTrayHitAtPoint(point, geom, state) {
@@ -11547,8 +11568,8 @@
     ctx.lineWidth = Math.max(1.5, fontSize * 0.18);
     ctx.strokeStyle = darkText ? 'rgba(255,253,248,0.72)' : 'rgba(17,17,17,0.55)';
     ctx.fillStyle = darkText ? '#171615' : '#fffdf8';
-    ctx.strokeText(text, point.x, point.y + fontSize * 0.04);
-    ctx.fillText(text, point.x, point.y + fontSize * 0.04);
+    ctx.strokeText(tr(text), point.x, point.y + fontSize * 0.04);
+    ctx.fillText(tr(text), point.x, point.y + fontSize * 0.04);
   }
 
   function drawGoScoreOverlay(ctx, geom, state) {
@@ -12860,7 +12881,7 @@
     ctx.textBaseline = 'middle';
     const firstY = -((layout.lines.length - 1) * lineHeight) / 2;
     layout.lines.forEach((line, index) => {
-      ctx.fillText(line, textCenterX, firstY + index * lineHeight + layout.fontSize * 0.02, maxTextWidth);
+      ctx.fillText(tr(line), textCenterX, firstY + index * lineHeight + layout.fontSize * 0.02, maxTextWidth);
     });
     ctx.restore();
   }
@@ -14069,7 +14090,7 @@
     ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, point.x, point.y + radius * 0.02, maxWidth);
+    ctx.fillText(tr(text), point.x, point.y + radius * 0.02, maxWidth);
   }
 
   function fittedBoxTextSize(ctx, text, maxFontSize, minFontSize, maxWidth) {
@@ -14341,7 +14362,7 @@
                 : (isSokobanGame(state)
                   ? 'Sokoban solved'
                   : (state.ending === 'bonus' ? 'bonus ending' : 'game over')))))));
-    ctx.fillText(title, geom.width / 2, y + height * 0.36);
+    ctx.fillText(tr(title), geom.width / 2, y + height * 0.36);
     ctx.fillStyle = '#6c6257';
     ctx.font = `${Math.max(12, Math.round(geom.radius * 0.34))}px "JetBrains Mono", monospace`;
     const detail = isGomokuGame(state)
@@ -14359,7 +14380,7 @@
                 : (isSokobanGame(state)
                   ? `${state.moves || state.round || 0} move${(state.moves || state.round) === 1 ? '' : 's'}   ${state.pushes || 0} push${state.pushes === 1 ? '' : 'es'}`
                   : `score ${state.score || 0}   highest ${highestValue(state)}`))))));
-    ctx.fillText(detail, geom.width / 2, y + height * 0.66);
+    ctx.fillText(tr(detail), geom.width / 2, y + height * 0.66);
     ctx.restore();
   }
 
@@ -23209,8 +23230,8 @@
   function syncStatus(status, info, badge) {
     const warning = stackWarningText(game);
     const infoText = warning ? `${info || ''}${info ? ' | ' : ''}${warning}` : (info || '');
-    if (refs.statusBadge) refs.statusBadge.textContent = badge || '';
-    if (refs.statusLine) refs.statusLine.textContent = status || '';
+    if (refs.statusBadge) refs.statusBadge.textContent = tr(badge || '');
+    if (refs.statusLine) refs.statusLine.textContent = tr(status || '');
     renderStatusInfoLine(infoText);
     syncStats();
   }
@@ -23218,7 +23239,7 @@
   function renderStatusInfoLine(infoText) {
     if (!refs.infoLine) return;
     if (renderChineseCheckersInfoLine(refs.infoLine, infoText || '')) return;
-    refs.infoLine.textContent = infoText || '';
+    refs.infoLine.textContent = tr(infoText || '');
   }
 
   function renderChineseCheckersInfoLine(container, infoText) {
@@ -23241,7 +23262,7 @@
     piece.style.borderColor = colors.stroke;
     container.textContent = '';
     container.appendChild(piece);
-    container.appendChild(doc.createTextNode(match[4]));
+    container.appendChild(doc.createTextNode(tr(match[4])));
     return true;
   }
 
@@ -23256,7 +23277,7 @@
 
   function showSetupAlert(text) {
     if (!refs.setupAlert) return;
-    refs.setupAlert.textContent = text || '';
+    refs.setupAlert.textContent = tr(text || '');
     refs.setupAlert.hidden = !text;
   }
 

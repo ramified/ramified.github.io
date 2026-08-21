@@ -1,0 +1,55 @@
+.site-language-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+}
+
+.site-language-control select {
+  min-width: 7.5rem;
+  padding: 0.28rem 1.7rem 0.28rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+body > header .site-language-control {
+  color: #f2e8d8;
+}
+
+html[lang^='zh'] body {
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', SimSun, serif;
+}
+
+html[lang^='zh'] button,
+html[lang^='zh'] input,
+html[lang^='zh'] select,
+html[lang^='zh'] textarea,
+html[lang^='zh'] output,
+html[lang^='zh'] .site-language-control {
+  font-family: 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+}
+
+@media (max-width: 780px) {
+  body > header {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    padding: 16px 20px;
+  }
+
+  body > header > span {
+    flex: 1 1 auto;
+  }
+
+  .site-language-control {
+    flex: 1 0 100%;
+    width: 100%;
+    margin: 0.35rem 0 0;
+    justify-content: center;
+  }
+}
