@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Higher-Dimensional Slice Calculator</title>
   <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
     .slice-calculator-layout {
       max-width: 1380px;
@@ -757,7 +758,7 @@
             <div class="slice-control-line">
               <select id="object-select" class="slice-select" aria-label="Active object"></select>
               <button id="object-delete" class="slice-icon-btn" type="button" title="delete object">del</button>
-              <button id="object-export" class="slice-btn" type="button">export</button>
+              <button id="object-export" class="slice-btn" type="button" data-import-export-trigger="active-object" data-export-filename="slice-object.json">export</button>
             </div>
           </div>
 
@@ -1064,9 +1065,9 @@
           <div class="slice-row">
             <span class="slice-row-label">copy</span>
             <div class="slice-button-line">
-              <button id="copy-position" class="slice-btn" type="button">copy p</button>
-              <button id="copy-frame" class="slice-btn" type="button">copy frame</button>
-              <button id="copy-slice" class="slice-btn" type="button">copy frame JSON</button>
+              <button id="copy-position" class="slice-btn" type="button" data-import-export-trigger="position" data-export-filename="slice-position.json">copy p</button>
+              <button id="copy-frame" class="slice-btn" type="button" data-import-export-trigger="frame" data-export-filename="slice-frame.txt">copy frame</button>
+              <button id="copy-slice" class="slice-btn" type="button" data-import-export-trigger="frame-json" data-export-filename="slice-frame.json">copy frame JSON</button>
             </div>
           </div>
         </div>
@@ -1125,6 +1126,8 @@
   </script>
   <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
   <script src="js/calculator_cards.js"></script>
-  <script src="js/higher_dimensional_slice_explorer.js"></script>
+  <script src="js/higher_dimensional_slice_explorer.js?v=20260821-1"></script>
+  <script src="js/import_export_panel.js?v=20260821-7"></script>
+  <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>
 </html>

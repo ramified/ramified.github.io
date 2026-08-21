@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sheaf Calculator</title>
   <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
     .sheaf-layout {
       max-width: 1240px;
@@ -2547,7 +2548,7 @@
           <div class="sheaf-step-library-controls">
             <button class="btn btn-ghost sheaf-chart-export" id="class-step-add-formula" type="button">add formula</button>
             <button class="btn btn-ghost sheaf-chart-export" id="class-step-import-preset" type="button" aria-expanded="false">import</button>
-            <button class="btn btn-ghost sheaf-chart-export" id="class-step-export-saved" type="button">export</button>
+            <button class="btn btn-ghost sheaf-chart-export" id="class-step-export-saved" type="button" data-import-export-trigger="saved-formulas" data-export-filename="sheaf-saved-formulas.txt">export</button>
             <button class="btn btn-ghost sheaf-chart-export" id="class-step-delete-saved" type="button">delete</button>
           </div>
           <div class="sheaf-import-panel" id="class-step-import-panel" hidden>
@@ -2644,7 +2645,7 @@
               <button class="btn btn-ghost sheaf-chart-export" id="class-step-save-rule" type="button">close editor</button>
               <button class="btn btn-ghost sheaf-chart-export" id="class-step-undo" type="button">cancel last step</button>
               <button class="btn btn-ghost sheaf-chart-export" id="class-step-restart" type="button">restart</button>
-              <button class="btn btn-ghost sheaf-chart-export" id="class-step-export" type="button">export</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-export" type="button" data-import-export-trigger="step-classes" data-export-filename="sheaf-step-classes.txt">export</button>
             </div>
             <div class="hint" id="class-step-message"></div>
           </div>
@@ -3427,7 +3428,7 @@
         <div class="sheaf-chart-actions" id="class-actions">
           <button class="btn btn-ghost sheaf-chart-export" id="further-simplify" type="button">further simplify</button>
           <button class="btn btn-ghost sheaf-chart-export" id="reset-simplify" type="button" hidden>reset simplify</button>
-          <button class="btn btn-ghost sheaf-chart-export" id="export-classes" type="button">export</button>
+          <button class="btn btn-ghost sheaf-chart-export" id="export-classes" type="button" data-import-export-trigger="classes" data-export-filename="sheaf-classes.txt">export</button>
         </div>
         <div class="sheaf-inline-row" id="basis-row">
           <span class="input-label">basis</span>
@@ -3574,7 +3575,7 @@
             <output id="hodge-cell-size-value" for="hodge-cell-size">20px</output>
           </label>
           <button class="btn btn-ghost hodge-wide-toggle" id="toggle-hodge-wide" type="button" aria-pressed="false">wide</button>
-          <button class="btn btn-ghost sheaf-chart-export hodge-export-button" id="export-hodge" type="button">export</button>
+          <button class="btn btn-ghost sheaf-chart-export hodge-export-button" id="export-hodge" type="button" data-import-export-trigger="hodge" data-export-filename="sheaf-hodge.txt">export</button>
         </div>
         <div class="hodge-query" id="hodge-query" hidden>
           <label class="hodge-query-index" for="hodge-query-p">
@@ -3645,5 +3646,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js"></script>
 <script src="js/sheaf_calculator.js"></script>
+<script src="js/import_export_panel.js?v=20260821-7"></script>
+<script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>
 </html>

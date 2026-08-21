@@ -7058,6 +7058,61 @@
       $('grid-cols') && $('grid-cols').addEventListener('change', () => setTimeout(() => { updateSliceCard(); refreshSlice(); }, 10));
     }
 
+    window.SiteImportExportPageAdapter = {
+      exportDefault() {
+        refreshExport({ force: true });
+        return {
+          text: $('export-out').value,
+          filename: 'double_young_diagram_export.json',
+          mimeType: 'application/json'
+        };
+      },
+      validateImport(_kind, raw) {
+        const text = String(raw?.text || '').trim();
+        if (!text) throw new Error('Paste a Double Young Diagram state.');
+        const data = JSON.parse(text);
+        if (data.app && data.app !== 'double_young_diagram') throw new Error('This is not a Double Young Diagram state.');
+        const lambda = Array.isArray(data.lambda) ? data.lambda.map(Number) : null;
+        const mu = Array.isArray(data.mu) ? data.mu.map(Number) : null;
+        if (!lambda || !mu) throw new Error('The state must contain lambda and mu partitions.');
+        [lambda, mu].forEach((rows) => {
+          if (rows.some((value) => !Number.isInteger(value) || value < 0)) throw new Error('Partition rows must be nonnegative integers.');
+          for (let index = 1; index < rows.length; index += 1) {
+            if (rows[index] > rows[index - 1]) throw new Error('Partition rows must be non-increasing.');
+          }
+        });
+        return { data, lambda, mu };
+      },
+      applyImport(_kind, prepared) {
+        const data = prepared.data;
+        if (data.grid) {
+          $('grid-rows').value = String(Math.max(1, Math.min(18, Number(data.grid.rows) || state.lambda.maxRows)));
+          $('grid-cols').value = String(Math.max(1, Math.min(18, Number(data.grid.cols) || state.lambda.maxCols)));
+          applyGridSize();
+        }
+        if (data.type && $('lie-type')) $('lie-type').value = data.type;
+        if (data.rank && $('lie-rank')) $('lie-rank').value = String(data.rank);
+        if ($('fixed-rank-mode')) $('fixed-rank-mode').checked = !!data.fixedRankMode;
+        window.onTypeChange();
+        setDiagram('lambda', prepared.lambda);
+        setDiagram('mu', prepared.mu);
+        state.lastDecomposition = null;
+        state.lastKostka = null;
+        state.lastKronecker = null;
+        state.lastPlethysm = null;
+        state.lastSchurFunctor = null;
+        state.lastGrassmannian = null;
+        markSymmetricPolynomialStale();
+        refreshExport({ force: true });
+      },
+      hasMeaningfulState() {
+        return trimPartition(state.lambda.rows).length > 0 || trimPartition(state.mu.rows).length > 0;
+      },
+      filename(name) {
+        return state.exportFilename || (name === 'default' ? 'double_young_diagram_export.json' : 'double_young_diagram_export.txt');
+      }
+    };
+
     init();
     setupSlice();
     setupSliceHooks();

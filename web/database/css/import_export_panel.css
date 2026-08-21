@@ -1,0 +1,270 @@
+.import-export-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.import-export-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(100%, 210px);
+  margin-inline: auto;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
+.import-export-tab {
+  min-width: 0;
+  min-height: 29px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.import-export-tab[aria-selected='true'] {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 1px 4px rgba(45, 34, 22, 0.14);
+}
+
+.import-export-tab:focus-visible,
+.import-export-file-picker:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.import-export-panel [hidden] {
+  display: none !important;
+}
+
+.import-export-tabpanel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.import-export-field-row {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.import-export-field-row > .input-label {
+  margin: 0;
+}
+
+.import-export-field-control {
+  display: grid;
+  min-width: 0;
+}
+
+.import-export-field-value {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 29px;
+  padding: 5px 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.import-export-field-value[data-state='detected'] {
+  color: var(--accent);
+}
+
+.import-export-panel select option:disabled {
+  color: var(--muted);
+}
+
+.import-export-panel select,
+.import-export-panel input[type='text'],
+.import-export-panel input[type='search'],
+.import-export-panel input[type='number'] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 29px;
+  padding: 5px 8px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 3px !important;
+  background: var(--bg) !important;
+  color: var(--text) !important;
+  font-family: 'EB Garamond', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', Georgia, serif !important;
+  font-size: 0.9rem !important;
+}
+
+.import-export-panel select:focus,
+.import-export-panel input[type='text']:focus,
+.import-export-panel input[type='search']:focus,
+.import-export-panel input[type='number']:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent) !important;
+}
+
+/*
+ * The panel can adopt legacy textareas whose ID rules are more specific than
+ * this component. These declarations intentionally win so imported and newly
+ * created editors have one appearance on every calculator.
+ */
+.import-export-panel .import-export-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 128px;
+  margin: 0;
+  padding: 5px 8px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 3px !important;
+  background: var(--bg) !important;
+  color: var(--text) !important;
+  font-family: 'JetBrains Mono', 'Noto Sans SC', 'Microsoft YaHei', Consolas, monospace !important;
+  font-size: 0.78rem !important;
+  line-height: 1.35 !important;
+  resize: vertical;
+}
+
+.import-export-panel .import-export-textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent) !important;
+}
+
+.import-export-panel .import-export-textarea::placeholder {
+  color: var(--muted);
+  opacity: 0.82;
+}
+
+.import-export-legacy-host[hidden] {
+  display: none !important;
+}
+
+.import-export-tabpanel > .mosaic-inline-row,
+.import-export-tabpanel > .mosaic-editor-input,
+.import-export-tabpanel > .import-export-file-row,
+.import-export-tabpanel > .import-export-actions {
+  margin-top: 0;
+}
+
+.import-export-tabpanel > .opt-row {
+  min-height: 30px;
+  padding-block: 0;
+}
+
+.import-export-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 0;
+}
+
+.import-export-actions .btn {
+  width: 100%;
+  min-width: 0;
+}
+
+.import-export-import-actions {
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+}
+
+.import-export-file-row {
+  display: grid;
+  gap: 5px;
+  margin-top: 0;
+}
+
+.import-export-file-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 29px;
+  padding: 4px 8px;
+  overflow: hidden;
+  border: 1px dashed var(--accent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  color: var(--accent);
+  font-family: 'JetBrains Mono', 'Noto Sans SC', 'Microsoft YaHei', Consolas, monospace;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  text-align: center;
+  cursor: pointer;
+}
+
+.import-export-file-picker input[type='file'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.import-export-filename {
+  min-height: 1.25em;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.import-export-filename:empty {
+  display: none;
+}
+
+.import-export-status {
+  min-height: 1.5em;
+  margin: 0;
+  padding: 6px 7px;
+  border: 1px solid rgba(31, 122, 140, 0.22);
+  border-radius: 5px;
+  background: rgba(31, 122, 140, 0.06);
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.import-export-status[data-state='success'] {
+  border-color: rgba(47, 133, 90, 0.32);
+  background: rgba(47, 133, 90, 0.08);
+  color: #24543a;
+}
+
+.import-export-status[data-state='error'] {
+  border-color: rgba(178, 58, 72, 0.32);
+  background: rgba(178, 58, 72, 0.08);
+  color: #7d2830;
+}
+
+.import-export-panel[aria-busy='true'] {
+  cursor: progress;
+}
+
+@media (max-width: 520px) {
+  .import-export-field-row {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .import-export-actions,
+  .import-export-import-actions {
+    grid-template-columns: 1fr;
+  }
+}

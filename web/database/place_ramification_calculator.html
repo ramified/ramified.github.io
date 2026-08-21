@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Place Ramification Calculator</title>
   <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
     .ramification-layout {
       max-width: 1240px;
@@ -339,7 +340,7 @@
 <main class="layout ramification-layout">
   <section class="canvas-panel" aria-label="Place ramification canvas panel">
     <header class="panel-title">
-      <span class="panel-title-text">Places Over \(\mathbb{Q}\)</span>
+      <span id="ramification-relation-title" class="panel-title-text">Places of \(L\) above places of \(K\)</span>
       <div class="canvas-toolbar" aria-label="Ramification controls">
         <span class="shape-indicator"><span id="ramification-status" class="ramification-badge">\(\mathbb{Q}(\sqrt{2})\)</span></span>
         <span class="ramification-toolbar-group">
@@ -365,12 +366,50 @@
     <section class="card" draggable="true">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
+        <div class="ramification-inline-row">
+          <span class="input-label">Input mode</span>
+          <select id="ramification-input-mode" class="ramification-select">
+            <option value="lmfdb" selected>LMFDB field over Q</option>
+            <option value="polynomial">Polynomial extension L/K</option>
+            <option value="quadratic">Offline quadratic over Q</option>
+          </select>
+        </div>
         <div class="input-label">LMFDB field</div>
         <div class="ramification-search-row">
           <input id="lmfdb-query" class="ramification-input" type="text" value="2.2.5.1" placeholder="2.2.5.1, Qi, Qsqrt5, x^2-x-1" spellcheck="false" autocomplete="off">
           <button id="lmfdb-search" class="btn" type="button">search</button>
         </div>
         <div class="result-meta ramification-status-line" id="lmfdb-search-status"></div>
+
+        <details id="polynomial-extension" class="ramification-details">
+          <summary>Browser polynomial extension \(L=\mathbb{Q}(\alpha)\)</summary>
+          <p class="hint">Runs locally in your browser. At bad primes (repeated polynomial reduction), local \((e_i,f_i)\) data is intentionally unavailable; all other displayed finite primes are exact.</p>
+          <div class="ramification-inline-row">
+            <span class="input-label">Base \(K\)</span>
+            <select id="generic-base-kind" class="ramification-select">
+              <option value="Q">\(\mathbb{Q}\)</option>
+              <option value="Fqt">\(\mathbb{F}_q(t)\) (WebAssembly CAS required)</option>
+            </select>
+          </div>
+          <div id="generic-q-row" class="ramification-inline-row" hidden>
+            <span class="input-label">\(q\)</span>
+            <input id="generic-q" class="ramification-input" type="number" min="2" step="1" value="3">
+          </div>
+          <div class="ramification-inline-row">
+            <span class="input-label">Generator</span>
+            <input id="generic-generator" class="ramification-input" type="text" value="alpha" maxlength="32" spellcheck="false">
+          </div>
+          <div class="ramification-inline-row">
+            <span class="input-label">\(f(x)\)</span>
+            <input id="generic-polynomial" class="ramification-input" type="text" value="x^2-2" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="ramification-preset-row">
+            <button id="generic-compute" class="btn" type="button">compute</button>
+            <button class="btn btn-ghost" type="button" data-generic-example="number">\(x^3-x-1\)</button>
+            <button class="btn btn-ghost" type="button" data-generic-example="function">\(x^2-t\)</button>
+          </div>
+          <div class="result-meta ramification-status-line" id="generic-status"></div>
+        </details>
 
         <details id="quadratic-fallback" class="ramification-details" open>
           <summary>Offline quadratic fallback</summary>
@@ -396,10 +435,10 @@
         </div>
         </details>
         <div class="ramification-place-editor">
-          <div class="input-label">Finite places</div>
+          <div id="finite-places-label" class="input-label">Finite places</div>
           <div class="ramification-place-row">
-            <input id="extra-prime-input" class="ramification-input" type="number" min="2" step="1" placeholder="prime p">
-            <button id="add-extra-prime" class="btn btn-ghost" type="button">add</button>
+            <input id="extra-prime-input" class="ramification-input" type="text" placeholder="prime p" spellcheck="false">
+            <button id="add-extra-prime" class="btn btn-ghost" type="button">add place</button>
           </div>
           <div id="place-chip-list" class="ramification-chip-list"></div>
         </div>
@@ -436,7 +475,7 @@
 </main>
 
 <footer>
-  LMFDB-backed ramification-place calculator with an offline quadratic fallback.
+  Global place-decomposition calculator: LMFDB lookup, Sage-backed monogenic extensions, and an offline quadratic fallback.
   <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
 </footer>
 
@@ -457,6 +496,8 @@
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js"></script>
-<script src="js/place_ramification_calculator.js"></script>
+<script src="js/place_ramification_calculator.js?v=20260821-1"></script>
+<script src="js/import_export_panel.js?v=20260821-7"></script>
+<script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>
 </html>

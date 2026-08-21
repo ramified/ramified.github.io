@@ -6,6 +6,7 @@
   <title data-i18n="meta.title">Ramified Minigames</title>
   <link rel="stylesheet" href="css/site.css">
   <link rel="stylesheet" href="css/site_i18n.css">
+  <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
 <style>
     .mosaic-layout {
       max-width: 1220px;
@@ -657,8 +658,7 @@
       border-top: 1px solid var(--border);
     }
 
-    .mosaic-history-actions,
-    .minigame-action-grid {
+    .mosaic-history-actions {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
@@ -666,8 +666,7 @@
     }
 
     .mosaic-debug-actions .btn,
-    .mosaic-history-actions .btn,
-    .minigame-action-grid .btn {
+    .mosaic-history-actions .btn {
       width: 100%;
     }
 
@@ -675,10 +674,6 @@
     .mosaic-debug-actions .btn,
     .mosaic-history-actions .btn {
       min-height: 38px;
-    }
-
-    .minigame-action-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     .mosaic-debug-step-row {
@@ -693,21 +688,13 @@
       width: 100%;
     }
 
-    .mosaic-debug-panel,
-    .minigame-subpanel {
+    .mosaic-debug-panel {
       margin-top: 10px;
       padding-top: 10px;
       border-top: 1px dotted var(--border);
     }
 
-    .minigame-subpanel:first-child {
-      margin-top: 0;
-      padding-top: 0;
-      border-top: 0;
-    }
-
-    .mosaic-debug-panel[hidden],
-    .minigame-subpanel[hidden] {
+    .mosaic-debug-panel[hidden] {
       display: none !important;
     }
 
@@ -1932,57 +1919,92 @@
     <section class="card">
       <div class="card-head"><span class="card-head-label" data-i18n="io.title">Import / Export</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
-        <div class="minigame-subpanel" id="import-preset-tools">
-          <label class="opt-row"><input type="checkbox" id="import-keep-game-mode" checked> keep current game type</label>
-          <div class="mosaic-inline-row">
-            <span class="input-label">Import game</span>
-            <select id="import-game-mode" aria-label="Import game">
-              <option value="gomoku">Gomoku</option>
-              <option value="go">Go</option>
-              <option value="connect-four">Connect Four</option>
-              <option value="2048" selected>2048</option>
-              <option value="reversi">Reversi</option>
-              <option value="chinese-checkers">Chinese Checkers</option>
-              <option value="sokoban">Sokoban</option>
-              <option value="fide-chess">FIDE Chess</option>
-            </select>
+        <div class="import-export-panel" id="ramified-import-export-panel">
+          <div class="import-export-tabs" role="tablist" aria-label="Import and export" data-i18n-aria-label="access.ioTabs">
+            <button class="import-export-tab" id="import-export-tab-export" type="button" role="tab" aria-selected="true" aria-controls="import-export-panel-export" data-import-export-tab="export" data-i18n="io.tabExport">Export</button>
+            <button class="import-export-tab" id="import-export-tab-import" type="button" role="tab" aria-selected="false" aria-controls="import-preset-tools" tabindex="-1" data-import-export-tab="import" data-i18n="io.tabImport">Import</button>
           </div>
-          <div class="mosaic-inline-row">
-            <span class="input-label">Source</span>
-            <select id="import-preset-source" aria-label="Preset import source">
-              <option value="catalog" selected>Catalog preset</option>
-              <option value="paste">Paste preset</option>
-            </select>
+
+          <div class="import-export-tabpanel" id="import-export-panel-export" role="tabpanel" aria-labelledby="import-export-tab-export" data-import-export-panel="export">
+            <div class="mosaic-inline-row">
+              <span class="input-label" data-i18n="io.exportContent">Export content</span>
+              <span class="import-export-field-control">
+                <select id="export-state-kind" data-export-kind data-export-content data-i18n-aria-label="access.exportContent" aria-label="Export content">
+                  <option value="background" data-i18n="io.backgroundPreset">Background preset</option>
+                  <option value="status" selected data-i18n="io.fullStatus">Full current status</option>
+                  <option value="record" data-i18n="io.gameRecord">Game record</option>
+                </select>
+                <span class="import-export-field-value" data-export-content-value aria-live="polite" hidden></span>
+              </span>
+            </div>
+            <div class="mosaic-inline-row" id="export-background-format-row" data-export-format-row>
+              <span class="input-label" data-i18n="io.format">Format</span>
+              <span class="import-export-field-control">
+                <select id="export-background-format" data-export-format data-i18n-aria-label="access.exportFormat" aria-label="Export format">
+                  <option value="dsl" selected data-i18n="io.dsl">DSL-style</option>
+                  <option value="verbose" data-i18n="io.verboseJson">Verbose JSON</option>
+                </select>
+                <span class="import-export-field-value" data-export-format-value aria-live="polite" hidden></span>
+              </span>
+            </div>
+            <textarea class="mosaic-editor-input minigame-status-export" id="debug-export-output" data-export-output spellcheck="false" autocomplete="off" data-i18n-aria-label="access.exportOutput" aria-label="Current game status or preset export" readonly></textarea>
+            <div class="import-export-actions">
+              <button class="btn" id="export-state" type="button" data-export-action="refresh" data-i18n="common.refresh">refresh</button>
+              <button class="btn" id="copy-state" type="button" data-export-action="copy" data-i18n="common.copy" disabled>copy</button>
+              <button class="btn" id="download-state" type="button" data-export-action="download" data-i18n="common.download" disabled>download</button>
+            </div>
           </div>
-          <div class="mosaic-inline-row" id="import-preset-catalog-row">
-            <span class="input-label">Catalog</span>
-            <select id="import-preset-catalog" aria-label="Import catalog preset"></select>
+
+          <div class="import-export-tabpanel" id="import-preset-tools" role="tabpanel" aria-labelledby="import-export-tab-import" data-import-export-panel="import" hidden>
+            <label class="opt-row"><input type="checkbox" id="import-keep-game-mode" checked> <span data-i18n="io.keepMode">keep current game type</span></label>
+            <div class="mosaic-inline-row">
+              <span class="input-label" data-i18n="io.importContent">Import content</span>
+              <span class="import-export-field-value" data-import-content-value aria-live="polite"></span>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label" data-i18n="io.format">Format</span>
+              <span class="import-export-field-value" data-import-format-value aria-live="polite"></span>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label" data-i18n="io.importGame">Import game</span>
+              <select id="import-game-mode" data-i18n-aria-label="access.importGame" aria-label="Import game">
+                <option value="gomoku" data-i18n="games.gomoku">Gomoku</option>
+                <option value="go" data-i18n="games.go">Go</option>
+                <option value="connect-four" data-i18n="games.connectFour">Connect Four</option>
+                <option value="2048" selected>2048</option>
+                <option value="reversi" data-i18n="games.reversi">Reversi</option>
+                <option value="chinese-checkers" data-i18n="games.checkers">Chinese Checkers</option>
+                <option value="sokoban" data-i18n="games.sokoban">Sokoban</option>
+                <option value="fide-chess" data-i18n="games.chess">FIDE Chess</option>
+              </select>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label" data-i18n="io.source">Source</span>
+              <select id="import-preset-source" data-import-source data-i18n-aria-label="access.presetSource" aria-label="Preset import source">
+                <option value="catalog" selected data-i18n="io.catalogPreset">Catalog preset</option>
+                <option value="paste" data-i18n="io.pasteJson">Paste JSON</option>
+                <option value="file" data-i18n="io.localFile">Local file</option>
+              </select>
+            </div>
+            <div class="mosaic-inline-row" id="import-preset-catalog-row" data-import-source-panel="catalog">
+              <span class="input-label" data-i18n="io.catalog">Catalog</span>
+              <select id="import-preset-catalog" data-import-catalog data-i18n-aria-label="access.importCatalog" aria-label="Import catalog preset"></select>
+            </div>
+            <div class="import-export-file-row" data-import-source-panel="file" hidden>
+              <label class="import-export-file-picker">
+                <span data-i18n="io.chooseFile">Choose JSON file</span>
+                <input id="import-state-file" data-import-file type="file" accept="application/json,.json" data-i18n-aria-label="access.importFile" aria-label="Choose a JSON file to import">
+              </label>
+              <span class="import-export-filename" id="import-state-filename" data-import-filename aria-live="polite"></span>
+            </div>
+            <textarea class="mosaic-editor-input mosaic-import-input" id="import-preset-input" data-import-input spellcheck="false" autocomplete="off" data-i18n-placeholder="io.pastePlaceholder" placeholder="Paste preset, status, or game-record JSON" data-i18n-aria-label="access.importPayload" aria-label="Imported preset or status" hidden></textarea>
+            <div class="import-export-actions import-export-import-actions">
+              <button class="btn" id="clear-import-preset" type="button" data-import-action="clear" data-i18n="common.clear" hidden>clear</button>
+              <button class="btn" id="apply-import-preset" type="button" data-import-action="apply" data-i18n="common.import">import</button>
+            </div>
           </div>
-          <textarea class="mosaic-editor-input mosaic-import-input" id="import-preset-input" spellcheck="false" autocomplete="off" placeholder="{ ... }" aria-label="Imported preset or status" hidden></textarea>
-          <button class="btn mosaic-import-button" id="apply-import-preset" type="button">import</button>
-        </div>
-        <div class="minigame-subpanel">
-          <div class="mosaic-inline-row">
-            <span class="input-label">Export</span>
-            <select id="export-state-kind" aria-label="Export kind">
-              <option value="background">Background preset</option>
-              <option value="status" selected>Full current status</option>
-              <option value="record">Game record</option>
-            </select>
-          </div>
-          <div class="mosaic-inline-row" id="export-background-format-row" hidden>
-            <span class="input-label">Format</span>
-            <select id="export-background-format" aria-label="Background export format">
-              <option value="dsl" selected>DSL-style</option>
-              <option value="verbose">Verbose JSON</option>
-            </select>
-          </div>
-          <div class="minigame-action-grid">
-            <button class="btn mosaic-import-button" id="export-state" type="button">export</button>
-            <button class="btn mosaic-import-button" id="refresh-state" type="button">refresh</button>
-            <button class="btn mosaic-import-button" id="copy-state" type="button">copy</button>
-          </div>
-          <textarea class="mosaic-editor-input minigame-status-export" id="debug-export-output" spellcheck="false" autocomplete="off" aria-label="Current game status or preset export"></textarea>
+
+          <p class="import-export-status" id="import-export-status" role="status" aria-live="polite" data-import-export-status data-i18n-ignore></p>
         </div>
       </div>
     </section>
@@ -2009,10 +2031,11 @@
 <script src="js/calculator_cards.js"></script>
 <script src="js/site_i18n.js?v=20260821-2"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260821-2"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260821-2"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260821-4"></script>
+<script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
-<script src="js/ramified_minigames_setup.js?v=20260821-2"></script>
+<script src="js/ramified_minigames_setup.js?v=20260821-6"></script>
 </body>
 </html>

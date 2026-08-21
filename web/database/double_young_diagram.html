@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Young Diagram² Calculator</title>
   <link rel="stylesheet" href="css/site.css" />
+  <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7" />
   <style>
     .double-layout {
       max-width: 1280px;
@@ -560,7 +561,7 @@
           </label>
           <div class="lr-action-row">
             <button id="compute-schur" class="btn">compute</button>
-            <button id="export-schur" class="btn btn-ghost">export</button>
+            <button id="export-schur" class="btn btn-ghost" data-import-export-trigger="schur" data-export-filename="lr-decomposition.txt">export</button>
           </div>
           <div id="schur-out" class="decomposition-output"><span class="hint">Draw λ and μ, choose stable or fixed-rank mode, then compute.</span></div>
           <p class="hint">Fixed-rank mode enumerates dominant candidate highest weights inside the invariant norm bound ‖γ‖ ≤ ‖λ‖ + ‖μ‖, then computes coefficients by Freudenthal characters plus Brauer–Klimyk straightening; the dimension check reports completeness.</p>
@@ -605,7 +606,7 @@
         <div class="card-body">
           <div class="lr-action-row">
             <button id="compute-kostka" class="btn">compute</button>
-            <button id="export-kostka" class="btn btn-ghost">export</button>
+            <button id="export-kostka" class="btn btn-ghost" data-import-export-trigger="kostka" data-export-filename="kostka-tableaux.txt">export</button>
           </div>
           <div id="kostka-out" class="decomposition-output"><span class="hint">Compute all semistandard Young tableaux of shape λ and weight μ. This card is independent of the selected Lie type.</span></div>
           <p class="hint">Rows are weakly increasing and columns are strictly increasing; the weight μ = (μ₁, μ₂, …) means entry i appears μᵢ times.</p>
@@ -617,7 +618,7 @@
         <div class="card-body">
           <div class="lr-action-row">
             <button id="compute-kronecker" class="btn">compute</button>
-            <button id="export-kronecker" class="btn btn-ghost">export</button>
+            <button id="export-kronecker" class="btn btn-ghost" data-import-export-trigger="kronecker" data-export-filename="kronecker-decomposition.txt">export</button>
           </div>
           <div id="kronecker-out" class="decomposition-output"><span class="hint">Compute all nonzero Kronecker coefficients g<sup>ν</sup><sub>λ,μ</sub> for |λ| = |μ|.</span></div>
           <p class="hint">The output lists every nonzero target ν under the current browser cap; no third diagram is required.</p>
@@ -629,7 +630,7 @@
         <div class="card-body">
           <div class="lr-action-row">
             <button id="compute-plethysm" class="btn">compute</button>
-            <button id="export-plethysm" class="btn btn-ghost">export</button>
+            <button id="export-plethysm" class="btn btn-ghost" data-import-export-trigger="plethysm" data-export-filename="plethysm-decomposition.txt">export</button>
           </div>
           <div id="plethysm-out" class="decomposition-output"><span class="hint">Compute all nonzero coefficients in the Schur plethysm s<sub>λ</sub>∘s<sub>μ</sub>.</span></div>
           <p class="hint">The output lists every nonzero target ν under the current browser cap; no third diagram is required.</p>
@@ -641,7 +642,7 @@
         <div class="card-body">
           <div class="lr-action-row">
             <button id="compute-schur-functor" class="btn">compute</button>
-            <button id="export-schur-functor" class="btn btn-ghost">export</button>
+            <button id="export-schur-functor" class="btn btn-ghost" data-import-export-trigger="schur-functor" data-export-filename="schur-functor-decomposition.txt">export</button>
           </div>
           <div id="schur-functor-out" class="decomposition-output"><span class="hint">Compute 𝕊<sup>μ</sup>(V<sup>λ</sup>) for the selected Dynkin type/rank and decompose it as a sum of V<sup>γ</sup>.</span></div>
           <p class="hint">This card interprets λ as the highest weight of V<sup>λ</sup> for the selected Lie algebra, applies the Schur functor with shape μ, then decomposes the resulting character into irreducible representations V<sup>γ</sup>.</p>
@@ -660,7 +661,7 @@
           </div>
           <div class="lr-action-row">
             <button id="compute-grassmannian" class="btn">compute</button>
-            <button id="export-grassmannian" class="btn btn-ghost">export</button>
+            <button id="export-grassmannian" class="btn btn-ghost" data-import-export-trigger="grassmannian" data-export-filename="grassmannian-cup-product.txt">export</button>
           </div>
           <div id="grassmannian-out" class="decomposition-output"><span class="hint">Compute σ<sub>λ</sub> ∪ σ<sub>μ</sub> in H*(Gr(r,n)), where r is the number of grid rows and n−r is the number of grid columns.</span></div>
           <p class="hint">The Young-diagram presentation uses Littlewood–Richardson coefficients inside the current r × (n−r) rectangle. The Chern presentation uses the Giambelli determinant in Chern classes c<sub>i</sub>.</p>
@@ -715,7 +716,7 @@
                 <option value="polynomial">poly</option>
               </select>
               <button id="compute-sympoly" class="symfun-export-btn" type="button">compute</button>
-              <button id="export-sympoly" class="symfun-export-btn" type="button">export</button>
+              <button id="export-sympoly" class="symfun-export-btn" type="button" data-import-export-trigger="symmetric-polynomials" data-export-filename="symmetric-polynomial-product.txt">export</button>
             </span>
           </div>
           <div id="sympoly-output" class="symfun-expansions"><span class="hint">Draw &lambda; and &mu; to combine their symmetric polynomials.</span></div>
@@ -748,6 +749,8 @@
   </footer>
 
   <script src="js/calculator_cards.js"></script>
-  <script src="js/double_young_diagram.js"></script>
+  <script src="js/double_young_diagram.js?v=20260821-1"></script>
+  <script src="js/import_export_panel.js?v=20260821-7"></script>
+  <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>
 </html>

@@ -1623,6 +1623,8 @@
     const parabolic = parabolicData(state.type, state.rank, indices, state.roots);
     const payload = {
       calculator: 'Dynkin diagram calculator',
+      version: 1,
+      typeKey: state.type,
       type: info.label,
       rank: state.rank,
       selectedVertex: state.selected + 1,
@@ -2271,6 +2273,47 @@
       return closest;
     }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
   }
+
+  window.SiteImportExportPageAdapter = {
+    exportDefault() {
+      renderExport();
+      return { text: $('dynkin-export-out').value, filename: 'dynkin-diagram-state.json', mimeType: 'application/json' };
+    },
+    validateImport(_kind, raw) {
+      const text = String(raw?.text || '').trim();
+      if (!text) throw new Error('Paste a Dynkin calculator export.');
+      const data = JSON.parse(text);
+      if (data.calculator && data.calculator !== 'Dynkin diagram calculator') throw new Error('This is not a Dynkin calculator export.');
+      let type = String(data.typeKey || '').trim();
+      if (!type) {
+        const compact = String(data.type || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+        type = /^E[678]$/.test(compact) ? compact : (/^[ABCD]$/.test(compact[0]) ? compact[0] : compact);
+      }
+      if (!['A', 'B', 'C', 'D', 'E6', 'E7', 'E8', 'F4', 'G2'].includes(type)) throw new Error('The Dynkin type is not supported.');
+      const rank = EXCEPTIONAL_RANK[type] || clampRank(type, data.rank);
+      const selected = (Array.isArray(data.selectedVertices) ? data.selectedVertices : [data.selectedVertex])
+        .map((value) => Number(value) - 1)
+        .filter((value) => Number.isInteger(value) && value >= 0 && value < rank);
+      return { data, type, rank, selected: selected.length ? selected : [0] };
+    },
+    applyImport(_kind, prepared) {
+      const { data, type, rank, selected } = prepared;
+      state.type = type;
+      state.rank = rank;
+      state.multiSelect = !!data.multiSelect;
+      state.selected = selected[0];
+      state.selectedSet = selected.slice();
+      state.quiverMode = !!data.quiver?.enabled && supportsQuiverOrientation(type);
+      if (state.quiverMode && data.quiver?.orientations && typeof data.quiver.orientations === 'object') {
+        state.quiverOrientations[quiverLayoutKey(type, rank)] = { ...data.quiver.orientations };
+      }
+      render();
+    },
+    hasMeaningfulState() {
+      return state.type !== 'E6' || state.rank !== 6 || state.selected !== 0 || state.multiSelect || state.quiverMode;
+    },
+    filename() { return 'dynkin-diagram-state.json'; }
+  };
 
   document.addEventListener('DOMContentLoaded', () => {
     bindInputs();

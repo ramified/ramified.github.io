@@ -5,11 +5,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mosaic Calculator</title>
   <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
-    .mosaic-layout {
-      max-width: 1220px;
-      grid-template-columns: minmax(0, 1fr) 340px;
-    }
+        .mosaic-layout {
+            max-width: 1220px;
+            grid-template-columns: minmax(0, 1fr) 340px;
+        }
+
+        .homology-generator-list {
+            margin: 8px 0 0;
+            padding: 0;
+            list-style: none;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 12px;
+        }
+
+        .homology-generator-list li {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 0;
+            border-bottom: 1px dotted var(--border);
+        }
+
+        .homology-generator-list li:last-child { border-bottom: none; }
+
+        .homology-generator-list .btn {
+            margin-left: auto;
+            padding: 4px 8px;
+            font-size: 0.72rem;
+        }
+
+        .homology-actions,
+        .homology-options { margin-top: 8px; }
+
+        .homology-math { word-break: normal; }
+
+        .homology-status {
+            min-height: 18px;
+            margin-top: 8px;
+            color: #435467;
+            font-size: 12px;
+        }
 
     #mosaic-canvas {
       cursor: pointer;
@@ -1345,6 +1382,8 @@
               <option value="glue-boundary">Glue boundary</option>
               <option value="reverse-glue" hidden disabled>Reverse arrows</option>
               <option value="billiard">Billiard / geodesic</option>
+              <option value="homology-circle">Trace a background loop</option>
+              <option value="homology-representative" hidden disabled>Choose homology side</option>
             </select>
           </div>
           <div class="mosaic-inline-row" id="background-decoration-row" hidden>
@@ -1515,6 +1554,87 @@
       </div>
     </section>
 
+    <section class="card collapsed" id="homology-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Cellular homology</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="stat-row"><span class="stat-label homology-math">\(\operatorname{H}_{1}(X;\mathbb{Z})\)</span><span class="stat-value homology-math" id="homology-group">\(\text{not computed}\)</span></div>
+        <div class="action-row homology-actions">
+          <button class="btn btn-ghost" id="compute-homology" type="button">compute integral H&#8321;</button>
+          <button class="btn btn-ghost" id="trace-homology-circle" type="button" title="Click a quotient corner and then incident tile edges to make a closed background loop." disabled>trace a background loop</button>
+          <button class="btn btn-ghost" id="homology-trace-undo" type="button" disabled>undo</button>
+          <button class="btn btn-ghost" id="homology-trace-clear" type="button" disabled>clear</button>
+          <button class="btn btn-ghost" id="identify-homology-circle" type="button" disabled>identify closed circle</button>
+        </div>
+        <div class="mosaic-opt-pair homology-options">
+          <label class="opt-row"><input type="checkbox" id="show-homology" disabled> show basis</label>
+          <label class="opt-row"><input type="checkbox" id="pick-homology-knot" disabled> pick knot</label>
+          <label class="opt-row"><input type="checkbox" id="homology-trace-reverse"> next edge reversed</label>
+          <label class="opt-row"><input type="checkbox" id="relax-homology-cords" disabled> relax basis cords</label>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Cords</span>
+          <button class="btn btn-ghost" id="reset-homology-cords" type="button" disabled>reset cords</button>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Label</span>
+          <select id="homology-label-position" disabled><option value="side">Selected side</option><option value="middle">Shared-edge middle</option></select>
+        </div>
+        <ul class="homology-generator-list" id="homology-generator-list" aria-label="Homology basis generators"></ul>
+        <div class="homology-status homology-math" id="homology-knot-result"></div>
+        <div class="homology-status" id="homology-trace-result"></div>
+        <div class="homology-status" id="homology-status"></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="homology-cord-debug-card" hidden>
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Homology cord debug</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="mosaic-inline-row">
+          <span class="input-label">Total mass</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-mass" min="0.2" max="5" step="0.1" value="1"><output id="homology-cord-mass-value">1</output></span>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Axial rigidity</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-spring" min="5" max="240" step="1" value="90"><output id="homology-cord-spring-value">90</output></span>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Bending rigidity</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-bend-spring" min="0" max="30" step="0.1" value="2.5"><output id="homology-cord-bend-spring-value">2.5</output></span>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Closure rigidity</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-closure-spring" min="5" max="240" step="1" value="72"><output id="homology-cord-closure-spring-value">72</output></span>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Damping</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-damping" min="0" max="15" step="0.1" value="4.2"><output id="homology-cord-damping-value">4.2</output></span>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Substeps</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-substeps" min="1" max="16" step="1" value="7"><output id="homology-cord-substeps-value">7</output></span>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Speed</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-speed" min="0.1" max="2" step="0.1" value="1.6"><output id="homology-cord-speed-value">1.6</output></span>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Particles / edge</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-particles" min="5" max="24" step="1" value="12"><output id="homology-cord-particles-value">12</output></span>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Shrink / s</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-shrink-rate" min="0" max="0.2" step="0.01" value="0.06"><output id="homology-cord-shrink-rate-value">0.06</output></span>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Min spacing / R</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-min-spacing" min="0.04" max="0.2" step="0.01" value="0.09"><output id="homology-cord-min-spacing-value">0.09</output></span>
+        </div>
+        <label class="opt-row"><input type="checkbox" id="show-homology-cord-particles"> show material particles</label>
+        <label class="opt-row"><input type="checkbox" id="inspect-homology-cord-force"> inspect particle force</label>
+        <div class="hint" id="homology-cord-force-readout">Enable inspection, then click a particle.</div>
+      </div>
+    </section>
+
     <section class="card collapsed" id="dual-graph-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Dual Graph Visualization</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
@@ -1522,7 +1642,7 @@
           <span class="stat-label">Status</span>
           <span class="stat-value" id="dual-graph-status">
             <span id="dual-graph-status-text">-</span>
-            <button class="btn btn-ghost" id="export-dual-graph" type="button" hidden>Export graph</button>
+            <button class="btn btn-ghost" id="export-dual-graph" type="button" data-import-export-trigger="dual-graph" data-export-filename="mosaic-dual-graph.json" hidden>Export graph</button>
           </span>
         </div>
         <div class="slice-info-row" id="dual-graph-invariants-row" hidden>
@@ -1644,7 +1764,7 @@
         <div class="card-body">
           <div class="dual-graph-degeneration-actions">
             <button class="btn btn-ghost" id="compute-degenerations" type="button">Compute divisors</button>
-            <button class="btn btn-ghost" id="export-degenerations" type="button">Export</button>
+            <button class="btn btn-ghost" id="export-degenerations" type="button" data-import-export-trigger="degenerations" data-export-filename="dual-graph-degenerations.json">Export</button>
             <button class="btn btn-ghost dual-graph-degeneration-wide-toggle" id="toggle-degenerations-wide" type="button">wide</button>
             <span class="hint" id="dual-graph-degenerations-status">stable graph required</span>
           </div>
@@ -1796,6 +1916,19 @@
 <script src="js/mosaic_knot_engine.js"></script>
 <script src="ramified_minigame_presets/presets.js"></script>
 <script src="js/calculator_cards.js"></script>
-<script src="js/mosaic_calculator.js?v=export-formats"></script>
+<script src="js/background_homology.js?v=20260821-2"></script>
+<script src="js/mosaic_calculator.js?v=export-formats-homology-25"></script>
+<script src="js/import_export_panel.js?v=20260821-7"></script>
+<script src="js/import_export_page_adapters.js?v=20260821-9"></script>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']]
+    },
+    options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 </body>
 </html>

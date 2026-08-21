@@ -3260,14 +3260,20 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('id="apply-import-preset"'));
   assert.ok(minigameHtml.includes('id="export-state-kind"'));
   assert.ok(minigameHtml.includes('id="export-background-format"'));
-  assert.ok(minigameHtml.includes('id="import-state"'));
-  assert.ok(!minigameHtml.includes('id="debug-export-output" readonly'));
+  assert.ok(minigameHtml.includes('id="import-state-file"'));
+  assert.ok(minigameHtml.includes('id="download-state"'));
+  assert.ok(minigameHtml.includes('id="debug-export-output" data-export-output'));
+  assert.ok(minigameHtml.includes('aria-label="Current game status or preset export" readonly'));
   const importExportSection = minigameHtml.slice(
     minigameHtml.indexOf('Import / Export'),
     minigameHtml.indexOf('Game Stats')
   );
-  assert.ok(importExportSection.includes('class="minigame-subpanel" id="import-preset-tools"'));
-  assert.ok(importExportSection.includes('class="minigame-action-grid"'));
+  assert.ok(importExportSection.includes('class="import-export-tabs" role="tablist"'));
+  assert.ok(importExportSection.includes('id="import-preset-tools" role="tabpanel"'));
+  assert.ok(importExportSection.includes('data-import-export-panel="export"'));
+  assert.ok(importExportSection.includes('data-import-export-panel="import"'));
+  assert.ok(importExportSection.includes('data-import-source-panel="file"'));
+  assert.ok(importExportSection.includes('class="import-export-actions"'));
   assert.ok(importExportSection.includes('class="mosaic-editor-input minigame-status-export"'));
   assert.ok(!importExportSection.includes('mosaic-debug-panel'));
   assert.ok(minigameSource.includes("document.querySelectorAll('.card-head')"));
@@ -6848,7 +6854,9 @@ function testReusableLocalizationWiring() {
   const setupSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
   const localeSource = fs.readFileSync(require.resolve('./i18n/ramified_minigames_locales.js'), 'utf8');
   assert.ok(html.includes('css/site_i18n.css'));
+  assert.ok(html.includes('css/import_export_panel.css'));
   assert.ok(html.includes('js/site_i18n.js'));
+  assert.ok(html.includes('js/import_export_panel.js'));
   assert.ok(html.includes('js/i18n/ramified_minigames_legacy_sources.js'));
   assert.ok(html.includes('js/i18n/ramified_minigames_locales.js'));
   assert.ok(html.includes('data-language-switch'));
@@ -6858,6 +6866,8 @@ function testReusableLocalizationWiring() {
   assert.ok(localeSource.includes("'zh-CN'"));
   assert.ok(localeSource.includes('歧趣游境'));
   assert.ok(localeSource.includes('同时移动所有玩家'));
+  assert.ok(localeSource.includes("'io.fileReady'"));
+  assert.ok(localeSource.includes("'common.download'"));
 }
 
 async function run() {

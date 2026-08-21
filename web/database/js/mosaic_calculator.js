@@ -1,6 +1,17 @@
 (() => {
   'use strict';
 
+  // The browser receives this before this file; Node tests load the same pure
+  // module directly.  Keeping the topology calculation outside the UI avoids
+  // a second, subtly different quotient construction.
+  const BackgroundHomology = (() => {
+    if (typeof globalThis !== 'undefined' && globalThis.BackgroundHomology) return globalThis.BackgroundHomology;
+    if (typeof module !== 'undefined' && module.exports && typeof require === 'function') {
+      try { return require('./background_homology.js'); } catch (_) { return null; }
+    }
+    return null;
+  })();
+
   const LATTICES = {
     hexagonal: {
       label: 'hexagonal',
@@ -57,6 +68,7 @@
   };
   const COMPONENT_COLOR_PALETTE = ['#b23a48', '#1f7a8c', '#6a4c93', '#c47f17'];
   const GLUED_BOUNDARY_COLORS = ['#1f7a8c', '#b23a48', '#6a4c93', '#c47f17', '#2f855a', '#8a4f7d'];
+  const HOMOLOGY_COLORS = ['#18748a', '#b23a48', '#6a4c93', '#c47f17', '#278050', '#8a4f7d'];
   const DEFAULT_SEIFERT_BAND_WIDTH = 0.42;
   const MIN_SEIFERT_BAND_WIDTH = 0.24;
   const MAX_SEIFERT_BAND_WIDTH = 0.78;
@@ -805,6 +817,45 @@
     backgroundBilliardArrowLength: DEFAULT_BACKGROUND_BILLIARD_ARROW_LENGTH,
     backgroundBilliardHitMarkers: DEFAULT_BACKGROUND_BILLIARD_HIT_MARKERS,
     backgroundHoverCusp: null,
+    homologyAnalysis: null,
+    homologyTopologyKey: '',
+    homologyComputing: false,
+    homologyRequestId: 0,
+    showHomology: false,
+    homologyGeneratorVisibility: {},
+    homologySideSelections: {},
+    homologyEditingGeneratorId: '',
+    homologyLabelPosition: 'side',
+    homologyTrace: [],
+    homologyTraceStartVertex: -1,
+    homologyTraceCurrentVertex: -1,
+    homologyTraceResult: null,
+    homologyTraceReverse: false,
+    homologyKnotPick: false,
+    homologyKnotPickInputLocked: false,
+    homologyKnotPickReturnMode: 'draw',
+    homologyKnotResult: null,
+    homologyKnotLineworkKey: '',
+    homologyKnotArrowScale: 0.5,
+    homologyCordMode: false,
+    homologyCords: {},
+    homologyCordChains: {},
+    homologyCordDrag: null,
+    homologyCordAnimation: null,
+    homologyCordMass: 1,
+    homologyCordSpring: 90,
+    homologyCordBendSpring: 2.5,
+    homologyCordClosureSpring: 72,
+    homologyCordDamping: 4.2,
+    homologyCordSubsteps: 7,
+    homologyCordParticles: 12,
+    homologyCordSpeed: 1.6,
+    homologyCordShrinkRate: 0.06,
+    homologyCordMinSpacing: 0.09,
+    showHomologyCordParticles: false,
+    inspectHomologyCordForce: false,
+    homologyCordForceSelection: null,
+    homologyStatus: '',
     backgroundBilliard: {
       tileIndex: -1,
       position: null,
@@ -960,6 +1011,9 @@
   let tileDragSource = null;
   let drawState = null;
   let decorationClickTimer = null;
+  let homologyMathTypesetTimer = null;
+  let homologyMathTypesetAttempts = 0;
+  const homologyMathTypesetTargets = new Set();
 
   if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', init);
 
@@ -1031,6 +1085,47 @@
     refs.backgroundBilliardArrowValue = document.getElementById('background-billiard-arrow-value');
     refs.backgroundBilliardHitRow = document.getElementById('background-billiard-hit-row');
     refs.backgroundBilliardHitMarkers = document.getElementById('background-billiard-hit-markers');
+    refs.homologyCard = document.getElementById('homology-card');
+    refs.homologyGroup = document.getElementById('homology-group');
+    refs.computeHomology = document.getElementById('compute-homology');
+    refs.showHomology = document.getElementById('show-homology');
+    refs.pickHomologyKnot = document.getElementById('pick-homology-knot');
+    refs.relaxHomologyCords = document.getElementById('relax-homology-cords');
+    refs.resetHomologyCords = document.getElementById('reset-homology-cords');
+    refs.homologyLabelPosition = document.getElementById('homology-label-position');
+    refs.traceHomologyCircle = document.getElementById('trace-homology-circle');
+    refs.homologyTraceUndo = document.getElementById('homology-trace-undo');
+    refs.homologyTraceClear = document.getElementById('homology-trace-clear');
+    refs.homologyTraceReverse = document.getElementById('homology-trace-reverse');
+    refs.identifyHomologyCircle = document.getElementById('identify-homology-circle');
+    refs.homologyGeneratorList = document.getElementById('homology-generator-list');
+    refs.homologyKnotResult = document.getElementById('homology-knot-result');
+    refs.homologyTraceResult = document.getElementById('homology-trace-result');
+    refs.homologyStatus = document.getElementById('homology-status');
+    refs.homologyCordDebugCard = document.getElementById('homology-cord-debug-card');
+    refs.homologyCordMass = document.getElementById('homology-cord-mass');
+    refs.homologyCordMassValue = document.getElementById('homology-cord-mass-value');
+    refs.homologyCordSpring = document.getElementById('homology-cord-spring');
+    refs.homologyCordSpringValue = document.getElementById('homology-cord-spring-value');
+    refs.homologyCordBendSpring = document.getElementById('homology-cord-bend-spring');
+    refs.homologyCordBendSpringValue = document.getElementById('homology-cord-bend-spring-value');
+    refs.homologyCordClosureSpring = document.getElementById('homology-cord-closure-spring');
+    refs.homologyCordClosureSpringValue = document.getElementById('homology-cord-closure-spring-value');
+    refs.homologyCordDamping = document.getElementById('homology-cord-damping');
+    refs.homologyCordDampingValue = document.getElementById('homology-cord-damping-value');
+    refs.homologyCordSubsteps = document.getElementById('homology-cord-substeps');
+    refs.homologyCordSubstepsValue = document.getElementById('homology-cord-substeps-value');
+    refs.homologyCordParticles = document.getElementById('homology-cord-particles');
+    refs.homologyCordParticlesValue = document.getElementById('homology-cord-particles-value');
+    refs.homologyCordSpeed = document.getElementById('homology-cord-speed');
+    refs.homologyCordSpeedValue = document.getElementById('homology-cord-speed-value');
+    refs.homologyCordShrinkRate = document.getElementById('homology-cord-shrink-rate');
+    refs.homologyCordShrinkRateValue = document.getElementById('homology-cord-shrink-rate-value');
+    refs.homologyCordMinSpacing = document.getElementById('homology-cord-min-spacing');
+    refs.homologyCordMinSpacingValue = document.getElementById('homology-cord-min-spacing-value');
+    refs.showHomologyCordParticles = document.getElementById('show-homology-cord-particles');
+    refs.inspectHomologyCordForce = document.getElementById('inspect-homology-cord-force');
+    refs.homologyCordForceReadout = document.getElementById('homology-cord-force-readout');
     refs.backgroundCuspMarkerRow = document.getElementById('background-cusp-marker-row');
     refs.backgroundCuspMarkerScale = document.getElementById('background-cusp-marker-scale');
     refs.backgroundCuspMarkerScaleValue = document.getElementById('background-cusp-marker-scale-value');
@@ -1051,6 +1146,8 @@
     refs.showCoords = document.getElementById('show-coords');
     refs.colorComponents = document.getElementById('color-components');
     refs.displayPick = document.getElementById('display-pick');
+    refs.homologyKnotArrowSize = document.getElementById('homology-knot-arrow-size');
+    refs.homologyKnotArrowSizeValue = document.getElementById('homology-knot-arrow-size-value');
     refs.showCuspsRow = document.getElementById('show-cusps-row');
     refs.showCusps = document.getElementById('show-cusps');
     refs.showSeifertSurfaceRow = document.getElementById('show-seifert-surface-row');
@@ -1269,6 +1366,7 @@
         state.hoverIndex = -1;
         state.backgroundHoverEdge = null;
         state.backgroundHoverCusp = null;
+        if (!isBackgroundHomologyRepresentativeAction()) state.homologyEditingGeneratorId = '';
         if (!isBackgroundGlueAction()) clearPendingGlueEdge();
         if (!isBackgroundBilliardAction()) stopBackgroundBilliard(false);
         syncBackgroundModeControls();
@@ -1366,6 +1464,84 @@
         refreshExport();
       });
     }
+    if (refs.computeHomology) refs.computeHomology.addEventListener('click', requestBackgroundHomology);
+    if (refs.showHomology) {
+      refs.showHomology.addEventListener('change', () => {
+        state.showHomology = !!refs.showHomology.checked;
+        if (!state.showHomology) {
+          stopEditingHomologyRepresentatives(false);
+          setBackgroundHomologyCordMode(false);
+        }
+        syncMainCanvasCursor();
+        updateReport(false);
+      });
+    }
+    if (refs.pickHomologyKnot) {
+      refs.pickHomologyKnot.addEventListener('change', () => {
+        setHomologyKnotPick(!!refs.pickHomologyKnot.checked);
+      });
+    }
+    if (refs.relaxHomologyCords) {
+      refs.relaxHomologyCords.addEventListener('change', () => setBackgroundHomologyCordMode(!!refs.relaxHomologyCords.checked));
+    }
+    if (refs.resetHomologyCords) refs.resetHomologyCords.addEventListener('click', () => resetBackgroundHomologyCords(true));
+    [
+      ['homologyCordMass', 'homologyCordMassValue', 'homology-cord-mass', normalizeHomologyCordMass],
+      ['homologyCordSpring', 'homologyCordSpringValue', 'homology-cord-spring', normalizeHomologyCordSpring],
+      ['homologyCordBendSpring', 'homologyCordBendSpringValue', 'homology-cord-bend-spring', normalizeHomologyCordBendSpring],
+      ['homologyCordClosureSpring', 'homologyCordClosureSpringValue', 'homology-cord-closure-spring', normalizeHomologyCordSpring],
+      ['homologyCordDamping', 'homologyCordDampingValue', 'homology-cord-damping', normalizeHomologyCordDamping],
+      ['homologyCordSubsteps', 'homologyCordSubstepsValue', 'homology-cord-substeps', normalizeHomologyCordSubsteps],
+      ['homologyCordParticles', 'homologyCordParticlesValue', 'homology-cord-particles', normalizeHomologyCordParticles],
+      ['homologyCordSpeed', 'homologyCordSpeedValue', 'homology-cord-speed', normalizeHomologyCordSpeed],
+      ['homologyCordShrinkRate', 'homologyCordShrinkRateValue', 'homology-cord-shrink-rate', normalizeHomologyCordShrinkRate],
+      ['homologyCordMinSpacing', 'homologyCordMinSpacingValue', 'homology-cord-min-spacing', normalizeHomologyCordMinSpacing]
+    ].forEach(([stateKey, outputKey, inputId, normalize]) => {
+      const input = refs[stateKey];
+      if (!input) return;
+      input.addEventListener('input', () => {
+        state[stateKey] = normalize(input.value);
+        if (refs[outputKey]) refs[outputKey].textContent = String(state[stateKey]);
+        if (inputId === 'homology-cord-particles') resetBackgroundHomologyCords(false);
+        scheduleBackgroundHomologyCordAnimation();
+        draw(analyze());
+      });
+    });
+    if (refs.showHomologyCordParticles) {
+      refs.showHomologyCordParticles.addEventListener('change', () => {
+        state.showHomologyCordParticles = !!refs.showHomologyCordParticles.checked;
+        draw(analyze());
+      });
+    }
+    if (refs.inspectHomologyCordForce) {
+      refs.inspectHomologyCordForce.addEventListener('change', () => {
+        state.inspectHomologyCordForce = !!refs.inspectHomologyCordForce.checked;
+        if (!state.inspectHomologyCordForce) state.homologyCordForceSelection = null;
+        if (refs.homologyCordForceReadout) {
+          refs.homologyCordForceReadout.textContent = state.inspectHomologyCordForce
+            ? 'Click a material particle to inspect its net force.'
+            : 'Enable inspection, then click a particle.';
+        }
+        draw(analyze());
+      });
+    }
+    if (refs.homologyLabelPosition) {
+      refs.homologyLabelPosition.addEventListener('change', () => {
+        state.homologyLabelPosition = refs.homologyLabelPosition.value === 'middle' ? 'middle' : 'side';
+        draw(analyze());
+      });
+    }
+    if (refs.traceHomologyCircle) {
+      refs.traceHomologyCircle.addEventListener('click', startBackgroundHomologyTrace);
+    }
+    if (refs.homologyTraceUndo) refs.homologyTraceUndo.addEventListener('click', undoBackgroundHomologyTrace);
+    if (refs.homologyTraceClear) refs.homologyTraceClear.addEventListener('click', () => clearBackgroundHomologyTrace(true));
+    if (refs.homologyTraceReverse) {
+      refs.homologyTraceReverse.addEventListener('change', () => {
+        state.homologyTraceReverse = !!refs.homologyTraceReverse.checked;
+      });
+    }
+    if (refs.identifyHomologyCircle) refs.identifyHomologyCircle.addEventListener('click', identifyBackgroundHomologyTrace);
     if (refs.backgroundCuspMarkerScale) {
       refs.backgroundCuspMarkerScale.addEventListener('input', () => {
         state.backgroundCuspMarkerScale = normalizeBackgroundCuspMarkerScale(refs.backgroundCuspMarkerScale.value);
@@ -1467,6 +1643,13 @@
       }
       refreshExport();
     });
+    if (refs.homologyKnotArrowSize) {
+      refs.homologyKnotArrowSize.addEventListener('input', () => {
+        state.homologyKnotArrowScale = normalizeHomologyKnotArrowScale(refs.homologyKnotArrowSize.value);
+        if (refs.homologyKnotArrowSizeValue) refs.homologyKnotArrowSizeValue.textContent = state.homologyKnotArrowScale.toFixed(1);
+        draw(analyze());
+      });
+    }
     if (refs.showCusps) {
       refs.showCusps.addEventListener('change', () => {
         state.showCusps = refs.showCusps.checked;
@@ -3272,6 +3455,7 @@
     state.showCusps = false;
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
+    state.homologyKnotArrowScale = 0.5;
     state.componentColors = [];
     state.edits = 0;
     state.hoverIndex = -1;
@@ -3906,6 +4090,7 @@
     );
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
+    state.homologyKnotArrowScale = 0.5;
     state.componentColors = [];
     state.drawStyle = normalizeDrawStyle(
       payload.drawStyle
@@ -4679,6 +4864,7 @@
     state.showCusps = false;
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
+    state.homologyKnotArrowScale = 0.5;
     state.backgroundOrientability = null;
     clearBackgroundBilliard(false);
     if (refs.displayPick) refs.displayPick.checked = false;
@@ -4753,12 +4939,24 @@
       refs.canvas.style.cursor = 'copy';
       return;
     }
+    if (state.homologyCordMode && state.showHomology) {
+      refs.canvas.style.cursor = state.homologyCordDrag ? 'grabbing' : 'grab';
+      return;
+    }
     if (isDecorationMode()) {
       refs.canvas.style.cursor = state.decorationHoverHit ? 'pointer' : 'default';
       return;
     }
     if (state.inputMode === 'background' && isBackgroundBilliardAction()) {
       refs.canvas.style.cursor = state.backgroundBilliard && state.backgroundBilliard.playing ? 'default' : 'crosshair';
+      return;
+    }
+    if (state.inputMode === 'background' && isBackgroundHomologyTraceAction()) {
+      refs.canvas.style.cursor = state.backgroundHoverCusp || state.backgroundHoverEdge ? 'pointer' : 'crosshair';
+      return;
+    }
+    if (state.inputMode === 'background' && isBackgroundHomologyRepresentativeAction()) {
+      refs.canvas.style.cursor = state.backgroundHoverEdge ? 'pointer' : 'crosshair';
       return;
     }
     if (state.inputMode === 'background' && state.backgroundHoverCusp) {
@@ -7736,6 +7934,10 @@
     state.pickedComponent = component;
     state.pickedAnchor = hit ? pickHoverHitFromEdgeHit(hit, component) : null;
     state.pickHoverHit = hit ? pickHoverHitFromEdgeHit(hit, component) : null;
+    if (hit && component != null && state.homologyKnotPickInputLocked) {
+      finishHomologyKnotPickCapture();
+      return;
+    }
     if (hit && state.displayPickInputLocked) {
       finishDisplayPickCapture(true);
       return;
@@ -7958,6 +8160,16 @@
     return state.backgroundAction === 'billiard';
   }
 
+  function isBackgroundHomologyTraceAction() {
+    if (state.wanderSelectingStart) return false;
+    return state.backgroundAction === 'homology-circle';
+  }
+
+  function isBackgroundHomologyRepresentativeAction() {
+    if (state.wanderSelectingStart) return false;
+    return state.backgroundAction === 'homology-representative';
+  }
+
   function isBackgroundInputHoleAction() {
     if (state.wanderSelectingStart) return false;
     return state.backgroundAction === 'decoration'
@@ -8005,6 +8217,14 @@
 
   function handlePointerDown(event) {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (inspectBackgroundHomologyCordForce(event)) {
+      event.preventDefault();
+      return;
+    }
+    if (beginBackgroundHomologyCordDrag(event)) {
+      event.preventDefault();
+      return;
+    }
     if (state.wanderSelectingStart) {
       handleWanderStartPointerDown(event);
       event.preventDefault();
@@ -8092,6 +8312,10 @@
       event.preventDefault();
       return;
     }
+    if (moveBackgroundHomologyCordDrag(event)) {
+      event.preventDefault();
+      return;
+    }
 
     if (state.inputMode === 'background') {
       updateBackgroundGesture(event);
@@ -8153,6 +8377,7 @@
   }
 
   function handlePointerUp(event) {
+    if (finishBackgroundHomologyCordDrag(event)) return;
     if (state.inputMode === 'background') {
       finishBackgroundGesture(event);
       clearPointerState(event);
@@ -8214,13 +8439,17 @@
 
   function beginBackgroundGesture(event) {
     const isBilliard = isBackgroundBilliardAction();
-    const cusp = isBilliard ? null : backgroundCuspHitTest(event.clientX, event.clientY);
-    const edge = !isBilliard && isBackgroundBoundaryAction()
-      ? backgroundEdgeHitTest(event.clientX, event.clientY)
+    const isHomologyTrace = isBackgroundHomologyTraceAction();
+    const isHomologyRepresentative = isBackgroundHomologyRepresentativeAction();
+    const cusp = isBilliard
+      ? null
+      : (isHomologyTrace ? backgroundHomologyCornerHitTest(event.clientX, event.clientY) : (isHomologyRepresentative ? null : backgroundCuspHitTest(event.clientX, event.clientY)));
+    const edge = !isBilliard && (isBackgroundBoundaryAction() || isHomologyTrace || isHomologyRepresentative)
+      ? ((isHomologyTrace || isHomologyRepresentative) ? edgeHitTest(event.clientX, event.clientY, 0.10) : backgroundEdgeHitTest(event.clientX, event.clientY))
       : null;
     const hit = isBilliard
       ? backgroundTileHitIndex(event.clientX, event.clientY)
-      : (isBackgroundBoundaryAction()
+      : ((isBackgroundBoundaryAction() || isHomologyTrace || isHomologyRepresentative)
       ? -1
       : hitTest(event.clientX, event.clientY, { includeRemoved: true }));
     const decoration = isBackgroundDecorationAction() && hit >= 0
@@ -8272,13 +8501,17 @@
       return;
     }
     const isBilliard = isBackgroundBilliardAction();
-    const cusp = isBilliard ? null : backgroundCuspHitTest(event.clientX, event.clientY);
-    const edge = !isBilliard && isBackgroundBoundaryAction()
-      ? backgroundEdgeHitTest(event.clientX, event.clientY)
+    const isHomologyTrace = isBackgroundHomologyTraceAction();
+    const isHomologyRepresentative = isBackgroundHomologyRepresentativeAction();
+    const cusp = isBilliard
+      ? null
+      : (isHomologyTrace ? backgroundHomologyCornerHitTest(event.clientX, event.clientY) : (isHomologyRepresentative ? null : backgroundCuspHitTest(event.clientX, event.clientY)));
+    const edge = !isBilliard && (isBackgroundBoundaryAction() || isHomologyTrace || isHomologyRepresentative)
+      ? ((isHomologyTrace || isHomologyRepresentative) ? edgeHitTest(event.clientX, event.clientY, 0.10) : backgroundEdgeHitTest(event.clientX, event.clientY))
       : null;
     const hit = isBilliard
       ? backgroundTileHitIndex(event.clientX, event.clientY)
-      : (isBackgroundBoundaryAction()
+      : ((isBackgroundBoundaryAction() || isHomologyTrace || isHomologyRepresentative)
       ? -1
       : hitTest(event.clientX, event.clientY, { includeRemoved: true }));
     const aimChanged = isBilliard ? updateBackgroundBilliardAim(event.clientX, event.clientY, false) : false;
@@ -8306,6 +8539,29 @@
     if (isBackgroundBilliardAction()) {
       if (!pointerState.moved && isOverCanvas(event.clientX, event.clientY)) {
         handleBackgroundBilliardClick(event.clientX, event.clientY);
+      }
+      return;
+    }
+    if (isBackgroundHomologyRepresentativeAction()) {
+      const edge = isOverCanvas(event.clientX, event.clientY)
+        ? edgeHitTest(event.clientX, event.clientY, 0.10)
+        : null;
+      if (!pointerState.moved && edge && sameBackgroundEdgeHit(edge, pointerState.backgroundEdge)) {
+        selectBackgroundHomologyRepresentative(edge);
+      }
+      return;
+    }
+    if (isBackgroundHomologyTraceAction()) {
+      const cusp = isOverCanvas(event.clientX, event.clientY)
+        ? backgroundHomologyCornerHitTest(event.clientX, event.clientY)
+        : null;
+      const edge = isOverCanvas(event.clientX, event.clientY)
+        ? edgeHitTest(event.clientX, event.clientY, 0.10)
+        : null;
+      if (!pointerState.moved && cusp && sameBackgroundCuspHit(cusp, pointerState.backgroundCusp)) {
+        selectBackgroundHomologyTraceStart(cusp);
+      } else if (!pointerState.moved && edge && sameBackgroundEdgeHit(edge, pointerState.backgroundEdge)) {
+        appendBackgroundHomologyTraceEdge(edge);
       }
       return;
     }
@@ -9130,6 +9386,33 @@
   }
 
   function computeBackgroundQuotientVertices() {
+    const complex = currentBackgroundCellComplex();
+    if (complex) {
+      const cornerAngle = tileCornerAngle();
+      const vertices = complex.vertices.map((vertex) => {
+        const corners = (vertex.corners || []).map((corner) => {
+          const cell = geometry && geometry.cells ? geometry.cells[corner.index] : null;
+          return {
+            index: corner.index,
+            row: Math.floor(corner.index / state.cols),
+            col: corner.index % state.cols,
+            vertex: corner.vertex,
+            point: cell ? tileCornerPoint(corner.index, corner.vertex) : null
+          };
+        });
+        const entry = {
+          id: '',
+          angleRadians: corners.length * cornerAngle,
+          corners
+        };
+        entry.id = backgroundCuspKey(entry);
+        entry.representative = corners[0] || null;
+        entry.angleDegrees = entry.angleRadians * 180 / Math.PI;
+        return entry;
+      }).sort(compareBackgroundCusps);
+      vertices.forEach((entry, index) => { entry.label = `V${index + 1}`; });
+      return { vertices };
+    }
     const lattice = getLattice();
     const cornerCount = state.rows * state.cols * lattice.sides;
     const parent = Array.from({ length: cornerCount }, (_, index) => index);
@@ -9415,6 +9698,736 @@
     return { x: cell.x, y: cell.y };
   }
 
+  // ------------------------------------------------------------------------
+  // Cellular H_1 of the glued background.  This is intentionally a thin UI
+  // layer over js/background_homology.js, which also supplies the quotient
+  // corners used by the existing background-space display.
+
+  function backgroundHomologyApi() {
+    return BackgroundHomology || (typeof globalThis !== 'undefined' ? globalThis.BackgroundHomology : null);
+  }
+
+  function backgroundHomologySnapshot() {
+    const total = state.rows * state.cols;
+    return {
+      lattice: state.lattice,
+      rows: state.rows,
+      cols: state.cols,
+      activeTiles: Array.from({ length: total }, (_, index) => tileExists(index)),
+      cutEdges: Array.from(cloneCutEdgeSet()).sort(),
+      gluedEdges: cloneGluedEdges().map((pair) => ({
+        first: cloneBoundaryEdge(pair.first),
+        second: cloneBoundaryEdge(pair.second),
+        reversed: !!pair.reversed,
+        group: Number.isInteger(pair.group) ? pair.group : undefined
+      }))
+    };
+  }
+
+  function backgroundHomologyTopologyKey(snapshot = backgroundHomologySnapshot()) {
+    return JSON.stringify(snapshot);
+  }
+
+  function currentBackgroundCellComplex() {
+    const homology = backgroundHomologyApi();
+    return homology && typeof homology.buildCellComplex === 'function'
+      ? homology.buildCellComplex(backgroundHomologySnapshot())
+      : null;
+  }
+
+  function invalidateBackgroundHomology(reason = '') {
+    state.homologyRequestId += 1;
+    state.homologyAnalysis = null;
+    state.homologyTopologyKey = '';
+    state.homologyComputing = false;
+    clearBackgroundHomologyDisplay();
+    clearBackgroundHomologyTrace(false);
+    state.homologyStatus = reason;
+  }
+
+  function clearBackgroundHomologyDisplay() {
+    state.showHomology = false;
+    state.homologyGeneratorVisibility = {};
+    state.homologySideSelections = {};
+    state.homologyEditingGeneratorId = '';
+    state.homologyCordMode = false;
+    resetBackgroundHomologyCords(false);
+    clearBackgroundHomologyKnot(false);
+  }
+
+  function isBackgroundHomologySupported(report = null) {
+    if (!isGluedBoundaryMode() || !backgroundHomologyApi()) return false;
+    const background = report && report.background ? report.background : analyzeBackgroundSpace();
+    return !!background && background.existing > 0 && background.components === 1;
+  }
+
+  function currentBackgroundHomologyAnalysis() {
+    const key = backgroundHomologyTopologyKey();
+    return state.homologyAnalysis && state.homologyTopologyKey === key
+      ? state.homologyAnalysis
+      : null;
+  }
+
+  // Public programmatic entry point.  It has no UI side effects, so callers
+  // can use it for their own exact calculations as well as tests.
+  function analyzeBackgroundHomology() {
+    const homology = backgroundHomologyApi();
+    if (!homology || typeof homology.analyze !== 'function') {
+      throw new Error('The background homology module is unavailable.');
+    }
+    return homology.analyze(backgroundHomologySnapshot());
+  }
+
+  // Public programmatic entry point.  A path is [{index, dir, direction}],
+  // where direction is +1 for the tile-side orientation and -1 for reverse.
+  function classifyBackgroundCircle(path) {
+    const homology = backgroundHomologyApi();
+    if (!homology || typeof homology.classifyPath !== 'function') {
+      return { valid: false, reason: 'The background homology module is unavailable.' };
+    }
+    const analysis = currentBackgroundHomologyAnalysis() || analyzeBackgroundHomology();
+    return homology.classifyPath(analysis, Array.isArray(path) ? path : state.homologyTrace);
+  }
+
+  function backgroundKnotLineworkKey() {
+    return JSON.stringify({ diagramType: state.diagramType, tiles: state.tiles });
+  }
+
+  function knotComponentArcLoop(component, report = analyze()) {
+    if (isDualGraph()) return { valid: false, reason: 'Knot homology is available only for knot/link linework.' };
+    if (!Number.isInteger(component) || component < 0 || !report || !report.arcComponents) {
+      return { valid: false, reason: 'Pick a knot component first.' };
+    }
+    const candidates = [];
+    state.tiles.forEach((tile, index) => {
+      if (!tileExists(index)) return;
+      const pairs = normalizeTile(tile);
+      const components = report.arcComponents[index] || [];
+      pairs.forEach((pair, pairIndex) => {
+        if (components[pairIndex] === component) candidates.push({ index, pairIndex, pair: pair.slice(0, 2) });
+      });
+    });
+    candidates.sort((left, right) => left.index - right.index || left.pairIndex - right.pairIndex);
+    if (!candidates.length) return { valid: false, reason: 'The selected knot component is no longer present.' };
+    const first = candidates[0];
+    const startPort = { index: first.index, pairIndex: first.pairIndex, dir: first.pair[0] };
+    let current = { ...startPort };
+    const loop = [];
+    const visited = new Set();
+    const maxSteps = (candidates.length * 2) + 1;
+    for (let count = 0; count < maxSteps; count += 1) {
+      const key = `${current.index}:${current.pairIndex}:${current.dir}`;
+      if (visited.has(key)) return { valid: false, reason: 'The selected component does not form one closed knot traversal.' };
+      visited.add(key);
+      const pair = normalizeTile(state.tiles[current.index])[current.pairIndex];
+      if (!pair || (pair[0] !== current.dir && pair[1] !== current.dir)) {
+        return { valid: false, reason: 'The selected knot contains an invalid tile arc.' };
+      }
+      const toDir = pair[0] === current.dir ? pair[1] : pair[0];
+      loop.push({ index: current.index, fromDir: current.dir, toDir });
+      const next = connectedSurfaceNeighbor(current.index, toDir);
+      if (!next) return { valid: false, reason: 'The selected knot component has open ends.' };
+      const nextPairs = normalizeTile(state.tiles[next.index]);
+      const nextPairIndex = nextPairs.findIndex((candidate, pairIndex) => (
+        (candidate[0] === next.dir || candidate[1] === next.dir)
+        && report.arcComponents[next.index]
+        && report.arcComponents[next.index][pairIndex] === component
+      ));
+      if (nextPairIndex < 0) return { valid: false, reason: 'The selected knot component has open ends.' };
+      const nextPort = { index: next.index, pairIndex: nextPairIndex, dir: next.dir };
+      if (nextPort.index === startPort.index && nextPort.pairIndex === startPort.pairIndex && nextPort.dir === startPort.dir) {
+        return { valid: true, arcLoop: loop };
+      }
+      current = nextPort;
+    }
+    return { valid: false, reason: 'The selected component does not form one closed knot traversal.' };
+  }
+
+  // Public programmatic entry point for the component selected by the normal
+  // canvas picker.  It deliberately leaves UI state untouched.
+  function classifySelectedBackgroundKnot() {
+    const analysis = currentBackgroundHomologyAnalysis();
+    if (!analysis) return { valid: false, reason: 'Compute H₁ before classifying a knot.' };
+    const report = analyze();
+    const loop = knotComponentArcLoop(state.pickedComponent, report);
+    if (!loop.valid) return loop;
+    const homology = backgroundHomologyApi();
+    if (!homology || typeof homology.classifyArcLoop !== 'function') {
+      return { valid: false, reason: 'The background homology module is unavailable.' };
+    }
+    return homology.classifyArcLoop(analysis, loop.arcLoop);
+  }
+
+  function clearBackgroundHomologyKnot(redraw = false) {
+    const wasLocked = state.homologyKnotPickInputLocked;
+    const returnMode = state.homologyKnotPickReturnMode || 'draw';
+    state.homologyKnotPick = false;
+    state.homologyKnotPickInputLocked = false;
+    state.homologyKnotPickReturnMode = 'draw';
+    state.homologyKnotResult = null;
+    state.homologyKnotLineworkKey = '';
+    if (!state.displayPick) {
+      state.pickedComponent = null;
+      state.pickedAnchor = null;
+      state.pickHoverHit = null;
+    }
+    if (wasLocked) setInputMode(returnMode, { clearPick: false });
+    if (redraw) updateReport(false);
+  }
+
+  function setHomologyKnotPick(enabled) {
+    const analysis = currentBackgroundHomologyAnalysis();
+    if (!enabled) {
+      clearBackgroundHomologyKnot(true);
+      return;
+    }
+    if (isDualGraph() || !analysis) {
+      state.homologyStatus = isDualGraph()
+        ? 'Knot homology is available only for knot/link linework.'
+        : 'Compute H₁ before picking a knot.';
+      clearBackgroundHomologyKnot(false);
+      updateReport(false);
+      return;
+    }
+    if (state.displayPickInputLocked) {
+      state.homologyStatus = 'Finish the display Pick selection before picking a knot for homology.';
+      clearBackgroundHomologyKnot(false);
+      updateReport(false);
+      return;
+    }
+    state.homologyKnotPick = true;
+    state.homologyKnotPickInputLocked = true;
+    state.homologyKnotPickReturnMode = state.inputMode;
+    state.homologyKnotResult = null;
+    state.homologyStatus = 'Click a knot component to identify its H₁ class.';
+    setInputMode('pick', { clearPick: false });
+    updateInputModeLock();
+    updateReport(false);
+  }
+
+  function finishHomologyKnotPickCapture() {
+    const wasLocked = state.homologyKnotPickInputLocked;
+    const returnMode = state.homologyKnotPickReturnMode || 'draw';
+    state.homologyKnotPickInputLocked = false;
+    state.homologyKnotPickReturnMode = 'draw';
+    state.homologyKnotResult = classifySelectedBackgroundKnot();
+    state.homologyKnotLineworkKey = backgroundKnotLineworkKey();
+    state.homologyStatus = state.homologyKnotResult.valid
+      ? `Knot identified as ${state.homologyKnotResult.expression}; the marked point and arrow give its orientation.`
+      : state.homologyKnotResult.reason;
+    updateInputModeLock();
+    if (wasLocked) setInputMode(returnMode, { clearPick: false });
+    else updateReport(false);
+  }
+
+  function requestBackgroundHomology() {
+    const snapshot = backgroundHomologySnapshot();
+    const key = backgroundHomologyTopologyKey(snapshot);
+    if (!isBackgroundHomologySupported()) {
+      state.homologyStatus = isGluedBoundaryMode()
+        ? 'A single connected glued background is required.'
+        : 'Switch to glued boundary mode to compute background homology.';
+      updateReport(false);
+      return;
+    }
+    const homology = backgroundHomologyApi();
+    const requestId = state.homologyRequestId + 1;
+    state.homologyRequestId = requestId;
+    state.homologyAnalysis = null;
+    state.homologyTopologyKey = key;
+    state.homologyComputing = true;
+    clearBackgroundHomologyDisplay();
+    clearBackgroundHomologyTrace(false);
+    state.homologyStatus = 'Computing integral cellular H₁…';
+    updateReport(false);
+
+    const finish = (analysis, error = '') => {
+      if (requestId !== state.homologyRequestId || key !== backgroundHomologyTopologyKey()) return;
+      state.homologyComputing = false;
+      if (error || !analysis) {
+        state.homologyAnalysis = null;
+        state.homologyTopologyKey = '';
+        state.homologyStatus = error || 'Could not compute background homology.';
+      } else {
+        state.homologyAnalysis = analysis;
+        state.homologyTopologyKey = key;
+        // A newly computed basis should be immediately useful: all of its
+        // individual generators default to visible unless the user hides one.
+        state.showHomology = true;
+        state.homologyStatus = `Computed ${analysis.group}.`;
+      }
+      updateReport(false);
+    };
+
+    if (typeof Worker !== 'undefined') {
+      try {
+        const worker = new Worker('js/background_homology_worker.js');
+        worker.onmessage = (event) => {
+          const message = event && event.data ? event.data : {};
+          worker.terminate();
+          if (message.id !== requestId) return;
+          finish(message.ok ? message.analysis : null, message.ok ? '' : (message.error || 'Homology worker failed.'));
+        };
+        worker.onerror = () => {
+          worker.terminate();
+          // The synchronous fallback keeps local/file deployments useful when
+          // a browser refuses Worker loading.
+          try { finish(homology.analyze(snapshot)); } catch (error) { finish(null, error.message); }
+        };
+        worker.postMessage({ id: requestId, snapshot });
+        return;
+      } catch (_) {
+        // Fall through to the small-board synchronous calculation below.
+      }
+    }
+    const compute = () => {
+      try { finish(homology.analyze(snapshot)); } catch (error) { finish(null, error.message); }
+    };
+    if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') window.setTimeout(compute, 0);
+    else compute();
+  }
+
+  function traceStepInfo(step, analysis = currentBackgroundHomologyAnalysis()) {
+    if (!analysis || !analysis.complex || !step) return null;
+    const lattice = getLattice();
+    const index = Number(step.index);
+    const dir = modulo(Number(step.dir), lattice.sides);
+    const side = analysis.complex.sideToEdge.get(`${index}:${dir}`);
+    if (!side) return null;
+    const direction = step.direction === -1 || step.reverse === true ? -1 : 1;
+    return {
+      index,
+      dir,
+      direction,
+      edge: side.edge,
+      coefficient: BigInt(side.sign * direction),
+      start: direction > 0 ? side.localStart : side.localEnd,
+      end: direction > 0 ? side.localEnd : side.localStart
+    };
+  }
+
+  function backgroundHomologyCornerHitTest(clientX, clientY) {
+    const analysis = currentBackgroundHomologyAnalysis();
+    if (!analysis || !geometry) return null;
+    const point = clientPointToBoardPoint(clientX, clientY);
+    const threshold = Math.max(7, geometry.radius * 0.19);
+    let closest = null;
+    analysis.complex.vertices.forEach((vertex) => {
+      (vertex.corners || []).forEach((corner) => {
+        const cornerPoint = tileCornerPoint(corner.index, corner.vertex);
+        if (!cornerPoint) return;
+        const distance = Math.hypot(point.x - cornerPoint.x, point.y - cornerPoint.y);
+        if (distance <= threshold && (!closest || distance < closest.distance)) {
+          closest = { id: vertex.id, point: cornerPoint, distance };
+        }
+      });
+    });
+    return closest;
+  }
+
+  function selectBackgroundHomologyTraceStart(corner) {
+    if (!corner || !currentBackgroundHomologyAnalysis()) return;
+    state.homologyTrace = [];
+    state.homologyTraceStartVertex = corner.id;
+    state.homologyTraceCurrentVertex = corner.id;
+    state.homologyTraceResult = null;
+    state.homologyStatus = `Start quotient corner ${corner.id} selected; choose an incident tile edge.`;
+    updateReport(false);
+  }
+
+  function appendBackgroundHomologyTraceEdge(hit) {
+    const analysis = currentBackgroundHomologyAnalysis();
+    if (!analysis || !hit) return;
+    if (state.homologyTraceStartVertex < 0 || state.homologyTraceCurrentVertex < 0) {
+      state.homologyStatus = 'First click a quotient corner, then choose an incident tile edge.';
+      updateReport(false);
+      return;
+    }
+    const preferred = state.homologyTraceReverse ? -1 : 1;
+    const choices = preferred === 1 ? [1, -1] : [-1, 1];
+    const step = choices
+      .map((direction) => traceStepInfo({ index: hit.index, dir: hit.dir, direction }, analysis))
+      .find((entry) => entry && entry.start === state.homologyTraceCurrentVertex);
+    if (!step) {
+      state.homologyStatus = 'That tile edge is not incident to the current quotient corner.';
+      updateReport(false);
+      return;
+    }
+    state.homologyTrace.push({ index: step.index, dir: step.dir, direction: step.direction });
+    state.homologyTraceCurrentVertex = step.end;
+    state.homologyTraceResult = null;
+    state.homologyTraceReverse = false;
+    state.homologyStatus = isBackgroundHomologyTraceClosed()
+      ? 'Closed quotient path; identify it to obtain its homology class.'
+      : `Trace has ${state.homologyTrace.length} edge${state.homologyTrace.length === 1 ? '' : 's'}; choose an incident edge.`;
+    updateReport(false);
+  }
+
+  function recomputeBackgroundHomologyTraceEndpoints() {
+    const analysis = currentBackgroundHomologyAnalysis();
+    if (!analysis || !state.homologyTrace.length) {
+      state.homologyTraceCurrentVertex = state.homologyTraceStartVertex;
+      return;
+    }
+    const first = traceStepInfo(state.homologyTrace[0], analysis);
+    if (!first) return clearBackgroundHomologyTrace(false);
+    state.homologyTraceStartVertex = first.start;
+    state.homologyTraceCurrentVertex = first.end;
+    for (let index = 1; index < state.homologyTrace.length; index += 1) {
+      const step = traceStepInfo(state.homologyTrace[index], analysis);
+      if (!step || step.start !== state.homologyTraceCurrentVertex) return clearBackgroundHomologyTrace(false);
+      state.homologyTraceCurrentVertex = step.end;
+    }
+  }
+
+  function isBackgroundHomologyTraceClosed() {
+    return state.homologyTrace.length > 0
+      && state.homologyTraceStartVertex >= 0
+      && state.homologyTraceStartVertex === state.homologyTraceCurrentVertex;
+  }
+
+  function clearBackgroundHomologyTrace(redraw = false) {
+    state.homologyTrace = [];
+    state.homologyTraceStartVertex = -1;
+    state.homologyTraceCurrentVertex = -1;
+    state.homologyTraceResult = null;
+    state.homologyTraceReverse = false;
+    if (redraw) {
+      state.homologyStatus = 'Trace cleared. Click a quotient corner to start another circle.';
+      updateReport(false);
+    }
+  }
+
+  function undoBackgroundHomologyTrace() {
+    if (!state.homologyTrace.length) return;
+    state.homologyTrace.pop();
+    state.homologyTraceResult = null;
+    recomputeBackgroundHomologyTraceEndpoints();
+    state.homologyStatus = state.homologyTrace.length
+      ? 'Last tile edge removed.'
+      : 'Trace empty; click a quotient corner to choose its start.';
+    updateReport(false);
+  }
+
+  function startBackgroundHomologyTrace() {
+    if (!currentBackgroundHomologyAnalysis()) {
+      state.homologyStatus = 'Compute H₁ before tracing a circle.';
+      updateReport(false);
+      return;
+    }
+    clearBackgroundHomologyTrace(false);
+    state.homologyEditingGeneratorId = '';
+    state.inputMode = 'background';
+    state.backgroundAction = 'homology-circle';
+    state.homologyStatus = 'Click a quotient corner, then trace incident tile edges. A seam continues at its identified corner.';
+    if (refs.inputMode) refs.inputMode.value = 'background';
+    if (refs.backgroundAction) refs.backgroundAction.value = 'homology-circle';
+    syncBackgroundModeControls();
+    syncMainCanvasCursor();
+    updateReport(false);
+  }
+
+  function identifyBackgroundHomologyTrace() {
+    if (!isBackgroundHomologyTraceClosed()) {
+      state.homologyStatus = 'Return to the selected quotient corner before identifying the path.';
+      updateReport(false);
+      return;
+    }
+    state.homologyTraceResult = classifyBackgroundCircle(state.homologyTrace);
+    state.homologyStatus = state.homologyTraceResult.valid
+      ? `Circle identified as ${state.homologyTraceResult.expression}.`
+      : state.homologyTraceResult.reason;
+    updateReport(false);
+  }
+
+  function homologyGeneratorById(analysis, generatorId) {
+    return analysis && Array.isArray(analysis.generators)
+      ? analysis.generators.find((generator) => generator.id === generatorId) || null
+      : null;
+  }
+
+  function homologyGeneratorVisible(generatorId) {
+    return state.homologyGeneratorVisibility[generatorId] !== false;
+  }
+
+  function homologyRepresentativeKey(generatorId, edgeId) {
+    return `${generatorId}:${edgeId}`;
+  }
+
+  function orderedHomologyEdgeSides(edge) {
+    return (edge && Array.isArray(edge.sides) ? edge.sides : [])
+      .slice()
+      .sort((left, right) => left.index - right.index || left.dir - right.dir);
+  }
+
+  function selectedHomologyEdgeSide(generatorId, edge) {
+    const sides = orderedHomologyEdgeSides(edge);
+    if (!sides.length) return null;
+    const saved = state.homologySideSelections[homologyRepresentativeKey(generatorId, edge.id)];
+    const selected = saved && sides.find((side) => side.index === saved.index && side.dir === saved.dir);
+    return selected || sides[0];
+  }
+
+  function generatorUsesHomologyEdge(generator, edgeId) {
+    const raw = generator && Array.isArray(generator.edgeChain) ? generator.edgeChain[edgeId] : 0n;
+    return (typeof raw === 'bigint' ? raw : BigInt(raw || 0)) !== 0n;
+  }
+
+  function setHomologyGeneratorVisible(generatorId, visible) {
+    state.homologyGeneratorVisibility[generatorId] = !!visible;
+    if (!visible && state.homologyEditingGeneratorId === generatorId) stopEditingHomologyRepresentatives(false);
+    if (!visible) resetBackgroundHomologyCords(false, generatorId);
+    if (state.homologyCordMode && !hasVisibleHomologyGenerators()) setBackgroundHomologyCordMode(false);
+    syncMainCanvasCursor();
+    updateReport(false);
+  }
+
+  function startEditingHomologyRepresentatives(generatorId) {
+    const analysis = currentBackgroundHomologyAnalysis();
+    const generator = homologyGeneratorById(analysis, generatorId);
+    if (!generator) return;
+    if (state.homologyEditingGeneratorId === generatorId) {
+      stopEditingHomologyRepresentatives(true);
+      return;
+    }
+    state.homologyEditingGeneratorId = generatorId;
+    state.homologyGeneratorVisibility[generatorId] = true;
+    state.showHomology = true;
+    state.inputMode = 'background';
+    state.backgroundAction = 'homology-representative';
+    state.homologyStatus = `Editing ${generatorId}: click a solid or dashed tile-side fragment to choose its displayed representative.`;
+    if (refs.inputMode) refs.inputMode.value = 'background';
+    if (refs.backgroundAction) refs.backgroundAction.value = 'homology-representative';
+    syncBackgroundModeControls();
+    syncMainCanvasCursor();
+    updateReport(false);
+  }
+
+  function stopEditingHomologyRepresentatives(redraw = true) {
+    if (!state.homologyEditingGeneratorId) return;
+    state.homologyEditingGeneratorId = '';
+    if (isBackgroundHomologyRepresentativeAction()) {
+      state.backgroundAction = 'tile';
+      if (refs.backgroundAction) refs.backgroundAction.value = 'tile';
+    }
+    state.homologyStatus = 'Representative editing finished.';
+    if (redraw) updateReport(false);
+  }
+
+  function selectBackgroundHomologyRepresentative(hit) {
+    const analysis = currentBackgroundHomologyAnalysis();
+    const generator = homologyGeneratorById(analysis, state.homologyEditingGeneratorId);
+    if (!analysis || !generator || !hit) return;
+    const side = analysis.complex.sideToEdge.get(`${hit.index}:${hit.dir}`);
+    if (!side || !generatorUsesHomologyEdge(generator, side.edge)) {
+      state.homologyStatus = `That edge is not part of ${generator.id}.`;
+      updateReport(false);
+      return;
+    }
+    const quotientEdge = analysis.complex.edges[side.edge];
+    const clicked = orderedHomologyEdgeSides(quotientEdge)
+      .find((entry) => entry.index === hit.index && entry.dir === hit.dir);
+    if (!clicked) return;
+    state.homologySideSelections[homologyRepresentativeKey(generator.id, side.edge)] = {
+      index: clicked.index,
+      dir: clicked.dir
+    };
+    resetBackgroundHomologyCords(false, generator.id);
+    state.homologyStatus = `Selected tile side ${clicked.index}:${clicked.dir} for ${generator.id}.`;
+    updateReport(false);
+  }
+
+  function renderHomologyGeneratorList(analysis) {
+    if (!refs.homologyGeneratorList) return;
+    refs.homologyGeneratorList.textContent = '';
+    if (!analysis || !analysis.generators.length) return;
+    analysis.generators.forEach((generator) => {
+      const item = document.createElement('li');
+      const visibility = document.createElement('input');
+      visibility.type = 'checkbox';
+      visibility.checked = homologyGeneratorVisible(generator.id);
+      visibility.title = `show ${generator.id}`;
+      visibility.addEventListener('change', () => setHomologyGeneratorVisible(generator.id, visibility.checked));
+      const description = document.createElement('span');
+      description.textContent = generator.kind === 'torsion'
+        ? ` ${generator.id}: order ${generator.order.toString()} `
+        : ` ${generator.id}: free generator `;
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'btn btn-ghost';
+      edit.textContent = state.homologyEditingGeneratorId === generator.id ? 'done sides' : 'edit sides';
+      edit.title = `choose tile-side representatives for ${generator.id}`;
+      edit.addEventListener('click', () => startEditingHomologyRepresentatives(generator.id));
+      item.append(visibility, description, edit);
+      refs.homologyGeneratorList.appendChild(item);
+    });
+  }
+
+  function backgroundHomologyGroupLatex(analysis) {
+    if (!analysis) return '\\(\\text{not computed}\\)';
+    const terms = [];
+    if (analysis.freeRank === 1) terms.push('\\mathbb{Z}');
+    else if (analysis.freeRank > 1) terms.push(`\\mathbb{Z}^{${analysis.freeRank}}`);
+    (analysis.torsion || []).forEach((order) => {
+      terms.push(`\\mathbb{Z}/${BigInt(order).toString()}\\mathbb{Z}`);
+    });
+    return `\\(${terms.length ? terms.join('\\oplus') : '0'}\\)`;
+  }
+
+  function setBackgroundHomologyGroupDisplay(analysis) {
+    if (!refs.homologyGroup) return;
+    const latex = backgroundHomologyGroupLatex(analysis);
+    if (refs.homologyGroup.dataset.latex === latex) return;
+    refs.homologyGroup.dataset.latex = latex;
+    refs.homologyGroup.innerHTML = latex;
+    queueBackgroundHomologyMathTypeset(refs.homologyGroup);
+  }
+
+  function queueBackgroundHomologyMathTypeset(target) {
+    if (target) homologyMathTypesetTargets.add(target);
+    if (typeof window === 'undefined' || !homologyMathTypesetTargets.size || homologyMathTypesetTimer) return;
+    homologyMathTypesetTimer = window.setTimeout(() => {
+      homologyMathTypesetTimer = null;
+      const math = window.MathJax;
+      if (!math || typeof math.typesetPromise !== 'function') {
+        if (homologyMathTypesetAttempts++ < 40) queueBackgroundHomologyMathTypeset();
+        return;
+      }
+      homologyMathTypesetAttempts = 0;
+      const targets = Array.from(homologyMathTypesetTargets);
+      homologyMathTypesetTargets.clear();
+      const run = () => {
+        if (math.typesetClear) math.typesetClear(targets);
+        math.typesetPromise(targets).catch(() => {});
+      };
+      if (math.startup && math.startup.promise) math.startup.promise.then(run).catch(() => {});
+      else run();
+    }, 0);
+  }
+
+  function homologyExpressionLatex(expression) {
+    return String(expression || '0').replace(/([at])(\d+)/g, '$1_{$2}');
+  }
+
+  function setBackgroundHomologyKnotResult(result) {
+    if (!refs.homologyKnotResult) return;
+    if (!result) {
+      refs.homologyKnotResult.textContent = '';
+      delete refs.homologyKnotResult.dataset.latex;
+      return;
+    }
+    if (!result.valid) {
+      refs.homologyKnotResult.textContent = `Selected knot: ${result.reason}`;
+      delete refs.homologyKnotResult.dataset.latex;
+      return;
+    }
+    const latex = `\\(\\text{Selected knot: } [K] = ${homologyExpressionLatex(result.expression)}\\)`;
+    if (refs.homologyKnotResult.dataset.latex === latex) return;
+    refs.homologyKnotResult.dataset.latex = latex;
+    refs.homologyKnotResult.innerHTML = latex;
+    queueBackgroundHomologyMathTypeset(refs.homologyKnotResult);
+  }
+
+  function syncBackgroundHomologyCard(report) {
+    const visible = isGluedBoundaryMode();
+    const snapshotKey = backgroundHomologyTopologyKey();
+    if (!visible) {
+      if (state.homologyTopologyKey || state.homologyTrace.length || state.homologyComputing) invalidateBackgroundHomology();
+      if (refs.homologyCard) refs.homologyCard.hidden = true;
+      return;
+    }
+    if (refs.homologyCard) refs.homologyCard.hidden = !visible;
+    if (state.homologyTopologyKey && state.homologyTopologyKey !== snapshotKey) {
+      invalidateBackgroundHomology('Background topology changed; recompute H₁.');
+    }
+    const supported = isBackgroundHomologySupported(report);
+    const analysis = currentBackgroundHomologyAnalysis();
+    const hasKnotLinework = !isDualGraph() && !!(report.arcComponents || []).some((components) => components.some((component) => component >= 0));
+    const knotPickAvailable = !!analysis && hasKnotLinework;
+    if (state.homologyKnotResult && state.homologyKnotLineworkKey !== backgroundKnotLineworkKey()) {
+      clearBackgroundHomologyKnot(false);
+    }
+    if (!knotPickAvailable && state.homologyKnotPick) clearBackgroundHomologyKnot(false);
+    const traceClosed = isBackgroundHomologyTraceClosed();
+    const cordAvailable = !!analysis && !!state.showHomology && hasVisibleHomologyGenerators();
+    setBackgroundHomologyGroupDisplay(analysis);
+    if (refs.computeHomology) refs.computeHomology.disabled = !supported || state.homologyComputing;
+    if (refs.showHomology) {
+      refs.showHomology.disabled = !analysis;
+      refs.showHomology.checked = !!(analysis && state.showHomology);
+    }
+    if (!cordAvailable && state.homologyCordMode) setBackgroundHomologyCordMode(false);
+    if (refs.relaxHomologyCords) {
+      refs.relaxHomologyCords.disabled = !cordAvailable;
+      refs.relaxHomologyCords.checked = !!(cordAvailable && state.homologyCordMode);
+    }
+    if (refs.resetHomologyCords) refs.resetHomologyCords.disabled = !cordAvailable;
+    if (refs.homologyCordDebugCard) refs.homologyCordDebugCard.hidden = !cordAvailable;
+    if (refs.showHomologyCordParticles) {
+      refs.showHomologyCordParticles.disabled = !cordAvailable;
+      refs.showHomologyCordParticles.checked = !!(cordAvailable && state.showHomologyCordParticles);
+    }
+    if (refs.inspectHomologyCordForce) {
+      refs.inspectHomologyCordForce.disabled = !cordAvailable;
+      refs.inspectHomologyCordForce.checked = !!(cordAvailable && state.inspectHomologyCordForce);
+      if (!cordAvailable) state.homologyCordForceSelection = null;
+    }
+    [
+      ['homologyCordMass', 'homologyCordMassValue', normalizeHomologyCordMass],
+      ['homologyCordSpring', 'homologyCordSpringValue', normalizeHomologyCordSpring],
+      ['homologyCordBendSpring', 'homologyCordBendSpringValue', normalizeHomologyCordBendSpring],
+      ['homologyCordClosureSpring', 'homologyCordClosureSpringValue', normalizeHomologyCordSpring],
+      ['homologyCordDamping', 'homologyCordDampingValue', normalizeHomologyCordDamping],
+      ['homologyCordSubsteps', 'homologyCordSubstepsValue', normalizeHomologyCordSubsteps],
+      ['homologyCordParticles', 'homologyCordParticlesValue', normalizeHomologyCordParticles],
+      ['homologyCordSpeed', 'homologyCordSpeedValue', normalizeHomologyCordSpeed],
+      ['homologyCordShrinkRate', 'homologyCordShrinkRateValue', normalizeHomologyCordShrinkRate],
+      ['homologyCordMinSpacing', 'homologyCordMinSpacingValue', normalizeHomologyCordMinSpacing]
+    ].forEach(([stateKey, outputKey, normalize]) => {
+      const input = refs[stateKey];
+      const value = normalize(state[stateKey]);
+      state[stateKey] = value;
+      if (input) {
+        input.disabled = !cordAvailable;
+        input.value = String(value);
+      }
+      if (refs[outputKey]) refs[outputKey].textContent = String(value);
+    });
+    if (refs.pickHomologyKnot) {
+      refs.pickHomologyKnot.disabled = !knotPickAvailable;
+      refs.pickHomologyKnot.checked = !!(knotPickAvailable && state.homologyKnotPick);
+    }
+    if (refs.homologyLabelPosition) {
+      refs.homologyLabelPosition.disabled = !analysis;
+      refs.homologyLabelPosition.value = state.homologyLabelPosition;
+    }
+    if (refs.traceHomologyCircle) refs.traceHomologyCircle.disabled = !analysis;
+    if (refs.homologyTraceUndo) refs.homologyTraceUndo.disabled = !state.homologyTrace.length;
+    if (refs.homologyTraceClear) refs.homologyTraceClear.disabled = !state.homologyTrace.length && state.homologyTraceStartVertex < 0;
+    if (refs.homologyTraceReverse) refs.homologyTraceReverse.checked = !!state.homologyTraceReverse;
+    if (refs.identifyHomologyCircle) refs.identifyHomologyCircle.disabled = !analysis || !traceClosed;
+    renderHomologyGeneratorList(analysis);
+    setBackgroundHomologyKnotResult(state.homologyKnotResult);
+    if (refs.homologyTraceResult) {
+      if (state.homologyTraceResult) {
+        refs.homologyTraceResult.textContent = state.homologyTraceResult.valid
+          ? `[circle] = ${state.homologyTraceResult.expression}`
+          : state.homologyTraceResult.reason;
+      } else if (state.homologyTrace.length) {
+        refs.homologyTraceResult.textContent = traceClosed
+          ? 'Closed path ready to identify.'
+          : `${state.homologyTrace.length} traced edge${state.homologyTrace.length === 1 ? '' : 's'}; path is not closed.`;
+      } else {
+        refs.homologyTraceResult.textContent = '';
+      }
+    }
+    if (refs.homologyStatus) {
+      refs.homologyStatus.textContent = state.homologyStatus || (!supported
+        ? 'A single connected glued background is required.'
+        : (analysis ? 'Trace a background loop to classify another loop.' : 'Compute the integral cellular H₁ on demand.'));
+    }
+  }
+
   function updateReport(manualCheck) {
     pruneVertexDecorations();
     validateWanderBoardState();
@@ -9458,6 +10471,7 @@
     updatePickControls();
     updateDisplayControls();
     updateSeifertSurfaceChart(report);
+    syncBackgroundHomologyCard(report);
     if (!isDualGraph()) updateKnotCard(report);
     else updateDualGraphCard(report);
     refreshExport();
@@ -9558,7 +10572,7 @@
   }
 
   function isPickDisplayActive() {
-    return state.inputMode === 'pick' || state.displayPick;
+    return state.inputMode === 'pick' || state.displayPick || state.homologyKnotPick;
   }
 
   function beginDisplayPickCapture() {
@@ -9585,7 +10599,7 @@
 
   function updateInputModeLock() {
     if (!refs.inputMode) return;
-    refs.inputMode.disabled = !!state.displayPickInputLocked || !!state.wanderSelectingStart;
+    refs.inputMode.disabled = !!state.displayPickInputLocked || !!state.homologyKnotPickInputLocked || !!state.wanderSelectingStart;
   }
 
   function updateKnotCard(report) {
@@ -10542,6 +11556,10 @@
       card.classList.toggle('wide', state.dualGraphDegenerationsWide);
       wideHost.hidden = !state.dualGraphDegenerationsWide;
     }
+    // The side host is itself a flex child.  When its card is hidden or has
+    // been moved to the wide host, hiding the empty host prevents it from
+    // creating an extra pair of sidebar gaps before Display Options.
+    sideHost.hidden = !isDualGraph() || card.parentElement !== sideHost;
     if (refs.toggleDegenerationsWide) {
       refs.toggleDegenerationsWide.textContent = state.dualGraphDegenerationsWide ? 'side' : 'wide';
       refs.toggleDegenerationsWide.setAttribute('aria-pressed', state.dualGraphDegenerationsWide ? 'true' : 'false');
@@ -15276,6 +16294,7 @@
     drawBackgroundHoverOverlay(ctx, palette);
     drawBackgroundCuspOverlay(ctx, palette, report);
     drawBackgroundBilliardOverlay(ctx, palette);
+    drawBackgroundHomologyOverlay(ctx);
     drawPickHoverOverlay(ctx, palette, report);
     drawDragGhost(ctx, palette);
     drawMainWanderMarker(ctx, palette);
@@ -15378,6 +16397,1304 @@
       ctx.lineWidth = Math.max(1, radius * 0.028);
       ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  function drawBackgroundHomologyOverlay(ctx) {
+    const analysis = currentBackgroundHomologyAnalysis();
+    if (!analysis || !geometry || !isGluedBoundaryMode()) return;
+    ctx.save();
+    if (state.showHomology) {
+      (analysis.generators || []).forEach((generator, index) => {
+        if (!homologyGeneratorVisible(generator.id)) return;
+        const color = HOMOLOGY_COLORS[index % HOMOLOGY_COLORS.length];
+        if (state.homologyCordMode) drawBackgroundHomologyCords(ctx, analysis, generator, color);
+        else drawBackgroundHomologyChain(ctx, analysis, generator, color);
+      });
+    }
+    if (state.homologyTrace.length) {
+      state.homologyTrace.forEach((step) => {
+        const info = traceStepInfo(step, analysis);
+        if (!info) return;
+        const edge = analysis.complex.edges[info.edge];
+        (edge && edge.sides ? edge.sides : [info]).forEach((side) => {
+          const local = analysis.complex.sideToEdge.get(`${side.index}:${side.dir}`);
+          const segment = boundaryEdgeSegment(side, 0.94);
+          if (!local || !segment) return;
+          const reverse = (info.coefficient * BigInt(local.sign)) < 0n;
+          drawBackgroundHomologySegment(ctx, segment, reverse, '#e06c26', Math.max(2.2, geometry.radius * 0.058));
+        });
+      });
+    }
+    if (state.homologyTraceStartVertex >= 0) {
+      const vertex = analysis.complex.vertices.find((entry) => entry.id === state.homologyTraceStartVertex);
+      const corner = vertex && vertex.corners && vertex.corners[0];
+      const point = corner && tileCornerPoint(corner.index, corner.vertex);
+      if (point) {
+        ctx.fillStyle = '#e06c26';
+        circle(ctx, point.x, point.y, Math.max(3.2, geometry.radius * 0.085));
+      }
+    }
+    ctx.restore();
+  }
+
+  function homologyChainDisplayEntries(analysis, generator) {
+    if (!generator || !Array.isArray(generator.edgeChain)) return [];
+    const entries = [];
+    generator.edgeChain.forEach((rawCoefficient, edgeIndex) => {
+      const coefficient = typeof rawCoefficient === 'bigint' ? rawCoefficient : BigInt(rawCoefficient || 0);
+      if (coefficient === 0n) return;
+      const edge = analysis.complex.edges[edgeIndex];
+      if (!edge) return;
+      const side = selectedHomologyEdgeSide(generator.id, edge);
+      const local = side && analysis.complex.sideToEdge.get(`${side.index}:${side.dir}`);
+      const segment = side && boundaryEdgeSegment(side, 0.94);
+      if (!local || !segment) return;
+      entries.push({
+        edge,
+        side,
+        coefficient,
+        reverse: (coefficient * BigInt(local.sign)) < 0n,
+        segment
+      });
+    });
+    return entries;
+  }
+
+  function homologyLabelEntry(entries) {
+    if (!entries.length) return null;
+    return state.homologyLabelPosition === 'middle'
+      ? (entries.find((candidate) => candidate.edge.kind === 'internal') || entries[0])
+      : entries[0];
+  }
+
+  function homologyLabelAnchor(entries) {
+    const entry = homologyLabelEntry(entries);
+    if (!entry) return null;
+    return {
+      x: (entry.segment.start.x + entry.segment.end.x) * 0.5,
+      y: (entry.segment.start.y + entry.segment.end.y) * 0.5
+    };
+  }
+
+  // A cord is a freely moving visual copy of one selected physical expression
+  // of a quotient edge.  The immutable signed cellular chain remains the
+  // generator's exact H_1 representative while the visible cord relaxes.
+  function homologyCordKey(generatorId, edgeId) {
+    return `${generatorId}:${edgeId}`;
+  }
+
+  function hasVisibleHomologyGenerators() {
+    const analysis = currentBackgroundHomologyAnalysis();
+    return !!(analysis && (analysis.generators || []).some((generator) => homologyGeneratorVisible(generator.id)));
+  }
+
+  function resetBackgroundHomologyCords(redraw = false, generatorId = '') {
+    if (generatorId) {
+      Object.keys(state.homologyCords || {}).forEach((key) => {
+        if (key.startsWith(`${generatorId}:`)) delete state.homologyCords[key];
+      });
+      delete state.homologyCordChains[generatorId];
+      if (state.homologyCordForceSelection && state.homologyCordForceSelection.generatorId === generatorId) state.homologyCordForceSelection = null;
+    } else {
+      state.homologyCords = {};
+      state.homologyCordChains = {};
+      state.homologyCordDrag = null;
+      state.homologyCordForceSelection = null;
+    }
+    if (state.homologyCordAnimation != null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(state.homologyCordAnimation);
+      state.homologyCordAnimation = null;
+    }
+    if (redraw) {
+      state.homologyStatus = 'Basis cords reset to their selected cellular sides.';
+      updateReport(false);
+    }
+  }
+
+  function setBackgroundHomologyCordMode(enabled) {
+    const available = !!state.showHomology && hasVisibleHomologyGenerators();
+    state.homologyCordMode = !!enabled && available;
+    if (!state.homologyCordMode) resetBackgroundHomologyCords(false);
+    if (refs.relaxHomologyCords) refs.relaxHomologyCords.checked = state.homologyCordMode;
+    if (state.homologyCordMode) {
+      state.homologyStatus = 'Drag any point on a cord. It is one continuous rubber band on the quotient surface; a glued seam only changes its displayed chart.';
+      scheduleBackgroundHomologyCordAnimation();
+    }
+    syncMainCanvasCursor();
+    updateReport(false);
+  }
+
+  function makeHomologyCord(generator, entry) {
+    const key = homologyCordKey(generator.id, entry.edge.id);
+    const center = tileCenterPoint(entry.side.index);
+    if (!center) return null;
+    const pullInside = (point, amount) => ({
+      x: point.x + ((center.x - point.x) * amount),
+      y: point.y + ((center.y - point.y) * amount)
+    });
+    // These are deliberately not tile vertices: the whole visible cord can
+    // move, while the edge chain is retained separately for classification.
+    const physicalStart = entry.reverse ? entry.segment.end : entry.segment.start;
+    const physicalEnd = entry.reverse ? entry.segment.start : entry.segment.end;
+    const pointCount = 11;
+    const points = [];
+    for (let index = 0; index < pointCount; index += 1) {
+      const t = index / (pointCount - 1);
+      const edgePoint = {
+        x: physicalStart.x + ((physicalEnd.x - physicalStart.x) * t),
+        y: physicalStart.y + ((physicalEnd.y - physicalStart.y) * t)
+      };
+      // An equal-spaced particle chain starts slightly inside the tile, but
+      // none of the particles is fixed to a corner or a tile boundary.
+      const bow = Math.sin(Math.PI * t) * 0.16;
+      points.push(pullInside(edgePoint, 0.22 + bow));
+    }
+    const restPoints = points.map((point) => ({ ...point }));
+    const restLength = points.slice(1).reduce((sum, point, index) => sum + Math.hypot(point.x - points[index].x, point.y - points[index].y), 0) / (pointCount - 1);
+    return {
+      key,
+      generatorId: generator.id,
+      edgeId: entry.edge.id,
+      index: entry.side.index,
+      side: { index: entry.side.index, dir: entry.side.dir },
+      kind: entry.edge.kind,
+      center,
+      points,
+      restPoints,
+      velocities: points.map(() => ({ x: 0, y: 0 })),
+      restLength
+    };
+  }
+
+  function homologyCordStart(cord) {
+    return cord.points[0];
+  }
+
+  function homologyCordEnd(cord) {
+    return cord.points[cord.points.length - 1];
+  }
+
+  function homologyCordForEntry(generator, entry) {
+    const key = homologyCordKey(generator.id, entry.edge.id);
+    const current = state.homologyCords && state.homologyCords[key];
+    const fingerprint = `${entry.side.index}:${entry.side.dir}:${entry.segment.start.x.toFixed(2)}:${entry.segment.end.x.toFixed(2)}:${geometry.radius.toFixed(2)}`;
+    if (current && current.fingerprint === fingerprint) return current;
+    const next = makeHomologyCord(generator, entry);
+    if (!next) return null;
+    next.fingerprint = fingerprint;
+    state.homologyCords[key] = next;
+    return next;
+  }
+
+  function homologyCordTransitions(entries, cords) {
+    const outgoing = new Map();
+    const ordered = entries.map((entry) => {
+      const forward = entry.coefficient > 0n;
+      return {
+        entry,
+        cord: cords.get(entry.edge.id),
+        startVertex: forward ? entry.edge.source : entry.edge.target,
+        endVertex: forward ? entry.edge.target : entry.edge.source
+      };
+    }).filter((item) => item.cord).sort((left, right) => left.entry.edge.id - right.entry.edge.id);
+    ordered.forEach((item) => {
+      const bucket = outgoing.get(item.startVertex) || [];
+      bucket.push(item);
+      outgoing.set(item.startVertex, bucket);
+    });
+    return ordered.map((item) => {
+      const choices = outgoing.get(item.endVertex) || [];
+      const next = choices.find((candidate) => candidate.entry.edge.id !== item.entry.edge.id) || choices[0];
+      return next ? { from: item, to: next } : null;
+    }).filter(Boolean);
+  }
+
+  // Turn the signed cellular representative into one unambiguous directed
+  // circuit.  This is deliberately stricter than the chain algebra: a
+  // branching/non-manifold representative still has an exact display, but is
+  // not pretended to be a single piece of rubber.
+  function orderedHomologyCordEntries(entries) {
+    const records = [];
+    entries.forEach((entry) => {
+      const count = Number(entry.coefficient < 0n ? -entry.coefficient : entry.coefficient);
+      if (!Number.isSafeInteger(count) || count < 1 || count > 64) return;
+      for (let copy = 0; copy < count; copy += 1) {
+        const forward = entry.coefficient > 0n;
+        records.push({
+          entry,
+          copy,
+          startVertex: forward ? entry.edge.source : entry.edge.target,
+          endVertex: forward ? entry.edge.target : entry.edge.source
+        });
+      }
+    });
+    if (!records.length) return null;
+    const outgoing = new Map();
+    const incoming = new Map();
+    records.forEach((record) => {
+      const out = outgoing.get(record.startVertex) || [];
+      out.push(record);
+      outgoing.set(record.startVertex, out);
+      const input = incoming.get(record.endVertex) || [];
+      input.push(record);
+      incoming.set(record.endVertex, input);
+    });
+    if (Array.from(outgoing.values()).some((items) => items.length !== 1)
+      || Array.from(incoming.values()).some((items) => items.length !== 1)) return null;
+    const seed = records.slice().sort((left, right) => left.entry.edge.id - right.entry.edge.id || left.copy - right.copy)[0];
+    const ordered = [];
+    let current = seed;
+    for (let step = 0; step <= records.length; step += 1) {
+      if (!current || ordered.includes(current)) break;
+      ordered.push(current);
+      current = (outgoing.get(current.endVertex) || [])[0];
+    }
+    return current === seed && ordered.length === records.length ? ordered : null;
+  }
+
+  function homologyCordChainFingerprint(generator, entries) {
+    return `${generator.id}|${geometry.radius.toFixed(3)}|${normalizeHomologyCordParticles(state.homologyCordParticles)}|${entries.map((entry) => (
+      `${entry.edge.id}:${entry.coefficient}:${entry.side.index}:${entry.side.dir}:${entry.reverse ? 1 : 0}`
+    )).join('|')}`;
+  }
+
+  // Develop the circuit in a lifted chart.  The final-to-first displacement
+  // is a deck transformation, not a visible seam node; constraining this
+  // vector preserves a non-contractible loop such as the usual-strip line.
+  function makeHomologyCordChain(generator, entries) {
+    const ordered = orderedHomologyCordEntries(entries);
+    if (!ordered) return null;
+    const points = [];
+    let previous = null;
+    ordered.forEach((record, recordIndex) => {
+      const { entry } = record;
+      const start = entry.reverse ? entry.segment.end : entry.segment.start;
+      const end = entry.reverse ? entry.segment.start : entry.segment.end;
+      const offset = previous
+        ? { x: previous.x - start.x, y: previous.y - start.y }
+        : { x: 0, y: 0 };
+      const samples = normalizeHomologyCordParticles(state.homologyCordParticles);
+      for (let index = 0; index < samples; index += 1) {
+        const t = index / (samples - 1);
+        const tangentX = end.x - start.x;
+        const tangentY = end.y - start.y;
+        const tangentLength = Math.hypot(tangentX, tangentY) || 1;
+        const bow = Math.sin(Math.PI * t) * geometry.radius * 0.12;
+        const point = {
+          x: start.x + (tangentX * t) - ((tangentY / tangentLength) * bow) + offset.x,
+          y: start.y + (tangentY * t) + ((tangentX / tangentLength) * bow) + offset.y,
+          ox: offset.x,
+          oy: offset.y,
+          // This is a second chart-view of the previous logical particle.
+          // It is free to move, but portal constraint keeps its lifted
+          // position identical instead of making a physical seam endpoint.
+          portal: recordIndex > 0 && index === 0,
+          tileIndex: entry.side.index,
+          chartVertex: -1
+        };
+        point.px = point.x;
+        point.py = point.y;
+        point.vx = 0;
+        point.vy = 0;
+        point.netForce = { x: 0, y: 0 };
+        point.chartVertex = nearestHomologyCordChartVertex(
+          currentBackgroundHomologyAnalysis(),
+          point.tileIndex,
+          { x: point.x - point.ox, y: point.y - point.oy }
+        );
+        points.push(point);
+        previous = point;
+      }
+    });
+    if (points.length < 3) return null;
+    let length = 0;
+    let linkCount = 0;
+    for (let index = 1; index < points.length; index += 1) {
+      if (points[index].portal) continue;
+      length += Math.hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y);
+      linkCount += 1;
+    }
+    const first = points[0];
+    const last = points[points.length - 1];
+    const deck = { x: last.x - first.x, y: last.y - first.y };
+    const initialRestLength = length / Math.max(1, linkCount);
+    const minimumLength = (Math.hypot(deck.x, deck.y) / Math.max(1, linkCount)) * 1.002;
+    return {
+      generatorId: generator.id,
+      fingerprint: homologyCordChainFingerprint(generator, entries),
+      points,
+      deck,
+      restLength: Math.max(minimumLength, initialRestLength),
+      referenceRestLength: initialRestLength,
+      hardRestLength: minimumLength,
+      shrinkFloor: minimumLength,
+      minimumParticleCount: Math.max(6, ordered.length * 3),
+      shrinkFrozen: false,
+      shrinkWindow: null,
+      timeAccumulator: 0,
+      settled: false
+    };
+  }
+
+  function homologyCordChainForGenerator(generator, entries) {
+    const fingerprint = homologyCordChainFingerprint(generator, entries);
+    const current = state.homologyCordChains[generator.id];
+    if (current && current.fingerprint === fingerprint) return current;
+    const next = makeHomologyCordChain(generator, entries);
+    if (next) state.homologyCordChains[generator.id] = next;
+    else delete state.homologyCordChains[generator.id];
+    return next;
+  }
+
+  function projectedHomologyCordChainPoint(point) {
+    return { x: point.x - point.ox, y: point.y - point.oy };
+  }
+
+  // Portal entries are a second chart view of the preceding material point,
+  // not a second mass.  All forces therefore work on this reduced sequence.
+  function homologyCordPhysicalIndices(chain) {
+    return chain.points.reduce((indices, point, index) => {
+      if (!point.portal) indices.push(index);
+      return indices;
+    }, []);
+  }
+
+  function homologyCordMaterialLength(chain, material = homologyCordPhysicalIndices(chain)) {
+    let length = 0;
+    for (let index = 1; index < material.length; index += 1) {
+      const left = chain.points[material[index - 1]];
+      const right = chain.points[material[index]];
+      length += Math.hypot(right.x - left.x, right.y - left.y);
+    }
+    return length;
+  }
+
+  function homologyCordHardRestLength(chain, material = homologyCordPhysicalIndices(chain)) {
+    return (Math.hypot(chain.deck.x, chain.deck.y) / Math.max(1, material.length - 1)) * 1.002;
+  }
+
+  // The developed coordinates are an affine atlas.  For each force pair we
+  // choose the tile/chart whose lifted centre is closest to the pair midpoint;
+  // subtracting that chart origin puts both endpoints in one local affine
+  // coordinate system before measuring their spring vector.
+  function homologyCordPairLocalVector(left, right, analysis) {
+    const midpoint = { x: (left.x + right.x) * 0.5, y: (left.y + right.y) * 0.5 };
+    const candidates = [left, right].map((point) => {
+      const center = tileCenterPoint(point.tileIndex);
+      if (!center) return null;
+      return {
+        point,
+        x: center.x + point.ox,
+        y: center.y + point.oy
+      };
+    }).filter(Boolean);
+    const chart = candidates.reduce((best, candidate) => (
+      !best || Math.hypot(candidate.x - midpoint.x, candidate.y - midpoint.y) < best.distance
+        ? { ...candidate, distance: Math.hypot(candidate.x - midpoint.x, candidate.y - midpoint.y) }
+        : best
+    ), null);
+    const origin = chart ? { x: chart.x, y: chart.y } : midpoint;
+    const chartPoint = chart ? { x: midpoint.x - chart.point.ox, y: midpoint.y - chart.point.oy } : midpoint;
+    return {
+      dx: (right.x - origin.x) - (left.x - origin.x),
+      dy: (right.y - origin.y) - (left.y - origin.y),
+      chartVertex: chart ? nearestHomologyCordChartVertex(analysis, chart.point.tileIndex, chartPoint) : -1
+    };
+  }
+
+  // Reparameterise the single material loop by arc length.  Portal copies are
+  // intentionally discarded here: a particle carries one local chart, while
+  // seam views are generated only by the renderer.
+  function remeshHomologyCordChain(chain, analysis) {
+    const material = homologyCordPhysicalIndices(chain);
+    const oldCount = material.length;
+    const nextCount = Math.max(chain.minimumParticleCount || 6, Math.round(oldCount * (5 / 6)));
+    if (oldCount < 3 || nextCount >= oldCount) return false;
+    const segments = [];
+    let totalLength = 0;
+    for (let index = 1; index < material.length; index += 1) {
+      const left = chain.points[material[index - 1]];
+      const right = chain.points[material[index]];
+      const length = Math.hypot(right.x - left.x, right.y - left.y);
+      segments.push({ left, right, length, start: totalLength });
+      totalLength += length;
+    }
+    if (totalLength < 0.001) return false;
+    const nextPoints = [];
+    for (let index = 0; index < nextCount; index += 1) {
+      const wanted = (totalLength * index) / Math.max(1, nextCount - 1);
+      const segment = segments.find((entry) => wanted <= entry.start + entry.length + 0.0001) || segments[segments.length - 1];
+      const t = segment.length > 0.0001 ? clamp((wanted - segment.start) / segment.length, 0, 1) : 0;
+      const source = t <= 0.5 ? segment.left : segment.right;
+      const point = {
+        x: segment.left.x + ((segment.right.x - segment.left.x) * t),
+        y: segment.left.y + ((segment.right.y - segment.left.y) * t),
+        vx: (segment.left.vx || 0) + (((segment.right.vx || 0) - (segment.left.vx || 0)) * t),
+        vy: (segment.left.vy || 0) + (((segment.right.vy || 0) - (segment.left.vy || 0)) * t),
+        ox: source.ox,
+        oy: source.oy,
+        tileIndex: source.tileIndex,
+        chartVertex: -1,
+        portal: false,
+        netForce: { x: 0, y: 0 }
+      };
+      point.px = point.x;
+      point.py = point.y;
+      point.chartVertex = nearestHomologyCordChartVertex(
+        analysis,
+        point.tileIndex,
+        projectedHomologyCordChainPoint(point)
+      );
+      nextPoints.push(point);
+    }
+    nextPoints.forEach((point) => constrainHomologyCordParticleToSurface(chain, point, analysis));
+    const oldLinks = Math.max(1, oldCount - 1);
+    const newLinks = Math.max(1, nextCount - 1);
+    const scale = oldLinks / newLinks;
+    chain.points = nextPoints;
+    chain.restLength *= scale;
+    chain.referenceRestLength *= scale;
+    chain.hardRestLength = homologyCordHardRestLength(chain);
+    chain.shrinkFloor = Math.max(chain.hardRestLength, (chain.shrinkFloor || 0) * scale);
+    chain.restLength = Math.max(chain.hardRestLength, chain.restLength);
+    chain.shrinkWindow = null;
+    if (state.homologyCordForceSelection && state.homologyCordForceSelection.generatorId === chain.generatorId) {
+      state.homologyCordForceSelection = null;
+      if (refs.homologyCordForceReadout) refs.homologyCordForceReadout.textContent = 'Particles were remeshed; click one to inspect its net force.';
+    }
+    return true;
+  }
+
+  function annealHomologyCordRestLength(chain, dt) {
+    if (chain.shrinkFrozen) return;
+    const hardFloor = homologyCordHardRestLength(chain);
+    chain.hardRestLength = hardFloor;
+    const floor = Math.max(hardFloor, chain.shrinkFloor || hardFloor);
+    const rate = normalizeHomologyCordShrinkRate(state.homologyCordShrinkRate);
+    if (rate <= 0 || chain.restLength <= floor) return;
+    chain.restLength = Math.max(floor, chain.restLength * Math.exp(-rate * dt));
+  }
+
+  function recordHomologyCordShrinkProgress(chain, dt, kinetic, meanStrain) {
+    if (chain.shrinkFrozen) return;
+    const material = homologyCordPhysicalIndices(chain);
+    const length = homologyCordMaterialLength(chain, material);
+    const window = chain.shrinkWindow || {
+      elapsed: 0,
+      startLength: length,
+      bestLength: length,
+      peakStrain: 0
+    };
+    window.elapsed += dt;
+    window.bestLength = Math.min(window.bestLength, length);
+    window.peakStrain = Math.max(window.peakStrain, meanStrain);
+    if (window.elapsed >= 0.9) {
+      const improvement = (window.startLength - window.bestLength) / Math.max(1, window.startLength);
+      const nearHardLimit = chain.restLength <= chain.hardRestLength * 1.01;
+      if (!nearHardLimit && kinetic < Math.max(0.05, geometry.radius * 0.012) && improvement < 0.002 && window.peakStrain > 0.04) {
+        chain.shrinkFloor = Math.max(chain.hardRestLength, length / Math.max(1, material.length - 1));
+        chain.restLength = chain.shrinkFloor;
+        chain.shrinkFrozen = true;
+      }
+      chain.shrinkWindow = {
+        elapsed: 0,
+        startLength: length,
+        bestLength: length,
+        peakStrain: 0
+      };
+      return;
+    }
+    chain.shrinkWindow = window;
+  }
+
+  // A local affine chart is labelled by the quotient vertex closest to a
+  // particle.  The label is transient geometry only; it never participates in
+  // the cellular chain or in its H_1 coordinates.
+  function nearestHomologyCordChartVertex(analysis, tileIndex, point) {
+    if (!analysis || !analysis.complex || !Array.isArray(analysis.complex.vertices)) return -1;
+    let best = null;
+    analysis.complex.vertices.forEach((vertex) => {
+      (vertex.corners || []).forEach((corner) => {
+        if (corner.index !== tileIndex) return;
+        const location = tileCornerPoint(corner.index, corner.vertex);
+        if (!location) return;
+        const distance = Math.hypot(point.x - location.x, point.y - location.y);
+        if (!best || distance < best.distance) best = { id: vertex.id, distance };
+      });
+    });
+    return best ? best.id : -1;
+  }
+
+  function nearestHomologyCordTileSide(tileIndex, point) {
+    const cell = geometry && geometry.cells[tileIndex];
+    if (!cell) return null;
+    const lattice = getLattice();
+    let nearest = null;
+    for (let dir = 0; dir < lattice.sides; dir += 1) {
+      const segment = edgeSegmentPoints(cell.x, cell.y, dir, geometry.radius);
+      const projection = projectPointToSegment(point, segment.start, segment.end);
+      if (!nearest || projection.distance < nearest.distance) {
+        nearest = { dir, segment, ...projection };
+      }
+    }
+    return nearest;
+  }
+
+  function homologyCordPortalMap(analysis, fromIndex, fromDir, toIndex, toDir, point, velocity) {
+    const source = edgeSegmentPoints(geometry.cells[fromIndex].x, geometry.cells[fromIndex].y, fromDir, geometry.radius);
+    const target = edgeSegmentPoints(geometry.cells[toIndex].x, geometry.cells[toIndex].y, toDir, geometry.radius);
+    const sourceProjection = projectPointToSegment(point, source.start, source.end);
+    const sourceInfo = analysis.complex.sideToEdge.get(`${fromIndex}:${fromDir}`);
+    const targetInfo = analysis.complex.sideToEdge.get(`${toIndex}:${toDir}`);
+    const sameOrientation = !sourceInfo || !targetInfo || sourceInfo.localStart === targetInfo.localStart;
+    const t = sameOrientation ? sourceProjection.t : 1 - sourceProjection.t;
+    const boundary = {
+      x: target.start.x + ((target.end.x - target.start.x) * t),
+      y: target.start.y + ((target.end.y - target.start.y) * t)
+    };
+    const targetCell = geometry.cells[toIndex];
+    const inward = { x: targetCell.x - boundary.x, y: targetCell.y - boundary.y };
+    const inwardLength = Math.hypot(inward.x, inward.y) || 1;
+    const sourceTangent = { x: source.end.x - source.start.x, y: source.end.y - source.start.y };
+    const targetTangent = { x: target.end.x - target.start.x, y: target.end.y - target.start.y };
+    const sourceLength = Math.hypot(sourceTangent.x, sourceTangent.y) || 1;
+    const targetLength = Math.hypot(targetTangent.x, targetTangent.y) || 1;
+    const sourceNormal = {
+      x: sourceProjection.point.x - geometry.cells[fromIndex].x,
+      y: sourceProjection.point.y - geometry.cells[fromIndex].y
+    };
+    const sourceNormalLength = Math.hypot(sourceNormal.x, sourceNormal.y) || 1;
+    const sourceOutward = {
+      x: sourceNormal.x / sourceNormalLength,
+      y: sourceNormal.y / sourceNormalLength
+    };
+    const tangentVelocity = ((velocity.x * sourceTangent.x) + (velocity.y * sourceTangent.y)) / sourceLength;
+    const outwardVelocity = (velocity.x * sourceOutward.x) + (velocity.y * sourceOutward.y);
+    const targetTangentSign = sameOrientation ? 1 : -1;
+    const mappedVelocity = {
+      x: ((targetTangent.x / targetLength) * tangentVelocity * targetTangentSign) + ((inward.x / inwardLength) * outwardVelocity),
+      y: ((targetTangent.y / targetLength) * tangentVelocity * targetTangentSign) + ((inward.y / inwardLength) * outwardVelocity)
+    };
+    const inset = Math.max(0.8, geometry.radius * 0.022);
+    return {
+      point: {
+        x: boundary.x + ((inward.x / inwardLength) * inset),
+        y: boundary.y + ((inward.y / inwardLength) * inset)
+      },
+      velocity: mappedVelocity
+    };
+  }
+
+  // Keep a particle on the glued quotient surface.  Ordinary shared edges
+  // and glued sides are affine portals; a cut or unglued outer boundary is a
+  // real wall and reflects/clamps the particle instead of allowing infinity.
+  function constrainHomologyCordParticleToSurface(chain, point, analysis) {
+    if (!geometry || !tileExists(point.tileIndex)) return;
+    const display = projectedHomologyCordChainPoint(point);
+    const cell = geometry.cells[point.tileIndex];
+    if (!cell) return;
+    if (pointInPolygon(display, tilePoints(cell.x, cell.y, geometry.radius * 1.002))) {
+      point.chartVertex = nearestHomologyCordChartVertex(analysis, point.tileIndex, display);
+      return;
+    }
+    const side = nearestHomologyCordTileSide(point.tileIndex, display);
+    if (!side) return;
+    const next = connectedSurfaceNeighbor(point.tileIndex, side.dir);
+    const velocity = { x: Number(point.vx) || 0, y: Number(point.vy) || 0 };
+    if (next) {
+      const mapped = homologyCordPortalMap(analysis, point.tileIndex, side.dir, next.index, next.dir, display, velocity);
+      point.tileIndex = next.index;
+      point.ox = point.x - mapped.point.x;
+      point.oy = point.y - mapped.point.y;
+      point.vx = mapped.velocity.x;
+      point.vy = mapped.velocity.y;
+      point.px = point.x;
+      point.py = point.y;
+      point.chartVertex = nearestHomologyCordChartVertex(analysis, point.tileIndex, mapped.point);
+      return;
+    }
+    const inward = { x: cell.x - side.point.x, y: cell.y - side.point.y };
+    const length = Math.hypot(inward.x, inward.y) || 1;
+    const inset = Math.max(0.8, geometry.radius * 0.022);
+    const clamped = {
+      x: side.point.x + ((inward.x / length) * inset),
+      y: side.point.y + ((inward.y / length) * inset)
+    };
+    point.x = clamped.x + point.ox;
+    point.y = clamped.y + point.oy;
+    // A real boundary reflects only its outward velocity component.  The
+    // cord therefore slides along it rather than sticking there.
+    const outward = { x: -inward.x / length, y: -inward.y / length };
+    const normalSpeed = ((Number(point.vx) || 0) * outward.x) + ((Number(point.vy) || 0) * outward.y);
+    if (normalSpeed > 0) {
+      point.vx -= outward.x * normalSpeed * 1.18;
+      point.vy -= outward.y * normalSpeed * 1.18;
+    }
+    point.px = point.x;
+    point.py = point.y;
+    point.chartVertex = nearestHomologyCordChartVertex(analysis, point.tileIndex, clamped);
+  }
+
+  function shiftHomologyCordAtlas(cord, delta) {
+    cord.points.forEach((point, index) => {
+      cord.points[index] = { x: point.x + delta.x, y: point.y + delta.y };
+      cord.restPoints[index] = { x: cord.restPoints[index].x + delta.x, y: cord.restPoints[index].y + delta.y };
+    });
+    cord.atlasOffset = { x: (cord.atlasOffset ? cord.atlasOffset.x : 0) + delta.x, y: (cord.atlasOffset ? cord.atlasOffset.y : 0) + delta.y };
+  }
+
+  function projectedHomologyCordPoint(cord, point) {
+    const offset = cord.atlasOffset || { x: 0, y: 0 };
+    return { x: point.x - offset.x, y: point.y - offset.y };
+  }
+
+  // Develop every deterministic circuit into a lifted chart.  When its path
+  // crosses a glued boundary, the next physical fragment is translated into
+  // the adjacent sheet instead of being pinned at the displayed seam.
+  function prepareHomologyCordAtlas(generator, entries, cords) {
+    const transitions = homologyCordTransitions(entries, cords);
+    const fingerprint = entries.map((entry) => `${entry.edge.id}:${entry.side.index}:${entry.side.dir}:${entry.coefficient}`).join('|');
+    const first = entries.find((entry) => cords.get(entry.edge.id));
+    if (!first) return transitions;
+    const alreadyPrepared = Array.from(cords.values()).filter(Boolean).every((cord) => cord.atlasFingerprint === fingerprint);
+    if (alreadyPrepared) return transitions;
+    Array.from(cords.values()).filter(Boolean).forEach((cord) => {
+      cord.atlasOffset = { x: 0, y: 0 };
+      cord.atlasFingerprint = fingerprint;
+      delete cord.atlasNextKey;
+      delete cord.atlasClosure;
+    });
+    const byFrom = new Map(transitions.map((transition) => [transition.from.cord.key, transition]));
+    const pending = Array.from(cords.values()).filter(Boolean).sort((left, right) => left.key.localeCompare(right.key));
+    const assigned = new Set();
+    pending.forEach((seed) => {
+      if (assigned.has(seed.key)) return;
+      assigned.add(seed.key);
+      let current = seed;
+      for (let steps = 0; steps <= pending.length; steps += 1) {
+        const transition = byFrom.get(current.key);
+        if (!transition) break;
+        const next = transition.to.cord;
+        current.atlasNextKey = next.key;
+        const end = homologyCordEnd(current);
+        const start = homologyCordStart(next);
+        if (assigned.has(next.key)) {
+          current.atlasClosure = { toKey: next.key, vector: { x: start.x - end.x, y: start.y - end.y } };
+          break;
+        }
+        shiftHomologyCordAtlas(next, { x: end.x - start.x, y: end.y - start.y });
+        assigned.add(next.key);
+        current = next;
+      }
+    });
+    return transitions;
+  }
+
+  function homologyCordTransitionIsLocal(transition) {
+    const { from, to } = transition;
+    if (from.cord.index === to.cord.index) return true;
+    const end = projectedHomologyCordPoint(from.cord, homologyCordEnd(from.cord));
+    const start = projectedHomologyCordPoint(to.cord, homologyCordStart(to.cord));
+    const distance = Math.hypot(end.x - start.x, end.y - start.y);
+    return distance <= geometry.radius * 0.55;
+  }
+
+  function constrainHomologyCordControl(cord, point) {
+    // Atlas coordinates may lie in an adjacent developed sheet, so a cord is
+    // never clamped to a displayed tile, seam, or canvas boundary.
+    return { x: point.x, y: point.y };
+  }
+
+  function scheduleBackgroundHomologyCordAnimation() {
+    if (!state.homologyCordMode || state.homologyCordAnimation != null || typeof requestAnimationFrame !== 'function') return;
+    state.homologyCordAnimation = requestAnimationFrame((time) => {
+      state.homologyCordAnimation = null;
+      const moving = advanceBackgroundHomologyCords(time);
+      draw(analyze());
+      if (moving) scheduleBackgroundHomologyCordAnimation();
+    });
+  }
+
+  function advanceBackgroundHomologyCords(time) {
+    if (Object.keys(state.homologyCordChains || {}).length) return advanceBackgroundHomologyCordChains(time);
+    const elapsed = Math.min(0.04, Math.max(0.008, ((Number(time) || 0) - (state.homologyCordLastTime || time)) / 1000));
+    state.homologyCordLastTime = Number(time) || 0;
+    let moving = !!state.homologyCordDrag;
+    Object.values(state.homologyCords || {}).forEach((cord) => {
+      const held = state.homologyCordDrag && state.homologyCordDrag.key === cord.key
+        ? state.homologyCordDrag.part
+        : -1;
+      const forces = cord.points.map((point, index) => {
+        const rest = cord.restPoints[index];
+        return { x: (rest.x - point.x) * 0.35, y: (rest.y - point.y) * 0.35 };
+      });
+      for (let index = 0; index < cord.points.length - 1; index += 1) {
+        const left = cord.points[index];
+        const right = cord.points[index + 1];
+        const dx = right.x - left.x;
+        const dy = right.y - left.y;
+        const length = Math.hypot(dx, dy) || 1;
+        const stretch = (length - cord.restLength) / length;
+        const force = 32 * stretch;
+        forces[index].x += dx * force;
+        forces[index].y += dy * force;
+        forces[index + 1].x -= dx * force;
+        forces[index + 1].y -= dy * force;
+      }
+      for (let index = 1; index < cord.points.length - 1; index += 1) {
+        const point = cord.points[index];
+        const left = cord.points[index - 1];
+        const right = cord.points[index + 1];
+        forces[index].x += (((left.x + right.x) * 0.5) - point.x) * 8;
+        forces[index].y += (((left.y + right.y) * 0.5) - point.y) * 8;
+      }
+      cord.points.forEach((point, index) => {
+        if (index === held) return;
+        const velocity = cord.velocities[index];
+        velocity.x = (velocity.x + (forces[index].x * elapsed)) * 0.88;
+        velocity.y = (velocity.y + (forces[index].y * elapsed)) * 0.88;
+        cord.points[index] = constrainHomologyCordControl(cord, { x: point.x + velocity.x, y: point.y + velocity.y });
+        if (Math.hypot(forces[index].x, forces[index].y) > 0.15 || Math.hypot(velocity.x, velocity.y) > 0.035) moving = true;
+      });
+    });
+    applyBackgroundHomologyCordLoopTension(elapsed);
+    synchronizeBackgroundHomologyCordJunctions();
+    return moving;
+  }
+
+  function advanceBackgroundHomologyCordChains(time) {
+    const elapsed = Math.min(0.04, Math.max(0.008, ((Number(time) || 0) - (state.homologyCordLastTime || time)) / 1000));
+    state.homologyCordLastTime = Number(time) || 0;
+    const analysis = currentBackgroundHomologyAnalysis();
+    if (!analysis) return false;
+    // A material model: equal masses connected by equal Hooke springs.  The
+    // controls are spring constants, not PBD position-correction fractions.
+    const mass = normalizeHomologyCordMass(state.homologyCordMass);
+    const stretchSpring = normalizeHomologyCordSpring(state.homologyCordSpring);
+    const bendSpring = normalizeHomologyCordBendSpring(state.homologyCordBendSpring);
+    const closureSpring = normalizeHomologyCordSpring(state.homologyCordClosureSpring);
+    const substeps = normalizeHomologyCordSubsteps(state.homologyCordSubsteps);
+    const speed = normalizeHomologyCordSpeed(state.homologyCordSpeed);
+    const damping = normalizeHomologyCordDamping(state.homologyCordDamping);
+    let moving = !!state.homologyCordDrag;
+    Object.values(state.homologyCordChains || {}).forEach((chain) => {
+      const drag = state.homologyCordDrag && state.homologyCordDrag.generatorId === chain.generatorId
+        ? state.homologyCordDrag
+        : null;
+      const held = drag ? drag.part : -1;
+      if (!drag) {
+        annealHomologyCordRestLength(chain, elapsed * speed);
+        const spacing = normalizeHomologyCordMinSpacing(state.homologyCordMinSpacing) * geometry.radius;
+        if (chain.restLength < spacing) remeshHomologyCordChain(chain, analysis);
+      }
+      let material = homologyCordPhysicalIndices(chain);
+      const fixedStep = 1 / 120;
+      chain.timeAccumulator = Math.min(0.12, (chain.timeAccumulator || 0) + (elapsed * speed));
+      const steps = Math.min(substeps, Math.floor(chain.timeAccumulator / fixedStep));
+      if (steps) chain.timeAccumulator -= steps * fixedStep;
+      let strainTotal = 0;
+      let strainSamples = 0;
+      for (let step = 0; step < steps; step += 1) {
+        material = homologyCordPhysicalIndices(chain);
+        const particleMass = mass / Math.max(1, material.length);
+        const segmentScale = chain.referenceRestLength / Math.max(0.001, chain.restLength);
+        const localStretchSpring = stretchSpring * segmentScale;
+        const localBendSpring = bendSpring * segmentScale * segmentScale * segmentScale;
+        const forces = chain.points.map(() => ({ x: 0, y: 0 }));
+        const addForce = (index, x, y) => {
+          if (index === held) return;
+          forces[index].x += x;
+          forces[index].y += y;
+        };
+        // Every material segment has the same natural length and spring
+        // constant, distributing the shortening tension evenly over the cord.
+        for (let index = 1; index < material.length; index += 1) {
+          const leftIndex = material[index - 1];
+          const rightIndex = material[index];
+          const left = chain.points[leftIndex];
+          const right = chain.points[rightIndex];
+          const local = homologyCordPairLocalVector(left, right, analysis);
+          const dx = local.dx;
+          const dy = local.dy;
+          const distance = Math.hypot(dx, dy) || 1;
+          const magnitude = localStretchSpring * (distance - chain.restLength);
+          strainTotal += Math.abs(distance - chain.restLength) / Math.max(0.001, chain.restLength);
+          strainSamples += 1;
+          const x = (dx / distance) * magnitude;
+          const y = (dy / distance) * magnitude;
+          left.forceChartVertex = local.chartVertex;
+          right.forceChartVertex = local.chartVertex;
+          addForce(leftIndex, x, y);
+          addForce(rightIndex, -x, -y);
+        }
+        // Discrete elastic-rod bending energy, evaluated on the reduced
+        // material chain so portals neither duplicate nor anchor curvature.
+        for (let index = 1; index < material.length - 1; index += 1) {
+          const leftIndex = material[index - 1];
+          const middleIndex = material[index];
+          const rightIndex = material[index + 1];
+          const left = chain.points[leftIndex];
+          const middle = chain.points[middleIndex];
+          const right = chain.points[rightIndex];
+          const curveX = left.x - (2 * middle.x) + right.x;
+          const curveY = left.y - (2 * middle.y) + right.y;
+          addForce(leftIndex, -localBendSpring * curveX, -localBendSpring * curveY);
+          addForce(middleIndex, 2 * localBendSpring * curveX, 2 * localBendSpring * curveY);
+          addForce(rightIndex, -localBendSpring * curveX, -localBendSpring * curveY);
+        }
+        // The deck vector is the topological closing edge of the lifted
+        // circuit.  Its spring distributes a generator's global constraint
+        // through the material chain rather than pinning a seam particle.
+        const firstIndex = material[0];
+        const lastIndex = material[material.length - 1];
+        const first = chain.points[firstIndex];
+        const last = chain.points[lastIndex];
+        const closureX = (last.x - first.x) - chain.deck.x;
+        const closureY = (last.y - first.y) - chain.deck.y;
+        addForce(firstIndex, closureSpring * closureX, closureSpring * closureY);
+        addForce(lastIndex, -closureSpring * closureX, -closureSpring * closureY);
+        material.forEach((index) => {
+          if (index === held) return;
+          const point = chain.points[index];
+          const force = forces[index];
+          force.x -= damping * (Number(point.vx) || 0);
+          force.y -= damping * (Number(point.vy) || 0);
+          point.netForce = { x: force.x, y: force.y };
+          point.vx = (Number(point.vx) || 0) + ((force.x / particleMass) * fixedStep);
+          point.vy = (Number(point.vy) || 0) + ((force.y / particleMass) * fixedStep);
+          const speedLimit = Math.max(5, geometry.radius * 3.5);
+          const pointSpeed = Math.hypot(point.vx, point.vy);
+          if (pointSpeed > speedLimit) {
+            point.vx = (point.vx / pointSpeed) * speedLimit;
+            point.vy = (point.vy / pointSpeed) * speedLimit;
+          }
+          point.x += point.vx * fixedStep;
+          point.y += point.vy * fixedStep;
+          point.px = point.x;
+          point.py = point.y;
+          constrainHomologyCordParticleToSurface(chain, point, analysis);
+        });
+        // Update each non-physical portal view from its preceding material
+        // particle.  It has no force, no mass, and no chance to act as a pin.
+        chain.points.forEach((point, index) => {
+          if (!point.portal) return;
+          const source = chain.points[index - 1];
+          point.x = source.x;
+          point.y = source.y;
+          point.px = source.px;
+          point.py = source.py;
+          point.vx = source.vx;
+          point.vy = source.vy;
+        });
+      }
+      const kinetic = material.reduce((maximum, index) => {
+        const point = chain.points[index];
+        return Math.max(maximum, Math.hypot(point.vx || 0, point.vy || 0));
+      }, 0);
+      if (!drag && steps) {
+        recordHomologyCordShrinkProgress(
+          chain,
+          steps * fixedStep,
+          kinetic,
+          strainSamples ? strainTotal / strainSamples : 0
+        );
+      }
+      // Animation lifetime follows measurable motion.  At a real boundary a
+      // wall reaction may balance non-zero elastic tension, so force alone is
+      // not evidence that another frame is useful.
+      const shrinkActive = !drag && !chain.shrinkFrozen
+        && chain.restLength > Math.max(chain.hardRestLength, chain.shrinkFloor || 0) + 0.0001;
+      chain.settled = !drag && !shrinkActive && kinetic < 0.02;
+      if (!chain.settled) moving = true;
+    });
+    return moving;
+  }
+
+  function applyBackgroundHomologyCordLoopTension(elapsed) {
+    const analysis = currentBackgroundHomologyAnalysis();
+    if (!analysis) return;
+    (analysis.generators || []).forEach((generator) => {
+      if (!homologyGeneratorVisible(generator.id)) return;
+      const entries = homologyChainDisplayEntries(analysis, generator);
+      const cords = new Map(entries.map((entry) => [entry.edge.id, state.homologyCords[homologyCordKey(generator.id, entry.edge.id)]]));
+      prepareHomologyCordAtlas(generator, entries, cords).forEach((transition) => {
+        if (transition.from.cord.atlasClosure || transition.from.cord.atlasNextKey !== transition.to.cord.key) return;
+        const held = state.homologyCordDrag;
+        const fromIndex = transition.from.cord.points.length - 1;
+        const toIndex = 0;
+        const fromHeld = held && held.key === transition.from.cord.key && held.part === fromIndex;
+        const toHeld = held && held.key === transition.to.cord.key && held.part === toIndex;
+        const end = homologyCordEnd(transition.from.cord);
+        const start = homologyCordStart(transition.to.cord);
+        const dx = start.x - end.x;
+        const dy = start.y - end.y;
+        const force = 7 * elapsed;
+        if (!fromHeld) {
+          transition.from.cord.velocities[fromIndex].x += dx * force;
+          transition.from.cord.velocities[fromIndex].y += dy * force;
+        }
+        if (!toHeld) {
+          transition.to.cord.velocities[toIndex].x -= dx * force;
+          transition.to.cord.velocities[toIndex].y -= dy * force;
+        }
+      });
+      Array.from(cords.values()).filter(Boolean).forEach((cord) => {
+        if (!cord.atlasClosure) return;
+        const next = state.homologyCords[cord.atlasClosure.toKey];
+        if (!next) return;
+        const endIndex = cord.points.length - 1;
+        const end = cord.points[endIndex];
+        const start = homologyCordStart(next);
+        const target = { x: start.x - cord.atlasClosure.vector.x, y: start.y - cord.atlasClosure.vector.y };
+        const dx = target.x - end.x;
+        const dy = target.y - end.y;
+        cord.velocities[endIndex].x += dx * 7 * elapsed;
+        cord.velocities[endIndex].y += dy * 7 * elapsed;
+      });
+    });
+  }
+
+  // A local quotient junction is one point of the same rubber band, not two
+  // endpoints merely joined by a weak spring.  Synchronising it after each
+  // integration step removes visual gaps and gives both adjoining segments a
+  // single position and velocity.  A distant glued seam instead joins in the
+  // lifted atlas and is rendered only as clipped chart fragments.
+  function synchronizeBackgroundHomologyCordJunctions() {
+    const analysis = currentBackgroundHomologyAnalysis();
+    if (!analysis) return;
+    (analysis.generators || []).forEach((generator) => {
+      if (!homologyGeneratorVisible(generator.id)) return;
+      const entries = homologyChainDisplayEntries(analysis, generator);
+      const cords = new Map(entries.map((entry) => [entry.edge.id, state.homologyCords[homologyCordKey(generator.id, entry.edge.id)]]));
+      prepareHomologyCordAtlas(generator, entries, cords).forEach((transition) => {
+        if (transition.from.cord.atlasClosure || transition.from.cord.atlasNextKey !== transition.to.cord.key) return;
+        const fromIndex = transition.from.cord.points.length - 1;
+        const toIndex = 0;
+        const held = state.homologyCordDrag;
+        const fromHeld = held && held.key === transition.from.cord.key && held.part === fromIndex;
+        const toHeld = held && held.key === transition.to.cord.key && held.part === toIndex;
+        const fromPoint = transition.from.cord.points[fromIndex];
+        const toPoint = transition.to.cord.points[toIndex];
+        const point = fromHeld
+          ? { ...fromPoint }
+          : (toHeld ? { ...toPoint } : { x: (fromPoint.x + toPoint.x) * 0.5, y: (fromPoint.y + toPoint.y) * 0.5 });
+        const fromVelocity = transition.from.cord.velocities[fromIndex];
+        const toVelocity = transition.to.cord.velocities[toIndex];
+        const velocity = fromHeld
+          ? { ...fromVelocity }
+          : (toHeld ? { ...toVelocity } : { x: (fromVelocity.x + toVelocity.x) * 0.5, y: (fromVelocity.y + toVelocity.y) * 0.5 });
+        transition.from.cord.points[fromIndex] = { ...point };
+        transition.to.cord.points[toIndex] = { ...point };
+        transition.from.cord.velocities[fromIndex] = { ...velocity };
+        transition.to.cord.velocities[toIndex] = { ...velocity };
+      });
+    });
+  }
+
+  function homologyCordAtPoint(clientX, clientY) {
+    if (!state.homologyCordMode || !state.showHomology) return null;
+    const point = clientPointToBoardPoint(clientX, clientY);
+    const threshold = Math.max(10, geometry.radius * 0.22);
+    let match = null;
+    Object.values(state.homologyCordChains || {}).forEach((chain) => {
+      chain.points.forEach((particle, part) => {
+        const projected = projectedHomologyCordChainPoint(particle);
+        const distance = Math.hypot(point.x - projected.x, point.y - projected.y);
+        if (distance <= threshold && (!match || distance < match.distance)) {
+          match = {
+            chain,
+            part: particle.portal ? part - 1 : part,
+            viewOffset: { x: particle.ox, y: particle.oy },
+            distance
+          };
+        }
+      });
+    });
+    if (match) return match;
+    Object.values(state.homologyCords || {}).forEach((cord) => {
+      cord.points.forEach((particle, part) => {
+        const projected = projectedHomologyCordPoint(cord, particle);
+        const distance = Math.hypot(point.x - projected.x, point.y - projected.y);
+        if (distance <= threshold && (!match || distance < match.distance)) match = { cord, part, distance };
+      });
+    });
+    return match;
+  }
+
+  function inspectBackgroundHomologyCordForce(event) {
+    if (!state.inspectHomologyCordForce || !state.homologyCordMode) return false;
+    const hit = homologyCordAtPoint(event.clientX, event.clientY);
+    if (!hit || !hit.chain) return false;
+    state.homologyCordForceSelection = { generatorId: hit.chain.generatorId, part: hit.part };
+    hit.chain.settled = false;
+    scheduleBackgroundHomologyCordAnimation();
+    draw(analyze());
+    return true;
+  }
+
+  function beginBackgroundHomologyCordDrag(event) {
+    const hit = homologyCordAtPoint(event.clientX, event.clientY);
+    if (!hit) return false;
+    state.homologyCordDrag = hit.chain
+      ? { generatorId: hit.chain.generatorId, part: hit.part, viewOffset: hit.viewOffset, pointerId: event.pointerId }
+      : { key: hit.cord.key, part: hit.part, pointerId: event.pointerId };
+    activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    refs.canvas.setPointerCapture(event.pointerId);
+    return true;
+  }
+
+  function moveBackgroundHomologyCordDrag(event) {
+    const drag = state.homologyCordDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return false;
+    if (drag.generatorId) {
+      const chain = state.homologyCordChains[drag.generatorId];
+      if (!chain || !chain.points[drag.part]) return false;
+      const projected = clientPointToBoardPoint(event.clientX, event.clientY);
+      const particle = chain.points[drag.part];
+      const viewOffset = drag.viewOffset || { x: particle.ox, y: particle.oy };
+      particle.x = projected.x + viewOffset.x;
+      particle.y = projected.y + viewOffset.y;
+      particle.px = particle.x;
+      particle.py = particle.y;
+      particle.vx = 0;
+      particle.vy = 0;
+      constrainHomologyCordParticleToSurface(chain, particle, currentBackgroundHomologyAnalysis());
+      chain.settled = false;
+      draw(analyze());
+      return true;
+    }
+    const cord = state.homologyCords[drag.key];
+    if (!cord) return false;
+    const projected = clientPointToBoardPoint(event.clientX, event.clientY);
+    const offset = cord.atlasOffset || { x: 0, y: 0 };
+    cord.points[drag.part] = constrainHomologyCordControl(cord, { x: projected.x + offset.x, y: projected.y + offset.y });
+    cord.restPoints[drag.part] = { ...cord.points[drag.part] };
+    cord.velocities[drag.part] = { x: 0, y: 0 };
+    synchronizeBackgroundHomologyCordJunctions();
+    draw(analyze());
+    return true;
+  }
+
+  function finishBackgroundHomologyCordDrag(event) {
+    const drag = state.homologyCordDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return false;
+    if (drag.generatorId) {
+      const chain = state.homologyCordChains[drag.generatorId];
+      if (chain) {
+        chain.shrinkFrozen = false;
+        chain.shrinkFloor = chain.hardRestLength || homologyCordHardRestLength(chain);
+        chain.shrinkWindow = null;
+      }
+    }
+    state.homologyCordDrag = null;
+    scheduleBackgroundHomologyCordAnimation();
+    clearPointerState(event);
+    return true;
+  }
+
+  function drawBackgroundHomologyChain(ctx, analysis, generator, color) {
+    const entries = homologyChainDisplayEntries(analysis, generator);
+    const editing = state.homologyEditingGeneratorId === generator.id;
+    const lineWidth = Math.max(1.8, geometry.radius * (editing ? 0.062 : 0.047));
+    entries.forEach((entry) => {
+      drawBackgroundHomologySegment(ctx, entry.segment, entry.reverse, color, lineWidth);
+      if (!editing) return;
+      orderedHomologyEdgeSides(entry.edge).forEach((side) => {
+        if (side.index === entry.side.index && side.dir === entry.side.dir) return;
+        const local = analysis.complex.sideToEdge.get(`${side.index}:${side.dir}`);
+        const segment = boundaryEdgeSegment(side, 0.94);
+        if (!local || !segment) return;
+        const reverse = (entry.coefficient * BigInt(local.sign)) < 0n;
+        drawBackgroundHomologySegment(ctx, segment, reverse, color, lineWidth, { dashed: true, alpha: 0.5 });
+      });
+    });
+    const anchor = homologyLabelAnchor(entries);
+    if (!anchor) return;
+    ctx.save();
+    ctx.font = `600 ${Math.max(10, geometry.radius * 0.19)}px ui-monospace, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = Math.max(2.8, geometry.radius * 0.07);
+    ctx.strokeStyle = '#fffdf8';
+    ctx.strokeText(generator.id, anchor.x, anchor.y);
+    ctx.fillStyle = color;
+    ctx.fillText(generator.id, anchor.x, anchor.y);
+    ctx.restore();
+  }
+
+  function drawBackgroundHomologyCords(ctx, analysis, generator, color) {
+    const entries = homologyChainDisplayEntries(analysis, generator);
+    const lineWidth = Math.max(2.4, geometry.radius * 0.065);
+    const chain = homologyCordChainForGenerator(generator, entries);
+    // Cellular chains on non-manifold quotients may branch.  They remain
+    // exact, but cannot honestly be shown as one physical cord.
+    if (!chain) {
+      drawBackgroundHomologyChain(ctx, analysis, generator, color);
+      return;
+    }
+    const drawPath = () => {
+      let run = [];
+      const strokeRun = () => {
+        if (run.length < 2) return;
+        ctx.moveTo(run[0].x, run[0].y);
+        if (run.length === 2) {
+          ctx.lineTo(run[1].x, run[1].y);
+        } else {
+          // Quadratic midpoint interpolation makes the visual cord smooth
+          // without changing its physical particles or quotient topology.
+          for (let pointIndex = 1; pointIndex < run.length - 1; pointIndex += 1) {
+            const control = run[pointIndex];
+            const next = run[pointIndex + 1];
+            ctx.quadraticCurveTo(control.x, control.y, (control.x + next.x) * 0.5, (control.y + next.y) * 0.5);
+          }
+          const penultimate = run[run.length - 2];
+          const last = run[run.length - 1];
+          ctx.quadraticCurveTo(penultimate.x, penultimate.y, last.x, last.y);
+        }
+      };
+      ctx.beginPath();
+      for (let index = 1; index < chain.points.length; index += 1) {
+        const previous = chain.points[index - 1];
+        const current = chain.points[index];
+        const from = projectedHomologyCordChainPoint(previous);
+        const to = projectedHomologyCordChainPoint(current);
+        // Particles acquire their own lifted offsets after crossing a portal.
+        // Offset equality is therefore not a rendering criterion.  Two
+        // nearby chart projections, or two views inside the same tile, are a
+        // continuous visible segment; only a genuinely distant glued view is
+        // clipped from the fundamental-domain drawing.
+        const visibleDistance = Math.hypot(from.x - to.x, from.y - to.y);
+        const locallyContinuous = previous.tileIndex === current.tileIndex
+          || visibleDistance <= geometry.radius * 1.45;
+        if (!locallyContinuous) {
+          strokeRun();
+          run = [];
+          continue;
+        }
+        if (!run.length) run.push(from);
+        run.push(to);
+      }
+      strokeRun();
+      ctx.stroke();
+    };
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,0.96)';
+    ctx.lineWidth = lineWidth + Math.max(2.6, geometry.radius * 0.07);
+    drawPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    drawPath();
+    if (state.showHomologyCordParticles) {
+      homologyCordPhysicalIndices(chain).forEach((index) => {
+        const point = projectedHomologyCordChainPoint(chain.points[index]);
+        ctx.fillStyle = 'rgba(255,253,248,0.96)';
+        circle(ctx, point.x, point.y, Math.max(3.2, geometry.radius * 0.066));
+        ctx.fillStyle = color;
+        circle(ctx, point.x, point.y, Math.max(1.6, geometry.radius * 0.032));
+      });
+    }
+    const forceSelection = state.homologyCordForceSelection;
+    if (state.inspectHomologyCordForce && forceSelection && forceSelection.generatorId === generator.id && chain.points[forceSelection.part]) {
+      const particle = chain.points[forceSelection.part];
+      const point = projectedHomologyCordChainPoint(particle);
+      const force = particle.netForce || { x: 0, y: 0 };
+      const magnitude = Math.hypot(force.x, force.y);
+      const unit = magnitude > 0.0001 ? { x: force.x / magnitude, y: force.y / magnitude } : { x: 1, y: 0 };
+      const length = magnitude > 0.0001 ? clamp(magnitude * 0.10, geometry.radius * 0.16, geometry.radius * 0.95) : 0;
+      ctx.fillStyle = '#fffdf8';
+      circle(ctx, point.x, point.y, Math.max(6.2, geometry.radius * 0.135));
+      ctx.fillStyle = '#155ec9';
+      circle(ctx, point.x, point.y, Math.max(3.1, geometry.radius * 0.066));
+      if (length) {
+        const tip = { x: point.x + (unit.x * length), y: point.y + (unit.y * length) };
+        const normal = { x: -unit.y, y: unit.x };
+        const head = Math.max(6, geometry.radius * 0.13);
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgba(255,253,248,0.98)';
+        ctx.lineWidth = Math.max(5, geometry.radius * 0.11);
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y);
+        ctx.lineTo(tip.x, tip.y);
+        ctx.stroke();
+        ctx.strokeStyle = '#155ec9';
+        ctx.lineWidth = Math.max(2.6, geometry.radius * 0.05);
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y);
+        ctx.lineTo(tip.x, tip.y);
+        ctx.stroke();
+        ctx.fillStyle = '#155ec9';
+        ctx.beginPath();
+        ctx.moveTo(tip.x, tip.y);
+        ctx.lineTo(tip.x - (unit.x * head) + (normal.x * head * 0.55), tip.y - (unit.y * head) + (normal.y * head * 0.55));
+        ctx.lineTo(tip.x - (unit.x * head) - (normal.x * head * 0.55), tip.y - (unit.y * head) - (normal.y * head * 0.55));
+        ctx.closePath();
+        ctx.fill();
+      }
+      if (refs.homologyCordForceReadout) {
+        refs.homologyCordForceReadout.textContent = `F = ${magnitude.toFixed(2)}  (${force.x.toFixed(2)}, ${force.y.toFixed(2)})`;
+      }
+    }
+    const drag = state.homologyCordDrag;
+    if (drag && drag.generatorId === generator.id && chain.points[drag.part]) {
+      const point = projectedHomologyCordChainPoint(chain.points[drag.part]);
+      ctx.fillStyle = '#fffdf8';
+      circle(ctx, point.x, point.y, Math.max(6.2, geometry.radius * 0.145));
+      ctx.fillStyle = color;
+      circle(ctx, point.x, point.y, Math.max(3.6, geometry.radius * 0.082));
+    }
+    ctx.restore();
+    const anchor = projectedHomologyCordChainPoint(chain.points[Math.floor(chain.points.length / 2)]);
+    ctx.save();
+    ctx.font = `600 ${Math.max(10, geometry.radius * 0.19)}px ui-monospace, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = Math.max(2.8, geometry.radius * 0.07);
+    ctx.strokeStyle = '#fffdf8';
+    ctx.strokeText(generator.id, anchor.x, anchor.y);
+    ctx.fillStyle = color;
+    ctx.fillText(generator.id, anchor.x, anchor.y);
+    ctx.restore();
+    if (!chain.settled) scheduleBackgroundHomologyCordAnimation();
+  }
+
+  function drawHomologyCordSeamMarkers(ctx, edge, color) {
+    const sides = orderedHomologyEdgeSides(edge);
+    if (sides.length < 2) return;
+    ctx.save();
+    sides.forEach((side) => {
+      const segment = boundaryEdgeSegment(side, 0.94);
+      if (!segment) return;
+      const point = {
+        x: (segment.start.x + segment.end.x) * 0.5,
+        y: (segment.start.y + segment.end.y) * 0.5
+      };
+      ctx.font = `700 ${Math.max(10, geometry.radius * 0.18)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.strokeStyle = '#fffdf8';
+      ctx.lineWidth = Math.max(3, geometry.radius * 0.075);
+      ctx.strokeText('↔', point.x, point.y + 0.5);
+      ctx.fillStyle = color;
+      ctx.fillText('↔', point.x, point.y + 0.5);
+    });
+    ctx.restore();
+  }
+
+  function drawBackgroundHomologySegment(ctx, segment, reverse, color, lineWidth, options = {}) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.globalAlpha *= Number.isFinite(options.alpha) ? options.alpha : 1;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (options.dashed) ctx.setLineDash([Math.max(3, geometry.radius * 0.10), Math.max(3, geometry.radius * 0.075)]);
+    drawBackgroundBoundarySegment(ctx, segment);
+    if (options.dashed) ctx.setLineDash([]);
+    drawSegmentArrow(ctx, segment, reverse, color, lineWidth);
     ctx.restore();
   }
 
@@ -17722,9 +20039,11 @@
 
   function drawPickHoverOverlay(ctx, palette, report) {
     if (!isPickDisplayActive()) return;
-    if (state.pickedAnchor) {
+    const hasHomologyOrientation = !!(state.homologyKnotPick && state.homologyKnotResult && state.homologyKnotResult.valid);
+    if (state.pickedAnchor && !hasHomologyOrientation) {
       drawPickHitMarkers(ctx, state.pickedAnchor, palette.accent2, 2.4);
     }
+    drawHomologyKnotDirectionArrow(ctx, palette);
     if (state.inputMode === 'pick' && state.pickHoverHit) {
       drawPickHitMarkers(ctx, state.pickHoverHit, palette.accent, 2);
     }
@@ -17738,6 +20057,116 @@
     ctx.save();
     drawPickEdgeMidpoint(ctx, midpoint.x, midpoint.y, radius, color, width);
     ctx.restore();
+  }
+
+  function drawHomologyKnotDirectionArrow(ctx, palette) {
+    const result = state.homologyKnotResult;
+    if (!state.homologyKnotPick || !result || !result.valid || !Array.isArray(result.arcLoop) || !result.arcLoop.length) return;
+    const anchor = state.pickedAnchor;
+    let arc = result.arcLoop[0];
+    let startsAtAnchor = true;
+    if (anchor) {
+      const outgoing = result.arcLoop.find((candidate) => candidate.index === anchor.index && candidate.fromDir === anchor.dir);
+      const incoming = result.arcLoop.find((candidate) => candidate.index === anchor.index && candidate.toDir === anchor.dir);
+      if (outgoing) {
+        arc = outgoing;
+      } else if (incoming) {
+        arc = incoming;
+        startsAtAnchor = false;
+      }
+    }
+    const cell = geometry.cells[arc.index];
+    if (!cell) return;
+    const offset = anchor && anchor.index === arc.index && anchor.dir === (startsAtAnchor ? arc.fromDir : arc.toDir)
+      ? (anchor.offset || { x: 0, y: 0 })
+      : { x: 0, y: 0 };
+    const path = getArcPath({ x: cell.x + offset.x, y: cell.y + offset.y }, [arc.fromDir, arc.toDir], geometry.radius);
+    const point = startsAtAnchor ? path.start : path.end;
+    const sample = directedArcSample(path, startsAtAnchor ? 0.08 : 0.92);
+    if (!sample) return;
+    // A fixed blue distinguishes orientation from the commonly red knot
+    // component colour and remains legible with the white backing below.
+    const color = '#1671c4';
+    const scale = normalizeHomologyKnotArrowScale(state.homologyKnotArrowScale);
+    // The control intentionally changes reach only.  The line, point and
+    // head stay legible at one consistent visual weight.
+    const length = Math.max(22, geometry.radius * 2.1 * scale);
+    const size = Math.max(11, geometry.radius * 0.3);
+    const tip = { x: point.x + sample.ux * length, y: point.y + sample.uy * length };
+    const normal = { x: -sample.uy, y: sample.ux };
+    const base = { x: tip.x - sample.ux * size, y: tip.y - sample.uy * size };
+    ctx.save();
+    // The dot marks the exact side the user picked; the arrow follows the
+    // deterministic orientation used for the reported homology class.
+    const shaftWidth = Math.max(3.6, geometry.radius * 0.095);
+    // Keep the point -> marker readable on both dark linework and coloured
+    // tiles by drawing an opaque white backing before its accent colour.
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
+    ctx.lineTo(base.x, base.y);
+    ctx.strokeStyle = 'rgba(255,255,255,0.98)';
+    ctx.lineWidth = shaftWidth + Math.max(4, geometry.radius * 0.11);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
+    ctx.lineTo(base.x, base.y);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = shaftWidth;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,253,248,0.98)';
+    circle(ctx, point.x, point.y, Math.max(8.5, geometry.radius * 0.205));
+    ctx.fillStyle = color;
+    circle(ctx, point.x, point.y, Math.max(3.8, geometry.radius * 0.085));
+    ctx.fillStyle = 'rgba(255,255,255,0.98)';
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(base.x + normal.x * size * 0.62, base.y + normal.y * size * 0.62);
+    ctx.lineTo(base.x - normal.x * size * 0.62, base.y - normal.y * size * 0.62);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#fffdf8';
+    ctx.lineWidth = Math.max(1.7, geometry.radius * 0.038);
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(base.x + normal.x * size * 0.48, base.y + normal.y * size * 0.48);
+    ctx.lineTo(base.x - normal.x * size * 0.48, base.y - normal.y * size * 0.48);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function directedArcSample(path, fraction) {
+    if (!path) return null;
+    const t = clamp(Number(fraction), 0.08, 0.92);
+    if (path.type === 'line') {
+      const dx = path.end.x - path.start.x;
+      const dy = path.end.y - path.start.y;
+      const length = Math.hypot(dx, dy);
+      if (length < 0.001) return null;
+      return { x: path.start.x + dx * t, y: path.start.y + dy * t, ux: dx / length, uy: dy / length };
+    }
+    if (path.type === 'arc') {
+      const sign = path.anticlockwise ? -1 : 1;
+      const theta = path.startAngle + (sign * path.sweep * t);
+      const dx = -Math.sin(theta) * sign;
+      const dy = Math.cos(theta) * sign;
+      return {
+        x: path.center.x + Math.cos(theta) * path.arcRadius,
+        y: path.center.y + Math.sin(theta) * path.arcRadius,
+        ux: dx,
+        uy: dy
+      };
+    }
+    const inverse = 1 - t;
+    const x = (inverse * inverse * path.start.x) + (2 * inverse * t * path.control.x) + (t * t * path.end.x);
+    const y = (inverse * inverse * path.start.y) + (2 * inverse * t * path.control.y) + (t * t * path.end.y);
+    const dx = (2 * inverse * (path.control.x - path.start.x)) + (2 * t * (path.end.x - path.control.x));
+    const dy = (2 * inverse * (path.control.y - path.start.y)) + (2 * t * (path.end.y - path.control.y));
+    const length = Math.hypot(dx, dy);
+    return length < 0.001 ? null : { x, y, ux: dx / length, uy: dy / length };
   }
 
   function matchingNeighborEdgeMarker(hit) {
@@ -20588,7 +23017,8 @@
       boundary: state.boundaryMode,
       wrappedViewMode: state.wrappedViewMode,
       inputMode: state.inputMode,
-      backgroundAction: state.backgroundAction,
+      // A homology trace is an inspection aid, not part of the saved mosaic.
+      backgroundAction: backgroundActionForExport(),
       backgroundDecorationKind: normalizeBackgroundDecorationKind(state.backgroundDecorationKind),
       backgroundDecorationColor: normalizePresetPieceColor(state.backgroundDecorationColor) || 'black',
       backgroundChessPawnDirection: normalizeChessPawnDirectionChoice(state.backgroundChessPawnDirection),
@@ -20943,7 +23373,7 @@
   function backgroundSpaceForExport(report) {
     return {
       ...(report.background || analyzeBackgroundSpace()),
-      action: state.backgroundAction,
+      action: backgroundActionForExport(),
       multiEdges: !!state.backgroundMultiEdges,
       chessPawnDirection: normalizeChessPawnDirectionChoice(state.backgroundChessPawnDirection),
       chainLength: normalizeBackgroundChainLength(state.backgroundChainLength),
@@ -20954,6 +23384,12 @@
       billiardArrowLength: normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength),
       billiardHitMarkers: normalizeBackgroundBilliardHitMarkers(state.backgroundBilliardHitMarkers)
     };
+  }
+
+  function backgroundActionForExport() {
+    return isBackgroundHomologyTraceAction() || isBackgroundHomologyRepresentativeAction()
+      ? 'tile'
+      : state.backgroundAction;
   }
 
   function backgroundBilliardForExport() {
@@ -22011,6 +24447,10 @@
 
   function updateDisplayControls() {
     syncSeifertSurfaceControls();
+    if (refs.homologyKnotArrowSize) {
+      refs.homologyKnotArrowSize.value = normalizeHomologyKnotArrowScale(state.homologyKnotArrowScale).toFixed(1);
+      if (refs.homologyKnotArrowSizeValue) refs.homologyKnotArrowSizeValue.textContent = normalizeHomologyKnotArrowScale(state.homologyKnotArrowScale).toFixed(1);
+    }
     if (refs.wrappedViewRow) {
       refs.wrappedViewRow.hidden = !state.wrapped;
       refs.wrappedViewMode.disabled = !state.wrapped;
@@ -22413,6 +24853,8 @@
       || action === 'reverseArrows'
     ) return hasGluedBoundaryPairs() ? 'reverse-glue' : 'tile';
     if (action === 'billiard' || action === 'billiards') return 'billiard';
+    if (action === 'homology-circle' || action === 'homology' || action === 'trace-circle' || action === 'trace-homology') return 'homology-circle';
+    if (action === 'homology-representative' || action === 'homology-side' || action === 'choose-homology-side') return 'homology-representative';
     return 'tile';
   }
 
@@ -22656,6 +25098,56 @@
 
   function normalizeDrawStyle(style) {
     return ['none', 'debug', 'shade'].includes(style) ? style : 'shade';
+  }
+
+  function normalizeHomologyKnotArrowScale(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? clamp(parsed, 0.5, 3) : 0.5;
+  }
+
+  function normalizeHomologyCordMass(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? clamp(parsed, 0.2, 5) : 1;
+  }
+
+  function normalizeHomologyCordSpring(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? clamp(parsed, 5, 240) : 90;
+  }
+
+  function normalizeHomologyCordBendSpring(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? clamp(parsed, 0, 30) : 2.5;
+  }
+
+  function normalizeHomologyCordDamping(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? clamp(parsed, 0, 15) : 4.2;
+  }
+
+  function normalizeHomologyCordSubsteps(value) {
+    const parsed = Math.round(Number(value));
+    return Number.isFinite(parsed) ? clamp(parsed, 1, 16) : 7;
+  }
+
+  function normalizeHomologyCordParticles(value) {
+    const parsed = Math.round(Number(value));
+    return Number.isFinite(parsed) ? clamp(parsed, 5, 24) : 12;
+  }
+
+  function normalizeHomologyCordSpeed(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? clamp(parsed, 0.1, 2) : 1.6;
+  }
+
+  function normalizeHomologyCordShrinkRate(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? clamp(parsed, 0, 0.2) : 0.06;
+  }
+
+  function normalizeHomologyCordMinSpacing(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? clamp(parsed, 0.04, 0.2) : 0.09;
   }
 
   function normalizeHalfEdgeLabelStyle(style) {
@@ -23153,6 +25645,9 @@
   }
 
   const api = {
+    analyzeBackgroundHomology,
+    classifyBackgroundCircle,
+    classifySelectedBackgroundKnot,
     __test: {
       state,
       refs,
@@ -23176,6 +25671,30 @@
       minigameGluedEdgesForExport,
       minigamePresetRegistryEntry,
       normalizeBackgroundAction,
+      backgroundHomologySnapshot,
+      backgroundHomologyTopologyKey,
+      backgroundHomologyGroupLatex,
+      knotComponentArcLoop,
+      setHomologyKnotPick,
+      clearBackgroundHomologyKnot,
+      clearBackgroundHomologyDisplay,
+      computeBackgroundQuotientVertices,
+      homologyLabelEntry,
+      homologyGeneratorVisible,
+      homologyCordKey,
+      homologyCordTransitions,
+      orderedHomologyCordEntries,
+      makeHomologyCordChain,
+      homologyCordPhysicalIndices,
+      homologyCordMaterialLength,
+      homologyCordHardRestLength,
+      remeshHomologyCordChain,
+      annealHomologyCordRestLength,
+      hasVisibleHomologyGenerators,
+      resetBackgroundHomologyCords,
+      setBackgroundHomologyCordMode,
+      isBackgroundHomologyTraceClosed,
+      selectedHomologyEdgeSide,
       normalizeExportImportPayload,
       parseExportImportText,
       refreshExport,

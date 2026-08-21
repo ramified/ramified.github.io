@@ -5921,4 +5921,51 @@
       refs.matrixStatus.textContent = 'copy unavailable';
     }
   }
+
+  window.SiteImportExportPageAdapter = {
+    exportDefault() {
+      refreshExport();
+      const format = refs.exportFormat.value;
+      const extension = format === 'latex' ? 'tex' : 'txt';
+      return { text: refs.exportOut.value, filename: `matrix-export.${extension}`, mimeType: format === 'latex' ? 'application/x-tex' : 'text/plain' };
+    },
+    exporters: {
+      operation() {
+        if (!state.lastOperationResult) throw new Error('Compute an operation before exporting it.');
+        exportOperationResult();
+        const format = refs.exportFormat.value;
+        return {
+          text: refs.exportOut.value,
+          filename: `matrix-operation.${format === 'latex' ? 'tex' : 'txt'}`,
+          mimeType: format === 'latex' ? 'application/x-tex' : 'text/plain'
+        };
+      }
+    },
+    validateImport(_kind, raw) {
+      const text = String(raw?.text || '').trim();
+      return { text, parsed: parseImportedMatrix(text) };
+    },
+    applyImport(_kind, prepared) {
+      const rows = prepared.parsed.rows;
+      const rowCount = rows.length;
+      const colCount = rows[0]?.length || 0;
+      if (rowCount > MAX_SIZE || colCount > MAX_SIZE) throw new Error(`The browser editor is capped at ${MAX_SIZE} x ${MAX_SIZE}.`);
+      state.rows = rowCount;
+      state.cols = colCount;
+      state.entries = rows;
+      refs.rows.value = String(rowCount);
+      refs.cols.value = String(colCount);
+      clearOperationResult();
+      renderMatrixGrid();
+      refreshAll();
+      refs.bulkMessage.textContent = `Imported ${prepared.parsed.style}.`;
+    },
+    hasMeaningfulState() {
+      return state.entries.some((row) => row.some((value) => String(value || '').trim() && String(value).trim() !== '0'));
+    },
+    filename(name) {
+      const format = refs.exportFormat?.value || 'rows';
+      return `${name === 'operation' ? 'matrix-operation' : 'matrix-export'}.${format === 'latex' ? 'tex' : 'txt'}`;
+    }
+  };
 })();

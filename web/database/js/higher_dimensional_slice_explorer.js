@@ -13180,6 +13180,72 @@
     renderAll();
   }
 
+  window.SiteImportExportPageAdapter = {
+    importKinds: [
+      { value: "state", label: "Full calculator state" },
+      { value: "object-new", label: "Object as new", replacesState: false },
+      { value: "object-replace", label: "Replace active object" },
+      { value: "frame", label: "Frame matrix" }
+    ],
+    exportDefault() {
+      return {
+        text: JSON.stringify(fullState(), null, 2),
+        filename: "higher_dimensional_slice_calculator_state.json",
+        mimeType: "application/json"
+      };
+    },
+    exporters: {
+      "active-object"() {
+        const object = activeObject();
+        if (!object) throw new Error("There is no active object to export.");
+        return { text: JSON.stringify(objectExportPayload(object), null, 2), filename: "slice-explorer-object.json", mimeType: "application/json" };
+      },
+      position() {
+        return { text: JSON.stringify(state.p), filename: "slice-position.json", mimeType: "application/json" };
+      },
+      frame() {
+        return { text: directFrameRowsText(), filename: "slice-frame.txt", mimeType: "text/plain" };
+      },
+      "frame-json"() {
+        return { text: JSON.stringify(frameState(), null, 2), filename: "slice-frame.json", mimeType: "application/json" };
+      }
+    },
+    validateImport(kind, raw) {
+      const text = String(raw?.text || "").trim();
+      if (!text) throw new Error("Paste or choose data to import.");
+      if (kind === "frame") return { text, rows: parseDirectMatrixRows(text) };
+      const data = JSON.parse(text);
+      if (kind === "state") {
+        if (data.kind === "slice-explorer-object") throw new Error("Choose an object import action for object JSON.");
+        if (data.module && data.module !== "higher-dimensional-slice-explorer") throw new Error("This is not a slice calculator state.");
+      } else if (data.kind !== "slice-explorer-object" && !data.object) {
+        throw new Error("This is not a slice object export.");
+      }
+      return { text, data };
+    },
+    applyImport(kind, prepared) {
+      if (kind === "frame") {
+        applyDirectFrameRows(prepared.rows, null, "Imported frame matrix applied.");
+        return;
+      }
+      $("import-state").value = prepared.text;
+      if (kind === "state") importState();
+      else if (kind === "object-new") importObjectAsNew();
+      else replaceActiveObject();
+    },
+    hasMeaningfulState() {
+      return state.objects.length > 1
+        || state.objects[0]?.type !== "cartesian-frame"
+        || state.p.some((value) => Math.abs(value) > 1e-12)
+        || state.ambientDim !== 4;
+    },
+    filename(name) {
+      if (name === "active-object") return "slice-explorer-object.json";
+      if (name === "frame") return "slice-frame.txt";
+      return "higher_dimensional_slice_calculator_state.json";
+    }
+  };
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {

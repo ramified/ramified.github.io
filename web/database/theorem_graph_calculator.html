@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Maintenance Tracker</title>
   <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
     .theorem-layout {
       max-width: 1260px;
@@ -1400,7 +1401,7 @@
           </div>
         </div>
         <div class="theorem-detail-actions">
-          <button class="btn btn-ghost" id="node-export" type="button">export</button>
+          <button class="btn btn-ghost" id="node-export" type="button" data-import-export-trigger="current-node" data-export-filename="theorem-current-node.json">export</button>
           <button class="btn" id="detail-update" type="button" disabled>update</button>
           <button class="btn btn-ghost" id="detail-cancel" type="button" disabled>cancel</button>
         </div>
@@ -1545,7 +1546,7 @@
           <button class="btn" id="add-reference" type="button">add BibTeX</button>
           <button class="btn" id="add-link-reference" type="button">add source</button>
           <button class="btn btn-ghost" id="clear-bibtex" type="button">clear inputs</button>
-          <button class="btn btn-ghost" id="export-selected-references" type="button">export selected</button>
+          <button class="btn btn-ghost" id="export-selected-references" type="button" data-import-export-trigger="selected-references" data-export-filename="theorem-selected-references.json">export selected</button>
           <button class="btn btn-ghost" id="delete-selected-references" type="button">delete selected</button>
         </div>
         <div class="theorem-reference-edit-form" id="reference-edit-form" hidden>
@@ -1706,5 +1707,7 @@
 <script id="theorem-preset-registry" src="theorem_graph_presets/presets.js"></script>
 <script src="js/calculator_cards.js"></script>
 <script src="js/theorem_graph_calculator.js"></script>
+<script src="js/import_export_panel.js?v=20260821-7"></script>
+<script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>
 </html>

@@ -431,6 +431,7 @@
     refs.fullscreenRestart = document.getElementById('fullscreen-restart');
     refs.gameMode = document.getElementById('game-mode-select');
     refs.select = document.getElementById('surface-preset-select');
+    refs.importExportRoot = document.getElementById('ramified-import-export-panel');
     refs.importToggle = document.getElementById('import-preset-toggle');
     refs.importTools = document.getElementById('import-preset-tools');
     refs.importKeepGameMode = document.getElementById('import-keep-game-mode');
@@ -439,7 +440,11 @@
     refs.importCatalogRow = document.getElementById('import-preset-catalog-row');
     refs.importCatalog = document.getElementById('import-preset-catalog');
     refs.importInput = document.getElementById('import-preset-input');
+    refs.importFile = document.getElementById('import-state-file');
+    refs.importFilename = document.getElementById('import-state-filename');
+    refs.clearImportPreset = document.getElementById('clear-import-preset');
     refs.applyImportPreset = document.getElementById('apply-import-preset');
+    refs.importState = document.getElementById('import-state');
     refs.placementDisplayRow = document.getElementById('gomoku-display-row');
     refs.gomokuDisplay = document.getElementById('gomoku-display-style');
     refs.moveNumberLabelRow = document.getElementById('move-number-label-row');
@@ -533,6 +538,7 @@
     refs.exportState = document.getElementById('export-state');
     refs.refreshState = document.getElementById('refresh-state');
     refs.copyState = document.getElementById('copy-state');
+    refs.downloadState = document.getElementById('download-state');
     refs.debugExport = document.getElementById('debug-export-output');
     refs.exportStateKind = document.getElementById('export-state-kind');
     refs.exportBackgroundFormatRow = document.getElementById('export-background-format-row');
@@ -564,13 +570,16 @@
     bindCards();
     if (!refs.canvas || !refs.ctx || !refs.select) return;
 
+    refs.importExportController = initImportExportPanel();
+
     if (refs.gameMode) refs.gameMode.addEventListener('change', handleGameModeChange);
     refs.select.addEventListener('change', handlePresetSelectChange);
     if (refs.importToggle) refs.importToggle.addEventListener('click', toggleImportTools);
     if (refs.importKeepGameMode) refs.importKeepGameMode.addEventListener('change', syncImportExportControls);
     if (refs.importGameMode) refs.importGameMode.addEventListener('change', syncImportExportControls);
-    if (refs.importSource) refs.importSource.addEventListener('change', syncImportExportControls);
-    if (refs.applyImportPreset) refs.applyImportPreset.addEventListener('click', importPresetFromUi);
+    if (!refs.importExportController && refs.importSource) refs.importSource.addEventListener('change', syncImportExportControls);
+    if (!refs.importExportController && refs.applyImportPreset) refs.applyImportPreset.addEventListener('click', importPresetFromUi);
+    if (refs.importState) refs.importState.addEventListener('click', importStateFromUi);
     if (refs.gomokuDisplay) refs.gomokuDisplay.addEventListener('change', render);
     if (refs.moveNumberLabels) refs.moveNumberLabels.addEventListener('change', render);
     if (refs.placementPieceSize) {
@@ -648,11 +657,11 @@
     if (refs.debugToggle) refs.debugToggle.addEventListener('click', toggleDebugMode);
     if (refs.undo) refs.undo.addEventListener('click', undoPreviousStep);
     if (refs.redo) refs.redo.addEventListener('click', redoPreviousUndo);
-    if (refs.exportState) refs.exportState.addEventListener('click', exportFromUi);
-    if (refs.refreshState) refs.refreshState.addEventListener('click', refreshExportFromUi);
-    if (refs.copyState) refs.copyState.addEventListener('click', copyExportFromUi);
-    if (refs.exportStateKind) refs.exportStateKind.addEventListener('change', syncImportExportControls);
-    if (refs.exportBackgroundFormat) refs.exportBackgroundFormat.addEventListener('change', syncImportExportControls);
+    if (!refs.importExportController && refs.exportState) refs.exportState.addEventListener('click', exportFromUi);
+    if (!refs.importExportController && refs.refreshState) refs.refreshState.addEventListener('click', refreshExportFromUi);
+    if (!refs.importExportController && refs.copyState) refs.copyState.addEventListener('click', copyExportFromUi);
+    if (!refs.importExportController && refs.exportStateKind) refs.exportStateKind.addEventListener('change', syncImportExportControls);
+    if (!refs.importExportController && refs.exportBackgroundFormat) refs.exportBackgroundFormat.addEventListener('change', syncImportExportControls);
     refs.canvasViewButtons.forEach((button) => {
       button.addEventListener('click', () => handleCanvasDisplayModeButton(button));
     });
@@ -727,6 +736,110 @@
         if (card) card.classList.toggle('collapsed');
       });
     });
+  }
+
+  function initImportExportPanel() {
+    if (!refs.importExportRoot || !window.ImportExportPanel || typeof window.ImportExportPanel.mount !== 'function') {
+      return null;
+    }
+    return window.ImportExportPanel.mount(refs.importExportRoot, {
+      id: 'ramified-minigames',
+      eventRoot: document,
+      translate(key, parameters) {
+        return window.SiteI18n && typeof window.SiteI18n.t === 'function'
+          ? window.SiteI18n.t(key, parameters)
+          : '';
+      },
+      exportOptions: {
+        content: refs.exportStateKind,
+        kind: refs.exportStateKind,
+        format: refs.exportBackgroundFormat,
+        formatRow: refs.exportBackgroundFormatRow,
+        output: refs.debugExport,
+        refresh: refs.exportState,
+        copy: refs.copyState,
+        download: refs.downloadState
+      },
+      importOptions: {
+        source: refs.importSource,
+        catalog: refs.importCatalog,
+        input: refs.importInput,
+        file: refs.importFile,
+        filename: refs.importFilename,
+        apply: refs.applyImportPreset,
+        clear: refs.clearImportPreset
+      },
+      importMetadata: {
+        label: 'Preset or game status',
+        labelKey: 'io.importPayloadContent',
+        catalogLabel: 'Background preset',
+        catalogLabelKey: 'io.backgroundPreset',
+        detectContent: true,
+        format: { mode: 'fixed', label: 'JSON' }
+      },
+      defaultExporter: 'status',
+      exporters: {
+        background: {
+          labelKey: 'io.backgroundPreset',
+          formats: [
+            { id: 'dsl', labelKey: 'io.dsl', label: 'DSL-style', mimeType: 'application/json', extension: 'json' },
+            { id: 'verbose', labelKey: 'io.verboseJson', label: 'Verbose JSON', mimeType: 'application/json', extension: 'json' }
+          ],
+          defaultFormat: 'dsl',
+          produce: () => exportSharedContent('background')
+        },
+        status: {
+          labelKey: 'io.fullStatus',
+          formats: [{ id: 'json', label: 'JSON', mimeType: 'application/json', extension: 'json' }],
+          produce: () => exportSharedContent('status')
+        },
+        record: {
+          labelKey: 'io.gameRecord',
+          formats: [{ id: 'json', label: 'JSON', mimeType: 'application/json', extension: 'json' }],
+          produce: () => exportSharedContent('record')
+        }
+      },
+      readImport(context) {
+        return importRequestFromUi(context);
+      },
+      validateImport(request) {
+        return prepareImportRequest(request);
+      },
+      describeImport(prepared) {
+        const contentKeys = {
+          'catalog-preset': 'io.backgroundPreset',
+          preset: 'io.backgroundPreset',
+          status: 'io.fullStatus'
+        };
+        return { contentKey: contentKeys[prepared?.kind] || 'io.importPayloadContent', format: 'JSON' };
+      },
+      applyImport(prepared) {
+        applyPreparedImport(prepared);
+        return { statusKey: 'io.importComplete', statusType: 'success' };
+      },
+      confirmReplace() {
+        return confirmActiveGameReplacement();
+      },
+      onContextChange() {
+        syncImportExportControls();
+      }
+    });
+
+    function exportSharedContent(kind) {
+          if (refs.exportStateKind) refs.exportStateKind.value = kind;
+          if (!game) throw new Error(tr('The game is not ready to export.'));
+          exportSelectedOutput({ focus: false, action: 'refreshed' });
+          const text = refs.debugExport ? String(refs.debugExport.value || '') : '';
+          if (!text && selectedExportKind() === 'record') {
+            throw new Error(tr('Game records are available for Gomoku, Go, Connect Four, Reversi, and FIDE Chess.'));
+          }
+          const filename = selectedExportKind() === 'background'
+            ? 'ramified-minigame-background.json'
+            : selectedExportKind() === 'record'
+              ? 'ramified-minigame-record.json'
+              : 'ramified-minigame-status.json';
+          return { text, filename, mimeType: 'application/json' };
+    }
   }
 
   function initOnlinePlay() {
@@ -3432,11 +3545,19 @@
   function setImportToolsVisible(force) {
     hideCanvasStartPrompt();
     if (!refs.importTools) return;
+    if (refs.importExportController) {
+      if (!force) return;
+      if (refs.importSource) refs.importSource.value = 'paste';
+      refs.importExportController.activateTab('import');
+      syncImportExportControls();
+      if (refs.importInput) refs.importInput.focus();
+      return;
+    }
     refs.importTools.hidden = false;
     if (force && refs.importSource) refs.importSource.value = 'paste';
     if (refs.importToggle) refs.importToggle.setAttribute('aria-expanded', 'true');
     syncImportExportControls();
-    if (selectedImportSource() === 'paste' && refs.importInput) refs.importInput.focus();
+    if ((selectedImportSource() === 'paste' || selectedImportSource() === 'file') && refs.importInput) refs.importInput.focus();
   }
 
   function toggleImportTools() {
@@ -3444,52 +3565,108 @@
   }
 
   function importPresetFromUi() {
-    const importMode = selectedImportGameMode();
-    const targetMode = shouldKeepCurrentGameModeOnImport() ? selectedGameMode() : importMode;
     try {
-      if (selectedImportSource() === 'catalog') {
-        const preset = resolvePreset(refs.importCatalog ? refs.importCatalog.value : defaultPresetIdForMode(importMode));
-        if (shouldKeepCurrentGameModeOnImport()) {
-          importedPreset = clonePreset(preset);
-          applyImportedPresetMode(importedPreset, targetMode);
-          ensureImportedPresetOption(importedPreset);
-          if (refs.select) refs.select.value = IMPORTED_PRESET_ID;
-        } else {
-          importedPreset = null;
-          if (refs.gameMode) refs.gameMode.value = importMode;
-          syncPresetSelectOptions(preset.id);
-          if (refs.select) refs.select.value = preset.id;
-        }
-        applyDefaultPlacementPieceSizeForMode(targetMode);
-        resetToPreview();
-        syncImportExportControls();
-        syncStatus('preset imported', previewInfo(game.preset), 'setup');
+      const prepared = prepareImportRequest(importRequestFromUi());
+      if (!confirmActiveGameReplacement()) {
+        syncStatus('import cancelled', 'current game unchanged', phaseBadge(game && game.phase));
         return;
       }
-      if (!refs.importInput) return;
-      const statusPayload = statusImportPayloadFromText(refs.importInput.value);
-      if (statusPayload) {
-        const imported = gameStateFromDebugImportPayload(statusPayload);
-        if (statusPayload.settings && typeof statusPayload.settings === 'object' && !Array.isArray(statusPayload.settings)) {
-          imported.settings = statusPayload.settings;
-        }
-        applyImportedDebugState(imported);
-        setImportToolsVisible(false);
-        return;
-      }
-      importedPreset = presetFromImportText(refs.importInput.value);
-      applyImportedPresetMode(importedPreset, targetMode);
-      if (!shouldKeepCurrentGameModeOnImport() && refs.gameMode) refs.gameMode.value = importMode;
-      applyDefaultPlacementPieceSizeForMode(targetMode);
-      ensureImportedPresetOption(importedPreset);
-      if (refs.select) refs.select.value = IMPORTED_PRESET_ID;
-      resetToPreview();
-      syncImportExportControls();
-      syncStatus('preset imported', previewInfo(game.preset), 'setup');
-      setImportToolsVisible(false);
+      applyPreparedImport(prepared);
     } catch (error) {
       syncStatus('import failed', error && error.message ? error.message : 'invalid preset JSON', 'error');
     }
+  }
+
+  function importStateFromUi() {
+    try {
+      const prepared = prepareImportRequest(importRequestFromUi({
+        importSource: 'paste',
+        importText: refs.debugExport ? refs.debugExport.value : ''
+      }));
+      if (!confirmActiveGameReplacement()) {
+        syncStatus('import cancelled', 'current game unchanged', phaseBadge(game && game.phase));
+        return;
+      }
+      applyPreparedImport(prepared);
+    } catch (error) {
+      syncStatus('import failed', error && error.message ? error.message : 'invalid preset JSON', 'error');
+    }
+  }
+
+  function importRequestFromUi(context = {}) {
+    const importMode = selectedImportGameMode();
+    const keepCurrentGameMode = shouldKeepCurrentGameModeOnImport();
+    return {
+      source: context.importSource || selectedImportSource(),
+      text: Object.prototype.hasOwnProperty.call(context, 'importText')
+        ? String(context.importText || '')
+        : (refs.importInput ? String(refs.importInput.value || '') : ''),
+      catalogId: context.catalogId || (refs.importCatalog ? refs.importCatalog.value : defaultPresetIdForMode(importMode)),
+      importMode,
+      targetMode: keepCurrentGameMode ? selectedGameMode() : importMode,
+      keepCurrentGameMode
+    };
+  }
+
+  function prepareImportRequest(request) {
+    if (!request || typeof request !== 'object') throw new Error('invalid import request');
+    if (request.source === 'catalog') {
+      return {
+        ...request,
+        kind: 'catalog-preset',
+        preset: clonePreset(resolvePreset(request.catalogId || defaultPresetIdForMode(request.importMode)))
+      };
+    }
+    const text = String(request.text || '').trim();
+    if (!text) throw new Error('empty import JSON');
+    const statusPayload = statusImportPayloadFromText(text);
+    if (statusPayload) {
+      const imported = gameStateFromDebugImportPayload(statusPayload);
+      if (statusPayload.settings && typeof statusPayload.settings === 'object' && !Array.isArray(statusPayload.settings)) {
+        imported.settings = statusPayload.settings;
+      }
+      return { ...request, kind: 'status', imported };
+    }
+    const preset = presetFromImportText(text);
+    applyImportedPresetMode(preset, request.targetMode);
+    return { ...request, kind: 'preset', preset };
+  }
+
+  function applyPreparedImport(prepared) {
+    if (prepared.kind === 'status') {
+      applyImportedDebugState(prepared.imported);
+      return;
+    }
+    if (prepared.kind === 'catalog-preset') {
+      if (prepared.keepCurrentGameMode) {
+        importedPreset = clonePreset(prepared.preset);
+        applyImportedPresetMode(importedPreset, prepared.targetMode);
+        ensureImportedPresetOption(importedPreset);
+        if (refs.select) refs.select.value = IMPORTED_PRESET_ID;
+      } else {
+        importedPreset = null;
+        if (refs.gameMode) refs.gameMode.value = prepared.importMode;
+        syncPresetSelectOptions(prepared.preset.id);
+        if (refs.select) refs.select.value = prepared.preset.id;
+      }
+    } else if (prepared.kind === 'preset') {
+      importedPreset = prepared.preset;
+      if (!prepared.keepCurrentGameMode && refs.gameMode) refs.gameMode.value = prepared.importMode;
+      ensureImportedPresetOption(importedPreset);
+      if (refs.select) refs.select.value = IMPORTED_PRESET_ID;
+    } else {
+      throw new Error('unsupported import payload');
+    }
+    applyDefaultPlacementPieceSizeForMode(prepared.targetMode);
+    resetToPreview();
+    syncImportExportControls();
+    syncStatus('preset imported', previewInfo(game.preset), 'setup');
+  }
+
+  function confirmActiveGameReplacement() {
+    if (!game || game.phase === 'setup') return true;
+    if (typeof window === 'undefined' || typeof window.confirm !== 'function') return true;
+    return window.confirm(tr('Importing will replace the active game. Continue?'));
   }
 
   function statusImportPayloadFromText(text) {
@@ -3538,7 +3715,8 @@
   }
 
   function selectedImportSource() {
-    return refs.importSource && refs.importSource.value === 'paste' ? 'paste' : 'catalog';
+    const value = refs.importSource ? refs.importSource.value : '';
+    return value === 'paste' || value === 'file' ? value : 'catalog';
   }
 
   function shouldKeepCurrentGameModeOnImport() {
@@ -3559,11 +3737,15 @@
   function syncImportExportControls() {
     if (refs.importGameMode && !refs.importGameMode.value) refs.importGameMode.value = selectedGameMode();
     syncImportCatalogOptions();
-    const pasteSource = selectedImportSource() === 'paste';
-    if (refs.importCatalogRow) refs.importCatalogRow.hidden = pasteSource;
-    if (refs.importInput) refs.importInput.hidden = !pasteSource;
+    if (refs.importExportController) {
+      refs.importExportController.sync();
+    } else {
+      const textSource = selectedImportSource() !== 'catalog';
+      if (refs.importCatalogRow) refs.importCatalogRow.hidden = textSource;
+      if (refs.importInput) refs.importInput.hidden = !textSource;
+    }
     const backgroundExport = selectedExportKind() === 'background';
-    if (refs.exportBackgroundFormatRow) refs.exportBackgroundFormatRow.hidden = !backgroundExport;
+    if (!refs.importExportController && refs.exportBackgroundFormatRow) refs.exportBackgroundFormatRow.hidden = !backgroundExport;
   }
 
   function syncImportCatalogOptions() {
@@ -6975,7 +7157,9 @@
   function exportGameRecord(options = {}) {
     if (!game || !refs.debugExport) return;
     if (!recordableGameMode(gameModeValue(game))) {
-      syncStatus('record unavailable', 'game records are available for Gomoku, Go, Connect Four, Reversi, and FIDE Chess', 'warn');
+      refs.debugExport.value = '';
+      if (refs.importExportController) refs.importExportController.sync();
+      syncStatus('record unavailable', 'Game records are available for Gomoku, Go, Connect Four, Reversi, and FIDE Chess.', 'warn');
       return;
     }
     refs.debugExport.value = JSON.stringify(gameRecordExportPayload(game), null, 2);
@@ -7360,10 +7544,12 @@
     if (!refs.debugExport || !refs.debugExport.value) return;
     if (selectedExportKind() !== 'status') return;
     refs.debugExport.value = JSON.stringify(debugExportPayload(), null, 2);
+    if (refs.importExportController) refs.importExportController.sync();
   }
 
   function clearDebugExport() {
     if (refs.debugExport) refs.debugExport.value = '';
+    if (refs.importExportController) refs.importExportController.sync();
   }
 
   function debugExportPayload() {
@@ -23543,6 +23729,7 @@
     if (refs.exportState) refs.exportState.disabled = !game;
     if (refs.refreshState) refs.refreshState.disabled = !game;
     if (refs.copyState) refs.copyState.disabled = !game && !(refs.debugExport && refs.debugExport.value);
+    if (refs.downloadState) refs.downloadState.disabled = !game && !(refs.debugExport && refs.debugExport.value);
     syncCanvasDisplayModeUi();
     syncDebugModeUi();
     syncImportExportControls();

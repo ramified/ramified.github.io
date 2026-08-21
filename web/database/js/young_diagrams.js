@@ -6921,6 +6921,95 @@ function initCustomTooltips() {
 //  Init
 // ─────────────────────────────────────────────
 let youngDiagramPageInitialized = false;
+
+function parseYoungDiagramImportText(text) {
+  const raw = String(text || '').trim();
+  if (!raw) throw new Error('Paste a Young diagram state, shape, or ytableau.');
+  if (raw.startsWith('{')) {
+    const data = JSON.parse(raw);
+    if (data.app && data.app !== 'young_diagrams') throw new Error('This is not a Young Diagram Calculator state.');
+    const rows = Array.isArray(data.partition) ? data.partition : data.rows;
+    if (!Array.isArray(rows)) throw new Error('The state has no partition rows.');
+    return { kind: 'state', data, rows: rows.map(Number) };
+  }
+  if (/\\begin\s*\{ytableau\}/.test(raw)) {
+    const body = raw.replace(/[\s\S]*?\\begin\s*\{ytableau\}/, '').replace(/\\end\s*\{ytableau\}[\s\S]*/, '');
+    const rows = body.split(/\\\\/).map((line) => line.replace(/%.*$/gm, '').trim()).filter(Boolean)
+      .map((line) => line.split('&').map((cell) => cell.trim()).filter(Boolean).length);
+    if (!rows.length) throw new Error('No ytableau rows were found.');
+    return { kind: 'ytableau', rows };
+  }
+  const rows = raw.replace(/[()\[\]]/g, '').split(/[\s,;]+/).filter(Boolean).map(Number);
+  return { kind: 'shape', rows };
+}
+
+function validateYoungDiagramImport(parsed) {
+  const rows = parsed.rows;
+  if (!rows.length || rows.some((value) => !Number.isInteger(value) || value < 0)) {
+    throw new Error('Partition rows must be nonnegative integers.');
+  }
+  for (let index = 1; index < rows.length; index += 1) {
+    if (rows[index] > rows[index - 1]) throw new Error('Partition rows must be non-increasing.');
+  }
+  return parsed;
+}
+
+window.SiteImportExportPageAdapter = {
+  exportDefault() {
+    const payload = {
+      app: 'young_diagrams',
+      version: 1,
+      grid: { rows: gridRows, cols: gridCols },
+      partition: rowLengths(),
+      lie: {
+        type: document.getElementById('lie-type')?.value || 'A',
+        rank: Number(document.getElementById('lie-rank')?.value || 1)
+      },
+      display: {
+        showHooks: !!document.getElementById('showhooks')?.checked,
+        shadeHooks: !!document.getElementById('shadehooks')?.checked,
+        showCoordinates: !!document.getElementById('showcoords')?.checked
+      }
+    };
+    return { text: JSON.stringify(payload, null, 2), filename: 'young-diagram-state.json', mimeType: 'application/json' };
+  },
+  validateImport(_kind, raw) {
+    return validateYoungDiagramImport(parseYoungDiagramImportText(raw?.text));
+  },
+  applyImport(_kind, prepared) {
+    const data = prepared.data || {};
+    if (prepared.kind === 'state' && data.grid) {
+      const rowsInput = document.getElementById('grid-rows');
+      const colsInput = document.getElementById('grid-cols');
+      if (rowsInput) rowsInput.value = String(Math.max(1, Math.min(15, Number(data.grid.rows) || gridRows)));
+      if (colsInput) colsInput.value = String(Math.max(1, Math.min(25, Number(data.grid.cols) || gridCols)));
+      applyGridSizeFromInputs();
+    }
+    if (Math.max(...prepared.rows, 0) > gridCols || prepared.rows.length > gridRows) {
+      throw new Error(`Imported shape needs at least ${prepared.rows.length} rows and ${Math.max(...prepared.rows)} columns.`);
+    }
+    drawPartitionRows(prepared.rows.filter((value) => value > 0));
+    const partitionInput = document.getElementById('partition-input');
+    if (partitionInput) partitionInput.value = prepared.rows.join(',');
+    if (prepared.kind === 'state') {
+      if (data.lie?.type && document.getElementById('lie-type')) document.getElementById('lie-type').value = data.lie.type;
+      if (data.lie?.rank && document.getElementById('lie-rank')) document.getElementById('lie-rank').value = String(data.lie.rank);
+      if (data.display) {
+        if (document.getElementById('showhooks')) document.getElementById('showhooks').checked = data.display.showHooks !== false;
+        if (document.getElementById('shadehooks')) document.getElementById('shadehooks').checked = data.display.shadeHooks !== false;
+        if (document.getElementById('showcoords')) document.getElementById('showcoords').checked = !!data.display.showCoordinates;
+      }
+      onTypeChange();
+      redraw();
+    }
+  },
+  hasMeaningfulState() { return rowLengths().length > 0; },
+  filename(name) {
+    const names = { latex: 'young-diagram.tex', svg: 'young-diagram.svg', shape: 'young-diagram-shape.txt' };
+    return names[name] || 'young-diagram-state.json';
+  }
+};
+
 function initYoungDiagramPage() {
   if (youngDiagramPageInitialized) return;
   youngDiagramPageInitialized = true;
