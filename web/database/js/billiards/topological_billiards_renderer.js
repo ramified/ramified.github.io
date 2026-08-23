@@ -14,6 +14,12 @@
   const textureCache = new Map();
   const texturePixelsCache = new Map();
 
+  function ballLabel(ball) {
+    if (ball && ball.kind === 'cue') return '0';
+    const number = Number(ball && ball.number);
+    return Number.isFinite(number) ? String(Math.floor(number)) : '';
+  }
+
   function canvasFactory(width, height) {
     if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(width, height);
     const canvas = document.createElement('canvas');
@@ -22,8 +28,9 @@
     return canvas;
   }
 
-  function makeTexture(ball, debug) {
-    const key = `${debug ? 'debug' : 'pool'}:${ball.number}:${ball.color}`;
+  function makeTexture(ball, debug, options = {}) {
+    const showNumberPatch = options.showNumberPatch !== false;
+    const key = `${debug ? 'debug' : 'pool'}:${showNumberPatch ? 'numbered' : 'plain'}:${ball.number}:${ball.color}`;
     if (textureCache.has(key)) return textureCache.get(key);
     const width = 320;
     const height = 160;
@@ -65,17 +72,19 @@
         ctx.fillRect(0, 0, width, height * 0.28);
         ctx.fillRect(0, height * 0.72, width, height * 0.28);
       }
-      const patchX = width / 2;
-      const patchY = height / 2;
-      ctx.fillStyle = '#fbf8ef';
-      ctx.beginPath();
-      ctx.arc(patchX, patchY, 29, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#202329';
-      ctx.font = 'bold 37px Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(ball.number ? String(ball.number) : 'C', patchX, patchY + 1);
+      if (showNumberPatch) {
+        const patchX = width / 2;
+        const patchY = height / 2;
+        ctx.fillStyle = '#fbf8ef';
+        ctx.beginPath();
+        ctx.arc(patchX, patchY, 29, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#202329';
+        ctx.font = 'bold 37px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(ballLabel(ball), patchX, patchY + 1);
+      }
       ctx.fillStyle = 'rgba(255,255,255,0.16)';
       ctx.fillRect(0, 0, width, 8);
     }
@@ -91,13 +100,13 @@
     return texturePixelsCache.get(texture.key);
   }
 
-  function sphericalSprite(ball, orientation, diameter, debug) {
+  function sphericalSprite(ball, orientation, diameter, debug, options = {}) {
     const size = Math.max(12, Math.ceil(diameter));
     const canvas = canvasFactory(size, size);
     const ctx = canvas.getContext('2d');
     const image = ctx.createImageData(size, size);
     const pixels = image.data;
-    const texture = makeTexture(ball, debug);
+    const texture = makeTexture(ball, debug, options);
     const source = texturePixels(texture);
     const inverse = M.conjugateQuaternion(orientation);
     const center = (size - 1) / 2;
@@ -129,6 +138,62 @@
     }
     ctx.putImageData(image, 0, 0);
     return canvas;
+  }
+
+  function drawBallOutline(ctx, center, radius) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(18, 23, 27, 0.72)';
+    ctx.lineWidth = Math.max(0.8, radius * 0.065);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, radius * 0.94, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBallBadge(ctx, center, radius, ball) {
+    const label = ballLabel(ball);
+    const badgeRadius = radius * 0.49;
+    drawBallOutline(ctx, center, radius);
+    ctx.save();
+    ctx.fillStyle = '#fbf8ef';
+    ctx.strokeStyle = 'rgba(24, 28, 32, 0.58)';
+    ctx.lineWidth = Math.max(0.7, radius * 0.052);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, badgeRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#202329';
+    let fontSize = Math.max(7, radius * (label.length > 2 ? 0.38 : label.length > 1 ? 0.49 : 0.62));
+    ctx.font = `900 ${fontSize}px Arial, sans-serif`;
+    if (typeof ctx.measureText === 'function') {
+      const width = ctx.measureText(label).width;
+      const maximumWidth = badgeRadius * 1.55;
+      if (width > maximumWidth && width > 0) {
+        fontSize *= maximumWidth / width;
+        ctx.font = `900 ${fontSize}px Arial, sans-serif`;
+      }
+    }
+    ctx.direction = 'ltr';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, center.x, center.y);
+    ctx.restore();
+  }
+
+  function drawFixedBallLabel(canvas, ball, size) {
+    drawBallBadge(canvas.getContext('2d'), { x: size / 2, y: size / 2 }, size / 2, ball);
+    return canvas;
+  }
+
+  function numberedBallSprite(ball, orientation, diameter, debug = false) {
+    const size = Math.max(12, Math.ceil(diameter));
+    const canvas = sphericalSprite(ball, orientation, size, debug, { showNumberPatch: false });
+    return drawFixedBallLabel(canvas, ball, size);
+  }
+
+  function paletteBallSprite(ball, diameter) {
+    const orientation = M.quaternionFromAxisAngle({ x: 0, y: 1, z: 0 }, -Math.PI / 2);
+    return numberedBallSprite(ball, orientation, diameter, false);
   }
 
   function fitBoard(canvas, surface) {
@@ -226,11 +291,13 @@
     });
   }
 
-  function drawBallImage(ctx, layout, ball, image, debugTexture) {
+  function drawBallImage(ctx, layout, ball, image, debugTexture, fixedLabel) {
     const center = surfaceToCanvas(image.position, layout);
     const radius = ball.radius * layout.scale;
-    const sprite = sphericalSprite(ball, image.orientation, radius * 2, debugTexture);
+    const sprite = sphericalSprite(ball, image.orientation, radius * 2, debugTexture, { showNumberPatch: !fixedLabel });
     ctx.drawImage(sprite, center.x - radius, center.y - radius, radius * 2, radius * 2);
+    if (fixedLabel) drawBallBadge(ctx, center, radius, ball);
+    else drawBallOutline(ctx, center, radius);
   }
 
   function rayCircleDistance(origin, direction, center, radius) {
@@ -396,7 +463,14 @@
         padding: ball.radius,
         maxDepth: state.parameters.localCoverDepth
       });
-      images.forEach((image) => drawBallImage(ctx, layout, ball, image, !!view.debugTexture));
+      images.forEach((image) => drawBallImage(
+        ctx,
+        layout,
+        ball,
+        image,
+        !!view.debugTexture,
+        state.phase === 'setup' || (state.phase === 'ball-in-hand' && ball.kind === 'cue')
+      ));
     });
     ctx.restore();
     if (view.debug) drawDebug(ctx, layout, state);
@@ -404,9 +478,14 @@
   }
 
   return {
+    ballLabel,
     canvasToSurface,
+    drawBallBadge,
+    drawBallOutline,
     fitBoard,
     makeTexture,
+    numberedBallSprite,
+    paletteBallSprite,
     render,
     sphericalSprite,
     surfaceToCanvas,

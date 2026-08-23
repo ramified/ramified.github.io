@@ -133,7 +133,7 @@
   const BILLIARDS_SQUARE_BOARD_SIZE = 4;
   const BILLIARDS_RECTANGLE_ROWS = 3;
   const BILLIARDS_RECTANGLE_COLS = 5;
-  const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20260823-1';
+  const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20260823-7';
   const BILLIARDS_FALLBACK_FRAME_BUDGET_MS = 8;
   const BILLIARDS_FALLBACK_STEP_CHUNK = 8;
   const FIDE_CHESS_PUZZLE_MIN_BOARD_SIZE = 2;
@@ -884,7 +884,7 @@
           exportSelectedOutput({ focus: false, action: 'refreshed' });
           const text = refs.debugExport ? String(refs.debugExport.value || '') : '';
           if (!text && selectedExportKind() === 'record') {
-            throw new Error(tr('Game records are available for Topological Billiards, Gomoku, Go, Connect Four, Reversi, and FIDE Chess.'));
+            throw new Error(tr('Game records are available for Billiard, Gomoku, Go, Connect Four, Reversi, and FIDE Chess.'));
           }
           const filename = selectedExportKind() === 'background'
             ? 'ramified-minigame-background.json'
@@ -1978,7 +1978,10 @@
     }
     if (currentAnimation || billiardsShotPending) {
       queueOnlineStateMessage(message);
-      syncOnlineStatus('Move received; waiting for local Billiards playback.', 'idle');
+      syncOnlineStatus(
+        billiardsShotPending ? 'Move received; waiting for local Billiards playback.' : 'Move received; waiting for local animation.',
+        'idle'
+      );
       syncOnlineControls();
       return;
     }
@@ -2787,7 +2790,7 @@
     if (mode === GAME_MODES.CHINESE_CHECKERS || mode === 'chinesecheckers' || mode === 'chinese checkers') return GAME_MODES.CHINESE_CHECKERS;
     if (mode === GAME_MODES.SOKOBAN) return GAME_MODES.SOKOBAN;
     if (mode === GAME_MODES.FIDE_CHESS || mode === 'fidechess' || mode === 'fide chess' || mode === 'chess') return GAME_MODES.FIDE_CHESS;
-    if (mode === GAME_MODES.BILLIARDS || mode === 'topological billiards') return GAME_MODES.BILLIARDS;
+    if ([GAME_MODES.BILLIARDS, 'billiard', 'topological billiards'].includes(mode)) return GAME_MODES.BILLIARDS;
     if (mode === GAME_MODES.CONNECT_FOUR || mode === 'connectfour' || mode === 'connect four') return GAME_MODES.CONNECT_FOUR;
     if (mode === GAME_MODES.REVERSI || mode === 'othello') return GAME_MODES.REVERSI;
     if (mode === GAME_MODES.GOMOKU) return GAME_MODES.GOMOKU;
@@ -2848,7 +2851,7 @@
   }
 
   function gameTypeForGameMode(mode) {
-    if (mode === GAME_MODES.BILLIARDS) return 'Topological Billiards';
+    if (mode === GAME_MODES.BILLIARDS) return 'Billiard';
     if (mode === GAME_MODES.FIDE_CHESS) return 'FIDE Chess';
     if (mode === GAME_MODES.SOKOBAN) return 'Sokoban';
     if (mode === GAME_MODES.CHINESE_CHECKERS) return 'Chinese Checkers';
@@ -3336,7 +3339,7 @@
   }
 
   function presetGameTypeLabelForMode(preset, mode) {
-    if (mode === GAME_MODES.BILLIARDS) return 'Topological Billiards';
+    if (mode === GAME_MODES.BILLIARDS) return 'Billiard';
     const matching = presetGameTypesForModes(preset).find((gameType) => gameTypeToGameMode(gameType) === mode);
     return cleanPresetGameType(matching || gameTypeForGameMode(mode));
   }
@@ -3461,7 +3464,7 @@
       if (game.phase === 'gameover') syncStatus(fideChessResultText(game), `${game.round || 0} move${game.round === 1 ? '' : 's'}`, 'over');
       else syncStatus(`${game.preset.label} FIDE Chess`, fideChessTurnInfo(game), 'ready');
     } else if (isBilliardsGame(game)) {
-      syncStatus(`${game.preset.label} Topological Billiards`, billiardsTurnInfo(game), 'ready');
+      syncStatus(`${game.preset.label} Billiard`, billiardsTurnInfo(game), 'ready');
     } else {
       syncStatus(`${game.preset.label} game seed`, 'use arrow keys, buttons, or swipe/drag to slide', 'ready');
     }
@@ -3608,13 +3611,13 @@
     const size = canvas.width;
     ctx.clearRect(0, 0, size, size);
     const renderer = typeof window !== 'undefined' ? window.TopologicalBilliardsRenderer : null;
-    if (renderer && typeof renderer.sphericalSprite === 'function' && Billiards) {
+    if (renderer && typeof renderer.paletteBallSprite === 'function' && Billiards) {
       const ball = {
         kind: choice.kind,
         number: choice.number,
         color: Billiards.ballColor(choice.kind, choice.number)
       };
-      const sprite = renderer.sphericalSprite(ball, Billiards.defaultBallOrientation(), size - 8, false);
+      const sprite = renderer.paletteBallSprite(ball, size - 8);
       ctx.drawImage(sprite, 4, 4, size - 8, size - 8);
       return;
     }
@@ -3626,6 +3629,17 @@
     ctx.arc(size / 2, size / 2, radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    const label = String(choice.number);
+    ctx.fillStyle = '#fbf8ef';
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#202329';
+    ctx.font = `bold ${size * (label.length > 1 ? 0.2 : 0.25)}px Arial, sans-serif`;
+    ctx.direction = 'ltr';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, size / 2, size / 2);
   }
 
   function buildBilliardsBallPalette() {
@@ -7935,7 +7949,7 @@
     if (!recordableGameMode(gameModeValue(game))) {
       refs.debugExport.value = '';
       if (refs.importExportController) refs.importExportController.sync();
-      syncStatus('record unavailable', 'Game records are available for Topological Billiards, Gomoku, Go, Connect Four, Reversi, and FIDE Chess.', 'warn');
+      syncStatus('record unavailable', 'Game records are available for Billiard, Gomoku, Go, Connect Four, Reversi, and FIDE Chess.', 'warn');
       return;
     }
     refs.debugExport.value = JSON.stringify(gameRecordExportPayload(game), null, 2);
@@ -8878,7 +8892,7 @@
     const preset = presetFromStatusPayload(payload);
     const removed = normalizeStatusRemovedSet(payload, preset);
     if (normalizeStatusGameMode(payload) === GAME_MODES.BILLIARDS) {
-      if (!Billiards) throw new Error('Topological Billiards module is unavailable');
+      if (!Billiards) throw new Error('Billiard module is unavailable');
       const state = Billiards.stateFromExport(preset, payload);
       return {
         state,
@@ -9363,7 +9377,7 @@
 
   function beginRecordGame(mode, preset, settings = {}) {
     if (mode === GAME_MODES.BILLIARDS) {
-      if (!Billiards) throw new Error('Topological Billiards module is unavailable');
+      if (!Billiards) throw new Error('Billiard module is unavailable');
       const created = Billiards.createState(preset, { rules: settings.rules });
       const result = Billiards.begin(created);
       if (!result.changed) throw new Error(`record Billiards setup is invalid: ${result.message}`);
@@ -9930,7 +9944,7 @@
 
   function normalizeStatusGameMode(payload) {
     const value = String((payload && (payload.gameMode || payload.game)) || '').trim().toLowerCase();
-    if (value === GAME_MODES.BILLIARDS || value === 'topological billiards') return GAME_MODES.BILLIARDS;
+    if ([GAME_MODES.BILLIARDS, 'billiard', 'topological billiards'].includes(value)) return GAME_MODES.BILLIARDS;
     if (value === GAME_MODES.CHINESE_CHECKERS || value === 'chinese checkers' || value === 'chinesecheckers') {
       return GAME_MODES.CHINESE_CHECKERS;
     }
@@ -23260,7 +23274,7 @@
       ? clampInteger(value, FIDE_CHESS_PUZZLE_MIN_BOARD_SIZE, BOUNDARY_GLUE_MAX_BOARD_SIZE, defaultBoardSizeForPreset(mode, source))
       : selectedPresetIsBoundaryGlueBoard()
       ? normalizeBoundaryGlueBoardSize(value, squareDefault)
-      : clampInteger(value, GOMOKU_MIN_BOARD_SIZE, GOMOKU_MAX_BOARD_SIZE, defaults.rows);
+      : clampInteger(value, GOMOKU_MIN_BOARD_SIZE, GOMOKU_MAX_BOARD_SIZE, squareDefault);
     return { rows: size, cols: size };
   }
 
@@ -23429,7 +23443,7 @@
   }
 
   function createBilliardsState(presetOrId, options = {}) {
-    if (!Billiards) throw new Error('Topological Billiards module is unavailable');
+    if (!Billiards) throw new Error('Billiard module is unavailable');
     const preset = materializePreset(resolvePreset(presetOrId), options);
     return Billiards.createState(preset, options);
   }

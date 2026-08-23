@@ -1,8 +1,74 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
+const vm = require('vm');
+const M = require('./topological_billiards_math.js');
+const P = require('./topological_billiards_physics.js');
+const N = require('./topological_billiards_native.js');
+
+function testBrowserSimulationWorker() {
+  let messageHandler = null;
+  const messages = [];
+  const workerScope = {
+    addEventListener(type, handler) {
+      if (type === 'message') messageHandler = handler;
+    },
+    postMessage(message) {
+      messages.push(message);
+    }
+  };
+  const context = vm.createContext({
+    self: workerScope,
+    performance,
+    importScripts() {
+      workerScope.TopologicalBilliardsMath = M;
+      workerScope.TopologicalBilliardsPhysics = P;
+      workerScope.TopologicalBilliardsNative = N;
+    }
+  });
+  const source = fs.readFileSync(require.resolve('./topological_billiards_simulation_worker.js'), 'utf8');
+  vm.runInContext(source, context, { filename: 'topological_billiards_simulation_worker.js' });
+  assert.strictEqual(typeof messageHandler, 'function');
+
+  const preset = {
+    id: 'worker-shot-test',
+    lattice: 'square',
+    rows: 1,
+    cols: 1,
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [],
+    billiards: {
+      pockets: [],
+      balls: [{ id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0, y: 0 } }],
+      parameters: { maxShotSeconds: 0.05 }
+    }
+  };
+  const state = N.begin(N.createState(preset)).state;
+  messageHandler({
+    data: {
+      id: 17,
+      preset,
+      state: N.stateExport(state),
+      aim: { x: 1, y: 0 },
+      power: 0.4,
+      contact: { x: 0, y: 0 },
+      shooter: 'player-1',
+      collectTrajectory: true
+    }
+  });
+  assert.strictEqual(messages.length, 1);
+  assert.strictEqual(messages[0].id, 17);
+  assert.strictEqual(messages[0].ok, true);
+  assert.strictEqual(messages[0].changed, true);
+  assert.strictEqual(messages[0].state.shots, 1);
+  assert.ok(messages[0].simulationSteps > 0);
+  assert.ok(messages[0].trajectory.length >= 2);
+}
 
 async function run() {
+  testBrowserSimulationWorker();
   const worker = await import('../../cloudflare/ramified-chess.worker.js');
   const shot = worker.normalizeAction({
     type: 'billiards-shot',

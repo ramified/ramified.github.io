@@ -69,6 +69,9 @@
   const COMPONENT_COLOR_PALETTE = ['#b23a48', '#1f7a8c', '#6a4c93', '#c47f17'];
   const GLUED_BOUNDARY_COLORS = ['#1f7a8c', '#b23a48', '#6a4c93', '#c47f17', '#2f855a', '#8a4f7d'];
   const HOMOLOGY_COLORS = ['#18748a', '#b23a48', '#6a4c93', '#c47f17', '#278050', '#8a4f7d'];
+  const HOMOLOGY_CORD_REAL_BOUNDARY_INSET_RATIO = 0.05;
+  const HOMOLOGY_CORD_DEFAULT_ITERATIONS_PER_FRAME = 20;
+  const HOMOLOGY_CORD_DEFAULT_CONTRACTION_RATIO = 0.1;
   const DEFAULT_SEIFERT_BAND_WIDTH = 0.42;
   const MIN_SEIFERT_BAND_WIDTH = 0.24;
   const MAX_SEIFERT_BAND_WIDTH = 0.78;
@@ -842,8 +845,9 @@
     homologyCordDrag: null,
     homologyCordAnimation: null,
     homologyCordRelaxSpeed: 1,
+    homologyCordContractionStrength: HOMOLOGY_CORD_DEFAULT_CONTRACTION_RATIO,
     homologyCordPointSpacing: 0.12,
-    homologyCordIterationsPerFrame: 4,
+    homologyCordIterationsPerFrame: HOMOLOGY_CORD_DEFAULT_ITERATIONS_PER_FRAME,
     showHomologyCordParticles: false,
     inspectHomologyCordOptimization: false,
     homologyCordOptimizationSelection: null,
@@ -1097,6 +1101,8 @@
     refs.homologyCordDebugCard = document.getElementById('homology-cord-debug-card');
     refs.homologyCordRelaxSpeed = document.getElementById('homology-cord-relax-speed');
     refs.homologyCordRelaxSpeedValue = document.getElementById('homology-cord-relax-speed-value');
+    refs.homologyCordContractionStrength = document.getElementById('homology-cord-contraction-strength');
+    refs.homologyCordContractionStrengthValue = document.getElementById('homology-cord-contraction-strength-value');
     refs.homologyCordPointSpacing = document.getElementById('homology-cord-point-spacing');
     refs.homologyCordPointSpacingValue = document.getElementById('homology-cord-point-spacing-value');
     refs.showHomologyCordParticles = document.getElementById('show-homology-cord-particles');
@@ -1463,6 +1469,7 @@
     if (refs.resetHomologyCords) refs.resetHomologyCords.addEventListener('click', () => resetBackgroundHomologyCords(true));
     [
       ['homologyCordRelaxSpeed', 'homologyCordRelaxSpeedValue', 'homology-cord-relax-speed', normalizeHomologyCordRelaxSpeed],
+      ['homologyCordContractionStrength', 'homologyCordContractionStrengthValue', 'homology-cord-contraction-strength', normalizeHomologyCordContractionStrength],
       ['homologyCordPointSpacing', 'homologyCordPointSpacingValue', 'homology-cord-point-spacing', normalizeHomologyCordPointSpacing]
     ].forEach(([stateKey, outputKey, inputId, normalize]) => {
       const input = refs[stateKey];
@@ -10342,6 +10349,7 @@
     }
     [
       ['homologyCordRelaxSpeed', 'homologyCordRelaxSpeedValue', normalizeHomologyCordRelaxSpeed],
+      ['homologyCordContractionStrength', 'homologyCordContractionStrengthValue', normalizeHomologyCordContractionStrength],
       ['homologyCordPointSpacing', 'homologyCordPointSpacingValue', normalizeHomologyCordPointSpacing]
     ].forEach(([stateKey, outputKey, normalize]) => {
       const input = refs[stateKey];
@@ -16480,7 +16488,7 @@
       } else {
         state.homologyStatus = preparation.unsupported > 0
           ? `Drag any point on an elastic cord. ${preparation.unsupported} generator${preparation.unsupported === 1 ? '' : 's'} remain${preparation.unsupported === 1 ? 's' : ''} in exact cellular form because they do not make one supported circuit.`
-          : 'Drag any point on a cord. It is one continuous rubber band on the quotient surface; a glued seam only changes its displayed chart.';
+          : 'Drag any point on a cord.';
         scheduleBackgroundHomologyCordAnimation();
       }
     }
@@ -16603,21 +16611,48 @@
     const transition = homologyCordSelectedPortalTransition(analysis, entry);
     if (transition) return transition;
     // A cellular cycle may legitimately run along an unpaired boundary (for
-    // example around a hole).  Traversing that edge does not cross a portal;
-    // the following edge continues in the current chart and the optimizer's
-    // boundary projection keeps the material curve on the surface.
+    // example around a hole). Traversing that edge does not cross a portal,
+    // so initial polyline construction continues in the current chart.
     if (entry && entry.edge && entry.edge.kind === 'boundary') {
       return { frame: homologyCordAffineIdentity(), crossing: null };
     }
     return null;
   }
 
-  // Develop the circuit in a lifted chart.  The final-to-first displacement
-  // is a deck transformation, not a visible seam node; constraining this
-  // vector preserves a non-contractible loop such as the usual-strip line.
+  function homologyCordMaterialSegment(entry, insetRealBoundary = false) {
+    const side = entry && entry.side;
+    const cell = side && geometry && geometry.cells[side.index];
+    if (!cell) return null;
+    const segment = edgeSegmentPoints(cell.x, cell.y, side.dir, geometry.radius);
+    if (!insetRealBoundary || !entry.edge || entry.edge.kind !== 'boundary') return segment;
+    const tangent = homologyCordNormalize({
+      x: segment.end.x - segment.start.x,
+      y: segment.end.y - segment.start.y
+    });
+    const midpoint = {
+      x: (segment.start.x + segment.end.x) * 0.5,
+      y: (segment.start.y + segment.end.y) * 0.5
+    };
+    const inward = homologyCordNormalize({ x: cell.x - midpoint.x, y: cell.y - midpoint.y });
+    const inset = geometry.radius * HOMOLOGY_CORD_REAL_BOUNDARY_INSET_RATIO;
+    return {
+      start: {
+        x: segment.start.x + (tangent.x * inset) + (inward.x * inset),
+        y: segment.start.y + (tangent.y * inset) + (inward.y * inset)
+      },
+      end: {
+        x: segment.end.x - (tangent.x * inset) + (inward.x * inset),
+        y: segment.end.y - (tangent.y * inset) + (inward.y * inset)
+      }
+    };
+  }
+
+  // Develop the initial circuit in a lifted chart. The planar band adapter
+  // below discards this construction-only frame and deck metadata.
   function makeHomologyCordChain(generator, entries, analysisOverride = null) {
     const ordered = orderedHomologyCordEntries(entries);
     if (!ordered) return null;
+    const insetSingleBoundary = ordered.filter((record) => record.entry.edge.kind === 'boundary').length === 1;
     const points = [];
     const analysis = analysisOverride || currentBackgroundHomologyAnalysis();
     const transitions = ordered.map((record) => homologyCordEntryTransition(analysis, record.entry));
@@ -16627,7 +16662,8 @@
     ordered.forEach((record, recordIndex) => {
       const { entry } = record;
       const cell = geometry.cells[entry.side.index];
-      const materialSegment = edgeSegmentPoints(cell.x, cell.y, entry.side.dir, geometry.radius);
+      const materialSegment = homologyCordMaterialSegment(entry, insetSingleBoundary);
+      if (!materialSegment) return;
       const start = entry.reverse ? materialSegment.end : materialSegment.start;
       const end = entry.reverse ? materialSegment.start : materialSegment.end;
       const samples = clamp(Math.ceil(Math.hypot(end.x - start.x, end.y - start.y) /
@@ -16654,9 +16690,8 @@
           x: developed.x,
           y: developed.y,
           frame: { matrix: { ...frame.matrix }, offset: { ...frame.offset } },
-          // This is a second chart-view of the previous logical particle.
-          // It is free to move, but portal constraint keeps its lifted
-          // position identical instead of making a physical seam endpoint.
+          // This temporary second chart view is discarded by the planar
+          // adapter instead of becoming another physical particle.
           portal: recordIndex > 0 && index === 0,
           tileIndex: entry.side.index,
           chartVertex: -1
@@ -16677,8 +16712,8 @@
       const nextRecord = ordered[recordIndex + 1];
       if (nextRecord) {
         const nextEntry = nextRecord.entry;
-        const nextCell = geometry.cells[nextEntry.side.index];
-        const nextSegment = edgeSegmentPoints(nextCell.x, nextCell.y, nextEntry.side.dir, geometry.radius);
+        const nextSegment = homologyCordMaterialSegment(nextEntry, insetSingleBoundary);
+        if (!nextSegment) return;
         const nextStart = nextEntry.reverse ? nextSegment.end : nextSegment.start;
         const developedNextStart = applyHomologyCordAffine(frame, nextStart);
         frame = composeHomologyCordAffine({
@@ -16713,22 +16748,9 @@
         matrix: { ...frame.matrix },
         offset: { ...frame.offset }
       },
-      // `edgeChain` is the exact cellular representative.  The geometric
-      // path is relaxable only when its directed circuit exists; branching
-      // representatives keep the existing exact cellular rendering.
-      topologySignature: `${generator.id}|${generator.edgeChain.map((value) => value.toString()).join(',')}`,
-      initialTopologySignature: `${generator.id}|${generator.edgeChain.map((value) => value.toString()).join(',')}`,
-      portalItinerary: null,
-      closurePortalItinerary: transitions.map((transition) => transition.crossing).filter(Boolean),
-      portalTemplates: points.reduce((templates, point, index) => {
-        if (point.portal) templates.push({ afterFraction: index / Math.max(1, points.length - 1), frame: point.frame, tileIndex: point.tileIndex });
-        return templates;
-      }, []),
-      minimumParticleCount: Math.max(6, ordered.length * 3),
-      settled: false
+      closurePortalItinerary: transitions.map((transition) => transition.crossing).filter(Boolean)
     };
-    chain.portalItinerary = homologyCordCandidateItinerary(chain, homologyCordSnapshot(chain), analysis);
-    if (!chain.portalItinerary) return null;
+    if (!homologyCordCandidateItinerary(chain, homologyCordMaterialSnapshot(chain), analysis)) return null;
     return chain;
   }
 
@@ -16736,7 +16758,7 @@
     const fingerprint = homologyCordChainFingerprint(generator, entries);
     const current = state.homologyCordChains[generator.id];
     if (current && current.fingerprint === fingerprint) return current;
-    const next = makeHomologyCordChain(generator, entries);
+    const next = makePlanarElasticBandChain(makeHomologyCordChain(generator, entries));
     if (next) state.homologyCordChains[generator.id] = next;
     else delete state.homologyCordChains[generator.id];
     return next;
@@ -16760,6 +16782,13 @@
     return homologyCordPointLocal(point);
   }
 
+  // The first elastic-band milestone deliberately lives in one Euclidean
+  // optimization plane. Tile charts remain construction metadata until the
+  // later quotient-surface integration is reintroduced.
+  function displayedHomologyCordChainPoint(point) {
+    return { x: point.x, y: point.y };
+  }
+
   // Portal entries are a second chart view of the preceding material point,
   // not a second optimizer particle.
   function homologyCordPhysicalIndices(chain) {
@@ -16769,43 +16798,120 @@
     }, []);
   }
 
-  function regenerateHomologyCordPortalCopies(chain) {
-    const material = chain.points.filter((point) => !point.portal);
-    if (!Array.isArray(chain.portalTemplates) || !chain.portalTemplates.length) {
-      chain.points = material;
-      return;
-    }
-    const templates = chain.portalTemplates.slice().sort((left, right) => left.afterFraction - right.afterFraction);
-    const copiesAfter = new Map();
-    templates.forEach((template) => {
-      const position = clamp(Math.floor(template.afterFraction * Math.max(1, material.length - 1)), 0, Math.max(0, material.length - 2));
-      const list = copiesAfter.get(position) || [];
-      list.push(template);
-      copiesAfter.set(position, list);
-    });
-    const points = [];
-    material.forEach((point, index) => {
-      points.push(point);
-      (copiesAfter.get(index) || []).forEach((template) => {
-        points.push({
-          ...point,
-          portal: true,
-          tileIndex: template.tileIndex,
-          frame: { matrix: { ...template.frame.matrix }, offset: { ...template.frame.offset } }
-        });
-      });
-    });
-    chain.points = points;
+  function homologyCordMaterialSnapshot(chain) {
+    return homologyCordPhysicalIndices(chain).map((index) => ({ index, ...chain.points[index] }));
   }
 
-  function homologyCordMaterialLength(chain, material = homologyCordPhysicalIndices(chain)) {
-    let length = 0;
-    for (let index = 1; index < material.length; index += 1) {
-      const left = chain.points[material[index - 1]];
-      const right = chain.points[material[index]];
-      length += Math.hypot(right.x - left.x, right.y - left.y);
+  function makePlanarElasticBandChain(surfaceChain) {
+    if (!surfaceChain || !Array.isArray(surfaceChain.points)) return null;
+    const material = homologyCordPhysicalIndices(surfaceChain);
+    if (material.length < 3) return null;
+    const points = material.map((index) => {
+      const projected = projectedHomologyCordChainPoint(surfaceChain.points[index]);
+      return {
+        x: projected.x,
+        y: projected.y,
+        optimizationDirection: { x: 0, y: 0 }
+      };
+    });
+    if (points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))) return null;
+    points[points.length - 1] = {
+      x: points[0].x,
+      y: points[0].y,
+      optimizationDirection: { x: 0, y: 0 }
+    };
+    return {
+      generatorId: surfaceChain.generatorId,
+      fingerprint: surfaceChain.fingerprint,
+      solverSpace: 'planar',
+      points,
+      deck: { x: 0, y: 0 },
+      closure: homologyCordAffineIdentity()
+    };
+  }
+
+  function snapshotPlanarElasticBand(chain) {
+    if (!chain || !Array.isArray(chain.points)) return [];
+    return chain.points.map((point, index) => ({ index, x: point.x, y: point.y }));
+  }
+
+  function computePlanarElasticBandDirections(snapshot, heldIndex = -1) {
+    const directions = snapshot.map(() => ({ x: 0, y: 0 }));
+    const logicalCount = Math.max(0, snapshot.length - 1);
+    if (logicalCount < 2) return directions;
+    const held = heldIndex === logicalCount ? 0 : heldIndex;
+    for (let index = 0; index < logicalCount; index += 1) {
+      if (index === held) continue;
+      const previous = snapshot[(index + logicalCount - 1) % logicalCount];
+      const current = snapshot[index];
+      const next = snapshot[(index + 1) % logicalCount];
+      const incomingLength = Math.hypot(previous.x - current.x, previous.y - current.y);
+      const outgoingLength = Math.hypot(next.x - current.x, next.y - current.y);
+      const incoming = incomingLength > 0 && Number.isFinite(incomingLength)
+        ? { x: (previous.x - current.x) / incomingLength, y: (previous.y - current.y) / incomingLength }
+        : { x: 0, y: 0 };
+      const outgoing = outgoingLength > 0 && Number.isFinite(outgoingLength)
+        ? { x: (next.x - current.x) / outgoingLength, y: (next.y - current.y) / outgoingLength }
+        : { x: 0, y: 0 };
+      directions[index] = { x: incoming.x + outgoing.x, y: incoming.y + outgoing.y };
     }
-    return length;
+    return directions;
+  }
+
+  function stepPlanarElasticBand(chain, options = {}) {
+    const snapshot = snapshotPlanarElasticBand(chain);
+    const logicalCount = Math.max(0, snapshot.length - 1);
+    const configuredStep = Math.max(0, Number(options.stepSize) || 0);
+    const configuredContraction = Number(options.contractionRatio);
+    const contractionRatio = Number.isFinite(configuredContraction)
+      ? clamp(configuredContraction, 0.01, 0.2)
+      : 0.05;
+    const heldIndex = Number.isInteger(options.heldIndex) ? options.heldIndex : -1;
+    const directions = computePlanarElasticBandDirections(snapshot, heldIndex);
+    let shortestNonzeroEdge = Infinity;
+    for (let index = 0; index < logicalCount; index += 1) {
+      const next = (index + 1) % logicalCount;
+      const length = Math.hypot(snapshot[next].x - snapshot[index].x, snapshot[next].y - snapshot[index].y);
+      if (length > 0 && Number.isFinite(length) && length < shortestNonzeroEdge) shortestNonzeroEdge = length;
+    }
+    const safeStep = shortestNonzeroEdge === Infinity
+      ? 0
+      : Math.min(configuredStep, contractionRatio * shortestNonzeroEdge);
+    const held = heldIndex === logicalCount ? 0 : heldIndex;
+    const nextPositions = snapshot.map((point) => ({ x: point.x, y: point.y }));
+    for (let index = 0; index < logicalCount; index += 1) {
+      if (index === held) continue;
+      nextPositions[index] = {
+        x: snapshot[index].x + (directions[index].x * safeStep),
+        y: snapshot[index].y + (directions[index].y * safeStep)
+      };
+    }
+    if (snapshot.length) {
+      nextPositions[snapshot.length - 1] = {
+        x: nextPositions[0].x,
+        y: nextPositions[0].y
+      };
+    }
+    let maximumDisplacement = 0;
+    nextPositions.forEach((position, index) => {
+      maximumDisplacement = Math.max(maximumDisplacement, Math.hypot(
+        position.x - snapshot[index].x,
+        position.y - snapshot[index].y
+      ));
+    });
+    nextPositions.forEach((position, index) => {
+      chain.points[index].x = position.x;
+      chain.points[index].y = position.y;
+      chain.points[index].optimizationDirection = index < logicalCount
+        ? { ...directions[index] }
+        : { x: 0, y: 0 };
+    });
+    return {
+      safeStep,
+      contractionRatio,
+      shortestNonzeroEdge: shortestNonzeroEdge === Infinity ? 0 : shortestNonzeroEdge,
+      maximumDisplacement
+    };
   }
 
   const HOMOLOGY_CORD_EPSILON = 1e-8;
@@ -16847,25 +16953,11 @@
     return inverse ? applyHomologyCordAffine(inverse, point) : { x: point.x, y: point.y };
   }
 
-  function setHomologyCordPointLocal(point, local) {
-    const developed = applyHomologyCordAffine(point.frame || homologyCordAffineIdentity(), local);
-    point.x = developed.x;
-    point.y = developed.y;
-    return point;
-  }
-
   function homologyCordNormalize(vector) {
     const length = Math.hypot(vector.x, vector.y);
     return length > HOMOLOGY_CORD_EPSILON
       ? { x: vector.x / length, y: vector.y / length }
       : { x: 0, y: 0 };
-  }
-
-  function homologyCordClampLength(vector, maximum) {
-    const length = Math.hypot(vector.x, vector.y);
-    if (!Number.isFinite(length) || length <= maximum || length < HOMOLOGY_CORD_EPSILON) return { ...vector };
-    const scale = maximum / length;
-    return { x: vector.x * scale, y: vector.y * scale };
   }
 
   function homologyCordClosure(chain) {
@@ -16888,49 +16980,6 @@
       x: (closure.matrix.a * point.x) + (closure.matrix.b * point.y) + closure.offset.x,
       y: (closure.matrix.c * point.x) + (closure.matrix.d * point.y) + closure.offset.y
     };
-  }
-
-  function invertHomologyCordClosure(chain, point) {
-    const closure = homologyCordClosure(chain);
-    const { a, b, c, d } = closure.matrix;
-    const determinant = (a * d) - (b * c);
-    if (Math.abs(determinant) < HOMOLOGY_CORD_EPSILON) return null;
-    const x = point.x - closure.offset.x;
-    const y = point.y - closure.offset.y;
-    return { x: ((d * x) - (b * y)) / determinant, y: ((-c * x) + (a * y)) / determinant };
-  }
-
-  function inverseHomologyCordClosureVector(chain, vector) {
-    const { matrix } = homologyCordClosure(chain);
-    const determinant = (matrix.a * matrix.d) - (matrix.b * matrix.c);
-    if (Math.abs(determinant) < HOMOLOGY_CORD_EPSILON) return { x: 0, y: 0 };
-    return {
-      x: ((matrix.d * vector.x) - (matrix.b * vector.y)) / determinant,
-      y: ((-matrix.c * vector.x) + (matrix.a * vector.y)) / determinant
-    };
-  }
-
-  function homologyCordClosureError(chain, first, last) {
-    const expected = applyHomologyCordClosure(chain, first);
-    return Math.hypot(last.x - expected.x, last.y - expected.y);
-  }
-
-  // This is the negative local length gradient.  It deliberately depends on
-  // direction alone, so unequal spacing on a straight line remains stationary.
-  function computeHomologyCordContractionDirection(previous, current, next) {
-    const incoming = homologyCordNormalize({ x: previous.x - current.x, y: previous.y - current.y });
-    const outgoing = homologyCordNormalize({ x: next.x - current.x, y: next.y - current.y });
-    return { x: incoming.x + outgoing.x, y: incoming.y + outgoing.y };
-  }
-
-  function homologyCordSnapshot(chain, material = homologyCordPhysicalIndices(chain)) {
-    return material.map((index) => ({ index, ...chain.points[index] }));
-  }
-
-  function homologyCordSnapshotLength(snapshot) {
-    return snapshot.slice(1).reduce((length, point, index) => (
-      length + Math.hypot(point.x - snapshot[index].x, point.y - snapshot[index].y)
-    ), 0);
   }
 
   function segmentIntersectionParameters(start, end, edgeStart, edgeEnd) {
@@ -17018,211 +17067,6 @@
     return itinerary;
   }
 
-  function homologyCordSameItinerary(left, right) {
-    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
-    return left.every((entry, index) => {
-      const candidate = right[index];
-      return entry.kind === candidate.kind
-        && entry.vertex === candidate.vertex
-        && entry.fromTile === candidate.fromTile
-        && entry.fromDir === candidate.fromDir
-        && entry.toTile === candidate.toTile
-        && entry.toDir === candidate.toDir;
-    });
-  }
-
-  function homologyCordElasticBandCandidates(chain, options = {}) {
-    const material = homologyCordPhysicalIndices(chain);
-    const snapshot = homologyCordSnapshot(chain, material);
-    const stepSize = Math.max(0, Number(options.stepSize) || 0);
-    const maximumMove = Math.max(0, Number(options.maximumMove) || stepSize);
-    const held = Number.isInteger(options.held) ? options.held : -1;
-    if (snapshot.length < 3) return { material, snapshot, candidates: snapshot, maxDisplacement: 0 };
-    const candidates = snapshot.map((point, position) => ({ ...point }));
-    let maxDisplacement = 0;
-    for (let position = 0; position < snapshot.length - 1; position += 1) {
-      const point = snapshot[position];
-      if (point.index === held) continue;
-      const next = snapshot[position + 1];
-      const previous = position === 0 ? snapshot[snapshot.length - 2] : snapshot[position - 1];
-      const closurePrevious = position === 0 ? snapshot[snapshot.length - 2] : previous;
-      const closureLast = snapshot[snapshot.length - 1];
-      const incoming = position === 0
-        ? homologyCordNormalize(inverseHomologyCordClosureVector(chain, {
-          x: closurePrevious.x - closureLast.x,
-          y: closurePrevious.y - closureLast.y
-        }))
-        : homologyCordNormalize({ x: previous.x - point.x, y: previous.y - point.y });
-      const outgoing = homologyCordNormalize({ x: next.x - point.x, y: next.y - point.y });
-      const direction = { x: incoming.x + outgoing.x, y: incoming.y + outgoing.y };
-      const previousLength = position === 0
-        ? Math.hypot(closurePrevious.x - closureLast.x, closurePrevious.y - closureLast.y)
-        : Math.hypot(previous.x - point.x, previous.y - point.y);
-      const nextLength = Math.hypot(next.x - point.x, next.y - point.y);
-      const bubble = Math.min(maximumMove, previousLength * 0.4, nextLength * 0.4);
-      const displacement = homologyCordClampLength({ x: direction.x * stepSize, y: direction.y * stepSize }, bubble);
-      candidates[position].x += displacement.x;
-      candidates[position].y += displacement.y;
-      candidates[position].optimizationDirection = direction;
-      candidates[position].proposedDisplacement = displacement;
-      maxDisplacement = Math.max(maxDisplacement, Math.hypot(displacement.x, displacement.y));
-    }
-    // The lifted closing point is exact, not a spring.  A held closing point
-    // is represented by moving its canonical mate through the inverse map.
-    const last = snapshot[snapshot.length - 1];
-    const first = candidates[0];
-    if (last.index === held) {
-      const inverse = invertHomologyCordClosure(chain, last);
-      if (inverse) {
-        first.x = inverse.x;
-        first.y = inverse.y;
-      }
-    }
-    const closed = applyHomologyCordClosure(chain, first);
-    candidates[candidates.length - 1] = { ...last, ...closed, optimizationDirection: { x: 0, y: 0 }, proposedDisplacement: { x: 0, y: 0 } };
-    return { material, snapshot, candidates, maxDisplacement };
-  }
-
-  function homologyCordFiniteSnapshot(snapshot) {
-    return snapshot.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
-  }
-
-  function applyHomologyCordElasticBandCandidates(chain, material, candidates) {
-    candidates.forEach((candidate, position) => {
-      const index = material[position];
-      const point = chain.points[index];
-      Object.assign(point, candidate);
-    });
-  }
-
-  // One deterministic Jacobi iteration.  Integrations with the atlas pass
-  // surface, segment, and topology validators through options; the pure path
-  // remains useful for direct numerical tests.
-  function relaxHomologyCordElasticBandIteration(chain, analysis, options = {}) {
-    const baseStep = Math.max(0, Number(options.stepSize) || 0);
-    const maximumMove = Math.max(0, Number(options.maximumMove) || baseStep);
-    const lengthTolerance = Math.max(0, Number(options.lengthTolerance) || 1e-9);
-    const maxBacktracking = Math.max(0, Math.floor(Number(options.maxBacktracking) || 8));
-    const oldMaterial = homologyCordPhysicalIndices(chain);
-    const oldSnapshot = homologyCordSnapshot(chain, oldMaterial);
-    const oldLength = homologyCordSnapshotLength(oldSnapshot);
-    let accepted = null;
-    let stepSize = baseStep;
-    for (let attempt = 0; attempt <= maxBacktracking; attempt += 1) {
-      const proposal = homologyCordElasticBandCandidates(chain, {
-        stepSize,
-        maximumMove: Math.min(maximumMove, stepSize || maximumMove),
-        held: options.held
-      });
-      let candidates = proposal.candidates.map((point) => ({ ...point }));
-      if (typeof options.projectCandidate === 'function') {
-        candidates = candidates.map((point, position) => options.projectCandidate({ ...point }, position, proposal, analysis));
-      }
-      const closureFirst = candidates[0];
-      if (closureFirst) {
-        const closed = applyHomologyCordClosure(chain, closureFirst);
-        candidates[candidates.length - 1] = { ...candidates[candidates.length - 1], ...closed };
-      }
-      const candidateLength = homologyCordSnapshotLength(candidates);
-      const acceptedDisplacement = candidates.reduce((maximum, point, index) => Math.max(maximum, Math.hypot(
-        point.x - oldSnapshot[index].x,
-        point.y - oldSnapshot[index].y
-      )), 0);
-      const valid = homologyCordFiniteSnapshot(candidates)
-        && homologyCordClosureError(chain, candidates[0], candidates[candidates.length - 1]) <= 1e-6
-        && (!options.validateCandidates || options.validateCandidates(candidates, proposal, analysis) !== false)
-        && (!options.validateSegments || options.validateSegments(candidates, proposal, analysis) !== false)
-        && (!options.validateTopology || options.validateTopology(candidates, proposal, analysis) !== false)
-        && candidateLength <= oldLength + lengthTolerance;
-      if (valid) {
-        accepted = { ...proposal, candidates, length: candidateLength, maxDisplacement: acceptedDisplacement, attempts: attempt, stepSize };
-        break;
-      }
-      stepSize *= 0.5;
-    }
-    if (!accepted) {
-      chain.stableIterations = 0;
-      chain.settled = false;
-      chain.blocked = true;
-      chain.lastOptimization = { accepted: false, blocked: true, oldLength, attempts: maxBacktracking + 1 };
-      return { accepted: false, blocked: true, settled: false, oldLength, length: oldLength, maxDisplacement: 0 };
-    }
-    applyHomologyCordElasticBandCandidates(chain, accepted.material, accepted.candidates);
-    const relativeImprovement = Math.abs(oldLength - accepted.length) / Math.max(1, oldLength);
-    const stable = relativeImprovement <= (options.relativeLengthTolerance || 1e-4)
-      && accepted.maxDisplacement <= (options.positionTolerance || 1e-4);
-    chain.stableIterations = stable ? (chain.stableIterations || 0) + 1 : 0;
-    chain.blocked = false;
-    chain.settled = chain.stableIterations >= (options.stableIterations || 5);
-    chain.lastOptimization = {
-      accepted: true,
-      oldLength,
-      length: accepted.length,
-      relativeImprovement,
-      maxDisplacement: accepted.maxDisplacement,
-      attempts: accepted.attempts,
-      stepSize: accepted.stepSize
-    };
-    return { accepted: true, settled: chain.settled, ...chain.lastOptimization };
-  }
-
-  // Geometry-based remeshing.  It never consults a spring rest length: long
-  // material links gain a midpoint and locally redundant points are removed
-  // only when their replacement segment retains the recorded surface route.
-  function resampleHomologyCordElasticBand(chain, analysis, options = {}) {
-    const minimum = Math.max(3, Math.floor(options.minimumParticleCount || chain.minimumParticleCount || 6));
-    const minSpacing = Math.max(HOMOLOGY_CORD_EPSILON, Number(options.minSpacing) || 1);
-    const maxSpacing = Math.max(minSpacing, Number(options.maxSpacing) || minSpacing * 1.7);
-    const material = homologyCordPhysicalIndices(chain);
-    if (material.length < 3) return false;
-    const points = material.map((index) => ({ ...chain.points[index], portal: false }));
-    let changed = false;
-    for (let index = 1; index < points.length; index += 1) {
-      const left = points[index - 1];
-      const right = points[index];
-      const distance = Math.hypot(right.x - left.x, right.y - left.y);
-      if (distance <= maxSpacing) continue;
-      const midpoint = {
-        ...left,
-        x: (left.x + right.x) * 0.5,
-        y: (left.y + right.y) * 0.5,
-        portal: false
-      };
-      const projected = constrainHomologyCordElasticBandCandidate(chain, left, midpoint, analysis);
-      points.splice(index, 0, projected);
-      changed = true;
-      break;
-    }
-    if (!changed && points.length > minimum) {
-      for (let index = 1; index < points.length - 1; index += 1) {
-        const left = points[index - 1];
-        const middle = points[index];
-        const right = points[index + 1];
-        const adjacent = Math.hypot(middle.x - left.x, middle.y - left.y)
-          + Math.hypot(right.x - middle.x, right.y - middle.y);
-        const replacement = Math.hypot(right.x - left.x, right.y - left.y);
-        if (adjacent >= minSpacing * 2 || replacement > maxSpacing) continue;
-        const candidate = points.slice();
-        candidate.splice(index, 1);
-        if (!geometry || homologyCordCandidateSegmentsAreValid(candidate, chain, analysis)) {
-          points.splice(index, 1);
-          changed = true;
-          break;
-        }
-      }
-    }
-    if (!changed) return false;
-    const closed = applyHomologyCordClosure(chain, points[0]);
-    points[points.length - 1] = { ...points[points.length - 1], ...closed };
-    if (!options.skipValidation && ((geometry && !homologyCordCandidateSegmentsAreValid(points, chain, analysis))
-      || !homologyCordTopologyIsValid(chain, points, analysis))) return false;
-    chain.points = points;
-    regenerateHomologyCordPortalCopies(chain);
-    chain.stableIterations = 0;
-    chain.remeshCooldown = Number(options.cooldown) || 12;
-    return true;
-  }
-
   // A local affine chart is labelled by the quotient vertex closest to a
   // particle.  The label is transient geometry only; it never participates in
   // the cellular chain or in its H_1 coordinates.
@@ -17239,21 +17083,6 @@
       });
     });
     return best ? best.id : -1;
-  }
-
-  function nearestHomologyCordTileSide(tileIndex, point) {
-    const cell = geometry && geometry.cells[tileIndex];
-    if (!cell) return null;
-    const lattice = getLattice();
-    let nearest = null;
-    for (let dir = 0; dir < lattice.sides; dir += 1) {
-      const segment = edgeSegmentPoints(cell.x, cell.y, dir, geometry.radius);
-      const projection = projectPointToSegment(point, segment.start, segment.end);
-      if (!nearest || projection.distance < nearest.distance) {
-        nearest = { dir, segment, ...projection };
-      }
-    }
-    return nearest;
   }
 
   function homologyCordAffinePortalTransform(source, target, sameOrientation, sourceCenter, targetCenter, inset = 0) {
@@ -17298,109 +17127,6 @@
     return { mapPosition, mapVector, affine, sourceTangent: sourceUnitTangent, sourceOutward, targetTangent: targetUnitTangent, targetInward };
   }
 
-  function homologyCordPortalMap(analysis, fromIndex, fromDir, toIndex, toDir, point, displacement) {
-    const source = edgeSegmentPoints(geometry.cells[fromIndex].x, geometry.cells[fromIndex].y, fromDir, geometry.radius);
-    const target = edgeSegmentPoints(geometry.cells[toIndex].x, geometry.cells[toIndex].y, toDir, geometry.radius);
-    const sameOrientation = homologyCordPortalSameOrientation(analysis,
-      { side: { index: fromIndex, dir: fromDir } },
-      { side: { index: toIndex, dir: toDir } });
-    const targetCell = geometry.cells[toIndex];
-    const inset = Math.max(0.8, geometry.radius * 0.022);
-    const transform = homologyCordAffinePortalTransform(
-      source,
-      target,
-      sameOrientation,
-      geometry.cells[fromIndex],
-      targetCell,
-      inset
-    );
-    return {
-      point: transform.mapPosition(point),
-      displacement: transform.mapVector(displacement),
-      transform
-    };
-  }
-
-  function projectHomologyCordBoundaryDisplacement(previous, candidate, side) {
-    const tangent = homologyCordNormalize({
-      x: side.segment.end.x - side.segment.start.x,
-      y: side.segment.end.y - side.segment.start.y
-    });
-    const hit = segmentIntersectionParameters(previous, candidate, side.segment.start, side.segment.end);
-    const contact = hit && hit.pathT >= 0 && hit.pathT <= 1
-      ? {
-        x: previous.x + ((candidate.x - previous.x) * hit.pathT),
-        y: previous.y + ((candidate.y - previous.y) * hit.pathT)
-      }
-      : side.point;
-    const remainder = {
-      x: candidate.x - contact.x,
-      y: candidate.y - contact.y
-    };
-    const amount = (remainder.x * tangent.x) + (remainder.y * tangent.y);
-    return { x: contact.x + (tangent.x * amount), y: contact.y + (tangent.y * amount) };
-  }
-
-  // Candidate projection for the optimizer.  A real wall removes only the
-  // outward normal component, retaining a tangential slide; no velocity or
-  // reflected impulse is involved in this path.
-  function constrainHomologyCordElasticBandCandidate(chain, previous, candidate, analysis) {
-    if (!geometry || !tileExists(candidate.tileIndex)) return candidate;
-    const display = projectedHomologyCordChainPoint(candidate);
-    const cell = geometry.cells[candidate.tileIndex];
-    if (!cell) return candidate;
-    if (pointInPolygon(display, tilePoints(cell.x, cell.y, geometry.radius * 1.002))) {
-      candidate.chartVertex = nearestHomologyCordChartVertex(analysis, candidate.tileIndex, display);
-      return candidate;
-    }
-    const side = nearestHomologyCordTileSide(candidate.tileIndex, display);
-    if (!side) return candidate;
-    const next = connectedSurfaceNeighbor(candidate.tileIndex, side.dir);
-    if (next) {
-      const mapped = homologyCordPortalMap(analysis, candidate.tileIndex, side.dir, next.index, next.dir, display, {
-        x: display.x - projectedHomologyCordChainPoint(previous).x,
-        y: display.y - projectedHomologyCordChainPoint(previous).y
-      });
-      const inverse = invertHomologyCordAffine(mapped.transform.affine);
-      if (!inverse) return candidate;
-      candidate.tileIndex = next.index;
-      candidate.frame = composeHomologyCordAffine(candidate.frame || homologyCordAffineIdentity(), inverse);
-      setHomologyCordPointLocal(candidate, mapped.point);
-      candidate.portalTransformedDisplacement = mapped.displacement;
-      candidate.chartVertex = nearestHomologyCordChartVertex(analysis, candidate.tileIndex, mapped.point);
-      return candidate;
-    }
-    const before = projectedHomologyCordChainPoint(previous);
-    const slid = projectHomologyCordBoundaryDisplacement(before, display, side);
-    const validSlide = pointInPolygon(slid, tilePoints(cell.x, cell.y, geometry.radius * 1.002));
-    const inward = homologyCordNormalize({ x: cell.x - side.point.x, y: cell.y - side.point.y });
-    const inset = Math.max(0.8, geometry.radius * 0.022);
-    const corrected = validSlide
-      ? slid
-      : { x: side.point.x + (inward.x * inset), y: side.point.y + (inward.y * inset) };
-    setHomologyCordPointLocal(candidate, corrected);
-    candidate.boundaryCorrection = { x: corrected.x - display.x, y: corrected.y - display.y };
-    candidate.chartVertex = nearestHomologyCordChartVertex(analysis, candidate.tileIndex, corrected);
-    return candidate;
-  }
-
-  function homologyCordSegmentIsValid(left, right, analysis) {
-    return !!homologyCordSegmentTrace(left, right, analysis);
-  }
-
-  function homologyCordCandidateSegmentsAreValid(candidates, chain, analysis) {
-    for (let index = 1; index < candidates.length; index += 1) {
-      if (!homologyCordSegmentIsValid(candidates[index - 1], candidates[index], analysis)) return false;
-    }
-    return true;
-  }
-
-  function homologyCordTopologyIsValid(chain, candidates, analysis) {
-    if (!chain.topologySignature || chain.topologySignature !== chain.initialTopologySignature) return false;
-    const itinerary = homologyCordCandidateItinerary(chain, candidates, analysis);
-    return !!itinerary && homologyCordSameItinerary(chain.portalItinerary, itinerary);
-  }
-
   function scheduleBackgroundHomologyCordAnimation() {
     if (!state.homologyCordMode || state.homologyCordAnimation != null || typeof requestAnimationFrame !== 'function') return;
     state.homologyCordAnimation = requestAnimationFrame((time) => {
@@ -17416,80 +17142,32 @@
   }
 
   function advanceBackgroundHomologyCordChains() {
-    return advanceBackgroundHomologyCordElasticBandChains();
+    return advanceBackgroundHomologyPlanarBands();
   }
 
-  function advanceBackgroundHomologyCordElasticBandChains() {
-    const analysis = currentBackgroundHomologyAnalysis();
-    if (!analysis || !geometry) return false;
+  function advanceBackgroundHomologyPlanarBands() {
+    if (!geometry) return false;
+    const chains = Object.values(state.homologyCordChains || {});
+    if (!chains.length) return false;
     const speed = normalizeHomologyCordRelaxSpeed(state.homologyCordRelaxSpeed);
-    const spacing = normalizeHomologyCordPointSpacing(state.homologyCordPointSpacing) * geometry.radius;
-    const options = {
-      stepSize: geometry.radius * 0.012 * speed,
-      maximumMove: geometry.radius * 0.12,
-      lengthTolerance: geometry.radius * 1e-6,
-      relativeLengthTolerance: 1e-4,
-      positionTolerance: geometry.radius * 1e-4,
-      stableIterations: 5,
-      maxBacktracking: 10
-    };
-    const iterations = Math.max(1, Math.floor(state.homologyCordIterationsPerFrame || 4));
-    let moving = !!state.homologyCordDrag;
-    Object.values(state.homologyCordChains || {}).forEach((chain) => {
+    const contractionRatio = normalizeHomologyCordContractionStrength(state.homologyCordContractionStrength);
+    const stepSize = geometry.radius * 0.012 * (contractionRatio / 0.05);
+    const iterations = Math.max(1, Math.floor(
+      (state.homologyCordIterationsPerFrame || HOMOLOGY_CORD_DEFAULT_ITERATIONS_PER_FRAME) * speed
+    ));
+    chains.forEach((chain) => {
       const drag = state.homologyCordDrag && state.homologyCordDrag.generatorId === chain.generatorId
         ? state.homologyCordDrag
         : null;
       for (let iteration = 0; iteration < iterations; iteration += 1) {
-        const result = relaxHomologyCordElasticBandIteration(chain, analysis, {
-          ...options,
-          held: drag ? drag.part : -1,
-          projectCandidate(candidate, position, proposal) {
-            if (position === proposal.candidates.length - 1) return candidate;
-            return constrainHomologyCordElasticBandCandidate(chain, proposal.snapshot[position], candidate, analysis);
-          },
-          validateCandidates(candidates) {
-            return candidates.every((point) => {
-              const cell = geometry.cells[point.tileIndex];
-              return !!cell && pointInPolygon(projectedHomologyCordChainPoint(point), tilePoints(cell.x, cell.y, geometry.radius * 1.002));
-            });
-          },
-          validateSegments(candidates) {
-            return homologyCordCandidateSegmentsAreValid(candidates, chain, analysis);
-          },
-          validateTopology(candidates) {
-            return homologyCordTopologyIsValid(chain, candidates, analysis);
-          }
+        stepPlanarElasticBand(chain, {
+          stepSize,
+          contractionRatio,
+          heldIndex: drag ? drag.part : -1
         });
-        chain.points.forEach((point, index) => {
-          if (!point.portal || index === 0) return;
-          const source = chain.points[index - 1];
-          point.x = source.x;
-          point.y = source.y;
-        });
-        if (!result.accepted) {
-          chain.blocked = true;
-          break;
-        }
       }
-      if (!drag) {
-        chain.remeshCooldown = Math.max(0, (chain.remeshCooldown || 0) - iterations);
-        if (!chain.remeshCooldown) {
-          const remeshed = resampleHomologyCordElasticBand(chain, analysis, {
-            minSpacing: spacing * 0.65,
-            maxSpacing: spacing * 1.5,
-            cooldown: 12
-          });
-          if (remeshed) {
-            chain.settled = false;
-            moving = true;
-          }
-        }
-      } else {
-        chain.settled = false;
-      }
-      if (!chain.settled) moving = true;
     });
-    return moving;
+    return true;
   }
 
   function homologyCordAtPoint(clientX, clientY) {
@@ -17499,12 +17177,12 @@
     let match = null;
     Object.values(state.homologyCordChains || {}).forEach((chain) => {
       chain.points.forEach((particle, part) => {
-        const projected = projectedHomologyCordChainPoint(particle);
+        const projected = displayedHomologyCordChainPoint(particle);
         const distance = Math.hypot(point.x - projected.x, point.y - projected.y);
         if (distance <= threshold && (!match || distance < match.distance)) {
           match = {
             chain,
-            part: particle.portal ? part - 1 : part,
+            part: part === chain.points.length - 1 ? 0 : part,
             distance
           };
         }
@@ -17518,7 +17196,6 @@
     const hit = homologyCordAtPoint(event.clientX, event.clientY);
     if (!hit || !hit.chain) return false;
     state.homologyCordOptimizationSelection = { generatorId: hit.chain.generatorId, part: hit.part };
-    hit.chain.settled = false;
     scheduleBackgroundHomologyCordAnimation();
     draw(analyze());
     return true;
@@ -17533,47 +17210,17 @@
     return true;
   }
 
-  function moveHomologyCordMaterialPoint(chain, part, projected, analysis) {
+  function movePlanarElasticBandPoint(chain, part, projected) {
     if (!chain || !chain.points[part]) return false;
-    const material = homologyCordPhysicalIndices(chain);
-    const materialSnapshot = material.map((index) => ({
-      index,
-      point: {
-        ...chain.points[index],
-        frame: chain.points[index].frame && {
-          matrix: { ...chain.points[index].frame.matrix },
-          offset: { ...chain.points[index].frame.offset }
-        }
-      }
-    }));
-    const particle = chain.points[part];
-    const previous = materialSnapshot.find((entry) => entry.index === part);
-    if (!previous) return false;
-    setHomologyCordPointLocal(particle, projected);
-    const firstIndex = material[0];
-    const lastIndex = material[material.length - 1];
-    if (part === lastIndex) {
-      const inverse = invertHomologyCordClosure(chain, particle);
-      if (inverse) {
-        const first = chain.points[firstIndex];
-        const firstPrevious = materialSnapshot.find((entry) => entry.index === firstIndex);
-        first.x = inverse.x;
-        first.y = inverse.y;
-        constrainHomologyCordElasticBandCandidate(chain, firstPrevious.point, first, analysis);
-        Object.assign(particle, applyHomologyCordClosure(chain, first));
-      }
-    } else {
-      constrainHomologyCordElasticBandCandidate(chain, previous.point, particle, analysis);
-      if (part === firstIndex) Object.assign(chain.points[lastIndex], applyHomologyCordClosure(chain, particle));
-    }
-    const candidates = homologyCordSnapshot(chain);
-    if (!homologyCordCandidateSegmentsAreValid(candidates, chain, analysis)
-      || !homologyCordTopologyIsValid(chain, candidates, analysis)) {
-      materialSnapshot.forEach(({ index, point }) => { chain.points[index] = point; });
-      return false;
-    }
-    chain.blocked = false;
-    chain.settled = false;
+    if (!Number.isFinite(projected.x) || !Number.isFinite(projected.y)) return false;
+    const lastIndex = chain.points.length - 1;
+    const canonicalPart = part === lastIndex ? 0 : part;
+    if (canonicalPart < 0 || canonicalPart >= lastIndex) return false;
+    const particle = chain.points[canonicalPart];
+    particle.x = projected.x;
+    particle.y = projected.y;
+    chain.points[lastIndex].x = chain.points[0].x;
+    chain.points[lastIndex].y = chain.points[0].y;
     return true;
   }
 
@@ -17584,8 +17231,7 @@
       const chain = state.homologyCordChains[drag.generatorId];
       if (!chain || !chain.points[drag.part]) return false;
       const projected = clientPointToBoardPoint(event.clientX, event.clientY);
-      const analysis = currentBackgroundHomologyAnalysis();
-      moveHomologyCordMaterialPoint(chain, drag.part, projected, analysis);
+      movePlanarElasticBandPoint(chain, drag.part, projected);
       draw(analyze());
       return true;
     }
@@ -17650,7 +17296,7 @@
           ctx.lineTo(run[1].x, run[1].y);
         } else {
           // Quadratic midpoint interpolation makes the visual cord smooth
-          // without changing its physical particles or quotient topology.
+          // without changing its planar particles.
           for (let pointIndex = 1; pointIndex < run.length - 1; pointIndex += 1) {
             const control = run[pointIndex];
             const next = run[pointIndex + 1];
@@ -17665,21 +17311,8 @@
       for (let index = 1; index < chain.points.length; index += 1) {
         const previous = chain.points[index - 1];
         const current = chain.points[index];
-        const from = projectedHomologyCordChainPoint(previous);
-        const to = projectedHomologyCordChainPoint(current);
-        // Particles acquire their own lifted offsets after crossing a portal.
-        // Offset equality is therefore not a rendering criterion.  Two
-        // nearby chart projections, or two views inside the same tile, are a
-        // continuous visible segment; only a genuinely distant glued view is
-        // clipped from the fundamental-domain drawing.
-        const visibleDistance = Math.hypot(from.x - to.x, from.y - to.y);
-        const locallyContinuous = previous.tileIndex === current.tileIndex
-          || visibleDistance <= geometry.radius * 1.45;
-        if (!locallyContinuous) {
-          strokeRun();
-          run = [];
-          continue;
-        }
+        const from = displayedHomologyCordChainPoint(previous);
+        const to = displayedHomologyCordChainPoint(current);
         if (!run.length) run.push(from);
         run.push(to);
       }
@@ -17697,7 +17330,7 @@
     drawPath();
     if (state.showHomologyCordParticles) {
       homologyCordPhysicalIndices(chain).forEach((index) => {
-        const point = projectedHomologyCordChainPoint(chain.points[index]);
+        const point = displayedHomologyCordChainPoint(chain.points[index]);
         ctx.fillStyle = 'rgba(255,253,248,0.96)';
         circle(ctx, point.x, point.y, Math.max(3.2, geometry.radius * 0.066));
         ctx.fillStyle = color;
@@ -17707,7 +17340,7 @@
     const optimizationSelection = state.homologyCordOptimizationSelection;
     if (state.inspectHomologyCordOptimization && optimizationSelection && optimizationSelection.generatorId === generator.id && chain.points[optimizationSelection.part]) {
       const particle = chain.points[optimizationSelection.part];
-      const point = projectedHomologyCordChainPoint(particle);
+      const point = displayedHomologyCordChainPoint(particle);
       const direction = particle.optimizationDirection || { x: 0, y: 0 };
       const magnitude = Math.hypot(direction.x, direction.y);
       const unit = magnitude > 0.0001 ? { x: direction.x / magnitude, y: direction.y / magnitude } : { x: 1, y: 0 };
@@ -17747,14 +17380,14 @@
     }
     const drag = state.homologyCordDrag;
     if (drag && drag.generatorId === generator.id && chain.points[drag.part]) {
-      const point = projectedHomologyCordChainPoint(chain.points[drag.part]);
+      const point = displayedHomologyCordChainPoint(chain.points[drag.part]);
       ctx.fillStyle = '#fffdf8';
       circle(ctx, point.x, point.y, Math.max(6.2, geometry.radius * 0.145));
       ctx.fillStyle = color;
       circle(ctx, point.x, point.y, Math.max(3.6, geometry.radius * 0.082));
     }
     ctx.restore();
-    const anchor = projectedHomologyCordChainPoint(chain.points[Math.floor(chain.points.length / 2)]);
+    const anchor = displayedHomologyCordChainPoint(chain.points[Math.floor(chain.points.length / 2)]);
     ctx.save();
     ctx.font = `600 ${Math.max(10, geometry.radius * 0.19)}px ui-monospace, monospace`;
     ctx.textAlign = 'center';
@@ -17765,7 +17398,7 @@
     ctx.fillStyle = color;
     ctx.fillText(generator.id, anchor.x, anchor.y);
     ctx.restore();
-    if (!chain.settled) scheduleBackgroundHomologyCordAnimation();
+    scheduleBackgroundHomologyCordAnimation();
   }
 
   function drawHomologyCordSeamMarkers(ctx, edge, color) {
@@ -25215,7 +24848,12 @@
 
   function normalizeHomologyCordRelaxSpeed(value) {
     const parsed = Number(value);
-    return Number.isFinite(parsed) ? clamp(parsed, 0.1, 2) : 1;
+    return Number.isFinite(parsed) ? clamp(parsed, 0.1, 6) : 1;
+  }
+
+  function normalizeHomologyCordContractionStrength(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? clamp(parsed, 0.01, 0.2) : HOMOLOGY_CORD_DEFAULT_CONTRACTION_RATIO;
   }
 
   function normalizeHomologyCordPointSpacing(value) {
@@ -25774,41 +25412,23 @@
       makeHomologyCordChain,
       nearestHomologyCordChartVertex,
       homologyCordPhysicalIndices,
-      homologyCordMaterialLength,
-      homologyCordNormalize,
-      homologyCordClampLength,
       homologyCordAffineIdentity,
       applyHomologyCordAffine,
       composeHomologyCordAffine,
       invertHomologyCordAffine,
       homologyCordPointLocal,
-      setHomologyCordPointLocal,
       homologyCordClosure,
       applyHomologyCordClosure,
-      invertHomologyCordClosure,
-      inverseHomologyCordClosureVector,
-      homologyCordClosureError,
-      computeHomologyCordContractionDirection,
-      homologyCordSnapshot,
-      homologyCordSnapshotLength,
-      homologyCordElasticBandCandidates,
-      homologyCordFiniteSnapshot,
-      applyHomologyCordElasticBandCandidates,
-      relaxHomologyCordElasticBandIteration,
+      makePlanarElasticBandChain,
+      snapshotPlanarElasticBand,
+      computePlanarElasticBandDirections,
+      stepPlanarElasticBand,
       homologyCordAffinePortalTransform,
-      homologyCordPortalMap,
-      projectHomologyCordBoundaryDisplacement,
-      constrainHomologyCordElasticBandCandidate,
-      homologyCordSegmentIsValid,
-      homologyCordCandidateSegmentsAreValid,
       homologyCordSegmentTrace,
       homologyCordCandidateItinerary,
-      homologyCordSameItinerary,
-      homologyCordTopologyIsValid,
-      resampleHomologyCordElasticBand,
-      advanceBackgroundHomologyCordElasticBandChains,
+      advanceBackgroundHomologyPlanarBands,
       homologyCordAtPoint,
-      moveHomologyCordMaterialPoint,
+      movePlanarElasticBandPoint,
       hasVisibleHomologyGenerators,
       prepareBackgroundHomologyCordChains,
       resetBackgroundHomologyCords,

@@ -2,22 +2,46 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
-  const LMFDB_SHORTCUTS = {
-    sqrt: { button: 'lmfdb-quadratic-shortcut', fields: 'lmfdb-square-fields', inputs: ['lmfdb-square-d'] },
-    root: { button: 'lmfdb-root-shortcut', fields: 'lmfdb-root-fields', inputs: ['lmfdb-root-n', 'lmfdb-root-d'] },
-    zeta: { button: 'lmfdb-zeta-shortcut', fields: 'lmfdb-zeta-fields', inputs: ['lmfdb-zeta-n'] }
+  const LMFDB_SELECTORS = {
+    extension: {
+      query: 'lmfdb-query', search: 'lmfdb-search', status: 'lmfdb-search-status', editor: 'lmfdb-shortcut-editor',
+      panel: 'lmfdb-shortcut-panel', close: 'lmfdb-shortcut-close', error: 'lmfdb-shortcut-error',
+      shortcuts: {
+        sqrt: { button: 'lmfdb-quadratic-shortcut', fields: 'lmfdb-square-fields', inputs: ['lmfdb-square-d'] },
+        root: { button: 'lmfdb-root-shortcut', fields: 'lmfdb-root-fields', inputs: ['lmfdb-root-n', 'lmfdb-root-d'] },
+        zeta: { button: 'lmfdb-zeta-shortcut', fields: 'lmfdb-zeta-fields', inputs: ['lmfdb-zeta-n'] }
+      }
+    },
+    base: {
+      query: 'base-lmfdb-query', search: 'base-lmfdb-search', status: 'base-lmfdb-status', editor: 'base-lmfdb-shortcut-editor',
+      panel: 'base-lmfdb-shortcut-panel', close: 'base-lmfdb-shortcut-close', error: 'base-lmfdb-shortcut-error',
+      shortcuts: {
+        sqrt: { button: 'base-lmfdb-quadratic-shortcut', fields: 'base-lmfdb-square-fields', inputs: ['base-lmfdb-square-d'] },
+        root: { button: 'base-lmfdb-root-shortcut', fields: 'base-lmfdb-root-fields', inputs: ['base-lmfdb-root-n', 'base-lmfdb-root-d'] },
+        zeta: { button: 'base-lmfdb-zeta-shortcut', fields: 'base-lmfdb-zeta-fields', inputs: ['base-lmfdb-zeta-n'] }
+      }
+    }
   };
-  let activeLmfdbShortcut = '';
+  let activeLmfdbShortcut = null;
+  let localWorker = null;
+  let localRequestId = 0;
+  let localRequestReject = null;
   const state = {
     source: 'lmfdb',
-    inputMode: 'lmfdb',
+    baseKind: 'Q',
+    extensionKind: 'lmfdb',
     lmfdbQuery: '2.2.5.1',
     lmfdbField: null,
     lmfdbStatus: '',
     lmfdbStatusKind: '',
     lmfdbLoading: false,
+    baseLmfdbQuery: '2.2.5.1',
+    baseLmfdbField: null,
+    baseLmfdbStatus: '',
+    baseLmfdbStatusKind: '',
+    baseLmfdbLoading: false,
     generic: {
-      baseKind: 'Q', q: 3, generator: 'alpha', polynomial: 'x^2-2',
+      baseKind: 'Q', q: '3', generator: 'alpha', polynomial: 'x^2-2',
       response: null, status: '', statusKind: '', loading: false, extraPlaces: [], hiddenPlaces: []
     },
     primeBound: 11,
@@ -38,6 +62,7 @@
     unramified: { fill: '#6b5f83', stroke: '#4b425d', label: 'unramified mixed' },
     complex: { fill: '#8b3a2a', stroke: '#6b2a1f', label: 'complex' },
     inseparable: { fill: '#875b1d', stroke: '#684311', label: 'inseparable' },
+    unresolved: { fill: '#7a6f65', stroke: '#5f564d', label: 'unresolved' },
     unknown: { fill: '#7a6f65', stroke: '#5f564d', label: 'unknown' }
   };
 
@@ -56,7 +81,7 @@
 
   function normalizedGenericField() {
     const response = state.generic.response;
-    if (!response) return { error: state.generic.status || 'Enter a monic integer polynomial and compute it locally in the browser.' };
+    if (!response) return { error: state.generic.status || 'Enter an irreducible monic polynomial and compute E/F locally in the browser.' };
     const extension = response.extension || {};
     const base = response.base || {};
     const places = Array.isArray(response.places)
@@ -71,27 +96,30 @@
       ramps: [], localAlgs: [], frobs: [], backendPlaces: places,
       separableDegree: Number(extension.separableDegree || extension.degree || 0),
       inseparableDegree: Number(extension.inseparableDegree || 1),
-      flavor: String(extension.flavor || 'separable')
+      flavor: String(extension.flavor || 'separable'), engine: response.engine || null,
+      warnings: Array.isArray(response.warnings) ? response.warnings : []
     };
   }
 
   function normalizeGenericPlace(place, index) {
     const components = Array.isArray(place?.components) ? place.components.map((component, componentIndex) => ({
       label: String(component.label || `\\mathfrak{p}_{${componentIndex + 1}}`),
-      e: Number.isFinite(Number(component.e)) ? Number(component.e) : null,
-      f: Number.isFinite(Number(component.f)) ? Number(component.f) : null,
-      source: String(component.source || place.source || 'Sage'),
+      e: component.e == null ? null : Number.isFinite(Number(component.e)) ? Number(component.e) : null,
+      f: component.f == null ? null : Number.isFinite(Number(component.f)) ? Number(component.f) : null,
+      source: String(component.source || place.source || 'browser local engine'),
       ramified: Number(component.e) > 1
     })) : [];
-    const inseparable = String(place.behavior || '') === 'inseparable' || state.generic.response?.extension?.flavor !== 'separable';
+    const unresolved = place.status === 'unresolved';
+    const inseparable = String(place.behavior || '') === 'inseparable' || state.generic.response?.extension?.flavor === 'purely inseparable';
     return {
       key: String(place.id || `generic:${index}`), scope: place.scope === 'infinite' ? 'infinite' : 'finite',
       label: String(place.label || '?'), base: `\\(${String(place.base || place.label || '?')}\\)`,
-      kind: inseparable ? 'inseparable' : String(place.behavior || 'unknown'),
+      kind: unresolved ? 'unresolved' : inseparable ? 'inseparable' : String(place.behavior || 'unknown'),
       e: commonComponentValue(components, 'e'), f: commonComponentValue(components, 'f'),
-      g: Number(place.g || components.length), components: assignComponentLabels(components),
+      g: unresolved ? null : Number(place.g ?? components.length), components: assignComponentLabels(components),
       ideals: components.map((component) => component.label), splittingType: String(place.splittingType || splittingTypeText(components)),
-      detail: String(place.detail || ''), source: String(place.source || 'Sage'), placeType: String(place.placeType || '')
+      detail: String(place.detail || ''), source: String(place.source || 'browser local engine'), placeType: String(place.placeType || ''),
+      status: unresolved ? 'unresolved' : 'resolved', reasonCode: place.reasonCode || null, certificate: place.certificate || null
     };
   }
 
@@ -133,26 +161,46 @@
     let components = [];
     let source = '';
     let detail = '';
+    let status = 'resolved';
+    let reasonCode = null;
+    let certificate = null;
+    let kind = '';
 
     if (ramified) {
       components = localAlgebraComponents(field, p);
-      if (components.length) {
+      if (components.length && components.every((component) => component.e != null && component.f != null)) {
         source = 'LMFDB local_algs';
         detail = `LMFDB local algebra label${components.length === 1 ? '' : 's'}: ${components.map((item) => item.rawLabel).join(', ')}.`;
+        certificate = 'LMFDB local algebra data';
       } else {
-        components = polynomialFactorComponents(field, p, true);
-        source = 'polynomial mod p';
-        detail = `\\(${p}\\) is listed as ramified; local algebra labels were not available.`;
+        status = 'unresolved';
+        reasonCode = 'lmfdb-local-decomposition-unavailable';
+        source = 'LMFDB ramification record';
+        detail = `LMFDB certifies that \\(${p}\\) ramifies, but the local decomposition data are unavailable; no \\(e_i,f_i\\) are asserted.`;
+        components = [{ e: null, f: null, source, ramified: false }];
+        kind = 'unresolved';
       }
     } else {
       components = frobeniusComponents(field, p);
       if (components.length) {
         source = 'LMFDB frobs';
         detail = `LMFDB frobs gives splitting type \\(${splittingTypeText(components)}\\).`;
+        certificate = 'LMFDB Frobenius data';
       } else {
-        components = polynomialFactorComponents(field, p, false);
-        source = 'polynomial mod p';
-        detail = `Computed by factoring the defining polynomial modulo \\(${p}\\).`;
+        const factored = polynomialFactorComponents(field, p, false);
+        if (factored) {
+          components = factored;
+          source = 'polynomial mod p';
+          detail = `Computed by factoring the defining polynomial modulo \\(${p}\\).`;
+          certificate = 'unramified Dedekind factorization';
+        } else {
+          status = 'unresolved';
+          reasonCode = 'local-factorization-budget';
+          source = 'browser factorization budget';
+          detail = `The browser did not complete a certified factorization modulo \\(${p}\\); no local invariants are asserted.`;
+          components = [{ e: null, f: null, source, ramified: false }];
+          kind = 'unresolved';
+        }
       }
     }
 
@@ -161,11 +209,11 @@
     }
 
     components = assignComponentLabels(components);
-    const kind = kindFromComponents(components, field.degree, ramified);
-    return finitePlaceRecord({ p, kind, components, detail, source });
+    kind ||= kindFromComponents(components, field.degree, ramified);
+    return finitePlaceRecord({ p, kind, components, detail, source, status, reasonCode, certificate });
   }
 
-  function finitePlaceRecord({ p, kind, components, detail, source }) {
+  function finitePlaceRecord({ p, kind, components, detail, source, status, reasonCode, certificate }) {
     return {
       key: `p:${p}`,
       scope: 'finite',
@@ -174,12 +222,15 @@
       kind,
       e: commonComponentValue(components, 'e'),
       f: commonComponentValue(components, 'f'),
-      g: components.length,
+      g: status === 'unresolved' ? null : components.length,
       components,
       ideals: components.map((component) => component.label),
       splittingType: splittingTypeText(components),
       detail,
-      source
+      source,
+      status: status || 'resolved',
+      reasonCode: reasonCode || null,
+      certificate: certificate || null
     };
   }
 
@@ -205,7 +256,10 @@
       ideals: components.map((component) => component.label),
       splittingType: field.r2 ? `${field.r1} real, ${field.r2} complex` : `${field.r1} real`,
       detail: `The field has signature \\((${field.r1}, ${field.r2})\\).`,
-      source: 'signature'
+      source: 'signature',
+      status: 'resolved',
+      reasonCode: null,
+      certificate: 'LMFDB signature'
     };
   }
 
@@ -262,8 +316,10 @@
   }
 
   function polynomialFactorComponents(field, p, ramified) {
-    if (!Array.isArray(field.coeffs) || field.coeffs.length < 2) return [];
-    return factorDegreesModPrime(field.coeffs, p).map((f) => ({
+    if (!Array.isArray(field.coeffs) || field.coeffs.length < 2) return null;
+    const degrees = factorDegreesModPrime(field.coeffs, p);
+    if (!degrees) return null;
+    return degrees.map((f) => ({
       e: ramified ? null : 1,
       f,
       source: 'polynomial mod p',
@@ -325,7 +381,7 @@
   }
 
   function fieldLatex(field) {
-    if (field.source === 'generic') return `K(\\mathrm{${field.generator || 'alpha'}})`;
+    if (field.source === 'generic') return `F(\\mathrm{${field.generator || 'alpha'}})`;
     if (field.label === '1.1.1.1') return '\\mathbb{Q}';
     return `K_{${field.label}}`;
   }
@@ -339,7 +395,8 @@
     const field = activeField();
     if (field.error) {
       renderError(field.error);
-      renderLmfdbStatus();
+      renderLmfdbStatus('extension');
+      renderLmfdbStatus('base');
       return;
     }
     state.places = buildPlaces(field);
@@ -379,23 +436,32 @@
     const labelLayer = $('ramification-labels');
     if (labelLayer) labelLayer.innerHTML = '';
     $('ramification-selected-label').textContent = 'selected place: none';
-    $('ramification-count-label').textContent = 'finite primes shown: 0';
+    $('ramification-count-label').textContent = 'finite places shown: 0';
     $('ramification-export-out').value = '';
   }
 
   function syncInputControls() {
     $('lmfdb-query').value = state.lmfdbQuery;
+    $('base-lmfdb-query').value = state.baseLmfdbQuery;
     state.primeBound = Math.min(31, Math.max(2, Math.floor(Number(state.primeBound) || 11)));
     $('prime-bound').value = String(state.primeBound);
     $('prime-bound-output').textContent = String(state.primeBound);
     $('show-infinite').checked = state.showInfinite;
-    $('ramification-input-mode').value = state.inputMode;
-    $('generic-base-kind').value = state.generic.baseKind;
+    $('base-field-kind').value = state.baseKind;
+    $('extension-input-kind').value = state.extensionKind;
     $('generic-q').value = String(state.generic.q);
-    $('generic-q-control').hidden = state.generic.baseKind !== 'Fqt';
+    $('generic-q-control').hidden = state.baseKind !== 'Fqt';
+    $('base-lmfdb-selector').hidden = state.baseKind !== 'lmfdb';
+    $('extension-lmfdb-selector').hidden = state.extensionKind !== 'lmfdb';
+    $('polynomial-extension').hidden = state.extensionKind !== 'polynomial';
+    $('prime-bound-control').hidden = state.baseKind === 'Fqt';
+    const lmfdbOption = $('extension-input-kind').querySelector('option[value="lmfdb"]');
+    if (lmfdbOption) lmfdbOption.disabled = state.baseKind !== 'Q';
     $('generic-generator').value = state.generic.generator;
     $('generic-polynomial').value = state.generic.polynomial;
     renderGenericStatus();
+    renderLmfdbStatus('extension');
+    renderLmfdbStatus('base');
   }
 
   function syncControls(field) {
@@ -404,41 +470,51 @@
     typeset($('ramification-status'));
     const relation = $('ramification-relation-title');
     if (relation) relation.innerHTML = field.source === 'generic'
-      ? `Places of \\(L=K(${escapeHtml(field.generator)})\\) above places of \\(${escapeHtml(field.base?.label || 'K')}\\)`
-      : 'Places of \\(L\\) above places of \\(\\mathbb{Q}\\)';
+      ? `Places of \\(E=F(${escapeHtml(field.generator)})\\) above places of \\(${escapeHtml(field.base?.label || 'F')}\\)`
+      : 'Places of \\(E\\) above places of \\(F=\\mathbb{Q}\\)';
     typeset(relation);
     if (field.source === 'generic') {
-      const baseKind = field.base?.kind || state.generic.baseKind;
+      const baseKind = field.base?.kind || state.baseKind;
       const isFunction = baseKind === 'Fqt';
       $('finite-places-label').innerHTML = isFunction ? 'Finite places \\(P(t)\\)' : 'Finite places';
       $('extra-prime-input').placeholder = isFunction ? 'monic irreducible P(t)' : 'prime p';
-      $('ramification-input-note').innerHTML = `\\(L=K(${escapeHtml(field.generator)})\\), ${escapeHtml(field.flavor)} extension of degree \\(${field.degree}\\).`;
+      const completeness = field.engine?.completeness ? `; ${escapeHtml(field.engine.completeness)} local result` : '';
+      $('ramification-input-note').innerHTML = `\\(E=F(${escapeHtml(field.generator)})\\), ${escapeHtml(field.flavor)} extension of degree \\(${field.degree}\\)${completeness}.`;
       typeset($('finite-places-label'));
       typeset($('ramification-input-note'));
     } else {
       $('finite-places-label').textContent = 'Finite places';
       $('extra-prime-input').placeholder = 'prime p';
       const warningText = field.warnings.length ? `; ${field.warnings[0]}` : '';
-      $('ramification-input-note').textContent = `LMFDB label ${field.label}${warningText}`;
+      $('ramification-input-note').textContent = `E/Q from LMFDB label ${field.label}${warningText}`;
     }
     const finiteCount = state.places.filter((place) => place.scope === 'finite').length;
-    $('ramification-count-label').textContent = `${field.source === 'generic' ? 'finite places' : 'finite primes'} shown: ${finiteCount}`;
-    renderLmfdbStatus();
+    $('ramification-count-label').textContent = `finite places of F shown: ${finiteCount}`;
+    renderLmfdbStatus('extension');
+    renderLmfdbStatus('base');
   }
 
-  function renderLmfdbStatus() {
-    const status = $('lmfdb-search-status');
-    const searchButton = $('lmfdb-search');
+  function selectorState(role) {
+    return role === 'base'
+      ? { status: state.baseLmfdbStatus, kind: state.baseLmfdbStatusKind, loading: state.baseLmfdbLoading }
+      : { status: state.lmfdbStatus, kind: state.lmfdbStatusKind, loading: state.lmfdbLoading };
+  }
+
+  function renderLmfdbStatus(role) {
+    const definition = LMFDB_SELECTORS[role];
+    const current = selectorState(role);
+    const status = $(definition.status);
+    const searchButton = $(definition.search);
     const hasProxy = !!lmfdbProxyUrl();
-    searchButton.disabled = !hasProxy || state.lmfdbLoading;
-    status.classList.toggle('is-error', state.lmfdbStatusKind === 'error' || !hasProxy);
-    status.classList.toggle('is-ok', state.lmfdbStatusKind === 'ok');
+    searchButton.disabled = !hasProxy || current.loading;
+    status.classList.toggle('is-error', current.kind === 'error' || !hasProxy);
+    status.classList.toggle('is-ok', current.kind === 'ok');
     if (!hasProxy) {
       status.textContent = 'LMFDB proxy URL is not configured.';
-    } else if (state.lmfdbLoading) {
+    } else if (current.loading) {
       status.textContent = 'Searching LMFDB...';
     } else {
-      status.textContent = state.lmfdbStatus || 'LMFDB proxy ready.';
+      status.textContent = current.status || 'LMFDB proxy ready.';
     }
   }
 
@@ -446,14 +522,15 @@
     if (field.source === 'generic') {
       const baseLabel = field.base?.label || (field.base?.kind === 'Fqt' ? `\\mathbb{F}_{${field.base?.q}}(t)` : '\\mathbb{Q}');
       const rows = [
-        ['Base field', `\\(${baseLabel}\\)`],
-        ['Extension', `\\(L=K(${field.generator})\\)`],
+        ['Base field F', `\\(${baseLabel}\\)`],
+        ['Extension E', `\\(E=F(${field.generator})\\)`],
         ['Defining polynomial', `\\(${polynomialLatex(field)}\\)`],
         ['Degree', `\\(${field.degree}\\)`],
         ['Extension flavor', field.flavor],
         ['Separable degree', `\\(${field.separableDegree}\\)`],
         ['Inseparable degree', `\\(${field.inseparableDegree}\\)`]
       ];
+      if (field.engine) rows.push(['Local engine', `${field.engine.name || 'browser local'} ${field.engine.version || ''} (${field.engine.completeness || 'partial'})`]);
       if (field.base?.kind === 'Fqt') rows.splice(1, 0, ['Constant field', `\\(\\mathbb{F}_{${field.base.q}}\\)`]);
       if (field.signature) rows.push(['Signature', `\\(${field.signature}\\)`]);
       $('field-invariants').innerHTML = htmlRows(rows);
@@ -462,10 +539,11 @@
     }
     if (field.source === 'lmfdb') {
       $('field-invariants').innerHTML = htmlRows([
-        ['Field', `\\(${fieldLatex(field)}\\)`],
+        ['Base field F', `\\(\\mathbb{Q}\\)`],
+        ['Extension field E', `\\(${fieldLatex(field)}\\)`],
         ['LMFDB label', field.label],
         ['Polynomial', `\\(${polynomialLatex(field)}\\)`],
-        ['\\(\\operatorname{Disc}(K)\\)', `\\(${field.discriminantText}\\)`],
+        ['\\(\\operatorname{Disc}(E)\\)', `\\(${field.discriminantText}\\)`],
         ['Signature', `\\(${field.signature}\\)`],
         ['Ramified finite primes', field.ramps.map((p) => `\\(${p}\\)`).join(', ') || 'none'],
         ['Degree', `\\(${field.degree}\\)`],
@@ -488,7 +566,7 @@
         <table class="ramification-table">
           <thead>
             <tr>
-              <th>base place</th>
+              <th>place of F</th>
               <th>behavior</th>
               <th>type</th>
               <th>g</th>
@@ -502,7 +580,7 @@
                 <td class="nowrap">\\(${escapeHtml(place.label)}\\)</td>
                 <td>${escapeHtml(PLACE_STYLE[place.kind]?.label || place.kind)}</td>
                 <td class="nowrap">\\(${escapeHtml(place.splittingType)}\\)</td>
-                <td>${place.g}</td>
+                <td>${place.g == null ? '?' : place.g}</td>
                 <td class="left nowrap">\\(${escapeHtml(componentEfText(place.components))}\\)</td>
                 <td class="left">${escapeHtml(place.source || 'n/a')}</td>
               </tr>
@@ -537,13 +615,16 @@
     }
     $('ramification-selected-label').innerHTML = `selected place: \\(${escapeHtml(place.label)}\\)`;
     $('selected-place-data').innerHTML = htmlRows([
-      ['base place', place.base],
+      ['place of F', place.base],
+      ['status', place.status || 'resolved'],
       ['behavior', PLACE_STYLE[place.kind]?.label || place.kind],
       ['splitting type', `\\(${place.splittingType}\\)`],
-      ['\\(g\\)', `\\(${place.g}\\)`],
+      ['\\(g\\)', `\\(${place.g == null ? '?' : place.g}\\)`],
       ['\\((e_i,f_i)\\)', `\\(${componentEfText(place.components)}\\)`],
-      ['places above', `\\(${place.ideals.join(', ')}\\)`],
+      ['places of E above', `\\(${place.ideals.join(', ')}\\)`],
       ['source', place.source || 'n/a'],
+      ['certificate', place.certificate || 'none'],
+      ['reason', place.reasonCode || 'none'],
       ['criterion', place.detail]
     ]);
     typeset($('selected-place-data'));
@@ -647,7 +728,7 @@
     ctx.strokeStyle = style.stroke;
     ctx.lineWidth = selected ? 2.8 : 2;
     ctx.lineCap = 'round';
-    ctx.setLineDash(place.kind === 'inert' || place.kind === 'unknown' ? [7, 6] : []);
+    ctx.setLineDash(place.kind === 'inert' || place.kind === 'unknown' || place.kind === 'unresolved' ? [7, 6] : []);
 
     tops.forEach((point) => {
       const ramifiedBranch = point.component.ramified || point.component.e > 1 || place.kind === 'complex';
@@ -729,7 +810,11 @@
 
   function renderExport(field) {
     const places = state.places.map((place) => ({
+      id: place.key,
+      scope: place.scope,
       place: place.label,
+      status: place.status || 'resolved',
+      reasonCode: place.reasonCode || null,
       behavior: PLACE_STYLE[place.kind]?.label || place.kind,
       splittingType: place.splittingType,
       g: place.g,
@@ -740,97 +825,39 @@
         source: component.source,
         rawLabel: component.rawLabel || null
       })),
-      detail: place.detail
+      detail: place.detail,
+      certificate: place.certificate || null
     }));
 
-    const payload = field.source === 'generic'
-      ? {
-        calculator: 'Place ramification calculator', version: 2, source: 'polynomial-extension',
-        base: field.base, extension: {
-          generator: field.generator, polynomial: field.polynomial, degree: field.degree,
-          separableDegree: field.separableDegree, inseparableDegree: field.inseparableDegree, flavor: field.flavor,
-          signature: field.signature || null
-        },
-        selection: { bound: state.primeBound, includeInfinite: state.showInfinite, extraFinitePlaces: state.generic.extraPlaces, hiddenPlaces: state.generic.hiddenPlaces },
-        response: state.generic.response, places
-      }
+    const base = field.source === 'generic'
+      ? state.generic.response.base
+      : { kind: 'Q', label: '\\mathbb{Q}' };
+    const extension = field.source === 'generic'
+      ? state.generic.response.extension
       : {
-        calculator: 'Place ramification calculator',
-        version: 1,
-        source: 'LMFDB',
-        query: field.query,
-        queryType: field.queryType,
-        lmfdbLabel: field.label,
-        lmfdbUrl: field.lmfdbUrl,
-        field: {
-          degree: field.degree,
-          coeffs: field.coeffs,
-          discriminant: field.discriminantText,
-          signature: field.signature,
-          ramifiedPrimes: field.ramps,
-          galoisLabel: field.galoisLabel
-        },
-        primeBound: state.primeBound,
-        showInfinite: state.showInfinite,
-        places,
-        raw: {
-          local_algs: field.localAlgs,
-          frobs: field.frobs
-        }
+        kind: 'lmfdb', query: field.query, queryType: field.queryType, label: field.label, url: field.lmfdbUrl,
+        fieldSnapshot: field.rawField,
+        extraSnapshot: field.rawExtra
       };
+    const payload = {
+      calculator: 'Place ramification calculator',
+      version: 3,
+      source: 'field-extension',
+      base,
+      extension,
+      engine: field.source === 'generic'
+        ? state.generic.response.engine
+        : { name: 'LMFDB proxy', version: field.proxyApiVersion || null, completeness: 'exact' },
+      selection: {
+        rationalPrimeBound: base.kind === 'Fqt' ? null : state.primeBound,
+        includeInfinite: state.showInfinite,
+        extraFinitePlaces: field.source === 'generic' ? state.generic.extraPlaces : state.extraPrimes.map(String),
+        hiddenPlaces: field.source === 'generic' ? state.generic.hiddenPlaces : state.hiddenPrimes.map((p) => `p:${p}`)
+      },
+      places,
+      response: field.source === 'generic' ? state.generic.response : null
+    };
     $('ramification-export-out').value = JSON.stringify(payload, null, 2);
-  }
-
-  async function searchLmfdbField() {
-    if (state.lmfdbLoading) return;
-    const proxy = lmfdbProxyUrl();
-    state.source = 'lmfdb';
-    state.inputMode = 'lmfdb';
-    state.lmfdbQuery = $('lmfdb-query').value.trim();
-    if (!proxy) {
-      state.lmfdbField = null;
-      state.lmfdbStatus = 'LMFDB proxy URL is not configured.';
-      state.lmfdbStatusKind = 'error';
-      render();
-      return;
-    }
-    if (!state.lmfdbQuery) {
-      state.lmfdbField = null;
-      state.lmfdbStatus = 'Enter an LMFDB label, nickname, or monic integer polynomial.';
-      state.lmfdbStatusKind = 'error';
-      render();
-      return;
-    }
-
-    state.lmfdbField = null;
-    state.lmfdbLoading = true;
-    state.lmfdbStatus = '';
-    state.lmfdbStatusKind = '';
-    render();
-    try {
-      const endpoint = buildProxyFieldUrl(proxy, state.lmfdbQuery);
-      const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.error || `LMFDB proxy returned HTTP ${response.status}.`);
-      }
-      const field = normalizeLmfdbPayload(payload);
-      state.source = 'lmfdb';
-      state.inputMode = 'lmfdb';
-      state.lmfdbField = field;
-      state.hiddenPrimes = [];
-      state.selectedKey = `p:${field.ramps[0] || primesUpTo(state.primeBound)[0] || 2}`;
-      state.lmfdbStatus = payload.warnings?.length
-        ? `Loaded ${field.label}; ${payload.warnings[0]}`
-        : `Loaded ${field.label}.`;
-      state.lmfdbStatusKind = 'ok';
-    } catch (error) {
-      state.lmfdbStatus = error.message || 'LMFDB search failed.';
-      state.lmfdbStatusKind = 'error';
-    } finally {
-      state.lmfdbLoading = false;
-      render();
-    }
   }
 
   function buildProxyFieldUrl(proxy, query) {
@@ -841,18 +868,19 @@
     return url.toString();
   }
 
-  function normalizeLmfdbPayload(payload) {
+  function normalizeLmfdbPayload(payload, fallbackQuery) {
     const record = payload.field || null;
     if (!record || !record.label) throw new Error('LMFDB proxy response did not include a field record.');
     const coeffs = Array.isArray(record.coeffs) ? record.coeffs.map(Number) : [];
     const degree = Number(record.degree || Math.max(0, coeffs.length - 1));
     const r2 = Number(record.r2 || 0);
     const r1 = Math.max(0, degree - 2 * r2);
-    const discAbsNumber = Number(record.disc_abs);
+    const discAbsRaw = record.disc_abs ?? record.discriminant ?? null;
+    const discAbsNumber = Number(discAbsRaw);
     const discSign = Number(record.disc_sign || 1) < 0 ? -1 : 1;
     const safeDisc = Number.isSafeInteger(discAbsNumber) ? discSign * discAbsNumber : null;
     const discriminantText = safeDisc == null
-      ? `${discSign < 0 ? '-' : ''}${record.disc_abs}`
+      ? discAbsRaw == null ? 'unknown' : `${discSign < 0 ? '-' : ''}${discAbsRaw}`
       : String(safeDisc);
     const ramps = Array.isArray(record.ramps)
       ? record.ramps.map(Number).filter((p) => Number.isFinite(p)).sort((a, b) => a - b)
@@ -861,7 +889,7 @@
       source: 'lmfdb',
       label: String(record.label),
       lmfdbUrl: `https://www.lmfdb.org/NumberField/${encodeURIComponent(record.label)}`,
-      query: payload.query || state.lmfdbQuery,
+      query: payload.query || fallbackQuery || state.lmfdbQuery,
       queryType: payload.queryType || 'label',
       normalizedInput: payload.normalizedInput || record.label,
       degree,
@@ -875,45 +903,12 @@
       localAlgs: Array.isArray(record.local_algs) ? record.local_algs.map(String) : [],
       frobs: Array.isArray(payload.extra?.frobs) ? payload.extra.frobs : [],
       galoisLabel: record.galois_label || '',
+      proxyApiVersion: Number(payload.proxyApiVersion) || null,
+      proxyCapabilities: Array.isArray(payload.capabilities) ? payload.capabilities.map(String) : [],
       warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
       rawField: record,
       rawExtra: payload.extra || null
     };
-  }
-
-  function openLmfdbShortcut(mode) {
-    const definition = LMFDB_SHORTCUTS[mode];
-    const panel = $('lmfdb-shortcut-panel');
-    if (!definition) return;
-    if (activeLmfdbShortcut === mode && !panel.hidden) {
-      closeLmfdbShortcut(true);
-      return;
-    }
-
-    activeLmfdbShortcut = mode;
-    panel.hidden = false;
-    panel.dataset.mode = mode;
-    $('lmfdb-shortcut-error').textContent = '';
-    Object.entries(LMFDB_SHORTCUTS).forEach(([key, item]) => {
-      $(item.button).setAttribute('aria-expanded', String(key === mode));
-      $(item.fields).hidden = key !== mode;
-      item.inputs.forEach((id) => $(id).setCustomValidity(''));
-    });
-    const firstInput = $(definition.inputs[0]);
-    firstInput.focus();
-    firstInput.select();
-    typeset(panel);
-  }
-
-  function closeLmfdbShortcut(returnFocus) {
-    const mode = activeLmfdbShortcut;
-    activeLmfdbShortcut = '';
-    $('lmfdb-shortcut-panel').hidden = true;
-    Object.values(LMFDB_SHORTCUTS).forEach((item) => {
-      $(item.button).setAttribute('aria-expanded', 'false');
-    });
-    $('lmfdb-shortcut-error').textContent = '';
-    if (returnFocus && mode && LMFDB_SHORTCUTS[mode]) $(LMFDB_SHORTCUTS[mode].button).focus();
   }
 
   function readShortcutInteger(id, label) {
@@ -936,102 +931,207 @@
     return error;
   }
 
-  function insertLmfdbShortcut() {
+  function proxyLookupError(payload, response, query) {
+    const message = payload.error || `LMFDB proxy returned HTTP ${response.status}.`;
+    const needsNaturalNames = /^Q(?:root|zeta)\s*\(/i.test(query);
+    const capabilities = Array.isArray(payload.capabilities) ? payload.capabilities : [];
+    if (needsNaturalNames && !capabilities.includes('natural-name-resolver') && /monic integer polynomial/i.test(message)) {
+      return 'The configured LMFDB proxy does not support this field-name syntax yet. Update the proxy or enter the canonical LMFDB label.';
+    }
+    return message;
+  }
+
+  async function lookupLmfdbSelector(role) {
+    const definition = LMFDB_SELECTORS[role];
+    const loadingKey = role === 'base' ? 'baseLmfdbLoading' : 'lmfdbLoading';
+    const queryKey = role === 'base' ? 'baseLmfdbQuery' : 'lmfdbQuery';
+    const fieldKey = role === 'base' ? 'baseLmfdbField' : 'lmfdbField';
+    const statusKey = role === 'base' ? 'baseLmfdbStatus' : 'lmfdbStatus';
+    const statusKindKey = role === 'base' ? 'baseLmfdbStatusKind' : 'lmfdbStatusKind';
+    if (state[loadingKey]) return;
+    const proxy = lmfdbProxyUrl();
+    const query = $(definition.query).value.trim();
+    state[queryKey] = query;
+    if (!proxy) {
+      state[statusKey] = 'LMFDB proxy URL is not configured.';
+      state[statusKindKey] = 'error';
+      render();
+      return;
+    }
+    if (!query) {
+      state[statusKey] = 'Enter an LMFDB label, natural name, or monic integer polynomial.';
+      state[statusKindKey] = 'error';
+      render();
+      return;
+    }
+
+    state[loadingKey] = true;
+    state[statusKey] = '';
+    state[statusKindKey] = '';
+    render();
+    try {
+      const response = await fetch(buildProxyFieldUrl(proxy, query), { headers: { Accept: 'application/json' } });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(proxyLookupError(payload, response, query));
+      const field = normalizeLmfdbPayload(payload, query);
+      state[fieldKey] = field;
+      state[statusKey] = payload.warnings?.length ? `Loaded ${field.label}; ${payload.warnings[0]}` : `Loaded ${field.label}.`;
+      state[statusKindKey] = 'ok';
+      if (role === 'extension') {
+        state.source = 'lmfdb';
+        state.baseKind = 'Q';
+        state.generic.baseKind = 'Q';
+        state.extensionKind = 'lmfdb';
+        state.hiddenPrimes = [];
+        state.selectedKey = `p:${field.ramps[0] || primesUpTo(state.primeBound)[0] || 2}`;
+      }
+    } catch (error) {
+      state[statusKey] = error.message || 'LMFDB search failed.';
+      state[statusKindKey] = 'error';
+    } finally {
+      state[loadingKey] = false;
+      render();
+    }
+  }
+
+  function openSelectorShortcut(role, mode) {
+    const selector = LMFDB_SELECTORS[role];
+    const definition = selector.shortcuts[mode];
+    if (!definition) return;
+    if (activeLmfdbShortcut?.role === role && activeLmfdbShortcut?.mode === mode && !$(selector.panel).hidden) {
+      closeSelectorShortcut(true);
+      return;
+    }
+    if (activeLmfdbShortcut) closeSelectorShortcut(false);
+    activeLmfdbShortcut = { role, mode };
+    $(selector.panel).hidden = false;
+    $(selector.error).textContent = '';
+    Object.entries(selector.shortcuts).forEach(([key, item]) => {
+      $(item.button).setAttribute('aria-expanded', String(key === mode));
+      $(item.fields).hidden = key !== mode;
+      item.inputs.forEach((id) => $(id).setCustomValidity(''));
+    });
+    const input = $(definition.inputs[0]);
+    input.focus();
+    input.select();
+    typeset($(selector.panel));
+  }
+
+  function closeSelectorShortcut(returnFocus) {
     if (!activeLmfdbShortcut) return;
+    const current = activeLmfdbShortcut;
+    const selector = LMFDB_SELECTORS[current.role];
+    activeLmfdbShortcut = null;
+    $(selector.panel).hidden = true;
+    Object.values(selector.shortcuts).forEach((item) => $(item.button).setAttribute('aria-expanded', 'false'));
+    $(selector.error).textContent = '';
+    if (returnFocus) $(selector.shortcuts[current.mode].button).focus();
+  }
+
+  function insertSelectorShortcut() {
+    if (!activeLmfdbShortcut) return;
+    const { role, mode } = activeLmfdbShortcut;
+    const selector = LMFDB_SELECTORS[role];
+    const inputs = selector.shortcuts[mode].inputs;
     let alias = '';
     try {
-      if (activeLmfdbShortcut === 'sqrt') {
-        const d = readShortcutInteger('lmfdb-square-d', 'd');
-        if (d === 0) throw shortcutValidationError($('lmfdb-square-d'), 'd must be nonzero.');
+      if (mode === 'sqrt') {
+        const d = readShortcutInteger(inputs[0], 'd');
+        if (d === 0) throw shortcutValidationError($(inputs[0]), 'd must be nonzero.');
         alias = `Qsqrt(${d})`;
-      } else if (activeLmfdbShortcut === 'root') {
-        const n = readShortcutInteger('lmfdb-root-n', 'n');
-        const d = readShortcutInteger('lmfdb-root-d', 'd');
-        if (n < 2) throw shortcutValidationError($('lmfdb-root-n'), 'n must be at least 2.');
-        if (d === 0) throw shortcutValidationError($('lmfdb-root-d'), 'd must be nonzero.');
+      } else if (mode === 'root') {
+        const n = readShortcutInteger(inputs[0], 'n');
+        const d = readShortcutInteger(inputs[1], 'd');
+        if (n < 2) throw shortcutValidationError($(inputs[0]), 'n must be at least 2.');
+        if (d === 0) throw shortcutValidationError($(inputs[1]), 'd must be nonzero.');
         alias = `Qroot(${n},${d})`;
-      } else if (activeLmfdbShortcut === 'zeta') {
-        const n = readShortcutInteger('lmfdb-zeta-n', 'n');
-        if (n < 3) throw shortcutValidationError($('lmfdb-zeta-n'), 'n must be at least 3.');
+      } else {
+        const n = readShortcutInteger(inputs[0], 'n');
+        if (n < 3) throw shortcutValidationError($(inputs[0]), 'n must be at least 3.');
         alias = `Qzeta(${n})`;
       }
     } catch (error) {
       if (!error.shortcutValidation) throw error;
-      $('lmfdb-shortcut-error').textContent = error.message;
+      $(selector.error).textContent = error.message;
       return;
     }
+    const query = $(selector.query);
+    query.value = alias;
+    if (role === 'base') state.baseLmfdbQuery = alias;
+    else state.lmfdbQuery = alias;
+    closeSelectorShortcut(false);
+    query.focus();
+    query.setSelectionRange(alias.length, alias.length);
+  }
 
-    const input = $('lmfdb-query');
-    input.value = alias;
-    state.lmfdbQuery = alias;
-    closeLmfdbShortcut(false);
-    input.focus();
-    input.setSelectionRange(alias.length, alias.length);
+  function bindLmfdbSelector(role) {
+    const selector = LMFDB_SELECTORS[role];
+    $(selector.query).addEventListener('input', (event) => {
+      if (role === 'base') state.baseLmfdbQuery = event.target.value;
+      else state.lmfdbQuery = event.target.value;
+    });
+    $(selector.query).addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      lookupLmfdbSelector(role);
+    });
+    $(selector.search).addEventListener('click', () => lookupLmfdbSelector(role));
+    Object.entries(selector.shortcuts).forEach(([mode, definition]) => {
+      $(definition.button).addEventListener('click', () => openSelectorShortcut(role, mode));
+    });
+    $(selector.panel).addEventListener('submit', (event) => {
+      event.preventDefault();
+      insertSelectorShortcut();
+    });
+    $(selector.panel).addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeSelectorShortcut(true);
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        insertSelectorShortcut();
+      }
+    });
+    $(selector.close).addEventListener('click', () => closeSelectorShortcut(true));
   }
 
   function bindInputs() {
-    $('ramification-input-mode').addEventListener('change', (event) => {
-      const mode = event.target.value;
-      state.inputMode = mode;
-      state.source = mode === 'polynomial' ? 'generic' : mode;
-      if (mode === 'polynomial') {
-        $('polynomial-extension').open = true;
-      } else if (!state.lmfdbField) {
-        searchLmfdbField();
-        return;
-      }
-      render();
+    $('base-field-kind').addEventListener('change', (event) => {
+      state.baseKind = event.target.value;
+      state.generic.baseKind = state.baseKind;
+      if (state.baseKind !== 'Q') state.extensionKind = 'polynomial';
+      if (state.baseKind === 'Fqt' && state.generic.polynomial === 'x^2-2') state.generic.polynomial = 'x^2-t';
+      if (state.baseKind === 'lmfdb' && ['x^2-2', 'x^2-t'].includes(state.generic.polynomial)) state.generic.polynomial = 'x^2-a';
+      syncInputControls();
+      if (state.baseKind === 'lmfdb' && !state.baseLmfdbField) lookupLmfdbSelector('base');
     });
-    $('generic-base-kind').addEventListener('change', (event) => {
-      state.generic.baseKind = event.target.value;
-      $('generic-q-control').hidden = state.generic.baseKind !== 'Fqt';
-      if (state.generic.baseKind === 'Fqt' && state.generic.polynomial === 'x^2-2') $('generic-polynomial').value = state.generic.polynomial = 'x^2-t';
+    $('extension-input-kind').addEventListener('change', (event) => {
+      state.extensionKind = state.baseKind === 'Q' ? event.target.value : 'polynomial';
+      syncInputControls();
+      if (state.extensionKind === 'lmfdb' && !state.lmfdbField) lookupLmfdbSelector('extension');
     });
-    $('generic-q').addEventListener('input', (event) => { state.generic.q = Math.floor(Number(event.target.value) || 0); });
+    $('generic-q').addEventListener('input', (event) => { state.generic.q = event.target.value.trim(); });
     $('generic-generator').addEventListener('input', (event) => { state.generic.generator = event.target.value; });
     $('generic-polynomial').addEventListener('input', (event) => { state.generic.polynomial = event.target.value; });
     $('generic-compute').addEventListener('click', computeGenericExtension);
     document.querySelectorAll('[data-generic-example]').forEach((button) => {
       button.addEventListener('click', () => {
-        const functionExample = button.dataset.genericExample === 'function';
-        state.generic.baseKind = functionExample ? 'Fqt' : 'Q';
-        state.generic.q = 3;
-        state.generic.polynomial = functionExample ? 'x^2-t' : 'x^3-x-1';
-        $('generic-base-kind').value = state.generic.baseKind;
-        $('generic-q').value = String(state.generic.q);
-        $('generic-q-control').hidden = !functionExample;
-        $('generic-polynomial').value = state.generic.polynomial;
+        const example = button.dataset.genericExample;
+        state.baseKind = example === 'function' ? 'Fqt' : example === 'relative' ? 'lmfdb' : 'Q';
+        state.generic.baseKind = state.baseKind;
+        state.extensionKind = 'polynomial';
+        state.generic.q = '3';
+        state.generic.polynomial = example === 'function' ? 'x^2-t' : example === 'relative' ? 'x^2-a' : 'x^3-x-1';
+        syncInputControls();
+        if (state.baseKind === 'lmfdb' && !state.baseLmfdbField) lookupLmfdbSelector('base');
       });
     });
-    $('lmfdb-query').addEventListener('input', (event) => {
-      state.lmfdbQuery = event.target.value;
-    });
-    $('lmfdb-query').addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter') return;
-      event.preventDefault();
-      searchLmfdbField();
-    });
-    $('lmfdb-search').addEventListener('click', searchLmfdbField);
-    Object.entries(LMFDB_SHORTCUTS).forEach(([mode, definition]) => {
-      $(definition.button).addEventListener('click', () => openLmfdbShortcut(mode));
-    });
-    $('lmfdb-shortcut-panel').addEventListener('submit', (event) => {
-      event.preventDefault();
-      insertLmfdbShortcut();
-    });
-    $('lmfdb-shortcut-panel').addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeLmfdbShortcut(true);
-      } else if (event.key === 'Enter') {
-        event.preventDefault();
-        insertLmfdbShortcut();
-      }
-    });
-    $('lmfdb-shortcut-close').addEventListener('click', () => closeLmfdbShortcut(true));
+    bindLmfdbSelector('base');
+    bindLmfdbSelector('extension');
     document.addEventListener('click', (event) => {
-      const editor = $('lmfdb-shortcut-editor');
-      if (activeLmfdbShortcut && !editor.contains(event.target)) closeLmfdbShortcut(false);
+      if (!activeLmfdbShortcut) return;
+      const selector = LMFDB_SELECTORS[activeLmfdbShortcut.role];
+      if (!$(selector.editor).contains(event.target)) closeSelectorShortcut(false);
     });
     $('prime-bound').addEventListener('input', (event) => {
       state.primeBound = Math.min(31, Math.max(2, Math.floor(Number(event.target.value) || 11)));
@@ -1100,9 +1200,14 @@
 
   function addExtraPrimeFromInput() {
     const input = $('extra-prime-input');
-    if (state.source === 'generic') {
+    if (state.extensionKind === 'polynomial') {
       const value = input.value.trim();
       if (!value) return;
+      if (state.baseKind !== 'Fqt' && !isPrime(Number(value))) {
+        input.setCustomValidity('Enter a rational prime.');
+        input.reportValidity();
+        return;
+      }
       input.setCustomValidity('');
       if (!state.generic.extraPlaces.includes(value)) state.generic.extraPlaces.push(value);
       state.generic.hiddenPlaces = [];
@@ -1127,27 +1232,126 @@
     render();
   }
 
-  function computeGenericExtension() {
-    state.source = 'generic';
-    state.inputMode = 'polynomial';
-    $('ramification-input-mode').value = 'polynomial';
-    state.generic.baseKind = $('generic-base-kind').value;
-    state.generic.q = Math.floor(Number($('generic-q').value) || 0);
+  function localEngineRequest() {
+    let base;
+    if (state.baseKind === 'Q') {
+      base = { kind: 'Q' };
+    } else if (state.baseKind === 'lmfdb') {
+      const field = state.baseLmfdbField;
+      if (!field) throw new Error('Load the LMFDB base field F before computing E/F.');
+      base = {
+        kind: 'lmfdb', query: field.query, label: field.label, coeffs: field.coeffs,
+        zk: Array.isArray(field.rawExtra?.zk) ? field.rawExtra.zk : [],
+        fieldSnapshot: field.rawField,
+        extraSnapshot: field.rawExtra,
+        proxyApiVersion: field.proxyApiVersion,
+        proxyCapabilities: field.proxyCapabilities
+      };
+    } else {
+      base = { kind: 'Fqt', q: String(state.generic.q).trim() };
+    }
+    const extraValues = state.generic.extraPlaces.slice();
+    return {
+      schemaVersion: 1,
+      base,
+      extension: { kind: 'polynomial', generator: state.generic.generator, polynomial: state.generic.polynomial },
+      selection: {
+        bound: state.primeBound,
+        extraRationalPrimes: state.baseKind === 'Fqt' ? [] : extraValues.map(Number),
+        functionPlaces: state.baseKind === 'Fqt' ? extraValues : [],
+        includeInfinite: state.showInfinite
+      },
+      limits: { operationBudget: 300000, timeoutMs: 4500 }
+    };
+  }
+
+  function cancelLocalComputation(reason) {
+    if (localWorker) localWorker.terminate();
+    localWorker = null;
+    if (localRequestReject) {
+      const error = new Error(reason || 'Local computation cancelled.');
+      error.code = 'cancelled';
+      localRequestReject(error);
+    }
+    localRequestReject = null;
+  }
+
+  function runLocalEngine(request) {
+    const runWithoutWorker = () => {
+      if (!window.RamificationLocalEngine) return Promise.reject(new Error('The browser-local arithmetic engine is unavailable.'));
+      return Promise.resolve().then(() => window.RamificationLocalEngine.compute(request));
+    };
+    if (typeof window.Worker !== 'function') return runWithoutWorker();
+    cancelLocalComputation('Replaced by a newer local computation.');
+    const requestId = ++localRequestId;
+    try {
+      localWorker = new window.Worker('js/place_ramification_worker.js?v=20260823-1');
+    } catch (_) {
+      localWorker = null;
+      return runWithoutWorker();
+    }
+    return new Promise((resolve, reject) => {
+      localRequestReject = reject;
+      localWorker.addEventListener('message', (event) => {
+        const message = event.data || {};
+        if (message.requestId !== requestId) return;
+        localRequestReject = null;
+        localWorker.terminate();
+        localWorker = null;
+        if (message.type === 'result') resolve(message.result);
+        else {
+          const error = new Error(message.error?.message || 'The local ramification computation failed.');
+          error.code = message.error?.code || 'local-engine-error';
+          reject(error);
+        }
+      });
+      localWorker.addEventListener('error', () => {
+        localRequestReject = null;
+        localWorker?.terminate();
+        localWorker = null;
+        reject(new Error('The browser-local arithmetic worker stopped unexpectedly.'));
+      });
+      localWorker.postMessage({ type: 'compute', requestId, request });
+    });
+  }
+
+  async function computeGenericExtension() {
+    if (state.generic.loading) {
+      cancelLocalComputation('Local computation cancelled.');
+      state.generic.loading = false;
+      state.generic.status = 'Local computation cancelled.';
+      state.generic.statusKind = '';
+      render();
+      return;
+    }
+    state.extensionKind = 'polynomial';
+    state.generic.baseKind = state.baseKind;
+    state.generic.q = $('generic-q').value.trim();
     state.generic.generator = $('generic-generator').value.trim() || 'alpha';
     state.generic.polynomial = $('generic-polynomial').value.trim();
+    state.generic.loading = true;
+    state.generic.status = 'Computing E/F in this browser...';
+    state.generic.statusKind = '';
+    render();
     try {
-      if (state.generic.baseKind !== 'Q') throw new Error('Browser-only exact factorization over F_q(t) is deferred pending the WebAssembly-CAS feasibility gate. The current JavaScript engine supports polynomial extensions of Q.');
-      const payload = browserNumberFieldDecomposition();
+      const payload = await runLocalEngine(localEngineRequest());
+      state.source = 'generic';
       state.generic.response = payload;
-      state.generic.status = 'Computed in this browser. Exact away from bad primes; bad primes are flagged and have no local data.';
-      state.generic.statusKind = 'ok';
+      const unresolved = payload.places.filter((place) => place.status === 'unresolved').length;
+      state.generic.status = unresolved
+        ? `Computed locally; ${unresolved} place${unresolved === 1 ? ' is' : 's are'} explicitly unresolved.`
+        : 'Computed locally with certificates at every displayed place.';
+      state.generic.statusKind = unresolved ? '' : 'ok';
       state.selectedKey = normalizeGenericField().backendPlaces.find((place) => place.scope === 'finite')?.key || 'inf';
     } catch (error) {
-      state.generic.response = null;
-      state.generic.status = error.message || 'The Sage computation failed.';
-      state.generic.statusKind = 'error';
+      if (error.code !== 'cancelled') {
+        state.generic.status = error.message || 'The browser-local computation failed.';
+        state.generic.statusKind = 'error';
+      }
+    } finally {
+      state.generic.loading = false;
+      render();
     }
-    render();
   }
 
   function renderGenericStatus() {
@@ -1155,115 +1359,10 @@
     const button = $('generic-compute');
     if (!status || !button) return;
     button.disabled = false;
+    button.textContent = state.generic.loading ? 'cancel' : 'compute';
     status.classList.toggle('is-error', state.generic.statusKind === 'error');
     status.classList.toggle('is-ok', state.generic.statusKind === 'ok');
-    status.textContent = state.generic.status || 'Runs locally in this browser; exact away from bad primes.';
-  }
-
-  function browserNumberFieldDecomposition() {
-    const coeffs = parseBrowserIntegerPolynomial(state.generic.polynomial);
-    const irreducibilityWitness = certifyBrowserIrreducible(coeffs);
-    const hidden = new Set(state.generic.hiddenPlaces);
-    const primeSet = new Set(primesUpTo(state.primeBound));
-    state.generic.extraPlaces.forEach((value) => {
-      const p = Number(value);
-      if (!isPrime(p)) throw new Error(`${value} is not a rational prime.`);
-      primeSet.add(p);
-    });
-    const places = [...primeSet].sort((a, b) => a - b)
-      .map((p) => browserNumberFinitePlace(coeffs, p))
-      .filter((place) => !hidden.has(place.id));
-    if (state.showInfinite) {
-      places.push({
-        id: 'archimedean:infinity', scope: 'infinite', label: '\\infty', base: '\\infty',
-        placeType: 'archimedean', behavior: 'unknown', g: 1,
-        components: [{ label: '?', e: null, f: null, source: 'browser limitation' }],
-        splittingType: '?', detail: 'Archimedean decomposition is not computed in the browser-only polynomial mode.', source: 'browser limitation'
-      });
-    }
-    return {
-      schemaVersion: 1,
-      base: { kind: 'Q', label: '\\mathbb{Q}' },
-      extension: {
-        generator: state.generic.generator, polynomial: polynomialTextFromCoeffs(coeffs), degree: coeffs.length - 1,
-        separableDegree: coeffs.length - 1, inseparableDegree: 1, flavor: 'separable'
-      },
-      warnings: [`Irreducibility certified by squarefree reduction modulo ${irreducibilityWitness}.`],
-      places
-    };
-  }
-
-  function browserNumberFinitePlace(coeffs, p) {
-    const label = `(${p})`;
-    if (!isSquarefreeModPrime(coeffs, p)) {
-      return {
-        id: `finite:${label}`, scope: 'finite', label, base: label, placeType: 'finite', behavior: 'ramified', g: 1,
-        components: [{ label: '\\mathfrak{p}', e: null, f: null, source: 'bad prime' }],
-        splittingType: 'local data unavailable',
-        detail: `The defining polynomial has repeated reduction modulo \\(${p}\\). This is a bad prime; browser-only factorization does not determine its local \\(e_i,f_i\\).`,
-        source: 'bad prime (local data unavailable)'
-      };
-    }
-    const components = assignComponentLabels(factorDegreesModPrime(coeffs, p).map((f) => ({ e: 1, f, source: 'squarefree polynomial reduction' })));
-    const kind = kindFromComponents(components, coeffs.length - 1, false);
-    return {
-      id: `finite:${label}`, scope: 'finite', label, base: label, placeType: 'finite', behavior: kind,
-      g: components.length, components, splittingType: splittingTypeText(components),
-      detail: `The reduction of the defining polynomial modulo \\(${p}\\) is squarefree, so its factor degrees give the exact decomposition.`,
-      source: 'squarefree polynomial reduction'
-    };
-  }
-
-  function parseBrowserIntegerPolynomial(input) {
-    const source = String(input || '').replace(/\s+/g, '').replace(/\*/g, '');
-    if (!source || !/^[+\-]?(?:\d*x(?:\^\d+)?|\d+)(?:[+\-](?:\d*x(?:\^\d+)?|\d+))*$/i.test(source)) {
-      throw new Error('Enter a monic integer polynomial in expanded form, such as x^3-x-1.');
-    }
-    const coeffs = [];
-    (source.match(/[+\-]?[^+\-]+/g) || []).forEach((term) => {
-      let sign = 1;
-      let body = term;
-      if (body.startsWith('+')) body = body.slice(1);
-      if (body.startsWith('-')) { sign = -1; body = body.slice(1); }
-      const xIndex = body.toLowerCase().indexOf('x');
-      const coefficient = xIndex < 0 ? Number(body) : Number(body.slice(0, xIndex) || 1);
-      const exponent = xIndex < 0 ? 0 : Number((/^\^(\d+)$/.exec(body.slice(xIndex + 1)) || [])[1] || 1);
-      if (!Number.isSafeInteger(coefficient) || !Number.isSafeInteger(exponent) || exponent > 7 || Math.abs(coefficient) > 1000000) {
-        throw new Error('Use degree at most 7 and integer coefficients of absolute value at most 1,000,000.');
-      }
-      coeffs[exponent] = (coeffs[exponent] || 0) + sign * coefficient;
-    });
-    while (coeffs.length && !coeffs[coeffs.length - 1]) coeffs.pop();
-    if (coeffs.length < 3 || coeffs[coeffs.length - 1] !== 1) throw new Error('The polynomial must be monic of degree 2 through 7.');
-    return coeffs.map((value) => value || 0);
-  }
-
-  function certifyBrowserIrreducible(coeffs) {
-    const degree = coeffs.length - 1;
-    const witness = primesUpTo(31).find((p) => {
-      if (!isSquarefreeModPrime(coeffs, p)) return false;
-      const degrees = factorDegreesModPrime(coeffs, p);
-      return degrees.length === 1 && degrees[0] === degree;
-    });
-    if (!witness) throw new Error('Could not certify irreducibility from reductions modulo primes up to 31. Use a different irreducible presentation or wait for the WebAssembly-CAS engine.');
-    return witness;
-  }
-
-  function polynomialTextFromCoeffs(coeffs) {
-    return coeffsToPolynomialLatex(coeffs).replace(/\^\{(\d+)\}/g, '^$1');
-  }
-
-  function isSquarefreeModPrime(coeffs, p) {
-    const derivative = coeffs.slice(1).map((coefficient, index) => positiveMod(coefficient * (index + 1), p));
-    if (!derivative.some(Boolean)) return false;
-    let a = normalizePolyMod(coeffs, p);
-    let b = normalizePolyMod(derivative, p);
-    while (!(b.length === 1 && b[0] === 0)) {
-      const remainder = polyDivMod(a, b, p).remainder;
-      a = b;
-      b = remainder.length ? remainder : [0];
-    }
-    return a.length === 1 && a[0] !== 0;
+    status.textContent = state.generic.status || 'Runs locally; unsupported local cases are marked unresolved.';
   }
 
   function handleCanvasClick(event) {
@@ -1329,9 +1428,13 @@
       }
 
       let found = false;
+      let skippedSearch = false;
       for (let trialDegree = 2; trialDegree <= Math.floor(degree / 2) && !found; trialDegree++) {
         const attempts = Math.pow(p, trialDegree);
-        if (attempts > 70000) continue;
+        if (attempts > 70000) {
+          skippedSearch = true;
+          continue;
+        }
         for (let code = 0; code < attempts; code++) {
           const divisor = monicPolynomialFromCode(code, trialDegree, p);
           const divided = polyDivMod(poly, divisor, p);
@@ -1344,6 +1447,7 @@
         }
       }
       if (!found) {
+        if (skippedSearch) return null;
         degrees.push(degree);
         break;
       }
@@ -1516,6 +1620,84 @@
     }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
   }
 
+  function importedLmfdbField(definition) {
+    const input = definition || {};
+    const fieldSnapshot = input.fieldSnapshot || null;
+    if (!fieldSnapshot || !Array.isArray(fieldSnapshot.coeffs)) {
+      throw new Error('The LMFDB field definition has no resolved field snapshot.');
+    }
+    const query = String(input.query || input.label || fieldSnapshot.label || '');
+    return normalizeLmfdbPayload({
+      proxyApiVersion: input.proxyApiVersion,
+      capabilities: input.proxyCapabilities,
+      query,
+      queryType: input.queryType || 'import',
+      field: fieldSnapshot,
+      extra: input.extraSnapshot || null,
+      warnings: []
+    }, query);
+  }
+
+  function legacyLmfdbDefinition(data) {
+    const field = data.field || {};
+    const discriminant = Number(field.discriminant);
+    const signatureMatch = String(field.signature || '').match(/(-?\d+)\D+(-?\d+)/);
+    const r2 = signatureMatch ? Number(signatureMatch[2]) : 0;
+    const label = String(data.lmfdbLabel || data.query || 'imported field');
+    return {
+      kind: 'lmfdb',
+      query: String(data.query || label),
+      queryType: String(data.queryType || 'import'),
+      label,
+      fieldSnapshot: {
+        label,
+        degree: Number(field.degree) || Math.max(1, field.coeffs.length - 1),
+        coeffs: field.coeffs,
+        disc_abs: Number.isFinite(discriminant) ? Math.abs(discriminant) : field.discriminant,
+        disc_sign: Number.isFinite(discriminant) && discriminant < 0 ? -1 : 1,
+        r2,
+        ramps: Array.isArray(field.ramifiedPrimes) ? field.ramifiedPrimes : [],
+        local_algs: Array.isArray(data.raw?.local_algs) ? data.raw.local_algs : [],
+        galois_label: field.galoisLabel || ''
+      },
+      extraSnapshot: { label, frobs: Array.isArray(data.raw?.frobs) ? data.raw.frobs : [] }
+    };
+  }
+
+  function normalizedImportedLocalResponse(response) {
+    const snapshot = response && typeof response === 'object' ? response : {};
+    const places = Array.isArray(snapshot.places) ? snapshot.places.map((place) => {
+      const components = Array.isArray(place?.components) ? place.components : [];
+      const incomplete = place?.status === 'unresolved'
+        || !components.length
+        || components.some((component) => component.e == null || component.f == null);
+      if (!incomplete) return { ...place, status: 'resolved', reasonCode: place.reasonCode || null };
+      return {
+        ...place,
+        status: 'unresolved',
+        behavior: 'unresolved',
+        g: null,
+        splittingType: '?',
+        reasonCode: place.reasonCode || 'imported-unverified-place',
+        certificate: null,
+        components: components.length
+          ? components.map((component) => ({ ...component, e: null, f: null }))
+          : [{ label: '?', e: null, f: null, source: 'imported-unverified-place' }]
+      };
+    }) : [];
+    const unresolvedCount = places.filter((place) => place.status === 'unresolved').length;
+    return {
+      ...snapshot,
+      engine: snapshot.engine || {
+        name: 'imported legacy snapshot',
+        version: null,
+        arithmetic: 'imported',
+        completeness: unresolvedCount ? 'partial' : 'exact'
+      },
+      places
+    };
+  }
+
   window.SiteImportExportPageAdapter = {
     exportDefault() {
       const field = activeField();
@@ -1527,71 +1709,86 @@
       const text = String(raw?.text || '').trim();
       if (!text) throw new Error('Paste a place ramification export.');
       const data = JSON.parse(text);
+      if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('This is not a place ramification export.');
       if (data.calculator && data.calculator !== 'Place ramification calculator') throw new Error('This is not a place ramification export.');
       const rawSource = String(data.source || '').toLowerCase();
       if (rawSource === 'quadratic') throw new Error('Offline quadratic exports are no longer supported. Search for the field with QsqrtN instead.');
-      const source = rawSource === 'polynomial-extension' ? 'generic' : rawSource === 'lmfdb' ? 'lmfdb' : '';
-      if (!source) throw new Error('Unsupported place ramification export source.');
-      if (source === 'lmfdb' && (!data.field || !Array.isArray(data.field.coeffs))) throw new Error('The LMFDB export has no field snapshot.');
-      if (source === 'generic' && (!data.base || !data.extension || !data.response)) throw new Error('The polynomial-extension export has no response snapshot.');
-      return { data, source };
+      if (rawSource === 'lmfdb') {
+        if (!data.field || !Array.isArray(data.field.coeffs)) throw new Error('The LMFDB export has no field snapshot.');
+        return { data, source: 'lmfdb', extension: legacyLmfdbDefinition(data) };
+      }
+      if (rawSource === 'polynomial-extension') {
+        if (!data.base || !data.extension || !data.response) throw new Error('The polynomial-extension export has no response snapshot.');
+        return { data, source: 'generic', base: data.base, extension: data.extension };
+      }
+      if (rawSource !== 'field-extension') throw new Error('Unsupported place ramification export source.');
+      if (Number(data.version) !== 3) throw new Error('Unsupported field-extension export version.');
+      const base = data.base || {};
+      const extension = data.extension || {};
+      if (!['Q', 'lmfdb', 'Fqt'].includes(base.kind)) throw new Error('The field-extension export has an unsupported base field.');
+      if (extension.kind === 'lmfdb') {
+        if (base.kind !== 'Q') throw new Error('An LMFDB extension snapshot is only valid over Q.');
+        importedLmfdbField(extension);
+        return { data, source: 'lmfdb', base, extension };
+      }
+      if (extension.kind !== 'polynomial' || !data.response) {
+        throw new Error('The field-extension export has no local polynomial response snapshot.');
+      }
+      if (base.kind === 'lmfdb') importedLmfdbField(base);
+      return { data, source: 'generic', base, extension };
     },
     applyImport(_kind, prepared) {
       const data = prepared.data;
-      state.primeBound = Math.max(2, Math.min(31, Math.floor(Number(data.selection?.bound || data.primeBound) || 11)));
+      const selection = data.selection || {};
+      const bound = selection.rationalPrimeBound ?? selection.bound ?? data.primeBound ?? 11;
+      state.primeBound = Math.max(2, Math.min(31, Math.floor(Number(bound) || 11)));
       state.showInfinite = data.selection?.includeInfinite ?? data.showInfinite !== false;
+      state.extraPrimes = [];
       state.hiddenPrimes = [];
+      state.generic.loading = false;
+      state.lmfdbLoading = false;
+      state.baseLmfdbLoading = false;
       if (prepared.source === 'generic') {
         state.source = 'generic';
-        state.inputMode = 'polynomial';
-        state.generic.baseKind = String(data.base.kind || 'Q');
-        state.generic.q = Number(data.base.q || 3);
-        state.generic.generator = String(data.extension.generator || 'alpha');
-        state.generic.polynomial = String(data.extension.polynomial || '');
-        state.generic.extraPlaces = Array.isArray(data.selection?.extraFinitePlaces) ? data.selection.extraFinitePlaces.map(String) : [];
-        state.generic.hiddenPlaces = Array.isArray(data.selection?.hiddenPlaces) ? data.selection.hiddenPlaces.map(String) : [];
-        state.generic.response = data.response;
-        state.generic.status = 'Loaded exported Sage computation snapshot.';
+        state.baseKind = String(prepared.base.kind || 'Q');
+        state.extensionKind = 'polynomial';
+        state.generic.baseKind = state.baseKind;
+        state.generic.q = String(prepared.base.q || 3);
+        state.generic.generator = String(prepared.extension.generator || 'alpha');
+        state.generic.polynomial = String(prepared.extension.polynomial || '');
+        state.generic.extraPlaces = Array.isArray(selection.extraFinitePlaces) ? selection.extraFinitePlaces.map(String) : [];
+        state.generic.hiddenPlaces = Array.isArray(selection.hiddenPlaces) ? selection.hiddenPlaces.map(String) : [];
+        state.generic.response = normalizedImportedLocalResponse(data.response);
+        state.generic.status = 'Loaded exported local-computation snapshot.';
         state.generic.statusKind = 'ok';
+        if (state.baseKind === 'lmfdb') {
+          state.baseLmfdbField = importedLmfdbField(prepared.base);
+          state.baseLmfdbQuery = state.baseLmfdbField.query;
+          state.baseLmfdbStatus = `Loaded ${state.baseLmfdbField.label} from the export.`;
+          state.baseLmfdbStatusKind = 'ok';
+        }
       } else {
-        const signatureMatch = String(data.field.signature || '').match(/(-?\d+)\D+(-?\d+)/);
-        const r1 = signatureMatch ? Number(signatureMatch[1]) : 0;
-        const r2 = signatureMatch ? Number(signatureMatch[2]) : 0;
         state.source = 'lmfdb';
-        state.inputMode = 'lmfdb';
-        state.lmfdbQuery = String(data.query || data.lmfdbLabel || '');
-        state.lmfdbField = {
-          source: 'lmfdb',
-          label: String(data.lmfdbLabel || data.query || 'imported field'),
-          lmfdbUrl: String(data.lmfdbUrl || ''),
-          query: String(data.query || data.lmfdbLabel || ''),
-          queryType: String(data.queryType || 'import'),
-          degree: Number(data.field.degree) || Math.max(1, data.field.coeffs.length - 1),
-          coeffs: data.field.coeffs.map(Number),
-          discriminant: Number.isSafeInteger(Number(data.field.discriminant)) ? Number(data.field.discriminant) : null,
-          discriminantText: String(data.field.discriminant),
-          r1,
-          r2,
-          signature: `(${r1}, ${r2})`,
-          ramps: (data.field.ramifiedPrimes || []).map(Number).filter(Number.isFinite),
-          localAlgs: (data.raw?.local_algs || []).map(String),
-          frobs: Array.isArray(data.raw?.frobs) ? data.raw.frobs : [],
-          galoisLabel: String(data.field.galoisLabel || ''),
-          warnings: [],
-          rawField: null,
-          rawExtra: null
-        };
+        state.baseKind = 'Q';
+        state.extensionKind = 'lmfdb';
+        state.generic.baseKind = 'Q';
+        state.lmfdbField = importedLmfdbField(prepared.extension);
+        state.lmfdbQuery = state.lmfdbField.query;
+        state.lmfdbStatus = `Loaded ${state.lmfdbField.label} from the export.`;
+        state.lmfdbStatusKind = 'ok';
+        state.extraPrimes = Array.isArray(selection.extraFinitePlaces)
+          ? selection.extraFinitePlaces.map(Number).filter(isPrime) : [];
+        state.hiddenPrimes = Array.isArray(selection.hiddenPlaces)
+          ? selection.hiddenPlaces.map((key) => Number(String(key).replace(/^p:/, ''))).filter(isPrime) : [];
       }
       const imported = activeField();
       state.places = imported.error ? [] : buildPlaces(imported);
       state.selectedKey = state.places.find((place) => place.scope === 'finite')?.key || state.places[0]?.key || 'p:2';
-      $('prime-bound').value = String(state.primeBound);
-      $('show-infinite').checked = state.showInfinite;
-      if ($('lmfdb-query')) $('lmfdb-query').value = state.lmfdbQuery;
       render();
     },
     hasMeaningfulState() {
-      return state.source !== 'lmfdb' || state.lmfdbQuery !== '2.2.5.1' || state.primeBound !== 11
+      return state.source !== 'lmfdb' || state.baseKind !== 'Q' || state.extensionKind !== 'lmfdb'
+        || state.lmfdbQuery !== '2.2.5.1' || state.primeBound !== 11
         || state.showInfinite !== true || state.extraPrimes.length > 0 || state.hiddenPrimes.length > 0;
     },
     filename() { return 'place-ramification-state.json'; }
@@ -1600,6 +1797,6 @@
   document.addEventListener('DOMContentLoaded', () => {
     bindInputs();
     bindCards();
-    searchLmfdbField();
+    lookupLmfdbSelector('extension');
   });
 })();

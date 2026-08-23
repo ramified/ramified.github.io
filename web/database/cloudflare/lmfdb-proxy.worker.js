@@ -1,5 +1,14 @@
 const LMFDB_API_BASE = 'https://www.lmfdb.org/api';
 const LMFDB_NUMBER_FIELD_BASE = 'https://www.lmfdb.org/NumberField/';
+const PROXY_API_VERSION = 2;
+const PROXY_CAPABILITIES = [
+  'canonical-labels',
+  'explicit-polynomials',
+  'natural-name-resolver',
+  'Qsqrt',
+  'Qroot',
+  'Qzeta'
+];
 const FIELD_TABLE = 'nf_fields';
 const EXTRA_TABLE = 'nf_fields_extra';
 const FIELD_COLUMNS = [
@@ -40,6 +49,12 @@ export default {
       return jsonResponse({ error: 'Method not allowed.' }, 405);
     }
 
+    if (url.pathname === '/meta') {
+      return jsonResponse(proxyMetadata(), 200, {
+        'Cache-Control': `public, max-age=${CACHE_SECONDS}`
+      });
+    }
+
     if (url.pathname !== '/field') {
       return jsonResponse({ error: 'Unknown endpoint. Use /field?q=2.2.5.1.' }, 404);
     }
@@ -62,7 +77,7 @@ export default {
         const detail = query.type === 'polynomial'
           ? 'No exact API coefficient match; try the LMFDB label.'
           : 'No LMFDB number field matched this query.';
-        return jsonResponse({ error: detail, query }, 404);
+        return jsonResponse({ ...proxyMetadata(), error: detail, query }, 404);
       }
 
       const label = String(record.label || '');
@@ -79,6 +94,7 @@ export default {
       }
 
       return jsonResponse({
+        ...proxyMetadata(),
         source: 'LMFDB',
         query: query.original,
         queryType: query.type,
@@ -98,10 +114,17 @@ export default {
       });
     } catch (error) {
       const status = error.status || 400;
-      return jsonResponse({ error: error.message || 'Could not query LMFDB.' }, status);
+      return jsonResponse({ ...proxyMetadata(), error: error.message || 'Could not query LMFDB.' }, status);
     }
   }
 };
+
+function proxyMetadata() {
+  return {
+    proxyApiVersion: PROXY_API_VERSION,
+    capabilities: PROXY_CAPABILITIES.slice()
+  };
+}
 
 function withCors(response) {
   const next = new Response(response.body, response);
@@ -182,6 +205,10 @@ function normalizeInput(raw) {
       normalized: `Qzeta(${n})`,
       resolvedInput: `Qzeta${n}`
     };
+  }
+
+  if (/^Q[A-Za-z]/i.test(compact)) {
+    badRequest('Unrecognized LMFDB field alias. Use a label, Q, Qi, Qsqrt(d), Qroot(n,d), or Qzeta(n).');
   }
 
   const coeffs = parseMonicIntegerPolynomial(original);

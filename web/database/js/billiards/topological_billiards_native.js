@@ -13,6 +13,7 @@
 
   const TAU = Math.PI * 2;
   const EPSILON = 1e-8;
+  const CONE_ANGLE_TOLERANCE = 1e-7;
   const PHYSICS_DT = 1 / 240;
   const SQUARE_DIRS = ['E', 'S', 'W', 'N'];
   const HEX_DIRS = ['E', 'SE', 'SW', 'W', 'NW', 'NE'];
@@ -295,7 +296,7 @@
           id: `v${index + 1}`,
           index,
           coneAngle,
-          singular: Math.abs(coneAngle - TAU) > 1e-7,
+          singular: Math.abs(coneAngle - TAU) > CONE_ANGLE_TOLERANCE,
           incidences: unique
         });
       });
@@ -520,7 +521,10 @@
     const explicit = block && Object.prototype.hasOwnProperty.call(block, 'pockets');
     const sources = explicit && Array.isArray(block.pockets)
       ? block.pockets
-      : atlas.vertexClasses.filter((entry) => entry.singular).map((entry) => ({ classIndex: entry.index }));
+      : atlas.vertexClasses.filter((entry) => (
+        Math.abs(entry.coneAngle - Math.PI) > CONE_ANGLE_TOLERANCE
+        && Math.abs(entry.coneAngle - TAU) > CONE_ANGLE_TOLERANCE
+      )).map((entry) => ({ classIndex: entry.index }));
     const seen = new Set();
     const pockets = [];
     sources.forEach((source, index) => {
@@ -702,36 +706,45 @@
     if (!atlas.chartTransformCache) atlas.chartTransformCache = new Map();
     const cacheKey = `${sourceTileIndex}:${depthLimit}`;
     if (atlas.chartTransformCache.has(cacheKey)) return atlas.chartTransformCache.get(cacheKey);
-    const queue = [{
-      tileIndex: sourceTileIndex,
-      transform: M.identityAffine(),
-      inverseTransform: M.identityAffine(),
-      depth: 0,
-      path: ''
-    }];
     const all = [];
     const byTile = new Map();
-    const seen = new Set();
+    const byKey = new Map();
+    const queue = [];
+    const addChart = (tileIndex, transform, depth, path) => {
+      const key = `${tileIndex}|${M.affineKey(transform, 6)}`;
+      const existing = byKey.get(key);
+      if (existing) return existing;
+      const chart = {
+        index: all.length,
+        tileIndex,
+        transform,
+        inverseTransform: M.inverseAffine(transform),
+        depth,
+        path,
+        edges: []
+      };
+      all.push(chart);
+      byKey.set(key, chart);
+      if (!byTile.has(tileIndex)) byTile.set(tileIndex, []);
+      byTile.get(tileIndex).push(chart);
+      queue.push(chart);
+      return chart;
+    };
+    addChart(sourceTileIndex, M.identityAffine(), 0, '');
     for (let queueIndex = 0; queueIndex < queue.length; queueIndex += 1) {
       const chart = queue[queueIndex];
-      const key = `${chart.tileIndex}|${M.affineKey(chart.transform, 6)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      all.push(chart);
-      if (!byTile.has(chart.tileIndex)) byTile.set(chart.tileIndex, []);
-      byTile.get(chart.tileIndex).push(chart);
       if (chart.depth >= depthLimit) continue;
       const tile = atlas.tiles[chart.tileIndex];
       tile.transitions.forEach((transition, dir) => {
         if (!transition) return;
         const transform = M.composeAffine(transition.transform, chart.transform);
-        queue.push({
-          tileIndex: transition.tileIndex,
+        const child = addChart(
+          transition.tileIndex,
           transform,
-          inverseTransform: M.inverseAffine(transform),
-          depth: chart.depth + 1,
-          path: chart.path ? `${chart.path}.${dir}` : String(dir)
-        });
+          chart.depth + 1,
+          chart.path ? `${chart.path}.${dir}` : String(dir)
+        );
+        chart.edges.push({ dir, childIndex: child.index });
       });
     }
     const cached = { all, byTile };
@@ -739,9 +752,13 @@
     return cached;
   }
 
-  function ballImageFromChart(ball, chart, minimal = false) {
+  function ballImageFromChart(ball, chart, minimal = false, traversal = chart) {
     const image = {
-      ...chart,
+      tileIndex: chart.tileIndex,
+      transform: chart.transform,
+      inverseTransform: chart.inverseTransform,
+      depth: traversal.depth,
+      path: traversal.path,
       position: M.applyAffine(chart.transform, ball.position)
     };
     if (minimal) return image;
@@ -754,58 +771,50 @@
   function nearbyImages(ball, atlas, options = {}) {
     const maxDepth = Math.max(0, Math.floor(Number(options.maxDepth) || 0));
     const minimal = options.minimal === true;
+    const padding = Number.isFinite(options.padding) ? options.padding : Infinity;
+    const charts = chartTransformsFromTile(atlas, ball.tileIndex, maxDepth);
     if (options.onlyIntersecting === false) {
-      return chartTransformsFromTile(atlas, ball.tileIndex, maxDepth).all
-        .map((chart) => ballImageFromChart(ball, chart, minimal));
+      return charts.all.map((chart) => ballImageFromChart(ball, chart, minimal));
     }
-    const queue = [{
-      tileIndex: ball.tileIndex,
-      transform: M.identityAffine(),
-      inverseTransform: M.identityAffine(),
-      depth: 0,
-      path: ''
-    }];
     const images = [];
-    const seen = new Set();
+    const queue = [{ chartIndex: 0, depth: 0, path: '' }];
+    const visited = new Set();
+    const imagePositions = new Set();
     for (let queueIndex = 0; queueIndex < queue.length; queueIndex += 1) {
-      const chart = queue[queueIndex];
-      const key = `${chart.tileIndex}|${M.affineKey(chart.transform, 6)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      const traversal = queue[queueIndex];
+      const chart = charts.all[traversal.chartIndex];
+      if (!chart || visited.has(chart.index)) continue;
+      visited.add(chart.index);
       const position = M.applyAffine(chart.transform, ball.position);
-      const image = minimal
-        ? { ...chart, position }
-        : {
-          ...chart,
-          position,
-          velocity: M.applyLinear(chart.transform, ball.velocity),
-          angularVelocity: M.applyLiftedLinear(chart.transform, ball.angularVelocity),
-          orientation: M.transportOrientation(ball.orientation, chart.transform)
-        };
-      images.push(image);
-      if (chart.depth >= maxDepth) continue;
+      if (!pointInsideTile(atlas, chart.tileIndex, position, -padding)) continue;
+      const positionKey = `${chart.tileIndex}|${position.x.toFixed(7)}:${position.y.toFixed(7)}`;
+      if (options.deduplicatePositions === false || !imagePositions.has(positionKey)) {
+        imagePositions.add(positionKey);
+        images.push(ballImageFromChart(ball, chart, minimal, traversal));
+      }
+      if (traversal.depth >= maxDepth) continue;
       const tile = atlas.tiles[chart.tileIndex];
-      tile.transitions.forEach((transition, dir) => {
-        if (!transition) return;
-        const distance = pointEdgeDistance(position, tile.frames[dir]);
-        const padding = Number.isFinite(options.padding) ? options.padding : Infinity;
-        if (distance > padding + EPSILON && options.onlyIntersecting !== false) return;
-        const transform = M.composeAffine(transition.transform, chart.transform);
-        queue.push({
-          tileIndex: transition.tileIndex,
-          transform,
-          inverseTransform: M.inverseAffine(transform),
-          depth: chart.depth + 1,
-          path: chart.path ? `${chart.path}.${dir}` : String(dir)
-        });
+      chart.edges.forEach((edge) => {
+        if (pointEdgeDistance(position, tile.frames[edge.dir]) <= padding + EPSILON) {
+          queue.push({
+            chartIndex: edge.childIndex,
+            depth: traversal.depth + 1,
+            path: traversal.path ? `${traversal.path}.${edge.dir}` : String(edge.dir)
+          });
+        }
       });
     }
     return images;
   }
 
-  function ballImagesInTile(ball, atlas, tileIndex, maxDepth = 3) {
-    const charts = chartTransformsFromTile(atlas, ball.tileIndex, maxDepth).byTile.get(tileIndex) || [];
-    return charts.map((chart) => ballImageFromChart(ball, chart, true));
+  function ballImagesInTile(ball, atlas, tileIndex, maxDepth = 3, padding = 0, options = {}) {
+    return nearbyImages(ball, atlas, {
+      padding,
+      maxDepth,
+      onlyIntersecting: true,
+      minimal: true,
+      deduplicatePositions: options.deduplicatePositions
+    }).filter((image) => image.tileIndex === tileIndex);
   }
 
   function activePocketAtClass(state, classIndex) {
@@ -824,13 +833,21 @@
   function overlappingBall(state, candidate, ignoredId = '') {
     return state.balls.find((other) => {
       if (!other.active || other.id === ignoredId || other.id === candidate.id) return false;
-      const images = ballImagesInTile(other, state.atlas, candidate.tileIndex, state.deterministic.parameters.localCoverDepth);
+      const images = ballImagesInTile(
+        other,
+        state.atlas,
+        candidate.tileIndex,
+        state.deterministic.parameters.localCoverDepth,
+        candidate.radius + other.radius
+      );
       return images.some((image) => M.length2(M.sub2(candidate.position, image.position)) < candidate.radius + other.radius - EPSILON);
     }) || null;
   }
 
   function selfImageOverlap(state, ball) {
-    const images = ballImagesInTile(ball, state.atlas, ball.tileIndex, 3);
+    const images = ballImagesInTile(ball, state.atlas, ball.tileIndex, 3, ball.radius * 2, {
+      deduplicatePositions: false
+    });
     return images.some((image) => image.depth > 0 && M.length2(M.sub2(ball.position, image.position)) < ball.radius * 2 - EPSILON);
   }
 
@@ -1141,7 +1158,7 @@
         const vertexClass = state.atlas.vertexClasses[entry.classIndex];
         return vertexClass && vertexClass.incidences.some((incidence) => (
           incidence.tileIndex === ball.tileIndex
-          && M.length2(M.sub2(ball.position, incidence.point)) <= Math.max(entry.radius - ball.radius * 0.2, ball.radius * 0.5)
+          && M.length2(M.sub2(ball.position, incidence.point)) <= pocketCaptureRadius(ball, entry)
         ));
       });
       if (!pocket) return;
@@ -1151,6 +1168,10 @@
       if (ball.kind === 'cue') shotResult.scratch = true;
       else shotResult.pocketedTargets.push(ball.id);
     });
+  }
+
+  function pocketCaptureRadius(ball, pocket) {
+    return Math.max(pocket.radius - ball.radius * 0.2, ball.radius * 0.5);
   }
 
   function ballsAtRest(state) {
@@ -1175,8 +1196,9 @@
     state.balls.forEach((ball) => {
       if (!ball.active) return;
       applyFriction(ball, dt, parameters);
-      if (M.length2(ball.velocity) <= parameters.stopSpeed) ball.velocity = { x: 0, y: 0 };
-      if (Math.hypot(ball.angularVelocity.x, ball.angularVelocity.y, ball.angularVelocity.z) <= parameters.stopSpin) {
+      const stoppedLinear = M.length2(ball.velocity) <= parameters.stopSpeed;
+      if (stoppedLinear) ball.velocity = { x: 0, y: 0 };
+      if (stoppedLinear && Math.hypot(ball.angularVelocity.x, ball.angularVelocity.y, ball.angularVelocity.z) <= parameters.stopSpin) {
         ball.angularVelocity = { x: 0, y: 0, z: 0 };
       }
     });
@@ -1534,9 +1556,14 @@
     });
     ctx.closePath();
     ctx.clip();
-    if (renderer && typeof renderer.sphericalSprite === 'function') {
-      const sprite = renderer.sphericalSprite(ball, image.orientation, radius * 2, !!debugTexture);
+    if (renderer && typeof renderer.sphericalSprite === 'function' && typeof renderer.drawBallBadge === 'function') {
+      const fixedLabel = state.phase === 'setup' || (state.phase === 'ball-in-hand' && ball.kind === 'cue');
+      const sprite = renderer.sphericalSprite(ball, image.orientation, radius * 2, !!debugTexture, {
+        showNumberPatch: !fixedLabel
+      });
       ctx.drawImage(sprite, center.x - radius, center.y - radius, radius * 2, radius * 2);
+      if (fixedLabel) renderer.drawBallBadge(ctx, center, radius, ball);
+      else if (typeof renderer.drawBallOutline === 'function') renderer.drawBallOutline(ctx, center, radius);
     } else {
       ctx.fillStyle = ball.kind === 'cue' ? '#fbfbf8' : ['#e6b640', '#2a6ba8', '#b44537', '#5e4a91'][modulo(ball.number - 1, 4)];
       ctx.strokeStyle = '#202326';
@@ -1545,17 +1572,17 @@
       ctx.arc(center.x, center.y, radius, 0, TAU);
       ctx.fill();
       ctx.stroke();
-      if (ball.kind === 'target') {
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(center.x, center.y, radius * 0.43, 0, TAU);
-        ctx.fill();
-        ctx.fillStyle = '#111';
-        ctx.font = `600 ${Math.max(8, radius * 0.58)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(String(ball.number), center.x, center.y);
-      }
+      const label = ball.kind === 'cue' ? '0' : String(ball.number);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radius * 0.49, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.font = `600 ${Math.max(8, radius * (label.length > 1 ? 0.49 : 0.62))}px sans-serif`;
+      ctx.direction = 'ltr';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, center.x, center.y);
     }
     ctx.restore();
   }
@@ -1576,10 +1603,25 @@
     const depth = Math.max(1, Math.min(4, Number(state.deterministic.parameters.localCoverDepth) || 1));
     state.balls.forEach((ball) => {
       if (!ball.active || ball.kind !== 'target' || ball.id === cue.id) return;
-      ballImagesInTile(ball, state.atlas, tileIndex, depth).forEach((image) => {
+      ballImagesInTile(ball, state.atlas, tileIndex, depth, cue.radius + ball.radius).forEach((image) => {
         const distance = rayCircleDistance(point, direction, image.position, cue.radius + ball.radius);
         if (distance == null || distance > maximumDistance + EPSILON) return;
         if (!hit || distance < hit.distance) hit = { distance, ball, image };
+      });
+    });
+    return hit;
+  }
+
+  function firstAimPocket(state, cue, tileIndex, point, direction, maximumDistance) {
+    let hit = null;
+    state.pockets.forEach((pocket) => {
+      const vertexClass = state.atlas.vertexClasses[pocket.classIndex];
+      if (!vertexClass) return;
+      vertexClass.incidences.forEach((incidence) => {
+        if (incidence.tileIndex !== tileIndex) return;
+        const distance = rayCircleDistance(point, direction, incidence.point, pocketCaptureRadius(cue, pocket));
+        if (distance == null || distance > maximumDistance + EPSILON) return;
+        if (!hit || distance < hit.distance) hit = { distance, pocket, incidence };
       });
     });
     return hit;
@@ -1616,7 +1658,7 @@
     const maximumTransitions = Number.isFinite(requestedTransitions)
       ? Math.max(0, Math.min(12, Math.floor(requestedTransitions)))
       : 12;
-    const result = { segments: [], contactedBall: null, termination: 'none', transitions: 0 };
+    const result = { segments: [], contactedBall: null, contactedPocket: null, termination: 'none', transitions: 0 };
     if (!cue || M.length2(aim) <= EPSILON) return result;
 
     let tileIndex = cue.tileIndex;
@@ -1629,7 +1671,9 @@
         result.termination = 'none';
         break;
       }
-      const hit = firstAimBall(state, cue, tileIndex, point, ray, edge.distance);
+      const ballHit = firstAimBall(state, cue, tileIndex, point, ray, edge.distance);
+      const pocketHit = firstAimPocket(state, cue, tileIndex, point, ray, edge.distance);
+      const hit = ballHit && (!pocketHit || ballHit.distance <= pocketHit.distance) ? ballHit : pocketHit;
       const distance = hit ? hit.distance : edge.distance;
       const end = M.add2(point, M.scale2(ray, distance));
       result.segments.push({
@@ -1639,7 +1683,7 @@
         hit: !!hit,
         boundary: !hit && !edge.transition
       });
-      if (hit) {
+      if (hit && hit === ballHit) {
         result.contactedBall = {
           id: String(hit.ball.id),
           ballId: String(hit.ball.id),
@@ -1651,6 +1695,19 @@
           cuePosition: { ...end }
         };
         result.termination = 'ball';
+        break;
+      }
+      if (hit && hit === pocketHit) {
+        result.contactedPocket = {
+          id: String(hit.pocket.id),
+          classIndex: hit.pocket.classIndex,
+          tileIndex,
+          position: { ...hit.incidence.point },
+          cuePosition: { ...end },
+          radius: hit.pocket.radius,
+          captureRadius: pocketCaptureRadius(cue, hit.pocket)
+        };
+        result.termination = 'pocket';
         break;
       }
       if (!edge.transition) {
@@ -1691,6 +1748,62 @@
     return true;
   }
 
+  function aimGuideImages(state, tileIndex, position, radius) {
+    const guide = {
+      tileIndex,
+      position,
+      velocity: { x: 0, y: 0 },
+      angularVelocity: { x: 0, y: 0, z: 0 },
+      orientation: defaultBallOrientation()
+    };
+    return nearbyImages(guide, state.atlas, {
+      padding: radius,
+      maxDepth: Math.max(3, Number(state.deterministic.parameters.localCoverDepth) || 0),
+      onlyIntersecting: true,
+      minimal: true
+    });
+  }
+
+  function drawAimGuideCircle(ctx, geometry, state, tileIndex, position, radius, scale, style, lineWidth) {
+    aimGuideImages(state, tileIndex, position, radius).forEach((image) => {
+      const center = localToCanvas(image.tileIndex, image.position, geometry, state.atlas);
+      if (!center) return;
+      ctx.save();
+      if (!clipToTile(ctx, geometry, state, image.tileIndex)) {
+        ctx.restore();
+        return;
+      }
+      ctx.setLineDash([]);
+      ctx.strokeStyle = style;
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radius * scale, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
+  function drawAimPocketHighlight(ctx, geometry, state, contact, scale) {
+    const vertexClass = state.atlas.vertexClasses[contact.classIndex];
+    if (!vertexClass) return;
+    vertexClass.incidences.forEach((incidence) => {
+      const center = localToCanvas(incidence.tileIndex, incidence.point, geometry, state.atlas);
+      if (!center) return;
+      ctx.save();
+      if (!clipToTile(ctx, geometry, state, incidence.tileIndex)) {
+        ctx.restore();
+        return;
+      }
+      ctx.setLineDash([]);
+      ctx.strokeStyle = 'rgba(244,207,89,0.92)';
+      ctx.lineWidth = Math.max(2, scale * 0.026);
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, contact.radius * scale, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
   function drawBeginnerAim(ctx, geometry, state, cue, aim, scale) {
     const trace = traceAim(state, aim);
     trace.segments.forEach((segment) => {
@@ -1711,26 +1824,36 @@
       ctx.stroke();
       ctx.restore();
     });
-    if (!trace.contactedBall) return;
-    const contact = trace.contactedBall;
-    const cuePoint = localToCanvas(contact.tileIndex, contact.cuePosition, geometry, state.atlas);
-    const ballPoint = localToCanvas(contact.tileIndex, contact.position, geometry, state.atlas);
-    if (!cuePoint || !ballPoint) return;
+    const contact = trace.contactedBall || trace.contactedPocket;
+    if (!contact) return;
+    drawAimGuideCircle(
+      ctx,
+      geometry,
+      state,
+      contact.tileIndex,
+      contact.cuePosition,
+      cue.radius,
+      scale,
+      'rgba(255,255,255,0.72)',
+      Math.max(1.5, scale * 0.022)
+    );
+    if (trace.contactedPocket) {
+      drawAimPocketHighlight(ctx, geometry, state, trace.contactedPocket, scale);
+      return;
+    }
     const target = state.balls.find((ball) => String(ball.id) === contact.ballId);
-    ctx.save();
-    clipToTile(ctx, geometry, state, contact.tileIndex);
-    ctx.setLineDash([]);
-    ctx.lineWidth = Math.max(1.5, scale * 0.022);
-    ctx.strokeStyle = 'rgba(255,255,255,0.72)';
-    ctx.beginPath();
-    ctx.arc(cuePoint.x, cuePoint.y, cue.radius * scale, 0, TAU);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(244,207,89,0.92)';
-    ctx.lineWidth = Math.max(2, scale * 0.026);
-    ctx.beginPath();
-    ctx.arc(ballPoint.x, ballPoint.y, (target ? target.radius : state.ballRadius) * scale * 1.18, 0, TAU);
-    ctx.stroke();
-    ctx.restore();
+    if (!target) return;
+    drawAimGuideCircle(
+      ctx,
+      geometry,
+      state,
+      target.tileIndex,
+      target.position,
+      target.radius * 1.18,
+      scale,
+      'rgba(244,207,89,0.92)',
+      Math.max(2, scale * 0.026)
+    );
   }
 
   function drawAim(ctx, geometry, state, view) {
@@ -1809,7 +1932,13 @@
     let hit = null;
     state.balls.forEach((ball) => {
       if (!ball.active) return;
-      ballImagesInTile(ball, state.atlas, tileIndex, state.deterministic.parameters.localCoverDepth).forEach((image) => {
+      ballImagesInTile(
+        ball,
+        state.atlas,
+        tileIndex,
+        state.deterministic.parameters.localCoverDepth,
+        ball.radius * 1.35
+      ).forEach((image) => {
         const distance = M.length2(M.sub2(position, image.position));
         if (distance <= ball.radius * 1.35 && (!hit || distance < hit.distance)) hit = { ball, image, distance };
       });

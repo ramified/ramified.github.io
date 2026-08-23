@@ -4,6 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const M = require('./topological_billiards_math.js');
 const P = require('./topological_billiards_physics.js');
+const R = require('./topological_billiards_renderer.js');
 const N = require('./topological_billiards_native.js');
 const Controller = require('../ramified_minigames_setup.js');
 
@@ -18,6 +19,10 @@ function speed(ball) {
 function quaternionNorm(ball) {
   const q = ball.orientation;
   return Math.hypot(q.w, q.x, q.y, q.z);
+}
+
+function pointEdgeDistance(point, frame) {
+  return M.dot2(M.sub2(point, frame.start), frame.inward);
 }
 
 function frictionless(extra = {}) {
@@ -219,7 +224,11 @@ function testOrientationPersistenceAndSpinThroughGlue() {
 function testPageIntegration() {
   const html = fs.readFileSync(require.resolve('../../ramified_minigames.html'), 'utf8');
   const setup = fs.readFileSync(require.resolve('../ramified_minigames_setup.js'), 'utf8');
+  const native = fs.readFileSync(require.resolve('./topological_billiards_native.js'), 'utf8');
+  const renderer = fs.readFileSync(require.resolve('./topological_billiards_renderer.js'), 'utf8');
   assert.ok(html.includes('value="billiards"'));
+  assert.ok(html.includes('data-i18n="games.billiards">Billiard</option>'));
+  assert.ok(!html.includes('Topological Billiards'));
   assert.ok(html.includes('id="mosaic-canvas"'));
   assert.ok(!html.includes('id="topological-billiards-canvas"'));
   assert.ok(html.includes('id="billiards-spin-pad"'));
@@ -230,12 +239,109 @@ function testPageIntegration() {
   assert.ok(html.includes('topological_billiards_physics.js'));
   assert.ok(html.includes('topological_billiards_renderer.js'));
   assert.ok(html.includes('topological_billiards_native.js'));
+  assert.ok(setup.includes('topological_billiards_simulation_worker.js'));
+  assert.ok(setup.includes('BILLIARDS_FALLBACK_FRAME_BUDGET_MS'));
+  assert.ok(setup.includes('BILLIARDS_SQUARE_BOARD_SIZE = 4'));
+  assert.ok(setup.includes('BILLIARDS_RECTANGLE_ROWS = 3'));
+  assert.ok(setup.includes('BILLIARDS_RECTANGLE_COLS = 5'));
+  assert.ok(html.includes('id="boundary-glue-rows" type="number" min="2" max="25" step="1" value="3"'));
+  assert.ok(html.includes('id="boundary-glue-cols" type="number" min="2" max="25" step="1" value="5"'));
   assert.ok(!html.includes('topological_billiards_game.js'));
   assert.ok(setup.includes("BILLIARDS: 'billiards'"));
   assert.ok(setup.includes('orderedModes.push(GAME_MODES.BILLIARDS)'));
   assert.ok(setup.includes('billiardsTable ? 1.0015 : 0.96'));
   assert.ok(setup.includes('selectNextMissingNumberedBall'));
+  assert.ok(setup.includes('renderer.paletteBallSprite(ball, size - 8)'));
+  assert.ok(renderer.includes('function numberedBallSprite'));
+  assert.ok(native.includes("const fixedLabel = state.phase === 'setup'"));
+  assert.ok(native.includes('showNumberPatch: !fixedLabel'));
   assert.ok(!setup.includes('togglePocket(game, local.tileIndex, local.position, true)'));
+}
+
+function testPaletteLabelsAreCenteredAndUpright() {
+  class FakeContext {
+    constructor(canvas) {
+      this.canvas = canvas;
+      this.operations = [];
+    }
+
+    beginPath() {}
+    arc() {}
+    fill() {}
+    fillRect() {}
+    lineTo() {}
+    moveTo() {}
+    restore() {}
+    save() {}
+    stroke() {}
+    createImageData(width, height) {
+      return { data: new Uint8ClampedArray(width * height * 4), width, height };
+    }
+    getImageData(x, y, width, height) {
+      return { data: new Uint8ClampedArray(width * height * 4), width, height };
+    }
+    putImageData() {}
+    fillText(text, x, y) {
+      this.operations.push({ kind: 'text', text, x, y, font: this.font });
+    }
+    rotate(angle) { this.operations.push({ kind: 'rotate', angle }); }
+    scale(x, y) { this.operations.push({ kind: 'scale', x, y }); }
+    transform(a, b, c, d, e, f) { this.operations.push({ kind: 'transform', a, b, c, d, e, f }); }
+    setTransform(a, b, c, d, e, f) { this.operations.push({ kind: 'setTransform', a, b, c, d, e, f }); }
+  }
+
+  class FakeCanvas {
+    constructor(width, height) {
+      this.width = width;
+      this.height = height;
+      this.context = new FakeContext(this);
+    }
+
+    getContext() {
+      return this.context;
+    }
+  }
+
+  const originalOffscreenCanvas = global.OffscreenCanvas;
+  global.OffscreenCanvas = FakeCanvas;
+  try {
+    assert.strictEqual(R.ballLabel({ kind: 'cue', number: 0 }), '0');
+    assert.strictEqual(R.ballLabel({ kind: 'target', number: 15 }), '15');
+    const texture = R.makeTexture({ kind: 'cue', number: 0, color: '#f7f4e8' }, false);
+    assert.strictEqual(texture.canvas.context.operations.find((entry) => entry.kind === 'text').text, '0');
+
+    const fontSizes = new Map();
+    [0, 1, 6, 9, 10, 15].forEach((number) => {
+      const kind = number === 0 ? 'cue' : 'target';
+      const sprite = R.paletteBallSprite({ kind, number, color: N.ballColor(kind, number) }, 64);
+      const operations = sprite.context.operations;
+      const labels = operations.filter((entry) => entry.kind === 'text');
+      assert.strictEqual(labels.length, 1, `palette ball ${number} has one fixed label`);
+      assert.strictEqual(labels[0].text, String(number));
+      near(labels[0].x, 32, 1e-12, `palette ball ${number} label x`);
+      near(labels[0].y, 32, 1e-12, `palette ball ${number} label y`);
+      assert.ok(!operations.some((entry) => ['rotate', 'scale', 'transform', 'setTransform'].includes(entry.kind)));
+      fontSizes.set(number, Number.parseFloat(labels[0].font.match(/([\d.]+)px/)[1]));
+    });
+    assert.ok(fontSizes.get(10) < fontSizes.get(9), 'two-digit labels use a smaller fitting font');
+
+    [
+      M.quaternion(),
+      M.quaternionFromAxisAngle({ x: 1, y: 2, z: 3 }, 1.7),
+      M.quaternionFromAxisAngle({ x: 0, y: 1, z: 0 }, Math.PI)
+    ].forEach((orientation, index) => {
+      const sprite = R.numberedBallSprite({ kind: 'target', number: 12, color: N.ballColor('target', 12) }, orientation, 64);
+      const operations = sprite.context.operations;
+      const label = operations.find((entry) => entry.kind === 'text');
+      assert.strictEqual(label.text, '12');
+      near(label.x, 32, 1e-12, `board label ${index} x`);
+      near(label.y, 32, 1e-12, `board label ${index} y`);
+      assert.ok(!operations.some((entry) => ['rotate', 'scale', 'transform', 'setTransform'].includes(entry.kind)));
+    });
+  } finally {
+    if (originalOffscreenCanvas === undefined) delete global.OffscreenCanvas;
+    else global.OffscreenCanvas = originalOffscreenCanvas;
+  }
 }
 
 function testNativeAtlasesAndPocketDefaults() {
@@ -255,8 +361,24 @@ function testNativeAtlasesAndPocketDefaults() {
   assert.ok(squareAtlas.vertexClasses.some((vertex) => Math.abs(vertex.coneAngle - Math.PI * 2) < 1e-7));
   const squareState = N.createState(squarePreset);
   assert.strictEqual(squareState.balls.length, 0, 'omitted balls open blank setup');
-  assert.ok(squareState.pockets.length > 0, 'singular square vertices receive default pockets');
+  assert.strictEqual(squareState.pockets.length, 4, 'only the four outer corners receive default pockets');
   assert.ok(squareState.pockets.every((pocket) => squareState.atlas.vertexClasses[pocket.classIndex].singular));
+  assert.ok(squareState.pockets.every((pocket) => (
+    Math.abs(squareState.atlas.vertexClasses[pocket.classIndex].coneAngle - Math.PI) > 1e-7
+  )), 'smooth 180-degree boundary vertices do not receive automatic pockets');
+
+  const rectangleState = N.createState({ ...squarePreset, id: 'native-rectangle-pockets', rows: 3, cols: 5 });
+  assert.strictEqual(rectangleState.pockets.length, 4, 'the default 3x5 rectangle has corner pockets only');
+  rectangleState.pockets.forEach((pocket) => {
+    near(rectangleState.atlas.vertexClasses[pocket.classIndex].coneAngle, Math.PI / 2);
+  });
+
+  const explicitPiState = N.createState({
+    ...squarePreset,
+    billiards: { pockets: [{ id: 'smooth-boundary', vertex: { row: 1, col: 1, corner: 'NE' } }] }
+  });
+  assert.strictEqual(explicitPiState.pockets.length, 1, 'explicit pi-angle pockets remain valid');
+  near(explicitPiState.atlas.vertexClasses[explicitPiState.pockets[0].classIndex].coneAngle, Math.PI);
 
   const noPocketState = N.createState({ ...squarePreset, billiards: { pockets: [] } });
   assert.strictEqual(noPocketState.pockets.length, 0, 'explicit empty pockets disable defaults');
@@ -348,6 +470,7 @@ function testNativeSetupPaletteModelAndPocketToggle() {
   const added = N.togglePocket(state, 0, { x: 0.5, y: -0.5 });
   assert.strictEqual(added.changed, true);
   assert.strictEqual(added.state.pockets.length, 1);
+  near(added.state.atlas.vertexClasses[added.state.pockets[0].classIndex].coneAngle, Math.PI);
   const removedViaOtherRepresentative = N.togglePocket(added.state, 1, { x: -0.5, y: -0.5 });
   assert.strictEqual(removedViaOtherRepresentative.changed, true);
   assert.strictEqual(removedViaOtherRepresentative.state.pockets.length, 0, 'any quotient representative removes the canonical pocket');
@@ -423,6 +546,49 @@ function testNativeBeginnerAimTracing() {
   assert.strictEqual(wallTrace.termination, 'wall');
   near(wallTrace.segments[0].to.x, 0.4, 1e-7, 'wall trace accounts for cue radius');
 
+  const pocketState = N.createState({
+    ...squarePreset,
+    id: 'native-pocket-aim',
+    rows: 1,
+    cols: 1,
+    billiards: {
+      ballRadius: 0.1,
+      pockets: [{ id: 'corner', vertex: { row: 1, col: 1, corner: 'NE' } }],
+      balls: [{ id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0, y: 0 } }]
+    }
+  });
+  const pocketTrace = N.traceAim(pocketState, { x: 1, y: -1 });
+  assert.strictEqual(pocketTrace.termination, 'pocket');
+  assert.strictEqual(pocketTrace.contactedPocket.id, 'corner');
+  assert.strictEqual(pocketTrace.contactedBall, null);
+  near(pocketTrace.contactedPocket.captureRadius, 0.32, 1e-9, 'guide uses the physical pocket capture radius');
+  assert.ok(pocketTrace.segments[0].to.x < 0.4, 'pocket capture precedes the physical wall stop');
+
+  const vertexGuideState = N.createState({
+    ...squarePreset,
+    id: 'native-vertex-guide-images',
+    rows: 2,
+    cols: 2,
+    billiards: { pockets: [] }
+  });
+  const guideImages = N.nearbyImages({
+    tileIndex: 0,
+    position: { x: 0.5, y: 0.5 },
+    velocity: { x: 0, y: 0 },
+    angularVelocity: { x: 0, y: 0, z: 0 },
+    orientation: N.defaultBallOrientation()
+  }, vertexGuideState.atlas, {
+    padding: 0.1,
+    maxDepth: 3,
+    onlyIntersecting: true,
+    minimal: true
+  });
+  assert.deepStrictEqual(
+    Array.from(new Set(guideImages.map((image) => image.tileIndex))).sort((a, b) => a - b),
+    [0, 1, 2, 3],
+    'a guide circle at a regular vertex is represented in all four incident tiles'
+  );
+
   const hexTrace = N.traceAim(N.createState({
     ...squarePreset,
     id: 'native-hex-aim',
@@ -483,6 +649,226 @@ function testNativeBeginnerAimTracing() {
   assert.ok(closedTrace.segments.length <= 13);
 }
 
+function testNativeCachedChartsAndChunkedSimulation() {
+  const preset = {
+    id: 'native-chunked-shot',
+    label: 'Native chunked shot',
+    lattice: 'square',
+    rows: 1,
+    cols: 2,
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [],
+    billiards: {
+      ballRadius: 0.1,
+      pockets: [],
+      balls: [
+        { id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0, y: 0 } },
+        { id: '1', kind: 'target', number: 1, at: { row: 1, col: 2, x: 0.1, y: 0 } }
+      ],
+      parameters: {
+        maxShotSeconds: 0.5,
+        localCoverDepth: 3,
+        clothFriction: 0,
+        rollingResistance: 0,
+        spinResistance: 0,
+        restitution: 1
+      }
+    }
+  };
+  const state = N.begin(N.createState(preset)).state;
+  const cue = state.balls.find((ball) => ball.kind === 'cue');
+  const firstImages = N.nearbyImages(cue, state.atlas, { maxDepth: 3, onlyIntersecting: false, minimal: true });
+  const cacheSize = state.atlas.chartTransformCache.size;
+  const secondImages = N.nearbyImages(cue, state.atlas, { maxDepth: 3, onlyIntersecting: false, minimal: true });
+  assert.deepStrictEqual(secondImages, firstImages, 'cached atlas charts preserve exact image transforms');
+  assert.strictEqual(state.atlas.chartTransformCache.size, cacheSize, 'repeated image lookup reuses the cached chart');
+
+  const aim = { x: 1, y: 0 };
+  const contact = { x: 0, y: 0 };
+  const expected = N.resolveShot(state, aim, 0.5, contact, { collectTrajectory: true });
+  assert.ok(expected.state.balls.find((ball) => ball.id === '1').position.x > 0.2, 'broad phase retains direct-seam collision transfer');
+  assert.strictEqual(expected.simulationSteps, 120);
+  [1, 7, 64].forEach((chunkSize) => {
+    const simulation = N.createShotSimulation(state, aim, 0.5, contact, { collectTrajectory: true });
+    while (!simulation.done) N.advanceShotSimulation(simulation, chunkSize);
+    assert.deepStrictEqual(
+      N.shotSimulationResult(simulation),
+      expected,
+      `chunk size ${chunkSize} preserves deterministic state and trajectory`
+    );
+  });
+
+  [false, true].forEach((secondArrowReversed) => {
+    const gluedPreset = {
+      ...preset,
+      id: `native-glued-collision-${secondArrowReversed}`,
+      rows: 1,
+      cols: 1,
+      gluedEdges: [{
+        first: { row: 1, col: 1, dir: 'E' },
+        second: { row: 1, col: 1, dir: 'W' },
+        firstArrowReversed: false,
+        secondArrowReversed
+      }],
+      billiards: {
+        ...preset.billiards,
+        ballRadius: 0.08,
+        balls: [
+          { id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0.3, y: 0.12 } },
+          { id: '1', kind: 'target', number: 1, at: { row: 1, col: 1, x: -0.3, y: secondArrowReversed ? 0.12 : -0.12 } }
+        ],
+        parameters: { ...preset.billiards.parameters, maxShotSeconds: 0.2 }
+      }
+    };
+    const gluedState = N.begin(N.createState(gluedPreset)).state;
+    const gluedResult = N.resolveShot(gluedState, aim, 0.5, contact);
+    const gluedTarget = gluedResult.state.balls.find((ball) => ball.id === '1');
+    assert.ok(gluedTarget.position.x > -0.2, `collision crosses ${secondArrowReversed ? 'preserving' : 'reflected'} glue`);
+  });
+
+  const hexPreset = {
+    ...preset,
+    id: 'native-hex-collision',
+    lattice: 'hexagonal',
+    billiards: {
+      ...preset.billiards,
+      parameters: { ...preset.billiards.parameters, maxShotSeconds: 0.8 }
+    }
+  };
+  const hexState = N.begin(N.createState(hexPreset)).state;
+  const hexResult = N.resolveShot(hexState, aim, 0.5, contact);
+  assert.ok(hexResult.state.balls.find((ball) => ball.id === '1').position.x > 0.2, 'broad phase retains hex seam collision transfer');
+
+  const rollingPreset = {
+    ...preset,
+    id: 'native-visible-rolling-spin',
+    rows: 1,
+    cols: 4,
+    billiards: {
+      ballRadius: 0.12,
+      pockets: [],
+      balls: [
+        { id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0, y: 0 } },
+        { id: '1', kind: 'target', number: 1, at: { row: 1, col: 2, x: 0, y: 0 } }
+      ],
+      parameters: { maxShotSeconds: 1 }
+    }
+  };
+  const rollingState = N.begin(N.createState(rollingPreset)).state;
+  const rollingResult = N.resolveShot(rollingState, aim, 0.7, contact, { collectTrajectory: true });
+  const patchFacing = rollingResult.trajectory.map((frame) => (
+    M.rotateVector3(frame[1].orientation, { x: 1, y: 0, z: 0 }).z
+  ));
+  assert.ok(
+    rollingResult.trajectory.some((frame) => Math.abs(frame[1].angularVelocity.y) > 0.1),
+    'a struck numbered ball retains rolling angular velocity while translating'
+  );
+  assert.ok(Math.min(...patchFacing) < 0.5, 'the numbered texture patch visibly rotates away from the viewer');
+}
+
+function testNativeSeamConditionedGlueImages() {
+  const preset = {
+    id: 'native-nonparallel-image-regression',
+    label: 'Native nonparallel image regression',
+    lattice: 'square',
+    rows: 2,
+    cols: 2,
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [{
+      first: { row: 1, col: 1, dir: 'N' },
+      second: { row: 1, col: 1, dir: 'W' },
+      firstArrowReversed: false,
+      secondArrowReversed: false
+    }],
+    billiards: { ballRadius: 0.12, pockets: [] }
+  };
+  const state = N.createState(preset);
+  const makeBall = (position) => ({
+    tileIndex: 0,
+    position,
+    velocity: { x: 0, y: 0 },
+    angularVelocity: { x: 0, y: 0, z: 0 },
+    orientation: N.defaultBallOrientation(),
+    radius: 0.12
+  });
+  const imagesFor = (position) => N.nearbyImages(makeBall(position), state.atlas, {
+    padding: 0.12,
+    maxDepth: 4,
+    onlyIntersecting: true,
+    minimal: true
+  });
+
+  assert.deepStrictEqual(imagesFor({ x: 0, y: 0.4 }).map((image) => image.tileIndex), [0, 2]);
+  assert.deepStrictEqual(imagesFor({ x: 0.4, y: 0 }).map((image) => image.tileIndex), [0, 1]);
+  const cornerImages = imagesFor({ x: 0.4, y: 0.4 });
+  assert.deepStrictEqual(cornerImages.map((image) => image.tileIndex), [0, 1, 2, 3]);
+  assert.strictEqual(new Set(cornerImages.map((image) => (
+    `${image.tileIndex}:${image.position.x.toFixed(7)}:${image.position.y.toFixed(7)}`
+  ))).size, cornerImages.length, 'visible representatives contain no coincident duplicates');
+
+  const rawImages = N.nearbyImages(makeBall({ x: 0, y: 0.4 }), state.atlas, {
+    maxDepth: 4,
+    onlyIntersecting: false,
+    minimal: true
+  });
+  assert.ok(rawImages.some((image) => image.path === '2.2.0'), 'raw diagnostics retain cached nonlocal charts');
+  assert.ok(!imagesFor({ x: 0, y: 0.4 }).some((image) => image.path === '2.2.0'), 'rendered images require seam-connected paths');
+
+  [
+    { lattice: 'square', firstDir: 'N', secondDir: 'W' },
+    { lattice: 'hexagonal', firstDir: 'E', secondDir: 'NW' }
+  ].forEach((spec) => {
+    [false, true].forEach((secondArrowReversed) => {
+      const glueState = N.createState({
+        ...preset,
+        id: `${spec.lattice}-${secondArrowReversed ? 'rotated' : 'reflected'}-glue`,
+        lattice: spec.lattice,
+        rows: 1,
+        cols: 1,
+        gluedEdges: [{
+          first: { row: 1, col: 1, dir: spec.firstDir },
+          second: { row: 1, col: 1, dir: spec.secondDir },
+          firstArrowReversed: false,
+          secondArrowReversed
+        }]
+      });
+      const tile = glueState.atlas.tiles[0];
+      const sourceDir = glueState.atlas.info.dirNames.indexOf(spec.firstDir);
+      const destinationDir = glueState.atlas.info.dirNames.indexOf(spec.secondDir);
+      const sourceFrame = tile.frames[sourceDir];
+      const destinationFrame = tile.frames[destinationDir];
+      const transition = tile.transitions[sourceDir];
+      const expectedStart = secondArrowReversed ? destinationFrame.end : destinationFrame.start;
+      const expectedEnd = secondArrowReversed ? destinationFrame.start : destinationFrame.end;
+      const mappedStart = M.applyAffine(transition.transform, sourceFrame.start);
+      const mappedEnd = M.applyAffine(transition.transform, sourceFrame.end);
+      near(mappedStart.x, expectedStart.x, 1e-7, `${spec.lattice} glue start x`);
+      near(mappedStart.y, expectedStart.y, 1e-7, `${spec.lattice} glue start y`);
+      near(mappedEnd.x, expectedEnd.x, 1e-7, `${spec.lattice} glue end x`);
+      near(mappedEnd.y, expectedEnd.y, 1e-7, `${spec.lattice} glue end y`);
+
+      const sourceMidpoint = M.scale2(M.add2(sourceFrame.start, sourceFrame.end), 0.5);
+      const acrossSource = M.add2(sourceMidpoint, M.scale2(sourceFrame.outward, 0.05));
+      const insideDestination = M.applyAffine(transition.transform, acrossSource);
+      near(pointEdgeDistance(insideDestination, destinationFrame), 0.05, 1e-7, `${spec.lattice} glue signed distance`);
+      const roundTrip = M.applyAffine(transition.inverseTransform, insideDestination);
+      near(roundTrip.x, acrossSource.x, 1e-7, `${spec.lattice} glue inverse x`);
+      near(roundTrip.y, acrossSource.y, 1e-7, `${spec.lattice} glue inverse y`);
+
+      const center = M.add2(sourceMidpoint, M.scale2(sourceFrame.inward, 0.05));
+      const seamImages = N.nearbyImages(makeBall(center), glueState.atlas, {
+        padding: 0.12,
+        maxDepth: 3,
+        onlyIntersecting: true,
+        minimal: true
+      });
+      assert.strictEqual(seamImages.length, 2, `${spec.lattice} nonparallel glue has two complementary pieces`);
+    });
+  });
+}
+
 function testControllerStatusAndRecordIntegration() {
   const preset = {
     id: 'controller-billiards-round-trip',
@@ -539,11 +925,14 @@ function run() {
   testNoSelfCollisionAndImageIndependence();
   testCueSpinAndSlidingToRolling();
   testOrientationPersistenceAndSpinThroughGlue();
+  testPaletteLabelsAreCenteredAndUpright();
   testNativeAtlasesAndPocketDefaults();
   testNativeStatusRoundTrip();
   testNativeSetupPaletteModelAndPocketToggle();
   testNativeBallAppearanceRoundTripsCanonically();
   testNativeBeginnerAimTracing();
+  testNativeCachedChartsAndChunkedSimulation();
+  testNativeSeamConditionedGlueImages();
   testControllerStatusAndRecordIntegration();
   testPageIntegration();
   console.log('topological_billiards_test: all tests passed');

@@ -1,9 +1,9 @@
 'use strict';
 
 importScripts(
-  './topological_billiards_math.js',
-  './topological_billiards_physics.js',
-  './topological_billiards_native.js'
+  './topological_billiards_math.js?v=20260823-1',
+  './topological_billiards_physics.js?v=20260823-1',
+  './topological_billiards_native.js?v=20260823-9'
 );
 
 self.addEventListener('message', (event) => {
