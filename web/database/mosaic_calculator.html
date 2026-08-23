@@ -1590,48 +1590,16 @@
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Homology cord debug</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="mosaic-inline-row">
-          <span class="input-label">Total mass</span>
-          <span class="background-slider-controls"><input type="range" id="homology-cord-mass" min="0.2" max="5" step="0.1" value="1"><output id="homology-cord-mass-value">1</output></span>
+          <span class="input-label">Relax speed</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-relax-speed" min="0.1" max="2" step="0.1" value="1"><output id="homology-cord-relax-speed-value">1</output></span>
         </div>
         <div class="mosaic-inline-row">
-          <span class="input-label">Axial rigidity</span>
-          <span class="background-slider-controls"><input type="range" id="homology-cord-spring" min="5" max="240" step="1" value="90"><output id="homology-cord-spring-value">90</output></span>
-        </div>
-        <div class="mosaic-inline-row">
-          <span class="input-label">Bending rigidity</span>
-          <span class="background-slider-controls"><input type="range" id="homology-cord-bend-spring" min="0" max="30" step="0.1" value="2.5"><output id="homology-cord-bend-spring-value">2.5</output></span>
-        </div>
-        <div class="mosaic-inline-row">
-          <span class="input-label">Closure rigidity</span>
-          <span class="background-slider-controls"><input type="range" id="homology-cord-closure-spring" min="5" max="240" step="1" value="72"><output id="homology-cord-closure-spring-value">72</output></span>
-        </div>
-        <div class="mosaic-inline-row">
-          <span class="input-label">Damping</span>
-          <span class="background-slider-controls"><input type="range" id="homology-cord-damping" min="0" max="15" step="0.1" value="4.2"><output id="homology-cord-damping-value">4.2</output></span>
-        </div>
-        <div class="mosaic-inline-row">
-          <span class="input-label">Substeps</span>
-          <span class="background-slider-controls"><input type="range" id="homology-cord-substeps" min="1" max="16" step="1" value="7"><output id="homology-cord-substeps-value">7</output></span>
-        </div>
-        <div class="mosaic-inline-row">
-          <span class="input-label">Speed</span>
-          <span class="background-slider-controls"><input type="range" id="homology-cord-speed" min="0.1" max="2" step="0.1" value="1.6"><output id="homology-cord-speed-value">1.6</output></span>
-        </div>
-        <div class="mosaic-inline-row">
-          <span class="input-label">Particles / edge</span>
-          <span class="background-slider-controls"><input type="range" id="homology-cord-particles" min="5" max="24" step="1" value="12"><output id="homology-cord-particles-value">12</output></span>
-        </div>
-        <div class="mosaic-inline-row">
-          <span class="input-label">Shrink / s</span>
-          <span class="background-slider-controls"><input type="range" id="homology-cord-shrink-rate" min="0" max="0.2" step="0.01" value="0.06"><output id="homology-cord-shrink-rate-value">0.06</output></span>
-        </div>
-        <div class="mosaic-inline-row">
-          <span class="input-label">Min spacing / R</span>
-          <span class="background-slider-controls"><input type="range" id="homology-cord-min-spacing" min="0.04" max="0.2" step="0.01" value="0.09"><output id="homology-cord-min-spacing-value">0.09</output></span>
+          <span class="input-label">Point spacing / R</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-point-spacing" min="0.05" max="0.3" step="0.01" value="0.12"><output id="homology-cord-point-spacing-value">0.12</output></span>
         </div>
         <label class="opt-row"><input type="checkbox" id="show-homology-cord-particles"> show material particles</label>
-        <label class="opt-row"><input type="checkbox" id="inspect-homology-cord-force"> inspect particle force</label>
-        <div class="hint" id="homology-cord-force-readout">Enable inspection, then click a particle.</div>
+        <label class="opt-row"><input type="checkbox" id="inspect-homology-cord-optimization"> inspect optimization direction</label>
+        <div class="hint" id="homology-cord-optimization-readout">Enable inspection, then click a particle.</div>
       </div>
     </section>
 

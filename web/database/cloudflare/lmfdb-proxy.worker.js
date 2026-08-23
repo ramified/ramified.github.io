@@ -1,4 +1,5 @@
 const LMFDB_API_BASE = 'https://www.lmfdb.org/api';
+const LMFDB_NUMBER_FIELD_BASE = 'https://www.lmfdb.org/NumberField/';
 const FIELD_TABLE = 'nf_fields';
 const EXTRA_TABLE = 'nf_fields_extra';
 const FIELD_COLUMNS = [
@@ -45,7 +46,15 @@ export default {
 
     try {
       const query = normalizeInput(url.searchParams.get('q') || '');
-      const fieldUrl = buildFieldUrl(query);
+      let resolvedLabel = query.label || '';
+      let jumpUrl = null;
+      if (query.resolvedInput) {
+        const resolved = await resolveNaturalName(query.resolvedInput);
+        resolvedLabel = resolved.label;
+        jumpUrl = resolved.url;
+      }
+      const canonicalQuery = resolvedLabel ? { ...query, label: resolvedLabel, coeffs: null } : query;
+      const fieldUrl = buildFieldUrl(canonicalQuery);
       const fieldJson = await fetchLmfdbJson(fieldUrl, ctx);
       const record = firstRecord(fieldJson);
 
@@ -74,9 +83,12 @@ export default {
         query: query.original,
         queryType: query.type,
         normalizedInput: query.normalized,
+        resolvedInput: query.resolvedInput || query.normalized,
+        canonicalLabel: label,
         field: record,
         extra,
         urls: {
+          jump: jumpUrl,
           field: fieldUrl,
           extra: extraUrl
         },
@@ -133,19 +145,42 @@ function normalizeInput(raw) {
     return { original, type: 'nickname', normalized: 'Qi', label: '2.0.4.1' };
   }
 
-  const sqrtMatch = /^Qsqrt\(?([+-]?\d+)\)?$/i.exec(original.replace(/\s+/g, ''));
+  const compact = original.replace(/\s+/g, '');
+  const sqrtMatch = /^Qsqrt(?:\(([+-]?\d+)\)|([+-]?\d+))$/i.exec(compact);
   if (sqrtMatch) {
-    const d = squarefreePart(Number(sqrtMatch[1]));
-    if (!Number.isSafeInteger(d) || d === 0 || d === 1) {
-      badRequest('QsqrtN must use a nonzero nonsquare integer N.');
-    }
-    const discriminant = positiveMod(d, 4) === 1 ? d : 4 * d;
-    const r1 = d > 0 ? 2 : 0;
+    const d = parseSafeInteger(sqrtMatch[1] || sqrtMatch[2], 'The radicand d');
+    if (d === 0) badRequest('The radicand d must be nonzero.');
     return {
       original,
       type: 'nickname',
-      normalized: `Qsqrt${d}`,
-      label: `2.${r1}.${Math.abs(discriminant)}.1`
+      normalized: `Qsqrt(${d})`,
+      resolvedInput: `Qsqrt${d}`
+    };
+  }
+
+  const rootMatch = /^Qroot\(([+-]?\d+),([+-]?\d+)\)$/i.exec(compact);
+  if (rootMatch) {
+    const n = parseSafeInteger(rootMatch[1], 'The root index n');
+    const d = parseSafeInteger(rootMatch[2], 'The radicand d');
+    if (n < 2) badRequest('The root index n must be at least 2.');
+    if (d === 0) badRequest('The radicand d must be nonzero.');
+    return {
+      original,
+      type: 'root',
+      normalized: `Qroot(${n},${d})`,
+      resolvedInput: pureRootPolynomial(n, d)
+    };
+  }
+
+  const zetaMatch = /^Qzeta\(([+-]?\d+)\)$/i.exec(compact);
+  if (zetaMatch) {
+    const n = parseSafeInteger(zetaMatch[1], 'The cyclotomic index n');
+    if (n < 3) badRequest('The cyclotomic index n must be at least 3.');
+    return {
+      original,
+      type: 'cyclotomic',
+      normalized: `Qzeta(${n})`,
+      resolvedInput: `Qzeta${n}`
     };
   }
 
@@ -156,6 +191,59 @@ function normalizeInput(raw) {
     normalized: polynomialText(coeffs),
     coeffs
   };
+}
+
+function parseSafeInteger(value, label) {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number)) badRequest(`${label} must be a safe integer.`);
+  return number;
+}
+
+function pureRootPolynomial(n, d) {
+  return `x^${n}${d < 0 ? '+' : '-'}${Math.abs(d)}`;
+}
+
+async function resolveNaturalName(expression) {
+  const url = new URL(LMFDB_NUMBER_FIELD_BASE);
+  url.searchParams.set('jump', expression);
+  const request = new Request(url, {
+    method: 'GET',
+    redirect: 'manual',
+    headers: { Accept: 'text/html' }
+  });
+  let response;
+  try {
+    response = await fetch(request);
+  } catch (_) {
+    const error = new Error('Could not reach the LMFDB number-field resolver.');
+    error.status = 502;
+    throw error;
+  }
+
+  const location = response.headers.get('Location') || response.url || '';
+  const label = extractCanonicalLabel(location);
+  if (label) return { label, url: url.toString() };
+
+  if (!response.ok && response.status >= 500) {
+    const error = new Error(`LMFDB resolver failed with HTTP ${response.status}.`);
+    error.status = 502;
+    throw error;
+  }
+
+  const error = new Error(`LMFDB could not resolve ${expression} to a number field.`);
+  error.status = 404;
+  throw error;
+}
+
+function extractCanonicalLabel(value) {
+  if (!value) return '';
+  try {
+    const pathname = new URL(value, LMFDB_NUMBER_FIELD_BASE).pathname;
+    const match = /(?:^|\/)(\d+\.\d+\.\d+\.\d+)(?:\/|$)/.exec(pathname);
+    return match ? match[1] : '';
+  } catch (_) {
+    return '';
+  }
 }
 
 function buildFieldUrl(query) {
@@ -226,26 +314,6 @@ async function fetchLmfdbJson(url, ctx) {
 
 function firstRecord(json) {
   return Array.isArray(json?.data) ? json.data[0] || null : null;
-}
-
-function squarefreePart(value) {
-  const sign = value < 0 ? -1 : 1;
-  let n = Math.abs(Math.trunc(value));
-  let result = 1;
-  for (let p = 2; p * p <= n; p += p === 2 ? 1 : 2) {
-    let count = 0;
-    while (n % p === 0) {
-      n = Math.floor(n / p);
-      count++;
-    }
-    if (count % 2) result *= p;
-  }
-  if (n > 1) result *= n;
-  return sign * result;
-}
-
-function positiveMod(a, m) {
-  return ((a % m) + m) % m;
 }
 
 function parseMonicIntegerPolynomial(input) {

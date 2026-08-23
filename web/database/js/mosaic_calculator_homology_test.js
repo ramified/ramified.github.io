@@ -59,10 +59,8 @@ state.homologyGeneratorVisibility[generator.id] = true;
 state.showHomology = true;
 assert.strictEqual(calculator.__test.hasVisibleHomologyGenerators(), true);
 assert.strictEqual(calculator.__test.homologyCordKey(generator.id, quotientEdgeId), `${generator.id}:${quotientEdgeId}`);
-state.homologyCords = { [`${generator.id}:${quotientEdgeId}`]: { control: { x: 1, y: 2 } } };
 state.homologyCordChains = { [generator.id]: { points: [] } };
 calculator.__test.resetBackgroundHomologyCords(false, generator.id);
-assert.deepStrictEqual(state.homologyCords, {});
 assert.deepStrictEqual(state.homologyCordChains, {});
 assert.strictEqual(calculator.classifyBackgroundCircle([{ index: 0, dir: 0 }]).expression, 'a1');
 const cordA = { key: 'a1:10' };
@@ -85,34 +83,6 @@ assert.deepStrictEqual(
   calculator.__test.homologyCordPhysicalIndices({ points: [{ portal: false }, { portal: true }, { portal: false }] }),
   [0, 2]
 );
-const remeshChain = {
-  points: Array.from({ length: 12 }, (_, index) => ({
-    x: index,
-    y: 0,
-    vx: 1,
-    vy: 0,
-    ox: 0,
-    oy: 0,
-    tileIndex: -1,
-    chartVertex: -1,
-    portal: false
-  })),
-  deck: { x: 0, y: 0 },
-  restLength: 1,
-  referenceRestLength: 1,
-  hardRestLength: 0,
-  shrinkFloor: 0,
-  minimumParticleCount: 6
-};
-const naturalLengthBefore = remeshChain.restLength * (remeshChain.points.length - 1);
-assert.strictEqual(calculator.__test.remeshHomologyCordChain(remeshChain, { complex: { vertices: [] } }), true);
-assert.strictEqual(remeshChain.points.length, 10);
-assert.ok(Math.abs((remeshChain.restLength * (remeshChain.points.length - 1)) - naturalLengthBefore) < 1e-9);
-assert.ok(remeshChain.points.every((point) => point.portal === false));
-const annealChain = { points: remeshChain.points, deck: { x: 0, y: 0 }, restLength: 10, hardRestLength: 2, shrinkFloor: 2, shrinkFrozen: false };
-calculator.__test.annealHomologyCordRestLength(annealChain, 1);
-assert.ok(annealChain.restLength < 10 && annealChain.restLength >= 2);
-
 // A picked interior knot component is reduced through the barycentric complex
 // to the same displayed H_1 basis, without relying on a tile-edge trace.
 state.tiles[0] = [[0, 2]];
@@ -136,7 +106,6 @@ assert.strictEqual(state.homologyKnotResult, null);
 calculator.__test.clearBackgroundHomologyDisplay();
 assert.strictEqual(state.showHomology, false);
 assert.strictEqual(state.homologyCordMode, false);
-assert.deepStrictEqual(state.homologyCords, {});
 assert.deepStrictEqual(state.homologyGeneratorVisibility, {});
 assert.deepStrictEqual(state.homologySideSelections, {});
 
@@ -145,7 +114,6 @@ state.backgroundAction = 'homology-representative';
 state.homologyKnotPick = true;
 state.homologyKnotResult = pickedKnot;
 state.homologyCordMode = true;
-state.homologyCords = { 'a1:0': { control: { x: 10, y: 10 } } };
 const exported = calculator.__test.buildFullExport();
 assert.strictEqual(exported.backgroundAction, 'tile');
 assert.strictEqual(exported.backgroundSpace.action, 'tile');

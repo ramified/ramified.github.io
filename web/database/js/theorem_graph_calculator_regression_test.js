@@ -552,6 +552,30 @@ function testUndoRestoresDeletedNode() {
   assert.strictEqual(api.state.rootGraph.nodes[0].label, 'Keep me');
 }
 
+function testEmptyGraphTitleIsPreserved() {
+  const api = loadCalculator();
+  const untitledGraph = api.createGraph();
+  const importedWithoutTitle = api.normalizeGraphImport({ nodes: [], arrows: [] });
+
+  assert.strictEqual(untitledGraph.title, '');
+  assert.strictEqual(untitledGraph.titleNode.label, '');
+  assert.strictEqual(importedWithoutTitle.title, '');
+
+  api.state.rootGraph = api.createGraph('Maintenance Tracker');
+  api.state.activePath = [];
+
+  api.state.graphTitle = '';
+  const exported = api.buildGraphExport(api.state.rootGraph);
+
+  assert.strictEqual(api.state.graphTitle, '');
+  assert.strictEqual(api.state.rootGraph.titleNode.label, '');
+  assert.strictEqual(exported.title, '');
+
+  const imported = api.normalizeGraphImport(exported);
+  assert.strictEqual(imported.title, '');
+  assert.strictEqual(imported.titleNode.label, '');
+}
+
 function testUndoRestoresNodeMoveIntoChildGraph() {
   const api = loadCalculator();
   const root = api.createGraph('Root');
@@ -648,6 +672,7 @@ testSelectedReferenceExportJsonAndImportNormalize();
 testReferenceUsageLabelsMatchUsageScanner();
 testCurrentNodeImportAppendsAndUniquifiesId();
 testUndoRestoresDeletedNode();
+testEmptyGraphTitleIsPreserved();
 testUndoRestoresNodeMoveIntoChildGraph();
 testUndoRestoresCurrentNodeImport();
 testUndoRestoresNodeColorEditSnapshot();

@@ -171,6 +171,113 @@
       opacity: 0.56;
     }
 
+    .ramification-query-shortcuts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .ramification-query-shortcuts .btn {
+      min-width: 54px;
+      padding: 3px 9px;
+    }
+
+    .ramification-query-shortcuts .btn[aria-expanded="true"] {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(61,107,79,0.08);
+    }
+
+    .ramification-shortcut-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      align-items: end;
+      gap: 7px;
+      margin-top: 7px;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: rgba(255,255,255,0.42);
+    }
+
+    .ramification-shortcut-panel[hidden] {
+      display: none;
+    }
+
+    .ramification-shortcut-fields {
+      display: flex;
+      align-items: end;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .ramification-shortcut-fields[hidden] {
+      display: none;
+    }
+
+    .ramification-shortcut-parameter {
+      display: grid;
+      grid-template-columns: auto minmax(62px, 88px);
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .ramification-shortcut-parameter .ramification-input {
+      width: 100%;
+    }
+
+    .ramification-shortcut-panel .btn {
+      min-height: 28px;
+      padding: 4px 9px;
+    }
+
+    .ramification-shortcut-close {
+      width: 28px;
+      min-width: 28px !important;
+      padding: 3px !important;
+      font-family: Arial, sans-serif;
+      font-size: 1rem;
+      line-height: 1;
+    }
+
+    .ramification-shortcut-error {
+      grid-column: 1 / -1;
+      color: var(--accent2);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+    }
+
+    .ramification-shortcut-error:empty {
+      display: none;
+    }
+
+    .ramification-base-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .ramification-q-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .ramification-q-control[hidden] {
+      display: none;
+    }
+
+    .ramification-q-control .ramification-input {
+      width: 58px;
+    }
+
     .ramification-status-line {
       min-height: 20px;
       margin-top: 7px;
@@ -214,6 +321,20 @@
       margin-top: 12px;
       padding-top: 10px;
       border-top: 1px dotted var(--border);
+    }
+
+    .ramification-place-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .ramification-place-heading .opt-row {
+      flex: 0 0 auto;
+      gap: 6px;
+      padding: 0;
+      font-size: 0.82rem;
     }
 
     .ramification-place-row {
@@ -318,6 +439,14 @@
       .ramification-layout {
         grid-template-columns: 1fr;
       }
+
+      .ramification-shortcut-panel {
+        grid-template-columns: minmax(0, 1fr) auto auto;
+      }
+
+      .ramification-shortcut-fields {
+        flex-wrap: wrap;
+      }
       .ramification-toolbar-group {
         width: 100%;
       }
@@ -326,6 +455,9 @@
       }
       .ramification-underbar {
         padding: 0 12px 12px;
+      }
+      .ramification-base-controls {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -342,7 +474,7 @@
     <header class="panel-title">
       <span id="ramification-relation-title" class="panel-title-text">Places of \(L\) above places of \(K\)</span>
       <div class="canvas-toolbar" aria-label="Ramification controls">
-        <span class="shape-indicator"><span id="ramification-status" class="ramification-badge">\(\mathbb{Q}(\sqrt{2})\)</span></span>
+        <span class="shape-indicator"><span id="ramification-status" class="ramification-badge">loading LMFDB...</span></span>
         <span class="ramification-toolbar-group">
           <label class="stat-label" for="prime-bound">\(p \le n\)</label>
           <input id="prime-bound" type="range" min="2" max="31" value="11">
@@ -357,8 +489,8 @@
       </div>
     </div>
     <div class="ramification-underbar">
-      <span id="ramification-selected-label">selected place: \(2\)</span>
-      <span id="ramification-count-label">finite primes shown: 5</span>
+      <span id="ramification-selected-label">selected place: none</span>
+      <span id="ramification-count-label">finite primes shown: 0</span>
     </div>
   </section>
 
@@ -371,13 +503,34 @@
           <select id="ramification-input-mode" class="ramification-select">
             <option value="lmfdb" selected>LMFDB field over Q</option>
             <option value="polynomial">Polynomial extension L/K</option>
-            <option value="quadratic">Offline quadratic over Q</option>
           </select>
         </div>
         <div class="input-label">LMFDB field</div>
         <div class="ramification-search-row">
-          <input id="lmfdb-query" class="ramification-input" type="text" value="2.2.5.1" placeholder="2.2.5.1, Qi, Qsqrt5, x^2-x-1" spellcheck="false" autocomplete="off">
+          <input id="lmfdb-query" class="ramification-input" type="text" value="2.2.5.1" placeholder="2.2.5.1, Qsqrt(5), Qroot(3,2), Qzeta(5)" spellcheck="false" autocomplete="off">
           <button id="lmfdb-search" class="btn" type="button">search</button>
+        </div>
+        <div id="lmfdb-shortcut-editor">
+          <div class="ramification-query-shortcuts" aria-label="LMFDB query shortcuts">
+            <button id="lmfdb-quadratic-shortcut" class="btn btn-ghost" type="button" data-lmfdb-shortcut="sqrt" title="Enter a quadratic field." aria-label="Enter a quadratic field." aria-expanded="false" aria-controls="lmfdb-shortcut-panel">\(\sqrt{d}\)</button>
+            <button id="lmfdb-root-shortcut" class="btn btn-ghost" type="button" data-lmfdb-shortcut="root" title="Enter an n-th root field." aria-label="Enter an n-th root field." aria-expanded="false" aria-controls="lmfdb-shortcut-panel">\(\sqrt[n]{d}\)</button>
+            <button id="lmfdb-zeta-shortcut" class="btn btn-ghost" type="button" data-lmfdb-shortcut="zeta" title="Enter a cyclotomic field." aria-label="Enter a cyclotomic field." aria-expanded="false" aria-controls="lmfdb-shortcut-panel">\(\zeta_n\)</button>
+          </div>
+          <form id="lmfdb-shortcut-panel" class="ramification-shortcut-panel" aria-label="LMFDB field shortcut parameters" hidden>
+            <div id="lmfdb-square-fields" class="ramification-shortcut-fields" data-lmfdb-shortcut-fields="sqrt" hidden>
+              <label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="lmfdb-square-d" class="ramification-input" type="number" step="1" value="2" inputmode="numeric" aria-label="Square root radicand d"></label>
+            </div>
+            <div id="lmfdb-root-fields" class="ramification-shortcut-fields" data-lmfdb-shortcut-fields="root" hidden>
+              <label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="lmfdb-root-n" class="ramification-input" type="number" step="1" value="3" inputmode="numeric" aria-label="Root index n"></label>
+              <label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="lmfdb-root-d" class="ramification-input" type="number" step="1" value="2" inputmode="numeric" aria-label="Root radicand d"></label>
+            </div>
+            <div id="lmfdb-zeta-fields" class="ramification-shortcut-fields" data-lmfdb-shortcut-fields="zeta" hidden>
+              <label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="lmfdb-zeta-n" class="ramification-input" type="number" step="1" value="5" inputmode="numeric" aria-label="Cyclotomic index n"></label>
+            </div>
+            <button id="lmfdb-shortcut-insert" class="btn" type="submit">insert</button>
+            <button id="lmfdb-shortcut-close" class="btn btn-ghost ramification-shortcut-close" type="button" title="Close field shortcut" aria-label="Close field shortcut">&#215;</button>
+            <div id="lmfdb-shortcut-error" class="ramification-shortcut-error" role="alert"></div>
+          </form>
         </div>
         <div class="result-meta ramification-status-line" id="lmfdb-search-status"></div>
 
@@ -386,14 +539,16 @@
           <p class="hint">Runs locally in your browser. At bad primes (repeated polynomial reduction), local \((e_i,f_i)\) data is intentionally unavailable; all other displayed finite primes are exact.</p>
           <div class="ramification-inline-row">
             <span class="input-label">Base \(K\)</span>
-            <select id="generic-base-kind" class="ramification-select">
-              <option value="Q">\(\mathbb{Q}\)</option>
-              <option value="Fqt">\(\mathbb{F}_q(t)\) (WebAssembly CAS required)</option>
-            </select>
-          </div>
-          <div id="generic-q-row" class="ramification-inline-row" hidden>
-            <span class="input-label">\(q\)</span>
-            <input id="generic-q" class="ramification-input" type="number" min="2" step="1" value="3">
+            <div class="ramification-base-controls">
+              <select id="generic-base-kind" class="ramification-select">
+                <option value="Q">\(\mathbb{Q}\)</option>
+                <option value="Fqt">\(\mathbb{F}_q(t)\) (WebAssembly CAS required)</option>
+              </select>
+              <label id="generic-q-control" class="ramification-q-control" hidden>
+                <span>\(q\)</span>
+                <input id="generic-q" class="ramification-input" type="number" min="2" step="1" value="3" aria-label="Constant field size q">
+              </label>
+            </div>
           </div>
           <div class="ramification-inline-row">
             <span class="input-label">Generator</span>
@@ -411,38 +566,21 @@
           <div class="result-meta ramification-status-line" id="generic-status"></div>
         </details>
 
-        <details id="quadratic-fallback" class="ramification-details" open>
-          <summary>Offline quadratic fallback</summary>
-        <div class="ramification-inline-row">
-          <span class="input-label">Extension</span>
-          <select id="extension-type" class="ramification-select">
-            <option value="quadratic" selected>Quadratic extension</option>
-          </select>
-        </div>
-        <div class="ramification-inline-row">
-          <span class="input-label">\(d\)</span>
-          <input id="quadratic-d" class="ramification-input" type="number" step="1" value="2">
-        </div>
-        <label class="opt-row">
-          <input id="show-infinite" type="checkbox" checked>
-          <span>show \(\infty\)</span>
-        </label>
-        <div class="ramification-preset-row">
-          <button class="btn btn-ghost" type="button" data-d="2">\(\sqrt{2}\)</button>
-          <button class="btn btn-ghost" type="button" data-d="5">\(\sqrt{5}\)</button>
-          <button class="btn btn-ghost" type="button" data-d="-1">\(\sqrt{-1}\)</button>
-          <button class="btn btn-ghost" type="button" data-d="-3">\(\sqrt{-3}\)</button>
-        </div>
-        </details>
         <div class="ramification-place-editor">
-          <div id="finite-places-label" class="input-label">Finite places</div>
+          <div class="ramification-place-heading">
+            <div id="finite-places-label" class="input-label">Finite places</div>
+            <label class="opt-row">
+              <input id="show-infinite" type="checkbox" checked>
+              <span>show \(\infty\)</span>
+            </label>
+          </div>
           <div class="ramification-place-row">
             <input id="extra-prime-input" class="ramification-input" type="text" placeholder="prime p" spellcheck="false">
             <button id="add-extra-prime" class="btn btn-ghost" type="button">add place</button>
           </div>
           <div id="place-chip-list" class="ramification-chip-list"></div>
         </div>
-        <div class="result-meta" id="ramification-input-note">quadratic field over Q</div>
+        <div class="result-meta" id="ramification-input-note">Loading the default LMFDB field...</div>
       </div>
     </section>
 
@@ -475,7 +613,7 @@
 </main>
 
 <footer>
-  Global place-decomposition calculator: LMFDB lookup, Sage-backed monogenic extensions, and an offline quadratic fallback.
+  Global place-decomposition calculator: LMFDB lookup and browser-based monogenic extensions.
   <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
 </footer>
 
@@ -496,7 +634,7 @@
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js"></script>
-<script src="js/place_ramification_calculator.js?v=20260821-1"></script>
+<script src="js/place_ramification_calculator.js?v=20260823-2"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

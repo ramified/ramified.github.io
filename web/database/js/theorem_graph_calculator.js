@@ -2,7 +2,7 @@
   'use strict';
 
   const SCHEMA_VERSION = 10;
-  const DEFAULT_GRAPH_TITLE = 'Dependency Graph';
+  const DEFAULT_GRAPH_TITLE = '';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
   const DEFAULT_PRESET_KEY = 'maintenance_tracker';
   const DEFAULT_NEW_NODE_TYPE = 'misc';
@@ -989,7 +989,7 @@
         },
         set(value) {
           const graph = currentGraph();
-          graph.title = cleanGraphTitle(value) || DEFAULT_GRAPH_TITLE;
+          graph.title = cleanGraphTitle(value);
           graph.titleNode.label = graph.title;
           syncActiveOwnerFromTitleNode();
           updateDocumentTitle();
@@ -1073,7 +1073,7 @@
   }
 
   function createGraph(title = DEFAULT_GRAPH_TITLE) {
-    const cleanTitle = cleanGraphTitle(title) || DEFAULT_GRAPH_TITLE;
+    const cleanTitle = cleanGraphTitle(title);
     return {
       title: cleanTitle,
       titleNode: makeTitleNode({ label: cleanTitle }),
@@ -1094,6 +1094,9 @@
       ? normalizeTitleNodeType(source.type)
       : TITLE_NODE_TYPE;
     const titleType = NODE_TYPES[type] || NODE_TYPES[TITLE_NODE_TYPE];
+    const labelSource = Object.prototype.hasOwnProperty.call(source, 'label')
+      ? source.label
+      : (Object.prototype.hasOwnProperty.call(source, 'title') ? source.title : DEFAULT_GRAPH_TITLE);
     return {
       extra: {
         ...cloneExtraObject(source.extra),
@@ -1101,7 +1104,7 @@
       },
       id: TITLE_NODE_ID,
       type,
-      label: cleanGraphTitle(source.label || source.title) || DEFAULT_GRAPH_TITLE,
+      label: cleanGraphTitle(labelSource),
       setting: type === TITLE_NODE_TYPE ? '' : cleanString(source.setting),
       condition: type === TITLE_NODE_TYPE ? '' : cleanString(source.condition),
       result: type === TITLE_NODE_TYPE ? '' : cleanString(source.result),
@@ -1133,9 +1136,11 @@
 
   function ensureGraphShape(graph) {
     if (!graph || typeof graph !== 'object' || Array.isArray(graph)) return createGraph(DEFAULT_GRAPH_TITLE);
-    graph.title = cleanGraphTitle(graph.title) || DEFAULT_GRAPH_TITLE;
+    graph.title = Object.prototype.hasOwnProperty.call(graph, 'title')
+      ? cleanGraphTitle(graph.title)
+      : DEFAULT_GRAPH_TITLE;
     graph.titleNode = graph.titleNode && typeof graph.titleNode === 'object'
-      ? makeTitleNode({ ...graph.titleNode, label: graph.titleNode.label || graph.title })
+      ? makeTitleNode({ ...graph.titleNode, label: graph.title })
       : makeTitleNode({ label: graph.title });
     graph.titleNode.label = graph.title;
     graph.nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
@@ -1227,7 +1232,7 @@
     titleNode.extra = cloneExtraObject(sourceNode.extra);
     titleNode.id = TITLE_NODE_ID;
     titleNode.type = type;
-    titleNode.label = cleanGraphTitle(sourceNode.label) || DEFAULT_GRAPH_TITLE;
+    titleNode.label = cleanGraphTitle(sourceNode.label);
     titleNode.setting = cleanString(sourceNode.setting);
     titleNode.condition = cleanString(sourceNode.condition);
     titleNode.result = cleanString(sourceNode.result);
@@ -1246,7 +1251,7 @@
     const nodeType = NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE];
     sourceNode.extra = cloneExtraObject(titleNode.extra);
     sourceNode.type = type;
-    sourceNode.label = cleanString(titleNode.label) || sourceNode.id;
+    sourceNode.label = cleanGraphTitle(titleNode.label);
     sourceNode.setting = cleanString(titleNode.setting);
     sourceNode.condition = cleanString(titleNode.condition);
     sourceNode.result = cleanString(titleNode.result);
@@ -5238,13 +5243,14 @@
       );
     }
     node.type = type;
-    node.label = cleanString(refs.nodeLabel ? refs.nodeLabel.value : node.label) || (isTitle ? DEFAULT_GRAPH_TITLE : node.id);
+    node.label = isTitle
+      ? cleanGraphTitle(refs.nodeLabel ? refs.nodeLabel.value : node.label)
+      : (cleanString(refs.nodeLabel ? refs.nodeLabel.value : node.label) || node.id);
     LEGACY_NODE_DETAIL_FIELDS.forEach(({ key }) => {
       node[key] = targetFields.has(key) ? fixedValues[key] : '';
     });
     node.details = nextDetails;
     if (isTitle) {
-      node.label = cleanGraphTitle(node.label) || DEFAULT_GRAPH_TITLE;
       graph.title = node.label;
       if (refs.graphTitle && refs.graphTitle.value !== node.label) refs.graphTitle.value = node.label;
       updateDocumentTitle();
@@ -5406,10 +5412,11 @@
   function restoreNodeDetailSnapshot(node, values) {
     const graph = isTitleNode(node) ? currentGraph() : null;
     if (graph) node = graph.titleNode;
-    const type = isTitleNode(node) ? normalizeTitleNodeType(values.type) : normalizeType(values.type);
+    const isTitle = isTitleNode(node);
+    const type = isTitle ? normalizeTitleNodeType(values.type) : normalizeType(values.type);
     Object.assign(node, {
       type,
-      label: cleanString(values.label) || (isTitleNode(node) ? DEFAULT_GRAPH_TITLE : node.id),
+      label: isTitle ? cleanGraphTitle(values.label) : (cleanString(values.label) || node.id),
       setting: cleanString(values.setting),
       condition: cleanString(values.condition),
       result: cleanString(values.result),
@@ -5419,8 +5426,7 @@
       color: normalizeColor(values.color, (NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).stroke),
       fillColor: normalizeNodeFillColor(values.fillColor, (NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).fill)
     });
-    if (isTitleNode(node)) {
-      node.label = cleanGraphTitle(node.label) || DEFAULT_GRAPH_TITLE;
+    if (isTitle) {
       graph.title = node.label;
       syncActiveOwnerFromTitleNode();
       return activeTitleNode();
@@ -7511,13 +7517,13 @@
     const titleSource = Object.prototype.hasOwnProperty.call(data, 'title')
       ? data.title
       : (Object.prototype.hasOwnProperty.call(view, 'title') ? view.title : DEFAULT_GRAPH_TITLE);
-    const title = cleanGraphTitle(titleSource) || DEFAULT_GRAPH_TITLE;
+    const title = cleanGraphTitle(titleSource);
     const titleNodeSource = data.titleNode && typeof data.titleNode === 'object' && !Array.isArray(data.titleNode)
       ? data.titleNode
       : {};
     const titleNode = makeTitleNode({
       ...titleNodeSource,
-      label: titleNodeSource.label || title
+      label: title
     });
     titleNode.label = title;
 

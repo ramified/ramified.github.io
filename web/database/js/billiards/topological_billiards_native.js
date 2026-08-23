@@ -1,0 +1,1862 @@
+(function(root, factory) {
+  const math = root && root.TopologicalBilliardsMath
+    ? root.TopologicalBilliardsMath
+    : (typeof require === 'function' ? require('./topological_billiards_math.js') : null);
+  const physics = root && root.TopologicalBilliardsPhysics
+    ? root.TopologicalBilliardsPhysics
+    : (typeof require === 'function' ? require('./topological_billiards_physics.js') : null);
+  const api = factory(math, physics);
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  if (root) root.TopologicalBilliardsNative = api;
+})(typeof window !== 'undefined' ? window : globalThis, function(M, Physics) {
+  'use strict';
+
+  const TAU = Math.PI * 2;
+  const EPSILON = 1e-8;
+  const PHYSICS_DT = 1 / 240;
+  const SQUARE_DIRS = ['E', 'S', 'W', 'N'];
+  const HEX_DIRS = ['E', 'SE', 'SW', 'W', 'NW', 'NE'];
+  const SQUARE_CORNERS = ['NW', 'NE', 'SE', 'SW'];
+  const HEX_CORNERS = ['NE', 'N', 'NW', 'SW', 'S', 'SE'];
+  const SQUARE_OFFSETS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+  const HEX_DELTAS = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]];
+  const BALL_COLORS = Physics && Array.isArray(Physics.BALL_COLORS)
+    ? Physics.BALL_COLORS.slice()
+    : [
+      '#f1c84c', '#2f70bb', '#c54b43', '#72509b', '#df7f37', '#3c8d62',
+      '#7e3543', '#25262a', '#e4ba3f', '#397ab9', '#cf5147', '#78529b',
+      '#e2873e', '#3f9567', '#823b49'
+    ];
+  const DEFAULT_PARAMETERS = Object.freeze({
+    restitution: 0.94,
+    wallRestitution: 0.86,
+    clothFriction: 0.34,
+    rollingResistance: 0.016,
+    spinResistance: 0.035,
+    stopSpeed: 0.004,
+    stopSpin: 0.08,
+    shotSpeed: 4.8,
+    maxShotSeconds: 28,
+    localCoverDepth: 3
+  });
+
+  function clonePlain(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+
+  function modulo(value, divisor) {
+    return ((value % divisor) + divisor) % divisor;
+  }
+
+  function clamp(value, minimum, maximum) {
+    return Math.max(minimum, Math.min(maximum, value));
+  }
+
+  function normalizeLattice(value) {
+    const text = String(value || '').trim().toLowerCase();
+    return text === 'hex' || text === 'hexagonal' ? 'hexagonal' : 'square';
+  }
+
+  function latticeInfo(preset) {
+    const hex = normalizeLattice(preset && preset.lattice) === 'hexagonal';
+    return {
+      id: hex ? 'hexagonal' : 'square',
+      shape: hex ? 'hex' : 'square',
+      sides: hex ? 6 : 4,
+      dirNames: hex ? HEX_DIRS : SQUARE_DIRS,
+      cornerNames: hex ? HEX_CORNERS : SQUARE_CORNERS,
+      cornerAngle: hex ? (Math.PI * 2 / 3) : (Math.PI / 2)
+    };
+  }
+
+  function indexOf(row, col, cols) {
+    return (row - 1) * cols + (col - 1);
+  }
+
+  function rowCol(index, cols) {
+    return { row: Math.floor(index / cols) + 1, col: (index % cols) + 1 };
+  }
+
+  function offsetToAxial(rowZero, colZero) {
+    return { q: colZero - Math.floor(rowZero / 2), r: rowZero };
+  }
+
+  function axialToOffset(q, r) {
+    return { row: r, col: q + Math.floor(r / 2) };
+  }
+
+  function neighborPosition(row, col, dir, preset) {
+    const info = latticeInfo(preset);
+    if (info.shape === 'hex') {
+      const axial = offsetToAxial(row - 1, col - 1);
+      const delta = HEX_DELTAS[dir];
+      if (!delta) return null;
+      const offset = axialToOffset(axial.q + delta[0], axial.r + delta[1]);
+      const next = { row: offset.row + 1, col: offset.col + 1 };
+      if (next.row < 1 || next.row > preset.rows || next.col < 1 || next.col > preset.cols) return null;
+      return next;
+    }
+    const delta = SQUARE_OFFSETS[dir];
+    if (!delta) return null;
+    const next = { row: row + delta[0], col: col + delta[1] };
+    if (next.row < 1 || next.row > preset.rows || next.col < 1 || next.col > preset.cols) return null;
+    return next;
+  }
+
+  function tileOrigin(row, col, info) {
+    if (info.shape === 'hex') {
+      const axial = offsetToAxial(row - 1, col - 1);
+      return {
+        x: Math.sqrt(3) * (axial.q + axial.r / 2),
+        y: 1.5 * axial.r
+      };
+    }
+    return { x: col - 1, y: row - 1 };
+  }
+
+  function localPolygon(info) {
+    if (info.shape === 'hex') {
+      return Array.from({ length: 6 }, (_, index) => {
+        const angle = ((30 + index * 60) * Math.PI) / 180;
+        return { x: Math.cos(angle), y: Math.sin(angle) };
+      });
+    }
+    return [
+      { x: -0.5, y: -0.5 },
+      { x: 0.5, y: -0.5 },
+      { x: 0.5, y: 0.5 },
+      { x: -0.5, y: 0.5 }
+    ];
+  }
+
+  function edgeCornerIndices(info, dir) {
+    return info.shape === 'hex'
+      ? [modulo(dir - 1, info.sides), modulo(dir, info.sides)]
+      : [modulo(dir + 1, 4), modulo(dir + 2, 4)];
+  }
+
+  function edgeSegmentForPolygon(polygon, info, dir) {
+    const corners = edgeCornerIndices(info, dir);
+    return { start: polygon[corners[0]], end: polygon[corners[1]], corners };
+  }
+
+  function edgeKey(tileIndex, dir) {
+    return `${tileIndex}:${dir}`;
+  }
+
+  function cutKey(left, right) {
+    return left < right ? `${left}:${right}` : `${right}:${left}`;
+  }
+
+  function normalizeDir(value, info) {
+    const number = Number(value);
+    if (Number.isInteger(number)) return modulo(number, info.sides);
+    const text = String(value || '').trim().toUpperCase();
+    const index = info.dirNames.indexOf(text);
+    return index >= 0 ? index : null;
+  }
+
+  function normalizeEdge(edge, preset, info) {
+    if (!edge || typeof edge !== 'object') return null;
+    const row = Number(edge.row);
+    const col = Number(edge.col);
+    const dir = normalizeDir(edge.dir, info);
+    if (!Number.isInteger(row) || !Number.isInteger(col) || !Number.isInteger(dir)) return null;
+    if (row < 1 || row > preset.rows || col < 1 || col > preset.cols) return null;
+    return { row, col, dir, tileIndex: indexOf(row, col, preset.cols) };
+  }
+
+  function affineBetweenFrames(sourceStart, sourceEnd, destStart, destEnd, sourceOutward, destOutward) {
+    const sourceTangent = M.normalize2(M.sub2(sourceEnd, sourceStart));
+    const destTangent = M.normalize2(M.sub2(destEnd, destStart));
+    const sourceNormal = M.normalize2(sourceOutward);
+    const destNormal = M.normalize2(M.scale2(destOutward, -1));
+    const a = (destTangent.x * sourceTangent.x) + (destNormal.x * sourceNormal.x);
+    const b = (destTangent.x * sourceTangent.y) + (destNormal.x * sourceNormal.y);
+    const c = (destTangent.y * sourceTangent.x) + (destNormal.y * sourceNormal.x);
+    const d = (destTangent.y * sourceTangent.y) + (destNormal.y * sourceNormal.y);
+    return {
+      a,
+      b,
+      c,
+      d,
+      tx: destStart.x - (a * sourceStart.x) - (b * sourceStart.y),
+      ty: destStart.y - (c * sourceStart.x) - (d * sourceStart.y)
+    };
+  }
+
+  function edgeFrame(polygon, info, dir) {
+    const segment = edgeSegmentForPolygon(polygon, info, dir);
+    const tangent = M.sub2(segment.end, segment.start);
+    const inward = M.normalize2({ x: -tangent.y, y: tangent.x });
+    return { ...segment, inward, outward: M.scale2(inward, -1) };
+  }
+
+  function directTransition(source, destination, sourceFrame) {
+    const transform = {
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      tx: source.origin.x - destination.origin.x,
+      ty: source.origin.y - destination.origin.y
+    };
+    return {
+      kind: 'direct',
+      tileIndex: destination.index,
+      dir: sourceFrame.dir,
+      transform,
+      inverseTransform: M.inverseAffine(transform)
+    };
+  }
+
+  function glueTransform(sourceTile, sourceFrame, destTile, destFrame, pair, fromFirst) {
+    const firstReverse = Object.prototype.hasOwnProperty.call(pair, 'firstArrowReversed')
+      ? !!pair.firstArrowReversed
+      : !!pair.reversed;
+    const secondReverse = Object.prototype.hasOwnProperty.call(pair, 'secondArrowReversed')
+      ? !!pair.secondArrowReversed
+      : true;
+    const sourceReverse = fromFirst ? firstReverse : secondReverse;
+    const destReverse = fromFirst ? secondReverse : firstReverse;
+    const sourceStart = sourceReverse ? sourceFrame.end : sourceFrame.start;
+    const sourceEnd = sourceReverse ? sourceFrame.start : sourceFrame.end;
+    const destStart = destReverse ? destFrame.end : destFrame.start;
+    const destEnd = destReverse ? destFrame.start : destFrame.end;
+    return affineBetweenFrames(
+      sourceStart,
+      sourceEnd,
+      destStart,
+      destEnd,
+      sourceFrame.outward,
+      destFrame.outward
+    );
+  }
+
+  function createUnionFind(length) {
+    const parent = Array.from({ length }, (_, index) => index);
+    const rank = Array(length).fill(0);
+    const find = (value) => {
+      let current = value;
+      while (parent[current] !== current) {
+        parent[current] = parent[parent[current]];
+        current = parent[current];
+      }
+      return current;
+    };
+    const union = (left, right) => {
+      let a = find(left);
+      let b = find(right);
+      if (a === b) return;
+      if (rank[a] < rank[b]) [a, b] = [b, a];
+      parent[b] = a;
+      if (rank[a] === rank[b]) rank[a] += 1;
+    };
+    return { find, union };
+  }
+
+  function buildVertexClasses(atlas, endpointLinks) {
+    const sides = atlas.info.sides;
+    const uf = createUnionFind(atlas.tiles.length * sides);
+    endpointLinks.forEach((link) => {
+      uf.union(link.firstTile * sides + link.firstCorner, link.secondTile * sides + link.secondCorner);
+    });
+    const groups = new Map();
+    atlas.tiles.forEach((tile) => {
+      tile.polygon.forEach((point, corner) => {
+        if (tile.removed) return;
+        const root = uf.find(tile.index * sides + corner);
+        if (!groups.has(root)) groups.set(root, []);
+        groups.get(root).push({
+          tileIndex: tile.index,
+          row: tile.row,
+          col: tile.col,
+          corner,
+          cornerName: atlas.info.cornerNames[corner],
+          point: { ...point }
+        });
+      });
+    });
+    const classes = [];
+    Array.from(groups.values())
+      .sort((left, right) => left[0].tileIndex - right[0].tileIndex || left[0].corner - right[0].corner)
+      .forEach((incidences, index) => {
+        const unique = [];
+        const seen = new Set();
+        incidences.forEach((entry) => {
+          const key = `${entry.tileIndex}:${entry.corner}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(entry);
+          }
+        });
+        const coneAngle = unique.length * atlas.info.cornerAngle;
+        classes.push({
+          id: `v${index + 1}`,
+          index,
+          coneAngle,
+          singular: Math.abs(coneAngle - TAU) > 1e-7,
+          incidences: unique
+        });
+      });
+    atlas.vertexClasses = classes;
+    atlas.vertexByCorner = new Map();
+    classes.forEach((vertexClass) => {
+      vertexClass.incidences.forEach((entry) => {
+        atlas.vertexByCorner.set(`${entry.tileIndex}:${entry.corner}`, vertexClass.index);
+      });
+    });
+  }
+
+  function buildAtlas(preset) {
+    if (!preset || typeof preset !== 'object') throw new Error('Billiards requires a normalized preset.');
+    const info = latticeInfo(preset);
+    const removed = new Set((preset.removedTiles || []).map((tile) => indexOf(Number(tile.row), Number(tile.col), preset.cols)));
+    const cuts = new Set((preset.cutEdges || []).map((edge) => cutKey(
+      indexOf(Number(edge.left.row), Number(edge.left.col), preset.cols),
+      indexOf(Number(edge.right.row), Number(edge.right.col), preset.cols)
+    )));
+    const basePolygon = localPolygon(info);
+    const tiles = [];
+    for (let row = 1; row <= preset.rows; row += 1) {
+      for (let col = 1; col <= preset.cols; col += 1) {
+        const index = indexOf(row, col, preset.cols);
+        const polygon = basePolygon.map((point) => ({ ...point }));
+        const frames = Array.from({ length: info.sides }, (_, dir) => ({
+          ...edgeFrame(polygon, info, dir),
+          dir
+        }));
+        tiles[index] = {
+          index,
+          row,
+          col,
+          origin: tileOrigin(row, col, info),
+          polygon,
+          frames,
+          removed: removed.has(index),
+          transitions: Array(info.sides).fill(null)
+        };
+      }
+    }
+    const atlas = {
+      info,
+      rows: preset.rows,
+      cols: preset.cols,
+      tiles,
+      removed,
+      cuts,
+      vertexClasses: [],
+      vertexByCorner: new Map(),
+      chartTransformCache: new Map()
+    };
+    const endpointLinks = [];
+    tiles.forEach((tile) => {
+      if (tile.removed) return;
+      for (let dir = 0; dir < info.sides; dir += 1) {
+        const next = neighborPosition(tile.row, tile.col, dir, preset);
+        if (!next) continue;
+        const nextIndex = indexOf(next.row, next.col, preset.cols);
+        const destination = tiles[nextIndex];
+        if (!destination || destination.removed || cuts.has(cutKey(tile.index, nextIndex))) continue;
+        const transition = directTransition(tile, destination, tile.frames[dir]);
+        tile.transitions[dir] = transition;
+        const sourceCorners = tile.frames[dir].corners;
+        const destinationDir = modulo(dir + info.sides / 2, info.sides);
+        const destinationCorners = destination.frames[destinationDir].corners;
+        endpointLinks.push(
+          { firstTile: tile.index, firstCorner: sourceCorners[0], secondTile: destination.index, secondCorner: destinationCorners[1] },
+          { firstTile: tile.index, firstCorner: sourceCorners[1], secondTile: destination.index, secondCorner: destinationCorners[0] }
+        );
+      }
+    });
+    (preset.gluedEdges || []).forEach((pair, pairIndex) => {
+      const first = normalizeEdge(pair.first, preset, info);
+      const second = normalizeEdge(pair.second, preset, info);
+      if (!first || !second || removed.has(first.tileIndex) || removed.has(second.tileIndex)) return;
+      const firstTile = tiles[first.tileIndex];
+      const secondTile = tiles[second.tileIndex];
+      const firstFrame = firstTile.frames[first.dir];
+      const secondFrame = secondTile.frames[second.dir];
+      const firstTransform = glueTransform(firstTile, firstFrame, secondTile, secondFrame, pair, true);
+      const secondTransform = M.inverseAffine(firstTransform);
+      firstTile.transitions[first.dir] = {
+        kind: 'glued',
+        pairIndex,
+        tileIndex: second.tileIndex,
+        dir: first.dir,
+        destinationDir: second.dir,
+        transform: firstTransform,
+        inverseTransform: secondTransform,
+        reversed: M.affineDeterminant(firstTransform) < 0
+      };
+      secondTile.transitions[second.dir] = {
+        kind: 'glued',
+        pairIndex,
+        tileIndex: first.tileIndex,
+        dir: second.dir,
+        destinationDir: first.dir,
+        transform: secondTransform,
+        inverseTransform: firstTransform,
+        reversed: M.affineDeterminant(secondTransform) < 0
+      };
+      const firstReverse = Object.prototype.hasOwnProperty.call(pair, 'firstArrowReversed') ? !!pair.firstArrowReversed : !!pair.reversed;
+      const secondReverse = Object.prototype.hasOwnProperty.call(pair, 'secondArrowReversed') ? !!pair.secondArrowReversed : true;
+      const firstCorners = firstReverse ? firstFrame.corners.slice().reverse() : firstFrame.corners;
+      const secondCorners = secondReverse ? secondFrame.corners.slice().reverse() : secondFrame.corners;
+      endpointLinks.push(
+        { firstTile: first.tileIndex, firstCorner: firstCorners[0], secondTile: second.tileIndex, secondCorner: secondCorners[0] },
+        { firstTile: first.tileIndex, firstCorner: firstCorners[1], secondTile: second.tileIndex, secondCorner: secondCorners[1] }
+      );
+    });
+    buildVertexClasses(atlas, endpointLinks);
+    return atlas;
+  }
+
+  function normalizeRules(value) {
+    return String(value || '').trim().toLowerCase() === 'competitive' ? 'competitive' : 'solo';
+  }
+
+  function normalizeRadius(value, fallback, minimum, maximum) {
+    const number = Number(value);
+    return Number.isFinite(number) ? clamp(number, minimum, maximum) : fallback;
+  }
+
+  function normalizeQuaternion(value) {
+    return M.normalizeQuaternion(value && typeof value === 'object' ? value : M.quaternion());
+  }
+
+  function normalizeVector2(value) {
+    return {
+      x: Number.isFinite(Number(value && value.x)) ? Number(value.x) : 0,
+      y: Number.isFinite(Number(value && value.y)) ? Number(value.y) : 0
+    };
+  }
+
+  function normalizeVector3(value) {
+    return {
+      x: Number.isFinite(Number(value && value.x)) ? Number(value.x) : 0,
+      y: Number.isFinite(Number(value && value.y)) ? Number(value.y) : 0,
+      z: Number.isFinite(Number(value && value.z)) ? Number(value.z) : 0
+    };
+  }
+
+  function ballColor(kind, number) {
+    if (kind === 'cue') return '#f7f4e9';
+    const normalized = Math.max(1, Math.floor(Number(number) || 1));
+    return BALL_COLORS[modulo(normalized - 1, BALL_COLORS.length)];
+  }
+
+  function defaultBallOrientation() {
+    return M.quaternionFromAxisAngle({ x: 0, y: 1, z: 0 }, -Math.PI / 2);
+  }
+
+  function tileIndexFromAt(at, preset, atlas) {
+    if (Number.isInteger(at && at.tileIndex) && atlas.tiles[at.tileIndex] && !atlas.tiles[at.tileIndex].removed) return at.tileIndex;
+    const row = Number(at && at.row);
+    const col = Number(at && at.col);
+    if (!Number.isInteger(row) || !Number.isInteger(col)) return null;
+    const index = indexOf(row, col, preset.cols);
+    return atlas.tiles[index] && !atlas.tiles[index].removed ? index : null;
+  }
+
+  function ballFromPayload(source, preset, atlas, defaults, ordinal) {
+    const at = source && source.at && typeof source.at === 'object' ? source.at : source;
+    const tileIndex = tileIndexFromAt(at, preset, atlas);
+    if (!Number.isInteger(tileIndex)) return null;
+    const kind = String(source && source.kind || '').trim().toLowerCase() === 'cue' || String(source && source.id || '').trim().toLowerCase() === 'cue'
+      ? 'cue'
+      : 'target';
+    const number = kind === 'target' ? Math.max(1, Math.floor(Number(source && source.number) || ordinal || 1)) : 0;
+    return {
+      id: String(source && source.id || (kind === 'cue' ? 'cue' : number)),
+      kind,
+      number,
+      color: ballColor(kind, number),
+      tileIndex,
+      position: normalizeVector2(at),
+      velocity: normalizeVector2(source && source.velocity),
+      angularVelocity: normalizeVector3(source && source.angularVelocity),
+      orientation: source && source.orientation ? normalizeQuaternion(source.orientation) : defaultBallOrientation(),
+      radius: normalizeRadius(source && source.radius, defaults.ballRadius, 0.05, 0.45),
+      mass: normalizeRadius(source && source.mass, 1, 0.05, 20),
+      active: source && Object.prototype.hasOwnProperty.call(source, 'active') ? !!source.active : true,
+      crossings: Math.max(0, Math.floor(Number(source && source.crossings) || 0))
+    };
+  }
+
+  function lowestMissingTargetNumber(balls) {
+    const used = new Set((balls || [])
+      .filter((ball) => ball && ball.kind === 'target')
+      .map((ball) => Math.max(1, Math.floor(Number(ball.number) || 1))));
+    let number = 1;
+    while (used.has(number)) number += 1;
+    return number;
+  }
+
+  function vertexClassFromReference(reference, preset, atlas) {
+    if (reference == null) return null;
+    if (typeof reference === 'string') {
+      const direct = atlas.vertexClasses.find((entry) => entry.id === reference);
+      if (direct) return direct;
+    }
+    if (Number.isInteger(Number(reference.classIndex))) return atlas.vertexClasses[Number(reference.classIndex)] || null;
+    const vertex = reference.vertex && typeof reference.vertex === 'object' ? reference.vertex : reference;
+    const row = Number(vertex.row);
+    const col = Number(vertex.col);
+    if (!Number.isInteger(row) || !Number.isInteger(col)) return null;
+    const tileIndex = indexOf(row, col, preset.cols);
+    const tile = atlas.tiles[tileIndex];
+    if (!tile || tile.removed) return null;
+    let corner = Number(vertex.corner);
+    if (!Number.isInteger(corner)) {
+      corner = atlas.info.cornerNames.indexOf(String(vertex.corner || '').trim().toUpperCase());
+    }
+    if (corner < 0 || corner >= atlas.info.sides) return null;
+    const classIndex = atlas.vertexByCorner.get(`${tileIndex}:${corner}`);
+    return Number.isInteger(classIndex) ? atlas.vertexClasses[classIndex] : null;
+  }
+
+  function pocketsFromPreset(block, preset, atlas, pocketRadius) {
+    const explicit = block && Object.prototype.hasOwnProperty.call(block, 'pockets');
+    const sources = explicit && Array.isArray(block.pockets)
+      ? block.pockets
+      : atlas.vertexClasses.filter((entry) => entry.singular).map((entry) => ({ classIndex: entry.index }));
+    const seen = new Set();
+    const pockets = [];
+    sources.forEach((source, index) => {
+      const vertexClass = vertexClassFromReference(source, preset, atlas);
+      if (!vertexClass || seen.has(vertexClass.index)) return;
+      seen.add(vertexClass.index);
+      pockets.push({
+        id: String(source && source.id || `p${index + 1}`),
+        classIndex: vertexClass.index,
+        radius: normalizeRadius(source && source.radius, pocketRadius, 0.08, 0.75)
+      });
+    });
+    return pockets;
+  }
+
+  function createState(preset, options = {}) {
+    const atlas = buildAtlas(preset);
+    const block = preset.billiards && typeof preset.billiards === 'object' && !Array.isArray(preset.billiards)
+      ? preset.billiards
+      : {};
+    const rules = normalizeRules(options.rules || block.rules);
+    const ballRadius = normalizeRadius(block.ballRadius, 0.22, 0.05, 0.45);
+    const pocketRadius = normalizeRadius(block.pocketRadius, 0.34, 0.08, 0.75);
+    const defaults = { ballRadius, pocketRadius };
+    const ballSources = Array.isArray(block.balls) ? block.balls : [];
+    const balls = ballSources.map((source, index) => ballFromPayload(source, preset, atlas, defaults, index + 1)).filter(Boolean);
+    const state = {
+      version: 3,
+      gameMode: 'billiards',
+      preset,
+      atlas,
+      phase: 'setup',
+      rules,
+      ballRadius,
+      pocketRadius,
+      balls,
+      pockets: pocketsFromPreset(block, preset, atlas, pocketRadius),
+      scores: { 'player-1': 0, 'player-2': 0 },
+      score: 0,
+      turn: 'player-1',
+      winner: '',
+      shots: 0,
+      round: 0,
+      targetTotal: balls.filter((ball) => ball.kind === 'target').length,
+      nextTargetNumber: lowestMissingTargetNumber(balls),
+      nextPocketId: 1,
+      ballInHand: false,
+      ballInHandPlayer: '',
+      lastShot: null,
+      initialSetup: null,
+      recordMoves: [],
+      deterministic: {
+        dt: PHYSICS_DT,
+        seed: Math.max(1, Math.floor(Number(block.seed) || 1)),
+        parameters: { ...DEFAULT_PARAMETERS, ...(block.parameters || {}) }
+      },
+      removed: new Set(atlas.removed),
+      boxes: [],
+      newBoxIds: new Set(),
+      nextBoxId: 1,
+      ending: '',
+      debugMessage: ''
+    };
+    while (state.pockets.some((pocket) => pocket.id === `p${state.nextPocketId}`)) state.nextPocketId += 1;
+    return state;
+  }
+
+  function ballExport(ball, preset) {
+    const tile = rowCol(ball.tileIndex, preset.cols);
+    return {
+      id: ball.id,
+      kind: ball.kind,
+      ...(ball.kind === 'target' ? { number: ball.number } : {}),
+      color: ballColor(ball.kind, ball.number),
+      at: { row: tile.row, col: tile.col, x: ball.position.x, y: ball.position.y },
+      tileIndex: ball.tileIndex,
+      position: { ...ball.position },
+      velocity: { ...ball.velocity },
+      angularVelocity: { ...ball.angularVelocity },
+      orientation: { ...ball.orientation },
+      radius: ball.radius,
+      mass: ball.mass,
+      active: !!ball.active,
+      crossings: ball.crossings || 0
+    };
+  }
+
+  function pocketExport(pocket, state) {
+    const vertexClass = state.atlas.vertexClasses[pocket.classIndex];
+    const representative = vertexClass && vertexClass.incidences[0];
+    return {
+      id: pocket.id,
+      classIndex: pocket.classIndex,
+      radius: pocket.radius,
+      coneAngle: vertexClass ? vertexClass.coneAngle : 0,
+      vertex: representative ? { row: representative.row, col: representative.col, corner: representative.cornerName } : null
+    };
+  }
+
+  function presetBlockFromState(state, options = {}) {
+    const block = {
+      rules: normalizeRules(state.rules),
+      ballRadius: state.ballRadius,
+      pocketRadius: state.pocketRadius,
+      balls: state.balls.filter((ball) => options.activeOnly === false || ball.active).map((ball) => {
+        const exported = ballExport(ball, state.preset);
+        return {
+          id: exported.id,
+          kind: exported.kind,
+          ...(exported.kind === 'target' ? { number: exported.number } : {}),
+          at: exported.at
+        };
+      }),
+      pockets: state.pockets.map((pocket) => {
+        const exported = pocketExport(pocket, state);
+        return { id: exported.id, vertex: exported.vertex };
+      })
+    };
+    return block;
+  }
+
+  function cloneState(source) {
+    const preset = source.preset;
+    const clone = createState({ ...preset, billiards: presetBlockFromState(source, { activeOnly: false }) }, { rules: source.rules });
+    clone.phase = source.phase;
+    clone.balls = source.balls.map((ball) => ({
+      ...ball,
+      position: { ...ball.position },
+      velocity: { ...ball.velocity },
+      angularVelocity: { ...ball.angularVelocity },
+      orientation: { ...ball.orientation }
+    }));
+    clone.pockets = source.pockets.map((pocket) => ({ ...pocket }));
+    clone.scores = { ...source.scores };
+    clone.score = source.score || 0;
+    clone.turn = source.turn || 'player-1';
+    clone.winner = source.winner || '';
+    clone.shots = source.shots || 0;
+    clone.round = source.round || clone.shots;
+    clone.targetTotal = Math.max(0, Number(source.targetTotal) || 0);
+    clone.nextTargetNumber = lowestMissingTargetNumber(clone.balls);
+    clone.nextPocketId = Math.max(1, Number(source.nextPocketId) || 1);
+    clone.ballInHand = !!source.ballInHand;
+    clone.ballInHandPlayer = source.ballInHandPlayer || '';
+    clone.lastShot = clonePlain(source.lastShot);
+    clone.initialSetup = clonePlain(source.initialSetup);
+    clone.recordMoves = clonePlain(source.recordMoves || []);
+    clone.deterministic = clonePlain(source.deterministic || clone.deterministic);
+    clone.ending = source.ending || '';
+    clone.debugMessage = source.debugMessage || '';
+    return clone;
+  }
+
+  function pointEdgeDistance(point, frame) {
+    return M.dot2(M.sub2(point, frame.start), frame.inward);
+  }
+
+  function pointInsideTile(atlas, tileIndex, point, inset = 0) {
+    const tile = atlas.tiles[tileIndex];
+    return !!(tile && !tile.removed && tile.frames.every((frame) => pointEdgeDistance(point, frame) >= inset - EPSILON));
+  }
+
+  function nearestVertex(atlas, tileIndex, point) {
+    const tile = atlas.tiles[tileIndex];
+    if (!tile || tile.removed) return null;
+    let best = null;
+    tile.polygon.forEach((cornerPoint, corner) => {
+      const distance = M.length2(M.sub2(point, cornerPoint));
+      if (!best || distance < best.distance) {
+        const classIndex = atlas.vertexByCorner.get(`${tileIndex}:${corner}`);
+        best = { tileIndex, corner, classIndex, point: cornerPoint, distance };
+      }
+    });
+    return best;
+  }
+
+  function chartTransformsFromTile(atlas, sourceTileIndex, maxDepth) {
+    const depthLimit = Math.max(0, Math.floor(Number(maxDepth) || 0));
+    if (!atlas.chartTransformCache) atlas.chartTransformCache = new Map();
+    const cacheKey = `${sourceTileIndex}:${depthLimit}`;
+    if (atlas.chartTransformCache.has(cacheKey)) return atlas.chartTransformCache.get(cacheKey);
+    const queue = [{
+      tileIndex: sourceTileIndex,
+      transform: M.identityAffine(),
+      inverseTransform: M.identityAffine(),
+      depth: 0,
+      path: ''
+    }];
+    const all = [];
+    const byTile = new Map();
+    const seen = new Set();
+    for (let queueIndex = 0; queueIndex < queue.length; queueIndex += 1) {
+      const chart = queue[queueIndex];
+      const key = `${chart.tileIndex}|${M.affineKey(chart.transform, 6)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      all.push(chart);
+      if (!byTile.has(chart.tileIndex)) byTile.set(chart.tileIndex, []);
+      byTile.get(chart.tileIndex).push(chart);
+      if (chart.depth >= depthLimit) continue;
+      const tile = atlas.tiles[chart.tileIndex];
+      tile.transitions.forEach((transition, dir) => {
+        if (!transition) return;
+        const transform = M.composeAffine(transition.transform, chart.transform);
+        queue.push({
+          tileIndex: transition.tileIndex,
+          transform,
+          inverseTransform: M.inverseAffine(transform),
+          depth: chart.depth + 1,
+          path: chart.path ? `${chart.path}.${dir}` : String(dir)
+        });
+      });
+    }
+    const cached = { all, byTile };
+    atlas.chartTransformCache.set(cacheKey, cached);
+    return cached;
+  }
+
+  function ballImageFromChart(ball, chart, minimal = false) {
+    const image = {
+      ...chart,
+      position: M.applyAffine(chart.transform, ball.position)
+    };
+    if (minimal) return image;
+    image.velocity = M.applyLinear(chart.transform, ball.velocity);
+    image.angularVelocity = M.applyLiftedLinear(chart.transform, ball.angularVelocity);
+    image.orientation = M.transportOrientation(ball.orientation, chart.transform);
+    return image;
+  }
+
+  function nearbyImages(ball, atlas, options = {}) {
+    const maxDepth = Math.max(0, Math.floor(Number(options.maxDepth) || 0));
+    const minimal = options.minimal === true;
+    if (options.onlyIntersecting === false) {
+      return chartTransformsFromTile(atlas, ball.tileIndex, maxDepth).all
+        .map((chart) => ballImageFromChart(ball, chart, minimal));
+    }
+    const queue = [{
+      tileIndex: ball.tileIndex,
+      transform: M.identityAffine(),
+      inverseTransform: M.identityAffine(),
+      depth: 0,
+      path: ''
+    }];
+    const images = [];
+    const seen = new Set();
+    for (let queueIndex = 0; queueIndex < queue.length; queueIndex += 1) {
+      const chart = queue[queueIndex];
+      const key = `${chart.tileIndex}|${M.affineKey(chart.transform, 6)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const position = M.applyAffine(chart.transform, ball.position);
+      const image = minimal
+        ? { ...chart, position }
+        : {
+          ...chart,
+          position,
+          velocity: M.applyLinear(chart.transform, ball.velocity),
+          angularVelocity: M.applyLiftedLinear(chart.transform, ball.angularVelocity),
+          orientation: M.transportOrientation(ball.orientation, chart.transform)
+        };
+      images.push(image);
+      if (chart.depth >= maxDepth) continue;
+      const tile = atlas.tiles[chart.tileIndex];
+      tile.transitions.forEach((transition, dir) => {
+        if (!transition) return;
+        const distance = pointEdgeDistance(position, tile.frames[dir]);
+        const padding = Number.isFinite(options.padding) ? options.padding : Infinity;
+        if (distance > padding + EPSILON && options.onlyIntersecting !== false) return;
+        const transform = M.composeAffine(transition.transform, chart.transform);
+        queue.push({
+          tileIndex: transition.tileIndex,
+          transform,
+          inverseTransform: M.inverseAffine(transform),
+          depth: chart.depth + 1,
+          path: chart.path ? `${chart.path}.${dir}` : String(dir)
+        });
+      });
+    }
+    return images;
+  }
+
+  function ballImagesInTile(ball, atlas, tileIndex, maxDepth = 3) {
+    const charts = chartTransformsFromTile(atlas, ball.tileIndex, maxDepth).byTile.get(tileIndex) || [];
+    return charts.map((chart) => ballImageFromChart(ball, chart, true));
+  }
+
+  function activePocketAtClass(state, classIndex) {
+    return state.pockets.find((pocket) => pocket.classIndex === classIndex) || null;
+  }
+
+  function ballPocketOverlap(state, ball, pocket) {
+    const vertexClass = state.atlas.vertexClasses[pocket.classIndex];
+    if (!vertexClass) return false;
+    return vertexClass.incidences.some((incidence) => {
+      if (incidence.tileIndex !== ball.tileIndex) return false;
+      return M.length2(M.sub2(ball.position, incidence.point)) < pocket.radius + ball.radius - EPSILON;
+    });
+  }
+
+  function overlappingBall(state, candidate, ignoredId = '') {
+    return state.balls.find((other) => {
+      if (!other.active || other.id === ignoredId || other.id === candidate.id) return false;
+      const images = ballImagesInTile(other, state.atlas, candidate.tileIndex, state.deterministic.parameters.localCoverDepth);
+      return images.some((image) => M.length2(M.sub2(candidate.position, image.position)) < candidate.radius + other.radius - EPSILON);
+    }) || null;
+  }
+
+  function selfImageOverlap(state, ball) {
+    const images = ballImagesInTile(ball, state.atlas, ball.tileIndex, 3);
+    return images.some((image) => image.depth > 0 && M.length2(M.sub2(ball.position, image.position)) < ball.radius * 2 - EPSILON);
+  }
+
+  function placementIssue(state, ball, ignoredId = '') {
+    if (!Number.isInteger(ball.tileIndex) || !pointInsideTile(state.atlas, ball.tileIndex, ball.position, 0)) return 'choose a point inside an existing tile';
+    const tile = state.atlas.tiles[ball.tileIndex];
+    for (let dir = 0; dir < state.atlas.info.sides; dir += 1) {
+      if (!tile.transitions[dir] && pointEdgeDistance(ball.position, tile.frames[dir]) < ball.radius - EPSILON) {
+        return 'ball intersects a physical boundary';
+      }
+    }
+    if (state.pockets.some((pocket) => ballPocketOverlap(state, ball, pocket))) return 'ball intersects a pocket';
+    if (overlappingBall(state, ball, ignoredId)) return 'ball overlaps another ball';
+    if (selfImageOverlap(state, ball)) return 'ball overlaps its own short glued image';
+    return '';
+  }
+
+  function setupIssue(state) {
+    const cues = state.balls.filter((ball) => ball.active && ball.kind === 'cue');
+    if (cues.length !== 1) return 'place exactly one cue ball';
+    for (const ball of state.balls.filter((entry) => entry.active)) {
+      const issue = placementIssue(state, ball, ball.id);
+      if (issue) return `${ball.kind === 'cue' ? 'cue ball' : `ball ${ball.number}`}: ${issue}`;
+    }
+    return '';
+  }
+
+  function placeBall(state, selection, tileIndex, position) {
+    const next = cloneState(state);
+    const explicit = selection && typeof selection === 'object' && !Array.isArray(selection);
+    const normalizedKind = (explicit ? selection.kind : selection) === 'cue' ? 'cue' : 'target';
+    const number = normalizedKind === 'target'
+      ? (explicit && Number.isFinite(Number(selection.number))
+        ? Math.max(1, Math.floor(Number(selection.number)))
+        : lowestMissingTargetNumber(next.balls))
+      : 0;
+    if (normalizedKind === 'cue' && next.balls.some((ball) => ball.kind === 'cue')) {
+      return { changed: false, state, message: 'move or erase the existing cue ball first' };
+    }
+    if (normalizedKind === 'target' && next.balls.some((ball) => ball.kind === 'target' && ball.number === number)) {
+      return { changed: false, state, message: `move or erase ball ${number} first` };
+    }
+    const usedIds = new Set(next.balls.map((ball) => String(ball.id)));
+    let id = normalizedKind === 'cue' ? 'cue' : String(number);
+    for (let suffix = 2; usedIds.has(id); suffix += 1) id = `ball-${number}-${suffix}`;
+    const ball = ballFromPayload({
+      id,
+      kind: normalizedKind,
+      number,
+      at: { tileIndex, ...position }
+    }, next.preset, next.atlas, next, number);
+    if (!ball) return { changed: false, state, message: 'choose a point inside an existing tile' };
+    const issue = placementIssue(next, ball, ball.id);
+    if (issue) return { changed: false, state, message: issue };
+    next.balls.push(ball);
+    if (normalizedKind === 'target') {
+      next.nextTargetNumber = lowestMissingTargetNumber(next.balls);
+      next.targetTotal += 1;
+    }
+    return { changed: true, state: next, message: normalizedKind === 'cue' ? 'cue ball placed' : `ball ${number} placed` };
+  }
+
+  function moveBall(state, ballId, tileIndex, position) {
+    const next = cloneState(state);
+    const ball = next.balls.find((entry) => entry.id === ballId && entry.active);
+    if (!ball) return { changed: false, state, message: 'ball not found' };
+    ball.tileIndex = tileIndex;
+    ball.position = { ...position };
+    ball.velocity = { x: 0, y: 0 };
+    ball.angularVelocity = { x: 0, y: 0, z: 0 };
+    const issue = placementIssue(next, ball, ball.id);
+    if (issue) return { changed: false, state, message: issue };
+    return { changed: true, state: next, message: `${ball.kind === 'cue' ? 'cue ball' : `ball ${ball.number}`} moved` };
+  }
+
+  function eraseAt(state, tileIndex, position) {
+    const next = cloneState(state);
+    let bestBall = null;
+    next.balls.forEach((ball) => {
+      if (!ball.active || ball.tileIndex !== tileIndex) return;
+      const distance = M.length2(M.sub2(position, ball.position));
+      if (distance <= ball.radius * 1.3 && (!bestBall || distance < bestBall.distance)) bestBall = { ball, distance };
+    });
+    if (bestBall) {
+      next.balls = next.balls.filter((ball) => ball.id !== bestBall.ball.id);
+      if (bestBall.ball.kind === 'target') {
+        next.targetTotal = Math.max(0, next.targetTotal - 1);
+        next.nextTargetNumber = lowestMissingTargetNumber(next.balls);
+      }
+      return { changed: true, state: next, message: 'ball erased' };
+    }
+    const vertex = nearestVertex(next.atlas, tileIndex, position);
+    if (vertex && vertex.distance <= next.pocketRadius * 1.5) {
+      const pocket = activePocketAtClass(next, vertex.classIndex);
+      if (pocket) {
+        next.pockets = next.pockets.filter((entry) => entry.classIndex !== vertex.classIndex);
+        return { changed: true, state: next, message: 'pocket erased' };
+      }
+    }
+    return { changed: false, state, message: 'nothing to erase here' };
+  }
+
+  function togglePocket(state, tileIndex, position, forceAdd = false) {
+    const next = cloneState(state);
+    const vertex = nearestVertex(next.atlas, tileIndex, position);
+    if (!vertex) return { changed: false, state, message: 'choose a quotient vertex' };
+    const existing = activePocketAtClass(next, vertex.classIndex);
+    if (existing && !forceAdd) {
+      next.pockets = next.pockets.filter((pocket) => pocket.classIndex !== vertex.classIndex);
+      return { changed: true, state: next, message: 'pocket removed' };
+    }
+    if (existing) return { changed: false, state, message: 'pocket already present' };
+    next.pockets.push({ id: `p${next.nextPocketId++}`, classIndex: vertex.classIndex, radius: next.pocketRadius });
+    return { changed: true, state: next, message: 'pocket added' };
+  }
+
+  function begin(state) {
+    const issue = setupIssue(state);
+    if (issue) return { changed: false, state, message: issue };
+    const next = cloneState(state);
+    next.phase = 'ready';
+    next.targetTotal = next.balls.filter((ball) => ball.active && ball.kind === 'target').length;
+    next.initialSetup = presetBlockFromState(next, { activeOnly: false });
+    next.recordMoves = [];
+    return { changed: true, state: next, message: next.targetTotal && next.pockets.length ? 'ready to shoot' : 'practice table ready' };
+  }
+
+  function canonicalizeBall(ball, atlas) {
+    for (let guard = 0; guard < 16; guard += 1) {
+      const tile = atlas.tiles[ball.tileIndex];
+      let crossing = null;
+      tile.frames.forEach((frame, dir) => {
+        const distance = pointEdgeDistance(ball.position, frame);
+        if (distance < -EPSILON && (!crossing || distance < crossing.distance)) crossing = { dir, distance };
+      });
+      if (!crossing) return true;
+      const transition = tile.transitions[crossing.dir];
+      if (!transition) return false;
+      ball.position = M.applyAffine(transition.transform, ball.position);
+      ball.velocity = M.applyLinear(transition.transform, ball.velocity);
+      ball.angularVelocity = M.applyLiftedLinear(transition.transform, ball.angularVelocity);
+      ball.orientation = M.transportOrientation(ball.orientation, transition.transform);
+      ball.tileIndex = transition.tileIndex;
+      ball.crossings = (ball.crossings || 0) + 1;
+    }
+    return false;
+  }
+
+  function resolveWalls(ball, atlas, restitution) {
+    const tile = atlas.tiles[ball.tileIndex];
+    tile.frames.forEach((frame, dir) => {
+      if (tile.transitions[dir]) return;
+      const distance = pointEdgeDistance(ball.position, frame);
+      if (distance >= ball.radius) return;
+      ball.position = M.add2(ball.position, M.scale2(frame.inward, ball.radius - distance + EPSILON));
+      const normalSpeed = M.dot2(ball.velocity, frame.inward);
+      if (normalSpeed < 0) {
+        ball.velocity = M.sub2(ball.velocity, M.scale2(frame.inward, (1 + restitution) * normalSpeed));
+      }
+    });
+  }
+
+  function applyFriction(ball, dt, parameters) {
+    const radius = ball.radius;
+    const slip = {
+      x: ball.velocity.x - radius * ball.angularVelocity.y,
+      y: ball.velocity.y + radius * ball.angularVelocity.x
+    };
+    const slipSpeed = M.length2(slip);
+    if (slipSpeed > EPSILON) {
+      const impulse = Math.min(slipSpeed, parameters.clothFriction * dt);
+      const direction = M.scale2(slip, -1 / slipSpeed);
+      ball.velocity = M.add2(ball.velocity, M.scale2(direction, impulse * 0.4));
+      const angularScale = impulse * 1.5 / Math.max(radius, EPSILON);
+      ball.angularVelocity.x += direction.y * angularScale;
+      ball.angularVelocity.y -= direction.x * angularScale;
+    } else {
+      const speed = M.length2(ball.velocity);
+      if (speed > EPSILON) {
+        const resistance = Math.min(speed, parameters.rollingResistance * dt);
+        ball.velocity = M.scale2(ball.velocity, (speed - resistance) / speed);
+      }
+    }
+    const spinFactor = Math.max(0, 1 - parameters.spinResistance * dt);
+    ball.angularVelocity.z *= spinFactor;
+  }
+
+  function collisionBroadPhase(state, balls) {
+    if (balls.length < 2) return [];
+    const depth = state.deterministic.parameters.localCoverDepth;
+    const maxRadius = balls.reduce((maximum, ball) => Math.max(maximum, ball.radius), 0);
+    const cellSize = Math.max(EPSILON * 32, maxRadius * 2);
+    const bucketsByTile = new Map();
+    const candidates = new Map();
+
+    balls.forEach((ball, ballIndex) => {
+      const images = nearbyImages(ball, state.atlas, {
+        padding: ball.radius,
+        maxDepth: depth,
+        onlyIntersecting: true,
+        minimal: true
+      });
+      images.forEach((image) => {
+        let cells = bucketsByTile.get(image.tileIndex);
+        if (!cells) {
+          cells = new Map();
+          bucketsByTile.set(image.tileIndex, cells);
+        }
+        const minCellX = Math.floor((image.position.x - ball.radius) / cellSize);
+        const maxCellX = Math.floor((image.position.x + ball.radius) / cellSize);
+        const minCellY = Math.floor((image.position.y - ball.radius) / cellSize);
+        const maxCellY = Math.floor((image.position.y + ball.radius) / cellSize);
+        const entry = { ball, ballIndex, image };
+        for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
+          for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
+            const cellKey = `${cellX}:${cellY}`;
+            const occupants = cells.get(cellKey) || [];
+            occupants.forEach((other) => {
+              if (other.ballIndex === ballIndex) return;
+              const leftEntry = other.ballIndex < ballIndex ? other : entry;
+              const rightEntry = other.ballIndex < ballIndex ? entry : other;
+              const pairKey = `${leftEntry.ballIndex}:${rightEntry.ballIndex}`;
+              const delta = M.sub2(rightEntry.image.position, leftEntry.image.position);
+              const distance = M.length2(delta);
+              const previous = candidates.get(pairKey);
+              if (previous && previous.distance <= distance) return;
+              candidates.set(pairKey, {
+                leftIndex: leftEntry.ballIndex,
+                rightIndex: rightEntry.ballIndex,
+                leftTileIndex: leftEntry.ball.tileIndex,
+                rightTileIndex: rightEntry.ball.tileIndex,
+                transform: M.composeAffine(leftEntry.image.inverseTransform, rightEntry.image.transform),
+                distance
+              });
+            });
+            occupants.push(entry);
+            cells.set(cellKey, occupants);
+          }
+        }
+      });
+    });
+
+    return Array.from(candidates.values()).sort((left, right) => (
+      left.leftIndex - right.leftIndex || left.rightIndex - right.rightIndex
+    ));
+  }
+
+  function closestCollisionImage(right, left, atlas, depth, preferredTransform) {
+    let contact = null;
+    const consider = (transform) => {
+      const position = M.applyAffine(transform, right.position);
+      const delta = M.sub2(position, left.position);
+      const distance = M.length2(delta);
+      const target = left.radius + right.radius;
+      if (distance < target - EPSILON && (!contact || distance < contact.distance)) {
+        contact = {
+          position,
+          transform,
+          inverseTransform: M.inverseAffine(transform),
+          delta,
+          distance,
+          target
+        };
+      }
+    };
+    if (preferredTransform) consider(preferredTransform);
+    if (!contact) {
+      const charts = chartTransformsFromTile(atlas, right.tileIndex, depth).byTile.get(left.tileIndex) || [];
+      charts.forEach((chart) => consider(chart.transform));
+    }
+    return contact;
+  }
+
+  function resolveBallCollisions(state) {
+    const balls = state.balls.filter((ball) => ball.active);
+    const depth = state.deterministic.parameters.localCoverDepth;
+    collisionBroadPhase(state, balls).forEach((candidate) => {
+      const left = balls[candidate.leftIndex];
+      const right = balls[candidate.rightIndex];
+      if (!left.active || !right.active) return;
+      const sameCharts = left.tileIndex === candidate.leftTileIndex && right.tileIndex === candidate.rightTileIndex;
+      const contact = closestCollisionImage(right, left, state.atlas, depth, sameCharts ? candidate.transform : null);
+      if (!contact) return;
+      const normal = contact.distance > EPSILON ? M.scale2(contact.delta, 1 / contact.distance) : { x: 1, y: 0 };
+      const rightVelocity = M.applyLinear(contact.transform, right.velocity);
+      const relative = M.dot2(M.sub2(rightVelocity, left.velocity), normal);
+      const inverseMass = (1 / left.mass) + (1 / right.mass);
+      if (relative < 0) {
+        const impulse = -((1 + state.deterministic.parameters.restitution) * relative) / inverseMass;
+        left.velocity = M.sub2(left.velocity, M.scale2(normal, impulse / left.mass));
+        const updatedRightImage = M.add2(rightVelocity, M.scale2(normal, impulse / right.mass));
+        right.velocity = M.applyLinear(contact.inverseTransform, updatedRightImage);
+      }
+      const correction = Math.max(0, contact.target - contact.distance) / inverseMass * 0.52;
+      left.position = M.sub2(left.position, M.scale2(normal, correction / left.mass));
+      const correctedRightImage = M.add2(contact.position, M.scale2(normal, correction / right.mass));
+      right.position = M.applyAffine(contact.inverseTransform, correctedRightImage);
+      canonicalizeBall(left, state.atlas);
+      canonicalizeBall(right, state.atlas);
+    });
+  }
+
+  function capturePockets(state, shotResult) {
+    if (!state.pockets.length) return;
+    state.balls.forEach((ball) => {
+      if (!ball.active) return;
+      const pocket = state.pockets.find((entry) => {
+        const vertexClass = state.atlas.vertexClasses[entry.classIndex];
+        return vertexClass && vertexClass.incidences.some((incidence) => (
+          incidence.tileIndex === ball.tileIndex
+          && M.length2(M.sub2(ball.position, incidence.point)) <= Math.max(entry.radius - ball.radius * 0.2, ball.radius * 0.5)
+        ));
+      });
+      if (!pocket) return;
+      ball.active = false;
+      ball.velocity = { x: 0, y: 0 };
+      ball.angularVelocity = { x: 0, y: 0, z: 0 };
+      if (ball.kind === 'cue') shotResult.scratch = true;
+      else shotResult.pocketedTargets.push(ball.id);
+    });
+  }
+
+  function ballsAtRest(state) {
+    const parameters = state.deterministic.parameters;
+    return state.balls.filter((ball) => ball.active).every((ball) => (
+      M.length2(ball.velocity) <= parameters.stopSpeed
+      && Math.hypot(ball.angularVelocity.x, ball.angularVelocity.y, ball.angularVelocity.z) <= parameters.stopSpin
+    ));
+  }
+
+  function step(state, dt, shotResult) {
+    const parameters = state.deterministic.parameters;
+    state.balls.forEach((ball) => {
+      if (!ball.active) return;
+      ball.orientation = M.integrateQuaternion(ball.orientation, ball.angularVelocity, dt);
+      ball.position = M.add2(ball.position, M.scale2(ball.velocity, dt));
+      if (!canonicalizeBall(ball, state.atlas)) resolveWalls(ball, state.atlas, parameters.wallRestitution);
+      resolveWalls(ball, state.atlas, parameters.wallRestitution);
+    });
+    resolveBallCollisions(state);
+    capturePockets(state, shotResult);
+    state.balls.forEach((ball) => {
+      if (!ball.active) return;
+      applyFriction(ball, dt, parameters);
+      if (M.length2(ball.velocity) <= parameters.stopSpeed) ball.velocity = { x: 0, y: 0 };
+      if (Math.hypot(ball.angularVelocity.x, ball.angularVelocity.y, ball.angularVelocity.z) <= parameters.stopSpin) {
+        ball.angularVelocity = { x: 0, y: 0, z: 0 };
+      }
+    });
+  }
+
+  function shotPayload(aim, power, contact, shooter) {
+    return {
+      action: 'billiards-shot',
+      type: 'billiards-shot',
+      shooter,
+      aim: M.normalize2(normalizeVector2(aim)),
+      power: clamp(Number(power) || 0, 0, 1),
+      contact: {
+        x: clamp(Number(contact && contact.x) || 0, -0.86, 0.86),
+        y: clamp(Number(contact && contact.y) || 0, -0.86, 0.86)
+      }
+    };
+  }
+
+  function applyCueImpulse(state, shot) {
+    const cue = state.balls.find((ball) => ball.active && ball.kind === 'cue');
+    if (!cue) return false;
+    const speed = state.deterministic.parameters.shotSpeed * shot.power;
+    if (speed <= state.deterministic.parameters.stopSpeed * 4) return false;
+    cue.velocity = M.scale2(shot.aim, speed);
+    const radius = cue.radius;
+    const horizontal = shot.contact.x * radius;
+    const vertical = -shot.contact.y * radius;
+    const reach = Math.sqrt(Math.max(0, radius * radius - horizontal * horizontal - vertical * vertical));
+    const left = { x: -shot.aim.y, y: shot.aim.x, z: 0 };
+    const contactVector = {
+      x: -reach * shot.aim.x + horizontal * left.x,
+      y: -reach * shot.aim.y + horizontal * left.y,
+      z: vertical
+    };
+    const impulse = { x: cue.velocity.x * cue.mass, y: cue.velocity.y * cue.mass, z: 0 };
+    const torque = M.cross3(contactVector, impulse);
+    const inertia = (2 / 5) * cue.mass * radius * radius;
+    cue.angularVelocity.x += torque.x / inertia;
+    cue.angularVelocity.y += torque.y / inertia;
+    cue.angularVelocity.z += torque.z / inertia;
+    return true;
+  }
+
+  function appendRecordMove(state, move) {
+    const sequence = (state.recordMoves || []).length + 1;
+    state.recordMoves = (state.recordMoves || []).concat({ sequence, ...clonePlain(move) });
+  }
+
+  function finishShot(state, shot, shotResult) {
+    const shooter = shot.shooter;
+    const opponent = shooter === 'player-2' ? 'player-1' : 'player-2';
+    const scored = shotResult.pocketedTargets.length;
+    state.shots += 1;
+    state.round = state.shots;
+    if (state.rules === 'competitive') {
+      state.scores[shooter] = (state.scores[shooter] || 0) + scored;
+      state.score = state.scores[shooter];
+      state.turn = shotResult.scratch || scored === 0 ? opponent : shooter;
+    } else {
+      state.score += scored;
+      state.scores['player-1'] = state.score;
+      state.turn = 'player-1';
+    }
+    if (shotResult.scratch) {
+      state.ballInHand = true;
+      state.ballInHandPlayer = state.turn;
+      state.phase = 'ball-in-hand';
+    } else {
+      state.phase = 'ready';
+    }
+    const activeTargets = state.balls.filter((ball) => ball.active && ball.kind === 'target').length;
+    if (state.targetTotal > 0 && state.pockets.length > 0 && activeTargets === 0) {
+      state.phase = 'gameover';
+      if (state.rules === 'competitive') {
+        const first = state.scores['player-1'] || 0;
+        const second = state.scores['player-2'] || 0;
+        state.winner = first === second ? 'draw' : (first > second ? 'player-1' : 'player-2');
+      } else {
+        state.winner = 'player-1';
+      }
+    }
+    state.lastShot = {
+      ...clonePlain(shot),
+      pocketedTargets: shotResult.pocketedTargets.slice(),
+      scratch: shotResult.scratch,
+      resultingTurn: state.turn
+    };
+    appendRecordMove(state, state.lastShot);
+  }
+
+  function createShotSimulation(source, aim, power, contact, options = {}) {
+    if (!source || source.phase !== 'ready') {
+      const result = { changed: false, state: source, message: 'wait until the table is ready', simulationSteps: 0 };
+      return { done: true, result, stepIndex: 0, maxSteps: 0 };
+    }
+    const shooter = options.shooter || source.turn || 'player-1';
+    if (source.rules === 'competitive' && shooter !== source.turn) {
+      const result = { changed: false, state: source, message: `${source.turn} shoots next`, simulationSteps: 0 };
+      return { done: true, result, stepIndex: 0, maxSteps: 0 };
+    }
+    const state = cloneState(source);
+    const shot = shotPayload(aim, power, contact, shooter);
+    if (!applyCueImpulse(state, shot)) {
+      const result = { changed: false, state: source, message: 'pull farther to shoot', simulationSteps: 0 };
+      return { done: true, result, stepIndex: 0, maxSteps: 0 };
+    }
+    state.phase = 'moving';
+    const shotResult = { pocketedTargets: [], scratch: false };
+    const trajectory = [];
+    if (options.collectTrajectory) trajectory.push(source.balls.map((ball) => ballExport(ball, source.preset)));
+    const maxSteps = Math.ceil(state.deterministic.parameters.maxShotSeconds / PHYSICS_DT);
+    return {
+      done: false,
+      result: null,
+      source,
+      state,
+      shot,
+      shotResult,
+      trajectory,
+      collectTrajectory: !!options.collectTrajectory,
+      stepIndex: 0,
+      maxSteps
+    };
+  }
+
+  function finishShotSimulation(simulation) {
+    if (simulation.done) return simulation.result;
+    const { state, shot, shotResult, trajectory } = simulation;
+    state.balls.forEach((ball) => {
+      ball.velocity = { x: 0, y: 0 };
+      if (Math.hypot(ball.angularVelocity.x, ball.angularVelocity.y, ball.angularVelocity.z) < state.deterministic.parameters.stopSpin * 2) {
+        ball.angularVelocity = { x: 0, y: 0, z: 0 };
+      }
+    });
+    finishShot(state, shot, shotResult);
+    if (simulation.collectTrajectory) trajectory.push(state.balls.map((ball) => ballExport(ball, state.preset)));
+    simulation.done = true;
+    simulation.result = {
+      changed: true,
+      state,
+      shot: state.lastShot,
+      trajectory,
+      simulationSteps: simulation.stepIndex,
+      message: shotResult.scratch
+        ? 'scratch: ball in hand'
+        : `${shotResult.pocketedTargets.length} target${shotResult.pocketedTargets.length === 1 ? '' : 's'} pocketed`
+    };
+    return simulation.result;
+  }
+
+  function advanceShotSimulation(simulation, requestedSteps = 1) {
+    if (!simulation || simulation.done) return simulation;
+    const stepLimit = Math.max(1, Math.floor(Number(requestedSteps) || 1));
+    const endStep = Math.min(simulation.maxSteps, simulation.stepIndex + stepLimit);
+    while (simulation.stepIndex < endStep) {
+      const index = simulation.stepIndex;
+      step(simulation.state, PHYSICS_DT, simulation.shotResult);
+      simulation.stepIndex += 1;
+      if (simulation.collectTrajectory && index % 8 === 0) {
+        simulation.trajectory.push(simulation.state.balls.map((ball) => ballExport(ball, simulation.state.preset)));
+      }
+      if (index > 12 && ballsAtRest(simulation.state)) {
+        finishShotSimulation(simulation);
+        break;
+      }
+    }
+    if (!simulation.done && simulation.stepIndex >= simulation.maxSteps) finishShotSimulation(simulation);
+    return simulation;
+  }
+
+  function shotSimulationResult(simulation) {
+    return simulation && simulation.done ? simulation.result : null;
+  }
+
+  function resolveShot(source, aim, power, contact, options = {}) {
+    const simulation = createShotSimulation(source, aim, power, contact, options);
+    while (!simulation.done) advanceShotSimulation(simulation, simulation.maxSteps || 1);
+    return shotSimulationResult(simulation);
+  }
+
+  function placeCueBallInHand(source, tileIndex, position, player) {
+    if (!source.ballInHand || source.phase !== 'ball-in-hand') return { changed: false, state: source, message: 'ball in hand is not active' };
+    if (player && source.ballInHandPlayer && player !== source.ballInHandPlayer) return { changed: false, state: source, message: `${source.ballInHandPlayer} places the cue ball` };
+    const state = cloneState(source);
+    let cue = state.balls.find((ball) => ball.kind === 'cue');
+    if (!cue) {
+      cue = ballFromPayload({ id: 'cue', kind: 'cue', at: { tileIndex, ...position } }, state.preset, state.atlas, state, 0);
+      state.balls.push(cue);
+    }
+    cue.active = true;
+    cue.tileIndex = tileIndex;
+    cue.position = { ...position };
+    cue.velocity = { x: 0, y: 0 };
+    cue.angularVelocity = { x: 0, y: 0, z: 0 };
+    const issue = placementIssue(state, cue, cue.id);
+    if (issue) return { changed: false, state: source, message: issue };
+    state.ballInHand = false;
+    state.ballInHandPlayer = '';
+    state.phase = 'ready';
+    const tile = rowCol(tileIndex, state.preset.cols);
+    appendRecordMove(state, {
+      action: 'billiards-place-cue',
+      type: 'billiards-place-cue',
+      player: player || source.ballInHandPlayer || source.turn,
+      at: { row: tile.row, col: tile.col, x: position.x, y: position.y }
+    });
+    return { changed: true, state, message: 'cue ball placed; ready to shoot' };
+  }
+
+  function stateExport(state) {
+    return {
+      rules: state.rules,
+      ballRadius: state.ballRadius,
+      pocketRadius: state.pocketRadius,
+      phase: state.phase,
+      balls: state.balls.map((ball) => ballExport(ball, state.preset)),
+      pockets: state.pockets.map((pocket) => pocketExport(pocket, state)),
+      scores: { ...state.scores },
+      score: state.score,
+      turn: state.turn,
+      winner: state.winner,
+      ballInHand: state.ballInHand,
+      ballInHandPlayer: state.ballInHandPlayer,
+      shots: state.shots,
+      round: state.round,
+      targetTotal: state.targetTotal,
+      nextTargetNumber: state.nextTargetNumber,
+      nextPocketId: state.nextPocketId,
+      lastShot: clonePlain(state.lastShot),
+      initialSetup: clonePlain(state.initialSetup),
+      recordMoves: clonePlain(state.recordMoves),
+      deterministic: clonePlain(state.deterministic)
+    };
+  }
+
+  function stateFromExport(preset, payload) {
+    const source = payload && payload.billiardsState && typeof payload.billiardsState === 'object'
+      ? payload.billiardsState
+      : payload;
+    const balls = Array.isArray(source.balls) ? source.balls.map((entry) => {
+      if (entry.at) return entry;
+      const tile = rowCol(Number(entry.tileIndex), preset.cols);
+      return { ...entry, at: { row: tile.row, col: tile.col, ...(entry.position || {}) } };
+    }) : [];
+    const pockets = Array.isArray(source.pockets) ? source.pockets.map((entry) => ({
+      ...entry,
+      vertex: entry.vertex || { classIndex: entry.classIndex }
+    })) : [];
+    const state = createState({
+      ...preset,
+      billiards: {
+        rules: source.rules,
+        ballRadius: source.ballRadius,
+        pocketRadius: source.pocketRadius,
+        balls,
+        pockets
+      }
+    }, { rules: source.rules });
+    state.phase = ['setup', 'ready', 'moving', 'ball-in-hand', 'gameover'].includes(source.phase) ? source.phase : 'setup';
+    state.scores = {
+      'player-1': Math.max(0, Number(source.scores && source.scores['player-1']) || 0),
+      'player-2': Math.max(0, Number(source.scores && source.scores['player-2']) || 0)
+    };
+    state.score = Math.max(0, Number(source.score) || 0);
+    state.turn = source.turn === 'player-2' ? 'player-2' : 'player-1';
+    state.winner = ['player-1', 'player-2', 'draw'].includes(source.winner) ? source.winner : '';
+    state.ballInHand = !!source.ballInHand;
+    state.ballInHandPlayer = source.ballInHandPlayer === 'player-2' ? 'player-2' : (source.ballInHandPlayer === 'player-1' ? 'player-1' : '');
+    state.shots = Math.max(0, Math.floor(Number(source.shots) || 0));
+    state.round = state.shots;
+    state.targetTotal = Math.max(0, Math.floor(Number(source.targetTotal) || state.balls.filter((ball) => ball.kind === 'target').length));
+    state.nextTargetNumber = lowestMissingTargetNumber(state.balls);
+    state.nextPocketId = Math.max(1, Math.floor(Number(source.nextPocketId) || state.nextPocketId));
+    state.lastShot = clonePlain(source.lastShot || null);
+    state.initialSetup = clonePlain(source.initialSetup || null);
+    state.recordMoves = clonePlain(source.recordMoves || []);
+    if (source.deterministic && typeof source.deterministic === 'object') {
+      state.deterministic = {
+        dt: PHYSICS_DT,
+        seed: Math.max(1, Math.floor(Number(source.deterministic.seed) || 1)),
+        parameters: { ...DEFAULT_PARAMETERS, ...(source.deterministic.parameters || {}) }
+      };
+    }
+    return state;
+  }
+
+  function localToCanvas(tileIndex, point, geometry, atlas) {
+    const cell = geometry && geometry.cells && geometry.cells[tileIndex];
+    if (!cell) return null;
+    const scale = atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
+    return { x: cell.x + point.x * scale, y: cell.y + point.y * scale };
+  }
+
+  function canvasToLocal(point, geometry, atlas) {
+    if (!point || !geometry || !geometry.cells) return null;
+    const scale = atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
+    let best = null;
+    atlas.tiles.forEach((tile) => {
+      if (tile.removed) return;
+      const cell = geometry.cells[tile.index];
+      if (!cell) return;
+      const local = { x: (point.x - cell.x) / scale, y: (point.y - cell.y) / scale };
+      if (!pointInsideTile(atlas, tile.index, local, 0)) return;
+      const distance = M.length2(local);
+      if (!best || distance < best.distance) best = { tileIndex: tile.index, position: local, distance };
+    });
+    return best;
+  }
+
+  function drawPocketWedges(ctx, geometry, state) {
+    const scale = state.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
+    state.pockets.forEach((pocket) => {
+      const vertexClass = state.atlas.vertexClasses[pocket.classIndex];
+      if (!vertexClass) return;
+      vertexClass.incidences.forEach((incidence) => {
+        const tile = state.atlas.tiles[incidence.tileIndex];
+        const center = localToCanvas(incidence.tileIndex, incidence.point, geometry, state.atlas);
+        if (!center) return;
+        ctx.save();
+        const polygon = tile.polygon.map((point) => localToCanvas(tile.index, point, geometry, state.atlas));
+        ctx.beginPath();
+        polygon.forEach((point, index) => {
+          if (index) ctx.lineTo(point.x, point.y);
+          else ctx.moveTo(point.x, point.y);
+        });
+        ctx.closePath();
+        ctx.clip();
+        const radius = pocket.radius * scale;
+        const gradient = ctx.createRadialGradient(center.x - radius * 0.16, center.y - radius * 0.16, 1, center.x, center.y, radius);
+        gradient.addColorStop(0, '#050707');
+        gradient.addColorStop(0.72, '#111516');
+        gradient.addColorStop(1, 'rgba(12,16,17,0.62)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, radius, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      });
+    });
+  }
+
+  function drawBall(ctx, geometry, state, ball, image, renderer, debugTexture) {
+    const center = localToCanvas(image.tileIndex, image.position, geometry, state.atlas);
+    if (!center) return;
+    const scale = state.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
+    const radius = ball.radius * scale;
+    const tile = state.atlas.tiles[image.tileIndex];
+    ctx.save();
+    const polygon = tile.polygon.map((point) => localToCanvas(tile.index, point, geometry, state.atlas));
+    ctx.beginPath();
+    polygon.forEach((point, index) => {
+      if (index) ctx.lineTo(point.x, point.y);
+      else ctx.moveTo(point.x, point.y);
+    });
+    ctx.closePath();
+    ctx.clip();
+    if (renderer && typeof renderer.sphericalSprite === 'function') {
+      const sprite = renderer.sphericalSprite(ball, image.orientation, radius * 2, !!debugTexture);
+      ctx.drawImage(sprite, center.x - radius, center.y - radius, radius * 2, radius * 2);
+    } else {
+      ctx.fillStyle = ball.kind === 'cue' ? '#fbfbf8' : ['#e6b640', '#2a6ba8', '#b44537', '#5e4a91'][modulo(ball.number - 1, 4)];
+      ctx.strokeStyle = '#202326';
+      ctx.lineWidth = Math.max(1, radius * 0.08);
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radius, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      if (ball.kind === 'target') {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, radius * 0.43, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = '#111';
+        ctx.font = `600 ${Math.max(8, radius * 0.58)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(ball.number), center.x, center.y);
+      }
+    }
+    ctx.restore();
+  }
+
+  function rayCircleDistance(origin, direction, center, radius) {
+    const delta = M.sub2(center, origin);
+    const projection = M.dot2(delta, direction);
+    if (projection <= EPSILON) return null;
+    const perpendicularSquared = M.dot2(delta, delta) - (projection * projection);
+    const radiusSquared = radius * radius;
+    if (perpendicularSquared > radiusSquared + EPSILON) return null;
+    const distance = projection - Math.sqrt(Math.max(0, radiusSquared - perpendicularSquared));
+    return distance >= EPSILON ? distance : null;
+  }
+
+  function firstAimBall(state, cue, tileIndex, point, direction, maximumDistance) {
+    let hit = null;
+    const depth = Math.max(1, Math.min(4, Number(state.deterministic.parameters.localCoverDepth) || 1));
+    state.balls.forEach((ball) => {
+      if (!ball.active || ball.kind !== 'target' || ball.id === cue.id) return;
+      ballImagesInTile(ball, state.atlas, tileIndex, depth).forEach((image) => {
+        const distance = rayCircleDistance(point, direction, image.position, cue.radius + ball.radius);
+        if (distance == null || distance > maximumDistance + EPSILON) return;
+        if (!hit || distance < hit.distance) hit = { distance, ball, image };
+      });
+    });
+    return hit;
+  }
+
+  function nextAimEdge(state, cue, tileIndex, point, direction) {
+    const tile = state.atlas.tiles[tileIndex];
+    let closest = null;
+    tile.frames.forEach((frame, dir) => {
+      const rate = M.dot2(direction, frame.inward);
+      if (rate >= -EPSILON) return;
+      const transition = tile.transitions[dir];
+      const currentDistance = pointEdgeDistance(point, frame);
+      const targetDistance = transition ? 0 : cue.radius;
+      const distance = (targetDistance - currentDistance) / rate;
+      if (distance < -EPSILON) return;
+      if (!closest || distance < closest.distance) {
+        closest = { dir, distance: Math.max(0, distance), transition };
+      }
+    });
+    return closest;
+  }
+
+  function aimRayStateKey(tileIndex, point, direction) {
+    return [tileIndex, point.x, point.y, direction.x, direction.y]
+      .map((value, index) => index ? Number(value).toFixed(7) : String(value))
+      .join('|');
+  }
+
+  function traceAim(state, direction, options = {}) {
+    const cue = state && state.balls && state.balls.find((ball) => ball.active && ball.kind === 'cue');
+    const aim = M.normalize2(normalizeVector2(direction));
+    const requestedTransitions = Number(typeof options === 'number' ? options : options.maxTransitions);
+    const maximumTransitions = Number.isFinite(requestedTransitions)
+      ? Math.max(0, Math.min(12, Math.floor(requestedTransitions)))
+      : 12;
+    const result = { segments: [], contactedBall: null, termination: 'none', transitions: 0 };
+    if (!cue || M.length2(aim) <= EPSILON) return result;
+
+    let tileIndex = cue.tileIndex;
+    let point = { ...cue.position };
+    let ray = aim;
+    const seen = new Set([aimRayStateKey(tileIndex, point, ray)]);
+    while (result.segments.length <= maximumTransitions) {
+      const edge = nextAimEdge(state, cue, tileIndex, point, ray);
+      if (!edge) {
+        result.termination = 'none';
+        break;
+      }
+      const hit = firstAimBall(state, cue, tileIndex, point, ray, edge.distance);
+      const distance = hit ? hit.distance : edge.distance;
+      const end = M.add2(point, M.scale2(ray, distance));
+      result.segments.push({
+        tileIndex,
+        from: { ...point },
+        to: { ...end },
+        hit: !!hit,
+        boundary: !hit && !edge.transition
+      });
+      if (hit) {
+        result.contactedBall = {
+          id: String(hit.ball.id),
+          ballId: String(hit.ball.id),
+          kind: hit.ball.kind,
+          number: hit.ball.number,
+          color: ballColor(hit.ball.kind, hit.ball.number),
+          tileIndex,
+          position: { ...hit.image.position },
+          cuePosition: { ...end }
+        };
+        result.termination = 'ball';
+        break;
+      }
+      if (!edge.transition) {
+        result.termination = 'wall';
+        break;
+      }
+      if (result.transitions >= maximumTransitions) {
+        result.termination = 'max-transitions';
+        break;
+      }
+      const across = M.add2(end, M.scale2(ray, EPSILON * 16));
+      point = M.applyAffine(edge.transition.transform, across);
+      ray = M.normalize2(M.applyLinear(edge.transition.transform, ray));
+      tileIndex = edge.transition.tileIndex;
+      result.transitions += 1;
+      const key = aimRayStateKey(tileIndex, point, ray);
+      if (seen.has(key)) {
+        result.termination = 'loop';
+        break;
+      }
+      seen.add(key);
+    }
+    return result;
+  }
+
+  function clipToTile(ctx, geometry, state, tileIndex) {
+    const tile = state.atlas.tiles[tileIndex];
+    if (!tile) return false;
+    const polygon = tile.polygon.map((point) => localToCanvas(tile.index, point, geometry, state.atlas));
+    if (polygon.some((point) => !point)) return false;
+    ctx.beginPath();
+    polygon.forEach((point, index) => {
+      if (index) ctx.lineTo(point.x, point.y);
+      else ctx.moveTo(point.x, point.y);
+    });
+    ctx.closePath();
+    ctx.clip();
+    return true;
+  }
+
+  function drawBeginnerAim(ctx, geometry, state, cue, aim, scale) {
+    const trace = traceAim(state, aim);
+    trace.segments.forEach((segment) => {
+      const from = localToCanvas(segment.tileIndex, segment.from, geometry, state.atlas);
+      const to = localToCanvas(segment.tileIndex, segment.to, geometry, state.atlas);
+      if (!from || !to) return;
+      ctx.save();
+      if (!clipToTile(ctx, geometry, state, segment.tileIndex)) {
+        ctx.restore();
+        return;
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.82)';
+      ctx.lineWidth = Math.max(1.2, scale * 0.018);
+      ctx.setLineDash([7, 5]);
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+      ctx.restore();
+    });
+    if (!trace.contactedBall) return;
+    const contact = trace.contactedBall;
+    const cuePoint = localToCanvas(contact.tileIndex, contact.cuePosition, geometry, state.atlas);
+    const ballPoint = localToCanvas(contact.tileIndex, contact.position, geometry, state.atlas);
+    if (!cuePoint || !ballPoint) return;
+    const target = state.balls.find((ball) => String(ball.id) === contact.ballId);
+    ctx.save();
+    clipToTile(ctx, geometry, state, contact.tileIndex);
+    ctx.setLineDash([]);
+    ctx.lineWidth = Math.max(1.5, scale * 0.022);
+    ctx.strokeStyle = 'rgba(255,255,255,0.72)';
+    ctx.beginPath();
+    ctx.arc(cuePoint.x, cuePoint.y, cue.radius * scale, 0, TAU);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(244,207,89,0.92)';
+    ctx.lineWidth = Math.max(2, scale * 0.026);
+    ctx.beginPath();
+    ctx.arc(ballPoint.x, ballPoint.y, (target ? target.radius : state.ballRadius) * scale * 1.18, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawAim(ctx, geometry, state, view) {
+    if (state.phase !== 'ready') return;
+    const cue = state.balls.find((ball) => ball.active && ball.kind === 'cue');
+    if (!cue) return;
+    const center = localToCanvas(cue.tileIndex, cue.position, geometry, state.atlas);
+    if (!center) return;
+    const scale = state.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
+    const aim = M.normalize2(view.aim || { x: 1, y: 0 });
+    ctx.save();
+    if (view.assistance === 'beginner') {
+      drawBeginnerAim(ctx, geometry, state, cue, aim, scale);
+    } else {
+      const length = scale * (view.assistance === 'expert' ? 0.65 : 1.55);
+      ctx.strokeStyle = 'rgba(255,255,255,0.78)';
+      ctx.lineWidth = Math.max(1.2, scale * 0.018);
+      ctx.setLineDash(view.assistance === 'expert' ? [] : [7, 5]);
+      ctx.beginPath();
+      ctx.moveTo(center.x, center.y);
+      ctx.lineTo(center.x + aim.x * length, center.y + aim.y * length);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    const pull = (0.42 + (view.dragPower || 0) * 0.8) * scale;
+    ctx.strokeStyle = '#c9a66b';
+    ctx.lineWidth = Math.max(4, scale * 0.065);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(center.x - aim.x * pull, center.y - aim.y * pull);
+    ctx.lineTo(center.x - aim.x * (pull + scale * 1.25), center.y - aim.y * (pull + scale * 1.25));
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function render(ctx, geometry, state, view = {}) {
+    if (!ctx || !geometry || !state) return;
+    drawPocketWedges(ctx, geometry, state);
+    if (view.setupHover && Number.isInteger(view.setupHover.tileIndex)) {
+      const point = localToCanvas(view.setupHover.tileIndex, view.setupHover.position, geometry, state.atlas);
+      if (point) {
+        const scale = state.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
+        ctx.save();
+        ctx.strokeStyle = view.setupHover.valid === false ? '#b23a48' : '#1f7a8c';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, state.ballRadius * scale, 0, TAU);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    drawAim(ctx, geometry, state, view);
+    const renderer = typeof window !== 'undefined' ? window.TopologicalBilliardsRenderer : null;
+    state.balls.filter((ball) => ball.active).forEach((ball) => {
+      nearbyImages(ball, state.atlas, {
+        padding: ball.radius,
+        maxDepth: state.deterministic.parameters.localCoverDepth,
+        onlyIntersecting: true
+      }).forEach((image) => drawBall(ctx, geometry, state, ball, image, renderer, view.debugTexture));
+    });
+    if (view.debug) {
+      ctx.save();
+      ctx.font = '11px monospace';
+      ctx.fillStyle = '#111';
+      state.atlas.vertexClasses.forEach((vertexClass) => {
+        const incidence = vertexClass.incidences[0];
+        const point = incidence && localToCanvas(incidence.tileIndex, incidence.point, geometry, state.atlas);
+        if (point) ctx.fillText(`${vertexClass.id}:${(vertexClass.coneAngle / Math.PI).toFixed(2)}pi`, point.x + 3, point.y - 3);
+      });
+      ctx.restore();
+    }
+  }
+
+  function ballAtPoint(state, tileIndex, position) {
+    let hit = null;
+    state.balls.forEach((ball) => {
+      if (!ball.active) return;
+      ballImagesInTile(ball, state.atlas, tileIndex, state.deterministic.parameters.localCoverDepth).forEach((image) => {
+        const distance = M.length2(M.sub2(position, image.position));
+        if (distance <= ball.radius * 1.35 && (!hit || distance < hit.distance)) hit = { ball, image, distance };
+      });
+    });
+    return hit;
+  }
+
+  return {
+    BALL_COLORS,
+    DEFAULT_PARAMETERS,
+    EPSILON,
+    PHYSICS_DT,
+    TAU,
+    activePocketAtClass,
+    ballColor,
+    ballAtPoint,
+    ballExport,
+    begin,
+    buildAtlas,
+    canvasToLocal,
+    createShotSimulation,
+    cloneState,
+    createState,
+    defaultBallOrientation,
+    eraseAt,
+    indexOf,
+    latticeInfo,
+    localToCanvas,
+    moveBall,
+    nearbyImages,
+    nearestVertex,
+    normalizeRules,
+    placeBall,
+    placeCueBallInHand,
+    placementIssue,
+    pocketExport,
+    presetBlockFromState,
+    render,
+    advanceShotSimulation,
+    resolveShot,
+    rowCol,
+    setupIssue,
+    stateExport,
+    stateFromExport,
+    shotSimulationResult,
+    traceAim,
+    togglePocket,
+    vertexClassFromReference
+  };
+});

@@ -26,6 +26,55 @@
       position: relative;
     }
 
+    .billiards-spin-row {
+      display: grid;
+      grid-template-columns: 116px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+    }
+
+    .billiards-spin-row[hidden] {
+      display: none !important;
+    }
+
+    .billiards-spin-control {
+      display: grid;
+      grid-template-columns: 104px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    #billiards-spin-pad {
+      display: block;
+      width: 104px;
+      height: 104px;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    #billiards-spin-label {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .billiards-debug-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      padding-top: 8px;
+      border-top: 1px dotted var(--border);
+    }
+
+    #billiards-power {
+      width: 100%;
+      height: 12px;
+      accent-color: var(--accent2);
+    }
+
     .online-play-panel {
       display: grid;
       gap: 9px;
@@ -1421,6 +1470,32 @@
       cursor: inherit;
     }
 
+    .billiards-ball-palette-row {
+      align-items: start;
+    }
+
+    .billiards-ball-palette {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 0;
+    }
+
+    .billiards-ball-palette .tile-swatch {
+      width: 100%;
+      height: auto;
+      aspect-ratio: 1;
+      cursor: pointer;
+      background: #f5f2e9;
+    }
+
+    .billiards-ball-palette .tile-swatch:disabled {
+      cursor: not-allowed;
+      opacity: 0.3;
+      border-color: var(--border);
+      box-shadow: none;
+      transform: none;
+    }
+
     .tile-drag-ghost {
       position: fixed;
       width: 58px;
@@ -1461,6 +1536,10 @@
       .mosaic-mode-row,
       .mosaic-view-row,
       .mosaic-inline-row {
+        grid-template-columns: 1fr;
+      }
+
+      .billiards-spin-row {
         grid-template-columns: 1fr;
       }
 
@@ -1571,10 +1650,11 @@
             <option value="chinese-checkers">Chinese Checkers</option>
             <option value="sokoban">Sokoban</option>
             <option value="fide-chess">FIDE Chess</option>
+            <option value="billiards" data-i18n="games.billiards">Topological Billiards</option>
             <option value="__random-game-setup">Random setup</option>
           </select>
         </div>
-        <div class="mosaic-inline-row">
+        <div class="mosaic-inline-row" id="surface-preset-row">
           <span class="input-label">Preset</span>
           <select id="surface-preset-select" aria-label="Surface preset">
             <option value="">Loading presets...</option>
@@ -1604,7 +1684,54 @@
             <option value="polished-vertex">polished gridded board</option>
             <option value="center">tile board</option>
             <option value="chessboard">classical board</option>
+            <option value="billiards-table" data-i18n="games.billiardsTable">billiards table</option>
           </select>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-rules-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.rules">Rules</span>
+          <select id="billiards-rules" data-i18n-aria-label="access.billiardsRules" aria-label="Billiards rules">
+            <option value="solo" selected data-i18n="setup.billiardsSolo">solo</option>
+            <option value="competitive" data-i18n="setup.billiardsCompetitive">two-player</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-tool-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.setupTool">Setup tool</span>
+          <select id="billiards-tool" data-i18n-aria-label="access.billiardsSetupTool" aria-label="Billiards setup tool">
+            <option value="ball" selected data-i18n="setup.billiardsPlaceSelected">place selected ball</option>
+            <option value="pocket" data-i18n="setup.billiardsPocket">pocket</option>
+            <option value="move" data-i18n="setup.billiardsMove">move</option>
+            <option value="erase" data-i18n="setup.billiardsErase">erase</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row billiards-ball-palette-row" id="billiards-ball-palette-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.billiardsBalls">Balls</span>
+          <div class="tile-palette-grid billiards-ball-palette" id="billiards-ball-palette" role="toolbar" data-i18n-aria-label="access.billiardsBallPalette" aria-label="Billiards ball palette"></div>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-assistance-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.assistance">Assistance</span>
+          <select id="billiards-assistance" data-i18n-aria-label="access.billiardsAssistance" aria-label="Billiards aim assistance">
+            <option value="beginner" data-i18n="setup.billiardsBeginner">beginner</option>
+            <option value="normal" selected data-i18n="setup.billiardsNormal">normal</option>
+            <option value="expert" data-i18n="setup.billiardsExpert">expert</option>
+          </select>
+        </div>
+        <div class="billiards-spin-row" id="billiards-spin-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.cueContact">Cue contact</span>
+          <span class="billiards-spin-control">
+            <canvas id="billiards-spin-pad" width="104" height="104" data-i18n-aria-label="access.billiardsCueContact" aria-label="Cue ball contact point"></canvas>
+            <output id="billiards-spin-label" data-i18n="setup.billiardsCenter">center</output>
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-power-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.power">Power</span>
+          <meter id="billiards-power" min="0" max="100" value="0">0%</meter>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-debug-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.view">View</span>
+          <span class="billiards-debug-options">
+            <label class="opt-row"><input type="checkbox" id="billiards-debug"> <span data-i18n="setup.billiardsAtlas">atlas</span></label>
+            <label class="opt-row"><input type="checkbox" id="billiards-debug-texture"> <span data-i18n="setup.billiardsOrientation">orientation</span></label>
+          </span>
         </div>
         <div class="mosaic-inline-row" id="move-number-label-row" hidden>
           <span class="input-label">Labels</span>
@@ -1635,8 +1762,8 @@
         <div class="mosaic-inline-row" id="boundary-glue-rect-row" hidden>
           <span class="input-label">Rows / cols</span>
           <span class="background-slider-controls">
-            <input id="boundary-glue-rows" type="number" min="2" max="25" step="1" value="15" aria-label="Boundary board rows">
-            <input id="boundary-glue-cols" type="number" min="2" max="25" step="1" value="15" aria-label="Boundary board columns">
+            <input id="boundary-glue-rows" type="number" min="2" max="25" step="1" value="3" aria-label="Boundary board rows">
+            <input id="boundary-glue-cols" type="number" min="2" max="25" step="1" value="5" aria-label="Boundary board columns">
           </span>
         </div>
         <div class="mosaic-inline-row" id="go-komi-row" data-mode-control="go" hidden>
@@ -1916,7 +2043,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card" id="ramified-import-export-card">
       <div class="card-head"><span class="card-head-label" data-i18n="io.title">Import / Export</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="import-export-panel" id="ramified-import-export-panel">
@@ -1976,6 +2103,7 @@
                 <option value="chinese-checkers" data-i18n="games.checkers">Chinese Checkers</option>
                 <option value="sokoban" data-i18n="games.sokoban">Sokoban</option>
                 <option value="fide-chess" data-i18n="games.chess">FIDE Chess</option>
+                <option value="billiards" data-i18n="games.billiards">Topological Billiards</option>
               </select>
             </div>
             <div class="mosaic-inline-row">
@@ -2031,11 +2159,15 @@
 <script src="js/calculator_cards.js"></script>
 <script src="js/site_i18n.js?v=20260821-2"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260821-2"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260821-4"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260823-2"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
+<script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
+<script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
+<script src="js/billiards/topological_billiards_renderer.js?v=20260823-1"></script>
+<script src="js/billiards/topological_billiards_native.js?v=20260823-2"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
-<script src="js/ramified_minigames_setup.js?v=20260821-6"></script>
+<script src="js/ramified_minigames_setup.js?v=20260823-4"></script>
 </body>
 </html>

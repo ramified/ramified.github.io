@@ -12,6 +12,7 @@ const JSON_HEADERS = {
 };
 
 const SUPPORTED_GAME_MODES = new Set([
+  'billiards',
   'gomoku',
   'go',
   'connect-four',
@@ -21,6 +22,7 @@ const SUPPORTED_GAME_MODES = new Set([
 ]);
 
 const PLAYER_ROLES_BY_MODE = {
+  billiards: ['player-1', 'player-2'],
   gomoku: ['black', 'white'],
   go: ['black', 'white'],
   'connect-four': ['red', 'yellow'],
@@ -120,7 +122,7 @@ export class GameRoom {
       return jsonResponse({ error: 'Unsupported game mode.' }, 400);
     }
     const snapshot = body.snapshot;
-    validateSnapshot(snapshot, gameMode);
+    validateSnapshot(snapshot, gameMode, { initial: true });
     const clientId = normalizeClientId(body.clientId);
     if (!clientId) return jsonResponse({ error: 'Missing client id.' }, 400);
 
@@ -609,6 +611,9 @@ export class GameRoom {
 
   turnIssue(roles, action, nextSnapshot) {
     const owned = normalizeRoles(roles);
+    if (this.room.gameMode === 'billiards') {
+      return billiardsTurnIssue(owned, action, this.room.snapshot, nextSnapshot);
+    }
     if (this.room.gameMode === 'chinese-checkers' && action.type === 'chinese-checkers-start') {
       if (!owned.length) return 'Claim at least one color before beginning.';
       const claimed = claimedRoomRoles(this.room);
@@ -798,7 +803,7 @@ async function createRoom(request, env) {
   const body = await readJson(request);
   const gameMode = normalizeGameMode(body.gameMode);
   if (!SUPPORTED_GAME_MODES.has(gameMode)) return jsonResponse({ error: 'Unsupported game mode.' }, 400);
-  validateSnapshot(body.snapshot, gameMode);
+  validateSnapshot(body.snapshot, gameMode, { initial: true });
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const roomCode = randomRoomCode();
     const stub = env.GAME_ROOM.get(env.GAME_ROOM.idFromName(roomCode));
@@ -853,7 +858,7 @@ async function readJson(request) {
   }
 }
 
-function validateSnapshot(snapshot, gameMode) {
+export function validateSnapshot(snapshot, gameMode, options = {}) {
   if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
     throw new Error('Missing game snapshot.');
   }
@@ -864,13 +869,39 @@ function validateSnapshot(snapshot, gameMode) {
   if (snapshotMode !== gameMode) {
     throw new Error('Snapshot game mode does not match the room.');
   }
+  if (gameMode === 'billiards' && String(snapshot.rules || '').trim().toLowerCase() !== 'competitive') {
+    throw new Error('Online Billiards requires Competitive rules.');
+  }
+  if (gameMode === 'billiards' && options.initial) validateInitialBilliardsSnapshot(snapshot);
   if (gameMode === 'fide-chess') {
     const variant = String(snapshot.fideChessVariant || snapshot.chessVariant || snapshot.variant || '').toLowerCase();
     if (variant.includes('puzzle')) throw new Error('FIDE chess puzzle mode is not supported online.');
   }
 }
 
-function normalizeAction(action) {
+function validateInitialBilliardsSnapshot(snapshot) {
+  if (snapshot.phase !== 'ready' || snapshot.ballInHand) {
+    throw new Error('Finish the Billiards setup before creating an online room.');
+  }
+  const balls = Array.isArray(snapshot.balls) ? snapshot.balls : [];
+  const active = balls.filter((ball) => ball && ball.active !== false);
+  const cues = active.filter((ball) => String(ball.kind || '').trim().toLowerCase() === 'cue');
+  if (cues.length !== 1) throw new Error('Online Billiards requires exactly one active cue ball.');
+  const ids = new Set();
+  active.forEach((ball) => {
+    const id = String(ball.id || '').trim();
+    const at = ball.at && typeof ball.at === 'object' && !Array.isArray(ball.at) ? ball.at : {};
+    if (!id || ids.has(id)) throw new Error('Online Billiards ball ids must be unique.');
+    ids.add(id);
+    if (!Number.isInteger(Number(at.row)) || Number(at.row) < 1
+      || !Number.isInteger(Number(at.col)) || Number(at.col) < 1
+      || !Number.isFinite(Number(at.x)) || !Number.isFinite(Number(at.y))) {
+      throw new Error('Online Billiards balls need canonical row, col, x, and y coordinates.');
+    }
+  });
+}
+
+export function normalizeAction(action) {
   const source = action && typeof action === 'object' && !Array.isArray(action) ? action : {};
   const result = {};
   Object.keys(source).slice(0, 24).forEach((key) => {
@@ -880,10 +911,35 @@ function normalizeAction(action) {
     else if (typeof value === 'number' && Number.isFinite(value)) result[key] = value;
     else if (typeof value === 'boolean') result[key] = value;
   });
+  if (source.aim && typeof source.aim === 'object' && !Array.isArray(source.aim)) {
+    result.aim = finiteCoordinatePair(source.aim);
+  }
+  if (source.contact && typeof source.contact === 'object' && !Array.isArray(source.contact)) {
+    result.contact = finiteCoordinatePair(source.contact);
+  }
+  if (source.at && typeof source.at === 'object' && !Array.isArray(source.at)) {
+    result.at = {
+      row: finiteNumberOrNull(source.at.row),
+      col: finiteNumberOrNull(source.at.col),
+      ...finiteCoordinatePair(source.at)
+    };
+  }
   result.type = sanitizeText(result.type || 'move', 48).toLowerCase();
   result.clientId = sanitizeText(result.clientId || '', 90);
   result.approvedRequestId = sanitizeText(result.approvedRequestId || '', 90);
   return result;
+}
+
+function finiteNumberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function finiteCoordinatePair(value) {
+  return {
+    x: finiteNumberOrNull(value && value.x),
+    y: finiteNumberOrNull(value && value.y)
+  };
 }
 
 function assignRequestedRoles(roles, gameMode, requestedRoles, clientId, snapshot) {
@@ -1103,6 +1159,69 @@ function randomRoomCode() {
 
 function normalizeRoomCode(value) {
   return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+}
+
+export function billiardsTurnIssue(owned, action, currentSnapshot, nextSnapshot) {
+  const current = currentSnapshot && typeof currentSnapshot === 'object' ? currentSnapshot : {};
+  const next = nextSnapshot && typeof nextSnapshot === 'object' ? nextSnapshot : {};
+  const expected = normalizeRole(current.ballInHandPlayer || current.turn);
+  if (!expected || !['player-1', 'player-2'].includes(expected)) return 'Billiards snapshot has no valid active player.';
+  if (!owned.includes(expected)) return `${expected} to play.`;
+  const type = String(action && action.type || '').trim().toLowerCase();
+  if (type === 'billiards-place-cue') {
+    if (!current.ballInHand || current.phase !== 'ball-in-hand') return 'Cue placement requires ball in hand.';
+    const player = normalizeRole(action.player || expected);
+    if (player !== expected) return `${expected} must place the cue ball.`;
+    const at = action.at && typeof action.at === 'object' ? action.at : action;
+    if (!Number.isInteger(at.row) || !Number.isInteger(at.col) || !Number.isFinite(at.x) || !Number.isFinite(at.y)) {
+      return 'Cue placement needs canonical row, col, x, and y coordinates.';
+    }
+    if (next.ballInHand || next.phase !== 'ready') return 'Accepted cue placement must end ball in hand and return the table to ready.';
+    if (normalizeRole(next.turn) !== expected) return 'Cue placement cannot change the active player.';
+    return '';
+  }
+  if (type !== 'billiards-shot') return 'Unsupported Billiards action.';
+  if (current.ballInHand || current.phase !== 'ready') return 'Place the cue ball before shooting.';
+  const shooter = normalizeRole(action.shooter);
+  if (shooter !== expected) return `${expected} must shoot.`;
+  const aim = action.aim && typeof action.aim === 'object' ? action.aim : {};
+  const aimX = aim.x;
+  const aimY = aim.y;
+  const aimLength = Math.hypot(aimX, aimY);
+  if (!Number.isFinite(aimX) || !Number.isFinite(aimY) || Math.abs(aimLength - 1) > 1e-5) return 'Billiards aim must be normalized.';
+  const power = Number(action.power);
+  if (!Number.isFinite(power) || power <= 0 || power > 1) return 'Billiards power must be greater than zero and at most one.';
+  const contact = action.contact && typeof action.contact === 'object' ? action.contact : {};
+  if (!Number.isFinite(contact.x) || !Number.isFinite(contact.y) || Math.hypot(contact.x, contact.y) > 0.861) {
+    return 'Billiards cue contact must lie on the cue-ball contact control.';
+  }
+  const lastShot = next.lastShot && typeof next.lastShot === 'object' ? next.lastShot : {};
+  if (normalizeRole(lastShot.shooter) !== shooter) return 'Resulting Billiards snapshot has the wrong shooter.';
+  const lastAim = lastShot.aim && typeof lastShot.aim === 'object' ? lastShot.aim : {};
+  const lastContact = lastShot.contact && typeof lastShot.contact === 'object' ? lastShot.contact : {};
+  if (!sameBilliardsNumber(lastAim.x, aimX) || !sameBilliardsNumber(lastAim.y, aimY)
+    || !sameBilliardsNumber(lastShot.power, power)
+    || !sameBilliardsNumber(lastContact.x, contact.x) || !sameBilliardsNumber(lastContact.y, contact.y)) {
+    return 'Resulting Billiards snapshot does not match the submitted shot parameters.';
+  }
+  if (Math.max(0, Math.floor(Number(next.shots) || 0)) !== Math.max(0, Math.floor(Number(current.shots) || 0)) + 1) {
+    return 'A Billiards shot must increment the shot count exactly once.';
+  }
+  const scratch = !!lastShot.scratch;
+  const pocketed = Array.isArray(lastShot.pocketedTargets) ? lastShot.pocketedTargets.length : 0;
+  const opponent = shooter === 'player-1' ? 'player-2' : 'player-1';
+  const resultingTurn = scratch || pocketed === 0 ? opponent : shooter;
+  if (normalizeRole(next.turn) !== resultingTurn) return 'Resulting Billiards turn does not match pocket/scratch rules.';
+  if (action.resultingTurn && normalizeRole(action.resultingTurn) !== resultingTurn) return 'Billiards action resulting turn is inconsistent.';
+  if (scratch && (!next.ballInHand || normalizeRole(next.ballInHandPlayer) !== opponent || next.phase !== 'ball-in-hand')) {
+    return 'A Billiards scratch must pass the turn and grant ball in hand.';
+  }
+  if (!scratch && (next.ballInHand || next.phase === 'ball-in-hand')) return 'Ball in hand is only granted after a scratch.';
+  return '';
+}
+
+function sameBilliardsNumber(left, right) {
+  return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) <= 1e-7;
 }
 
 function normalizeGameMode(value) {
