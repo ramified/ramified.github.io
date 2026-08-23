@@ -31,9 +31,10 @@
   const DEFAULT_PARAMETERS = Object.freeze({
     restitution: 0.94,
     wallRestitution: 0.86,
-    clothFriction: 0.34,
-    rollingResistance: 0.016,
-    spinResistance: 0.035,
+    friction: 1,
+    clothFriction: 0.5,
+    rollingResistance: 0.36,
+    spinResistance: 0.6,
     stopSpeed: 0.004,
     stopSpin: 0.08,
     shotSpeed: 4.8,
@@ -51,6 +52,13 @@
 
   function clamp(value, minimum, maximum) {
     return Math.max(minimum, Math.min(maximum, value));
+  }
+
+  function normalizeFriction(value, fallback = DEFAULT_PARAMETERS.friction) {
+    const number = value == null || value === '' ? NaN : Number(value);
+    const fallbackNumber = Number(fallback);
+    const resolvedFallback = Number.isFinite(fallbackNumber) ? fallbackNumber : DEFAULT_PARAMETERS.friction;
+    return clamp(Number.isFinite(number) ? number : resolvedFallback, 0.5, 2.5);
   }
 
   function normalizeLattice(value) {
@@ -551,6 +559,10 @@
     const defaults = { ballRadius, pocketRadius };
     const ballSources = Array.isArray(block.balls) ? block.balls : [];
     const balls = ballSources.map((source, index) => ballFromPayload(source, preset, atlas, defaults, index + 1)).filter(Boolean);
+    const parameters = { ...DEFAULT_PARAMETERS, ...(block.parameters || {}) };
+    parameters.friction = normalizeFriction(
+      options.friction != null ? options.friction : parameters.friction
+    );
     const state = {
       version: 3,
       gameMode: 'billiards',
@@ -579,7 +591,7 @@
       deterministic: {
         dt: PHYSICS_DT,
         seed: Math.max(1, Math.floor(Number(block.seed) || 1)),
-        parameters: { ...DEFAULT_PARAMETERS, ...(block.parameters || {}) }
+        parameters
       },
       removed: new Set(atlas.removed),
       boxes: [],
@@ -629,6 +641,7 @@
       rules: normalizeRules(state.rules),
       ballRadius: state.ballRadius,
       pocketRadius: state.pocketRadius,
+      parameters: clonePlain(state.deterministic.parameters),
       balls: state.balls.filter((ball) => options.activeOnly === false || ball.active).map((ball) => {
         const exported = ballExport(ball, state.preset);
         return {
@@ -1011,6 +1024,10 @@
   }
 
   function applyFriction(ball, dt, parameters) {
+    const friction = normalizeFriction(parameters.friction);
+    const clothFriction = Math.max(0, Number(parameters.clothFriction) || 0) * friction;
+    const rollingResistance = Math.max(0, Number(parameters.rollingResistance) || 0) * friction;
+    const spinResistance = Math.max(0, Number(parameters.spinResistance) || 0) * friction;
     const radius = ball.radius;
     const slip = {
       x: ball.velocity.x - radius * ball.angularVelocity.y,
@@ -1018,7 +1035,8 @@
     };
     const slipSpeed = M.length2(slip);
     if (slipSpeed > EPSILON) {
-      const impulse = Math.min(slipSpeed, parameters.clothFriction * dt);
+      // The linear and angular responses change contact-point slip by 1.9x the impulse.
+      const impulse = Math.min(slipSpeed / 1.9, clothFriction * dt);
       const direction = M.scale2(slip, -1 / slipSpeed);
       ball.velocity = M.add2(ball.velocity, M.scale2(direction, impulse * 0.4));
       const angularScale = impulse * 1.5 / Math.max(radius, EPSILON);
@@ -1027,11 +1045,14 @@
     } else {
       const speed = M.length2(ball.velocity);
       if (speed > EPSILON) {
-        const resistance = Math.min(speed, parameters.rollingResistance * dt);
-        ball.velocity = M.scale2(ball.velocity, (speed - resistance) / speed);
+        const resistance = Math.min(speed, rollingResistance * dt);
+        const rollingFactor = (speed - resistance) / speed;
+        ball.velocity = M.scale2(ball.velocity, rollingFactor);
+        ball.angularVelocity.x *= rollingFactor;
+        ball.angularVelocity.y *= rollingFactor;
       }
     }
-    const spinFactor = Math.max(0, 1 - parameters.spinResistance * dt);
+    const spinFactor = Math.max(0, 1 - spinResistance * dt);
     ball.angularVelocity.z *= spinFactor;
   }
 
@@ -1477,10 +1498,12 @@
     state.initialSetup = clonePlain(source.initialSetup || null);
     state.recordMoves = clonePlain(source.recordMoves || []);
     if (source.deterministic && typeof source.deterministic === 'object') {
+      const parameters = { ...DEFAULT_PARAMETERS, ...(source.deterministic.parameters || {}) };
+      parameters.friction = normalizeFriction(parameters.friction);
       state.deterministic = {
         dt: PHYSICS_DT,
         seed: Math.max(1, Math.floor(Number(source.deterministic.seed) || 1)),
-        parameters: { ...DEFAULT_PARAMETERS, ...(source.deterministic.parameters || {}) }
+        parameters
       };
     }
     return state;
@@ -1971,6 +1994,7 @@
     nearbyImages,
     nearestVertex,
     normalizeRules,
+    normalizeFriction,
     placeBall,
     placeCueBallInHand,
     placementIssue,

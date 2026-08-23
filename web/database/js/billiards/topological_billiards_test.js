@@ -309,6 +309,11 @@ function testPaletteLabelsAreCenteredAndUpright() {
     assert.strictEqual(R.ballLabel({ kind: 'target', number: 15 }), '15');
     const texture = R.makeTexture({ kind: 'cue', number: 0, color: '#f7f4e8' }, false);
     assert.strictEqual(texture.canvas.context.operations.find((entry) => entry.kind === 'text').text, '0');
+    assert.deepStrictEqual(
+      texture.canvas.context.operations.find((entry) => entry.kind === 'transform'),
+      { kind: 'transform', a: 0, b: 1, c: 1, d: 0, e: 80, f: -80 },
+      'gameplay labels compensate the initial sphere-chart reflection'
+    );
 
     const fontSizes = new Map();
     [0, 1, 6, 9, 10, 15].forEach((number) => {
@@ -413,6 +418,7 @@ function testNativeStatusRoundTrip() {
       rules: 'competitive',
       ballRadius: 0.18,
       pocketRadius: 0.31,
+      parameters: { friction: 1.75 },
       pockets: [],
       balls: [
         { id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0, y: 0 } },
@@ -427,8 +433,46 @@ function testNativeStatusRoundTrip() {
   assert.strictEqual(restored.rules, 'competitive');
   near(restored.ballRadius, 0.18);
   near(restored.pocketRadius, 0.31);
+  near(restored.deterministic.parameters.friction, 1.75);
   assert.strictEqual(restored.phase, 'ready');
   assert.deepStrictEqual(N.stateExport(restored), exported);
+  near(N.presetBlockFromState(restored).parameters.friction, 1.75);
+}
+
+function testNativeFrictionControlAndStoppingTime() {
+  const preset = {
+    id: 'native-friction-test',
+    label: 'Native friction test',
+    lattice: 'square',
+    rows: 1,
+    cols: 40,
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [],
+    billiards: {
+      ballRadius: 0.1,
+      pockets: [],
+      balls: [
+        { id: 'cue', kind: 'cue', at: { row: 1, col: 20, x: 0, y: 0 } }
+      ]
+    }
+  };
+  const shotSteps = (friction) => {
+    const ready = N.begin(N.createState(preset, { friction })).state;
+    const result = N.resolveShot(ready, { x: 1, y: 0 }, 0.6, { x: 0, y: 0 });
+    assert.strictEqual(result.changed, true);
+    assert.ok(result.simulationSteps < N.DEFAULT_PARAMETERS.maxShotSeconds * 240, 'shot reaches rest before the cap');
+    near(result.state.deterministic.parameters.friction, friction);
+    return result.simulationSteps;
+  };
+  const lowSteps = shotSteps(0.5);
+  const defaultSteps = shotSteps(1);
+  const highSteps = shotSteps(2.5);
+  assert.ok(defaultSteps < lowSteps * 0.6, 'default friction materially shortens low-friction motion');
+  assert.ok(highSteps < defaultSteps * 0.5, 'high friction materially shortens default motion');
+  near(N.normalizeFriction(null), 1);
+  near(N.normalizeFriction(0), 0.5);
+  near(N.normalizeFriction(4), 2.5);
 }
 
 function testNativeSetupPaletteModelAndPocketToggle() {
@@ -907,10 +951,11 @@ function testControllerStatusAndRecordIntegration() {
     version: 1,
     gameMode: 'billiards',
     preset,
-    settings: { rules: 'competitive', displayStyle: 'billiards-table' },
+    settings: { rules: 'competitive', friction: 2, displayStyle: 'billiards-table' },
     moves: []
   });
   assert.strictEqual(recordImport.state.phase, 'ready');
+  near(recordImport.state.deterministic.parameters.friction, 2);
   assert.strictEqual(recordImport.state.recordMoves.length, 0);
   assert.strictEqual(Controller.stateSummary(recordImport.state).gameMode, 'billiards');
 }
@@ -928,6 +973,7 @@ function run() {
   testPaletteLabelsAreCenteredAndUpright();
   testNativeAtlasesAndPocketDefaults();
   testNativeStatusRoundTrip();
+  testNativeFrictionControlAndStoppingTime();
   testNativeSetupPaletteModelAndPocketToggle();
   testNativeBallAppearanceRoundTripsCanonically();
   testNativeBeginnerAimTracing();

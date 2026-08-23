@@ -63,6 +63,51 @@ function assertPointNear(actual, expected, tolerance = 1e-12) {
   assert.ok(Math.abs(actual.y - expected.y) <= tolerance, `${actual.y} != ${expected.y}`);
 }
 
+function pointInPolygon(point, polygon) {
+  let inside = false;
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
+    const left = polygon[index];
+    const right = polygon[previous];
+    const intersects = ((left.y > point.y) !== (right.y > point.y))
+      && (point.x < ((right.x - left.x) * (point.y - left.y) / (right.y - left.y)) + left.x);
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function distanceToSegment(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = (dx * dx) + (dy * dy);
+  const t = lengthSquared > 0
+    ? Math.max(0, Math.min(1, (((point.x - start.x) * dx) + ((point.y - start.y) * dy)) / lengthSquared))
+    : 0;
+  return Math.hypot(point.x - start.x - (dx * t), point.y - start.y - (dy * t));
+}
+
+function distanceToPolygonBoundary(point, polygon) {
+  return Math.min(...polygon.map((start, index) => (
+    distanceToSegment(point, start, polygon[(index + 1) % polygon.length])
+  )));
+}
+
+function assertBandAvoidsObstacles(subject, obstacles) {
+  const logicalPoints = subject.points.slice(0, -1);
+  (obstacles.polygons || []).forEach((polygon) => {
+    logicalPoints.forEach((point) => {
+      assert.strictEqual(pointInPolygon(point, polygon.points), false, 'a particle entered an obstacle');
+    });
+  });
+  logicalPoints.forEach((point, index) => {
+    const next = logicalPoints[(index + 1) % logicalPoints.length];
+    assert.strictEqual(
+      elastic.planarElasticBandSegmentCrossesObstacle(point, next, obstacles),
+      false,
+      'a band segment crossed an obstacle'
+    );
+  });
+}
+
 // Normalized neighboring directions do not redistribute an unequally spaced
 // point that is already on the straight segment between its neighbors.
 const straight = closedChain([
@@ -112,6 +157,11 @@ const strongStep = elastic.stepPlanarElasticBand(strongStepBand, {
 });
 assert.ok(Math.abs(strongStep.safeStep - 0.6) < 1e-12);
 assert.strictEqual(strongStep.contractionRatio, 0.2);
+const distanceStepBand = closedChain([{ x: 0, y: 0 }, { x: 3, y: 0 }, { x: 0, y: 4 }]);
+const distanceStepLength = bandLength(distanceStepBand);
+const distanceStep = elastic.stepPlanarElasticBand(distanceStepBand, { distanceContraction: 0.8 });
+assert.strictEqual(distanceStep.distanceContraction, 0.8);
+assert.ok(bandLength(distanceStepBand) < distanceStepLength);
 
 // Reversing traversal order produces the same synchronous Jacobi update in
 // reverse, showing that no point observes an already-updated neighbor.
@@ -231,8 +281,9 @@ assert.strictEqual(elastic.movePlanarElasticBandPoint(dragged, dragged.points.le
 assert.deepStrictEqual({ x: dragged.points[0].x, y: dragged.points[0].y }, { x: -4, y: 3 });
 assertClosed(dragged);
 
-// Real 3x3 hexagonal-hole construction: after adaptation the band ignores
-// the removed tile, enters its planar region, and keeps a fixed point count.
+// A real 3x3 hexagonal hole becomes an expanded obstacle. The strong runtime
+// update contracts the band onto that obstacle without changing its topology
+// or particle count.
 const hexRadius = 40;
 const hexMargin = 28;
 const hexWidth = Math.sqrt(3) * hexRadius;
@@ -263,21 +314,87 @@ const holeBand = elastic.makePlanarElasticBandChain(holeSurfaceChain);
 assert.ok(holeBand);
 const holeInitialLength = bandLength(holeBand);
 const holeParticleCount = holeBand.points.length;
+assert.strictEqual(holeBand.obstacles.polygons.length, 1);
+const expandedHole = holeBand.obstacles.polygons[0];
+assert.ok(Math.abs(
+  Math.hypot(expandedHole.points[0].x - expandedHole.center.x, expandedHole.points[0].y - expandedHole.center.y)
+  - (hexRadius * 1.115)
+) < 1e-9, 'the collision boundary must be slightly larger than the visible tile boundary');
 let holePreviousLength = holeInitialLength;
 for (let index = 0; index < 1500; index += 1) {
-  elastic.stepPlanarElasticBand(holeBand, { stepSize: 1.2 });
+  elastic.stepPlanarElasticBand(holeBand, { distanceContraction: 0.8 });
   const length = bandLength(holeBand);
-  assert.ok(length <= holePreviousLength + 1e-9);
+  assert.ok(length <= holePreviousLength + 1e-8);
   holePreviousLength = length;
+  assertBandAvoidsObstacles(holeBand, holeBand.obstacles);
 }
 assertClosed(holeBand);
-const removedCenter = hexCells[4];
-const nearestToRemovedCenter = Math.min(...holeBand.points.map((point) => (
-  Math.hypot(point.x - removedCenter.x, point.y - removedCenter.y)
+const nearestToExpandedHole = Math.min(...holeBand.points.map((point) => (
+  distanceToPolygonBoundary(point, expandedHole.points)
 )));
-assert.ok(bandLength(holeBand) < holeInitialLength * 0.75);
-assert.ok(nearestToRemovedCenter < hexRadius * Math.sqrt(3) / 2);
+assert.ok(bandLength(holeBand) < holeInitialLength * 0.7);
+assert.ok(nearestToExpandedHole < hexRadius * 1e-3,
+  'the settled centerline must lie almost directly against the expanded collision boundary');
 assert.strictEqual(holeBand.points.length, holeParticleCount);
+
+// A pointer sweep through the hole stops at first contact instead of
+// teleporting to the opposite side. Moving an actual particle also preserves
+// the two incident collision-free segments.
+const dragIndex = holeBand.points.slice(0, -1).reduce((best, point, index, points) => (
+  point.x < points[best].x ? index : best
+), 0);
+const dragStart = { x: holeBand.points[dragIndex].x, y: holeBand.points[dragIndex].y };
+const dragTarget = {
+  x: (expandedHole.center.x * 2) - dragStart.x,
+  y: (expandedHole.center.y * 2) - dragStart.y
+};
+const constrainedDrag = elastic.constrainPlanarElasticBandPoint(
+  dragStart,
+  dragTarget,
+  holeBand.obstacles
+);
+assert.strictEqual(pointInPolygon(constrainedDrag, expandedHole.points), false);
+assert.strictEqual(
+  elastic.planarElasticBandSegmentCrossesObstacle(dragStart, constrainedDrag, holeBand.obstacles),
+  false
+);
+elastic.movePlanarElasticBandPoint(holeBand, dragIndex, dragTarget);
+assertBandAvoidsObstacles(holeBand, holeBand.obstacles);
+
+// Outer and cut edges are one-sided barriers shifted into the accessible tile.
+// A glued edge is omitted because it is not a physical boundary.
+const squareCells = [
+  { x: 10, y: 10 }, { x: 30, y: 10 },
+  { x: 10, y: 30 }, { x: 30, y: 30 }
+];
+calculator.__test.setTestBoard({
+  rows: 2,
+  cols: 2,
+  lattice: 'square',
+  boundary: 'glued',
+  cutEdges: [{ left: { row: 1, col: 1 }, right: { row: 1, col: 2 } }],
+  gluedEdges: [{
+    first: { index: 0, dir: 3 },
+    second: { index: 2, dir: 1 },
+    reversed: false
+  }]
+});
+calculator.__test.setTestGeometry({ radius: 10, width: 40, height: 40, cells: squareCells });
+const squareObstacles = elastic.makePlanarElasticBandObstacles();
+assert.ok(squareObstacles.barriers.some((barrier) => barrier.tileIndex === 0 && barrier.dir === 0));
+assert.ok(squareObstacles.barriers.some((barrier) => barrier.tileIndex === 1 && barrier.dir === 2));
+assert.strictEqual(squareObstacles.barriers.some((barrier) => (
+  (barrier.tileIndex === 0 && barrier.dir === 3) || (barrier.tileIndex === 2 && barrier.dir === 1)
+)), false, 'glued boundary edges must not become planar obstacles');
+const outerBarrier = squareObstacles.barriers.find((barrier) => barrier.tileIndex === 0 && barrier.dir === 2);
+const outsideAttempt = elastic.constrainPlanarElasticBandPoint(
+  { x: 10, y: 10 },
+  { x: -10, y: 10 },
+  { polygons: [], barriers: [outerBarrier] }
+);
+const outsideDistance = ((outsideAttempt.x - outerBarrier.start.x) * outerBarrier.inward.x)
+  + ((outsideAttempt.y - outerBarrier.start.y) * outerBarrier.inward.y);
+assert.ok(outsideDistance >= 0, 'outer-boundary motion must remain on the accessible side');
 
 // A selected glued edge still builds the initial representative, but the
 // runtime band receives ordinary Euclidean closure and no gluing metadata.
@@ -408,7 +525,6 @@ calculator.__test.setTestGeometry({ radius: 10, width: 20, height: 20, cells: [{
 elastic.state.homologyCordChains = { [gluedBand.generatorId]: gluedBand };
 elastic.state.homologyCordDrag = null;
 elastic.state.homologyCordRelaxSpeed = 1;
-elastic.state.homologyCordContractionStrength = 0.1;
 assert.strictEqual(elastic.state.homologyCordIterationsPerFrame, 20,
   'the default animation budget is five times the previous four iterations per frame');
 const animationLength = bandLength(gluedBand);
@@ -424,10 +540,10 @@ elastic.state.homologyCordChains = { [normalSpeedBand.generatorId]: normalSpeedB
 elastic.state.homologyCordRelaxSpeed = 1;
 elastic.advanceBackgroundHomologyPlanarBands();
 elastic.state.homologyCordChains = { [highSpeedBand.generatorId]: highSpeedBand };
-elastic.state.homologyCordRelaxSpeed = 3;
+elastic.state.homologyCordRelaxSpeed = 10;
 elastic.advanceBackgroundHomologyPlanarBands();
 assert.ok(bandLength(highSpeedBand) < bandLength(normalSpeedBand),
-  'the speed slider must scale the number of solver steps per frame');
+  'the multiplier must strengthen each solver step without adding iterations');
 
 // Particle hit-testing uses the same planar x/y values and maps the closing
 // duplicate to canonical particle zero.
@@ -442,8 +558,8 @@ assert.ok(hit && hit.chain === gluedBand);
 // Removed solver entry points must not survive as functions or test exports.
 const sourceText = fs.readFileSync(path.join(__dirname, 'mosaic_calculator.js'), 'utf8');
 const htmlText = fs.readFileSync(path.join(__dirname, '..', 'mosaic_calculator.html'), 'utf8');
-assert.ok(htmlText.includes('id="homology-cord-contraction-strength"'));
-assert.ok(htmlText.includes('id="homology-cord-relax-speed" min="0.1" max="6"'));
+assert.strictEqual(htmlText.includes('id="homology-cord-contraction-strength"'), false);
+assert.ok(htmlText.includes('id="homology-cord-relax-speed" min="0.1" max="10" step="0.1" value="10"'));
 [
   'homologyCordElasticBandCandidates',
   'relaxHomologyCordElasticBandIteration',

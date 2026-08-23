@@ -20,6 +20,15 @@
     return Number.isFinite(number) ? String(Math.floor(number)) : '';
   }
 
+  function drawTextureMappedBallLabel(ctx, ball, centerX, centerY) {
+    // The initial sphere chart projects texture v to screen x and texture u to screen y.
+    // Pre-transpose the glyph so the numbered patch begins upright and unreflected.
+    ctx.save();
+    ctx.transform(0, 1, 1, 0, centerX - centerY, centerY - centerX);
+    ctx.fillText(ballLabel(ball), centerX, centerY + 1);
+    ctx.restore();
+  }
+
   function canvasFactory(width, height) {
     if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(width, height);
     const canvas = document.createElement('canvas');
@@ -83,7 +92,7 @@
         ctx.font = 'bold 37px Arial, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(ballLabel(ball), patchX, patchY + 1);
+        drawTextureMappedBallLabel(ctx, ball, patchX, patchY);
       }
       ctx.fillStyle = 'rgba(255,255,255,0.16)';
       ctx.fillRect(0, 0, width, 8);
@@ -482,6 +491,7 @@
     canvasToSurface,
     drawBallBadge,
     drawBallOutline,
+    drawTextureMappedBallLabel,
     fitBoard,
     makeTexture,
     numberedBallSprite,

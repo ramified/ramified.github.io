@@ -265,6 +265,35 @@ function testMosaicAdapter() {
   assert.strictEqual(state.rows, 2);
   assert.strictEqual(state.cols, 3);
 
+  const shared = mosaicAdapter.createSharedState(preset, {
+    tiles: game.board.cells.map((cell) => cell.tile),
+    ensureInitialMatch: false
+  });
+  shared.selectedIndex = shared.board.cells.find((cell) => !!cell.tile).index;
+  shared.matches = 3;
+  shared.refreshes = 2;
+  mosaicAdapter.syncSharedState(shared);
+  assert.strictEqual(shared.gameMode, 'lianliankan', 'shared state uses the common game-mode discriminator');
+  assert.strictEqual(shared.preset, preset, 'shared state retains the common preset object');
+  assert.ok(shared.removed instanceof Set && shared.removed.has(4), 'shared state exposes removed cells to the common renderer');
+  assert.deepStrictEqual(shared.boxes, [], 'shared state remains safe for common non-placement helpers');
+
+  const cloned = mosaicAdapter.cloneSharedState(shared);
+  assert.notStrictEqual(cloned, shared, 'shared undo cloning creates a new state');
+  assert.notStrictEqual(cloned.board, shared.board, 'shared undo cloning creates a new board');
+  assert.strictEqual(cloned.selectedIndex, shared.selectedIndex);
+  assert.strictEqual(cloned.matches, 3);
+  assert.strictEqual(cloned.score, 3);
+
+  const restored = mosaicAdapter.stateFromSnapshot(preset, mosaicAdapter.snapshot(shared));
+  assert.deepStrictEqual(mosaicAdapter.snapshot(restored), mosaicAdapter.snapshot(shared), 'shared status snapshots round-trip exactly');
+  assert.throws(() => mosaicAdapter.stateFromSnapshot(preset, {
+    tiles: [{ row: 1, col: 4, id: 'outside', glyph: 'X' }]
+  }), /outside the board/);
+  assert.throws(() => mosaicAdapter.stateFromSnapshot(preset, {
+    tiles: [{ row: 2, col: 2, id: 'removed', glyph: 'X' }]
+  }), /removed cell/);
+
   const setup = fixture(['.A', 'A.'], {
     gluedEdges: [{
       group: 2,

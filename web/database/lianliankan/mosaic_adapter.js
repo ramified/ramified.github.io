@@ -74,23 +74,136 @@
     });
   }
 
+  function tileArray(game) {
+    return game.board.cells.map(function(cell) {
+      return cell.tile ? { id: cell.tile.id, glyph: cell.tile.glyph } : null;
+    });
+  }
+
+  function tileEntries(game) {
+    return game.board.cells.filter(function(cell) { return !!cell.tile; }).map(function(cell) {
+      return {
+        index: cell.index,
+        row: cell.row,
+        col: cell.col,
+        id: cell.tile.id,
+        glyph: cell.tile.glyph
+      };
+    });
+  }
+
+  function decorateSharedState(game, preset) {
+    game.gameMode = 'lianliankan';
+    game.preset = preset;
+    game.removed = new Set(game.board.cells.filter(function(cell) {
+      return !cell.playable;
+    }).map(function(cell) {
+      return cell.index;
+    }));
+    game.boxes = [];
+    game.newBoxIds = new Set();
+    game.nextBoxId = 1;
+    game.score = game.matches || 0;
+    game.round = game.matches || 0;
+    game.ending = '';
+    game.resultDismissed = false;
+    game.recordMoves = [];
+    game.debugMessage = '';
+    return game;
+  }
+
+  function syncSharedState(game) {
+    if (!game) return game;
+    game.score = game.matches || 0;
+    game.round = game.matches || 0;
+    return game;
+  }
+
+  function createSharedState(preset, options) {
+    return decorateSharedState(createGameFromMosaicPreset(preset, options), preset);
+  }
+
+  function clonePlain(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+
+  function cloneSharedState(source) {
+    if (!source || !source.board || !source.preset) throw new TypeError('A shared Lianliankan state is required');
+    const cloned = createSharedState(source.preset, {
+      tiles: tileArray(source),
+      ensureInitialMatch: false
+    });
+    cloned.phase = source.phase;
+    cloned.selectedIndex = Number.isInteger(source.selectedIndex) ? source.selectedIndex : null;
+    cloned.pendingMatch = clonePlain(source.pendingMatch);
+    cloned.matches = Math.max(0, Number(source.matches) || 0);
+    cloned.refreshes = Math.max(0, Number(source.refreshes) || 0);
+    cloned.resultDismissed = !!source.resultDismissed;
+    cloned.recordMoves = clonePlain(source.recordMoves) || [];
+    cloned.debugMessage = String(source.debugMessage || '');
+    return syncSharedState(cloned);
+  }
+
+  function entryIndex(entry, rows, cols) {
+    if (Number.isInteger(entry && entry.index)) return entry.index;
+    const row = Number(entry && entry.row);
+    const col = Number(entry && entry.col);
+    if (
+      !Number.isInteger(row)
+      || !Number.isInteger(col)
+      || row < 1
+      || row > rows
+      || col < 1
+      || col > cols
+    ) return -1;
+    return engine.indexOf(row, col, cols);
+  }
+
+  function stateFromSnapshot(preset, payload) {
+    const normalized = normalizedPresetData(preset);
+    const tiles = Array(normalized.rows * normalized.cols).fill(null);
+    const used = new Set();
+    (Array.isArray(payload && payload.tiles) ? payload.tiles : []).forEach(function(entry) {
+      const index = entryIndex(entry, normalized.rows, normalized.cols);
+      if (index < 0 || index >= tiles.length) throw new RangeError('Lianliankan tile is outside the board');
+      if (used.has(index)) throw new Error('Lianliankan status contains duplicate tile positions');
+      used.add(index);
+      const id = String(entry && entry.id || '');
+      const glyph = entry && entry.glyph != null ? entry.glyph : id;
+      tiles[index] = { id: id, glyph: String(glyph) };
+      if (!tiles[index].id) throw new TypeError('Lianliankan tiles require a non-empty id');
+    });
+    const state = createSharedState(preset, {
+      tiles: tiles,
+      ensureInitialMatch: false
+    });
+    used.forEach(function(index) {
+      if (!state.board.cells[index].playable) throw new Error('Lianliankan tile occupies a removed cell');
+    });
+    state.matches = Math.max(0, Number(payload && payload.matches) || 0);
+    state.refreshes = Math.max(0, Number(payload && payload.refreshes) || 0);
+    const selectedValue = payload && payload.selectedIndex;
+    const selected = selectedValue == null || selectedValue === '' ? NaN : Number(selectedValue);
+    state.selectedIndex = Number.isInteger(selected)
+      && selected >= 0
+      && selected < state.board.cells.length
+      && !!state.board.cells[selected].tile
+      ? selected
+      : null;
+    if (payload && payload.phase === 'setup') state.phase = 'setup';
+    return syncSharedState(state);
+  }
+
   function snapshot(game) {
     return {
       gameMode: 'lianliankan',
       rows: game.board.rows,
       cols: game.board.cols,
-      phase: game.phase,
+      phase: game.phase === 'animating' ? 'ready' : game.phase,
       selectedIndex: game.selectedIndex,
       matches: game.matches,
       refreshes: game.refreshes,
-      tiles: game.board.cells.filter(function(cell) { return !!cell.tile; }).map(function(cell) {
-        return {
-          row: cell.row,
-          col: cell.col,
-          id: cell.tile.id,
-          glyph: cell.tile.glyph
-        };
-      })
+      tiles: tileEntries(game)
     };
   }
 
@@ -138,9 +251,15 @@
   }
 
   return Object.freeze({
+    cloneSharedState: cloneSharedState,
     createGameFromMosaicPreset: createGameFromMosaicPreset,
+    createSharedState: createSharedState,
     normalizedPresetData: normalizedPresetData,
     pathSegments: pathSegments,
-    snapshot: snapshot
+    snapshot: snapshot,
+    stateFromSnapshot: stateFromSnapshot,
+    syncSharedState: syncSharedState,
+    tileArray: tileArray,
+    tileEntries: tileEntries
   });
 });

@@ -70,8 +70,12 @@
   const GLUED_BOUNDARY_COLORS = ['#1f7a8c', '#b23a48', '#6a4c93', '#c47f17', '#2f855a', '#8a4f7d'];
   const HOMOLOGY_COLORS = ['#18748a', '#b23a48', '#6a4c93', '#c47f17', '#278050', '#8a4f7d'];
   const HOMOLOGY_CORD_REAL_BOUNDARY_INSET_RATIO = 0.05;
+  // Leaves the outer cord stroke almost touching boundaries drawn at 0.96R.
+  const HOMOLOGY_CORD_BOUNDARY_OBSTACLE_RATIO = 0.115;
+  const HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE = 1e-4;
   const HOMOLOGY_CORD_DEFAULT_ITERATIONS_PER_FRAME = 20;
-  const HOMOLOGY_CORD_DEFAULT_CONTRACTION_RATIO = 0.1;
+  const HOMOLOGY_CORD_DEFAULT_RELAX_SPEED = 10;
+  const HOMOLOGY_CORD_BASE_DISTANCE_CONTRACTION = 0.08;
   const DEFAULT_SEIFERT_BAND_WIDTH = 0.42;
   const MIN_SEIFERT_BAND_WIDTH = 0.24;
   const MAX_SEIFERT_BAND_WIDTH = 0.78;
@@ -844,8 +848,7 @@
     homologyCordChains: {},
     homologyCordDrag: null,
     homologyCordAnimation: null,
-    homologyCordRelaxSpeed: 1,
-    homologyCordContractionStrength: HOMOLOGY_CORD_DEFAULT_CONTRACTION_RATIO,
+    homologyCordRelaxSpeed: HOMOLOGY_CORD_DEFAULT_RELAX_SPEED,
     homologyCordPointSpacing: 0.12,
     homologyCordIterationsPerFrame: HOMOLOGY_CORD_DEFAULT_ITERATIONS_PER_FRAME,
     showHomologyCordParticles: false,
@@ -1101,8 +1104,6 @@
     refs.homologyCordDebugCard = document.getElementById('homology-cord-debug-card');
     refs.homologyCordRelaxSpeed = document.getElementById('homology-cord-relax-speed');
     refs.homologyCordRelaxSpeedValue = document.getElementById('homology-cord-relax-speed-value');
-    refs.homologyCordContractionStrength = document.getElementById('homology-cord-contraction-strength');
-    refs.homologyCordContractionStrengthValue = document.getElementById('homology-cord-contraction-strength-value');
     refs.homologyCordPointSpacing = document.getElementById('homology-cord-point-spacing');
     refs.homologyCordPointSpacingValue = document.getElementById('homology-cord-point-spacing-value');
     refs.showHomologyCordParticles = document.getElementById('show-homology-cord-particles');
@@ -1469,7 +1470,6 @@
     if (refs.resetHomologyCords) refs.resetHomologyCords.addEventListener('click', () => resetBackgroundHomologyCords(true));
     [
       ['homologyCordRelaxSpeed', 'homologyCordRelaxSpeedValue', 'homology-cord-relax-speed', normalizeHomologyCordRelaxSpeed],
-      ['homologyCordContractionStrength', 'homologyCordContractionStrengthValue', 'homology-cord-contraction-strength', normalizeHomologyCordContractionStrength],
       ['homologyCordPointSpacing', 'homologyCordPointSpacingValue', 'homology-cord-point-spacing', normalizeHomologyCordPointSpacing]
     ].forEach(([stateKey, outputKey, inputId, normalize]) => {
       const input = refs[stateKey];
@@ -10349,7 +10349,6 @@
     }
     [
       ['homologyCordRelaxSpeed', 'homologyCordRelaxSpeedValue', normalizeHomologyCordRelaxSpeed],
-      ['homologyCordContractionStrength', 'homologyCordContractionStrengthValue', normalizeHomologyCordContractionStrength],
       ['homologyCordPointSpacing', 'homologyCordPointSpacingValue', normalizeHomologyCordPointSpacing]
     ].forEach(([stateKey, outputKey, normalize]) => {
       const input = refs[stateKey];
@@ -16802,15 +16801,283 @@
     return homologyCordPhysicalIndices(chain).map((index) => ({ index, ...chain.points[index] }));
   }
 
+  function makePlanarElasticBandObstacles() {
+    if (!geometry || !isGluedBoundaryMode()) return { polygons: [], barriers: [] };
+    const clearance = geometry.radius * HOMOLOGY_CORD_BOUNDARY_OBSTACLE_RATIO;
+    const removed = state.removedTiles instanceof Set ? state.removedTiles : new Set();
+    const polygons = [];
+    removed.forEach((index) => {
+      const cell = geometry.cells[index];
+      if (!cell) return;
+      polygons.push({
+        center: { x: cell.x, y: cell.y },
+        points: tilePoints(cell.x, cell.y, geometry.radius * (1 + HOMOLOGY_CORD_BOUNDARY_OBSTACLE_RATIO))
+      });
+    });
+    const barriers = [];
+    const lattice = getLattice();
+    for (let index = 0; index < state.rows * state.cols; index += 1) {
+      if (!tileExists(index)) continue;
+      const cell = geometry.cells[index];
+      if (!cell) continue;
+      const row = Math.floor(index / state.cols);
+      const col = index % state.cols;
+      for (let dir = 0; dir < lattice.sides; dir += 1) {
+        if (!isBackgroundBoundaryEdge(index, dir) || isGluedBoundaryEdge(index, dir)) continue;
+        const next = neighbor(row, col, dir, state.rows, state.cols, lattice, state.wrapped);
+        if (next && removed.has(indexOf(next.row, next.col, state.cols))) continue;
+        const segment = edgeSegmentPoints(cell.x, cell.y, dir, geometry.radius);
+        const tangent = homologyCordNormalize({
+          x: segment.end.x - segment.start.x,
+          y: segment.end.y - segment.start.y
+        });
+        const midpoint = {
+          x: (segment.start.x + segment.end.x) * 0.5,
+          y: (segment.start.y + segment.end.y) * 0.5
+        };
+        const inward = homologyCordNormalize({ x: cell.x - midpoint.x, y: cell.y - midpoint.y });
+        barriers.push({
+          tileIndex: index,
+          dir,
+          inward,
+          start: {
+            x: segment.start.x + (inward.x * clearance) - (tangent.x * clearance),
+            y: segment.start.y + (inward.y * clearance) - (tangent.y * clearance)
+          },
+          end: {
+            x: segment.end.x + (inward.x * clearance) + (tangent.x * clearance),
+            y: segment.end.y + (inward.y * clearance) + (tangent.y * clearance)
+          }
+        });
+      }
+    }
+    return { polygons, barriers };
+  }
+
+  function planarElasticBandPolygonEdges(polygon) {
+    return polygon.points.map((start, index) => ({
+      start,
+      end: polygon.points[(index + 1) % polygon.points.length]
+    }));
+  }
+
+  function planarElasticBandPolygonProjection(point, polygon) {
+    const epsilon = geometry ? geometry.radius * 1e-6 : 1e-6;
+    const direction = homologyCordNormalize({
+      x: point.x - polygon.center.x,
+      y: point.y - polygon.center.y
+    });
+    const span = Math.max(1, ...polygon.points.map((vertex) => (
+      Math.hypot(vertex.x - polygon.center.x, vertex.y - polygon.center.y)
+    )));
+    const rayDirection = Math.hypot(direction.x, direction.y) > 0
+      ? direction
+      : homologyCordNormalize({
+        x: polygon.points[0].x - polygon.center.x,
+        y: polygon.points[0].y - polygon.center.y
+      });
+    const rayEnd = {
+      x: polygon.center.x + (rayDirection.x * span * 4),
+      y: polygon.center.y + (rayDirection.y * span * 4)
+    };
+    let best = null;
+    planarElasticBandPolygonEdges(polygon).forEach((edge) => {
+      const hit = segmentIntersectionParameters(polygon.center, rayEnd, edge.start, edge.end);
+      if (!hit || hit.pathT <= 0 || hit.edgeT < -1e-8 || hit.edgeT > 1 + 1e-8) return;
+      if (!best || hit.pathT < best.pathT) best = { ...hit, edge };
+    });
+    if (!best) {
+      planarElasticBandPolygonEdges(polygon).forEach((edge) => {
+        const projection = projectPointToSegment(point, edge.start, edge.end);
+        if (!best || projection.distance < best.distance) best = { ...projection, edge };
+      });
+      if (!best) return { ...point };
+      const outward = homologyCordNormalize({
+        x: best.point.x - polygon.center.x,
+        y: best.point.y - polygon.center.y
+      });
+      return { x: best.point.x + (outward.x * epsilon), y: best.point.y + (outward.y * epsilon) };
+    }
+    const boundary = {
+      x: polygon.center.x + ((rayEnd.x - polygon.center.x) * best.pathT),
+      y: polygon.center.y + ((rayEnd.y - polygon.center.y) * best.pathT)
+    };
+    return {
+      x: boundary.x + (rayDirection.x * epsilon),
+      y: boundary.y + (rayDirection.y * epsilon)
+    };
+  }
+
+  function planarElasticBandFirstPolygonHit(start, end, polygon, endpointTolerance = 0) {
+    let first = null;
+    planarElasticBandPolygonEdges(polygon).forEach((edge) => {
+      const hit = segmentIntersectionParameters(start, end, edge.start, edge.end);
+      if (!hit
+        || hit.pathT <= endpointTolerance
+        || hit.pathT > 1 - endpointTolerance
+        || hit.edgeT < -HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE
+        || hit.edgeT > 1 + HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE) return;
+      if (!first || hit.pathT < first.pathT) first = { ...hit, edge };
+    });
+    return first;
+  }
+
+  function constrainPlanarElasticBandPoint(previous, proposed, obstacles) {
+    if (!obstacles) return { ...proposed };
+    const epsilon = geometry ? geometry.radius * 1e-6 : 1e-6;
+    let constrained = { ...proposed };
+    for (let pass = 0; pass < 4; pass += 1) {
+      let changed = false;
+      for (const polygon of obstacles.polygons || []) {
+        if (!pointInPolygon(previous, polygon.points)) {
+          const hit = planarElasticBandFirstPolygonHit(previous, constrained, polygon);
+          if (hit) {
+            const contact = {
+              x: previous.x + ((constrained.x - previous.x) * hit.pathT),
+              y: previous.y + ((constrained.y - previous.y) * hit.pathT)
+            };
+            const edgeVector = {
+              x: hit.edge.end.x - hit.edge.start.x,
+              y: hit.edge.end.y - hit.edge.start.y
+            };
+            const tangent = homologyCordNormalize(edgeVector);
+            const remaining = { x: constrained.x - contact.x, y: constrained.y - contact.y };
+            const slideAmount = (remaining.x * tangent.x) + (remaining.y * tangent.y);
+            const projection = projectPointToSegment({
+              x: contact.x + (tangent.x * slideAmount),
+              y: contact.y + (tangent.y * slideAmount)
+            }, hit.edge.start, hit.edge.end).point;
+            const outward = homologyCordNormalize({
+              x: ((hit.edge.start.x + hit.edge.end.x) * 0.5) - polygon.center.x,
+              y: ((hit.edge.start.y + hit.edge.end.y) * 0.5) - polygon.center.y
+            });
+            constrained = {
+              x: projection.x + (outward.x * epsilon),
+              y: projection.y + (outward.y * epsilon)
+            };
+            changed = true;
+            continue;
+          }
+        }
+        if (pointInPolygon(constrained, polygon.points)) {
+          constrained = planarElasticBandPolygonProjection(constrained, polygon);
+          changed = true;
+        }
+      }
+      let firstBarrier = null;
+      for (const barrier of obstacles.barriers || []) {
+        const oldDistance = ((previous.x - barrier.start.x) * barrier.inward.x)
+          + ((previous.y - barrier.start.y) * barrier.inward.y);
+        const newDistance = ((constrained.x - barrier.start.x) * barrier.inward.x)
+          + ((constrained.y - barrier.start.y) * barrier.inward.y);
+        if (oldDistance < -epsilon || newDistance >= 0 || oldDistance === newDistance) continue;
+        const pathT = oldDistance / (oldDistance - newDistance);
+        const contact = {
+          x: previous.x + ((constrained.x - previous.x) * pathT),
+          y: previous.y + ((constrained.y - previous.y) * pathT)
+        };
+        const edgeVector = {
+          x: barrier.end.x - barrier.start.x,
+          y: barrier.end.y - barrier.start.y
+        };
+        const lengthSquared = (edgeVector.x * edgeVector.x) + (edgeVector.y * edgeVector.y);
+        const edgeT = lengthSquared > 0
+          ? (((contact.x - barrier.start.x) * edgeVector.x) + ((contact.y - barrier.start.y) * edgeVector.y)) / lengthSquared
+          : -1;
+        if (edgeT < -1e-8 || edgeT > 1 + 1e-8) continue;
+        if (!firstBarrier || pathT < firstBarrier.pathT) firstBarrier = { barrier, contact, pathT };
+      }
+      if (firstBarrier) {
+        const { barrier, contact } = firstBarrier;
+        const tangent = homologyCordNormalize({
+          x: barrier.end.x - barrier.start.x,
+          y: barrier.end.y - barrier.start.y
+        });
+        const remaining = { x: constrained.x - contact.x, y: constrained.y - contact.y };
+        const slideAmount = (remaining.x * tangent.x) + (remaining.y * tangent.y);
+        const projection = projectPointToSegment({
+          x: contact.x + (tangent.x * slideAmount),
+          y: contact.y + (tangent.y * slideAmount)
+        }, barrier.start, barrier.end).point;
+        constrained = {
+          x: projection.x + (barrier.inward.x * epsilon),
+          y: projection.y + (barrier.inward.y * epsilon)
+        };
+        changed = true;
+      }
+      if (!changed) break;
+    }
+    return constrained;
+  }
+
+  function planarElasticBandSegmentCrossesObstacle(start, end, obstacles) {
+    if (!obstacles) return false;
+    const midpoint = { x: (start.x + end.x) * 0.5, y: (start.y + end.y) * 0.5 };
+    for (const polygon of obstacles.polygons || []) {
+      if (pointInPolygon(start, polygon.points) || pointInPolygon(end, polygon.points)
+        || pointInPolygon(midpoint, polygon.points)) return true;
+      if (planarElasticBandFirstPolygonHit(
+        start,
+        end,
+        polygon,
+        HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE
+      )) return true;
+    }
+    for (const barrier of obstacles.barriers || []) {
+      const startDistance = ((start.x - barrier.start.x) * barrier.inward.x)
+        + ((start.y - barrier.start.y) * barrier.inward.y);
+      const endDistance = ((end.x - barrier.start.x) * barrier.inward.x)
+        + ((end.y - barrier.start.y) * barrier.inward.y);
+      if (startDistance * endDistance >= 0) continue;
+      const hit = segmentIntersectionParameters(start, end, barrier.start, barrier.end);
+      if (hit
+        && hit.pathT > HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE
+        && hit.pathT < 1 - HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE
+        && hit.edgeT >= -HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE
+        && hit.edgeT <= 1 + HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE) return true;
+    }
+    return false;
+  }
+
+  function constrainInitialPlanarElasticBandPoint(point, tileIndex, obstacles) {
+    const epsilon = geometry ? geometry.radius * 1e-6 : 1e-6;
+    let constrained = { ...point };
+    for (const barrier of obstacles.barriers || []) {
+      if (barrier.tileIndex !== tileIndex) continue;
+      const edgeVector = { x: barrier.end.x - barrier.start.x, y: barrier.end.y - barrier.start.y };
+      const lengthSquared = (edgeVector.x * edgeVector.x) + (edgeVector.y * edgeVector.y);
+      if (lengthSquared <= 0) continue;
+      const rawT = (((constrained.x - barrier.start.x) * edgeVector.x)
+        + ((constrained.y - barrier.start.y) * edgeVector.y)) / lengthSquared;
+      const distance = ((constrained.x - barrier.start.x) * barrier.inward.x)
+        + ((constrained.y - barrier.start.y) * barrier.inward.y);
+      if (rawT < 0 || rawT > 1 || distance >= 0) continue;
+      constrained.x += barrier.inward.x * (-distance + epsilon);
+      constrained.y += barrier.inward.y * (-distance + epsilon);
+    }
+    for (const polygon of obstacles.polygons || []) {
+      if (pointInPolygon(constrained, polygon.points)) {
+        constrained = planarElasticBandPolygonProjection(constrained, polygon);
+      }
+    }
+    return constrained;
+  }
+
   function makePlanarElasticBandChain(surfaceChain) {
     if (!surfaceChain || !Array.isArray(surfaceChain.points)) return null;
     const material = homologyCordPhysicalIndices(surfaceChain);
     if (material.length < 3) return null;
+    const obstacles = makePlanarElasticBandObstacles();
     const points = material.map((index) => {
       const projected = projectedHomologyCordChainPoint(surfaceChain.points[index]);
+      const constrained = constrainInitialPlanarElasticBandPoint(
+        projected,
+        surfaceChain.points[index].tileIndex,
+        obstacles
+      );
       return {
-        x: projected.x,
-        y: projected.y,
+        x: constrained.x,
+        y: constrained.y,
         optimizationDirection: { x: 0, y: 0 }
       };
     });
@@ -16825,6 +17092,7 @@
       fingerprint: surfaceChain.fingerprint,
       solverSpace: 'planar',
       points,
+      obstacles,
       deck: { x: 0, y: 0 },
       closure: homologyCordAffineIdentity()
     };
@@ -16866,6 +17134,10 @@
     const contractionRatio = Number.isFinite(configuredContraction)
       ? clamp(configuredContraction, 0.01, 0.2)
       : 0.05;
+    const configuredDistanceContraction = Number(options.distanceContraction);
+    const distanceContraction = Number.isFinite(configuredDistanceContraction)
+      ? clamp(configuredDistanceContraction, 0, 0.8)
+      : null;
     const heldIndex = Number.isInteger(options.heldIndex) ? options.heldIndex : -1;
     const directions = computePlanarElasticBandDirections(snapshot, heldIndex);
     let shortestNonzeroEdge = Infinity;
@@ -16879,12 +17151,52 @@
       : Math.min(configuredStep, contractionRatio * shortestNonzeroEdge);
     const held = heldIndex === logicalCount ? 0 : heldIndex;
     const nextPositions = snapshot.map((point) => ({ x: point.x, y: point.y }));
+    const appliedDirections = directions.map((direction) => ({ ...direction }));
     for (let index = 0; index < logicalCount; index += 1) {
       if (index === held) continue;
+      if (distanceContraction != null) {
+        const previous = snapshot[(index + logicalCount - 1) % logicalCount];
+        const next = snapshot[(index + 1) % logicalCount];
+        const midpointForce = {
+          x: ((previous.x + next.x) * 0.5) - snapshot[index].x,
+          y: ((previous.y + next.y) * 0.5) - snapshot[index].y
+        };
+        appliedDirections[index] = midpointForce;
+        nextPositions[index] = {
+          x: snapshot[index].x + (midpointForce.x * distanceContraction),
+          y: snapshot[index].y + (midpointForce.y * distanceContraction)
+        };
+        continue;
+      }
       nextPositions[index] = {
         x: snapshot[index].x + (directions[index].x * safeStep),
         y: snapshot[index].y + (directions[index].y * safeStep)
       };
+    }
+    const obstacles = options.obstacles || chain.obstacles;
+    if (obstacles) {
+      for (let index = 0; index < logicalCount; index += 1) {
+        if (index === held) continue;
+        nextPositions[index] = constrainPlanarElasticBandPoint(
+          snapshot[index],
+          nextPositions[index],
+          obstacles
+        );
+      }
+      for (let pass = 0; pass < logicalCount; pass += 1) {
+        const blocked = new Set();
+        for (let index = 0; index < logicalCount; index += 1) {
+          const next = (index + 1) % logicalCount;
+          if (!planarElasticBandSegmentCrossesObstacle(nextPositions[index], nextPositions[next], obstacles)) continue;
+          if (index !== held) blocked.add(index);
+          if (next !== held) blocked.add(next);
+        }
+        if (!blocked.size) break;
+        blocked.forEach((index) => {
+          nextPositions[index] = { x: snapshot[index].x, y: snapshot[index].y };
+          appliedDirections[index] = { x: 0, y: 0 };
+        });
+      }
     }
     if (snapshot.length) {
       nextPositions[snapshot.length - 1] = {
@@ -16903,12 +17215,13 @@
       chain.points[index].x = position.x;
       chain.points[index].y = position.y;
       chain.points[index].optimizationDirection = index < logicalCount
-        ? { ...directions[index] }
+        ? { ...appliedDirections[index] }
         : { x: 0, y: 0 };
     });
     return {
       safeStep,
       contractionRatio,
+      distanceContraction,
       shortestNonzeroEdge: shortestNonzeroEdge === Infinity ? 0 : shortestNonzeroEdge,
       maximumDisplacement
     };
@@ -17150,10 +17463,9 @@
     const chains = Object.values(state.homologyCordChains || {});
     if (!chains.length) return false;
     const speed = normalizeHomologyCordRelaxSpeed(state.homologyCordRelaxSpeed);
-    const contractionRatio = normalizeHomologyCordContractionStrength(state.homologyCordContractionStrength);
-    const stepSize = geometry.radius * 0.012 * (contractionRatio / 0.05);
+    const distanceContraction = HOMOLOGY_CORD_BASE_DISTANCE_CONTRACTION * speed;
     const iterations = Math.max(1, Math.floor(
-      (state.homologyCordIterationsPerFrame || HOMOLOGY_CORD_DEFAULT_ITERATIONS_PER_FRAME) * speed
+      state.homologyCordIterationsPerFrame || HOMOLOGY_CORD_DEFAULT_ITERATIONS_PER_FRAME
     ));
     chains.forEach((chain) => {
       const drag = state.homologyCordDrag && state.homologyCordDrag.generatorId === chain.generatorId
@@ -17161,8 +17473,7 @@
         : null;
       for (let iteration = 0; iteration < iterations; iteration += 1) {
         stepPlanarElasticBand(chain, {
-          stepSize,
-          contractionRatio,
+          distanceContraction,
           heldIndex: drag ? drag.part : -1
         });
       }
@@ -17217,8 +17528,13 @@
     const canonicalPart = part === lastIndex ? 0 : part;
     if (canonicalPart < 0 || canonicalPart >= lastIndex) return false;
     const particle = chain.points[canonicalPart];
-    particle.x = projected.x;
-    particle.y = projected.y;
+    const constrained = constrainPlanarElasticBandPoint(particle, projected, chain.obstacles);
+    const previousIndex = (canonicalPart + lastIndex - 1) % lastIndex;
+    const nextIndex = (canonicalPart + 1) % lastIndex;
+    if (planarElasticBandSegmentCrossesObstacle(chain.points[previousIndex], constrained, chain.obstacles)
+      || planarElasticBandSegmentCrossesObstacle(constrained, chain.points[nextIndex], chain.obstacles)) return false;
+    particle.x = constrained.x;
+    particle.y = constrained.y;
     chain.points[lastIndex].x = chain.points[0].x;
     chain.points[lastIndex].y = chain.points[0].y;
     return true;
@@ -17287,13 +17603,18 @@
       drawBackgroundHomologyChain(ctx, analysis, generator, color);
       return;
     }
+    const hasObstacles = !!chain.obstacles
+      && ((chain.obstacles.polygons || []).length > 0 || (chain.obstacles.barriers || []).length > 0);
     const drawPath = () => {
       let run = [];
       const strokeRun = () => {
         if (run.length < 2) return;
         ctx.moveTo(run[0].x, run[0].y);
-        if (run.length === 2) {
+        if (run.length === 2 || hasObstacles) {
           ctx.lineTo(run[1].x, run[1].y);
+          for (let pointIndex = 2; pointIndex < run.length; pointIndex += 1) {
+            ctx.lineTo(run[pointIndex].x, run[pointIndex].y);
+          }
         } else {
           // Quadratic midpoint interpolation makes the visual cord smooth
           // without changing its planar particles.
@@ -24848,12 +25169,7 @@
 
   function normalizeHomologyCordRelaxSpeed(value) {
     const parsed = Number(value);
-    return Number.isFinite(parsed) ? clamp(parsed, 0.1, 6) : 1;
-  }
-
-  function normalizeHomologyCordContractionStrength(value) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? clamp(parsed, 0.01, 0.2) : HOMOLOGY_CORD_DEFAULT_CONTRACTION_RATIO;
+    return Number.isFinite(parsed) ? clamp(parsed, 0.1, 10) : HOMOLOGY_CORD_DEFAULT_RELAX_SPEED;
   }
 
   function normalizeHomologyCordPointSpacing(value) {
@@ -25419,6 +25735,9 @@
       homologyCordPointLocal,
       homologyCordClosure,
       applyHomologyCordClosure,
+      makePlanarElasticBandObstacles,
+      constrainPlanarElasticBandPoint,
+      planarElasticBandSegmentCrossesObstacle,
       makePlanarElasticBandChain,
       snapshotPlanarElasticBand,
       computePlanarElasticBandDirections,
