@@ -24,6 +24,13 @@
     'common.refresh': ['refresh', '刷新'],
     'common.copy': ['copy', '复制'],
     'common.download': ['download', '下载'],
+    'common.hint': ['Hint', '提示'],
+    'common.showHint': ['Show hint', '显示提示'],
+    'common.refreshRemainingTiles': ['Refresh remaining tiles', '刷新剩余方块'],
+    'common.reset': ['Reset', '重置'],
+    'common.resetGame': ['Reset game', '重置游戏'],
+    'common.confirmReset': ['Confirm reset', '确认重置'],
+    'common.confirmResetGame': ['Confirm reset game', '确认重置游戏'],
     'common.clear': ['clear', '清除'],
     'common.debug': ['debug', '调试'],
     'common.empty': ['empty', '空'],
@@ -94,11 +101,13 @@
     'access.boardRows': ['Boundary board rows', '边界棋盘行数'],
     'access.boardColumns': ['Boundary board columns', '边界棋盘列数'],
     'access.placementDisplay': ['Placement display', '落子显示样式'],
+    'access.coordinates': ['Show board coordinates', '显示棋盘坐标'],
     'access.billiardsRules': ['Billiards rules', '台球规则'],
     'access.billiardsSetupTool': ['Billiards setup tool', '台球布置工具'],
     'access.billiardsBallPalette': ['Billiards ball palette', '台球球组选择板'],
     'access.billiardsAssistance': ['Billiards aim assistance', '台球瞄准辅助'],
     'access.billiardsFriction': ['Billiards table friction', '台球桌面摩擦力'],
+    'access.tileSet': ['Tile Matching tile set', '连连看图案组'],
     'access.billiardsCueContact': ['Cue ball contact point', '母球击点'],
     'access.pieceRadius': ['Placement piece radius', '落子棋子半径'],
     'access.chessDisplay': ['Chess piece display', '国际象棋棋子显示'],
@@ -108,6 +117,7 @@
     'access.connectFall': ['Connect Four fall direction', '四子棋落子方向'],
     'access.checkersMoveTime': ['Chinese Checkers move time per edge', '跳棋每条边的移动时间'],
     'access.checkersPause': ['Chinese Checkers pause at multi-jump landings', '跳棋连跳落点停顿时间'],
+    'access.checkersJumpRule': ['Chinese Checkers jump rule', '跳棋跳跃规则'],
     'access.checkersPlayers': ['Chinese Checkers players', '跳棋玩家'],
     'access.turnNotice': ['Online turn notice duration', '在线回合提示时长'],
     'access.debugValue': ['Debug tile value', '调试方块数值'],
@@ -138,6 +148,7 @@
     'setup.boundary': ['Boundary', '边界'],
     'setup.shape': ['Shape', '形状'],
     'setup.display': ['Display', '显示'],
+    'setup.coordinates': ['coordinates', '坐标'],
     'setup.rules': ['Rules', '规则'],
     'setup.setupTool': ['Setup tool', '布置工具'],
     'setup.assistance': ['Assistance', '辅助'],
@@ -235,10 +246,20 @@
     'setup.goRules': ['Place stones on empty points; surrounded opposing groups are captured. Pass when both players are done.', '在空交点落子；完全包围对方棋群即可提子。双方结束时请选择停一手。'],
     'setup.reversiRules': ['Place a disc to bracket opposing discs along a line and flip them. Most discs at the end wins.', '落子夹住直线上的对方棋子并将其翻转，终局棋子较多者获胜。'],
     'setup.checkersRules': ['Select one of your marbles, then move or jump through connected cells. Race into the opposite camp.', '选择己方弹珠，沿相邻格移动或连续跳跃，率先进入对面营地。'],
+    'setup.checkersJumpRule': ['Jump rule', '跳跃规则'],
+    'setup.checkersJumpUnlimited': ['unlimited mirror jump', '不限距离镜像跳跃'],
+    'setup.checkersJumpAdjacent': ['adjacent jump only', '仅可跳过相邻棋子'],
+    'setup.checkersJumpAdjacentOrTwo': ['adjacent or distance-two jump', '相邻或距离二的跳跃'],
     'setup.sokobanRules': ['Move every player together. Push one box at a time onto the targets across the glued board.', '同时移动所有玩家，每次推动一个箱子，穿过粘合棋盘将箱子推到目标上。'],
     'setup.queensRules': ['Rearrange all queens so no queen threatens another across the transported square-board routes.', '重新排列所有后，使任意两个后都不会沿传送后的方格路径互相攻击。'],
     'setup.chessRules': ['Move FIDE chess pieces across transported square-board routes. Checkmate wins; stalemate and dead positions draw.', '沿传送后的方格路径移动国际象棋棋子；将死获胜，逼和与死局为和棋。'],
+    'setup.lianliankanRules': ['Match identical tiles through empty cells with an orthogonal path that turns at most twice. Only configured boundary glue may cross the board edge.', '用最多转弯两次的正交路径穿过空格连接相同方块；只有已配置的边界粘合可以跨越棋盘边缘。'],
     'setup.2048Rules': ['Slide boxes with arrow keys, move buttons, or a swipe. Matching powers of two merge; explosions leave clickable bombs.', '使用方向键、移动按钮或滑动来移动方块；相同的数字会合并，爆炸后会留下可点击的炸弹。'],
+    'setup.refreshRemainingTiles': ['Refresh remaining tiles', '刷新剩余方块'],
+    'setup.tileSet': ['Tile set', '图案组'],
+    'setup.chineseCharacters': ['Chinese characters', '汉字'],
+    'setup.japaneseCharacters': ['Japanese characters', '日文假名'],
+    'setup.youngDiagrams3x3': ['Young diagrams (3×3)', '杨图（3×3）'],
 
     'games.gomoku': ['Gomoku', '五子棋'],
     'games.go': ['Go', '围棋'],
@@ -248,6 +269,7 @@
     'games.sokoban': ['Sokoban', '推箱子'],
     'games.chess': ['FIDE Chess', '国际象棋'],
     'games.billiards': ['Billiard', '台球'],
+    'games.lianliankan': ['Tile Matching', '连连看'],
     'games.random': ['Random setup', '随机设置'],
     'games.torus': ['torus', '环面'],
     'games.klein': ['Klein bottle', '克莱因瓶'],
@@ -445,6 +467,22 @@
     , 'status.gameOver': ['game over', '游戏结束']
     , 'status.bonusEnding': ['bonus ending', '奖励结局']
     , 'status.sokobanSolved': ['Sokoban solved', '推箱子完成']
+    , 'status.lianliankanMatch': ['Tile Matching match', '连连看配对']
+    , 'status.lianliankanComplete': ['Tile Matching complete', '连连看完成']
+    , 'status.lianliankanHint': ['Tile Matching hint', '连连看提示']
+    , 'status.connectedPathFound': ['connected path found', '已找到连接路径']
+    , 'status.hintPathShown': ['a legal path is shown', '已显示一条可用路径']
+    , 'status.resetQuestion': ['Reset this game?', '重置本局游戏？']
+    , 'status.resetComplete': ['reset complete', '重置完成']
+    , 'status.lianliankanRestarted': ['Tile Matching restarted', '连连看已重新开始']
+    , 'status.useRefreshToContinue': ['use Refresh to continue', '请刷新后继续']
+    , 'status.noLianliankanMatches': ['No more tile matches are available', '没有可用的配对']
+    , 'status.matches': ['Matches', '配对次数']
+    , 'status.tilesLeft': ['Tiles left', '剩余方块']
+    , 'status.legalMatch': ['Legal match', '存在可配对方块']
+    , 'status.refreshes': ['Refreshes', '刷新次数']
+    , 'status.pairsCleared': ['Pairs cleared', '已消除对数']
+    , 'status.complete': ['complete', '完成']
   };
 
   const english = {};
@@ -507,6 +545,15 @@
     , ['^(.+) in check$', '$1被将军']
     , ['^(.+) Sokoban preview$', '$1推箱子预览']
     , ['^(\\d+) ms/edge$', '$1 毫秒／边']
+    , ['^(\\d+) tiles; paths may turn at most twice$', '$1 个方块；路径最多允许转弯两次']
+    , ['^(\\d+) matches cleared the board$', '已配对 $1 次，棋盘已清空']
+    , ['^(\\d+) tiles remain; use Refresh to continue$', '还剩 $1 个方块；请刷新后继续']
+    , ['^(\\d+) tiles remaining$', '还剩 $1 个方块']
+    , ['^(.+) selected; (\\d+) tiles remaining$', '已选择 $1；还剩 $2 个方块']
+    , ['^Tile Matching match (\\d+)$', '连连看｜已配对 $1 次']
+    , ['^(\\d+) tiles, (\\d+) matches, (\\d+) refreshes$', '$1 个方块，$2 次配对，$3 次刷新']
+    , ['^(\\d+) pair cleared$', '已消除 $1 对']
+    , ['^(\\d+) pairs cleared$', '已消除 $1 对']
     , ['^(\\d+)x(\\d+), (.+), (\\d+) unmatched, (\\d+) removed, (\\d+) cut, (\\d+) glued$', '$1×$2，$3，$4 条未匹配边，$5 个已移除，$6 条切边，$7 条粘合边']
   ];
   chinese.__fragments = {

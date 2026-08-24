@@ -7,6 +7,138 @@ const SHOP_CONFIG = {
   wechatName: "XxxxXxxxx-Zzzz",
   products: [
   {
+    id: "small-strainer",
+    image: "strainer.jpg",
+    price: 3,
+    name: { en: "Small strainer", zh: "小漏勺" },
+    description: {
+      en: "Small strainer, €3 each.",
+      zh: "小漏勺，3欧1个。"
+    }
+  },
+
+  {
+    id: "large-strainer",
+    image: "strainer.jpg",
+    price: 2,
+    name: { en: "Large strainer", zh: "大漏勺" },
+    description: {
+      en: "Large strainer, €2 each.",
+      zh: "大漏勺，2欧1个。"
+    }
+  },
+
+  {
+    id: "small-baking-tray",
+    image: "small_baking_tray.jpg",
+    price: 1.5,
+    name: { en: "Small baking tray", zh: "小型烤盘" },
+    description: {
+      en: "Small baking tray, €1.50.",
+      zh: "小型烤盘，1.5欧1个。"
+    }
+  },
+
+  {
+    id: "large-storage-box",
+    image: "large_storage_box.jpg",
+    price: 2,
+    name: { en: "Large storage box", zh: "大盒子" },
+    description: {
+      en: "Large storage box, €2.",
+      zh: "大盒子，2欧。"
+    }
+  },
+
+  {
+    id: "medium-lunch-box",
+    image: "medium_lunch_box.jpg",
+    price: 1.5,
+    name: { en: "Medium lunch box", zh: "饭盒（中盒子）" },
+    description: {
+      en: "Medium-sized lunch/storage box, €1.50.",
+      zh: "饭盒（中盒子），1.5欧。"
+    }
+  },
+
+  {
+    id: "small-storage-box",
+    image: "small_storage_box.jpg",
+    price: 0.3,
+    name: { en: "Small storage box", zh: "小盒子" },
+    description: {
+      en: "Small storage box, €0.30 each. Five available.",
+      zh: "小盒子，0.3欧1个，共5个。"
+    },
+    quantity: 5
+  },
+
+  {
+    id: "dish-drying-rack",
+    image: "dish_drying_rack.jpg",
+    price: 1,
+    name: { en: "Dish drying rack", zh: "沥水架" },
+    description: {
+      en: "Practical dish drying rack, €1.",
+      zh: "实用沥水架，1欧1个。"
+    }
+  },
+
+  {
+    id: "blue-raincoat",
+    image: "blue_raincoat.jpg",
+    price: 2,
+    name: { en: "Blue raincoat", zh: "蓝色雨衣" },
+    description: {
+      en: "Blue raincoat, €2.",
+      zh: "蓝色雨衣，2欧。"
+    }
+  },
+
+  {
+    id: "seasoning-bottles",
+    image: "seasoning_bottles.jpg",
+    price: 2,
+    name: { en: "10 small seasoning bottles", zh: "小型调味瓶（10个）" },
+    description: {
+      en: "Set of 10 small seasoning bottles, €2 for all. They can be emptied before pickup upon request.",
+      zh: "小型调味瓶10个，共2欧。如有需要，可以在交付之前清空。"
+    }
+  },
+
+  {
+    id: "extra-large-wmf-pot",
+    image: "extra_large_wmf_pot.jpg",
+    price: 19,
+    name: { en: "Extra-large WMF pot", zh: "特大号 WMF 锅" },
+    description: {
+      en: "Extra-large WMF cooking pot. Originally around €120, now offered for €19.",
+      zh: "特大号WMF铁锅，原价约120欧，现在19欧出。"
+    }
+  },
+
+  {
+    id: "heat-resistant-gloves",
+    image: "heat_resistant_gloves.jpg",
+    price: 1,
+    name: { en: "Heat-resistant gloves", zh: "防烫手套" },
+    description: {
+      en: "A pair of heat-resistant kitchen gloves, €1.",
+      zh: "防烫手套一副，1欧。"
+    }
+  },
+
+  {
+    id: "quiet-fan",
+    image: "quiet_fan.jpg",
+    price: 19,
+    name: { en: "Very quiet fan", zh: "静音风扇" },
+    description: {
+      en: "A very quiet and comfortable fan, suitable for sleeping or working. €19.",
+      zh: "非常舒适的静音风扇，19欧出。"
+    }
+  },
+  {
     id: "books",
     image: "books.jpg",
     price: 3,
@@ -184,7 +316,7 @@ const translations = {
   en: {
     eyebrow: "SECOND-HAND COLLECTION",
     siteTitle: "Objects looking for a new home",
-    intro: "One of each item. Add what you want to the cart, then send me a screenshot on WeChat.",
+    intro: "Most items are one-off. Add what you want to the cart, then send me a screenshot on WeChat.",
     cart: "Cart",
     availableNow: "AVAILABLE NOW",
     catalog: "Second-hand objects",
@@ -215,7 +347,7 @@ const translations = {
   zh: {
     eyebrow: "二手物品",
     siteTitle: "给闲置物品找一个新家",
-    intro: "每件物品仅一件。把想要的物品加入购物车，然后截图并通过微信联系我。",
+    intro: "大多数物品仅一件。把想要的物品加入购物车，然后截图并通过微信联系我。",
     cart: "购物车",
     availableNow: "现有物品",
     catalog: "二手物品",

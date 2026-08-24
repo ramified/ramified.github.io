@@ -11,7 +11,9 @@
     ["reversi", "focus-frame", "center"],
     ["chinese-checkers", "octahedron-with-square-holes", "center"],
     ["sokoban", "classic-fans", "center"],
-    ["fide-chess", "fide-chess-8x8", "chessboard"]
+    ["fide-chess", "fide-chess-8x8", "chessboard"],
+    ["billiards", "twisted-torus", "center"],
+    ["lianliankan", "rubiks-cube-2x2x2", "center"]
   ];
   return {
     gameOrder: defaultForEntries.map(([mode]) => mode),
@@ -24,7 +26,9 @@
         "Gomoku",
         "Go",
         "Reversi",
-        "FIDE Chess"
+        "FIDE Chess",
+        "Tile Matching",
+        "Billiard"
       ],
       "id": "boundary-glue-board",
       "label": "boundary glue board",
@@ -80,6 +84,16 @@
       "gameTypes": [
         "2048"
       ],
+      "id": "4-4-classic",
+      "label": "4*4 classic",
+      "key": "4_4_classic",
+      "file": "4_4_classic.preset.js"
+    },
+    {
+      "gameTypes": [
+        "2048",
+        "Billiard"
+      ],
       "id": "twisted-torus",
       "label": "twisted torus",
       "key": "twisted_torus",
@@ -87,7 +101,8 @@
     },
     {
       "gameTypes": [
-        "2048"
+        "2048",
+        "Billiard"
       ],
       "id": "genus-2",
       "label": "genus 2",
@@ -105,7 +120,8 @@
     },
     {
       "gameTypes": [
-        "2048"
+        "2048",
+        "Billiard"
       ],
       "id": "half-glued",
       "label": "half-glued",
@@ -123,7 +139,9 @@
     },
     {
       "gameTypes": [
-        "2048"
+        "2048",
+        "Tile Matching",
+        "Billiard"
       ],
       "id": "rubiks-cube-2x2x2",
       "label": "Rubik's Cube 2*2*2",
@@ -132,7 +150,7 @@
     },
     {
       "gameTypes": [
-        "Gomoku", "Go"
+        "Gomoku", "Go", "Tile Matching"
       ],
       "id": "rubiks-cube-3x3x3",
       "label": "Rubik's Cube 3*3*3",

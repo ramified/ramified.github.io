@@ -87,6 +87,23 @@
   const FULLSCREEN_ACTION_PAD = 10;
   const FULLSCREEN_ACTION_AUTO_COLLAPSE_MS = 5000;
   const FULLSCREEN_RESTART_CONFIRM_MS = 4200;
+  const LIANLIANKAN_PATH_DISPLAY_MS = 500;
+  const PLACEMENT_ASSIST_DWELL_MS = 500;
+  const PLACEMENT_ASSIST_HOLD_MS = 1000;
+  const GO_LIBERTY_DOT_SCALE = 600;
+  const GO_LIBERTY_DOT_SCALE_REFERENCE = 500;
+  const GO_LIBERTY_DOT_BORDER_SCALE = 300;
+  const GO_LIBERTY_DOT_BORDER_SCALE_REFERENCE = 100;
+  const LIANLIANKAN_TILE_SETS = Object.freeze({
+    japanese: Object.freeze((Lianliankan && Array.isArray(Lianliankan.HIRAGANA_SYMBOLS) ? Lianliankan.HIRAGANA_SYMBOLS : [])
+      .map((symbol) => Object.freeze({ ...symbol }))),
+    chinese: Object.freeze(['山', '水', '云', '月', '风', '花', '雪', '雨', '星', '日', '春', '夏', '秋', '冬', '梅', '兰', '竹', '菊']
+      .map((glyph) => Object.freeze({ id: `han_${glyph}`, glyph: glyph }))),
+    'young-3x3': Object.freeze([
+      [1, 0, 0], [2, 0, 0], [3, 0, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0], [2, 2, 0], [3, 2, 0], [3, 3, 0],
+      [1, 1, 1], [2, 1, 1], [3, 1, 1], [2, 2, 1], [3, 2, 1], [3, 3, 1], [2, 2, 2], [3, 2, 2], [3, 3, 2], [3, 3, 3]
+    ].map((rows) => Object.freeze({ id: `young_${rows.join('')}`, glyph: '' })))
+  });
   const GAME_MODES = {
     NUMBER_2048: '2048',
     GOMOKU: 'gomoku',
@@ -207,6 +224,12 @@
   const REVERSI_MIN_BOARD_SIZE = 4;
   const REVERSI_MAX_BOARD_SIZE = 24;
   const CHINESE_CHECKERS_DEFAULT_COLORS = ['red', 'yellow'];
+  const CHINESE_CHECKERS_JUMP_RULES = Object.freeze({
+    UNLIMITED: 'unlimited',
+    ADJACENT: 'adjacent',
+    ADJACENT_OR_TWO: 'adjacent-or-two'
+  });
+  const CHINESE_CHECKERS_JUMP_RULE_DEFAULT = CHINESE_CHECKERS_JUMP_RULES.UNLIMITED;
   const CHINESE_CHECKERS_MOVE_TIME_DEFAULT = 100;
   const CHINESE_CHECKERS_JUMP_PAUSE_DEFAULT = 120;
   const REVERSI_INVALID_MARK_DURATION = 460;
@@ -257,7 +280,7 @@
   }
 
   const PRESET_FOLDER_URL = 'ramified_minigame_presets/';
-  const PRESET_GROUP_ORDER = ['2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Lianliankan', 'Sokoban'];
+  const PRESET_GROUP_ORDER = ['2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Billiard', 'Tile Matching', 'Sokoban'];
 
   function createRubiksCubePreset(size, id, label) {
     const rows = size * 3;
@@ -431,6 +454,12 @@
   let fideChessPendingPromotion = null;
   let suppressNextCanvasClick = false;
   let suppressCanvasClickTimer = null;
+  let placementReachCandidate = null;
+  let placementReachDwellTimer = null;
+  let placementReachHoldTimer = null;
+  let placementReachAssistData = null;
+  let placementReachAssistState = null;
+  let placementReachSuppressClick = false;
   let heldArrowKeys = new Set();
   let activeHexVerticalKey = null;
   let chineseCheckersSelectedPlayers = null;
@@ -442,6 +471,8 @@
   let fullscreenActionPlacementFrame = null;
   let fullscreenRestartPending = false;
   let fullscreenRestartConfirmTimer = null;
+  let lianliankanHint = null;
+  let lianliankanHintTimer = null;
   let onlineState = null;
   const bombImageCache = new Map();
 
@@ -458,6 +489,9 @@
     refs.fullscreenExit = document.getElementById('fullscreen-exit');
     refs.fullscreenActionStatus = document.getElementById('fullscreen-action-status');
     refs.fullscreenRestart = document.getElementById('fullscreen-restart');
+    refs.fullscreenLianliankanActions = document.getElementById('fullscreen-lianliankan-actions');
+    refs.fullscreenLianliankanHint = document.getElementById('fullscreen-lianliankan-hint');
+    refs.fullscreenLianliankanReset = document.getElementById('fullscreen-lianliankan-reset');
     refs.gameMode = document.getElementById('game-mode-select');
     refs.select = document.getElementById('surface-preset-select');
     refs.importExportRoot = document.getElementById('ramified-import-export-panel');
@@ -474,8 +508,10 @@
     refs.clearImportPreset = document.getElementById('clear-import-preset');
     refs.applyImportPreset = document.getElementById('apply-import-preset');
     refs.importState = document.getElementById('import-state');
+    refs.displayCardBody = document.getElementById('display-card-body');
     refs.placementDisplayRow = document.getElementById('gomoku-display-row');
     refs.gomokuDisplay = document.getElementById('gomoku-display-style');
+    refs.showBoardCoordinates = document.getElementById('show-board-coordinates');
     refs.billiardsRules = document.getElementById('billiards-rules');
     refs.billiardsTool = document.getElementById('billiards-tool');
     refs.billiardsBallPaletteRow = document.getElementById('billiards-ball-palette-row');
@@ -521,10 +557,12 @@
     refs.chineseCheckersJumpPause = document.getElementById('chinese-checkers-jump-pause');
     refs.chineseCheckersJumpPauseValue = document.getElementById('chinese-checkers-jump-pause-value');
     refs.chineseCheckersFullHints = document.getElementById('chinese-checkers-full-hints');
+    refs.chineseCheckersJumpRule = document.getElementById('chinese-checkers-jump-rule');
     refs.chineseCheckersPlayerOptions = document.getElementById('chinese-checkers-player-options');
     refs.chineseCheckersEndJumpRow = document.getElementById('chinese-checkers-end-jump-row');
     refs.chineseCheckersEndJump = document.getElementById('chinese-checkers-end-jump');
     refs.fideChessPieceDisplay = document.getElementById('fide-chess-piece-display');
+    refs.lianliankanTileSet = document.getElementById('lianliankan-tile-set');
     refs.fideChessPuzzleThreatRow = document.getElementById('fide-chess-puzzle-threat-row');
     refs.fideChessPuzzleAttackBorders = document.getElementById('fide-chess-puzzle-attack-borders');
     refs.boxStyle = document.getElementById('number-box-style');
@@ -595,6 +633,7 @@
     refs.modeChineseCheckersControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="chinese-checkers"]')) : [];
     refs.modeSokobanControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="sokoban"]')) : [];
     refs.modeFideChessControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="fide-chess"]')) : [];
+    refs.modeLianliankanControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="lianliankan"]')) : [];
     refs.modeBilliardsControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="billiards"]')) : [];
     refs.statusBadge = document.getElementById('status-badge');
     refs.statusLine = document.getElementById('status-line');
@@ -609,6 +648,7 @@
     refs.existing = document.getElementById('existing-tile-value');
     refs.removed = document.getElementById('removed-tile-value');
     refs.round = document.getElementById('round-value');
+    moveVisualControlsToDisplayCard();
     bindCards();
     if (!refs.canvas || !refs.ctx || !refs.select) return;
 
@@ -622,7 +662,14 @@
     if (!refs.importExportController && refs.importSource) refs.importSource.addEventListener('change', syncImportExportControls);
     if (!refs.importExportController && refs.applyImportPreset) refs.applyImportPreset.addEventListener('click', importPresetFromUi);
     if (refs.importState) refs.importState.addEventListener('click', importStateFromUi);
-    if (refs.gomokuDisplay) refs.gomokuDisplay.addEventListener('change', render);
+    if (refs.gomokuDisplay) refs.gomokuDisplay.addEventListener('change', () => {
+      render();
+      refreshDebugExportIfNeeded();
+    });
+    if (refs.showBoardCoordinates) refs.showBoardCoordinates.addEventListener('change', () => {
+      render();
+      refreshDebugExportIfNeeded();
+    });
     if (refs.billiardsRules) refs.billiardsRules.addEventListener('change', handleBilliardsRulesChange);
     if (refs.billiardsTool) refs.billiardsTool.addEventListener('change', () => {
       billiardsSetupHover = null;
@@ -654,6 +701,7 @@
       refs.placementPieceSize.addEventListener('change', handlePlacementPieceSizeChange);
     }
     if (refs.fideChessPieceDisplay) refs.fideChessPieceDisplay.addEventListener('change', handleFideChessPieceDisplayChange);
+    if (refs.lianliankanTileSet) refs.lianliankanTileSet.addEventListener('change', handleLianliankanTileSetChange);
     if (refs.fideChessPuzzleAttackBorders) refs.fideChessPuzzleAttackBorders.addEventListener('change', handleFideChessPuzzleAttackBordersChange);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('change', handleGomokuSizeChange);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('input', handleGomokuSizeChange);
@@ -678,6 +726,7 @@
     if (refs.chineseCheckersMoveTime) refs.chineseCheckersMoveTime.addEventListener('input', syncChineseCheckersTimingOutput);
     if (refs.chineseCheckersJumpPause) refs.chineseCheckersJumpPause.addEventListener('input', syncChineseCheckersTimingOutput);
     if (refs.chineseCheckersFullHints) refs.chineseCheckersFullHints.addEventListener('change', handleChineseCheckersFullHintsChange);
+    if (refs.chineseCheckersJumpRule) refs.chineseCheckersJumpRule.addEventListener('change', handleChineseCheckersJumpRuleChange);
     if (refs.chineseCheckersPlayerOptions) refs.chineseCheckersPlayerOptions.addEventListener('change', handleChineseCheckersPlayerOptionsChange);
     if (refs.chineseCheckersEndJump) refs.chineseCheckersEndJump.addEventListener('click', endChineseCheckersJumpFromUi);
     if (refs.boxStyle) refs.boxStyle.addEventListener('change', render);
@@ -737,6 +786,8 @@
     if (refs.fullscreenRedo) refs.fullscreenRedo.addEventListener('click', redoFromFullscreenAction);
     if (refs.fullscreenExit) refs.fullscreenExit.addEventListener('click', exitFromFullscreenAction);
     if (refs.fullscreenRestart) refs.fullscreenRestart.addEventListener('click', restartFromFullscreenAction);
+    if (refs.fullscreenLianliankanHint) refs.fullscreenLianliankanHint.addEventListener('click', showLianliankanHintFromFullscreenAction);
+    if (refs.fullscreenLianliankanReset) refs.fullscreenLianliankanReset.addEventListener('click', resetLianliankanFromFullscreenAction);
     if (refs.fullscreenActionShell) {
       refs.fullscreenActionShell.addEventListener('pointerdown', scheduleFullscreenActionAutoCollapse);
       refs.fullscreenActionShell.addEventListener('focusin', scheduleFullscreenActionAutoCollapse);
@@ -744,12 +795,19 @@
     if (refs.canvas) {
       refs.canvas.addEventListener('click', handleCanvasClick);
       refs.canvas.addEventListener('mousemove', handleCanvasHover);
-      refs.canvas.addEventListener('mouseleave', clearGlueHover);
-      refs.canvas.addEventListener('blur', clearGlueHover);
+      refs.canvas.addEventListener('mouseleave', () => {
+        clearGlueHover();
+        clearPlacementReachAssist(true);
+      });
+      refs.canvas.addEventListener('blur', () => {
+        clearGlueHover();
+        clearPlacementReachAssist();
+      });
       refs.canvas.addEventListener('pointerdown', handleCanvasPointerDown);
       refs.canvas.addEventListener('pointermove', handleCanvasPointerMove);
       refs.canvas.addEventListener('pointerup', handleCanvasPointerUp);
       refs.canvas.addEventListener('pointercancel', handleCanvasPointerCancel);
+      refs.canvas.addEventListener('pointerleave', () => clearPlacementReachAssist(true));
       refs.canvas.addEventListener('lostpointercapture', handleCanvasLostPointerCapture);
     }
     refs.moveButtons.forEach((button) => {
@@ -765,7 +823,10 @@
       if (refs.onlineStatus) refs.onlineStatus.textContent = tr(onlineStatusText());
       render();
     });
-    window.addEventListener('blur', clearKeyboardState);
+    window.addEventListener('blur', () => {
+      clearKeyboardState();
+      clearPlacementReachAssist(true);
+    });
     window.addEventListener('resize', handleWindowResize);
 
     syncSpeedOutput();
@@ -802,6 +863,29 @@
         const card = head.closest ? head.closest('.card') : null;
         if (card) card.classList.toggle('collapsed');
       });
+    });
+  }
+
+  function moveVisualControlsToDisplayCard() {
+    if (!refs.displayCardBody || typeof document === 'undefined') return;
+    [
+      'gomoku-display-row',
+      'move-number-label-row',
+      'placement-piece-size-row',
+      'connect-four-align-row',
+      'fide-chess-piece-display-row',
+      'fide-chess-puzzle-threat-row',
+      'chinese-checkers-move-time-row',
+      'chinese-checkers-jump-pause-row',
+      'chinese-checkers-hints-row',
+      'box-ui-row',
+      'new-boxes-row',
+      'speed-row',
+      'billiards-assistance-row',
+      'billiards-debug-row'
+    ].forEach((id) => {
+      const control = document.getElementById(id);
+      if (control) refs.displayCardBody.appendChild(control);
     });
   }
 
@@ -1437,7 +1521,7 @@
       syncOnlineControls();
       return;
     }
-    const snapshot = debugExportPayload();
+    const snapshot = onlineSnapshotWithoutLocalDisplaySettings(debugExportPayload());
     onlineState.roomDisplaySettings = onlineDisplaySettingsFromSnapshot(snapshot);
     const snapshotBytes = jsonByteLength(snapshot);
     if (snapshotBytes > ONLINE_MAX_SNAPSHOT_BYTES) {
@@ -2427,7 +2511,7 @@
       syncOnlineStatus('Spectators cannot submit moves.', 'error');
       return;
     }
-    const snapshot = onlineSnapshotWithRoomDisplaySettings(debugExportPayload());
+    const snapshot = onlineSnapshotWithRoomDisplaySettings(onlineSnapshotWithoutLocalDisplaySettings(debugExportPayload()));
     const snapshotBytes = jsonByteLength(snapshot);
     if (snapshotBytes > ONLINE_MAX_SNAPSHOT_BYTES) {
       syncOnlineStatus(`Move not sent: snapshot is too large (${snapshotBytes} bytes).`, 'error');
@@ -2505,6 +2589,20 @@
       ...existing,
       ...clonePlain(onlineState.roomDisplaySettings)
     };
+    return next;
+  }
+
+  function onlineSnapshotWithoutLocalDisplaySettings(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return snapshot;
+    const next = clonePlain(snapshot);
+    if (next.settings && typeof next.settings === 'object' && !Array.isArray(next.settings)) {
+      delete next.settings.showBoardCoordinates;
+      delete next.settings.coordinates;
+      delete next.settings.boardCoordinates;
+    }
+    delete next.showBoardCoordinates;
+    delete next.coordinates;
+    delete next.boardCoordinates;
     return next;
   }
 
@@ -2704,6 +2802,8 @@
 
   function resetToPreview() {
     hideCanvasStartPrompt();
+    clearLianliankanHint();
+    clearPlacementReachAssist();
     if (!presetCatalogReady || !PRESETS.length) {
       game = null;
       geometry = null;
@@ -2801,7 +2901,7 @@
 
   function gameModeFromUrlParam(value) {
     const mode = String(value || '').trim().toLowerCase();
-    if (mode === GAME_MODES.LIANLIANKAN || mode === 'tile-link' || mode === 'tile link') return GAME_MODES.LIANLIANKAN;
+    if ([GAME_MODES.LIANLIANKAN, 'tile-link', 'tile link', 'tile matching', '连连看'].includes(mode)) return GAME_MODES.LIANLIANKAN;
     if (mode === GAME_MODES.CHINESE_CHECKERS || mode === 'chinesecheckers' || mode === 'chinese checkers') return GAME_MODES.CHINESE_CHECKERS;
     if (mode === GAME_MODES.SOKOBAN) return GAME_MODES.SOKOBAN;
     if (mode === GAME_MODES.FIDE_CHESS || mode === 'fidechess' || mode === 'fide chess' || mode === 'chess') return GAME_MODES.FIDE_CHESS;
@@ -2817,7 +2917,8 @@
   function gameModeFromPresetGroup(preset) {
     const gameTypes = presetGameTypesForModes(preset);
     const gameType = String(gameTypes[0] || '').trim().toLowerCase();
-    if (gameType.includes('lianliankan') || gameType.includes('tile-link') || gameType.includes('tile link')) return GAME_MODES.LIANLIANKAN;
+    if (gameType.includes('lianliankan') || gameType.includes('tile-link') || gameType.includes('tile link') || gameType.includes('tile matching') || gameType.includes('连连看')) return GAME_MODES.LIANLIANKAN;
+    if (gameType.includes('billiard')) return GAME_MODES.BILLIARDS;
     if (gameType.includes('fide') || gameType.includes('chess')) return GAME_MODES.FIDE_CHESS;
     if (gameType.includes('sokoban')) return GAME_MODES.SOKOBAN;
     if (gameType.includes('chinese')) return GAME_MODES.CHINESE_CHECKERS;
@@ -2834,24 +2935,13 @@
       const mode = gameTypeToGameMode(gameType);
       if (!modes.includes(mode)) modes.push(mode);
     });
-    if (preset && ['square', 'hexagonal'].includes(normalizeImportedLattice(preset.lattice || 'square')) && !modes.includes(GAME_MODES.BILLIARDS)) {
-      modes.push(GAME_MODES.BILLIARDS);
-    }
-    if (
-      Lianliankan
-      && LianliankanMosaicAdapter
-      && preset
-      && normalizeImportedLattice(preset.lattice || 'square') === 'square'
-      && !modes.includes(GAME_MODES.LIANLIANKAN)
-    ) {
-      modes.push(GAME_MODES.LIANLIANKAN);
-    }
     return modes.length ? modes : [GAME_MODES.NUMBER_2048];
   }
 
   function gameTypeToGameMode(gameType) {
     const normalized = String(gameType || '').trim().toLowerCase();
-    if (normalized.includes('lianliankan') || normalized.includes('tile-link') || normalized.includes('tile link')) return GAME_MODES.LIANLIANKAN;
+    if (normalized.includes('lianliankan') || normalized.includes('tile-link') || normalized.includes('tile link') || normalized.includes('tile matching') || normalized.includes('连连看')) return GAME_MODES.LIANLIANKAN;
+    if (normalized.includes('billiard')) return GAME_MODES.BILLIARDS;
     if (normalized.includes('fide') || normalized.includes('chess')) return GAME_MODES.FIDE_CHESS;
     if (normalized.includes('sokoban')) return GAME_MODES.SOKOBAN;
     if (normalized.includes('chinese')) return GAME_MODES.CHINESE_CHECKERS;
@@ -2877,7 +2967,7 @@
   }
 
   function gameTypeForGameMode(mode) {
-    if (mode === GAME_MODES.LIANLIANKAN) return 'Lianliankan';
+    if (mode === GAME_MODES.LIANLIANKAN) return 'Tile Matching';
     if (mode === GAME_MODES.BILLIARDS) return 'Billiard';
     if (mode === GAME_MODES.FIDE_CHESS) return 'FIDE Chess';
     if (mode === GAME_MODES.SOKOBAN) return 'Sokoban';
@@ -3108,7 +3198,7 @@
 
   function cleanPresetKey(value) {
     const key = cleanPresetString(value).replace(/[^A-Za-z0-9_$]/g, '_');
-    return /^[A-Za-z_$]/.test(key) ? key : '';
+    return /^[A-Za-z0-9_$]/.test(key) ? key : '';
   }
 
   function cleanPresetId(value) {
@@ -3134,6 +3224,8 @@
     if (normalized === 'chinese-checkers' || normalized === 'chinesecheckers' || normalized === 'chinese checkers') return 'Chinese Checkers';
     if (normalized === 'sokoban') return 'Sokoban';
     if (normalized === 'fide-chess' || normalized === 'fidechess' || normalized === 'fide chess' || normalized === 'chess') return 'FIDE Chess';
+    if (['tile matching', 'tile-link', 'tile link', 'lianliankan', '连连看'].includes(normalized)) return 'Tile Matching';
+    if (['billiard', 'billiards', 'topological billiards'].includes(normalized)) return 'Billiard';
     return gameType;
   }
 
@@ -3367,7 +3459,7 @@
 
   function presetGameTypeLabelForMode(preset, mode) {
     if (mode === GAME_MODES.BILLIARDS) return 'Billiard';
-    if (mode === GAME_MODES.LIANLIANKAN) return 'Lianliankan';
+    if (mode === GAME_MODES.LIANLIANKAN) return 'Tile Matching';
     const matching = presetGameTypesForModes(preset).find((gameType) => gameTypeToGameMode(gameType) === mode);
     return cleanPresetGameType(matching || gameTypeForGameMode(mode));
   }
@@ -3384,9 +3476,6 @@
 
   function defaultPresetIdForMode(mode) {
     const targetMode = mode || GAME_MODES.NUMBER_2048;
-    if (targetMode === GAME_MODES.LIANLIANKAN && resolvePreset(BOUNDARY_GLUE_BOARD_PRESET_ID)) {
-      return BOUNDARY_GLUE_BOARD_PRESET_ID;
-    }
     if (presetDefaultByMode[targetMode]) return presetDefaultByMode[targetMode];
     const fallbackPreset = presetListForMode(targetMode)[0] || PRESETS[0];
     return (fallbackPreset && fallbackPreset.id) || '';
@@ -3552,6 +3641,8 @@
       return false;
     }
     const previous = game;
+    clearLianliankanHint();
+    clearPlacementReachAssist();
     if (previous.phase === 'setup') {
       resetToPreview();
       if (refs.canvas) refs.canvas.focus();
@@ -3577,6 +3668,7 @@
     }
     if (isChineseCheckersGame(previous)) {
       options.playerColors = chineseCheckersPlayerColors(previous);
+      options.jumpRule = normalizeChineseCheckersJumpRule(previous.jumpRule);
     }
     game = beginSelectedGame(previous.preset || selectedPreset(), options);
     if (game.phase !== 'gameover') game.phase = 'ready';
@@ -3792,6 +3884,14 @@
     refreshDebugExportIfNeeded();
   }
 
+  function handleLianliankanTileSetChange() {
+    if (selectedGameMode() !== GAME_MODES.LIANLIANKAN || !game || game.phase !== 'setup' || onlineIsInRoom()) {
+      syncControls();
+      return;
+    }
+    resetToPreview();
+  }
+
   function handleFideChessPuzzleAttackBordersChange() {
     render();
     refreshDebugExportIfNeeded();
@@ -3969,6 +4069,8 @@
   }
 
   function applyPreparedImport(prepared) {
+    clearLianliankanHint();
+    clearPlacementReachAssist();
     if (prepared.kind === 'status') {
       applyImportedDebugState(prepared.imported);
       return;
@@ -4277,6 +4379,11 @@
     if (refs.moveNumberLabels && moveNumberLabels != null) {
       refs.moveNumberLabels.checked = normalizeBooleanSetting(moveNumberLabels, refs.moveNumberLabels.checked);
     }
+    const boardCoordinates = firstPresentValue(imported, ['showBoardCoordinates', 'coordinates', 'boardCoordinates'])
+      ?? firstPresentValue(settings, ['showBoardCoordinates', 'coordinates', 'boardCoordinates']);
+    if (refs.showBoardCoordinates && boardCoordinates != null) {
+      refs.showBoardCoordinates.checked = normalizeBooleanSetting(boardCoordinates, false);
+    }
     const pieceRadius = firstPresentValue(imported, ['pieceRadiusPercent', 'pieceSizePercent', 'pieceSize'])
       ?? firstPresentValue(settings, ['pieceRadiusPercent', 'pieceSizePercent', 'pieceSize']);
     if (refs.placementPieceSize && pieceRadius != null) {
@@ -4303,6 +4410,7 @@
     if (handleBilliardsPointerDown(event)) return;
     if (isFideChessGame(game) && fideChessPendingPromotion) return;
     if (beginFideChessPieceDrag(event)) return;
+    beginPlacementReachPress(event);
     if (!isDirectionalMoveGame(game) || !canAcceptDirectionalMove()) {
       resetSwipeGesture();
       return;
@@ -4320,9 +4428,11 @@
   function handleCanvasPointerMove(event) {
     if (handleBilliardsPointerMove(event)) return;
     if (activeFideChessDragEvent(event)) {
+      clearPlacementReachAssist();
       updateFideChessPieceDrag(event);
       return;
     }
+    updatePlacementReachDwell(event);
     if (!activeSwipeEvent(event)) return;
     swipeGesture.lastX = event.clientX;
     swipeGesture.lastY = event.clientY;
@@ -4339,6 +4449,7 @@
       finishFideChessPieceDrag(event);
       return;
     }
+    endPlacementReachPress(event);
     if (!activeSwipeEvent(event)) return;
     const endX = Number.isFinite(event.clientX) ? event.clientX : swipeGesture.lastX;
     const endY = Number.isFinite(event.clientY) ? event.clientY : swipeGesture.lastY;
@@ -4362,6 +4473,7 @@
       cancelFideChessPieceDrag(event);
       return;
     }
+    clearPlacementReachAssist();
     if (!activeSwipeEvent(event)) return;
     releaseSwipePointer(swipeGesture.pointerId);
     resetSwipeGesture();
@@ -4373,8 +4485,114 @@
       cancelFideChessPieceDrag(event);
       return;
     }
+    clearPlacementReachAssist();
     if (!activeSwipeEvent(event)) return;
     resetSwipeGesture();
+  }
+
+  function placementReachInteractionAvailable(state = game) {
+    return !!(
+      isPlacementGame(state)
+      && !currentAnimation
+      && !fideChessDrag
+      && !billiardsShotPending
+    );
+  }
+
+  function placementReachTargetAtEvent(event, state = game) {
+    if (!placementReachInteractionAvailable(state)) return null;
+    const target = tileFromCanvasEvent(event);
+    if (!target) return null;
+    const assist = placementReachAssist(state, target.index);
+    return assist ? { index: target.index, assist } : null;
+  }
+
+  function beginPlacementReachPress(event) {
+    const target = placementReachTargetAtEvent(event);
+    if (!target) {
+      clearPlacementReachAssist(true);
+      return;
+    }
+    setPlacementReachCandidate({
+      pointerId: event.pointerId,
+      index: target.index,
+      assist: target.assist,
+      pressed: true
+    });
+  }
+
+  function updatePlacementReachDwell(event) {
+    const target = placementReachTargetAtEvent(event);
+    if (!target) {
+      clearPlacementReachAssist(true);
+      return;
+    }
+    const same = placementReachCandidate
+      && placementReachCandidate.index === target.index
+      && placementReachCandidate.pointerId === event.pointerId;
+    if (same) return;
+    setPlacementReachCandidate({
+      pointerId: event.pointerId,
+      index: target.index,
+      assist: target.assist,
+      pressed: !!(event.buttons & 1)
+    });
+  }
+
+  function setPlacementReachCandidate(candidate) {
+    const hadAssist = !!placementReachAssistData;
+    clearPlacementReachTimers();
+    placementReachCandidate = candidate;
+    placementReachAssistData = null;
+    placementReachAssistState = null;
+    if (hadAssist) render();
+    placementReachDwellTimer = setTimeout(() => {
+      if (!placementReachCandidate || placementReachCandidate !== candidate) return;
+      activatePlacementReachAssist(candidate);
+    }, PLACEMENT_ASSIST_DWELL_MS);
+    if (candidate.pressed) {
+      placementReachHoldTimer = setTimeout(() => {
+        if (!placementReachCandidate || placementReachCandidate !== candidate || !candidate.pressed) return;
+        placementReachSuppressClick = true;
+        activatePlacementReachAssist(candidate);
+      }, PLACEMENT_ASSIST_HOLD_MS);
+    }
+  }
+
+  function activatePlacementReachAssist(candidate) {
+    if (!candidate || !placementReachInteractionAvailable() || placementReachCandidate !== candidate) return;
+    const assist = placementReachAssist(game, candidate.index);
+    if (!assist) {
+      clearPlacementReachAssist(true);
+      return;
+    }
+    placementReachAssistData = assist;
+    placementReachAssistState = game;
+    render();
+  }
+
+  function endPlacementReachPress(event) {
+    if (!placementReachCandidate || placementReachCandidate.pointerId !== event.pointerId) return;
+    const completedHold = placementReachSuppressClick;
+    clearPlacementReachAssist(true);
+    if (completedHold) suppressUpcomingCanvasClick();
+  }
+
+  function clearPlacementReachTimers() {
+    if (placementReachDwellTimer != null) clearTimeout(placementReachDwellTimer);
+    if (placementReachHoldTimer != null) clearTimeout(placementReachHoldTimer);
+    placementReachDwellTimer = null;
+    placementReachHoldTimer = null;
+  }
+
+  function clearPlacementReachAssist(redraw = false) {
+    const hadAssist = !!placementReachAssistData;
+    clearPlacementReachTimers();
+    placementReachCandidate = null;
+    placementReachAssistData = null;
+    placementReachAssistState = null;
+    placementReachSuppressClick = false;
+    if (redraw && hadAssist) render();
   }
 
   function billiardsLocalFromEvent(event) {
@@ -6023,6 +6241,7 @@
 
   function stopPlayback() {
     cancelBilliardsShotSimulation();
+    clearPlacementReachAssist();
     if (animationFrameId != null) cancelFrame(animationFrameId);
     animationFrameId = null;
     currentAnimation = null;
@@ -6215,7 +6434,16 @@
         button.setAttribute('aria-pressed', active ? 'true' : 'false');
       });
     }
-    if (!fullscreenActive) collapseFullscreenActionBar({ focusCanvas: false, skipPlacement: true });
+    if (refs.fullscreenLianliankanActions) {
+      refs.fullscreenLianliankanActions.hidden = !(
+        fullscreenActive
+        && isLianliankanGame(game)
+        && game.phase !== 'setup'
+      );
+    }
+    if (!fullscreenActive) {
+      collapseFullscreenActionBar({ focusCanvas: false, skipPlacement: true });
+    }
     requestFullscreenActionPlacement();
   }
 
@@ -6364,6 +6592,47 @@
       return !!game && game.phase !== 'setup';
     }
     return resetCurrentGameFromShortcut();
+  }
+
+  function clearLianliankanHint() {
+    if (lianliankanHintTimer) clearTimeout(lianliankanHintTimer);
+    lianliankanHintTimer = null;
+    lianliankanHint = null;
+  }
+
+  function showLianliankanHintFromFullscreenAction() {
+    if (!isLianliankanGame(game) || !Lianliankan || game.phase !== 'ready' || lianliankanHint) {
+      syncControls();
+      return;
+    }
+    const match = game.availableMatch || Lianliankan.findAnyLegalMatch(game);
+    if (!match || !match.path) {
+      syncStatus('No more tile matches are available', 'use Refresh to continue', 'warn');
+      syncControls();
+      return;
+    }
+    lianliankanHint = { a: match.a, b: match.b, path: match.path };
+    const hintedGame = game;
+    syncStatus('Tile Matching hint', 'a legal path is shown', 'ready');
+    render();
+    syncControls();
+    lianliankanHintTimer = setTimeout(() => {
+      lianliankanHintTimer = null;
+      if (game !== hintedGame || !lianliankanHint) return;
+      lianliankanHint = null;
+      syncStatusForCurrentGame();
+      render();
+      syncControls();
+    }, LIANLIANKAN_PATH_DISPLAY_MS);
+  }
+
+  function resetLianliankanFromFullscreenAction() {
+    if (!isLianliankanGame(game) || onlineIsInRoom()) {
+      syncControls();
+      return;
+    }
+    clearLianliankanHint();
+    if (refreshLianliankanFromUi() && refs.canvas) refs.canvas.focus();
   }
 
   function requestFullscreenActionPlacement() {
@@ -6604,6 +6873,7 @@
       if (event.preventDefault) event.preventDefault();
       return;
     }
+    clearPlacementReachAssist();
     if (handleSetupCanvasStartClick(event)) return;
     if (isBilliardsGame(game)) {
       handleBilliardsCanvasClick(event);
@@ -6651,6 +6921,15 @@
 
   function handleLianliankanCanvasClick(event) {
     if (!game || !Lianliankan || !LianliankanMosaicAdapter) return;
+    if (game.phase === 'complete') {
+      if (!game.resultDismissed) {
+        game.resultDismissed = true;
+        render();
+        refreshDebugExportIfNeeded();
+      }
+      return;
+    }
+    if (lianliankanHint) return;
     if (!['ready', 'deadlock'].includes(game.phase)) return;
     const target = tileFromCanvasEvent(event);
     if (!target) return;
@@ -6671,7 +6950,7 @@
     if (result.kind === 'match') {
       const pendingGame = game;
       render();
-      syncStatus('Lianliankan match', 'connected path found', 'moving');
+      syncStatus('Tile Matching match', 'connected path found', 'moving');
       setTimeout(() => {
         if (game !== pendingGame || !isLianliankanGame(game) || !game.pendingMatch) return;
         Lianliankan.commitPendingMatch(game);
@@ -6680,7 +6959,7 @@
         render();
         syncControls();
         refreshDebugExportIfNeeded();
-      }, 220);
+      }, LIANLIANKAN_PATH_DISPLAY_MS);
       return;
     }
     syncStatusForCurrentGame();
@@ -6690,7 +6969,8 @@
 
   function refreshLianliankanFromUi() {
     if (!isLianliankanGame(game) || !Lianliankan || game.phase === 'animating' || game.phase === 'complete') return false;
-    pushUndoSnapshot('refresh Lianliankan tiles');
+    clearLianliankanHint();
+    pushUndoSnapshot('refresh Tile Matching tiles');
     const result = Lianliankan.refreshGame(game, { rng: Math.random, maxAttempts: 50 });
     LianliankanMosaicAdapter.syncSharedState(game);
     syncStatusForCurrentGame();
@@ -7906,6 +8186,7 @@
 
   function restoreHistorySnapshot(snapshot, status, info) {
     stopPlayback();
+    clearLianliankanHint();
     clearFideChessPendingPromotion({ render: false });
     game = cloneGameState(snapshot.game);
     eventQueue = clonePlain(snapshot.eventQueue || []);
@@ -8120,16 +8401,17 @@
   }
 
   function gameRecordSettings(state) {
-    const settings = {};
+    const settings = {
+      displayStyle: placementDisplayStyle(),
+      showBoardCoordinates: shouldShowBoardCoordinates()
+    };
     if (isBilliardsGame(state)) {
-      settings.displayStyle = placementDisplayStyle();
       settings.rules = state.rules;
       settings.friction = Billiards
         ? Billiards.normalizeFriction(state.deterministic && state.deterministic.parameters && state.deterministic.parameters.friction)
         : 1;
     }
     if (isPlacementGame(state)) {
-      settings.displayStyle = placementDisplayStyle();
       settings.pieceRadiusPercent = selectedPlacementPieceRadiusPercent(gameModeValue(state));
     }
     if (isFideChessGame(state)) {
@@ -8653,6 +8935,7 @@
     if (isChineseCheckersGame(game)) {
       return {
         ...base,
+        jumpRule: normalizeChineseCheckersJumpRule(game.jumpRule),
         turn: game.turn || 'red',
         winner: game.winner || '',
         winningLine: (game.winningLine || []).slice(),
@@ -9259,10 +9542,15 @@
         payload.playerColors || payload.chineseCheckersPlayers || preset.chineseCheckersPlayers,
         camps
       );
+      const jumpRule = normalizeChineseCheckersJumpRule(
+        payload.jumpRule != null ? payload.jumpRule : (payload.chineseCheckersJumpRule != null
+          ? payload.chineseCheckersJumpRule
+          : preset.chineseCheckersJumpRule)
+      );
       const round = normalizeNonnegativeInteger(payload.round, 0);
       const openingOrder = normalizeImportedChineseCheckersOpeningOrder(payload, playerColors, phase, round);
       playerColors = chineseCheckersOrderedPlayerColors(playerColors, openingOrder);
-      const importedJumpChain = normalizeStatusChineseCheckersJumpChain(payload.jumpChain, marbles, preset, removed);
+      const importedJumpChain = normalizeStatusChineseCheckersJumpChain(payload.jumpChain, marbles, preset, removed, jumpRule);
       const jumpChain = phase === 'gameover' ? null : importedJumpChain;
       const jumpingMarble = jumpChain ? marbles.find((marble) => marble.id === jumpChain.marbleId) : null;
       const state = {
@@ -9278,6 +9566,7 @@
         nextMarbleId,
         camps,
         playerColors,
+        jumpRule,
         openingOrder,
         selectedIndex: jumpChain ? jumpChain.currentIndex : normalizeStatusOptionalBoardIndex(payload.selectedIndex, preset),
         jumpChain,
@@ -10020,7 +10309,7 @@
     });
   }
 
-  function normalizeStatusChineseCheckersJumpChain(value, marbles, preset, removed) {
+  function normalizeStatusChineseCheckersJumpChain(value, marbles, preset, removed, jumpRule = CHINESE_CHECKERS_JUMP_RULE_DEFAULT) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const marbleId = Number(value.marbleId);
     const moving = Number.isInteger(marbleId) ? marbles.find((marble) => marble.id === marbleId) : null;
@@ -10030,11 +10319,17 @@
     const stateLike = { preset };
     if (!validBoardIndex(stateLike, startIndex) || !validBoardIndex(stateLike, currentIndex)) return null;
     if (removed.has(startIndex) || removed.has(currentIndex) || moving.index !== currentIndex) return null;
+    const segments = cloneChineseCheckerMoveSegments(value.segments);
+    const jumpDistance = chineseCheckersJumpChainDistance({ jumpDistance: Number(value.jumpDistance), segments });
+    if (normalizeChineseCheckersJumpRule(jumpRule) === CHINESE_CHECKERS_JUMP_RULES.ADJACENT_OR_TWO
+      && (![1, 2].includes(jumpDistance)
+        || segments.some((segment) => chineseCheckerSegmentJumpDistance(segment) !== jumpDistance))) return null;
     return {
       marbleId,
       startIndex,
       currentIndex,
-      segments: cloneChineseCheckerMoveSegments(value.segments)
+      jumpDistance,
+      segments
     };
   }
 
@@ -10094,7 +10389,7 @@
 
   function normalizeStatusGameMode(payload) {
     const value = String((payload && (payload.gameMode || payload.game)) || '').trim().toLowerCase();
-    if (value === GAME_MODES.LIANLIANKAN || value === 'tile-link' || value === 'tile link') return GAME_MODES.LIANLIANKAN;
+    if ([GAME_MODES.LIANLIANKAN, 'tile-link', 'tile link', 'tile matching', '连连看'].includes(value)) return GAME_MODES.LIANLIANKAN;
     if ([GAME_MODES.BILLIARDS, 'billiard', 'topological billiards'].includes(value)) return GAME_MODES.BILLIARDS;
     if (value === GAME_MODES.CHINESE_CHECKERS || value === 'chinese checkers' || value === 'chinesecheckers') {
       return GAME_MODES.CHINESE_CHECKERS;
@@ -10255,6 +10550,17 @@
     return normalizePlacementColor(value);
   }
 
+  function normalizeChineseCheckersJumpRule(value) {
+    const rule = String(value || '').trim().toLowerCase();
+    if ([CHINESE_CHECKERS_JUMP_RULES.ADJACENT, 'adjacent-only', 'short'].includes(rule)) {
+      return CHINESE_CHECKERS_JUMP_RULES.ADJACENT;
+    }
+    if ([CHINESE_CHECKERS_JUMP_RULES.ADJACENT_OR_TWO, 'adjacent-or-distance-two', 'adjacent-plus-one', 'two'].includes(rule)) {
+      return CHINESE_CHECKERS_JUMP_RULES.ADJACENT_OR_TWO;
+    }
+    return CHINESE_CHECKERS_JUMP_RULE_DEFAULT;
+  }
+
   function normalizeChineseCheckersTurn(value, playerColors = CHINESE_CHECKERS_DEFAULT_COLORS) {
     const color = normalizeChineseCheckersColor(value);
     const players = normalizeChineseCheckersPlayers(playerColors);
@@ -10311,22 +10617,22 @@
         return;
       }
       if (game.phase === 'complete') {
-        syncStatus('Lianliankan complete', `${game.matches || 0} matches cleared the board`, 'over');
+        syncStatus('Tile Matching complete', `${game.matches || 0} matches cleared the board`, 'over');
         return;
       }
       if (game.phase === 'deadlock') {
-        syncStatus('No more matches are available', `${remaining} tiles remain; use Refresh to continue`, 'warn');
+        syncStatus('No more tile matches are available', `${remaining} tiles remain; use Refresh to continue`, 'warn');
         return;
       }
       if (game.phase === 'animating') {
-        syncStatus('Lianliankan match', `${remaining} tiles remaining`, 'moving');
+        syncStatus('Tile Matching match', `${remaining} tiles remaining`, 'moving');
         return;
       }
       const selected = Number.isInteger(game.selectedIndex) && game.board.cells[game.selectedIndex]
         ? game.board.cells[game.selectedIndex].tile
         : null;
       syncStatus(
-        `Lianliankan match ${game.matches || 0}`,
+        `Tile Matching match ${game.matches || 0}`,
         selected ? `${selected.glyph} selected; ${remaining} tiles remaining` : `${remaining} tiles remaining`,
         'ready'
       );
@@ -10611,6 +10917,7 @@
 
   function render() {
     if (!refs.canvas || !refs.ctx) return;
+    if (placementReachAssistData && (!placementReachInteractionAvailable() || placementReachAssistState !== game)) clearPlacementReachAssist();
     const preset = game ? game.preset : selectedPreset();
     if (!preset) return;
     if (hoveredGlue && !activeGlueHoverForPreset(preset, hoveredGlue)) {
@@ -10620,7 +10927,8 @@
     const removed = game ? game.removed : initialRemovedSet(preset);
     const dpr = Math.min(Math.max((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1, 1), 2.5);
     const sizing = canvasRenderSizing();
-    geometry = buildGeometry(preset, sizing.widthAvailable, sizing.margin, dpr, {
+    const coordinateMargin = shouldShowBoardCoordinates() ? boardCoordinateMargin(sizing) : 0;
+    geometry = buildGeometry(preset, sizing.widthAvailable, sizing.margin + coordinateMargin, dpr, {
       heightAvailable: sizing.heightAvailable,
       immersive: sizing.immersive
     });
@@ -10646,8 +10954,8 @@
     ctx.save();
     applyGeometryDisplayTransform(ctx, geometry);
     const sharedDisplayGame = isPlacementGame(game) || isBilliardsGame(game);
-    const displayStyle = sharedDisplayGame ? placementDisplayStyle() : 'center';
-    const vertexDisplay = sharedDisplayGame && isVertexPlacementDisplay(displayStyle);
+    const displayStyle = placementDisplayStyle();
+    const vertexDisplay = isVertexPlacementDisplay(displayStyle);
     const polishedVertexDisplay = vertexDisplay && displayStyle === 'polished-vertex';
     if (!vertexDisplay) {
       geometry.cells.forEach((cell, index) => {
@@ -10657,10 +10965,13 @@
           });
         }
       });
+    } else if (!sharedDisplayGame) {
+      drawGenericVertexBoard(ctx, geometry, preset, removed, polishedVertexDisplay);
     }
 
     drawBackgroundBoundaries(ctx, geometry, preset, boardBlocked);
     drawGlueEdges(ctx, geometry, preset, hoveredGlue);
+    if (shouldShowBoardCoordinates()) drawBoardCoordinates(ctx, geometry, preset, removed, vertexDisplay);
     if (isLianliankanGame(game)) {
       drawLianliankanGame(ctx, geometry, game);
     } else if (isBilliardsGame(game) && Billiards) {
@@ -10678,6 +10989,7 @@
       if (polishedVertexDisplay) drawPolishedPlacementVertexBoard(ctx, geometry, game);
       else if (vertexDisplay) drawPlacementVertexBoard(ctx, geometry, game);
       else if (isConnectFourGame(game)) drawConnectFourHoles(ctx, geometry, game);
+      drawPlacementReachAssistUnderlay(ctx, geometry, game);
       if (!isConnectFourDropAnimation() && !isChineseCheckersGame(game)) drawPlacementWinningLine(ctx, geometry, game);
       if (isGoGame(game)) drawGoScoreOverlay(ctx, geometry, game);
       drawPlacementLastMoveUnderlays(ctx, geometry, game);
@@ -10688,6 +11000,7 @@
       drawFideChessDraggedPiece(ctx, geometry, game);
       drawPlacementLastMovePieceMarkers(ctx, geometry, game);
       if (isGoGame(game)) drawGoDeadStoneMarks(ctx, geometry, game);
+      drawPlacementReachAssistOverlay(ctx, geometry, game);
       drawPlacementMoveNumberLabels(ctx, geometry, game);
       drawPlacementAnimationOverlays(ctx, geometry);
       drawPlacementFeedbackOverlays(ctx, geometry);
@@ -10704,8 +11017,8 @@
     }
     ctx.restore();
     drawCanvasFeedbackOverlays(ctx, geometry);
-    const gameOverPopupDismissed = game && game.resultDismissed && (isPlacementGame(game) || isSokobanGame(game));
-    if (game && game.phase === 'gameover' && !currentAnimation && !gameOverPopupDismissed) {
+    const finalResultVisible = game && (game.phase === 'gameover' || isLianliankanGame(game) && game.phase === 'complete');
+    if (finalResultVisible && !currentAnimation && !game.resultDismissed) {
       drawGameOverPopup(ctx, geometry, game);
     }
     syncStats();
@@ -10716,22 +11029,22 @@
     if (!state || !state.board || !LianliankanMosaicAdapter) return;
     const pendingPath = state.pendingMatch && state.pendingMatch.path;
     if (pendingPath) drawLianliankanPath(ctx, geom, pendingPath);
+    if (lianliankanHint && lianliankanHint.path) drawLianliankanPath(ctx, geom, lianliankanHint.path, { hint: true });
     state.board.cells.forEach((boardCell, index) => {
       if (!boardCell.playable || !boardCell.tile || !geom.cells[index]) return;
       drawLianliankanTile(ctx, geom, index, boardCell.tile, state.selectedIndex === index);
     });
   }
 
-  function drawLianliankanPath(ctx, geom, path) {
+  function drawLianliankanPath(ctx, geom, path, options = {}) {
     const segments = LianliankanMosaicAdapter.pathSegments(path, geom);
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = Math.max(3, geom.radius * 0.12);
+    ctx.strokeStyle = options.hint ? '#b45309' : '#0f766e';
+    ctx.setLineDash([]);
     segments.forEach((segment) => {
-      const glued = segment.kind !== 'direct';
-      ctx.strokeStyle = glued ? lianliankanGluePathColor(segment.group) : '#0f766e';
-      ctx.setLineDash(glued ? [Math.max(4, geom.radius * 0.18), Math.max(3, geom.radius * 0.12)] : []);
       ctx.beginPath();
       ctx.moveTo(segment.from.x, segment.from.y);
       ctx.lineTo(segment.to.x, segment.to.y);
@@ -10739,13 +11052,6 @@
     });
     ctx.setLineDash([]);
     ctx.restore();
-  }
-
-  function lianliankanGluePathColor(group) {
-    const text = String(group == null ? '' : group);
-    let hash = 0;
-    for (let index = 0; index < text.length; index += 1) hash = ((hash * 31) + text.charCodeAt(index)) >>> 0;
-    return GLUE_COLORS[hash % GLUE_COLORS.length] || '#8b5a2b';
   }
 
   function drawLianliankanTile(ctx, geom, index, tile, selected) {
@@ -10760,12 +11066,43 @@
     ctx.lineWidth = selected ? Math.max(3, geom.radius * 0.1) : Math.max(1.5, geom.radius * 0.055);
     ctx.strokeStyle = selected ? '#0f766e' : '#806f5e';
     ctx.stroke();
-    ctx.fillStyle = '#211f1b';
-    ctx.font = `700 ${Math.max(14, Math.floor(geom.radius * 0.82))}px "Noto Sans JP", "Yu Gothic", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(String(tile.glyph || tile.id), cell.x, cell.y + (geom.radius * 0.025), size * 0.76);
+    const youngRows = youngDiagramRows(tile);
+    if (youngRows) {
+      drawYoungDiagramTile(ctx, cell, size, youngRows);
+    } else {
+      ctx.fillStyle = '#211f1b';
+      ctx.font = `700 ${Math.max(14, Math.floor(geom.radius * 0.82))}px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(tile.glyph || tile.id), cell.x, cell.y + (geom.radius * 0.025), size * 0.76);
+    }
     ctx.restore();
+  }
+
+  function youngDiagramRows(tile) {
+    const match = /^young_([0-3])([0-3])([0-3])$/.exec(String(tile && tile.id || ''));
+    if (!match) return null;
+    const rows = match.slice(1).map(Number);
+    return rows[0] > 0 && rows[0] >= rows[1] && rows[1] >= rows[2] ? rows : null;
+  }
+
+  function drawYoungDiagramTile(ctx, cell, tileSize, rows) {
+    const gridSize = tileSize * 0.62;
+    const square = gridSize / 3;
+    const activeRows = rows.filter((count) => count > 0).length;
+    const width = rows[0] * square;
+    const height = activeRows * square;
+    const left = cell.x - (width / 2);
+    const top = cell.y - (height / 2);
+    ctx.lineWidth = Math.max(0.9, tileSize * 0.025);
+    ctx.strokeStyle = '#111111';
+    for (let row = 0; row < activeRows; row += 1) {
+      for (let col = 0; col < rows[row]; col += 1) {
+        const x = left + col * square;
+        const y = top + row * square;
+        ctx.strokeRect(x, y, square, square);
+      }
+    }
   }
 
   function activeCanvasDisplayMode() {
@@ -10796,6 +11133,11 @@
       margin: shortSide < 430 ? 12 : 18,
       immersive: true
     };
+  }
+
+  function boardCoordinateMargin(sizing) {
+    if (sizing && sizing.immersive) return Math.max(24, Math.min(42, Math.round(Math.min(sizing.widthAvailable, sizing.heightAvailable || sizing.widthAvailable) * 0.07)));
+    return sizing && sizing.widthAvailable < 430 ? 30 : 40;
   }
 
   function immersiveCanvasAvailableBox(wrap) {
@@ -12269,6 +12611,158 @@
     ctx.restore();
   }
 
+  function activePlacementReachAssist(state) {
+    return placementReachAssistData && placementReachAssistState === state && placementReachInteractionAvailable(state)
+      ? placementReachAssistData
+      : null;
+  }
+
+  function drawPlacementReachAssistUnderlay(ctx, geom, state) {
+    const assist = activePlacementReachAssist(state);
+    if (!assist) return;
+    if (assist.kind === 'connect-four-drop') {
+      const segments = placementAssistDropSegments(state, geom, assist);
+      if (!segments.length) return;
+      ctx.save();
+      ctx.lineCap = 'butt';
+      ctx.lineJoin = 'bevel';
+      const beamColors = connectFourAssistBeamColors(state);
+      ctx.strokeStyle = beamColors.outer;
+      ctx.lineWidth = placementPieceBaseRadius(geom) * 2;
+      drawPlacementAssistSegments(ctx, segments);
+      ctx.strokeStyle = beamColors.inner;
+      ctx.lineWidth = Math.max(1.5, placementPieceBaseRadius(geom) * 0.24);
+      drawPlacementAssistSegments(ctx, segments);
+      drawConnectFourAssistEndpointMarkers(ctx, geom, state, assist);
+      ctx.restore();
+      return;
+    }
+    if (assist.kind !== 'rays') return;
+    const segments = placementAssistRaySegments(state, geom, assist);
+    if (!segments.length) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(31, 122, 140, 0.23)';
+    ctx.lineWidth = Math.max(4, geom.radius * 0.24);
+    drawPlacementAssistSegments(ctx, segments);
+    ctx.strokeStyle = 'rgba(31, 122, 140, 0.72)';
+    ctx.lineWidth = Math.max(1.25, geom.radius * 0.055);
+    drawPlacementAssistSegments(ctx, segments);
+    ctx.restore();
+  }
+
+  function placementAssistDropSegments(state, geom, assist) {
+    const segments = [];
+    const path = Array.isArray(assist.path) ? assist.path : [];
+    const transitions = Array.isArray(assist.transitions) ? assist.transitions : [];
+    for (let step = 0; step < transitions.length && step + 1 < path.length; step += 1) {
+      const transition = transitions[step];
+      segments.push(...placementLineRenderSegments(state, geom, path[step], path[step + 1], {
+        kind: 'axis',
+        start: path[step],
+        end: path[step + 1],
+        transitions: [transition]
+      }));
+    }
+    return uniquePlacementAssistSegments(segments);
+  }
+
+  function placementAssistRaySegments(state, geom, assist) {
+    const segments = [];
+    (assist.routes || []).forEach((route) => {
+      if (route.kind === 'axis') {
+        (route.transitions || []).forEach((transition, step) => {
+          const from = route.path && route.path[step];
+          const to = route.path && route.path[step + 1];
+          if (!Number.isInteger(from) || !Number.isInteger(to)) return;
+          segments.push(...placementLineRenderSegments(state, geom, from, to, {
+            kind: 'axis', start: from, end: to, transitions: [transition]
+          }));
+        });
+      } else if (route.kind === 'diagonal') {
+        (route.steps || []).forEach((step) => {
+          segments.push(...placementLineRenderSegments(state, geom, step.start, step.end, step));
+        });
+      }
+    });
+    return uniquePlacementAssistSegments(segments);
+  }
+
+  function uniquePlacementAssistSegments(segments) {
+    const seen = new Set();
+    return segments.filter((segment) => {
+      const key = segment && (segment.key || placementSegmentPointKey(segment));
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function drawPlacementAssistSegments(ctx, segments) {
+    segments.forEach((segment) => {
+      if (!segment || !segment.start || !segment.end) return;
+      ctx.beginPath();
+      ctx.moveTo(segment.start.x, segment.start.y);
+      ctx.lineTo(segment.end.x, segment.end.y);
+      ctx.stroke();
+    });
+  }
+
+  function drawConnectFourAssistEndpointMarkers(ctx, geom, state, assist) {
+    const indices = [assist && assist.origin, assist && assist.landingIndex]
+      .filter(Number.isInteger)
+      .filter((index, position, values) => values.indexOf(index) === position);
+    if (!indices.length) return;
+    const colors = state && state.turn === 'yellow'
+      ? { fill: 'rgba(154, 113, 23, 0.92)', stroke: 'rgba(255, 241, 166, 0.94)' }
+      : { fill: 'rgba(132, 31, 36, 0.92)', stroke: 'rgba(255, 154, 143, 0.94)' };
+    ctx.fillStyle = colors.fill;
+    ctx.strokeStyle = colors.stroke;
+    ctx.lineWidth = Math.max(1.1, geom.radius * 0.035);
+    indices.forEach((index) => {
+      const point = placementPiecePoint(geom, index);
+      if (!point) return;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, placementPieceBaseRadius(geom), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+  }
+
+  function connectFourAssistBeamColors(state) {
+    return state && state.turn === 'yellow'
+      ? { outer: 'rgba(240, 200, 75, 0.20)', inner: 'rgba(255, 250, 214, 0.74)' }
+      : { outer: 'rgba(220, 70, 70, 0.18)', inner: 'rgba(255, 245, 242, 0.72)' };
+  }
+
+  function drawPlacementReachAssistOverlay(ctx, geom, state) {
+    const assist = activePlacementReachAssist(state);
+    if (!assist || assist.kind !== 'go-group') return;
+    ctx.save();
+    (assist.groupIndices || []).forEach((index) => {
+      const point = placementPiecePoint(geom, index);
+      if (!point) return;
+      ctx.strokeStyle = 'rgba(22, 163, 74, 0.92)';
+      ctx.lineWidth = Math.max(1.6, geom.radius * 0.065);
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, placementPieceBaseRadius(geom) * 1.1, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+    (assist.libertyIndices || []).forEach((index) => {
+      const point = placementPiecePoint(geom, index);
+      if (!point) return;
+      ctx.fillStyle = '#86efac';
+      ctx.strokeStyle = '#4ade80';
+      ctx.lineWidth = Math.max(1, geom.radius * 0.04) * (GO_LIBERTY_DOT_BORDER_SCALE / GO_LIBERTY_DOT_BORDER_SCALE_REFERENCE);
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, Math.max(4, geom.radius * 0.32) * (GO_LIBERTY_DOT_SCALE / GO_LIBERTY_DOT_SCALE_REFERENCE), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
   function placementWinningLineIndexCounts(state) {
     const counts = new Map();
     const line = Array.isArray(state && state.winningLine) ? state.winningLine : [];
@@ -12453,6 +12947,136 @@
 
   function pointCoordinateKey(point) {
     return `${Math.round(point.x * 1000)}:${Math.round(point.y * 1000)}`;
+  }
+
+  function drawGenericVertexBoard(ctx, geom, preset, removed, polished) {
+    const state = { preset, removed: removed instanceof Set ? removed : new Set() };
+    if (polished) drawPolishedPlacementVertexBoard(ctx, geom, state);
+    else drawPlacementVertexBoard(ctx, geom, state);
+  }
+
+  function drawBoardCoordinates(ctx, geom, preset, removed, useVisibleTileAnchors) {
+    if (!geom || !preset) return;
+    drawBoardFileRankCoordinates(ctx, geom, useVisibleTileAnchors && removed instanceof Set ? removed : null);
+  }
+
+  function boardCoordinateFontSize(geom) {
+    return Math.max(8, Math.min(16, Math.round(geom.radius * 0.34)));
+  }
+
+  function prepareBoardCoordinateText(ctx, geom) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(54, 43, 33, 0.86)';
+    ctx.font = `600 ${boardCoordinateFontSize(geom)}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+  }
+
+  function drawBoardFileRankCoordinates(ctx, geom, removed) {
+    const fontSize = boardCoordinateFontSize(geom);
+    const verticalOffset = geom.radius + (fontSize * 0.72);
+    // A pointy hex is narrower from its centre to a left/right edge than it is
+    // from its centre to a top/bottom point.  Use that real perimeter extent so
+    // rank labels sit just beyond the hex boundary instead of floating inward.
+    const horizontalOffset = geom.lattice && geom.lattice.shape === 'hex'
+      ? (geom.size / 2) + (fontSize * 0.72)
+      : verticalOffset;
+    prepareBoardCoordinateText(ctx, geom);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (geom.lattice && geom.lattice.shape === 'hex') {
+      drawHexQFileLabels(ctx, geom, fontSize, removed);
+    } else {
+      for (let col = 1; col <= geom.cols; col += 1) {
+        const top = coordinateLineEndpoint(geom, 1, col, 1, 0, removed);
+        const bottom = coordinateLineEndpoint(geom, geom.rows, col, -1, 0, removed);
+        if (!top || !bottom) continue;
+        const label = goCoordinateFile(col - 1);
+        ctx.fillText(label, top.x, top.y - verticalOffset);
+        ctx.fillText(label, bottom.x, bottom.y + verticalOffset);
+      }
+    }
+    ctx.textBaseline = 'alphabetic';
+    for (let row = 1; row <= geom.rows; row += 1) {
+      const left = coordinateLineEndpoint(geom, row, 1, 0, 1, removed);
+      const right = coordinateLineEndpoint(geom, row, geom.cols, 0, -1, removed);
+      if (!left || !right) continue;
+      const label = String(geom.rows - row + 1);
+      ctx.textAlign = 'right';
+      ctx.fillText(label, left.x - horizontalOffset, left.y + (fontSize * 0.34));
+      ctx.textAlign = 'left';
+      ctx.fillText(label, right.x + horizontalOffset, right.y + (fontSize * 0.34));
+    }
+    ctx.restore();
+  }
+
+  function coordinateLineEndpoint(geom, startRow, startCol, rowStep, colStep, removed) {
+    const maxSteps = Math.max(geom.rows, geom.cols);
+    for (let step = 0; step < maxSteps; step += 1) {
+      const row = startRow + (rowStep * step);
+      const col = startCol + (colStep * step);
+      if (row < 1 || row > geom.rows || col < 1 || col > geom.cols) break;
+      const index = indexOf(row, col, geom.cols);
+      const cell = geom.cells[index];
+      if (cell && (!removed || !removed.has(index))) return cell;
+    }
+    return null;
+  }
+
+  function drawHexQFileLabels(ctx, geom, fontSize, removed) {
+    hexQFileLabelAnchors(geom, fontSize, removed).forEach((anchor) => {
+      ctx.save();
+      ctx.translate(anchor.x, anchor.y);
+      ctx.rotate(-Math.PI / 6);
+      ctx.fillText(anchor.label, 0, 0);
+      ctx.restore();
+    });
+  }
+
+  function hexQFileLabelAnchors(geom, fontSize = boardCoordinateFontSize(geom), removed) {
+    const files = new Map();
+    geometryCells(geom).forEach(({ cell, index }) => {
+      if (!files.has(cell.q)) files.set(cell.q, []);
+      files.get(cell.q).push({ cell, index });
+    });
+    const outwardGap = Math.max(fontSize * 0.9, geom.radius * 0.18);
+    return Array.from(files.entries())
+      .sort(([leftQ], [rightQ]) => leftQ - rightQ)
+      .flatMap(([q, cells], labelIndex) => {
+        const visibleCells = removed ? cells.filter(({ index }) => !removed.has(index)) : cells;
+        if (!visibleCells.length) return [];
+        const ordered = visibleCells.slice().sort((left, right) => left.cell.r - right.cell.r || left.cell.col - right.cell.col);
+        const endpoints = [
+          { ...ordered[0], dir: HEX_DIRS.NW, side: 'northwest' },
+          { ...ordered[ordered.length - 1], dir: HEX_DIRS.SE, side: 'southeast' }
+        ];
+        return endpoints.map((endpoint) => {
+          const segment = edgeSegmentFromIndex(geom, endpoint.index, endpoint.dir);
+          if (!segment) return null;
+          const midpoint = {
+            x: (segment.start.x + segment.end.x) / 2,
+            y: (segment.start.y + segment.end.y) / 2
+          };
+          const normal = dirVector(endpoint.dir, outwardGap, geom.lattice);
+          return {
+            label: goCoordinateFile(labelIndex),
+            q,
+            side: endpoint.side,
+            x: midpoint.x + normal.x,
+            y: midpoint.y + normal.y,
+            segment: { dir: endpoint.dir, midpoint }
+          };
+        }).filter(Boolean);
+      });
+  }
+
+  function goCoordinateFile(index) {
+    const letters = 'ABCDEFGHJKLMNOPQRSTUVWXYZ';
+    let value = Math.max(0, Math.floor(Number(index) || 0));
+    let label = '';
+    do {
+      label = letters[value % letters.length] + label;
+      value = Math.floor(value / letters.length) - 1;
+    } while (value >= 0);
+    return label;
   }
 
   function drawPlacementVertexBoard(ctx, geom, state) {
@@ -12644,22 +13268,27 @@
   function drawConnectFourHoles(ctx, geom, state) {
     const holes = state && state.holes ? Array.from(state.holes) : [];
     if (!holes.length) return;
+    const activeDrop = activePlacementReachAssist(state);
+    const sourceIndex = activeDrop && activeDrop.kind === 'connect-four-drop' ? activeDrop.origin : null;
     ctx.save();
     holes.forEach((index) => {
       const point = placementPiecePoint(geom, index);
       if (!point) return;
       const radius = geom.radius * 0.34;
       const cycles = !!(state.cycleHoles && state.cycleHoles.has(index));
+      const activeSource = index === sourceIndex;
       ctx.fillStyle = cycles ? '#fff1ef' : '#fffdf8';
-      ctx.strokeStyle = cycles ? '#b42318' : '#111111';
-      ctx.lineWidth = cycles ? Math.max(2.4, geom.radius * 0.095) : Math.max(2, geom.radius * 0.075);
-      ctx.shadowColor = 'rgba(17,17,17,0.18)';
-      ctx.shadowBlur = Math.max(2, geom.radius * 0.1);
       ctx.beginPath();
       ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowColor = 'transparent';
-      ctx.stroke();
+      if (!activeSource) {
+        ctx.strokeStyle = cycles ? '#b42318' : '#111111';
+        ctx.lineWidth = cycles ? Math.max(2.4, geom.radius * 0.095) : Math.max(2, geom.radius * 0.075);
+        ctx.shadowColor = 'rgba(17,17,17,0.18)';
+        ctx.shadowBlur = Math.max(2, geom.radius * 0.1);
+        ctx.stroke();
+        ctx.shadowColor = 'transparent';
+      }
       ctx.strokeStyle = cycles ? 'rgba(180,35,24,0.95)' : 'rgba(31,122,140,0.62)';
       ctx.lineWidth = cycles ? Math.max(2.2, geom.radius * 0.08) : Math.max(1.3, geom.radius * 0.045);
       ctx.beginPath();
@@ -15686,7 +16315,9 @@
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#111111';
     ctx.font = `700 ${Math.max(20, Math.round(geom.radius * 0.72))}px "JetBrains Mono", monospace`;
-    const title = isGomokuGame(state)
+    const title = isLianliankanGame(state)
+      ? 'Tile Matching complete'
+      : (isGomokuGame(state)
       ? (state.winner ? `${gomokuColorLabel(state.winner)} wins` : 'Gomoku draw')
       : (isConnectFourGame(state)
         ? (state.winner ? `${connectFourColorLabel(state.winner)} wins` : 'Connect Four draw')
@@ -15700,11 +16331,13 @@
                 ? (state.winner ? `${fideChessSideLabel(state.winner)} wins` : 'FIDE Chess draw')
                 : (isSokobanGame(state)
                   ? 'Sokoban solved'
-                  : (state.ending === 'bonus' ? 'bonus ending' : 'game over')))))));
+                  : (state.ending === 'bonus' ? 'bonus ending' : 'game over'))))))));
     ctx.fillText(tr(title), geom.width / 2, y + height * 0.36);
     ctx.fillStyle = '#6c6257';
     ctx.font = `${Math.max(12, Math.round(geom.radius * 0.34))}px "JetBrains Mono", monospace`;
-    const detail = isGomokuGame(state)
+    const detail = isLianliankanGame(state)
+      ? `${state.matches || 0} pair${state.matches === 1 ? '' : 's'} cleared`
+      : (isGomokuGame(state)
       ? `${state.round || 0} move${state.round === 1 ? '' : 's'}`
       : (isConnectFourGame(state)
         ? `${state.round || 0} drop${state.round === 1 ? '' : 's'}`
@@ -15718,7 +16351,7 @@
                 ? `${state.ending || state.result || 'result'}   ${state.round || 0} move${state.round === 1 ? '' : 's'}`
                 : (isSokobanGame(state)
                   ? `${state.moves || state.round || 0} move${(state.moves || state.round) === 1 ? '' : 's'}   ${state.pushes || 0} push${state.pushes === 1 ? '' : 'es'}`
-                  : `score ${state.score || 0}   highest ${highestValue(state)}`))))));
+                  : `score ${state.score || 0}   highest ${highestValue(state)}`)))))));
     ctx.fillText(tr(detail), geom.width / 2, y + height * 0.66);
     ctx.restore();
   }
@@ -15767,7 +16400,38 @@
     if (!Lianliankan || !LianliankanMosaicAdapter) throw new Error('Lianliankan module is unavailable');
     const preset = materializePreset(resolvePreset(presetOrId), { ...options, gameMode: GAME_MODES.LIANLIANKAN });
     if (latticeForPreset(preset).id !== 'square') throw new Error('Lianliankan requires a square-lattice background');
-    return LianliankanMosaicAdapter.createSharedState(preset, options);
+    const initiallyEmpty = [
+      ...(Array.isArray(options.initiallyEmpty) ? options.initiallyEmpty : []),
+      ...lianliankanBoundaryRingEmptyCells(preset)
+    ];
+    return LianliankanMosaicAdapter.createSharedState(preset, { ...options, initiallyEmpty });
+  }
+
+  function selectedLianliankanTileSet() {
+    const value = refs.lianliankanTileSet ? refs.lianliankanTileSet.value : 'chinese';
+    return Object.prototype.hasOwnProperty.call(LIANLIANKAN_TILE_SETS, value) ? value : 'chinese';
+  }
+
+  function lianliankanSymbolsForTileSet(tileSet = selectedLianliankanTileSet()) {
+    const symbols = LIANLIANKAN_TILE_SETS[tileSet] || LIANLIANKAN_TILE_SETS.chinese;
+    return symbols.map((symbol) => ({ ...symbol }));
+  }
+
+  function lianliankanBoundaryRingEmptyCells(preset) {
+    if (
+      !preset
+      || preset.id !== BOUNDARY_GLUE_BOARD_PRESET_ID
+      || !preset.boundaryGlueBoard
+      || preset.rows <= 4
+      || preset.cols <= 4
+    ) return [];
+    const cells = [];
+    for (let row = 1; row <= preset.rows; row += 1) {
+      for (let col = 1; col <= preset.cols; col += 1) {
+        if (row === 1 || row === preset.rows || col === 1 || col === preset.cols) cells.push({ row, col });
+      }
+    }
+    return cells;
   }
 
   function beginLianliankanGame(presetOrId, options = {}) {
@@ -17363,6 +18027,11 @@
       nextMarbleId: 1,
       camps,
       playerColors,
+      jumpRule: normalizeChineseCheckersJumpRule(
+        options.jumpRule != null ? options.jumpRule : (options.chineseCheckersJumpRule != null
+          ? options.chineseCheckersJumpRule
+          : preset.chineseCheckersJumpRule)
+      ),
       openingOrder: [],
       selectedIndex: null,
       jumpChain: null,
@@ -18504,6 +19173,117 @@
   function gomokuStoneAt(state, index) {
     if (!state || !Array.isArray(state.stones)) return null;
     return state.stones.find((stone) => stone.index === index) || null;
+  }
+
+  function placementReachAssist(state, index) {
+    if (!state || !validBoardIndex(state, index) || state.removed.has(index)) return null;
+    if (isConnectFourGame(state)) {
+      if (connectFourHasHole(state, index)) {
+        const drop = connectFourDropTarget(state, index, state.fallDir);
+        return {
+          kind: 'connect-four-drop',
+          origin: index,
+          path: drop.path.slice(),
+          transitions: drop.transitions.map(clonePlacementTransition),
+          landingIndex: drop.index,
+          cycle: !!drop.cycle,
+          blockedBy: Number.isInteger(drop.blockedBy) ? drop.blockedBy : null
+        };
+      }
+      const token = connectFourTokenAt(state, index);
+      return token ? placementReachRayAssist(state, index, token.color, CONNECT_FOUR_WIN_LENGTH - 1, connectFourTokenAt) : null;
+    }
+    if (isGomokuGame(state)) {
+      const stone = gomokuStoneAt(state, index);
+      return stone ? placementReachRayAssist(state, index, stone.color, GOMOKU_WIN_LENGTH - 1, gomokuStoneAt) : null;
+    }
+    if (isGoGame(state)) {
+      const stone = goStoneAt(state, index);
+      if (!stone) return null;
+      const group = goGroupAt(state, index);
+      return {
+        kind: 'go-group',
+        origin: index,
+        color: stone.color,
+        groupIndices: group.stones.map((member) => member.index).sort((a, b) => a - b),
+        libertyIndices: Array.from(group.liberties).sort((a, b) => a - b)
+      };
+    }
+    return null;
+  }
+
+  function placementReachRayAssist(state, origin, color, stepLimit, pieceAt) {
+    const routes = [];
+    directionsForPreset(state.preset).forEach((dir) => {
+      const route = placementAssistAxialRay(state, origin, dir, color, stepLimit, pieceAt);
+      if (route.path.length > 1) routes.push(route);
+    });
+    gomokuDiagonalAxes(state.preset).forEach((axis) => {
+      routes.push(...placementAssistDiagonalRays(state, origin, axis.forward, color, stepLimit, pieceAt));
+      routes.push(...placementAssistDiagonalRays(state, origin, axis.backward, color, stepLimit, pieceAt));
+    });
+    return {
+      kind: 'rays',
+      origin,
+      color,
+      stepLimit,
+      routes
+    };
+  }
+
+  function placementAssistAxialRay(state, origin, initialDir, color, stepLimit, pieceAt) {
+    const path = [origin];
+    const transitions = [];
+    const seen = new Set([`${origin}:${initialDir}`]);
+    let index = origin;
+    let direction = initialDir;
+    for (let step = 0; step < stepLimit; step += 1) {
+      const next = surfaceSuccessor(state, index, direction);
+      if (!next || seen.has(`${next.index}:${next.dir}`)) break;
+      const piece = pieceAt(state, next.index);
+      if (piece && piece.color !== color) break;
+      transitions.push(placementTransitionRecord(index, direction, next));
+      path.push(next.index);
+      seen.add(`${next.index}:${next.dir}`);
+      index = next.index;
+      direction = next.dir;
+    }
+    return { kind: 'axis', origin, path, transitions };
+  }
+
+  function placementAssistDiagonalRays(state, origin, orders, color, stepLimit, pieceAt) {
+    const routes = [];
+    const emitted = new Set();
+    const visit = (index, currentOrders, path, steps, seen) => {
+      if (steps.length >= stepLimit) {
+        emit(path, steps);
+        return;
+      }
+      let advanced = false;
+      gomokuDiagonalStepCandidates(state, index, currentOrders).forEach((candidate) => {
+        const stateKey = `${candidate.index}:${diagonalOrdersKey(candidate.orders)}`;
+        const piece = pieceAt(state, candidate.index);
+        if (seen.has(stateKey) || (piece && piece.color !== color)) return;
+        advanced = true;
+        const nextSeen = new Set(seen);
+        nextSeen.add(stateKey);
+        visit(candidate.index, candidate.orders, path.concat(candidate.index), steps.concat(candidate.route), nextSeen);
+      });
+      if (!advanced && steps.length) emit(path, steps);
+    };
+    const emit = (path, steps) => {
+      const transitionKey = steps
+        .flatMap((step) => step.transitions || [])
+        .map((transition) => `${transition.from}:${transition.outDir}>${transition.to}:${transition.dir}`)
+        .join('|');
+      const key = `${path.join(',')}|${transitionKey}`;
+      if (emitted.has(key)) return;
+      emitted.add(key);
+      routes.push({ kind: 'diagonal', origin, path, steps });
+    };
+    const initialSeen = new Set([`${origin}:${diagonalOrdersKey(orders)}`]);
+    visit(origin, normalizeDiagonalOrders(orders), [origin], [], initialSeen);
+    return routes;
   }
 
   function placeConnectFourToken(sourceState, index) {
@@ -19828,7 +20608,7 @@
     }
     const stepwise = !!options.stepwise || activeJump;
     const legal = activeJump
-      ? chineseCheckerImmediateJumpMap(sourceState, from)
+      ? chineseCheckerImmediateJumpMap(sourceState, from, { jumpDistance: chineseCheckersJumpChainDistance(sourceState.jumpChain) })
       : (stepwise ? chineseCheckerStepwiseMoveMap(sourceState, from) : chineseCheckerMoveMap(sourceState, from));
     const move = legal.get(to);
     if (!move) {
@@ -19867,6 +20647,9 @@
         marbleId: moving.id,
         startIndex: activeJump && sourceState.jumpChain ? sourceState.jumpChain.startIndex : from,
         currentIndex: to,
+        jumpDistance: chineseCheckersJumpRuleRequiresUniformDistance(state)
+          ? chineseCheckerMoveJumpDistance(move)
+          : null,
         segments: chainSegments
       };
       state.phase = 'ready';
@@ -19938,13 +20721,14 @@
     return moves;
   }
 
-  function chineseCheckerImmediateJumpMap(state, fromIndex) {
+  function chineseCheckerImmediateJumpMap(state, fromIndex, options = {}) {
     const moves = new Map();
     const marble = chineseCheckerMarbleAt(state, fromIndex);
     if (!marble) return moves;
     const occupied = chineseCheckerOccupiedSet(state, fromIndex);
+    const jumpDistance = Number.isInteger(options.jumpDistance) ? options.jumpDistance : null;
     directionsForPreset(state.preset).forEach((dir) => {
-      const segment = chineseCheckerSuperJumpSegment(state, fromIndex, dir, occupied);
+      const segment = chineseCheckerSuperJumpSegment(state, fromIndex, dir, occupied, { jumpDistance });
       if (!segment) return;
       moves.set(segment.to, {
         kind: 'jump',
@@ -19963,25 +20747,30 @@
 
   function chineseCheckerJumpMap(state, fromIndex, occupied) {
     const moves = new Map();
-    const queue = [{ index: fromIndex, path: [fromIndex], segments: [] }];
-    const seenLandings = new Set([fromIndex]);
-    while (queue.length) {
-      const current = queue.shift();
-      directionsForPreset(state.preset).forEach((dir) => {
-        const segment = chineseCheckerSuperJumpSegment(state, current.index, dir, occupied);
-        if (!segment || seenLandings.has(segment.to)) return;
-        const path = current.path.concat(segment.to);
-        const segments = current.segments.concat(segment);
-        seenLandings.add(segment.to);
-        const move = { kind: 'jump', path, segments };
-        moves.set(segment.to, move);
-        queue.push({ index: segment.to, path, segments });
-      });
-    }
+    const rule = normalizeChineseCheckersJumpRule(state && state.jumpRule);
+    const distances = chineseCheckersJumpDistancesForRule(rule);
+    const chains = distances || [null];
+    chains.forEach((jumpDistance) => {
+      const queue = [{ index: fromIndex, path: [fromIndex], segments: [] }];
+      const seenLandings = new Set([fromIndex]);
+      while (queue.length) {
+        const current = queue.shift();
+        directionsForPreset(state.preset).forEach((dir) => {
+          const segment = chineseCheckerSuperJumpSegment(state, current.index, dir, occupied, { jumpDistance });
+          if (!segment || seenLandings.has(segment.to)) return;
+          const path = current.path.concat(segment.to);
+          const segments = current.segments.concat(segment);
+          seenLandings.add(segment.to);
+          const move = { kind: 'jump', path, segments };
+          if (!moves.has(segment.to)) moves.set(segment.to, move);
+          queue.push({ index: segment.to, path, segments });
+        });
+      }
+    });
     return moves;
   }
 
-  function chineseCheckerSuperJumpSegment(state, fromIndex, startDir, occupied) {
+  function chineseCheckerSuperJumpSegment(state, fromIndex, startDir, occupied, options = {}) {
     const preset = state && state.preset;
     const guardLimit = Math.max(1, preset.rows * preset.cols * directionsForPreset(preset).length + 1);
     const path = [fromIndex];
@@ -19990,6 +20779,10 @@
     let index = fromIndex;
     let direction = startDir;
     let midpoint = null;
+    const requiredJumpDistance = Number.isInteger(options.jumpDistance) ? options.jumpDistance : null;
+    const allowedJumpDistances = chineseCheckersJumpDistancesForRule(
+      normalizeChineseCheckersJumpRule(state && state.jumpRule)
+    );
     for (let distance = 1; distance <= guardLimit; distance += 1) {
       const key = `${index}:${direction}`;
       if (seen.has(key)) return null;
@@ -20002,26 +20795,61 @@
       path.push(index);
       const occupiedHere = occupied.has(index);
       if (!midpoint) {
-        if (occupiedHere) midpoint = { index, distance };
+        if (occupiedHere) {
+          if ((requiredJumpDistance != null && distance !== requiredJumpDistance)
+            || (allowedJumpDistances && !allowedJumpDistances.includes(distance))) return null;
+          midpoint = { index, distance };
+        }
         continue;
       }
       if (occupiedHere) return null;
       if (distance === midpoint.distance * 2) {
         if (index === fromIndex || state.removed.has(index) || occupied.has(index)) return null;
-        return chineseCheckerMoveSegment(fromIndex, index, path, transitions, midpoint.index);
+        return chineseCheckerMoveSegment(fromIndex, index, path, transitions, midpoint.index, midpoint.distance);
       }
     }
     return null;
   }
 
-  function chineseCheckerMoveSegment(from, to, path, transitions, jumped) {
+  function chineseCheckerMoveSegment(from, to, path, transitions, jumped, jumpDistance = null) {
     return {
       from,
       to,
       path: Array.isArray(path) ? path.slice() : [from, to],
       jumped: Number.isInteger(jumped) ? jumped : null,
+      jumpDistance: Number.isInteger(jumpDistance) ? jumpDistance : null,
       transitions: Array.isArray(transitions) ? transitions.map(clonePlacementTransition) : []
     };
+  }
+
+  function chineseCheckersJumpDistancesForRule(rule) {
+    const normalized = normalizeChineseCheckersJumpRule(rule);
+    if (normalized === CHINESE_CHECKERS_JUMP_RULES.ADJACENT) return [1];
+    if (normalized === CHINESE_CHECKERS_JUMP_RULES.ADJACENT_OR_TWO) return [1, 2];
+    return null;
+  }
+
+  function chineseCheckersJumpRuleRequiresUniformDistance(state) {
+    return normalizeChineseCheckersJumpRule(state && state.jumpRule) === CHINESE_CHECKERS_JUMP_RULES.ADJACENT_OR_TWO;
+  }
+
+  function chineseCheckerSegmentJumpDistance(segment) {
+    if (Number.isInteger(segment && segment.jumpDistance)) return segment.jumpDistance;
+    const path = Array.isArray(segment && segment.path) ? segment.path : [];
+    const span = path.length - 1;
+    return span > 0 && span % 2 === 0 ? span / 2 : null;
+  }
+
+  function chineseCheckerMoveJumpDistance(move) {
+    const segments = Array.isArray(move && move.segments) ? move.segments : [];
+    return chineseCheckerSegmentJumpDistance(segments[0]);
+  }
+
+  function chineseCheckersJumpChainDistance(chain) {
+    if (!chain || typeof chain !== 'object') return null;
+    if (Number.isInteger(chain.jumpDistance)) return chain.jumpDistance;
+    const segments = Array.isArray(chain.segments) ? chain.segments : [];
+    return chineseCheckerSegmentJumpDistance(segments[segments.length - 1]);
   }
 
   function chineseCheckersPathFromSegments(segments, fallbackFrom, fallbackTo) {
@@ -20051,6 +20879,7 @@
       marbleId: Number.isInteger(chain.marbleId) ? chain.marbleId : null,
       startIndex: Number.isInteger(chain.startIndex) ? chain.startIndex : null,
       currentIndex: Number.isInteger(chain.currentIndex) ? chain.currentIndex : null,
+      jumpDistance: chineseCheckersJumpChainDistance(chain),
       segments: cloneChineseCheckerMoveSegments(chain.segments)
     };
   }
@@ -23034,6 +23863,7 @@
         nextMarbleId: source.nextMarbleId || 1,
         camps: cloneChineseCheckersCamps(source.camps),
         playerColors: chineseCheckersPlayerColors(source),
+        jumpRule: normalizeChineseCheckersJumpRule(source.jumpRule),
         openingOrder: chineseCheckersOpeningOrder(source),
         selectedIndex: Number.isInteger(source.selectedIndex) ? source.selectedIndex : null,
         jumpChain: cloneChineseCheckersJumpChain(source.jumpChain),
@@ -23337,6 +24167,10 @@
     return isGomokuGame(state) || isGoGame(state) || isConnectFourGame(state) || isFideChessGame(state);
   }
 
+  function shouldShowBoardCoordinates() {
+    return !!(refs.showBoardCoordinates && refs.showBoardCoordinates.checked);
+  }
+
   function shouldShowMoveNumberLabels(state = game) {
     return !!(supportsMoveNumberLabels(state) && refs.moveNumberLabels && refs.moveNumberLabels.checked);
   }
@@ -23357,6 +24191,7 @@
     if (normalized === GAME_MODES.FIDE_CHESS && selectedFideChessPresetIsPuzzle()) return 'center';
     const display = normalizePlacementDisplayStyle(presetDefaultDisplayByMode[normalized], '');
     if (display) return display;
+    if (normalized === GAME_MODES.NUMBER_2048 || normalized === GAME_MODES.SOKOBAN || normalized === GAME_MODES.LIANLIANKAN) return 'center';
     if (normalized === GAME_MODES.BILLIARDS) return 'billiards-table';
     if (normalized === GAME_MODES.FIDE_CHESS) return 'chessboard';
     return 'vertex';
@@ -23406,7 +24241,7 @@
   function defaultBoardSizeForMode(mode) {
     if (mode === GAME_MODES.NUMBER_2048) return 4;
     if (mode === GAME_MODES.BILLIARDS) return BILLIARDS_SQUARE_BOARD_SIZE;
-    if (mode === GAME_MODES.LIANLIANKAN) return 8;
+    if (mode === GAME_MODES.LIANLIANKAN) return 6;
     if (mode === GAME_MODES.GO) return 19;
     if (mode === GAME_MODES.REVERSI) return 10;
     if (mode === GAME_MODES.FIDE_CHESS) return FIDE_CHESS_DEFAULT_BOARD_SIZE;
@@ -23505,12 +24340,14 @@
     }
     if (selectedGameMode() === GAME_MODES.CHINESE_CHECKERS) {
       options.playerColors = selectedChineseCheckersPlayerColors(selectedPreset());
+      options.jumpRule = selectedChineseCheckersJumpRule();
     }
     if (selectedGameMode() === GAME_MODES.BILLIARDS) {
       options.rules = Billiards
         ? Billiards.normalizeRules(refs.billiardsRules ? refs.billiardsRules.value : 'solo')
         : 'solo';
     }
+    if (selectedGameMode() === GAME_MODES.LIANLIANKAN) options.symbols = lianliankanSymbolsForTileSet();
     return options;
   }
 
@@ -24888,6 +25725,7 @@
     const modeSokoban = catalogAvailable && (isSokobanGame(game) || selectedGameMode() === GAME_MODES.SOKOBAN);
     const modeFideChess = catalogAvailable && (isFideChessGame(game) || selectedGameMode() === GAME_MODES.FIDE_CHESS);
     const modeBilliards = catalogAvailable && (isBilliardsGame(game) || selectedGameMode() === GAME_MODES.BILLIARDS);
+    const modeLianliankan = catalogAvailable && (isLianliankanGame(game) || selectedGameMode() === GAME_MODES.LIANLIANKAN);
     const modeFideChessPuzzle = modeFideChess && (isFideChessPuzzle(game) || selectedFideChessPresetIsPuzzle());
     const modeDirectional = mode2048 || modeSokoban;
     const modePlacement = modeGomoku || modeConnectFour || modeGo || modeReversi || modeChineseCheckers || modeFideChess;
@@ -24943,6 +25781,11 @@
         control.hidden = !modeBilliards;
       });
     }
+    if (refs.modeLianliankanControls) {
+      refs.modeLianliankanControls.forEach((control) => {
+        control.hidden = !modeLianliankan;
+      });
+    }
     if (refs.fideChessPuzzleThreatRow) refs.fideChessPuzzleThreatRow.hidden = !modeFideChessPuzzle;
     if (refs.modeDirectionalControls) {
       refs.modeDirectionalControls.forEach((control) => {
@@ -24960,10 +25803,11 @@
       refs.gomokuSize.max = boundaryGlueBoard || fideNQueensPreset ? String(BOUNDARY_GLUE_MAX_BOARD_SIZE) : String(GOMOKU_MAX_BOARD_SIZE);
       refs.gomokuSize.step = '1';
     }
-    if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = !(modePlacement || modeBilliards);
+    if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = false;
     if (refs.moveNumberLabelRow) refs.moveNumberLabelRow.hidden = !(modeGomoku || modeConnectFour || modeGo);
     if (refs.placementPieceSizeRow) refs.placementPieceSizeRow.hidden = !(modeGomoku || modeConnectFour || modeGo || modeReversi || modeFideChess);
     if (refs.billiardsRules) refs.billiardsRules.disabled = !modeBilliards || !!(game && game.phase !== 'setup') || onlineRoomActive || !!billiardsShotPending;
+    if (refs.lianliankanTileSet) refs.lianliankanTileSet.disabled = !modeLianliankan || !game || game.phase !== 'setup' || onlineRoomActive;
     if (refs.billiardsTool) refs.billiardsTool.disabled = !modeBilliards || !game || game.phase !== 'setup' || onlineRoomActive || !!billiardsShotPending;
     if (refs.billiardsBallPaletteRow) refs.billiardsBallPaletteRow.hidden = !modeBilliards || !game || game.phase !== 'setup';
     syncBilliardsBallPalette();
@@ -24993,6 +25837,25 @@
     if (refs.fullscreenUndo) refs.fullscreenUndo.disabled = onlineHistoryBlocked || !undoStack.length;
     if (refs.fullscreenRedo) refs.fullscreenRedo.disabled = onlineHistoryBlocked || !redoStack.length;
     if (refs.fullscreenRestart) refs.fullscreenRestart.disabled = onlineRoomActive || !game;
+    const lianliankanFullscreenActions = isLianliankanGame(game) && game.phase !== 'setup';
+    if (refs.fullscreenLianliankanActions) refs.fullscreenLianliankanActions.hidden = !lianliankanFullscreenActions;
+    if (refs.fullscreenLianliankanHint) {
+      refs.fullscreenLianliankanHint.disabled = !lianliankanFullscreenActions
+        || onlineRoomActive
+        || game.phase !== 'ready'
+        || !game.availableMatch
+        || !!lianliankanHint;
+      refs.fullscreenLianliankanHint.setAttribute('aria-label', tr('Show hint'));
+      refs.fullscreenLianliankanHint.setAttribute('title', tr('Hint'));
+    }
+    if (refs.fullscreenLianliankanReset) {
+      refs.fullscreenLianliankanReset.disabled = !lianliankanFullscreenActions
+        || onlineRoomActive
+        || game.phase === 'complete'
+        || !!game.pendingMatch;
+      refs.fullscreenLianliankanReset.setAttribute('aria-label', tr('Refresh remaining tiles'));
+      refs.fullscreenLianliankanReset.setAttribute('title', tr('Refresh remaining tiles'));
+    }
     if (refs.exportState) refs.exportState.disabled = !game;
     if (refs.refreshState) refs.refreshState.disabled = !game;
     if (refs.copyState) refs.copyState.disabled = !game && !(refs.debugExport && refs.debugExport.value);
@@ -25208,9 +26071,19 @@
     );
   }
 
+  function selectedChineseCheckersJumpRule() {
+    return normalizeChineseCheckersJumpRule(
+      refs.chineseCheckersJumpRule ? refs.chineseCheckersJumpRule.value : CHINESE_CHECKERS_JUMP_RULE_DEFAULT
+    );
+  }
+
   function syncChineseCheckersControls(modeChineseCheckers) {
     syncChineseCheckersTimingOutput();
     syncChineseCheckersPlayerOptions(modeChineseCheckers);
+    if (refs.chineseCheckersJumpRule) {
+      if (isChineseCheckersGame(game)) refs.chineseCheckersJumpRule.value = normalizeChineseCheckersJumpRule(game.jumpRule);
+      refs.chineseCheckersJumpRule.disabled = !modeChineseCheckers || !game || game.phase !== 'setup' || onlineIsInRoom();
+    }
     const activeJump = isChineseCheckersJumping(game);
     if (refs.chineseCheckersEndJumpRow) refs.chineseCheckersEndJumpRow.hidden = !modeChineseCheckers || !activeJump;
     if (refs.chineseCheckersEndJump) refs.chineseCheckersEndJump.disabled = !modeChineseCheckers || !activeJump || !!currentAnimation;
@@ -25251,6 +26124,21 @@
     }
     render();
     if (isChineseCheckersGame(game)) syncStatusForCurrentGame();
+  }
+
+  function handleChineseCheckersJumpRuleChange() {
+    if (selectedGameMode() !== GAME_MODES.CHINESE_CHECKERS) return;
+    if (!isChineseCheckersGame(game) || game.phase !== 'setup') {
+      syncChineseCheckersControls(true);
+      return;
+    }
+    game = createSelectedGameState(selectedPreset(), selectedGameOptions({ glueRng: Math.random }));
+    game.phase = 'setup';
+    clearUndoHistory();
+    clearDebugExport();
+    render();
+    syncStatusForCurrentGame();
+    syncControls();
   }
 
   function handleChineseCheckersPlayerOptionsChange(event) {
@@ -25847,6 +26735,7 @@
     if (isChineseCheckersGame(state)) {
       return {
         gameMode: GAME_MODES.CHINESE_CHECKERS,
+        jumpRule: normalizeChineseCheckersJumpRule(state.jumpRule),
         marbles: (state.marbles || [])
           .map((marble) => ({ id: marble.id, index: marble.index, color: marble.color }))
           .sort((a, b) => a.index - b.index || a.id - b.id),
@@ -25974,6 +26863,8 @@
     countUnmatchedBoundaries,
     createGameState,
     createLianliankanState,
+    lianliankanSymbolsForTileSet,
+    defaultBoardSizeForMode,
     createBilliardsState,
     createChineseCheckersState,
     createConnectFourState,
@@ -25983,6 +26874,7 @@
     createSokobanState,
     createFideChessState,
     createRng,
+    defaultPresetIdForMode,
     centeredReversiOpening,
     directNeighborIndex,
     detonateBombAt,
@@ -25998,6 +26890,8 @@
     generateKleinBoundaryGlue,
     generateProjectivePlaneBoundaryGlue,
     generateRandomBoundaryGlue,
+    goCoordinateFile,
+    hexQFileLabelAnchors,
     hoveredGlueBoundaryAtPoint,
     hoveredGlueEdgeKeys,
     indexOf,
@@ -26012,9 +26906,11 @@
     extractReturnedPresetObjectText,
     gameModeFromPresetGroup,
     gameModeFromUrlParam,
+    gameModesForPreset,
     gameStateFromDebugImportPayload,
     gameStateFromRecordImportPayload,
     orderedCatalogGameModes,
+    placementReachAssist,
     placementLineRenderSegments,
     placementWinningLineSegments,
     placementLineTransitionRoute,
@@ -26034,6 +26930,7 @@
     normalizePresetPayload,
     presetFromImportPayload,
     presetFromImportText,
+    presetListForMode,
     randomPresetForMode,
     randomSetupChoice,
     rowCol,

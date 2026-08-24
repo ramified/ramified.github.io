@@ -67,6 +67,7 @@
       gluedEdges: normalized.gluedEdges,
       tiles: config.tiles,
       initiallyEmpty: config.initiallyEmpty,
+      generateTiles: config.generateTiles,
       symbols: config.symbols,
       rng: config.rng,
       ensureInitialMatch: config.ensureInitialMatch,
@@ -129,9 +130,10 @@
 
   function cloneSharedState(source) {
     if (!source || !source.board || !source.preset) throw new TypeError('A shared Lianliankan state is required');
-    const cloned = createSharedState(source.preset, {
-      tiles: tileArray(source),
-      ensureInitialMatch: false
+  const cloned = createSharedState(source.preset, {
+    tiles: tileArray(source),
+    generateTiles: false,
+    ensureInitialMatch: false
     });
     cloned.phase = source.phase;
     cloned.selectedIndex = Number.isInteger(source.selectedIndex) ? source.selectedIndex : null;
@@ -175,6 +177,7 @@
     });
     const state = createSharedState(preset, {
       tiles: tiles,
+      generateTiles: false,
       ensureInitialMatch: false
     });
     used.forEach(function(index) {
@@ -182,6 +185,7 @@
     });
     state.matches = Math.max(0, Number(payload && payload.matches) || 0);
     state.refreshes = Math.max(0, Number(payload && payload.refreshes) || 0);
+    state.resultDismissed = !!(payload && payload.resultDismissed);
     const selectedValue = payload && payload.selectedIndex;
     const selected = selectedValue == null || selectedValue === '' ? NaN : Number(selectedValue);
     state.selectedIndex = Number.isInteger(selected)
@@ -203,6 +207,7 @@
       selectedIndex: game.selectedIndex,
       matches: game.matches,
       refreshes: game.refreshes,
+      resultDismissed: !!game.resultDismissed,
       tiles: tileEntries(game)
     };
   }

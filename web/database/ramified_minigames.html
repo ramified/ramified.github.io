@@ -297,8 +297,28 @@
       display: none !important;
     }
 
+    .fullscreen-lianliankan-actions {
+      position: absolute;
+      z-index: 9;
+      top: 10px;
+      right: 10px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+    }
+
+    body.canvas-fullscreen-active .fullscreen-lianliankan-actions:not([hidden]) {
+      display: flex;
+    }
+
+    .fullscreen-lianliankan-actions[hidden] {
+      display: none !important;
+    }
+
     .fullscreen-action-toggle,
-    .fullscreen-action-button {
+    .fullscreen-action-button,
+    .fullscreen-lianliankan-button {
       width: 42px;
       height: 42px;
       min-width: 42px;
@@ -317,17 +337,20 @@
     }
 
     .fullscreen-action-toggle:hover,
-    .fullscreen-action-button:hover {
+    .fullscreen-action-button:hover,
+    .fullscreen-lianliankan-button:hover {
       border-color: var(--accent);
       color: var(--accent);
     }
 
     .fullscreen-action-button:active,
-    .fullscreen-action-toggle:active {
+    .fullscreen-action-toggle:active,
+    .fullscreen-lianliankan-button:active {
       transform: scale(0.96);
     }
 
-    .fullscreen-action-button:disabled {
+    .fullscreen-action-button:disabled,
+    .fullscreen-lianliankan-button:disabled {
       cursor: not-allowed;
       opacity: 0.44;
       transform: none;
@@ -342,6 +365,22 @@
       stroke-linecap: round;
       stroke-linejoin: round;
       pointer-events: none;
+    }
+
+    .fullscreen-lianliankan-actions svg {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .fullscreen-lianliankan-reset {
+      border-color: rgba(139, 58, 42, 0.36);
+      color: var(--accent2);
     }
 
     .fullscreen-action-bar {
@@ -695,6 +734,23 @@
 
     .mosaic-inline-row .input-label {
       margin-bottom: 0 !important;
+      white-space: nowrap;
+    }
+
+    .display-style-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .display-style-controls select {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+
+    .display-style-controls .opt-row {
+      flex: 0 0 auto;
       white-space: nowrap;
     }
 
@@ -1580,6 +1636,21 @@
     </header>
     <div id="canvas-wrap">
       <canvas id="mosaic-canvas" tabindex="0" aria-label="Ramified minigame mosaic canvas"></canvas>
+      <div class="fullscreen-lianliankan-actions" id="fullscreen-lianliankan-actions" aria-label="Tile Matching fullscreen controls" hidden>
+        <button class="fullscreen-lianliankan-button" id="fullscreen-lianliankan-hint" type="button" aria-label="Show hint" title="Hint">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M9 18h6"></path>
+            <path d="M10 22h4"></path>
+            <path d="M8.3 14.5A7 7 0 1 1 15.7 14.5c-.9.7-1.4 1.5-1.5 2.5h-4.4c-.1-1-.6-1.8-1.5-2.5z"></path>
+          </svg>
+        </button>
+        <button class="fullscreen-lianliankan-button fullscreen-lianliankan-reset" id="fullscreen-lianliankan-reset" type="button" aria-label="Refresh remaining tiles" title="Refresh remaining tiles">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M3 12a9 9 0 1 0 3-6.7"></path>
+            <path d="M3 4v6h6"></path>
+          </svg>
+        </button>
+      </div>
       <div class="fullscreen-action-shell" id="fullscreen-action-shell" data-placement="top" aria-label="Fullscreen action controls" hidden>
         <button class="fullscreen-action-toggle" id="fullscreen-action-toggle" type="button" aria-label="Open fullscreen action bar" aria-expanded="false" aria-controls="fullscreen-action-bar" title="Actions">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -1677,14 +1748,25 @@
             <option value="rectangle">rectangle</option>
           </select>
         </div>
-        <div class="mosaic-inline-row" id="gomoku-display-row" data-mode-control="gomoku" hidden>
-          <span class="input-label">Display</span>
-          <select id="gomoku-display-style" aria-label="Placement display">
-            <option value="vertex" selected>gridded board</option>
-            <option value="polished-vertex">polished gridded board</option>
-            <option value="center">tile board</option>
-            <option value="chessboard">classical board</option>
-            <option value="billiards-table" data-i18n="games.billiardsTable">billiards table</option>
+        <div class="mosaic-inline-row" id="gomoku-display-row">
+          <span class="input-label" data-i18n="setup.display">Display</span>
+          <span class="display-style-controls">
+            <select id="gomoku-display-style" data-i18n-aria-label="access.placementDisplay" aria-label="Placement display">
+              <option value="vertex" selected>gridded board</option>
+              <option value="polished-vertex">polished gridded board</option>
+              <option value="center">tile board</option>
+              <option value="chessboard">classical board</option>
+              <option value="billiards-table" data-i18n="games.billiardsTable">billiards table</option>
+            </select>
+            <label class="opt-row"><input type="checkbox" id="show-board-coordinates" data-i18n-aria-label="access.coordinates" aria-label="Show board coordinates"> <span data-i18n="setup.coordinates">coordinates</span></label>
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="lianliankan-tile-set-row" data-mode-control="lianliankan" hidden>
+          <span class="input-label" data-i18n="setup.tileSet">Tile set</span>
+          <select id="lianliankan-tile-set" data-i18n-aria-label="access.tileSet" aria-label="Tile Matching tile set">
+            <option value="chinese" selected data-i18n="setup.chineseCharacters">Chinese characters</option>
+            <option value="japanese" data-i18n="setup.japaneseCharacters">Japanese characters</option>
+            <option value="young-3x3" data-i18n="setup.youngDiagrams3x3">Young diagrams (3×3)</option>
           </select>
         </div>
         <div class="mosaic-inline-row" id="billiards-rules-row" data-mode-control="billiards" hidden>
@@ -1838,6 +1920,14 @@
             <input type="range" id="chinese-checkers-jump-pause" min="0" max="240" step="40" value="120" aria-label="Chinese Checkers pause at multi-jump landings">
             <output id="chinese-checkers-jump-pause-value">120 ms</output>
           </span>
+        </div>
+        <div class="mosaic-inline-row" id="chinese-checkers-jump-rule-row" data-mode-control="chinese-checkers" hidden>
+          <span class="input-label" data-i18n="setup.checkersJumpRule">Jump rule</span>
+          <select id="chinese-checkers-jump-rule" data-i18n-aria-label="access.checkersJumpRule" aria-label="Chinese Checkers jump rule">
+            <option value="unlimited" selected data-i18n="setup.checkersJumpUnlimited">unlimited mirror jump</option>
+            <option value="adjacent" data-i18n="setup.checkersJumpAdjacent">adjacent jump only</option>
+            <option value="adjacent-or-two" data-i18n="setup.checkersJumpAdjacentOrTwo">adjacent or distance-two jump</option>
+          </select>
         </div>
         <div class="mosaic-inline-row" id="chinese-checkers-hints-row" data-mode-control="chinese-checkers" hidden>
           <span class="input-label">Hints</span>
@@ -2015,6 +2105,11 @@
       </div>
     </section>
 
+    <section class="card" id="display-card">
+      <div class="card-head"><span class="card-head-label" data-i18n="setup.display">Display</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body" id="display-card-body"></div>
+    </section>
+
     <section class="card" id="online-play-card">
       <div class="card-head"><span class="card-head-label" data-i18n="online.title">Online Play</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body online-play-panel">
@@ -2162,21 +2257,21 @@
   <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
 </footer>
 
-<script src="ramified_minigame_presets/presets.js"></script>
+<script src="ramified_minigame_presets/presets.js?v=20260824-3"></script>
 <script src="js/calculator_cards.js"></script>
 <script src="js/site_i18n.js?v=20260821-2"></script>
-<script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260821-2"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260823-5"></script>
+<script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-3"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260824-9"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_renderer.js?v=20260823-6"></script>
 <script src="js/billiards/topological_billiards_native.js?v=20260823-10"></script>
 <script src="lianliankan/lianliankan_engine.js?v=20260823-1"></script>
-<script src="lianliankan/mosaic_adapter.js?v=20260823-1"></script>
+<script src="lianliankan/mosaic_adapter.js?v=20260824-2"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
-<script src="js/ramified_minigames_setup.js?v=20260823-13"></script>
+<script src="js/ramified_minigames_setup.js?v=20260824-38"></script>
 </body>
 </html>
