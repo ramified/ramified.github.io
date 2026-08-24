@@ -103,8 +103,8 @@
     'access.placementDisplay': ['Placement display', '落子显示样式'],
     'access.coordinates': ['Show board coordinates', '显示棋盘坐标'],
     'access.billiardsRules': ['Billiards rules', '台球规则'],
-    'access.billiardsSetupTool': ['Billiards setup tool', '台球布置工具'],
     'access.billiardsBallPalette': ['Billiards ball palette', '台球球组选择板'],
+    'access.billiardsRacks': ['Billiards rack choices', '台球球框选择'],
     'access.billiardsAssistance': ['Billiards aim assistance', '台球瞄准辅助'],
     'access.billiardsFriction': ['Billiards table friction', '台球桌面摩擦力'],
     'access.tileSet': ['Tile Matching tile set', '连连看图案组'],
@@ -196,15 +196,26 @@
     'setup.billiardsCueBall': ['cue ball', '母球'],
     'setup.billiardsNextTarget': ['next numbered target', '下一个编号目标球'],
     'setup.billiardsBalls': ['Balls', '球组'],
-    'setup.billiardsPlaceSelected': ['place selected ball', '放置所选球'],
     'setup.billiardsNumberedBall': ['ball {{number}}', '{{number}}号球'],
     'setup.billiardsPocket': ['pocket', '袋口'],
-    'setup.billiardsMove': ['move', '移动'],
-    'setup.billiardsErase': ['erase', '删除'],
+    'setup.billiardsPlaced': ['placed', '已放置'],
+    'setup.billiardsRacks': ['Racks', '球框'],
+    'setup.billiardsRack6': ['6-ball rack', '6球三角框'],
+    'setup.billiardsRack10': ['10-ball rack', '10球三角框'],
+    'setup.billiardsRack15': ['15-ball rack', '15球三角框'],
     'setup.billiardsBeginner': ['beginner', '初学'],
     'setup.billiardsNormal': ['normal', '普通'],
     'setup.billiardsExpert': ['expert', '专家'],
     'setup.billiardsCenter': ['center', '中心'],
+    'setup.billiardsContactTop': ['top', '上方'],
+    'setup.billiardsContactTopLeft': ['top left', '左上'],
+    'setup.billiardsContactTopRight': ['top right', '右上'],
+    'setup.billiardsContactSide': ['side', '侧面'],
+    'setup.billiardsContactSideLeft': ['side left', '左侧'],
+    'setup.billiardsContactSideRight': ['side right', '右侧'],
+    'setup.billiardsContactDraw': ['draw', '下方'],
+    'setup.billiardsContactDrawLeft': ['draw left', '左下'],
+    'setup.billiardsContactDrawRight': ['draw right', '右下'],
     'setup.billiardsAtlas': ['atlas', '图册'],
     'setup.billiardsOrientation': ['orientation', '方向'],
     'status.billiardsCalculating': ['calculating shot', '正在计算击球'],
@@ -501,6 +512,33 @@
     , 'runtime.moveStatus': ['{{game}} move {{count}}', '{{game}}第{{count}}步']
     , 'runtime.dropStatus': ['{{game}} drop {{count}}', '{{game}}第{{count}}次落子']
     , 'runtime.shotStatus': ['{{game}} shot {{count}}', '{{game}}第{{count}}杆']
+    , 'runtime.billiardsSetupSummary': ['{{targets}}, {{pockets}}{{issue}}', '{{targets}}，{{pockets}}{{issue}}']
+    , 'runtime.billiardsIssueSuffix': ['; {{issue}}', '；{{issue}}']
+    , 'runtime.billiardsTargetOne': ['{{count}} target', '{{count}}个目标球']
+    , 'runtime.billiardsTargetMany': ['{{count}} targets', '{{count}}个目标球']
+    , 'runtime.billiardsPocketOne': ['{{count}} pocket', '{{count}}个袋口']
+    , 'runtime.billiardsPocketMany': ['{{count}} pockets', '{{count}}个袋口']
+    , 'runtime.billiardsShotOne': ['{{count}} shot', '{{count}}杆']
+    , 'runtime.billiardsShotMany': ['{{count}} shots', '{{count}}杆']
+    , 'runtime.billiardsTargetsRemaining': ['{{targets}} remaining', '剩余{{targets}}']
+    , 'runtime.billiardsPractice': ['practice', '练习模式']
+    , 'runtime.billiardsPocketed': ['{{targets}} pocketed', '已进{{targets}}']
+    , 'runtime.billiardsBallInHand': ['Billiards ball in hand', '台球自由球']
+    , 'runtime.billiardsPlaceCue': ['{{player}} places the cue ball', '{{player}}放置母球']
+    , 'runtime.billiardsDraw': ['Billiards draw', '台球和局']
+    , 'runtime.billiardsScoreSolo': ['{{targets}} in {{shots}}', '{{targets}}，共{{shots}}']
+    , 'runtime.billiardsScorePlayer': ['Player {{number}} {{score}}', '玩家{{number}}：{{score}}']
+    , 'runtime.billiardsCueRequired': ['place exactly one cue ball', '必须且只能放置一个母球']
+    , 'runtime.billiardsPointInsideTile': ['choose a point inside an existing tile', '请选择现有方块内的位置']
+    , 'runtime.billiardsPhysicalBoundary': ['ball intersects a physical boundary', '球与实体边界相交']
+    , 'runtime.billiardsPocketCollision': ['ball intersects a pocket', '球与袋口相交']
+    , 'runtime.billiardsBallCollision': ['ball overlaps another ball', '球与另一颗球重叠']
+    , 'runtime.billiardsSelfCollision': ['ball overlaps its own short glued image', '球与自身的粘合像重叠']
+    , 'runtime.billiardsRackNoFit': ['rack does not fit on this tile', '球框无法放入此方块']
+    , 'runtime.billiardsRackCollision': ['rack does not fit: {{issue}}', '球框无法放置：{{issue}}']
+    , 'runtime.billiardsRackDirection': ['choose a second point to set the rack direction', '请点击第二个点设置球框方向']
+    , 'runtime.billiardsRackCenter': ['rack center selected', '已选择球框中心']
+    , 'runtime.billiardsRackChooseDirection': ['click a second point to set the rack direction', '请点击第二个点设置球框方向']
     , 'runtime.puzzleStatus': ['{{game}} puzzle {{count}}', '{{game}}谜题第{{count}}步']
     , 'runtime.toMove': ['to move', '行棋']
     , 'runtime.toPlay': ['to play', '落子']

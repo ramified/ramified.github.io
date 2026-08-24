@@ -67,6 +67,51 @@ function testBrowserSimulationWorker() {
   assert.ok(messages[0].trajectory.length >= 2);
 }
 
+function testRackPlacement() {
+  const preset = {
+    id: 'rack-placement-test',
+    lattice: 'square',
+    rows: 5,
+    cols: 5,
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [],
+    billiards: {
+      ballRadius: 0.12,
+      pockets: [],
+      balls: [{ id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0, y: 0 } }]
+    }
+  };
+  const initial = N.createState(preset);
+  const tileIndex = N.indexOf(3, 3, preset.cols);
+  const six = N.placeRack(initial, 6, tileIndex, { x: 0, y: 0 }, { x: 1, y: 0 });
+  assert.strictEqual(six.changed, true);
+  assert.strictEqual(six.state.balls.filter((ball) => ball.kind === 'cue').length, 1);
+  const sixTargets = six.state.balls.filter((ball) => ball.kind === 'target');
+  assert.deepStrictEqual(sixTargets.map((ball) => ball.number).sort((a, b) => a - b), [1, 2, 3, 4, 5, 6]);
+  assert.ok(Math.abs(sixTargets.reduce((sum, ball) => sum + ball.position.x, 0) / sixTargets.length) < 1e-8);
+  assert.ok(Math.abs(sixTargets.reduce((sum, ball) => sum + ball.position.y, 0) / sixTargets.length) < 1e-8);
+  const clearPreview = N.rackPreviewEntries(initial, 6, tileIndex, { x: 0, y: 0 }, { x: 1, y: 0 });
+  assert.ok(clearPreview.every((entry) => entry.valid));
+  const blockedPreviewState = N.cloneState(initial);
+  blockedPreviewState.balls[0].tileIndex = clearPreview[0].tileIndex;
+  blockedPreviewState.balls[0].position = { ...clearPreview[0].position };
+  const blockedPreview = N.rackPreviewEntries(blockedPreviewState, 6, tileIndex, { x: 0, y: 0 }, { x: 1, y: 0 });
+  assert.ok(blockedPreview.some((entry) => !entry.valid));
+
+  const fifteen = N.placeRack(six.state, 15, tileIndex, { x: 0, y: 0 }, { x: 1, y: 0 });
+  assert.strictEqual(fifteen.changed, true);
+  assert.strictEqual(fifteen.state.targetTotal, 15);
+  assert.deepStrictEqual(fifteen.state.balls.filter((ball) => ball.kind === 'target').map((ball) => ball.number).sort((a, b) => a - b), Array.from({ length: 15 }, (_, index) => index + 1));
+  assert.strictEqual(N.begin(fifteen.state).changed, true);
+  const restored = N.stateFromExport(preset, N.stateExport(fifteen.state));
+  assert.deepStrictEqual(restored.balls.filter((ball) => ball.kind === 'target').map((ball) => ball.number).sort((a, b) => a - b), Array.from({ length: 15 }, (_, index) => index + 1));
+
+  const invalid = N.placeRack(fifteen.state, 7, tileIndex, { x: 0, y: 0 }, { x: 1, y: 0 });
+  assert.strictEqual(invalid.changed, false);
+  assert.strictEqual(invalid.state, fifteen.state);
+}
+
 async function testOnlineRoundReadinessAndRematch(worker) {
   const ctx = { storage: { async put() {} }, getWebSockets() { return []; } };
   const room = new worker.GameRoom(ctx, {});
@@ -114,6 +159,7 @@ async function testOnlineRoundReadinessAndRematch(worker) {
 
 async function run() {
   testBrowserSimulationWorker();
+  testRackPlacement();
   const worker = await import('../../cloudflare/ramified-chess.worker.js');
   await testOnlineRoundReadinessAndRematch(worker);
   const shot = worker.normalizeAction({

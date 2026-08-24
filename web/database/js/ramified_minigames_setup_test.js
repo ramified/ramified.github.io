@@ -7370,6 +7370,17 @@ function testReusableLocalizationWiring() {
   assert.ok(localeSource.includes("'common.download'"));
   assert.ok(localeSource.includes("'setup.coordinates'"));
   assert.ok(localeSource.includes("'access.coordinates'"));
+  assert.ok(localeSource.includes("'runtime.billiardsSetupSummary'"));
+  assert.ok(localeSource.includes("'setup.billiardsRack15'"));
+  assert.ok(localeSource.includes("'runtime.billiardsRackDirection': ['choose a second point to set the rack direction'"));
+  assert.ok(setupSource.includes("kind: 'rack'"));
+  assert.ok(setupSource.includes('function billiardsRackDirectionFromCanvasPoint'));
+  assert.ok(!setupSource.includes('billiardsRackDirectionFromLocal'));
+  assert.ok(!setupSource.includes('billiardsRackPreviewIsValid'));
+  assert.ok(!html.includes('id="billiards-rack-15"'));
+  assert.ok(html.includes('<option value="beginner" selected data-i18n="setup.billiardsBeginner">'));
+  assert.ok(html.includes('id="fullscreen-billiards-spin"'));
+  assert.ok(!html.includes('id="billiards-tool"'));
   assert.ok(!html.includes('id="go-liberty-dot-size"'));
   assert.ok(!html.includes('id="go-liberty-dot-border"'));
 }
@@ -7411,13 +7422,75 @@ function testRuntimeChineseLocaleCatalog() {
   assert.strictEqual(window.SiteI18n.t('runtime.restarted', { game: window.SiteI18n.t('games.checkers') }), '跳棋已重新开始');
   assert.strictEqual(window.SiteI18n.t('runtime.moveStatus', { game: window.SiteI18n.t('games.checkers'), count: 3 }), '跳棋第3步');
   assert.strictEqual(window.SiteI18n.t('runtime.roleAction', { role: window.SiteI18n.t('status.yellow'), action: window.SiteI18n.t('runtime.toMove') }), '黄方行棋');
+  assert.strictEqual(window.SiteI18n.t('runtime.billiardsSetupSummary', {
+    targets: window.SiteI18n.t('runtime.billiardsTargetMany', { count: 4 }),
+    pockets: window.SiteI18n.t('runtime.billiardsPocketOne', { count: 1 }),
+    issue: window.SiteI18n.t('runtime.billiardsIssueSuffix', { issue: window.SiteI18n.t('runtime.billiardsCueRequired') })
+  }), '4个目标球，1个袋口；必须且只能放置一个母球');
+  assert.strictEqual(window.SiteI18n.t('setup.billiardsContactTopLeft'), '左上');
+  assert.strictEqual(window.SiteI18n.t('runtime.billiardsRackDirection'), '请点击第二个点设置球框方向');
   assert.strictEqual(window.SiteI18n.translateSource('yellow wins'), '黄方获胜！');
   assert.strictEqual(window.SiteI18n.translateSource('Chinese Checkers restarted'), '跳棋已重新开始');
+}
+
+function testBilliardsQuickRulesAvailability() {
+  const base = {
+    gameMode: game.GAME_MODES.BILLIARDS,
+    balls: [],
+    pockets: []
+  };
+  assert.strictEqual(game.billiardsQuickRulesAvailable(base), false);
+  assert.strictEqual(game.billiardsQuickRulesAvailable({
+    ...base,
+    balls: [{ kind: 'cue', active: true }],
+    pockets: [{ id: 'p1' }]
+  }), false);
+  assert.strictEqual(game.billiardsQuickRulesAvailable({
+    ...base,
+    balls: [{ kind: 'target', number: 1, active: true }],
+    pockets: [{ id: 'p1' }]
+  }), false);
+  assert.strictEqual(game.billiardsQuickRulesAvailable({
+    ...base,
+    balls: [{ kind: 'cue', active: true }, { kind: 'target', number: 1, active: true }],
+    pockets: [{ id: 'p1' }]
+  }), true);
+}
+
+function testBilliardsReplayRestoresRoundSetup() {
+  const preset = {
+    id: 'billiards-replay-round-setup',
+    lattice: 'square',
+    rows: 3,
+    cols: 3,
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [],
+    billiards: {
+      pockets: [{ vertex: { row: 1, col: 1, corner: 'NW' } }],
+      balls: [
+        { id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0, y: 0 } },
+        { id: '1', kind: 'target', number: 1, at: { row: 3, col: 3, x: 0, y: 0 } }
+      ]
+    }
+  };
+  const initial = game.createBilliardsState(preset);
+  const started = require('./billiards/topological_billiards_native.js').begin(initial).state;
+  const finished = require('./billiards/topological_billiards_native.js').cloneState(started);
+  finished.phase = 'gameover';
+  finished.balls.find((ball) => ball.kind === 'target').active = false;
+  const replay = game.restartBilliardsRound(finished);
+  assert.strictEqual(replay.phase, 'ready');
+  assert.strictEqual(replay.balls.filter((ball) => ball.kind === 'cue' && ball.active).length, 1);
+  assert.strictEqual(replay.balls.filter((ball) => ball.kind === 'target' && ball.active).length, 1);
+  assert.deepStrictEqual(replay.initialSetup, started.initialSetup);
 }
 
 async function run() {
   testReusableLocalizationWiring();
   testRuntimeChineseLocaleCatalog();
+  testBilliardsQuickRulesAvailability();
+  testBilliardsReplayRestoresRoundSetup();
   testInitialSpawnWeights();
   testRoundSpawnWeights();
   testNoSpawnAfterNoop();

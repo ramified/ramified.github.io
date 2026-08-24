@@ -977,6 +977,92 @@
     return { changed: true, state: next, message: 'pocket added' };
   }
 
+  function rackRowCount(count) {
+    const normalized = Math.max(0, Math.floor(Number(count) || 0));
+    const rows = Math.floor((Math.sqrt(1 + (8 * normalized)) - 1) / 2);
+    return rows * (rows + 1) / 2 === normalized ? rows : 0;
+  }
+
+  function rackDirection(state, tileIndex, center) {
+    const tile = state.atlas.tiles[tileIndex];
+    if (!tile || !Array.isArray(tile.polygon) || !tile.polygon.length) return null;
+    // Keep the legacy one-click fallback pointed down-table. Two-point setup
+    // supplies an explicit direction and does not use this branch.
+    return { x: 0, y: 1 };
+  }
+
+  function normalizedRackDirection(direction, fallback) {
+    const vector = direction && Number.isFinite(Number(direction.x)) && Number.isFinite(Number(direction.y))
+      ? { x: Number(direction.x), y: Number(direction.y) }
+      : fallback;
+    const length = M.length2(vector || { x: 0, y: 0 });
+    return length > EPSILON ? M.scale2(vector, 1 / length) : fallback;
+  }
+
+  function rackLayout(count, center, direction, ballRadius) {
+    const rows = rackRowCount(count);
+    const normalizedDirection = normalizedRackDirection(direction, { x: 0, y: 1 });
+    const spacing = ballRadius * 2.04;
+    const centroidOffset = (2 * (rows - 1)) / 3;
+    const apex = M.sub2(center, M.scale2(normalizedDirection, spacing * centroidOffset));
+    const across = { x: -normalizedDirection.y, y: normalizedDirection.x };
+    const positions = [];
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column <= row; column += 1) {
+        positions.push(M.add2(apex, M.add2(
+          M.scale2(normalizedDirection, spacing * row),
+          M.scale2(across, spacing * (column - (row / 2)))
+        )));
+      }
+    }
+    return { rows, direction: normalizedDirection, positions };
+  }
+
+  function rackPreviewEntries(state, count, tileIndex, center, direction) {
+    const layout = rackLayout(count, center, direction, state.ballRadius);
+    if (!layout.rows || !Number.isInteger(tileIndex)) return [];
+    const previewState = { ...state, balls: state.balls.filter((ball) => ball.kind !== 'target').slice() };
+    return layout.positions.map((rackPosition, index) => {
+      const ball = ballFromPayload({
+        id: `rack-preview-${index + 1}`,
+        kind: 'target',
+        number: index + 1,
+        at: { tileIndex, ...rackPosition }
+      }, state.preset, state.atlas, state, index + 1);
+      if (!ball || !canonicalizeBall(ball, state.atlas)) return { tileIndex, position: rackPosition, valid: false };
+      const issue = placementIssue(previewState, ball, ball.id);
+      previewState.balls.push(ball);
+      return { tileIndex: ball.tileIndex, position: ball.position, valid: !issue };
+    });
+  }
+
+  function placeRack(state, count, tileIndex, position, direction) {
+    const normalizedCount = Math.max(0, Math.floor(Number(count) || 0));
+    const fallback = rackDirection(state, tileIndex, position);
+    const layout = rackLayout(normalizedCount, position, normalizedRackDirection(direction, fallback), state.ballRadius);
+    if (!layout.rows || !fallback) return { changed: false, state, message: 'choose a point inside an existing tile' };
+    const next = cloneState(state);
+    next.balls = next.balls.filter((ball) => ball.kind !== 'target');
+    let number = 1;
+    for (const rackPosition of layout.positions) {
+        const ball = ballFromPayload({
+          id: String(number),
+          kind: 'target',
+          number,
+          at: { tileIndex, ...rackPosition }
+        }, next.preset, next.atlas, next, number);
+        if (!ball) return { changed: false, state, message: 'rack does not fit on this tile' };
+        if (!canonicalizeBall(ball, next.atlas)) return { changed: false, state, message: 'rack does not fit on this tile' };
+        const issue = placementIssue(next, ball, ball.id);
+        if (issue) return { changed: false, state, message: `rack does not fit: ${issue}` };
+        next.balls.push(ball);
+        number += 1;
+    }
+    next.targetTotal = normalizedCount;
+    next.nextTargetNumber = lowestMissingTargetNumber(next.balls);
+    return { changed: true, state: next, message: `${normalizedCount}-ball rack placed` };
+  }
+
   function begin(state) {
     const issue = setupIssue(state);
     if (issue) return { changed: false, state, message: issue };
@@ -1929,6 +2015,39 @@
         ctx.restore();
       }
     }
+    if (view.rackPreview && Number.isInteger(view.rackPreview.tileIndex)) {
+      const preview = view.rackPreview;
+      const entries = rackPreviewEntries(state, preview.count, preview.tileIndex, preview.center, preview.direction);
+      const center = localToCanvas(preview.tileIndex, preview.center, geometry, state.atlas);
+      const directionPoint = preview.directionPoint && localToCanvas(preview.tileIndex, preview.directionPoint, geometry, state.atlas);
+      const scale = state.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
+      ctx.save();
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      if (center && directionPoint) {
+        ctx.strokeStyle = entries.some((entry) => !entry.valid) ? '#b23a48' : '#1f7a8c';
+        ctx.beginPath();
+        ctx.moveTo(center.x, center.y);
+        ctx.lineTo(directionPoint.x, directionPoint.y);
+        ctx.stroke();
+      }
+      entries.forEach((entry) => {
+        const point = localToCanvas(entry.tileIndex, entry.position, geometry, state.atlas);
+        if (!point) return;
+        ctx.strokeStyle = entry.valid ? '#1f7a8c' : '#b23a48';
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, state.ballRadius * scale, 0, TAU);
+        ctx.stroke();
+      });
+      if (center) {
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#1f7a8c';
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, Math.max(3, scale * 0.035), 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
     drawAim(ctx, geometry, state, view);
     const renderer = typeof window !== 'undefined' ? window.TopologicalBilliardsRenderer : null;
     state.balls.filter((ball) => ball.active).forEach((ball) => {
@@ -1996,11 +2115,13 @@
     normalizeRules,
     normalizeFriction,
     placeBall,
+    placeRack,
     placeCueBallInHand,
     placementIssue,
     pocketExport,
     presetBlockFromState,
     render,
+    rackPreviewEntries,
     advanceShotSimulation,
     resolveShot,
     rowCol,

@@ -12,7 +12,7 @@
     ["chinese-checkers", "octahedron-with-square-holes", "center"],
     ["sokoban", "classic-fans", "center"],
     ["fide-chess", "fide-chess-8x8", "chessboard"],
-    ["billiards", "twisted-torus", "center"],
+    ["billiards", "half-glued", "billiards-table"],
     ["lianliankan", "rubiks-cube-2x2x2", "center"]
   ];
   return {

@@ -510,6 +510,8 @@
   let billiardsSpinContact = { x: 0, y: 0 };
   let billiardsSetupHover = null;
   let billiardsBallSelection = { kind: 'cue', number: 0 };
+  let billiardsRackSelection = 0;
+  let billiardsRackCenter = null;
   let fideChessDrag = null;
   let fideChessPendingPromotion = null;
   let suppressNextCanvasClick = false;
@@ -576,7 +578,6 @@
     refs.gomokuDisplay = document.getElementById('gomoku-display-style');
     refs.showBoardCoordinates = document.getElementById('show-board-coordinates');
     refs.billiardsRules = document.getElementById('billiards-rules');
-    refs.billiardsTool = document.getElementById('billiards-tool');
     refs.billiardsBallPaletteRow = document.getElementById('billiards-ball-palette-row');
     refs.billiardsBallPalette = document.getElementById('billiards-ball-palette');
     refs.billiardsAssistance = document.getElementById('billiards-assistance');
@@ -584,6 +585,9 @@
     refs.billiardsFrictionValue = document.getElementById('billiards-friction-value');
     refs.billiardsSpinPad = document.getElementById('billiards-spin-pad');
     refs.billiardsSpinLabel = document.getElementById('billiards-spin-label');
+    refs.fullscreenBilliardsSpin = document.getElementById('fullscreen-billiards-spin');
+    refs.fullscreenBilliardsSpinPad = document.getElementById('fullscreen-billiards-spin-pad');
+    refs.fullscreenBilliardsSpinLabel = document.getElementById('fullscreen-billiards-spin-label');
     refs.billiardsPower = document.getElementById('billiards-power');
     refs.billiardsDebug = document.getElementById('billiards-debug');
     refs.billiardsDebugTexture = document.getElementById('billiards-debug-texture');
@@ -736,13 +740,6 @@
       refreshDebugExportIfNeeded();
     });
     if (refs.billiardsRules) refs.billiardsRules.addEventListener('change', handleBilliardsRulesChange);
-    if (refs.billiardsTool) refs.billiardsTool.addEventListener('change', () => {
-      billiardsSetupHover = null;
-      if (refs.billiardsTool.value === 'ball') ensureBilliardsBallSelection(true);
-      syncCanvasCursor();
-      syncBilliardsBallPalette();
-      render();
-    });
     if (refs.billiardsAssistance) refs.billiardsAssistance.addEventListener('change', render);
     if (refs.billiardsFriction) {
       refs.billiardsFriction.addEventListener('input', handleBilliardsFrictionChange);
@@ -753,6 +750,12 @@
     if (refs.billiardsSpinPad) {
       refs.billiardsSpinPad.addEventListener('pointerdown', handleBilliardsSpinPointer);
       refs.billiardsSpinPad.addEventListener('pointermove', (event) => {
+        if (event.buttons) handleBilliardsSpinPointer(event);
+      });
+    }
+    if (refs.fullscreenBilliardsSpinPad) {
+      refs.fullscreenBilliardsSpinPad.addEventListener('pointerdown', handleBilliardsSpinPointer);
+      refs.fullscreenBilliardsSpinPad.addEventListener('pointermove', (event) => {
         if (event.buttons) handleBilliardsSpinPointer(event);
       });
     }
@@ -2986,7 +2989,8 @@
     game.phase = 'setup';
     if (isBilliardsGame(game)) {
       billiardsBallSelection = { kind: 'cue', number: 0 };
-      if (refs.billiardsTool) refs.billiardsTool.value = 'ball';
+      billiardsRackSelection = 0;
+      billiardsRackCenter = null;
       ensureBilliardsBallSelection(true);
     }
     clearUndoHistory();
@@ -3702,8 +3706,9 @@
       const preview = isBilliardsGame(game) ? game : createBilliardsState(selectedPreset(), selectedGameOptions({ glueRng: Math.random }));
       const issue = Billiards ? Billiards.setupIssue(preview) : 'Billiards module is unavailable';
       if (issue) {
-        showSetupAlert(issue);
-        syncStatus('finish Billiards setup', issue, 'warn');
+        const localizedIssue = localizedBilliardsIssue(issue);
+        showSetupAlert(localizedIssue);
+        syncStatus('finish Billiards setup', localizedIssue, 'warn');
         render();
         syncControls();
         if (refs.canvas) refs.canvas.focus();
@@ -3839,7 +3844,15 @@
       options.playerColors = chineseCheckersPlayerColors(previous);
       options.jumpRule = normalizeChineseCheckersJumpRule(previous.jumpRule);
     }
-    game = beginSelectedGame(previous.preset || selectedPreset(), options);
+    if (isBilliardsGame(previous) && Billiards) {
+      game = restartBilliardsRound(previous);
+      billiardsRackSelection = 0;
+      billiardsRackCenter = null;
+      billiardsSetupHover = null;
+      ensureBilliardsBallSelection(true);
+    } else {
+      game = beginSelectedGame(previous.preset || selectedPreset(), options);
+    }
     if (game.phase !== 'gameover') game.phase = 'ready';
     clearUndoHistory();
     clearDebugExport();
@@ -3856,6 +3869,16 @@
     refreshDebugExportIfNeeded();
     if (refs.canvas) refs.canvas.focus();
     return true;
+  }
+
+  function restartBilliardsRound(state) {
+    const savedSetup = state && state.initialSetup
+      ? clonePlain(state.initialSetup)
+      : Billiards.presetBlockFromState(state, { activeOnly: false });
+    const restartPreset = { ...state.preset, billiards: savedSetup };
+    const restored = Billiards.createState(restartPreset, { rules: savedSetup.rules || state.rules });
+    const result = Billiards.begin(restored);
+    return result.changed ? result.state : restored;
   }
 
   function handleGameModeChange() {
@@ -3875,6 +3898,8 @@
   function billiardsBallPaletteChoices() {
     return [
       { kind: 'cue', number: 0, key: 'cue' },
+      { kind: 'pocket', number: 0, key: 'pocket' },
+      ...[6, 10, 15].map((count) => ({ kind: 'rack', count, key: `rack-${count}` })),
       ...Array.from({ length: 15 }, (_, index) => ({
         kind: 'target',
         number: index + 1,
@@ -3889,6 +3914,14 @@
         ? window.SiteI18n.t('setup.billiardsCueBall')
         : tr('cue ball');
     }
+    if (choice.kind === 'pocket') {
+      return typeof window !== 'undefined' && window.SiteI18n && typeof window.SiteI18n.t === 'function'
+        ? window.SiteI18n.t('setup.billiardsPocket')
+        : tr('pocket');
+    }
+    if (choice.kind === 'rack') {
+      return tk(`setup.billiardsRack${choice.count}`, `${choice.count}-ball rack`);
+    }
     return typeof window !== 'undefined' && window.SiteI18n && typeof window.SiteI18n.t === 'function'
       ? window.SiteI18n.t('setup.billiardsNumberedBall', { number: choice.number })
       : `ball ${choice.number}`;
@@ -3896,6 +3929,7 @@
 
   function billiardsBallChoicePlaced(choice, state = game) {
     if (!isBilliardsGame(state)) return false;
+    if (choice.kind === 'pocket' || choice.kind === 'rack') return false;
     return state.balls.some((ball) => (
       choice.kind === 'cue'
         ? ball.kind === 'cue'
@@ -3908,6 +3942,35 @@
     const ctx = canvas.getContext('2d');
     const size = canvas.width;
     ctx.clearRect(0, 0, size, size);
+    if (choice.kind === 'pocket') {
+      ctx.fillStyle = '#2b2d30';
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size * 0.34, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#8c765c';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size * 0.4, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    }
+    if (choice.kind === 'rack') {
+      const rows = Math.floor((Math.sqrt(1 + (8 * choice.count)) - 1) / 2);
+      const spacing = size * 0.17;
+      const offsetY = size / 2 - ((rows - 1) * spacing * 0.5);
+      for (let row = 0; row < rows; row += 1) {
+        for (let column = 0; column <= row; column += 1) {
+          ctx.fillStyle = Billiards ? Billiards.ballColor('target', row * (row + 1) / 2 + column + 1) : '#2f70bb';
+          ctx.strokeStyle = '#25282a';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(size / 2 + (column - (row / 2)) * spacing, offsetY + row * spacing, size * 0.068, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+      return;
+    }
     const renderer = typeof window !== 'undefined' ? window.TopologicalBilliardsRenderer : null;
     if (renderer && typeof renderer.paletteBallSprite === 'function' && Billiards) {
       const ball = {
@@ -3952,7 +4015,10 @@
       canvas.width = 64;
       canvas.height = 64;
       button.appendChild(canvas);
-      button.addEventListener('click', () => selectBilliardsBallChoice(choice));
+      button.addEventListener('click', () => {
+        if (choice.kind === 'rack') selectBilliardsRack(choice.count);
+        else selectBilliardsBallChoice(choice);
+      });
       refs.billiardsBallPalette.appendChild(button);
       drawBilliardsBallPaletteSwatch(canvas, choice);
     });
@@ -3961,6 +4027,7 @@
 
   function ensureBilliardsBallSelection(forceWhenEmpty = false) {
     if (!isBilliardsGame(game) || game.phase !== 'setup') return;
+    if (billiardsBallSelection && billiardsBallSelection.kind === 'pocket') return;
     if (billiardsBallSelection && !billiardsBallChoicePlaced(billiardsBallSelection)) return;
     if (!billiardsBallSelection && !forceWhenEmpty) return;
     const choices = billiardsBallPaletteChoices();
@@ -3969,14 +4036,15 @@
 
   function selectNextMissingNumberedBall() {
     billiardsBallSelection = billiardsBallPaletteChoices()
-      .slice(1)
-      .find((choice) => !billiardsBallChoicePlaced(choice)) || null;
+      .filter((choice) => choice.kind === 'target')
+      .find((choice) => !billiardsBallChoicePlaced(choice)) || { kind: 'pocket', number: 0, key: 'pocket' };
   }
 
   function selectBilliardsBallChoice(choice) {
     if (!isBilliardsGame(game) || game.phase !== 'setup' || onlineIsInRoom() || billiardsBallChoicePlaced(choice)) return;
     billiardsBallSelection = { kind: choice.kind, number: choice.number };
-    if (refs.billiardsTool) refs.billiardsTool.value = 'ball';
+    billiardsRackSelection = 0;
+    billiardsRackCenter = null;
     billiardsSetupHover = null;
     syncBilliardsBallPalette();
     syncCanvasCursor();
@@ -3988,21 +4056,33 @@
     ensureBilliardsBallSelection(false);
     const setupEnabled = isBilliardsGame(game) && game.phase === 'setup' && !onlineIsInRoom();
     const selectedKey = billiardsBallSelection
-      ? (billiardsBallSelection.kind === 'cue' ? 'cue' : String(billiardsBallSelection.number))
+      ? (billiardsBallSelection.kind === 'cue' ? 'cue' : (billiardsBallSelection.kind === 'pocket' ? 'pocket' : String(billiardsBallSelection.number)))
       : '';
     const choices = new Map(billiardsBallPaletteChoices().map((choice) => [choice.key, choice]));
     refs.billiardsBallPalette.querySelectorAll('.billiards-ball-swatch').forEach((button) => {
       const choice = choices.get(button.dataset.ballKey);
       if (!choice) return;
       const placed = billiardsBallChoicePlaced(choice);
-      const active = setupEnabled && refs.billiardsTool && refs.billiardsTool.value === 'ball' && selectedKey === choice.key && !placed;
+      const active = choice.kind === 'rack'
+        ? setupEnabled && billiardsRackSelection === choice.count
+        : setupEnabled && !billiardsRackSelection && selectedKey === choice.key && !placed;
       const label = billiardsBallPaletteLabel(choice);
       button.disabled = !setupEnabled || placed;
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', active ? 'true' : 'false');
-      button.setAttribute('aria-label', placed ? `${label} (${tr('Placed')})` : label);
+      button.setAttribute('aria-label', placed ? `${label} (${tk('setup.billiardsPlaced', 'placed')})` : label);
       button.title = button.getAttribute('aria-label');
     });
+  }
+
+  function selectBilliardsRack(count) {
+    if (!isBilliardsGame(game) || game.phase !== 'setup' || onlineIsInRoom() || ![6, 10, 15].includes(count)) return;
+    billiardsRackSelection = billiardsRackSelection === count ? 0 : count;
+    billiardsRackCenter = null;
+    billiardsSetupHover = null;
+    syncBilliardsBallPalette();
+    syncCanvasCursor();
+    render();
   }
 
   function handleBilliardsRulesChange() {
@@ -4785,7 +4865,7 @@
     if (!isBilliardsGame(game) || !Billiards || currentAnimation || billiardsShotPending) return false;
     const local = billiardsLocalFromEvent(event);
     if (!local) return false;
-    if (game.phase === 'setup' && refs.billiardsTool && refs.billiardsTool.value === 'move') {
+    if (game.phase === 'setup') {
       const hit = Billiards.ballAtPoint(game, local.tileIndex, local.position);
       if (!hit) return false;
       billiardsPointer = {
@@ -4793,7 +4873,9 @@
         pointerId: event.pointerId,
         ballId: hit.ball.id,
         start: local,
-        current: local
+        current: local,
+        startCanvas: canvasPointFromEvent(event),
+        moved: false
       };
       captureBilliardsPointer(event.pointerId);
       if (event.preventDefault) event.preventDefault();
@@ -4821,7 +4903,10 @@
     if (!isBilliardsGame(game) || !Billiards) return false;
     const local = billiardsLocalFromEvent(event);
     if (game.phase === 'setup' && !billiardsPointer) {
-      billiardsSetupHover = local ? { ...local, valid: true } : null;
+      const canvasPoint = canvasPointFromEvent(event);
+      billiardsSetupHover = (local || (billiardsRackCenter && canvasPoint))
+        ? { ...(local || {}), canvasPoint, valid: true }
+        : null;
       render();
       return false;
     }
@@ -4829,7 +4914,11 @@
     if (billiardsPointer.kind === 'move') {
       if (local) {
         billiardsPointer.current = local;
-        billiardsSetupHover = { ...local, valid: true };
+        const point = canvasPointFromEvent(event);
+        if (point && billiardsPointer.startCanvas && Math.hypot(point.x - billiardsPointer.startCanvas.x, point.y - billiardsPointer.startCanvas.y) > 4) {
+          billiardsPointer.moved = true;
+        }
+        billiardsSetupHover = { ...local, canvasPoint: point, valid: true };
         render();
       }
     } else if (billiardsPointer.kind === 'shot') {
@@ -4859,13 +4948,20 @@
     releaseBilliardsPointer(event.pointerId);
     if (pointer.kind === 'move') {
       const target = pointer.current;
-      const result = target ? Billiards.moveBall(game, pointer.ballId, target.tileIndex, target.position) : { changed: false, message: 'choose a valid point' };
+      const releasePoint = canvasPointFromEvent(event);
+      if (releasePoint && pointer.startCanvas && Math.hypot(releasePoint.x - pointer.startCanvas.x, releasePoint.y - pointer.startCanvas.y) > 4) {
+        pointer.moved = true;
+      }
+      const result = pointer.moved
+        ? (target ? Billiards.moveBall(game, pointer.ballId, target.tileIndex, target.position) : { changed: false, message: 'choose a valid point' })
+        : Billiards.eraseAt(game, pointer.start.tileIndex, pointer.start.position);
       if (result.changed) {
-        pushUndoSnapshot('Billiards setup move');
+        pushUndoSnapshot(pointer.moved ? 'Billiards setup move' : 'Billiards setup erase');
         game = result.state;
         clearSetupAlert();
+        resetBilliardsQuickRulesPrompt();
       } else {
-        showSetupAlert(result.message || 'invalid ball position');
+        showSetupAlert(result.message || (pointer.moved ? 'invalid ball position' : 'nothing to erase here'));
       }
       billiardsSetupHover = null;
       syncStatusForCurrentGame();
@@ -5132,13 +5228,15 @@
 
   function applyBilliardsSetupResult(result, label) {
     if (!result || !result.changed) {
-      showSetupAlert(result && result.message ? result.message : 'invalid Billiards setup edit');
-      syncStatus('setup unchanged', result && result.message ? result.message : 'choose a valid position', 'warn');
+      const message = localizedBilliardsIssue(result && result.message ? result.message : 'choose a point inside an existing tile');
+      showSetupAlert(message);
+      syncStatus('setup unchanged', message, 'warn');
       return false;
     }
     pushUndoSnapshot(label);
     game = result.state;
     clearSetupAlert();
+    resetBilliardsQuickRulesPrompt();
     syncStatusForCurrentGame();
     render();
     syncControls();
@@ -5148,9 +5246,10 @@
 
   function handleBilliardsCanvasClick(event) {
     if (!isBilliardsGame(game) || !Billiards || currentAnimation) return;
+    const canvasPoint = canvasPointFromEvent(event);
     const local = billiardsLocalFromEvent(event);
-    if (!local) return;
     if (game.phase === 'ball-in-hand') {
+      if (!local) return;
       const player = onlineIsInRoom() && onlineState ? onlineState.role : game.ballInHandPlayer;
       const issue = onlineLocalPlayIssue('billiards-place-cue');
       if (issue) {
@@ -5165,27 +5264,91 @@
       return;
     }
     if (game.phase !== 'setup') return;
-    const tool = refs.billiardsTool ? refs.billiardsTool.value : 'ball';
     let result;
-    if (tool === 'ball') {
+    if (billiardsRackSelection) {
+      if (!billiardsRackCenter) {
+        if (!local) return;
+        billiardsRackCenter = { tileIndex: local.tileIndex, position: { ...local.position } };
+        billiardsSetupHover = null;
+        syncStatus(tk('runtime.billiardsRackCenter', 'rack center selected'), tk('runtime.billiardsRackChooseDirection', 'click a second point to set the rack direction'), 'setup');
+        render();
+        return;
+      }
+      const rackDirection = billiardsRackDirectionFromCanvasPoint(canvasPoint);
+      if (!rackDirection) {
+        showSetupAlert(tk('runtime.billiardsRackDirection', 'choose a second point to set the rack direction'));
+        return;
+      }
+      result = Billiards.placeRack(game, billiardsRackSelection, billiardsRackCenter.tileIndex, billiardsRackCenter.position, rackDirection.direction);
+      const changed = applyBilliardsSetupResult(result, `Billiards ${billiardsRackSelection}-ball rack`);
+      if (changed) {
+        billiardsRackSelection = 0;
+        billiardsRackCenter = null;
+        ensureBilliardsBallSelection(true);
+        syncBilliardsBallPalette();
+      }
+      return;
+    }
+    if (!local) return;
+    if (billiardsBallSelection && billiardsBallSelection.kind === 'pocket') {
+      result = Billiards.togglePocket(game, local.tileIndex, local.position);
+    } else {
       if (!billiardsBallSelection) {
         showSetupAlert('all standard numbered balls are already placed');
         return;
       }
       result = Billiards.placeBall(game, billiardsBallSelection, local.tileIndex, local.position);
-    } else if (tool === 'pocket') result = Billiards.togglePocket(game, local.tileIndex, local.position);
-    else if (tool === 'erase') result = Billiards.eraseAt(game, local.tileIndex, local.position);
-    else return;
-    const changed = applyBilliardsSetupResult(result, `Billiards setup ${tool}`);
-    if (changed && tool === 'ball') {
+    }
+    const changed = applyBilliardsSetupResult(result, 'Billiards setup placement');
+    if (changed && billiardsBallSelection && billiardsBallSelection.kind !== 'pocket') {
       selectNextMissingNumberedBall();
       syncBilliardsBallPalette();
     }
   }
 
+  function billiardsRackDirectionFromCanvasPoint(point) {
+    if (!billiardsRackCenter || !point || !Billiards || !geometry) return null;
+    const center = Billiards.localToCanvas(billiardsRackCenter.tileIndex, billiardsRackCenter.position, geometry, game.atlas);
+    const scale = game.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
+    if (!center || !Number.isFinite(scale) || scale <= 0) return null;
+    const x = Number(point.x) - center.x;
+    const y = Number(point.y) - center.y;
+    const length = Math.hypot(x, y);
+    if (length <= scale * 0.04) return null;
+    return {
+      direction: { x: x / length, y: y / length },
+      // This virtual local point maps back to the clicked canvas position.  It is
+      // intentionally allowed outside the center tile so a second tile can set
+      // the direction without changing where the rack is placed.
+      directionPoint: {
+        x: Number(billiardsRackCenter.position.x) + x / scale,
+        y: Number(billiardsRackCenter.position.y) + y / scale
+      }
+    };
+  }
+
+  function billiardsRackPreview() {
+    if (!billiardsRackSelection) return null;
+    const center = billiardsRackCenter || (billiardsSetupHover && Number.isInteger(billiardsSetupHover.tileIndex)
+      ? { tileIndex: billiardsSetupHover.tileIndex, position: billiardsSetupHover.position }
+      : null);
+    if (!center) return null;
+    const directionChoice = billiardsRackCenter
+      ? billiardsRackDirectionFromCanvasPoint(billiardsSetupHover && billiardsSetupHover.canvasPoint)
+      : null;
+    return {
+      count: billiardsRackSelection,
+      tileIndex: center.tileIndex,
+      center: center.position,
+      direction: directionChoice ? directionChoice.direction : { x: 0, y: 1 },
+      directionPoint: directionChoice ? directionChoice.directionPoint : null
+    };
+  }
+
   function handleBilliardsSpinPointer(event) {
-    if (!refs.billiardsSpinPad) return;
-    const rect = refs.billiardsSpinPad.getBoundingClientRect();
+    const pad = event && event.currentTarget;
+    if (!pad || !pad.getBoundingClientRect) return;
+    const rect = pad.getBoundingClientRect();
     let x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
     let y = ((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
     const length = Math.hypot(x, y);
@@ -5199,48 +5362,47 @@
   }
 
   function drawBilliardsSpinPad() {
-    if (!refs.billiardsSpinPad) return;
-    const ctx = refs.billiardsSpinPad.getContext('2d');
-    const size = refs.billiardsSpinPad.width;
-    const center = size / 2;
-    const radius = size * 0.42;
-    ctx.clearRect(0, 0, size, size);
-    const gradient = ctx.createRadialGradient(center - radius * 0.25, center - radius * 0.3, 2, center, center, radius);
-    gradient.addColorStop(0, '#ffffff');
-    gradient.addColorStop(1, '#d5d8d8');
-    ctx.fillStyle = gradient;
-    ctx.strokeStyle = '#343b3d';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(center, center, radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(32,45,48,0.24)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(center - radius, center);
-    ctx.lineTo(center + radius, center);
-    ctx.moveTo(center, center - radius);
-    ctx.lineTo(center, center + radius);
-    ctx.stroke();
-    const marker = {
-      x: center + billiardsSpinContact.x * radius,
-      y: center + billiardsSpinContact.y * radius
-    };
-    ctx.fillStyle = '#b23a48';
-    ctx.beginPath();
-    ctx.arc(marker.x, marker.y, 5, 0, Math.PI * 2);
-    ctx.fill();
-    if (refs.billiardsSpinLabel) refs.billiardsSpinLabel.textContent = tr(billiardsSpinContactLabel());
+    [refs.billiardsSpinPad, refs.fullscreenBilliardsSpinPad].filter(Boolean).forEach((pad) => {
+      const ctx = pad.getContext('2d');
+      const size = pad.width;
+      const center = size / 2;
+      const radius = size * 0.42;
+      ctx.clearRect(0, 0, size, size);
+      const gradient = ctx.createRadialGradient(center - radius * 0.25, center - radius * 0.3, 2, center, center, radius);
+      gradient.addColorStop(0, '#ffffff');
+      gradient.addColorStop(1, '#d5d8d8');
+      ctx.fillStyle = gradient;
+      ctx.strokeStyle = '#343b3d';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(center, center, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(32,45,48,0.24)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(center - radius, center);
+      ctx.lineTo(center + radius, center);
+      ctx.moveTo(center, center - radius);
+      ctx.lineTo(center, center + radius);
+      ctx.stroke();
+      ctx.fillStyle = '#b23a48';
+      ctx.beginPath();
+      ctx.arc(center + billiardsSpinContact.x * radius, center + billiardsSpinContact.y * radius, Math.max(4, size * 0.048), 0, Math.PI * 2);
+      ctx.fill();
+    });
+    const label = tk(billiardsSpinContactLabelKey(), 'center');
+    if (refs.billiardsSpinLabel) refs.billiardsSpinLabel.textContent = label;
+    if (refs.fullscreenBilliardsSpinLabel) refs.fullscreenBilliardsSpinLabel.textContent = label;
   }
 
-  function billiardsSpinContactLabel() {
+  function billiardsSpinContactLabelKey() {
     const x = billiardsSpinContact.x;
     const y = billiardsSpinContact.y;
-    if (Math.hypot(x, y) < 0.14) return 'center';
-    const vertical = y < -0.22 ? 'top' : (y > 0.22 ? 'draw' : 'side');
-    const horizontal = x < -0.22 ? 'left' : (x > 0.22 ? 'right' : '');
-    return [vertical, horizontal].filter(Boolean).join(' ');
+    if (Math.hypot(x, y) < 0.14) return 'setup.billiardsCenter';
+    const vertical = y < -0.22 ? 'Top' : (y > 0.22 ? 'Draw' : 'Side');
+    const horizontal = x < -0.22 ? 'Left' : (x > 0.22 ? 'Right' : '');
+    return `setup.billiardsContact${vertical}${horizontal}`;
   }
 
   function syncBilliardsPower() {
@@ -6535,6 +6697,7 @@
       if (exit && typeof exit.catch === 'function') exit.catch(() => {});
     }
     syncCanvasDisplayModeUi();
+    syncControls();
     renderAfterCanvasLayoutChange();
   }
 
@@ -6999,18 +7162,44 @@
     canvasStartPromptTimer = null;
   }
 
+  function billiardsQuickRulesAvailable(state) {
+    if (!isBilliardsGame(state)) return false;
+    const balls = Array.isArray(state.balls) ? state.balls : [];
+    const hasCue = balls.some((ball) => ball && ball.active !== false && ball.kind === 'cue');
+    const hasTarget = balls.some((ball) => ball && ball.active !== false && ball.kind === 'target');
+    const hasPocket = Array.isArray(state.pockets) && state.pockets.length > 0;
+    return hasCue && hasTarget && hasPocket;
+  }
+
+  function setupQuickRulesAvailable(state) {
+    return !isBilliardsGame(state) || billiardsQuickRulesAvailable(state);
+  }
+
+  function resetBilliardsQuickRulesPrompt() {
+    if (!isBilliardsGame(game) || game.phase !== 'setup') return;
+    hideCanvasStartPrompt();
+    scheduleCanvasStartPrompt();
+  }
+
   function scheduleCanvasStartPrompt() {
     clearCanvasStartPromptTimer();
-    if (onlineIsInRoom() || !game || game.phase !== 'setup') return;
+    if (onlineIsInRoom() || !game || game.phase !== 'setup' || !setupQuickRulesAvailable(game)) {
+      if (game && game.phase === 'setup' && !setupQuickRulesAvailable(game)) hideCanvasStartPrompt();
+      return;
+    }
     canvasStartPromptTimer = setTimeout(() => {
       canvasStartPromptTimer = null;
-      if (!onlineIsInRoom() && game && game.phase === 'setup' && !currentAnimation) showCanvasStartPrompt();
+      if (!onlineIsInRoom() && game && game.phase === 'setup' && !currentAnimation && setupQuickRulesAvailable(game)) showCanvasStartPrompt();
     }, 3000);
   }
 
   function showCanvasStartPrompt(options = {}) {
     if (!refs.canvasStartOverlay || !game || (!options.force && game.phase !== 'setup')) return;
     clearCanvasStartPromptTimer();
+    if (!options.force && !setupQuickRulesAvailable(game)) {
+      hideCanvasStartPrompt();
+      return;
+    }
     const copy = options.copy || canvasStartPromptCopy(game);
     if (refs.canvasStartTitle) refs.canvasStartTitle.textContent = tr(copy.title);
     if (refs.canvasStartContext) refs.canvasStartContext.textContent = tr(copy.context);
@@ -8970,6 +9159,11 @@
     ensureImportedPresetOption(importedPreset);
     if (refs.select) refs.select.value = importedPreset.id;
     game = imported.state;
+    if (isBilliardsGame(game)) {
+      billiardsRackSelection = 0;
+      billiardsRackCenter = null;
+      ensureBilliardsBallSelection(true);
+    }
     if (isChineseCheckersGame(game)) setChineseCheckersSelectedPlayers(chineseCheckersPlayerColors(game), game.preset);
     if (isGoGame(game) && game.scoringReview) activateGoScoringReviewControls();
     eventQueue = imported.eventQueue;
@@ -10902,21 +11096,21 @@
         const targetCount = game.balls.filter((ball) => ball.active && ball.kind === 'target').length;
         syncStatus(
           localizedPreviewTitle(game.preset, GAME_MODES.BILLIARDS),
-          `${targetCount} target${targetCount === 1 ? '' : 's'}, ${game.pockets.length} pocket${game.pockets.length === 1 ? '' : 's'}${issue ? `; ${issue}` : ''}`,
+          billiardsSetupSummary(targetCount, game.pockets.length, issue),
           issue ? 'warn' : 'setup'
         );
         return;
       }
       if (game.phase === 'ball-in-hand') {
-        syncStatus('Billiards ball in hand', `${billiardsPlayerLabel(game.ballInHandPlayer || game.turn)} places the cue ball`, 'setup');
+        syncStatus(tk('runtime.billiardsBallInHand', 'Billiards ball in hand'), tk('runtime.billiardsPlaceCue', '{{player}} places the cue ball', { player: billiardsPlayerLabel(game.ballInHandPlayer || game.turn) }), 'setup');
         return;
       }
       if (game.phase === 'gameover') {
-        const result = game.winner === 'draw' ? 'Billiards draw' : `${billiardsPlayerLabel(game.winner)} wins`;
+        const result = game.winner === 'draw' ? tk('runtime.billiardsDraw', 'Billiards draw') : localizedWinnerText(game.winner);
         syncStatus(result, billiardsScoreInfo(game), 'over');
         return;
       }
-      syncStatus(`Billiards shot ${game.shots || 0}`, billiardsTurnInfo(game), phaseBadge(game.phase));
+      syncStatus(tk('runtime.shotStatus', '{{game}} shot {{count}}', { game: localizedGameName(GAME_MODES.BILLIARDS), count: game.shots || 0 }), billiardsTurnInfo(game), phaseBadge(game.phase));
       return;
     }
     if (isGomokuGame(game)) {
@@ -11060,16 +11254,68 @@
     return localizedRoleLabel(role === 'player-2' ? 'player-2' : 'player-1');
   }
 
+  function billiardsCountLabel(count, singularKey, pluralKey, singularFallback, pluralFallback) {
+    const normalized = Math.max(0, Number(count) || 0);
+    return tk(normalized === 1 ? singularKey : pluralKey, normalized === 1 ? singularFallback : pluralFallback, { count: normalized });
+  }
+
+  function localizedBilliardsIssue(issue) {
+    const raw = String(issue || '').trim();
+    if (!raw) return '';
+    const reasonKeys = new Map([
+      ['place exactly one cue ball', ['runtime.billiardsCueRequired', 'place exactly one cue ball']],
+      ['choose a point inside an existing tile', ['runtime.billiardsPointInsideTile', 'choose a point inside an existing tile']],
+      ['ball intersects a physical boundary', ['runtime.billiardsPhysicalBoundary', 'ball intersects a physical boundary']],
+      ['ball intersects a pocket', ['runtime.billiardsPocketCollision', 'ball intersects a pocket']],
+      ['ball overlaps another ball', ['runtime.billiardsBallCollision', 'ball overlaps another ball']],
+      ['ball overlaps its own short glued image', ['runtime.billiardsSelfCollision', 'ball overlaps its own short glued image']],
+      ['rack does not fit on this tile', ['runtime.billiardsRackNoFit', 'rack does not fit on this tile']]
+    ]);
+    const direct = reasonKeys.get(raw);
+    if (direct) return tk(direct[0], direct[1]);
+    if (raw.startsWith('rack does not fit: ')) {
+      return tk('runtime.billiardsRackCollision', 'rack does not fit: {{issue}}', { issue: localizedBilliardsIssue(raw.slice('rack does not fit: '.length)) });
+    }
+    const separator = raw.indexOf(': ');
+    if (separator > 0) {
+      const subject = raw.slice(0, separator);
+      const localizedSubject = subject === 'cue ball'
+        ? tk('setup.billiardsCueBall', 'cue ball')
+        : (subject.startsWith('ball ') ? tk('setup.billiardsNumberedBall', 'ball {{number}}', { number: subject.slice(5) }) : subject);
+      return `${localizedSubject}: ${localizedBilliardsIssue(raw.slice(separator + 2))}`;
+    }
+    return tr(raw);
+  }
+
+  function billiardsSetupSummary(targetCount, pocketCount, issue) {
+    const targets = billiardsCountLabel(targetCount, 'runtime.billiardsTargetOne', 'runtime.billiardsTargetMany', '{{count}} target', '{{count}} targets');
+    const pockets = billiardsCountLabel(pocketCount, 'runtime.billiardsPocketOne', 'runtime.billiardsPocketMany', '{{count}} pocket', '{{count}} pockets');
+    const suffix = issue ? tk('runtime.billiardsIssueSuffix', '; {{issue}}', { issue: localizedBilliardsIssue(issue) }) : '';
+    return tk('runtime.billiardsSetupSummary', '{{targets}}, {{pockets}}{{issue}}', { targets, pockets, issue: suffix });
+  }
+
   function billiardsScoreInfo(state) {
-    if (!state || state.rules !== 'competitive') return `${state ? state.score || 0 : 0} target${state && state.score === 1 ? '' : 's'} in ${state ? state.shots || 0 : 0} shot${state && state.shots === 1 ? '' : 's'}`;
-    return `Player 1 ${state.scores['player-1'] || 0}, Player 2 ${state.scores['player-2'] || 0}`;
+    if (!state || state.rules !== 'competitive') {
+      const targets = billiardsCountLabel(state ? state.score || 0 : 0, 'runtime.billiardsTargetOne', 'runtime.billiardsTargetMany', '{{count}} target', '{{count}} targets');
+      const shots = billiardsCountLabel(state ? state.shots || 0 : 0, 'runtime.billiardsShotOne', 'runtime.billiardsShotMany', '{{count}} shot', '{{count}} shots');
+      return tk('runtime.billiardsScoreSolo', '{{targets}} in {{shots}}', { targets, shots });
+    }
+    return [1, 2].map((number) => tk('runtime.billiardsScorePlayer', 'Player {{number}} {{score}}', {
+      number,
+      score: state.scores[`player-${number}`] || 0
+    })).join(', ');
   }
 
   function billiardsTurnInfo(state) {
     const activeTargets = state.balls.filter((ball) => ball.active && ball.kind === 'target').length;
     const practice = !state.pockets.length || !state.targetTotal;
-    const mode = practice ? 'practice' : (state.rules === 'competitive' ? `${billiardsPlayerLabel(state.turn)} to shoot` : `${state.score || 0} pocketed`);
-    return `${mode}; ${activeTargets} target${activeTargets === 1 ? '' : 's'} remaining`;
+    const targets = billiardsCountLabel(activeTargets, 'runtime.billiardsTargetOne', 'runtime.billiardsTargetMany', '{{count}} target', '{{count}} targets');
+    const mode = practice
+      ? tk('runtime.billiardsPractice', 'practice')
+      : (state.rules === 'competitive'
+        ? tk('runtime.roleAction', '{{role}} {{action}}', { role: billiardsPlayerLabel(state.turn), action: tk('runtime.toShoot', 'to shoot') })
+        : tk('runtime.billiardsPocketed', '{{targets}} pocketed', { targets: billiardsCountLabel(state.score || 0, 'runtime.billiardsTargetOne', 'runtime.billiardsTargetMany', '{{count}} target', '{{count}} targets') }));
+    return `${mode}; ${tk('runtime.billiardsTargetsRemaining', '{{targets}} remaining', { targets })}`;
   }
 
   function phaseBadge(phase) {
@@ -11237,8 +11483,9 @@
       Billiards.render(ctx, geometry, billiardsAnimationRenderState(game), {
         aim: billiardsAim,
         dragPower: billiardsDragPower,
-        assistance: refs.billiardsAssistance ? refs.billiardsAssistance.value : 'normal',
-        setupHover: billiardsSetupHover,
+        assistance: refs.billiardsAssistance ? refs.billiardsAssistance.value : 'beginner',
+        setupHover: billiardsRackSelection ? null : billiardsSetupHover,
+        rackPreview: billiardsRackPreview(),
         debug: !!(refs.billiardsDebug && refs.billiardsDebug.checked),
         debugTexture: !!(refs.billiardsDebugTexture && refs.billiardsDebugTexture.checked)
       });
@@ -26006,7 +26253,6 @@
     if (refs.placementPieceSizeRow) refs.placementPieceSizeRow.hidden = !(modeGomoku || modeConnectFour || modeGo || modeReversi || modeFideChess);
     if (refs.billiardsRules) refs.billiardsRules.disabled = !modeBilliards || !!(game && game.phase !== 'setup') || onlineRoomActive || !!billiardsShotPending;
     if (refs.lianliankanTileSet) refs.lianliankanTileSet.disabled = !modeLianliankan || !game || game.phase !== 'setup' || onlineRoomActive;
-    if (refs.billiardsTool) refs.billiardsTool.disabled = !modeBilliards || !game || game.phase !== 'setup' || onlineRoomActive || !!billiardsShotPending;
     if (refs.billiardsBallPaletteRow) refs.billiardsBallPaletteRow.hidden = !modeBilliards || !game || game.phase !== 'setup';
     syncBilliardsBallPalette();
     if (refs.billiardsAssistance) refs.billiardsAssistance.disabled = !modeBilliards || !!billiardsShotPending;
@@ -26018,7 +26264,10 @@
         || !!billiardsShotPending;
     }
     syncBilliardsFriction();
-    if (refs.billiardsSpinPad) refs.billiardsSpinPad.style.pointerEvents = modeBilliards && game && game.phase === 'ready' && !billiardsShotPending ? '' : 'none';
+    const billiardsSpinEnabled = modeBilliards && game && game.phase === 'ready' && !billiardsShotPending && !currentAnimation;
+    if (refs.billiardsSpinPad) refs.billiardsSpinPad.style.pointerEvents = billiardsSpinEnabled ? '' : 'none';
+    if (refs.fullscreenBilliardsSpin) refs.fullscreenBilliardsSpin.hidden = !billiardsSpinEnabled || !currentFullscreenElement();
+    if (refs.fullscreenBilliardsSpinPad) refs.fullscreenBilliardsSpinPad.style.pointerEvents = billiardsSpinEnabled ? '' : 'none';
     syncBilliardsPower();
     drawBilliardsSpinPad();
     syncPlacementPieceSizeOutput();
@@ -27071,6 +27320,7 @@
     createReversiState,
     createSokobanState,
     createFideChessState,
+    restartBilliardsRound,
     createRng,
     defaultPresetIdForMode,
     centeredReversiOpening,
@@ -27096,6 +27346,7 @@
     isGameOver,
     isExplosionModeActive,
     isBilliardsGame,
+    billiardsQuickRulesAvailable,
     isLianliankanGame,
     isSokobanGame,
     isFideChessGame,
