@@ -84,11 +84,15 @@
     if (exact) return exact;
     const catalog = namespaceCatalog(config.namespace, locale) || {};
     const patterns = Array.isArray(catalog.__patterns) ? catalog.__patterns : [];
+    let translated = text;
     for (const item of patterns) {
       if (!Array.isArray(item) || item.length < 2) continue;
       try {
-        const match = text.match(new RegExp(item[0]));
-        if (match) return text.replace(new RegExp(item[0]), item[1]);
+        const expression = new RegExp(item[0]);
+        if (translated.match(expression)) {
+          translated = translated.replace(expression, item[1]);
+          break;
+        }
       } catch (_error) {
         // Ignore malformed optional compatibility patterns.
       }
@@ -96,7 +100,7 @@
     const fragments = catalog.__fragments && typeof catalog.__fragments === 'object' ? catalog.__fragments : {};
     return Object.entries(fragments)
       .sort((left, right) => right[0].length - left[0].length)
-      .reduce((result, [source, replacement]) => result.split(source).join(replacement), text);
+      .reduce((result, [source, replacement]) => result.split(source).join(replacement), translated);
   }
 
   function translateTextNode(node) {

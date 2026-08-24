@@ -274,9 +274,20 @@
       font-size: 0.92rem;
     }
 
-    .canvas-start-begin {
-      width: 100%;
+    .canvas-start-actions {
+      display: grid;
+      gap: 8px;
       margin-top: 12px;
+    }
+
+    .canvas-start-begin,
+    .canvas-start-close {
+      width: 100%;
+    }
+
+    .canvas-start-close {
+      background: transparent;
+      color: var(--muted);
     }
 
     .fullscreen-action-shell {
@@ -1689,12 +1700,15 @@
           </button>
         </div>
       </div>
-      <div class="canvas-start-overlay" id="canvas-start-overlay" role="region" aria-live="polite" aria-label="Canvas start prompt" hidden>
+      <div class="canvas-start-overlay" id="canvas-start-overlay" role="region" aria-live="polite" aria-label="Canvas action prompt" hidden>
         <div class="canvas-start-sheet">
           <p class="canvas-start-title" id="canvas-start-title" data-i18n="setup.ready">Ready to begin?</p>
           <p class="canvas-start-context" id="canvas-start-context"></p>
           <p class="canvas-start-rules" id="canvas-start-rules"></p>
-          <button class="btn canvas-start-begin" id="canvas-start-begin" type="button" data-i18n="setup.begin">begin the game</button>
+          <div class="canvas-start-actions">
+            <button class="btn canvas-start-begin" id="canvas-start-begin" type="button" data-i18n="setup.begin">begin the game</button>
+            <button class="btn canvas-start-close" id="canvas-start-close" type="button" data-i18n="setup.viewBoard" hidden>view completed board</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2137,6 +2151,7 @@
           <button class="btn" id="online-leave-room" type="button" disabled>leave room</button>
         </div>
         <button class="btn" id="online-confirm-roles" type="button" hidden>confirm colors</button>
+        <button class="btn" id="online-ready" type="button" data-i18n="online.prepared" hidden>I'm prepared</button>
         <div class="mosaic-inline-row" id="online-chinese-start-row" hidden>
           <label class="opt-row"><input type="checkbox" id="online-keep-unclaimed-colors"> keep unclaimed colors</label>
           <button class="btn" id="online-start-claimed-colors" type="button">begin claimed colors</button>
@@ -2259,9 +2274,9 @@
 
 <script src="ramified_minigame_presets/presets.js?v=20260824-3"></script>
 <script src="js/calculator_cards.js"></script>
-<script src="js/site_i18n.js?v=20260821-2"></script>
-<script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-3"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260824-9"></script>
+<script src="js/site_i18n.js?v=20260824-3"></script>
+<script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-7"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260824-14"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
@@ -2272,6 +2287,6 @@
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
-<script src="js/ramified_minigames_setup.js?v=20260824-38"></script>
+<script src="js/ramified_minigames_setup.js?v=20260824-44"></script>
 </body>
 </html>

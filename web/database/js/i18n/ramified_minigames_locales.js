@@ -250,6 +250,14 @@
     'setup.checkersJumpUnlimited': ['unlimited mirror jump', '不限距离镜像跳跃'],
     'setup.checkersJumpAdjacent': ['adjacent jump only', '仅可跳过相邻棋子'],
     'setup.checkersJumpAdjacentOrTwo': ['adjacent or distance-two jump', '相邻或距离二的跳跃'],
+    'setup.playAgain': ['play again', '再来一局'],
+    'setup.viewBoard': ['view completed board', '查看完成棋盘'],
+    'setup.resultReplayRules': ['Start another round with the same game settings.', '使用相同的游戏设置开始新一局。'],
+    'online.prepared': ["I'm prepared", '我准备好了'],
+    'online.notPrepared': ['not prepared', '取消准备'],
+    'online.suggestRematch': ['suggest rematch', '建议再来一局'],
+    'online.acceptRematch': ['accept rematch', '接受再来一局'],
+    'online.waitingPlayers': ['waiting for players', '等待玩家'],
     'setup.sokobanRules': ['Move every player together. Push one box at a time onto the targets across the glued board.', '同时移动所有玩家，每次推动一个箱子，穿过粘合棋盘将箱子推到目标上。'],
     'setup.queensRules': ['Rearrange all queens so no queen threatens another across the transported square-board routes.', '重新排列所有后，使任意两个后都不会沿传送后的方格路径互相攻击。'],
     'setup.chessRules': ['Move FIDE chess pieces across transported square-board routes. Checkmate wins; stalemate and dead positions draw.', '沿传送后的方格路径移动国际象棋棋子；将死获胜，逼和与死局为和棋。'],
@@ -483,6 +491,26 @@
     , 'status.refreshes': ['Refreshes', '刷新次数']
     , 'status.pairsCleared': ['Pairs cleared', '已消除对数']
     , 'status.complete': ['complete', '完成']
+    , 'runtime.playerNumber': ['Player {{number}}', '玩家 {{number}}']
+    , 'runtime.spectator': ['spectator', '旁观者']
+    , 'runtime.winner': ['{{side}} wins', '{{side}}获胜！']
+    , 'runtime.drawResult': ['{{game}} draw', '{{game}}和局']
+    , 'runtime.gameComplete': ['Game complete', '游戏完成']
+    , 'runtime.gameCompleteForGame': ['{{game}} complete', '{{game}}完成']
+    , 'runtime.restarted': ['{{game}} restarted', '{{game}}已重新开始']
+    , 'runtime.moveStatus': ['{{game}} move {{count}}', '{{game}}第{{count}}步']
+    , 'runtime.dropStatus': ['{{game}} drop {{count}}', '{{game}}第{{count}}次落子']
+    , 'runtime.shotStatus': ['{{game}} shot {{count}}', '{{game}}第{{count}}杆']
+    , 'runtime.puzzleStatus': ['{{game}} puzzle {{count}}', '{{game}}谜题第{{count}}步']
+    , 'runtime.toMove': ['to move', '行棋']
+    , 'runtime.toPlay': ['to play', '落子']
+    , 'runtime.toDrop': ['to drop', '落子']
+    , 'runtime.toShoot': ['to shoot', '击球']
+    , 'runtime.jumping': ['jumping', '连跳中']
+    , 'runtime.roleAction': ['{{role}} {{action}}', '{{role}}{{action}}']
+    , 'runtime.komiSuffix': ['; komi {{komi}}', '；贴目 {{komi}}']
+    , 'runtime.fallingSuffix': ['; falling {{direction}}', '；向{{direction}}落子']
+    , 'runtime.jumpSuffix': ['; choose next jump or end jump', '；请选择下一跳或结束连跳']
   };
 
   const english = {};
@@ -520,6 +548,7 @@
     ['^(.+) quick rules$', '$1快速规则'],
     ['^(.+) on (.+)$', '$1｜$2'],
     ['^(.+) wins!?$', '$1获胜！'],
+    ['^(.+) restarted$', '$1已重新开始'],
     ['^winner: (.+)$', '获胜者：$1'],
     ['^[Rr]oom (.+)$', '房间 $1'],
     ['^(\\d+) moves$', '$1 步'],
@@ -584,6 +613,38 @@
     'highest': '最高方块',
     'Room': '房间',
     'Player': '玩家'
+    , 'Chinese Checkers': '跳棋'
+    , 'Gomoku': '五子棋'
+    , 'Connect Four': '四子棋'
+    , 'Reversi': '黑白棋'
+    , 'Sokoban': '推箱子'
+    , 'Billiards': '台球'
+    , 'Billiard': '台球'
+    , 'Tile Matching': '连连看'
+    , 'FIDE Chess': '国际象棋'
+    , 'Black': '黑方'
+    , 'White': '白方'
+    , 'Red': '红方'
+    , 'Yellow': '黄方'
+    , 'Green': '绿方'
+    , 'Blue': '蓝方'
+    , 'Orange': '橙方'
+    , 'Purple': '紫方'
+    , 'black': '黑方'
+    , 'white': '白方'
+    , 'red': '红方'
+    , 'yellow': '黄方'
+    , 'green': '绿方'
+    , 'blue': '蓝方'
+    , 'orange': '橙方'
+    , 'purple': '紫方'
+    , 'pawn': '兵'
+    , 'rook': '车'
+    , 'knight': '马'
+    , 'bishop': '象'
+    , 'queen': '后'
+    , 'king': '王'
+    , 'piece': '棋子'
   };
   // English fragments are identity mappings by default. If a dynamically
   // assembled English phrase needs correction, change its replacement here.

@@ -140,7 +140,11 @@ export class GameRoom {
       summary: sanitizeText(body.summary, 220),
       roles,
       playerNames,
-      readyToPlay: gameMode !== 'chinese-checkers',
+      readyToPlay: false,
+      roundState: 'waiting',
+      readyClientIds: [],
+      rematch: null,
+      roundStartSnapshot: snapshot,
       pendingApproval: null,
       approvedHistory: null,
       disconnected: {},
@@ -236,6 +240,18 @@ export class GameRoom {
     }
     if (payload.type === 'updateName') {
       await this.handleUpdateName(ws, payload);
+      return;
+    }
+    if (payload.type === 'setReady') {
+      await this.handleSetReady(ws, payload);
+      return;
+    }
+    if (payload.type === 'proposeRematch') {
+      await this.handleProposeRematch(ws, payload);
+      return;
+    }
+    if (payload.type === 'acceptRematch') {
+      await this.handleAcceptRematch(ws, payload);
       return;
     }
     if (payload.type === 'proposeMove') {
@@ -410,6 +426,109 @@ export class GameRoom {
     this.broadcastPresence();
   }
 
+  currentPlayableClientIds() {
+    return uniqueStrings(this.playerSockets()
+      .filter(({ attachment }) => attachmentHasPlayableRole(attachment))
+      .map(({ attachment }) => attachment.clientId));
+  }
+
+  async handleSetReady(ws, payload) {
+    const attachment = safeAttachment(ws);
+    if (!attachment.joined || !attachmentHasPlayableRole(attachment)) {
+      this.safeSend(ws, { type: 'error', error: 'Only players can change readiness.' });
+      return;
+    }
+    if (roomRoundState(this.room) !== 'waiting') {
+      this.safeSend(ws, { type: 'error', error: 'The round is not waiting for players.' });
+      return;
+    }
+    const current = this.currentPlayableClientIds();
+    const ready = new Set(normalizeClientIds(this.room.readyClientIds).filter((clientId) => current.includes(clientId)));
+    if (payload.ready === false) ready.delete(attachment.clientId);
+    else ready.add(attachment.clientId);
+    this.room.readyClientIds = Array.from(ready);
+    if (current.length && current.every((clientId) => ready.has(clientId))) {
+      this.room.roundState = 'playing';
+      this.room.readyToPlay = true;
+      this.room.readyClientIds = [];
+    }
+    this.room.updatedAt = new Date().toISOString();
+    await this.saveRoom();
+    this.broadcastPresence();
+  }
+
+  async handleProposeRematch(ws, payload) {
+    const attachment = safeAttachment(ws);
+    if (!attachment.joined || !attachmentHasPlayableRole(attachment)) {
+      this.safeSend(ws, { type: 'error', error: 'Only players can suggest a rematch.' });
+      return;
+    }
+    if (roomRoundState(this.room) !== 'finished') {
+      this.safeSend(ws, { type: 'error', error: 'A rematch can be suggested after the game ends.' });
+      return;
+    }
+    this.room.roundState = 'rematch-vote';
+    this.room.readyToPlay = false;
+    this.room.rematch = {
+      proposerClientId: attachment.clientId,
+      proposerName: normalizePlayerName(attachment.playerName, attachment.clientId),
+      acceptedClientIds: [attachment.clientId]
+    };
+    this.room.updatedAt = new Date().toISOString();
+    await this.saveRoom();
+    this.broadcastPresence();
+  }
+
+  async handleAcceptRematch(ws, payload) {
+    const attachment = safeAttachment(ws);
+    if (!attachment.joined || !attachmentHasPlayableRole(attachment)) {
+      this.safeSend(ws, { type: 'error', error: 'Only players can accept a rematch.' });
+      return;
+    }
+    if (roomRoundState(this.room) !== 'rematch-vote' || !this.room.rematch) {
+      this.safeSend(ws, { type: 'error', error: 'There is no rematch awaiting acceptance.' });
+      return;
+    }
+    const players = this.currentPlayableClientIds();
+    const accepted = new Set(normalizeClientIds(this.room.rematch.acceptedClientIds).filter((clientId) => players.includes(clientId)));
+    accepted.add(attachment.clientId);
+    this.room.rematch.acceptedClientIds = Array.from(accepted);
+    if (!players.length || !players.every((clientId) => accepted.has(clientId))) {
+      this.room.updatedAt = new Date().toISOString();
+      await this.saveRoom();
+      this.broadcastPresence();
+      return;
+    }
+    rotateTwoPlayerRoomRoles(this.room, players);
+    this.refreshSessionRoles();
+    this.room.snapshot = this.room.roundStartSnapshot || this.room.snapshot;
+    this.room.version += 1;
+    this.room.roundState = 'playing';
+    this.room.readyToPlay = true;
+    this.room.readyClientIds = [];
+    this.room.rematch = null;
+    this.room.summary = 'Rematch started.';
+    this.room.updatedAt = new Date().toISOString();
+    await this.saveRoom();
+    this.playerSockets().forEach(({ ws: target, attachment: targetAttachment }) => {
+      this.safeSend(target, {
+        type: 'state',
+        roomCode: this.room.roomCode,
+        gameMode: this.room.gameMode,
+        version: this.room.version,
+        snapshot: this.room.snapshot,
+        summary: this.room.summary,
+        action: { type: 'rematch-start', gameMode: this.room.gameMode },
+        clientId: attachment.clientId,
+        role: targetAttachment.role || 'spectator',
+        rolesAssigned: attachmentRoles(targetAttachment),
+        roles: publicRoles(this.room.roles),
+        rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
+        ...publicRoundState(this.room)
+      });
+    });
+  }
+
   async handleProposeMove(ws, payload) {
     const attachment = safeAttachment(ws);
     if (!attachment.joined) {
@@ -420,6 +539,10 @@ export class GameRoom {
     const role = roles[0] || 'spectator';
     if (!roles.length) {
       this.safeSend(ws, { type: 'rejected', error: 'Spectators cannot move.', version: this.room.version, snapshot: this.room.snapshot });
+      return;
+    }
+    if (roomRoundState(this.room) !== 'playing') {
+      this.safeSend(ws, { type: 'rejected', error: 'The online round is waiting for players.', version: this.room.version, snapshot: this.room.snapshot });
       return;
     }
     if (Number(payload.baseVersion) !== this.room.version) {
@@ -449,8 +572,11 @@ export class GameRoom {
     this.room.summary = sanitizeText(payload.summary, 220);
     this.room.updatedAt = new Date().toISOString();
     if (historyActionType(action.type)) this.room.approvedHistory = null;
-    if (this.room.gameMode === 'chinese-checkers' && action.type === 'chinese-checkers-start') {
-      this.room.readyToPlay = true;
+    if (payload.snapshot && ['gameover', 'complete'].includes(payload.snapshot.phase)) {
+      this.room.roundState = 'finished';
+      this.room.readyToPlay = false;
+      this.room.readyClientIds = [];
+      this.room.rematch = null;
     }
     updateRoomReadiness(this.room);
     await this.saveRoom();
@@ -467,8 +593,7 @@ export class GameRoom {
       role,
       roles: publicRoles(this.room.roles),
       rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
-      readyToPlay: this.room.readyToPlay !== false,
-      unclaimedRoles: unclaimedRoomRoles(this.room)
+      ...publicRoundState(this.room)
     };
     this.broadcast(stateMessage);
     this.safeSend(ws, {
@@ -477,8 +602,7 @@ export class GameRoom {
       action,
       roles: publicRoles(this.room.roles),
       rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
-      readyToPlay: this.room.readyToPlay !== false,
-      unclaimedRoles: unclaimedRoomRoles(this.room)
+      ...publicRoundState(this.room)
     });
   }
 
@@ -743,8 +867,7 @@ export class GameRoom {
       rolesAssigned: attachmentRoles(attachment),
       roles: publicRoles(this.room.roles),
       rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
-      readyToPlay: this.room.readyToPlay !== false,
-      unclaimedRoles: unclaimedRoomRoles(this.room),
+      ...publicRoundState(this.room),
       ...extra
     });
   }
@@ -763,8 +886,7 @@ export class GameRoom {
       roomCode: this.room.roomCode,
       roles: publicRoles(this.room.roles),
       rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
-      readyToPlay: this.room.readyToPlay !== false,
-      unclaimedRoles: unclaimedRoomRoles(this.room),
+      ...publicRoundState(this.room),
       connected: this.playerSockets().length
     });
   }
@@ -775,6 +897,17 @@ export class GameRoom {
       if (attachment.joined) sockets.push({ ws, attachment });
     });
     return sockets;
+  }
+
+  refreshSessionRoles() {
+    this.sessions.forEach((attachment, ws) => {
+      if (!attachment.joined) return;
+      const roles = rolesForGame(this.room.gameMode, this.room.snapshot)
+        .filter((role) => this.room.roles && this.room.roles[role] === attachment.clientId);
+      const next = { ...attachment, roles, role: roles[0] || 'spectator' };
+      this.sessions.set(ws, next);
+      ws.serializeAttachment(next);
+    });
   }
 
   findSocketByClientId(clientId) {
@@ -1040,12 +1173,50 @@ function chineseCheckersActionRole(action, nextSnapshot) {
 
 function updateRoomReadiness(room) {
   if (!room) return;
-  if (room.gameMode !== 'chinese-checkers') {
-    room.readyToPlay = true;
-    return;
-  }
-  if (room.readyToPlay === true) return;
-  room.readyToPlay = unclaimedRoomRoles(room).length === 0;
+  if (!room.roundState) room.roundState = room.readyToPlay === false ? 'waiting' : 'playing';
+  if (!Array.isArray(room.readyClientIds)) room.readyClientIds = [];
+  if (!Object.prototype.hasOwnProperty.call(room, 'rematch')) room.rematch = null;
+  if (!room.roundStartSnapshot) room.roundStartSnapshot = room.snapshot;
+  room.readyToPlay = room.roundState === 'playing';
+}
+
+function roomRoundState(room) {
+  updateRoomReadiness(room);
+  return room && room.roundState ? room.roundState : 'waiting';
+}
+
+function normalizeClientIds(value) {
+  const ids = Array.isArray(value) ? value : [];
+  return uniqueStrings(ids.map((item) => normalizeClientId(item)).filter(Boolean));
+}
+
+function publicRoundState(room) {
+  updateRoomReadiness(room);
+  const rematch = room.rematch && typeof room.rematch === 'object'
+    ? {
+      proposerName: sanitizeText(room.rematch.proposerName || '', 32),
+      acceptedClientIds: normalizeClientIds(room.rematch.acceptedClientIds)
+    }
+    : null;
+  return {
+    roundState: room.roundState,
+    readyToPlay: room.readyToPlay === true,
+    readyClientIds: normalizeClientIds(room.readyClientIds),
+    rematch,
+    unclaimedRoles: unclaimedRoomRoles(room)
+  };
+}
+
+function rotateTwoPlayerRoomRoles(room, playerIds) {
+  const activeIds = uniqueStrings(playerIds);
+  const roles = rolesForGame(room.gameMode, room.snapshot)
+    .filter((role) => activeIds.includes(room.roles && room.roles[role]));
+  if (roles.length !== 2) return;
+  const first = room.roles[roles[0]];
+  const second = room.roles[roles[1]];
+  if (!first || !second || first === second) return;
+  room.roles[roles[0]] = second;
+  room.roles[roles[1]] = first;
 }
 
 function normalizeRoles(value) {
@@ -1088,8 +1259,7 @@ function publicRoomPayload(room, extra = {}) {
     summary: room.summary || '',
     roles: publicRoles(room.roles),
     rolePlayers: publicRolePlayers(room.roles, room.playerNames),
-    readyToPlay: room.readyToPlay !== false,
-    unclaimedRoles: unclaimedRoomRoles(room),
+    ...publicRoundState(room),
     createdAt: room.createdAt,
     updatedAt: room.updatedAt,
     ...extra

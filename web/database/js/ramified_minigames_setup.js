@@ -18,6 +18,66 @@
     return window.SiteI18n.translateSource(String(value ?? ''));
   }
 
+  function tk(key, fallback, parameters) {
+    if (typeof window !== 'undefined' && window.SiteI18n && typeof window.SiteI18n.t === 'function') {
+      const translated = window.SiteI18n.t(key, parameters);
+      if (translated) return translated;
+    }
+    return String(fallback || '').replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_match, name) => String(parameters && parameters[name] != null ? parameters[name] : ''));
+  }
+
+  function localizedGameName(mode) {
+    const keyByMode = {
+      [GAME_MODES.LIANLIANKAN]: 'games.lianliankan',
+      [GAME_MODES.BILLIARDS]: 'games.billiards',
+      [GAME_MODES.FIDE_CHESS]: 'games.chess',
+      [GAME_MODES.SOKOBAN]: 'games.sokoban',
+      [GAME_MODES.CHINESE_CHECKERS]: 'games.checkers',
+      [GAME_MODES.REVERSI]: 'games.reversi',
+      [GAME_MODES.GO]: 'games.go',
+      [GAME_MODES.GOMOKU]: 'games.gomoku'
+    };
+    const fallback = gameTypeForGameMode(mode);
+    return keyByMode[mode] ? tk(keyByMode[mode], fallback) : tr(fallback);
+  }
+
+  function localizedRoleLabel(role) {
+    const text = String(role || '').trim().toLowerCase();
+    const keyByRole = {
+      black: 'status.black', white: 'status.white', red: 'status.red', yellow: 'status.yellow',
+      green: 'status.green', blue: 'status.blue', orange: 'status.orange', purple: 'status.purple'
+    };
+    if (keyByRole[text]) return tk(keyByRole[text], text);
+    if (text === 'player-1') return tk('runtime.playerNumber', 'Player {{number}}', { number: 1 });
+    if (text === 'player-2') return tk('runtime.playerNumber', 'Player {{number}}', { number: 2 });
+    if (text === 'spectator') return tk('runtime.spectator', 'spectator');
+    if (!text) return tk('online.autoSide', 'auto side');
+    return text;
+  }
+
+  function localizedWinnerText(role) {
+    return tk('runtime.winner', '{{side}} wins', { side: localizedRoleLabel(role) });
+  }
+
+  function localizedRestartText(state) {
+    return tk('runtime.restarted', '{{game}} restarted', { game: localizedGameName(gameModeValue(state)) });
+  }
+
+  function localizedMoveStatus(state, count, kind = 'move') {
+    const key = kind === 'drop' ? 'runtime.dropStatus' : (kind === 'shot' ? 'runtime.shotStatus' : 'runtime.moveStatus');
+    const fallback = kind === 'drop' ? '{{game}} drop {{count}}' : (kind === 'shot' ? '{{game}} shot {{count}}' : '{{game}} move {{count}}');
+    return tk(key, fallback, { game: localizedGameName(gameModeValue(state)), count });
+  }
+
+  function localizedTurnAction(actionText) {
+    const action = String(actionText || '').trim().toLowerCase();
+    const keyByAction = {
+      'to move': 'runtime.toMove', 'to play': 'runtime.toPlay', 'to drop': 'runtime.toDrop',
+      'to shoot': 'runtime.toShoot', jumping: 'runtime.jumping'
+    };
+    return keyByAction[action] ? tk(keyByAction[action], actionText) : tr(actionText);
+  }
+
   const DIRS = { E: 0, S: 1, W: 2, N: 3 };
   const HEX_DIRS = { E: 0, SE: 1, SW: 2, W: 3, NW: 4, NE: 5 };
   const LATTICES = {
@@ -454,6 +514,9 @@
   let fideChessPendingPromotion = null;
   let suppressNextCanvasClick = false;
   let suppressCanvasClickTimer = null;
+  let canvasStartPromptTimer = null;
+  let canvasPromptAction = '';
+  let localResultPromptDismissed = false;
   let placementReachCandidate = null;
   let placementReachDwellTimer = null;
   let placementReachHoldTimer = null;
@@ -573,6 +636,7 @@
     refs.canvasStartContext = document.getElementById('canvas-start-context');
     refs.canvasStartRules = document.getElementById('canvas-start-rules');
     refs.canvasStartBegin = document.getElementById('canvas-start-begin');
+    refs.canvasStartClose = document.getElementById('canvas-start-close');
     refs.setupAlert = document.getElementById('game-setup-alert');
     refs.onlineCard = document.getElementById('online-play-card');
     refs.onlineRoomCode = document.getElementById('online-room-code');
@@ -583,6 +647,7 @@
     refs.onlineSearchRoom = document.getElementById('online-search-room');
     refs.onlineJoinRoom = document.getElementById('online-join-room');
     refs.onlineConfirmRoles = document.getElementById('online-confirm-roles');
+    refs.onlineReady = document.getElementById('online-ready');
     refs.onlineChineseStartRow = document.getElementById('online-chinese-start-row');
     refs.onlineKeepUnclaimedColors = document.getElementById('online-keep-unclaimed-colors');
     refs.onlineStartClaimedColors = document.getElementById('online-start-claimed-colors');
@@ -735,10 +800,12 @@
     if (refs.bombArtStyle) refs.bombArtStyle.addEventListener('change', render);
     if (refs.begin) refs.begin.addEventListener('click', beginGameFromUi);
     if (refs.canvasStartBegin) refs.canvasStartBegin.addEventListener('click', handleCanvasStartBeginClick);
+    if (refs.canvasStartClose) refs.canvasStartClose.addEventListener('click', handleCanvasStartCloseClick);
     if (refs.onlineCreateRoom) refs.onlineCreateRoom.addEventListener('click', createOnlineRoomFromUi);
     if (refs.onlineSearchRoom) refs.onlineSearchRoom.addEventListener('click', searchOnlineRoomsFromUi);
     if (refs.onlineJoinRoom) refs.onlineJoinRoom.addEventListener('click', joinOnlineRoomFromUi);
     if (refs.onlineConfirmRoles) refs.onlineConfirmRoles.addEventListener('click', confirmOnlineChineseCheckersRolesFromUi);
+    if (refs.onlineReady) refs.onlineReady.addEventListener('click', setOnlineReadyFromUi);
     if (refs.onlineStartClaimedColors) refs.onlineStartClaimedColors.addEventListener('click', startOnlineChineseCheckersWithClaimedColorsFromUi);
     if (refs.onlineLeaveRoom) refs.onlineLeaveRoom.addEventListener('click', leaveOnlineRoomFromUi);
     if (refs.onlineRoleOptions) refs.onlineRoleOptions.addEventListener('change', handleOnlineRoleOptionsChange);
@@ -820,7 +887,9 @@
       syncControls();
       syncStats();
       syncOnlineRoleOptions();
+      if (game) syncStatusForCurrentGame();
       if (refs.onlineStatus) refs.onlineStatus.textContent = tr(onlineStatusText());
+      refreshCanvasPromptForLanguage();
       render();
     });
     window.addEventListener('blur', () => {
@@ -1008,6 +1077,9 @@
       roomRoles: {},
       rolePlayers: {},
       readyToPlay: true,
+      roundState: 'idle',
+      readyClientIds: [],
+      rematch: null,
       unclaimedRoles: [],
       gameMode: '',
       version: 0,
@@ -1272,17 +1344,7 @@
   }
 
   function onlineRoleLabel(role) {
-    const text = String(role || '').trim().toLowerCase();
-    if (text === 'white') return 'white';
-    if (text === 'black') return 'black';
-    if (text === 'red') return 'red';
-    if (text === 'yellow') return 'yellow';
-    if (text === 'blue') return 'blue';
-    if (text === 'green') return 'green';
-    if (text === 'player-1') return 'Player 1';
-    if (text === 'player-2') return 'Player 2';
-    if (text === 'spectator') return 'spectator';
-    return text || 'auto side';
+    return localizedRoleLabel(role);
   }
 
   function onlineRolePlayerName(role) {
@@ -1296,12 +1358,15 @@
     const label = String(fallbackLabel || onlineRoleLabel(normalized)).trim();
     const name = onlineRolePlayerName(normalized);
     if (!name) return label;
-    const side = String(parentheticalLabel || label || onlineRoleLabel(normalized)).trim().toLowerCase();
+    const side = String(parentheticalLabel || label || onlineRoleLabel(normalized)).trim();
     return side ? `${name} (${side})` : name;
   }
 
   function onlineRoleActionLabel(role, actionText = 'to move', fallbackLabel = '', parentheticalLabel = '') {
-    return `${onlineRolePlayerLabel(role, fallbackLabel, parentheticalLabel)} ${actionText}`.trim();
+    return tk('runtime.roleAction', '{{role}} {{action}}', {
+      role: onlineRolePlayerLabel(role, fallbackLabel, parentheticalLabel),
+      action: localizedTurnAction(actionText)
+    }).trim();
   }
 
   function onlineRolesLabel(roles) {
@@ -1466,20 +1531,100 @@
       });
     }
     const waitingChinese = onlineIsInRoom()
-      && onlineState.readyToPlay === false
+      && onlineState.roundState === 'waiting'
       && onlineState.gameMode === GAME_MODES.CHINESE_CHECKERS;
     if (refs.onlineConfirmRoles) {
       refs.onlineConfirmRoles.hidden = !waitingChinese;
       refs.onlineConfirmRoles.disabled = !waitingChinese || !onlineSocketOpen() || !onlinePendingRoleClaimsChanged();
     }
-    if (refs.onlineChineseStartRow) refs.onlineChineseStartRow.hidden = !waitingChinese;
-    if (refs.onlineStartClaimedColors) refs.onlineStartClaimedColors.disabled = !waitingChinese || !onlineStateHasPlayableRole();
-    if (refs.onlineKeepUnclaimedColors) refs.onlineKeepUnclaimedColors.disabled = !waitingChinese || !onlineStateHasPlayableRole();
+    if (refs.onlineChineseStartRow) refs.onlineChineseStartRow.hidden = true;
+    if (refs.onlineStartClaimedColors) refs.onlineStartClaimedColors.disabled = true;
+    if (refs.onlineKeepUnclaimedColors) refs.onlineKeepUnclaimedColors.disabled = true;
+    const waitingRound = onlineIsInRoom() && onlineState.roundState === 'waiting';
+    if (refs.onlineReady) {
+      const ready = onlineLocalPlayerIsReady();
+      refs.onlineReady.hidden = !waitingRound;
+      refs.onlineReady.disabled = !waitingRound || !onlineSocketOpen() || !onlineStateHasPlayableRole();
+      refs.onlineReady.textContent = tr(ready ? 'not prepared' : "I'm prepared");
+    }
     if (refs.onlineStatus) {
       refs.onlineStatus.textContent = onlineStatusText();
       refs.onlineStatus.dataset.state = onlineStatusDataState();
     }
     syncCanvasCursor();
+  }
+
+  function onlineLocalPlayerIsReady() {
+    return !!(onlineState && Array.isArray(onlineState.readyClientIds) && onlineState.readyClientIds.includes(onlineState.clientId));
+  }
+
+  function setOnlineReadyFromUi() {
+    if (!onlineIsInRoom() || !onlineSocketOpen() || !onlineStateHasPlayableRole() || onlineState.roundState !== 'waiting') return;
+    onlineSendRaw({ type: 'setReady', clientId: onlineState.clientId, ready: !onlineLocalPlayerIsReady() });
+    syncOnlineStatus(onlineLocalPlayerIsReady() ? 'Marked not prepared.' : 'Marked prepared; waiting for players.', 'idle');
+  }
+
+  function proposeOnlineRematchFromUi() {
+    if (!onlineIsInRoom() || !onlineSocketOpen() || !onlineStateHasPlayableRole() || onlineState.roundState !== 'finished') return;
+    onlineSendRaw({ type: 'proposeRematch', clientId: onlineState.clientId });
+  }
+
+  function acceptOnlineRematchFromUi() {
+    if (!onlineIsInRoom() || !onlineSocketOpen() || !onlineStateHasPlayableRole() || onlineState.roundState !== 'rematch-vote') return;
+    onlineSendRaw({ type: 'acceptRematch', clientId: onlineState.clientId });
+  }
+
+  function syncOnlineCanvasPrompt() {
+    if (!onlineIsInRoom() || !game || !onlineState) return;
+    if (onlineState.roundState === 'waiting') {
+      showCanvasStartPrompt({
+        force: true,
+        action: 'online-ready',
+        copy: {
+          title: 'Online game waiting',
+          context: `${(onlineState.readyClientIds || []).length} player${(onlineState.readyClientIds || []).length === 1 ? '' : 's'} prepared`,
+          rules: 'Every current player must be prepared before the game begins.',
+          action: onlineLocalPlayerIsReady() ? 'not prepared' : "I'm prepared",
+          status: ''
+        }
+      });
+      return;
+    }
+    if (onlineState.roundState === 'finished') {
+      showCanvasStartPrompt({
+        force: true,
+        action: 'online-propose-rematch',
+        badge: 'over',
+        copy: {
+          title: game.winner ? localizedWinnerText(game.winner) : tk('runtime.gameComplete', 'Game complete'),
+          context: 'Stay in this room for another round.',
+          rules: 'Suggest a rematch; every current player must accept it.',
+          action: 'suggest rematch',
+          status: ''
+        }
+      });
+      return;
+    }
+    if (onlineState.roundState === 'rematch-vote') {
+      const accepted = onlineState.rematch && Array.isArray(onlineState.rematch.acceptedClientIds)
+        ? onlineState.rematch.acceptedClientIds.includes(onlineState.clientId)
+        : false;
+      showCanvasStartPrompt({
+        force: true,
+        action: accepted ? '' : 'online-accept-rematch',
+        badge: 'over',
+        copy: {
+          title: 'Rematch proposed',
+          context: `${onlineState.rematch && onlineState.rematch.proposerName ? onlineState.rematch.proposerName : 'A player'} suggests another game`,
+          rules: 'All current players must accept before the rematch starts.',
+          action: accepted ? 'waiting for players' : 'accept rematch',
+          status: ''
+        }
+      });
+      if (accepted && refs.canvasStartBegin) refs.canvasStartBegin.disabled = true;
+      return;
+    }
+    if (refs.canvasStartOverlay && canvasPromptAction && canvasPromptAction.startsWith('online-')) hideCanvasStartPrompt();
   }
 
   function onlinePlayCardVisible() {
@@ -1558,6 +1703,7 @@
       onlineState.roomRoles = payload.roles && typeof payload.roles === 'object' ? { ...payload.roles } : {};
       onlineState.rolePlayers = payload.rolePlayers && typeof payload.rolePlayers === 'object' ? { ...payload.rolePlayers } : {};
       onlineState.readyToPlay = payload.readyToPlay !== false;
+      updateOnlineRoomMetaFromMessage(payload);
       onlineState.unclaimedRoles = normalizeOnlineRoles(payload.unclaimedRoles);
       syncOnlineRoleOptions(onlineState.gameMode);
       await connectOnlineSocketWithRetry(code, onlineState.roles.length ? onlineState.roles : rolesRequested);
@@ -1719,6 +1865,9 @@
       onlineState.roomRoles = {};
       onlineState.rolePlayers = {};
       onlineState.readyToPlay = true;
+      onlineState.roundState = 'idle';
+      onlineState.readyClientIds = [];
+      onlineState.rematch = null;
       onlineState.unclaimedRoles = [];
       onlineState.joined = false;
       onlineState.connecting = true;
@@ -1894,6 +2043,9 @@
       onlineState.roomRoles = {};
       onlineState.rolePlayers = {};
       onlineState.readyToPlay = true;
+      onlineState.roundState = 'idle';
+      onlineState.readyClientIds = [];
+      onlineState.rematch = null;
       onlineState.unclaimedRoles = [];
       onlineState.gameMode = '';
       onlineState.version = 0;
@@ -1954,6 +2106,7 @@
       onlineState.rolePlayers = message.rolePlayers && typeof message.rolePlayers === 'object' ? { ...message.rolePlayers } : {};
       onlineState.readyToPlay = message.readyToPlay !== false;
       onlineState.unclaimedRoles = normalizeOnlineRoles(message.unclaimedRoles);
+      updateOnlineRoomMetaFromMessage(message);
       onlineState.version = normalizeOnlineVersion(message.version, onlineState.version);
       onlineState.gameMode = gameModeFromUrlParam(message.gameMode) || onlineState.gameMode || selectedGameMode();
       if (onlineState.readyToPlay !== false) hideOnlineChineseCheckersStartPrompt();
@@ -1962,6 +2115,7 @@
       syncOnlineStatus('Joined room.', 'idle');
       syncOnlineControls();
       syncControls();
+      syncOnlineCanvasPrompt();
       resolvePendingOnlineJoin(onlineState.socket);
       return;
     }
@@ -1976,6 +2130,7 @@
       syncOnlineStatus('Move accepted.', 'idle');
       syncOnlineControls();
       syncControls();
+      syncOnlineCanvasPrompt();
       return;
     }
     if (message.type === 'rejected') {
@@ -2012,6 +2167,7 @@
       syncOnlineStatus(onlinePresenceText(message), 'idle');
       render();
       syncOnlineControls();
+      syncOnlineCanvasPrompt();
       return;
     }
     if (message.type === 'playerLeft') {
@@ -2067,7 +2223,7 @@
     onlineState.version = normalizeOnlineVersion(message.version, onlineState.version);
     const messageMode = gameModeFromUrlParam(message.gameMode || message.snapshot.gameMode);
     if (messageMode) onlineState.gameMode = messageMode;
-    if (localActionEcho) {
+    if (localActionEcho && String(action && action.type || '').toLowerCase() !== 'rematch-start') {
       syncOnlineRoleOptions(onlineState.gameMode);
       syncOnlineStatus('Move accepted.', 'idle');
       syncOnlineControls();
@@ -2106,6 +2262,7 @@
       onlineState.applyingRemoteState = false;
       syncOnlineControls();
       syncControls();
+      syncOnlineCanvasPrompt();
     }
   }
 
@@ -2114,6 +2271,10 @@
     if (message.roles && typeof message.roles === 'object') onlineState.roomRoles = { ...message.roles };
     if (message.rolePlayers && typeof message.rolePlayers === 'object') onlineState.rolePlayers = { ...message.rolePlayers };
     if (Object.prototype.hasOwnProperty.call(message, 'readyToPlay')) onlineState.readyToPlay = message.readyToPlay !== false;
+    if (typeof message.roundState === 'string') onlineState.roundState = message.roundState;
+    if (Array.isArray(message.readyClientIds)) onlineState.readyClientIds = message.readyClientIds.slice();
+    if (message.rematch && typeof message.rematch === 'object') onlineState.rematch = clonePlain(message.rematch);
+    else if (Object.prototype.hasOwnProperty.call(message, 'rematch')) onlineState.rematch = null;
     if (Object.prototype.hasOwnProperty.call(message, 'unclaimedRoles')) {
       onlineState.unclaimedRoles = normalizeOnlineRoles(message.unclaimedRoles);
     }
@@ -2188,10 +2349,10 @@
     pushUndoSnapshot(onlineActionHistoryLabel(action));
     game = result.state;
     if (game.phase === 'gameover') {
-      if (game.winner) syncStatus(`${gomokuColorLabel(game.winner)} wins`, `${game.round} move${game.round === 1 ? '' : 's'}`, 'over');
-      else syncStatus('Gomoku draw', `${game.round} moves`, 'over');
+      if (game.winner) syncStatus(localizedWinnerText(game.winner), `${game.round} move${game.round === 1 ? '' : 's'}`, 'over');
+      else syncStatus(tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.GOMOKU) }), `${game.round} moves`, 'over');
     } else {
-      syncStatus(`Gomoku move ${game.round}`, gomokuTurnInfo(game), 'ready');
+      syncStatus(localizedMoveStatus(game, game.round), gomokuTurnInfo(game), 'ready');
     }
     render();
     refreshDebugExportIfNeeded();
@@ -2244,13 +2405,13 @@
     game = result.state;
     startConnectFourDropAnimation(result);
     if (game.phase === 'gameover') {
-      if (game.winner) syncStatus(`${connectFourColorLabel(game.winner)} wins`, `${game.round} drop${game.round === 1 ? '' : 's'}`, 'over');
-      else syncStatus('Connect Four draw', `${game.round} drops`, 'over');
+      if (game.winner) syncStatus(localizedWinnerText(game.winner), `${game.round} drop${game.round === 1 ? '' : 's'}`, 'over');
+      else syncStatus(tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.CONNECT_FOUR) }), `${game.round} drops`, 'over');
     } else {
       const routeInfo = result.drop && result.drop.path && result.drop.path.length > 1
         ? `${connectFourTurnInfo(game)}; fell ${result.drop.path.length - 1} step${result.drop.path.length === 2 ? '' : 's'}`
         : connectFourTurnInfo(game);
-      syncStatus(`Connect Four drop ${game.round}`, routeInfo, 'ready');
+      syncStatus(localizedMoveStatus(game, game.round, 'drop'), routeInfo, 'ready');
     }
     render();
     refreshDebugExportIfNeeded();
@@ -2536,7 +2697,7 @@
     if (!onlineSocketOpen()) return 'online room is disconnected';
     if (!onlineStateSupported(game)) return 'this game is not supported online';
     if (!onlineStateHasPlayableRole()) return 'spectators cannot move';
-    if (isChineseCheckersGame(game) && onlineState.readyToPlay === false) return 'online Chinese Checkers is waiting for colors';
+    if (onlineState.roundState && onlineState.roundState !== 'playing') return 'online game is waiting for players';
     const expected = onlineExpectedRoleForGame(game, actionType);
     if (expected && !onlineStateOwnsRole(expected)) return onlineTurnActionText(game, expected);
     return '';
@@ -2624,7 +2785,7 @@
   function onlineChineseCheckersOpeningBlockedForLocal(state = game) {
     if (!onlineState || !onlineIsInRoom() || !onlineSocketOpen()) return false;
     if (!isChineseCheckersGame(state) || !isChineseCheckersOpeningRound(state)) return false;
-    if (onlineState.readyToPlay === false || !onlineStateHasPlayableRole()) return false;
+    if (onlineState.roundState !== 'playing' || !onlineStateHasPlayableRole()) return false;
     const expected = onlineChineseCheckersOpeningExpectedRole(state);
     if (expected) return !onlineStateOwnsRole(expected);
     const pending = chineseCheckersPendingOpeningColors(state);
@@ -2669,7 +2830,7 @@
     if (!onlineState || !onlineIsInRoom() || !onlineSocketOpen()) return false;
     if (!state || state.phase !== 'ready' || !onlineStateSupported(state)) return false;
     if (isGoGame(state) && state.scoringReview) return false;
-    if (isChineseCheckersGame(state) && onlineState.readyToPlay === false) return false;
+    if (onlineState.roundState && onlineState.roundState !== 'playing') return true;
     if (!onlineStateHasPlayableRole()) return true;
     if (onlineChineseCheckersOpeningBlockedForLocal(state)) return true;
     const expected = onlineExpectedRoleForGame(state);
@@ -2802,6 +2963,8 @@
 
   function resetToPreview() {
     hideCanvasStartPrompt();
+    clearCanvasStartPromptTimer();
+    resetLocalResultPromptDismissal();
     clearLianliankanHint();
     clearPlacementReachAssist();
     if (!presetCatalogReady || !PRESETS.length) {
@@ -2839,6 +3002,7 @@
     render();
     syncStatusForCurrentGame();
     syncControls();
+    scheduleCanvasStartPrompt();
   }
 
   function finishPresetCatalogInit() {
@@ -3483,6 +3647,8 @@
 
   function beginGameFromUi() {
     hideCanvasStartPrompt();
+    clearCanvasStartPromptTimer();
+    resetLocalResultPromptDismissal();
     if (game && game.phase !== 'setup') {
       if (isLianliankanGame(game) && game.phase === 'deadlock') {
         refreshLianliankanFromUi();
@@ -3601,6 +3767,8 @@
   function stopGameFromUi() {
     const previous = game;
     hideCanvasStartPrompt();
+    clearCanvasStartPromptTimer();
+    resetLocalResultPromptDismissal();
     stopPlayback();
     if (isConnectFourGame(previous)) {
       const holes = new Set(previous.holes || []);
@@ -3649,6 +3817,7 @@
       return true;
     }
     hideCanvasStartPrompt();
+    resetLocalResultPromptDismissal();
     stopPlayback();
     resetSwipeGesture();
     resetFideChessDrag();
@@ -3682,7 +3851,7 @@
     syncGoKomiInputFromGame();
     syncGoScoringMethodInputFromGame();
     render();
-    syncStatus('reset complete', `${gameTypeForGameMode(gameModeValue(game))} restarted`, 'ready');
+    syncStatus('reset complete', localizedRestartText(game), 'ready');
     syncControls();
     refreshDebugExportIfNeeded();
     if (refs.canvas) refs.canvas.focus();
@@ -5752,16 +5921,16 @@
   }
 
   function onlineTurnFeedbackActionText(state) {
-    if (isGoGame(state)) return 'to play';
-    if (isConnectFourGame(state)) return 'to drop';
-    if (isChineseCheckersGame(state) && isChineseCheckersJumping(state)) return 'jumping';
-    return 'to move';
+    if (isGoGame(state)) return localizedTurnAction('to play');
+    if (isConnectFourGame(state)) return localizedTurnAction('to drop');
+    if (isChineseCheckersGame(state) && isChineseCheckersJumping(state)) return localizedTurnAction('jumping');
+    return localizedTurnAction('to move');
   }
 
   function onlineTurnFeedbackSuffixText(state) {
-    if (isGoGame(state)) return `; komi ${formatKomi(state.komi)}`;
-    if (isConnectFourGame(state)) return `; falling ${dirLabel(state.fallDir, state.preset)}`;
-    if (isChineseCheckersGame(state) && isChineseCheckersJumping(state)) return '; choose next jump or end jump';
+    if (isGoGame(state)) return tk('runtime.komiSuffix', '; komi {{komi}}', { komi: formatKomi(state.komi) });
+    if (isConnectFourGame(state)) return tk('runtime.fallingSuffix', '; falling {{direction}}', { direction: tr(dirLabel(state.fallDir, state.preset)) });
+    if (isChineseCheckersGame(state) && isChineseCheckersJumping(state)) return tk('runtime.jumpSuffix', '; choose next jump or end jump');
     return '';
   }
 
@@ -6149,6 +6318,7 @@
     ) {
       currentAnimation = null;
       render();
+      showLocalReplayPrompt();
       syncControls();
       refreshDebugExportIfNeeded();
       flushQueuedOnlineStateMessages();
@@ -6785,22 +6955,147 @@
 
   function handleCanvasStartBeginClick(event) {
     if (event && event.preventDefault) event.preventDefault();
+    const action = canvasPromptAction || 'begin';
     hideCanvasStartPrompt();
+    if (action === 'restart') {
+      resetCurrentGameFromShortcut();
+      return;
+    }
+    if (action === 'online-ready') {
+      setOnlineReadyFromUi();
+      return;
+    }
+    if (action === 'online-propose-rematch') {
+      proposeOnlineRematchFromUi();
+      return;
+    }
+    if (action === 'online-accept-rematch') {
+      acceptOnlineRematchFromUi();
+      return;
+    }
     beginGameFromUi();
+  }
+
+  function handleCanvasStartCloseClick(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    if (!game || onlineIsInRoom() || !['gameover', 'complete'].includes(game.phase)) return;
+    localResultPromptDismissed = true;
+    hideCanvasStartPrompt();
+    if (refs.canvas) refs.canvas.focus();
   }
 
   function hideCanvasStartPrompt() {
     if (refs.canvasStartOverlay) refs.canvasStartOverlay.hidden = true;
+    if (refs.canvasStartClose) refs.canvasStartClose.hidden = true;
+    canvasPromptAction = '';
   }
 
-  function showCanvasStartPrompt() {
-    if (!refs.canvasStartOverlay || !game || game.phase !== 'setup') return;
-    const copy = canvasStartPromptCopy(game);
+  function resetLocalResultPromptDismissal() {
+    localResultPromptDismissed = false;
+  }
+
+  function clearCanvasStartPromptTimer() {
+    if (canvasStartPromptTimer != null && typeof clearTimeout === 'function') clearTimeout(canvasStartPromptTimer);
+    canvasStartPromptTimer = null;
+  }
+
+  function scheduleCanvasStartPrompt() {
+    clearCanvasStartPromptTimer();
+    if (onlineIsInRoom() || !game || game.phase !== 'setup') return;
+    canvasStartPromptTimer = setTimeout(() => {
+      canvasStartPromptTimer = null;
+      if (!onlineIsInRoom() && game && game.phase === 'setup' && !currentAnimation) showCanvasStartPrompt();
+    }, 3000);
+  }
+
+  function showCanvasStartPrompt(options = {}) {
+    if (!refs.canvasStartOverlay || !game || (!options.force && game.phase !== 'setup')) return;
+    clearCanvasStartPromptTimer();
+    const copy = options.copy || canvasStartPromptCopy(game);
     if (refs.canvasStartTitle) refs.canvasStartTitle.textContent = tr(copy.title);
     if (refs.canvasStartContext) refs.canvasStartContext.textContent = tr(copy.context);
     if (refs.canvasStartRules) refs.canvasStartRules.textContent = tr(copy.rules);
+    if (refs.canvasStartBegin) {
+      refs.canvasStartBegin.textContent = tr(copy.action || 'begin the game');
+      refs.canvasStartBegin.disabled = false;
+    }
+    if (refs.canvasStartClose) {
+      refs.canvasStartClose.hidden = !options.dismissible;
+      refs.canvasStartClose.textContent = tr(copy.closeAction || 'view completed board');
+    }
+    canvasPromptAction = options.action || 'begin';
     refs.canvasStartOverlay.hidden = false;
-    syncStatus('begin from canvas', copy.status, 'setup');
+    if (copy.status) syncStatus(copy.statusTitle || 'begin from canvas', copy.status, options.badge || 'setup');
+  }
+
+  function refreshCanvasPromptForLanguage() {
+    if (!refs.canvasStartOverlay || refs.canvasStartOverlay.hidden || !game) return;
+    if (onlineIsInRoom()) {
+      syncOnlineCanvasPrompt();
+      return;
+    }
+    if (canvasPromptAction === 'restart') {
+      showLocalReplayPrompt();
+      return;
+    }
+    if (game.phase === 'setup') showCanvasStartPrompt();
+  }
+
+  function showLocalReplayPrompt() {
+    if (
+      onlineIsInRoom()
+      || !game
+      || !['gameover', 'complete'].includes(game.phase)
+      || currentAnimation
+      || localResultPromptDismissed
+    ) return;
+    showCanvasStartPrompt({
+      force: true,
+      action: 'restart',
+      badge: 'over',
+      dismissible: true,
+      copy: gameResultPromptCopy(game)
+    });
+  }
+
+  function gameResultPromptCopy(state) {
+    return {
+      title: gameResultTitle(state),
+      context: gameResultDetail(state),
+      rules: 'Start another round with the same game settings.',
+      action: 'play again',
+      closeAction: 'view completed board',
+      status: ''
+    };
+  }
+
+  function gameResultTitle(state) {
+    if (isLianliankanGame(state)) return 'Tile Matching complete';
+    if (isGomokuGame(state)) return state.winner ? localizedWinnerText(state.winner) : tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.GOMOKU) });
+    if (isConnectFourGame(state)) return state.winner ? localizedWinnerText(state.winner) : tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.CONNECT_FOUR) });
+    if (isGoGame(state)) return state.winner ? localizedWinnerText(state.winner) : tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.GO) });
+    if (isReversiGame(state)) return state.winner ? localizedWinnerText(state.winner) : tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.REVERSI) });
+    if (isChineseCheckersGame(state)) return state.winner ? localizedWinnerText(state.winner) : tk('runtime.gameComplete', 'Game complete');
+    if (isFideChessGame(state)) return state.winner ? localizedWinnerText(state.winner) : tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.FIDE_CHESS) });
+    if (isSokobanGame(state)) return 'Sokoban solved';
+    if (isBilliardsGame(state)) {
+      if (state.rules === 'competitive') return state.winner === 'draw' ? tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.BILLIARDS) }) : localizedWinnerText(state.winner);
+      return tk('runtime.gameCompleteForGame', '{{game}} complete', { game: localizedGameName(GAME_MODES.BILLIARDS) });
+    }
+    return state.ending === 'bonus' ? 'bonus ending' : 'game over';
+  }
+
+  function gameResultDetail(state) {
+    if (isLianliankanGame(state)) return `${state.matches || 0} pair${state.matches === 1 ? '' : 's'} cleared`;
+    if (isGomokuGame(state)) return `${state.round || 0} move${state.round === 1 ? '' : 's'}`;
+    if (isConnectFourGame(state)) return `${state.round || 0} drop${state.round === 1 ? '' : 's'}`;
+    if (isGoGame(state)) return goFinalScoreText(state);
+    if (isReversiGame(state)) return reversiFinalScoreText(state);
+    if (isChineseCheckersGame(state)) return `${state.round || 0} move${state.round === 1 ? '' : 's'}`;
+    if (isFideChessGame(state)) return `${state.ending || state.result || 'result'}   ${state.round || 0} move${state.round === 1 ? '' : 's'}`;
+    if (isSokobanGame(state)) return `${state.moves || state.round || 0} move${(state.moves || state.round) === 1 ? '' : 's'}   ${state.pushes || 0} push${state.pushes === 1 ? '' : 'es'}`;
+    if (isBilliardsGame(state)) return billiardsScoreInfo(state);
+    return `score ${state.score || 0}   highest ${highestValue(state)}`;
   }
 
   function canvasStartPromptCopy(state) {
@@ -6922,11 +7217,6 @@
   function handleLianliankanCanvasClick(event) {
     if (!game || !Lianliankan || !LianliankanMosaicAdapter) return;
     if (game.phase === 'complete') {
-      if (!game.resultDismissed) {
-        game.resultDismissed = true;
-        render();
-        refreshDebugExportIfNeeded();
-      }
       return;
     }
     if (lianliankanHint) return;
@@ -7153,11 +7443,6 @@
   function handleGomokuCanvasClick(event) {
     if (!game || currentAnimation || game.phase === 'setup') return;
     if (game.phase === 'gameover') {
-      if (!game.resultDismissed) {
-        game.resultDismissed = true;
-        render();
-        refreshDebugExportIfNeeded();
-      }
       return;
     }
     if (rejectOnlineLocalAction('online Gomoku turn blocked')) return;
@@ -7202,11 +7487,6 @@
       return;
     }
     if (game.phase === 'gameover') {
-      if (!game.resultDismissed) {
-        game.resultDismissed = true;
-        render();
-        refreshDebugExportIfNeeded();
-      }
       return;
     }
     if (rejectOnlineLocalAction('online Connect Four turn blocked')) return;
@@ -7255,11 +7535,6 @@
   function handleGoCanvasClick(event) {
     if (!game || currentAnimation || game.phase === 'setup') return;
     if (game.phase === 'gameover') {
-      if (!game.resultDismissed) {
-        game.resultDismissed = true;
-        render();
-        refreshDebugExportIfNeeded();
-      }
       return;
     }
     const target = tileFromCanvasEvent(event);
@@ -7465,11 +7740,6 @@
   function handleReversiCanvasClick(event) {
     if (!game || currentAnimation || game.phase === 'setup') return;
     if (game.phase === 'gameover') {
-      if (!game.resultDismissed) {
-        game.resultDismissed = true;
-        render();
-        refreshDebugExportIfNeeded();
-      }
       return;
     }
     if (rejectOnlineLocalAction('online Reversi turn blocked')) return;
@@ -7500,11 +7770,6 @@
   function handleChineseCheckersCanvasClick(event) {
     if (!game || currentAnimation || game.phase === 'setup') return;
     if (game.phase === 'gameover') {
-      if (!game.resultDismissed) {
-        game.resultDismissed = true;
-        render();
-        refreshDebugExportIfNeeded();
-      }
       return;
     }
     const target = tileFromCanvasEvent(event);
@@ -7522,13 +7787,8 @@
         syncOnlineControls();
         return;
       }
-      if (onlineState.readyToPlay === false) {
-        if (marble && onlineStateOwnsRole(marble.color)) showOnlineChineseCheckersStartPrompt(marble);
-        else {
-          syncStatus('Chinese Checkers waiting', 'choose one of your claimed colors or wait for more players', 'warn');
-          syncOnlineStatus('Not all colors are claimed yet.', 'error');
-          syncOnlineControls();
-        }
+      if (onlineState.roundState && onlineState.roundState !== 'playing') {
+        syncOnlineCanvasPrompt();
         return;
       }
       const openingRound = isChineseCheckersOpeningRound(game);
@@ -7623,11 +7883,6 @@
     if (!game || currentAnimation || game.phase === 'setup') return;
     if (fideChessPendingPromotion) return;
     if (game.phase === 'gameover') {
-      if (!game.resultDismissed) {
-        game.resultDismissed = true;
-        render();
-        refreshDebugExportIfNeeded();
-      }
       return;
     }
     if (isFideChessPuzzle(game)) {
@@ -7867,12 +8122,8 @@
   function handleSokobanCanvasClick(event) {
     if (!game || currentAnimation || game.phase === 'setup') return;
     if (game.phase === 'gameover') {
-      if (!game.resultDismissed) {
-        game.resultDismissed = true;
-        render();
-        refreshDebugExportIfNeeded();
-      }
       if (event && event.preventDefault) event.preventDefault();
+      return;
     }
   }
 
@@ -8186,6 +8437,7 @@
 
   function restoreHistorySnapshot(snapshot, status, info) {
     stopPlayback();
+    resetLocalResultPromptDismissal();
     clearLianliankanHint();
     clearFideChessPendingPromotion({ render: false });
     game = cloneGameState(snapshot.game);
@@ -8204,6 +8456,7 @@
     if (isChineseCheckersGame(game)) setChineseCheckersSelectedPlayers(chineseCheckersPlayerColors(game), game.preset);
     if (isGoGame(game) && game.scoringReview) activateGoScoringReviewControls();
     syncStatus(status, info, phaseBadge(game.phase));
+    showLocalReplayPrompt();
     render();
     syncControls();
     refreshDebugExportIfNeeded();
@@ -8706,6 +8959,9 @@
   }
 
   function applyImportedDebugState(imported, options = {}) {
+    clearCanvasStartPromptTimer();
+    hideCanvasStartPrompt();
+    resetLocalResultPromptDismissal();
     if (game && options.recordHistory !== false) pushUndoSnapshot(options.historyLabel || 'status import');
     stopPlayback();
     clearFideChessPendingPromotion({ render: false });
@@ -8735,7 +8991,9 @@
     render();
     const info = options.info || debugExportInfo(game);
     syncStatus(options.status || 'status imported', info, debugMode ? 'debug' : phaseBadge(game.phase));
+    showLocalReplayPrompt();
     syncControls();
+    if (game.phase === 'setup') scheduleCanvasStartPrompt();
     refreshDebugExportIfNeeded();
     if (options.focus !== false && refs.canvas) refs.canvas.focus();
   }
@@ -10667,11 +10925,11 @@
         return;
       }
       if (game.phase === 'gameover') {
-        if (game.winner) syncStatus(`${gomokuColorLabel(game.winner)} wins`, `${game.round || 0} move${game.round === 1 ? '' : 's'}`, 'over');
-        else syncStatus('Gomoku draw', `${game.round || 0} moves`, 'over');
+        if (game.winner) syncStatus(localizedWinnerText(game.winner), `${game.round || 0} move${game.round === 1 ? '' : 's'}`, 'over');
+        else syncStatus(tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.GOMOKU) }), `${game.round || 0} moves`, 'over');
         return;
       }
-      syncStatus(`Gomoku move ${game.round || 0}`, gomokuTurnInfo(game), phaseBadge(game.phase));
+      syncStatus(localizedMoveStatus(game, game.round || 0), gomokuTurnInfo(game), phaseBadge(game.phase));
       return;
     }
     if (isConnectFourGame(game)) {
@@ -10680,11 +10938,11 @@
         return;
       }
       if (game.phase === 'gameover') {
-        if (game.winner) syncStatus(`${connectFourColorLabel(game.winner)} wins`, `${game.round || 0} drop${game.round === 1 ? '' : 's'}`, 'over');
-        else syncStatus('Connect Four draw', `${game.round || 0} drops`, 'over');
+        if (game.winner) syncStatus(localizedWinnerText(game.winner), `${game.round || 0} drop${game.round === 1 ? '' : 's'}`, 'over');
+        else syncStatus(tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.CONNECT_FOUR) }), `${game.round || 0} drops`, 'over');
         return;
       }
-      syncStatus(`Connect Four drop ${game.round || 0}`, connectFourTurnInfo(game), phaseBadge(game.phase));
+      syncStatus(localizedMoveStatus(game, game.round || 0, 'drop'), connectFourTurnInfo(game), phaseBadge(game.phase));
       return;
     }
     if (isGoGame(game)) {
@@ -10693,11 +10951,11 @@
         return;
       }
       if (game.phase === 'gameover') {
-        if (game.winner) syncStatus(`${goColorLabel(game.winner)} wins`, goFinalScoreText(game), 'over');
-        else syncStatus('Go draw', goFinalScoreText(game), 'over');
+        if (game.winner) syncStatus(localizedWinnerText(game.winner), goFinalScoreText(game), 'over');
+        else syncStatus(tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.GO) }), goFinalScoreText(game), 'over');
         return;
       }
-      syncStatus(`Go move ${game.round || 0}`, goTurnInfo(game), phaseBadge(game.phase));
+      syncStatus(localizedMoveStatus(game, game.round || 0), goTurnInfo(game), phaseBadge(game.phase));
       return;
     }
     if (isReversiGame(game)) {
@@ -10706,11 +10964,11 @@
         return;
       }
       if (game.phase === 'gameover') {
-        if (game.winner) syncStatus(`${reversiColorLabel(game.winner)} wins`, reversiFinalScoreText(game), 'over');
-        else syncStatus('Reversi draw', reversiFinalScoreText(game), 'over');
+        if (game.winner) syncStatus(localizedWinnerText(game.winner), reversiFinalScoreText(game), 'over');
+        else syncStatus(tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.REVERSI) }), reversiFinalScoreText(game), 'over');
         return;
       }
-      syncStatus(`Reversi move ${game.round || 0}`, reversiTurnInfo(game), phaseBadge(game.phase));
+      syncStatus(localizedMoveStatus(game, game.round || 0), reversiTurnInfo(game), phaseBadge(game.phase));
       return;
     }
     if (isChineseCheckersGame(game)) {
@@ -10719,10 +10977,10 @@
         return;
       }
       if (game.phase === 'gameover') {
-        syncStatus(`${chineseCheckersColorLabel(game.winner)} wins`, `${game.round || 0} move${game.round === 1 ? '' : 's'}`, 'over');
+        syncStatus(localizedWinnerText(game.winner), `${game.round || 0} move${game.round === 1 ? '' : 's'}`, 'over');
         return;
       }
-      syncStatus(`Chinese Checkers move ${game.round || 0}`, chineseCheckersTurnInfo(game), phaseBadge(game.phase));
+      syncStatus(localizedMoveStatus(game, game.round || 0), chineseCheckersTurnInfo(game), phaseBadge(game.phase));
       return;
     }
     if (isSokobanGame(game)) {
@@ -10735,7 +10993,7 @@
         syncStatus('Sokoban solved', sokobanTurnInfo(game), 'over');
         return;
       }
-      syncStatus(`Sokoban move ${game.moves || 0}`, sokobanTurnInfo(game), phaseBadge(game.phase));
+      syncStatus(localizedMoveStatus(game, game.moves || 0), sokobanTurnInfo(game), phaseBadge(game.phase));
       return;
     }
     if (isFideChessGame(game)) {
@@ -10753,7 +11011,7 @@
         syncStatus(fideChessResultText(game), `${game.round || 0} move${game.round === 1 ? '' : 's'}`, 'over');
         return;
       }
-      syncStatus(isFideChessPuzzle(game) ? `FIDE Chess puzzle ${game.round || 0}` : `FIDE Chess move ${game.round || 0}`, fideChessTurnInfo(game), phaseBadge(game.phase));
+      syncStatus(isFideChessPuzzle(game) ? tk('runtime.puzzleStatus', '{{game}} puzzle {{count}}', { game: localizedGameName(GAME_MODES.FIDE_CHESS), count: game.round || 0 }) : localizedMoveStatus(game, game.round || 0), fideChessTurnInfo(game), phaseBadge(game.phase));
       return;
     }
     if (game.phase === 'setup') {
@@ -10774,7 +11032,7 @@
 
   function localizedPreviewTitle(preset, mode = '') {
     const parts = [tr(preset && preset.label ? preset.label : 'selected background')];
-    if (mode) parts.push(tr(gameTypeForGameMode(mode)));
+    if (mode) parts.push(localizedGameName(mode));
     parts.push(tr('preview'));
     return parts.filter(Boolean).join(' ');
   }
@@ -10799,8 +11057,7 @@
   }
 
   function billiardsPlayerLabel(role) {
-    if (role === 'player-2') return 'Player 2';
-    return 'Player 1';
+    return localizedRoleLabel(role === 'player-2' ? 'player-2' : 'player-1');
   }
 
   function billiardsScoreInfo(state) {
@@ -11017,10 +11274,6 @@
     }
     ctx.restore();
     drawCanvasFeedbackOverlays(ctx, geometry);
-    const finalResultVisible = game && (game.phase === 'gameover' || isLianliankanGame(game) && game.phase === 'complete');
-    if (finalResultVisible && !currentAnimation && !game.resultDismissed) {
-      drawGameOverPopup(ctx, geometry, game);
-    }
     syncStats();
     requestFullscreenActionPlacement();
   }
@@ -16297,65 +16550,6 @@
     ctx.restore();
   }
 
-  function drawGameOverPopup(ctx, geom, state) {
-    const width = Math.min(geom.width - 36, Math.max(190, geom.width * 0.5));
-    const height = Math.min(130, Math.max(92, geom.height * 0.36));
-    const x = (geom.width - width) / 2;
-    const y = (geom.height - height) / 2;
-    ctx.save();
-    ctx.fillStyle = 'rgba(17,17,17,0.16)';
-    ctx.fillRect(0, 0, geom.width, geom.height);
-    ctx.fillStyle = '#fffdf8';
-    ctx.strokeStyle = '#111111';
-    ctx.lineWidth = Math.max(1.4, geom.radius * 0.045);
-    roundedRectPath(ctx, x, y, width, height, Math.min(8, height * 0.08));
-    ctx.fill();
-    ctx.stroke();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#111111';
-    ctx.font = `700 ${Math.max(20, Math.round(geom.radius * 0.72))}px "JetBrains Mono", monospace`;
-    const title = isLianliankanGame(state)
-      ? 'Tile Matching complete'
-      : (isGomokuGame(state)
-      ? (state.winner ? `${gomokuColorLabel(state.winner)} wins` : 'Gomoku draw')
-      : (isConnectFourGame(state)
-        ? (state.winner ? `${connectFourColorLabel(state.winner)} wins` : 'Connect Four draw')
-        : (isGoGame(state)
-          ? (state.winner ? `${goColorLabel(state.winner)} wins` : 'Go draw')
-          : (isReversiGame(state)
-            ? (state.winner ? `${reversiColorLabel(state.winner)} wins` : 'Reversi draw')
-            : (isChineseCheckersGame(state)
-              ? `${chineseCheckersColorLabel(state.winner)} wins`
-              : (isFideChessGame(state)
-                ? (state.winner ? `${fideChessSideLabel(state.winner)} wins` : 'FIDE Chess draw')
-                : (isSokobanGame(state)
-                  ? 'Sokoban solved'
-                  : (state.ending === 'bonus' ? 'bonus ending' : 'game over'))))))));
-    ctx.fillText(tr(title), geom.width / 2, y + height * 0.36);
-    ctx.fillStyle = '#6c6257';
-    ctx.font = `${Math.max(12, Math.round(geom.radius * 0.34))}px "JetBrains Mono", monospace`;
-    const detail = isLianliankanGame(state)
-      ? `${state.matches || 0} pair${state.matches === 1 ? '' : 's'} cleared`
-      : (isGomokuGame(state)
-      ? `${state.round || 0} move${state.round === 1 ? '' : 's'}`
-      : (isConnectFourGame(state)
-        ? `${state.round || 0} drop${state.round === 1 ? '' : 's'}`
-        : (isGoGame(state)
-          ? goFinalScoreText(state)
-          : (isReversiGame(state)
-            ? reversiFinalScoreText(state)
-            : (isChineseCheckersGame(state)
-              ? `${state.round || 0} move${state.round === 1 ? '' : 's'}`
-              : (isFideChessGame(state)
-                ? `${state.ending || state.result || 'result'}   ${state.round || 0} move${state.round === 1 ? '' : 's'}`
-                : (isSokobanGame(state)
-                  ? `${state.moves || state.round || 0} move${(state.moves || state.round) === 1 ? '' : 's'}   ${state.pushes || 0} push${state.pushes === 1 ? '' : 'es'}`
-                  : `score ${state.score || 0}   highest ${highestValue(state)}`)))))));
-    ctx.fillText(tr(detail), geom.width / 2, y + height * 0.66);
-    ctx.restore();
-  }
-
   function roundedRectPath(ctx, x, y, width, height, radius) {
     const r = Math.max(0, Math.min(radius, width / 2, height / 2));
     ctx.beginPath();
@@ -17971,7 +18165,8 @@
   }
 
   function fideChessSideLabel(side) {
-    return side === 'black' ? 'Black' : 'White';
+    const color = side === 'black' ? 'black' : 'white';
+    return tk(`status.${color}`, color === 'black' ? 'Black' : 'White');
   }
 
   function fideChessPieceLabel(piece) {
@@ -19508,7 +19703,7 @@
   }
 
   function connectFourColorLabel(color) {
-    return color === 'yellow' ? 'yellow' : 'red';
+    return localizedRoleLabel(color === 'yellow' ? 'yellow' : 'red');
   }
 
   function connectFourTurnInfo(state) {
@@ -19544,7 +19739,7 @@
   }
 
   function gomokuColorLabel(color) {
-    return color === 'white' ? 'white' : 'black';
+    return localizedRoleLabel(color === 'white' ? 'white' : 'black');
   }
 
   function gomokuWinLengthForPreset(preset) {
@@ -19971,7 +20166,7 @@
   }
 
   function goColorLabel(color) {
-    return color === 'white' ? 'white' : 'black';
+    return localizedRoleLabel(color === 'white' ? 'white' : 'black');
   }
 
   function goStoneCounts(state, deadIds = new Set()) {
@@ -20554,7 +20749,7 @@
   }
 
   function reversiColorLabel(color) {
-    return color === 'white' ? 'white' : 'black';
+    return localizedRoleLabel(color === 'white' ? 'white' : 'black');
   }
 
   function reversiDiscCounts(state) {
@@ -22425,7 +22620,7 @@
   }
 
   function chineseCheckersColorLabel(color) {
-    return normalizePlacementColor(color) || 'unknown';
+    return localizedRoleLabel(normalizePlacementColor(color) || 'unknown');
   }
 
   function chineseCheckersTurnLabel(state) {
@@ -25472,6 +25667,9 @@
     if (refs.statusLine) refs.statusLine.textContent = tr(status || '');
     renderStatusInfoLine(infoText);
     syncStats();
+    if (badge === 'over' && !onlineIsInRoom() && game && ['gameover', 'complete'].includes(game.phase)) {
+      showLocalReplayPrompt();
+    }
   }
 
   function renderStatusInfoLine(infoText) {

@@ -67,9 +67,55 @@ function testBrowserSimulationWorker() {
   assert.ok(messages[0].trajectory.length >= 2);
 }
 
+async function testOnlineRoundReadinessAndRematch(worker) {
+  const ctx = { storage: { async put() {} }, getWebSockets() { return []; } };
+  const room = new worker.GameRoom(ctx, {});
+  const firstId = 'player-a-1234';
+  const secondId = 'player-b-5678';
+  const snapshot = { gameMode: 'gomoku', phase: 'ready', turn: 'black' };
+  room.room = {
+    roomCode: 'TEST',
+    gameMode: 'gomoku',
+    version: 0,
+    snapshot,
+    roundStartSnapshot: snapshot,
+    summary: '',
+    roles: { black: firstId, white: secondId },
+    playerNames: { [firstId]: 'Alice', [secondId]: 'Bob' },
+    roundState: 'waiting',
+    readyToPlay: false,
+    readyClientIds: [],
+    rematch: null
+  };
+  const socket = (clientId, role) => {
+    let attachment = { clientId, playerName: clientId, role, roles: [role], joined: true };
+    return {
+      deserializeAttachment() { return attachment; },
+      serializeAttachment(next) { attachment = next; },
+      send() {}
+    };
+  };
+  const first = socket(firstId, 'black');
+  const second = socket(secondId, 'white');
+  room.sessions.set(first, first.deserializeAttachment());
+  room.sessions.set(second, second.deserializeAttachment());
+  await room.handleSetReady(first, { ready: true });
+  assert.strictEqual(room.room.roundState, 'waiting');
+  await room.handleSetReady(second, { ready: true });
+  assert.strictEqual(room.room.roundState, 'playing');
+  room.room.roundState = 'finished';
+  room.room.readyToPlay = false;
+  await room.handleProposeRematch(first, {});
+  await room.handleAcceptRematch(second, {});
+  assert.strictEqual(room.room.roundState, 'playing');
+  assert.strictEqual(room.room.roles.black, secondId);
+  assert.strictEqual(room.room.roles.white, firstId);
+}
+
 async function run() {
   testBrowserSimulationWorker();
   const worker = await import('../../cloudflare/ramified-chess.worker.js');
+  await testOnlineRoundReadinessAndRematch(worker);
   const shot = worker.normalizeAction({
     type: 'billiards-shot',
     shooter: 'player-1',

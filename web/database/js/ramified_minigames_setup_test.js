@@ -4275,6 +4275,12 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('number-box-style', { value: 'paper' }),
     makeElement('highlight-new-boxes', { checked: true }),
     makeElement('begin-game'),
+    makeElement('canvas-start-overlay', { hidden: true }),
+    makeElement('canvas-start-title'),
+    makeElement('canvas-start-context'),
+    makeElement('canvas-start-rules'),
+    makeElement('canvas-start-begin'),
+    makeElement('canvas-start-close', { hidden: true }),
     makeElement('game-setup-alert', { hidden: true }),
     makeElement('animation-speed', { value: '80' }),
     makeElement('animation-speed-value'),
@@ -4316,6 +4322,7 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('online-join-room'),
     makeElement('online-leave-room'),
     makeElement('online-confirm-roles'),
+    makeElement('online-ready'),
     makeElement('online-chinese-start-row'),
     makeElement('online-keep-unclaimed-colors'),
     makeElement('online-start-claimed-colors'),
@@ -4340,7 +4347,7 @@ function createHeadlessDomHarness(options = {}) {
     console,
     Buffer,
     Math: Object.create(Math),
-    performance: { now: () => 0 },
+    performance: { now: () => timerNow },
     setTimeout(callback, delay) {
       return scheduleTimer(callback, delay);
     },
@@ -4398,9 +4405,11 @@ function createHeadlessDomHarness(options = {}) {
       },
       requestAnimationFrame(handler) {
         calls.push({ method: 'requestAnimationFrame', args: [] });
-        return 1;
+        return scheduleTimer(() => handler(timerNow), 16);
       },
-      cancelAnimationFrame() {}
+      cancelAnimationFrame(id) {
+        timers.delete(id);
+      }
     }
   };
   let randoms = (options.randoms || [0.5, 0.5, 0, 0.1, 0.2, 0.1, 0.3, 0.1]).slice();
@@ -5547,6 +5556,103 @@ function testNewPlacementGameAnimationsStartFromUi() {
   assert.ok(calls.some((call) => call.method === 'requestAnimationFrame'));
 }
 
+function testUnifiedLocalResultCard() {
+  const { elements } = createHeadlessDomHarness();
+  elements.get('debug-export-output').value = JSON.stringify({
+    gameMode: 'gomoku',
+    preset: {
+      id: 'result-card-gomoku',
+      label: 'result card Gomoku',
+      lattice: 'square',
+      rows: 4,
+      cols: 4,
+      surface: 'result card',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: []
+    },
+    phase: 'gameover',
+    ending: 'gomoku-win',
+    round: 5,
+    turn: 'black',
+    winner: 'black',
+    resultDismissed: true,
+    winningLine: [0, 1, 2, 3],
+    stones: [
+      { id: 1, row: 1, col: 1, color: 'black' },
+      { id: 2, row: 2, col: 1, color: 'white' },
+      { id: 3, row: 1, col: 2, color: 'black' },
+      { id: 4, row: 2, col: 2, color: 'white' },
+      { id: 5, row: 1, col: 3, color: 'black' },
+      { id: 6, row: 2, col: 3, color: 'white' },
+      { id: 7, row: 1, col: 4, color: 'black' }
+    ]
+  });
+  elements.get('import-state').listeners.click();
+  assert.strictEqual(elements.get('canvas-start-overlay').hidden, false);
+  assert.strictEqual(elements.get('canvas-start-title').textContent, 'black wins');
+  assert.strictEqual(elements.get('canvas-start-context').textContent, '5 moves');
+  assert.strictEqual(elements.get('canvas-start-begin').textContent, 'play again');
+  assert.strictEqual(elements.get('canvas-start-close').hidden, false);
+  elements.get('canvas-start-close').listeners.click();
+  assert.strictEqual(elements.get('canvas-start-overlay').hidden, true);
+  elements.get('export-state').listeners.click();
+  const afterClose = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(afterClose.phase, 'gameover');
+  assert.strictEqual(afterClose.stones.length, 7);
+  assert.strictEqual(afterClose.resultDismissed, true);
+}
+
+function testConnectFourResultCardAppearsAfterDropAnimation() {
+  const harness = createHeadlessDomHarness();
+  const { elements, canvas, advanceTimers } = harness;
+  elements.get('debug-export-output').value = JSON.stringify({
+    gameMode: 'connect-four',
+    preset: {
+      id: 'result-card-connect-four',
+      label: 'result card Connect Four',
+      lattice: 'square',
+      rows: 6,
+      cols: 7,
+      surface: 'result card',
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [],
+      connectFourHoles: [
+        { row: 1, col: 1 }, { row: 1, col: 2 }, { row: 1, col: 3 }, { row: 1, col: 4 },
+        { row: 1, col: 5 }, { row: 1, col: 6 }, { row: 1, col: 7 }
+      ]
+    },
+    phase: 'ready',
+    round: 6,
+    turn: 'red',
+    fallDirName: 'S',
+    holes: [
+      { row: 1, col: 1 }, { row: 1, col: 2 }, { row: 1, col: 3 }, { row: 1, col: 4 },
+      { row: 1, col: 5 }, { row: 1, col: 6 }, { row: 1, col: 7 }
+    ],
+    tokens: [
+      { id: 1, row: 6, col: 1, color: 'red' }, { id: 2, row: 5, col: 1, color: 'yellow' },
+      { id: 3, row: 6, col: 2, color: 'red' }, { id: 4, row: 5, col: 2, color: 'yellow' },
+      { id: 5, row: 6, col: 3, color: 'red' }, { id: 6, row: 5, col: 3, color: 'yellow' }
+    ]
+  });
+  elements.get('import-state').listeners.click();
+  canvas.listeners.click({ clientX: 159, clientY: 41 });
+  assert.strictEqual(elements.get('status-line').textContent, 'red wins');
+  assert.strictEqual(elements.get('canvas-start-overlay').hidden, true);
+  advanceTimers(1000);
+  assert.strictEqual(elements.get('canvas-start-overlay').hidden, false);
+  assert.strictEqual(elements.get('canvas-start-title').textContent, 'red wins');
+  assert.strictEqual(elements.get('canvas-start-begin').textContent, 'play again');
+  elements.get('canvas-start-begin').listeners.click();
+  elements.get('export-state').listeners.click();
+  const restarted = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(restarted.phase, 'ready');
+  assert.strictEqual(restarted.fallDirName, 'S');
+  assert.strictEqual(restarted.holes.length, 7);
+}
+
 function testBackgroundExportFormats() {
   const { elements } = createHeadlessDomHarness();
   elements.get('game-mode-select').value = 'connect-four';
@@ -6068,7 +6174,7 @@ function testHeadlessDomStepControls() {
   canvas.listeners.click({ clientX: 57, clientY: 57 });
   elements.get('export-state').listeners.click();
   exported = JSON.parse(elements.get('debug-export-output').value);
-  assert.strictEqual(exported.resultDismissed, true);
+  assert.strictEqual(exported.resultDismissed, false);
   assert.strictEqual(exported.stones.length, 7);
 
   elements.get('game-mode-select').value = 'connect-four';
@@ -7268,8 +7374,50 @@ function testReusableLocalizationWiring() {
   assert.ok(!html.includes('id="go-liberty-dot-border"'));
 }
 
+function testRuntimeChineseLocaleCatalog() {
+  const localeSource = fs.readFileSync(require.resolve('./i18n/ramified_minigames_locales.js'), 'utf8');
+  const legacySource = fs.readFileSync(require.resolve('./i18n/ramified_minigames_legacy_sources.js'), 'utf8');
+  const siteI18nSource = fs.readFileSync(require.resolve('./site_i18n.js'), 'utf8');
+  const document = {
+    documentElement: { lang: '', dataset: {} },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    createTreeWalker() { return { nextNode: () => null }; },
+    dispatchEvent() {}
+  };
+  const window = {
+    document,
+    location: { href: 'https://example.test/' },
+    navigator: { languages: ['en'], language: 'en' },
+    localStorage: { getItem: () => null, setItem() {} },
+    addEventListener() {}
+  };
+  const context = {
+    window,
+    document,
+    localStorage: window.localStorage,
+    URL,
+    NodeFilter: { SHOW_TEXT: 4 },
+    MutationObserver: function MutationObserver() { this.observe = () => {}; },
+    CustomEvent: function CustomEvent(type, init) { this.type = type; this.detail = init && init.detail; }
+  };
+  vm.createContext(context);
+  vm.runInContext(siteI18nSource, context);
+  vm.runInContext(legacySource, context);
+  vm.runInContext(localeSource, context);
+  window.SiteI18n.init({ namespace: 'ramified-minigames', defaultLocale: 'en', supportedLocales: ['en', 'zh-CN'], locale: 'zh-CN' });
+  window.SiteI18n.setLocale('zh-CN');
+  assert.strictEqual(window.SiteI18n.t('runtime.winner', { side: window.SiteI18n.t('status.yellow') }), '黄方获胜！');
+  assert.strictEqual(window.SiteI18n.t('runtime.restarted', { game: window.SiteI18n.t('games.checkers') }), '跳棋已重新开始');
+  assert.strictEqual(window.SiteI18n.t('runtime.moveStatus', { game: window.SiteI18n.t('games.checkers'), count: 3 }), '跳棋第3步');
+  assert.strictEqual(window.SiteI18n.t('runtime.roleAction', { role: window.SiteI18n.t('status.yellow'), action: window.SiteI18n.t('runtime.toMove') }), '黄方行棋');
+  assert.strictEqual(window.SiteI18n.translateSource('yellow wins'), '黄方获胜！');
+  assert.strictEqual(window.SiteI18n.translateSource('Chinese Checkers restarted'), '跳棋已重新开始');
+}
+
 async function run() {
   testReusableLocalizationWiring();
+  testRuntimeChineseLocaleCatalog();
   testInitialSpawnWeights();
   testRoundSpawnWeights();
   testNoSpawnAfterNoop();
@@ -7406,6 +7554,8 @@ async function run() {
   testImportExportCardPastedPresetMode();
   testNewPlacementGameStatusRoundTrips();
   testNewPlacementGameAnimationsStartFromUi();
+  testUnifiedLocalResultCard();
+  testConnectFourResultCardAppearsAfterDropAnimation();
   testBackgroundExportFormats();
   testFullStatusImportWithoutDebugMode();
   testStepPauseRendersAfterSelectingNextEvent();
