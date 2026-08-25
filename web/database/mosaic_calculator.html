@@ -1366,13 +1366,6 @@
         </div>
         <div class="input-mode-panel" data-input-panel="background">
           <div class="mosaic-inline-row">
-            <span class="input-label">Preset</span>
-            <span class="background-preset-controls">
-              <select id="background-preset-select" aria-label="Background space preset"></select>
-              <button class="btn btn-ghost" id="load-background-preset" type="button">load</button>
-            </span>
-          </div>
-          <div class="mosaic-inline-row">
             <span class="input-label">Click action</span>
             <select id="background-action">
               <option value="occupied" hidden disabled>Occupied</option>
@@ -1540,9 +1533,21 @@
         </div>
         <div class="input-method input-mode-panel" data-input-panel="import">
           <span class="input-label">Mosaic Data</span>
-          <div class="mosaic-import-presets">
+          <div class="mosaic-import-presets" id="mosaic-import-catalog-controls">
             <div class="mosaic-inline-row">
-              <span class="input-label">Preset</span>
+              <span class="input-label">Catalog</span>
+              <select id="import-catalog" aria-label="Import catalog">
+                <option value="knot-link">knot/link</option>
+                <option value="stable-curve">stable curve</option>
+                <option value="minigames">minigames</option>
+              </select>
+            </div>
+            <div class="mosaic-inline-row" id="import-minigame-type-row" hidden>
+              <span class="input-label">Type</span>
+              <select id="import-minigame-type" aria-label="Minigame type"></select>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label">Level</span>
               <select id="import-preset-select"></select>
             </div>
             <div class="mosaic-import-preset-controls" id="dual-graph-preset-controls" hidden>
@@ -1554,6 +1559,20 @@
                 <span class="input-label">n:</span>
                 <input type="number" id="dual-graph-preset-markings" class="mosaic-editor-input" min="0" max="6" value="5">
               </label>
+            </div>
+            <div class="mosaic-import-preset-controls" id="minigame-rect-size-controls" hidden>
+              <label class="mosaic-preset-field">
+                <span class="input-label">Rows</span>
+                <input type="number" id="minigame-rows" class="mosaic-editor-input" min="2" max="25" value="4">
+              </label>
+              <label class="mosaic-preset-field">
+                <span class="input-label">Cols</span>
+                <input type="number" id="minigame-cols" class="mosaic-editor-input" min="2" max="25" value="4">
+              </label>
+            </div>
+            <div class="mosaic-inline-row" id="minigame-square-size-row" hidden>
+              <span class="input-label">Board n</span>
+              <input type="number" id="minigame-board-size" class="mosaic-editor-input" min="2" max="25" value="8">
             </div>
             <button class="btn btn-ghost mosaic-import-button" id="load-import-preset" type="button">load preset</button>
           </div>

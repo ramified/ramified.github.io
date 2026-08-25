@@ -38,8 +38,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 76.3,
-      "y": 81.2,
+      "x": 76.4,
+      "y": 81.4,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -73,8 +73,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 116.4,
-      "y": 309
+      "x": 116.6,
+      "y": 309.7
     },
     {
       "id": "n39",
@@ -95,8 +95,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 291.8,
-      "y": 369.8
+      "x": 292.2,
+      "y": 370.6
     },
     {
       "id": "n58",
@@ -110,8 +110,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 268.8,
-      "y": 81.2
+      "x": 269.1,
+      "y": 81.4
     },
     {
       "id": "n60",
@@ -122,7 +122,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "The textbox in import chart does not allow copy-paste"
+          "text": "- [x] The textbox in import chart does not allow copy-paste"
         }
       ],
       "setting": "",
@@ -130,10 +130,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#46786e",
-      "fillColor": "#eef7f4",
-      "x": 598.4,
-      "y": 87.6
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 599.2,
+      "y": 87.8
     },
     {
       "id": "n63",
@@ -154,8 +154,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 468.4,
-      "y": 369.8,
+      "x": 469,
+      "y": 370.6,
       "childGraph": {
         "title": "double click",
         "nodes": [
@@ -254,8 +254,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 657.2,
-      "y": 342.9
+      "x": 658.1,
+      "y": 343.7
     },
     {
       "id": "n66",
@@ -276,8 +276,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 358.5,
-      "y": 146.8
+      "x": 359,
+      "y": 147.1
     },
     {
       "id": "n68",
@@ -288,7 +288,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "bugs",
           "label": "bugs",
           "type": "checkbox",
-          "text": "Add hex support for Tile matching\n\"Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.\" should appear in the main canvas, like the caption. \"drag to shoot\" label can be removed\nFor the Hex, click undo should remove \"red wins. Start another round with the same game settings.\" chart\nLike \"Test in Minigames\" row in Mosaic calculator export page, there should be also a \"edit in Mosaic calculator\" row in minigames export page. When clicked, the default boundary should be \"Glued\", Mode being \"Background space\", Click action being \"Add/remove decorations\"\nThe code should only store reusable game-specific computations when the checkbox is clicked and user click \"refresh\".\nFor Import chart in Mosaic calculator, the Catalog row should be a selectbox of \"knot/link\", \"stable curve\" and \"minigames\". Under the minigames choice there is a row for the types of the minigame and finally the name of the level(there are some special cases where rows and colomns should be specified further). Remove the Preset row in the background space mode, as they will be covered by this.\nFor those objects in Decoration palette, if they appear in the main canvas and be dragged out of the main canvas then it should be removed, like what we see in Tiling preferences."
+          "text": "- [ ] Add hex support for Tile matching\n- [ ] \"Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.\" should appear in the main canvas, like the caption. \"drag to shoot\" label can be removed\n- [ ] For the Hex, click undo should remove \"red wins. Start another round with the same game settings.\" chart\n- [ ] Like \"Test in Minigames\" row in Mosaic calculator export page, there should be also a \"edit in Mosaic calculator\" row in minigames export page. When clicked, the default boundary should be \"Glued\", Mode being \"Background space\", Click action being \"Add/remove decorations\"\n- [x] The code should only store reusable game-specific computations when the checkbox is clicked and user click \"refresh\".\n- [x] For Import chart in Mosaic calculator, the Catalog row should be a selectbox of \"knot/link\", \"stable curve\" and \"minigames\". Under the minigames choice there is a row for the types of the minigame and finally the name of the level(there are some special cases where rows and colomns should be specified further). Remove the Preset row in the background space mode, as they will be covered by this.\n- [x] For those objects in Decoration palette, if they appear in the main canvas and be dragged out of the main canvas then it should be removed, like what we see in Tiling preferences."
         }
       ],
       "setting": "",
@@ -296,38 +296,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#46786e",
-      "fillColor": "#eef7f4",
-      "x": 312.3,
-      "y": 238.6
-    },
-    {
-      "id": "n48",
-      "type": "misc",
-      "label": "minigame",
-      "details": [
-        {
-          "id": "future",
-          "label": "future?",
-          "type": "checkbox",
-          "text": "- [x] Go\n- [x] Billiard\n- [x] Reversi"
-        },
-        {
-          "id": "bugs",
-          "label": "bugs",
-          "type": "checkbox",
-          "text": "- [x] actual loop in sokoban, allow reset in the loop\n- [x] allow to press Z long time to speed up cancellation"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 527,
-      "y": 296.5
+      "color": "#8b3a2a",
+      "fillColor": "#fbefee",
+      "x": 419.4,
+      "y": 271.2
     },
     {
       "id": "n70",
@@ -338,7 +310,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "For index.html, as those gifs take a lot of time to be loaded, I would like the corresponding demo-strip disappear when the gifs are not loaded. It should preserve the Masonn"
+          "text": "- [x] For index.html, as those gifs take a lot of time to be loaded, I would like the corresponding demo-strip disappear when the gifs are not loaded. It should preserve the Masonn"
         }
       ],
       "setting": "",
@@ -346,10 +318,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#46786e",
-      "fillColor": "#eef7f4",
-      "x": 400.3,
-      "y": 303
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 628.8,
+      "y": 178.9
     }
   ],
   "arrows": [
@@ -409,7 +381,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     "selectedId": "n68",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 451,
+    "canvasHeight": 452,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 1.6674,
     "relativeNodePositions": {
@@ -446,16 +418,12 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
         "y": 0.3255
       },
       "n68": {
-        "x": 0.4153,
-        "y": 0.5291
-      },
-      "n48": {
-        "x": 0.7008,
-        "y": 0.6575
+        "x": 0.557,
+        "y": 0.5999
       },
       "n70": {
-        "x": 0.5323,
-        "y": 0.6717
+        "x": 0.8351,
+        "y": 0.3959
       }
     },
     "selectedReferenceKeys": []

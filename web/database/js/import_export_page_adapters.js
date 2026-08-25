@@ -35,7 +35,8 @@
       accept: '.json,.txt,application/json,text/plain',
       exportContent: '#export-type', exportFormat: '#export-format',
       controls: ['#export-preset-meta-row', '#export-precomputed-game-data-row', '#export-test-link-row'],
-      importKinds: [{ value: 'chart', label: 'Mosaic chart or preset' }], catalog: '#import-preset-select'
+      importKinds: [{ value: 'chart', label: 'Mosaic chart or preset' }],
+      catalog: '#import-preset-select', catalogContainer: '#mosaic-import-catalog-controls'
     },
     'matrix_calculator.html': {
       id: 'matrix', output: '#export-out', refresh: '#refresh-export', copy: '#copy-export',
@@ -331,7 +332,11 @@
       if (prepared.source === 'catalog') {
         const catalog = document.getElementById('import-preset-select');
         if (catalog) catalog.value = prepared.value || '';
-        clickLegacy(document.getElementById('load-import-preset'));
+        if (window.MosaicCalculator && typeof window.MosaicCalculator.loadCatalogPreset === 'function') {
+          await window.MosaicCalculator.loadCatalogPreset();
+        } else {
+          clickLegacy(document.getElementById('load-import-preset'));
+        }
       } else {
         const input = document.getElementById('import-input');
         if (input) input.value = prepared.text;
@@ -495,7 +500,19 @@
     importPanel.appendChild(row('Source', sourceSelect));
 
     let catalogSelect = null;
-    if (catalogSource) {
+    const catalogContainer = config.catalogContainer
+      ? (legacyHost.querySelector(config.catalogContainer) || document.querySelector(config.catalogContainer))
+      : null;
+    // Mosaic keeps its preset controls in the editor card, while this shared
+    // Import/Export card is upgraded elsewhere.  Move an explicitly configured
+    // catalog container from either location so the Import tab owns the live
+    // staged controls instead of cloning the old concrete-level selector.
+    if (catalogSource && catalogContainer) {
+      catalogSelect = catalogSource;
+      catalogSelect.setAttribute('data-import-catalog', '');
+      catalogContainer.setAttribute('data-import-source-panel', 'catalog');
+      importPanel.appendChild(catalogContainer);
+    } else if (catalogSource) {
       catalogSelect = document.createElement('select');
       catalogSelect.setAttribute('data-import-catalog', '');
       catalogSelect.setAttribute('aria-label', 'Import catalog');

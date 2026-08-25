@@ -1030,6 +1030,8 @@
   let suppressCardToggleUntil = 0;
   let tileDragGhost = null;
   let tileDragSource = null;
+  let precomputedExportRefreshActive = false;
+  const minigamePresetLoadCache = new Map();
   let drawState = null;
   let decorationClickTimer = null;
   let homologyMathTypesetTimer = null;
@@ -1070,8 +1072,6 @@
     refs.inputBackgroundOption = refs.inputMode
       ? refs.inputMode.querySelector('option[value="background"]')
       : null;
-    refs.backgroundPresetSelect = document.getElementById('background-preset-select');
-    refs.loadBackgroundPreset = document.getElementById('load-background-preset');
     refs.backgroundAction = document.getElementById('background-action');
     refs.backgroundOccupiedOption = refs.backgroundAction
       ? refs.backgroundAction.querySelector('option[value="occupied"]')
@@ -1287,11 +1287,19 @@
     refs.riemannLoopTangentScaleOutputs = Array.from(document.querySelectorAll('[data-riemann-loop-tangent-scale-value]'));
     refs.tilePalette = document.getElementById('tile-palette');
     refs.importInput = document.getElementById('import-input');
+    refs.importCatalog = document.getElementById('import-catalog');
+    refs.importMinigameTypeRow = document.getElementById('import-minigame-type-row');
+    refs.importMinigameType = document.getElementById('import-minigame-type');
     refs.importPresetSelect = document.getElementById('import-preset-select');
     refs.loadImportPreset = document.getElementById('load-import-preset');
     refs.dualGraphPresetControls = document.getElementById('dual-graph-preset-controls');
     refs.dualGraphPresetGenus = document.getElementById('dual-graph-preset-genus');
     refs.dualGraphPresetMarkings = document.getElementById('dual-graph-preset-markings');
+    refs.minigameRectSizeControls = document.getElementById('minigame-rect-size-controls');
+    refs.minigameRows = document.getElementById('minigame-rows');
+    refs.minigameCols = document.getElementById('minigame-cols');
+    refs.minigameSquareSizeRow = document.getElementById('minigame-square-size-row');
+    refs.minigameBoardSize = document.getElementById('minigame-board-size');
     refs.exportCard = document.getElementById('export-card');
     refs.exportOut = document.getElementById('export-out');
     refs.importExport = document.getElementById('import-export');
@@ -1401,9 +1409,6 @@
         syncBackgroundModeControls();
         renderDecorationPalette();
       });
-    }
-    if (refs.loadBackgroundPreset) {
-      refs.loadBackgroundPreset.addEventListener('click', loadSelectedBackgroundPreset);
     }
     if (refs.backgroundMultiEdges) {
       refs.backgroundMultiEdges.addEventListener('change', () => {
@@ -1577,6 +1582,8 @@
     document.getElementById('clear-board').addEventListener('click', clearBoard);
     document.getElementById('generate-import').addEventListener('click', generateFromImport);
     if (refs.loadImportPreset) refs.loadImportPreset.addEventListener('click', loadSelectedImportPreset);
+    if (refs.importCatalog) refs.importCatalog.addEventListener('change', syncImportPresetControls);
+    if (refs.importMinigameType) refs.importMinigameType.addEventListener('change', syncImportPresetControls);
     if (refs.importPresetSelect) {
       refs.importPresetSelect.addEventListener('change', syncImportPresetControls);
     }
@@ -1618,7 +1625,7 @@
       });
     }
     if (refs.importExport) refs.importExport.addEventListener('click', importExportText);
-    document.getElementById('refresh-export').addEventListener('click', refreshExport);
+    document.getElementById('refresh-export').addEventListener('click', () => refreshExport({ manual: true }));
     document.getElementById('copy-export').addEventListener('click', copyExport);
 
     refs.showErrors.addEventListener('change', () => {
@@ -3165,10 +3172,11 @@
     }
   }
 
-  function loadSelectedImportPreset() {
+  async function loadSelectedImportPreset() {
     if (!refs.importInput || !refs.importPresetSelect) return;
+    const catalog = normalizeImportCatalog(refs.importCatalog && refs.importCatalog.value);
     const id = refs.importPresetSelect.value;
-    if (isDualGraph()) {
+    if (catalog === 'stable-curve') {
       if (id === 'random-stable-curve') {
         try {
           const preset = applyRandomStableCurvePreset();
@@ -3193,6 +3201,23 @@
       return;
     }
 
+    if (catalog === 'minigames') {
+      const entry = minigamePresetRegistryEntries().find((item) => item.id === id);
+      if (!entry) return;
+      try {
+        const source = await loadMinigamePresetData(entry);
+        const payload = materializeMinigamePresetForMosaic(entry, source);
+        refs.importInput.value = JSON.stringify(payload, null, 2);
+        applyImportedMosaic(payload);
+        refs.statusLine.textContent = `${entry.label} minigame level loaded`;
+        refs.statusLine.classList.remove('mosaic-status-bad');
+      } catch (error) {
+        refs.statusLine.textContent = error.message || 'could not load minigame level';
+        refs.statusLine.classList.add('mosaic-status-bad');
+      }
+      return;
+    }
+
     const preset = KNOT_PRESETS.find((entry) => entry.id === id) || KNOT_PRESETS[0];
     if (!preset) return;
     const payload = { ...knotPresetPayloadForCurrentLattice(preset), inputMode: 'import' };
@@ -3207,37 +3232,9 @@
     }
   }
 
-  function loadSelectedBackgroundPreset() {
-    if (!refs.backgroundPresetSelect) return;
-    const preset = BACKGROUND_SPACE_PRESETS.find((entry) => entry.id === refs.backgroundPresetSelect.value)
-      || BACKGROUND_SPACE_PRESETS[0];
-    if (!preset) return;
-
-    try {
-      const payload = JSON.parse(JSON.stringify(preset.payload || {}));
-      if (preset.randomGlue) {
-        payload.gluedEdges = createRandomBackgroundGluedEdges(payload.rows || 4, payload.cols || 4);
-      }
-      if (!Object.prototype.hasOwnProperty.call(payload, 'inputHoles')) payload.inputHoles = [];
-      if (!Object.prototype.hasOwnProperty.call(payload, 'pieces')) payload.pieces = [];
-      payload.boundary = 'glued';
-      payload.inputMode = 'background';
-      applyImportedMosaic(payload);
-      if (refs.backgroundPresetSelect) refs.backgroundPresetSelect.value = preset.id;
-      const background = analyzeBackgroundSpace();
-      const surfaceText = background && background.surfaceType ? ` (${background.surfaceType})` : '';
-      refs.statusLine.textContent = `${preset.label} preset loaded${surfaceText}`;
-      refs.statusLine.classList.remove('mosaic-status-good', 'mosaic-status-bad');
-    } catch (error) {
-      refs.statusLine.textContent = error.message || 'could not load background preset';
-      refs.statusLine.classList.add('mosaic-status-bad');
-    }
-  }
-
   function buildBackgroundPresetExport() {
     const report = analyze();
     const background = backgroundSpaceForExport(report);
-    const selected = BACKGROUND_SPACE_PRESETS.find((entry) => refs.backgroundPresetSelect && entry.id === refs.backgroundPresetSelect.value);
     const surface = background && background.surfaceType
       ? background.surfaceType
       : `${state.lattice} background`;
@@ -3247,7 +3244,7 @@
       version: 1,
       exportedAt: new Date().toISOString(),
       source: 'mosaic-calculator',
-      sourcePresetId: selected && selected.id ? selected.id : '',
+      sourcePresetId: '',
       preset: {
         id: 'mosaic-background',
         label,
@@ -3385,29 +3382,14 @@
     return preset.payload || preset.squarePayload || {};
   }
 
-  function syncBackgroundPresetControls() {
-    if (!refs.backgroundPresetSelect) return;
-    const previous = refs.backgroundPresetSelect.value;
-    refs.backgroundPresetSelect.textContent = '';
-    BACKGROUND_SPACE_PRESETS.forEach((preset) => {
-      const option = document.createElement('option');
-      option.value = preset.id;
-      option.textContent = preset.label;
-      refs.backgroundPresetSelect.appendChild(option);
-    });
-    const hasPrevious = BACKGROUND_SPACE_PRESETS.some((preset) => preset.id === previous);
-    refs.backgroundPresetSelect.value = hasPrevious
-      ? previous
-      : (BACKGROUND_SPACE_PRESETS[0] ? BACKGROUND_SPACE_PRESETS[0].id : '');
-    refs.backgroundPresetSelect.disabled = !BACKGROUND_SPACE_PRESETS.length;
-    if (refs.loadBackgroundPreset) refs.loadBackgroundPreset.disabled = !BACKGROUND_SPACE_PRESETS.length;
-  }
-
   function syncImportPresetControls() {
     if (!refs.importPresetSelect) return;
     const previous = refs.importPresetSelect.value;
     refs.importPresetSelect.textContent = '';
-    if (isDualGraph()) {
+    const catalog = normalizeImportCatalog(refs.importCatalog && refs.importCatalog.value);
+    if (refs.importCatalog) refs.importCatalog.value = catalog;
+    if (refs.importMinigameTypeRow) refs.importMinigameTypeRow.hidden = catalog !== 'minigames';
+    if (catalog === 'stable-curve') {
       DUAL_GRAPH_PRESETS.forEach((preset) => {
         const option = document.createElement('option');
         option.value = preset.id;
@@ -3417,6 +3399,20 @@
       refs.importPresetSelect.value = DUAL_GRAPH_PRESETS.some((preset) => preset.id === previous)
         ? previous
         : 'random-stable-curve';
+    } else if (catalog === 'minigames') {
+      syncMinigameTypeOptions();
+      const gameType = refs.importMinigameType ? refs.importMinigameType.value : '';
+      const levels = minigamePresetRegistryEntries().filter((entry) => entry.gameTypes.includes(gameType));
+      levels.forEach((preset) => {
+        const option = document.createElement('option');
+        option.value = preset.id;
+        option.textContent = preset.label;
+        refs.importPresetSelect.appendChild(option);
+      });
+      refs.importPresetSelect.value = levels.some((preset) => preset.id === previous)
+        ? previous
+        : (levels[0] ? levels[0].id : '');
+      refs.importPresetSelect.disabled = !levels.length;
     } else {
       KNOT_PRESETS.forEach((preset) => {
         const option = document.createElement('option');
@@ -3427,8 +3423,136 @@
       if (KNOT_PRESETS.some((preset) => preset.id === previous)) refs.importPresetSelect.value = previous;
     }
     if (refs.dualGraphPresetControls) {
-      refs.dualGraphPresetControls.hidden = !isDualGraph() || refs.importPresetSelect.value !== 'moduli';
+      refs.dualGraphPresetControls.hidden = catalog !== 'stable-curve' || refs.importPresetSelect.value !== 'moduli';
     }
+    syncMinigameSizeControls(catalog);
+  }
+
+  function normalizeImportCatalog(value) {
+    return ['knot-link', 'stable-curve', 'minigames'].includes(value) ? value : 'knot-link';
+  }
+
+  function minigamePresetRegistryEntries() {
+    const root = typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null);
+    let registry = root && root.RAMIFIED_MINIGAME_PRESETS;
+    if (!registry && typeof require === 'function') {
+      try { registry = require('../ramified_minigame_presets/presets.js'); } catch (_) { registry = null; }
+    }
+    const entries = Array.isArray(registry) ? registry : (registry && Array.isArray(registry.presets) ? registry.presets : []);
+    return entries.map((entry) => {
+      const id = String(entry && (entry.id || entry.key) || '').trim();
+      const key = String(entry && (entry.key || id) || '').trim();
+      const file = String(entry && entry.file || `${key}.preset.js`).trim();
+      const label = String(entry && (entry.label || id) || '').trim();
+      const gameTypes = gameTypesFromPresetLike(entry);
+      return id && key && file && label && gameTypes.length ? { id, key, file, label, gameTypes } : null;
+    }).filter(Boolean);
+  }
+
+  function syncMinigameTypeOptions() {
+    if (!refs.importMinigameType) return;
+    const previous = refs.importMinigameType.value;
+    const types = [];
+    minigamePresetRegistryEntries().forEach((entry) => entry.gameTypes.forEach((type) => {
+      if (!types.includes(type)) types.push(type);
+    }));
+    refs.importMinigameType.textContent = '';
+    types.forEach((type) => {
+      const option = document.createElement('option');
+      option.value = type;
+      option.textContent = type;
+      refs.importMinigameType.appendChild(option);
+    });
+    refs.importMinigameType.value = types.includes(previous) ? previous : (types[0] || '');
+    refs.importMinigameType.disabled = !types.length;
+  }
+
+  function selectedMinigameImportEntry() {
+    return minigamePresetRegistryEntries().find((entry) => refs.importPresetSelect && entry.id === refs.importPresetSelect.value) || null;
+  }
+
+  function syncMinigameSizeControls(catalog) {
+    const entry = catalog === 'minigames' ? selectedMinigameImportEntry() : null;
+    const boundaryGlue = !!(entry && entry.id === 'boundary-glue-board');
+    const nQueens = !!(entry && (entry.id === 'n-queens-puzzle' || entry.id === 'n-queens-torus-puzzle'));
+    if (refs.minigameRectSizeControls) refs.minigameRectSizeControls.hidden = !boundaryGlue;
+    if (refs.minigameSquareSizeRow) refs.minigameSquareSizeRow.hidden = !nQueens;
+    if (boundaryGlue) {
+      if (refs.minigameRows) refs.minigameRows.value = String(clampInt(refs.minigameRows.value, 2, 25, 4));
+      if (refs.minigameCols) refs.minigameCols.value = String(clampInt(refs.minigameCols.value, 2, 25, 4));
+    }
+    if (nQueens && refs.minigameBoardSize) {
+      const fallback = entry.id === 'n-queens-torus-puzzle' ? 5 : 8;
+      refs.minigameBoardSize.value = String(clampInt(refs.minigameBoardSize.value, 2, 25, fallback));
+    }
+  }
+
+  function loadMinigamePresetData(entry) {
+    if (!entry) return Promise.reject(new Error('No minigame level is selected.'));
+    const root = typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null);
+    const loaded = root && root.RAMIFIED_MINIGAME_PRESET_DATA && root.RAMIFIED_MINIGAME_PRESET_DATA[entry.key];
+    if (loaded) return Promise.resolve(JSON.parse(JSON.stringify(loaded)));
+    if (typeof require === 'function') {
+      try { return Promise.resolve(JSON.parse(JSON.stringify(require(`../ramified_minigame_presets/${entry.file}`)))); } catch (_) {}
+    }
+    if (minigamePresetLoadCache.has(entry.key)) return minigamePresetLoadCache.get(entry.key);
+    if (typeof document === 'undefined' || !document.createElement) return Promise.reject(new Error('Minigame preset loading is unavailable.'));
+    const request = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = `ramified_minigame_presets/${entry.file.split('/').map(encodeURIComponent).join('/')}`;
+      script.async = true;
+      script.onload = () => {
+        const data = root && root.RAMIFIED_MINIGAME_PRESET_DATA && root.RAMIFIED_MINIGAME_PRESET_DATA[entry.key];
+        if (data) resolve(JSON.parse(JSON.stringify(data)));
+        else reject(new Error(`Could not load ${entry.label}.`));
+      };
+      script.onerror = () => reject(new Error(`Could not load ${entry.label}.`));
+      (document.head || document.body).appendChild(script);
+    });
+    minigamePresetLoadCache.set(entry.key, request);
+    return request;
+  }
+
+  function materializeMinigamePresetForMosaic(entry, source) {
+    const payload = JSON.parse(JSON.stringify(source || {}));
+    payload.diagramType = 'link';
+    payload.inputMode = 'background';
+    payload.backgroundAction = 'decoration';
+    payload.boundary = payload.boundary || 'glued';
+    if (entry.id === 'boundary-glue-board') {
+      const rows = clampInt(refs.minigameRows && refs.minigameRows.value, 2, 25, 4);
+      const cols = clampInt(refs.minigameCols && refs.minigameCols.value, 2, 25, 4);
+      payload.rows = rows;
+      payload.cols = cols;
+      payload.size = `${rows}x${cols}`;
+      payload.surface = 'torus';
+      payload.gluedEdges = torusGluedEdgesForMinigameImport(rows, cols);
+      delete payload.hex;
+    } else if (entry.id === 'n-queens-puzzle' || entry.id === 'n-queens-torus-puzzle') {
+      const fallback = entry.id === 'n-queens-torus-puzzle' ? 5 : 8;
+      const size = clampInt(refs.minigameBoardSize && refs.minigameBoardSize.value, 2, 25, fallback);
+      const torus = entry.id === 'n-queens-torus-puzzle';
+      payload.rows = size;
+      payload.cols = size;
+      payload.size = `${size}x${size}`;
+      payload.surface = torus ? 'toroidal n-queens puzzle' : 'n-queens puzzle';
+      payload.gluedEdges = torus ? torusGluedEdgesForMinigameImport(size, size) : [];
+      payload.pieces = Array.from({ length: size }, (_, index) => ({
+        id: index + 1, row: index + 1, col: index + 1, side: 'black', color: 'black', kind: 'queen'
+      }));
+    }
+    return payload;
+  }
+
+  function torusGluedEdgesForMinigameImport(rows, cols) {
+    const edges = [];
+    for (let row = 1; row <= rows; row += 1) {
+      edges.push(backgroundGluedEdge('square', 0, { row, col: cols, dir: 0 }, { row, col: 1, dir: 2 }));
+    }
+    for (let col = 1; col <= cols; col += 1) {
+      edges.push(backgroundGluedEdge('square', 1, { row: 1, col, dir: 3 }, { row: rows, col, dir: 1 }));
+    }
+    return edges;
   }
 
   function formatModuliSpaceDualGraphPreset(genus, markings) {
@@ -6342,6 +6466,24 @@
     return false;
   }
 
+  function removeBilliardsDecoration(descriptor) {
+    if (!descriptor || !state.billiards || typeof state.billiards !== 'object') return false;
+    if (descriptor.type === 'billiards-ball') {
+      const before = Array.isArray(state.billiards.balls) ? state.billiards.balls.length : 0;
+      state.billiards.balls = (state.billiards.balls || []).filter((ball) => ball && ball.id !== descriptor.id);
+      return state.billiards.balls.length !== before;
+    }
+    if (descriptor.type === 'billiards-pocket') {
+      const nativeState = currentBilliardsEditorState();
+      if (!nativeState || !Billiards) return false;
+      const result = Billiards.togglePocket(nativeState, descriptor.tileIndex, descriptor.position);
+      if (!result.changed) return false;
+      saveBilliardsPocketsFromNative(result.state);
+      return true;
+    }
+    return false;
+  }
+
   function backgroundDecorationDragDescriptorAtIndex(index) {
     if (!tileExists(index)) return null;
     const layers = [];
@@ -6378,9 +6520,15 @@
       .filter((piece) => piece && importedEndpointIndex(piece, state.rows, state.cols) === index);
   }
 
-  function moveBackgroundDecoration(sourceIndex, targetIndex, descriptor) {
-    if (!descriptor || !Number.isInteger(sourceIndex) || !Number.isInteger(targetIndex)) return false;
-    if (!tileExists(sourceIndex) || !tileExists(targetIndex)) return false;
+  function moveBackgroundDecoration(sourceIndex, targetIndex, descriptor, options = {}) {
+    if (!descriptor || !Number.isInteger(sourceIndex) || !tileExists(sourceIndex)) return false;
+    if (!Number.isInteger(targetIndex) || !tileExists(targetIndex)) {
+      if (!options.removeWhenOutside) return false;
+      if (!removeBackgroundDecorationDescriptor(sourceIndex, descriptor)) return false;
+      state.edits += 1;
+      if (options.update !== false) updateReport(false);
+      return true;
+    }
     if (sourceIndex === targetIndex) return false;
     clearBackgroundBilliard(false);
     clearStandardDualGraphInput();
@@ -9215,12 +9363,17 @@
       const hit = isOverCanvas(event.clientX, event.clientY)
         ? hitTest(event.clientX, event.clientY)
         : -1;
-      moveBackgroundDecoration(state.drag.sourceIndex, hit, state.drag.decoration);
+      moveBackgroundDecoration(state.drag.sourceIndex, hit, state.drag.decoration, {
+        removeWhenOutside: !isOverCanvas(event.clientX, event.clientY)
+      });
       clearEditorDrag();
       return;
     }
     if (state.drag && state.drag.type === 'billiards-decoration' && state.drag.active) {
-      if (isOverCanvas(event.clientX, event.clientY) && moveBilliardsDecoration(state.drag.decoration, event.clientX, event.clientY)) {
+      const changed = isOverCanvas(event.clientX, event.clientY)
+        ? moveBilliardsDecoration(state.drag.decoration, event.clientX, event.clientY)
+        : removeBilliardsDecoration(state.drag.decoration);
+      if (changed) {
         state.edits += 1;
         updateReport(false);
       }
@@ -23470,8 +23623,14 @@
 
   function refreshExport(options = {}) {
     if (!refs.exportOut) return;
+    if (!options.manual) return;
     syncExportControls(options);
-    refs.exportOut.value = buildExportText();
+    precomputedExportRefreshActive = true;
+    try {
+      refs.exportOut.value = buildExportText();
+    } finally {
+      precomputedExportRefreshActive = false;
+    }
   }
 
   function buildExportText() {
@@ -24275,6 +24434,7 @@
       );
       if (restored) return JSON.parse(JSON.stringify(state.hexHomology));
     }
+    if (!precomputedExportRefreshActive) return null;
     const topology = TopologicalHex.buildTopology(hexHomologyPresetForExport(), removed, {
       analysis: currentBackgroundHomologyAnalysis()
     });
@@ -24697,7 +24857,6 @@
     syncDualGraphCanvasVisibility();
     syncRiemannNodeControls();
     refs.wrappedViewMode.value = state.wrappedViewMode;
-    syncBackgroundPresetControls();
     syncImportPresetControls();
     syncExportControls();
     updateInputModePanels();
@@ -24838,18 +24997,13 @@
 
   function defaultExportPresetMetadata() {
     const surface = currentBackgroundSurface();
-    const selected = selectedBackgroundPresetForExport();
-    const label = cleanExportPresetLabel((selected && selected.label) || surface);
+    const label = cleanExportPresetLabel(surface);
     return {
       id: cleanExportPresetId(label),
       key: cleanExportPresetKey(label),
       label,
       gameTypes: ['2048']
     };
-  }
-
-  function selectedBackgroundPresetForExport() {
-    return BACKGROUND_SPACE_PRESETS.find((entry) => refs.backgroundPresetSelect && entry.id === refs.backgroundPresetSelect.value) || null;
   }
 
   function cleanExportPresetLabel(value) {
@@ -26835,6 +26989,7 @@
     analyzeBackgroundHomology,
     classifyBackgroundCircle,
     classifySelectedBackgroundKnot,
+    loadCatalogPreset: loadSelectedImportPreset,
     __test: {
       state,
       refs,
@@ -26862,6 +27017,10 @@
       minigameModeForExportGameType,
       minigameGluedEdgesForExport,
       minigamePresetRegistryEntry,
+      minigamePresetRegistryEntries,
+      materializeMinigamePresetForMosaic,
+      moveBackgroundDecoration,
+      removeBilliardsDecoration,
       normalizeBackgroundAction,
       backgroundHomologySnapshot,
       backgroundHomologyTopologyKey,

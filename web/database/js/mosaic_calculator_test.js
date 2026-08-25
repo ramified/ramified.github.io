@@ -256,7 +256,7 @@ function testPresetMetadataCanBeClearedWhileEditing() {
   });
   mosaic.refs.exportPresetId.value = '';
   mosaic.refs.exportPresetLabel.value = '';
-  mosaic.refreshExport({ fillPresetDefaults: false });
+  mosaic.refreshExport({ fillPresetDefaults: false, manual: true });
   assert.strictEqual(mosaic.refs.exportPresetId.value, '');
   assert.strictEqual(mosaic.refs.exportPresetLabel.value, '');
   const source = mosaic.refs.exportOut.value;
@@ -965,6 +965,79 @@ function testPaletteSwatchRatios() {
   assert.ok(source.includes('Math.sqrt(3) / 2'));
 }
 
+function testStagedImportCatalogAndParameterizedLevels() {
+  const html = fs.readFileSync(require.resolve('../mosaic_calculator.html'), 'utf8');
+  const adapter = fs.readFileSync(require.resolve('./import_export_page_adapters.js'), 'utf8');
+  assert.match(html, /id="import-catalog"/);
+  ['knot/link', 'stable curve', 'minigames'].forEach((label) => assert.ok(html.includes(`>${label}<`)));
+  assert.ok(html.includes('id="import-minigame-type"'));
+  assert.ok(html.includes('id="minigame-rows"'));
+  assert.ok(html.includes('id="minigame-cols"'));
+  assert.ok(html.includes('id="minigame-board-size"'));
+  assert.ok(!html.includes('id="background-preset-select"'));
+  assert.ok(!html.includes('id="load-background-preset"'));
+  assert.ok(adapter.includes("catalogContainer: '#mosaic-import-catalog-controls'"));
+
+  const catalog = mosaic.minigamePresetRegistryEntries();
+  const boundary = catalog.find((entry) => entry.id === 'boundary-glue-board');
+  const queens = catalog.find((entry) => entry.id === 'n-queens-puzzle');
+  assert.ok(boundary && boundary.gameTypes.includes('2048'));
+  assert.ok(queens && queens.gameTypes.includes('FIDE Chess'));
+  const boundaryPayload = mosaic.materializeMinigamePresetForMosaic(
+    boundary,
+    require('../ramified_minigame_presets/boundary_glue_board.preset.js')
+  );
+  assert.strictEqual(boundaryPayload.rows, 4);
+  assert.strictEqual(boundaryPayload.cols, 4);
+  assert.strictEqual(boundaryPayload.gluedEdges.length, 8);
+  const queensPayload = mosaic.materializeMinigamePresetForMosaic(
+    queens,
+    require('../ramified_minigame_presets/n_queens_puzzle.preset.js')
+  );
+  assert.strictEqual(queensPayload.rows, queensPayload.cols);
+  assert.strictEqual(queensPayload.pieces.length, queensPayload.rows);
+}
+
+function testManualExportRefreshAndOutsideDecorationRemoval() {
+  setupBoard();
+  mosaic.refs.exportOut.value = 'stale preview';
+  mosaic.refreshExport();
+  assert.strictEqual(mosaic.refs.exportOut.value, 'stale preview');
+  mosaic.refreshExport({ manual: true });
+  assert.notStrictEqual(mosaic.refs.exportOut.value, 'stale preview');
+
+  mosaic.setTestBoard({
+    rows: 2,
+    cols: 2,
+    lattice: 'square',
+    removedTiles: [tile(1, 2)],
+    inputHoles: [tile(1, 1)]
+  });
+  const descriptor = { type: 'input-hole', kind: 'input-hole' };
+  assert.strictEqual(mosaic.moveBackgroundDecoration(0, 1, descriptor), false, 'removed in-canvas targets are non-destructive');
+  assert.deepStrictEqual(mosaic.inputHolesForExport().map(({ row, col }) => ({ row, col })), [tile(1, 1)]);
+  assert.strictEqual(mosaic.moveBackgroundDecoration(0, -1, descriptor, { removeWhenOutside: true, update: false }), true);
+  assert.deepStrictEqual(mosaic.inputHolesForExport(), []);
+}
+
+function testPrecomputedDataRequiresManualRefresh() {
+  mosaic.setTestBoard({
+    rows: 2,
+    cols: 3,
+    lattice: 'square',
+    gluedEdges: minigames.generateTorusBoundaryGlue(2, 3),
+    hex: { seeds: [{ row: 1, col: 1, color: 'red' }] }
+  });
+  mosaic.setTestExportControls({ type: 'minigame', format: 'verbose', label: 'Manual Hex', group: 'Hex', storeHexHomology: true });
+  mosaic.refs.exportOut.value = 'unchanged';
+  mosaic.refreshExport();
+  assert.strictEqual(mosaic.refs.exportOut.value, 'unchanged');
+  assert.strictEqual(mosaic.buildMinigamePresetExport().hex.homology, undefined);
+  mosaic.refreshExport({ manual: true });
+  const exported = JSON.parse(mosaic.refs.exportOut.value);
+  assert.strictEqual(exported.hex.homology.version, 1);
+}
+
 const tests = [
   testFullExportIncludesMarkers,
   testBackgroundFormats,
@@ -993,7 +1066,10 @@ const tests = [
   testHoleMarkerDrawingMatchesConnectFour,
   testSokobanDecorationDrawingMatchesMinigame,
   testRemovedBoundaryPresetIdsAreNotAdvertised,
-  testPaletteSwatchRatios
+  testPaletteSwatchRatios,
+  testStagedImportCatalogAndParameterizedLevels,
+  testManualExportRefreshAndOutsideDecorationRemoval,
+  testPrecomputedDataRequiresManualRefresh
 ];
 
 for (const test of tests) {

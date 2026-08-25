@@ -157,7 +157,8 @@ function testMosaicOptionalHexHomologyCache() {
     group: 'Hex',
     storeHexHomology: true
   });
-  const exported = mosaic.buildMinigamePresetExport();
+  mosaic.refreshExport({ manual: true });
+  const exported = JSON.parse(mosaic.refs.exportOut.value);
   assert.strictEqual(exported.hex.homology.version, 1);
   assert.match(exported.hex.homology.fingerprint, /^v1:/);
   assert.ok(exported.hex.homology.generators.length > 0);
