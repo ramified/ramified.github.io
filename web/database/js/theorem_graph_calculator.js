@@ -282,8 +282,52 @@
   const refs = {};
 
   defineActiveGraphAccessors();
+  installImportExportPageAdapter();
 
   document.addEventListener('DOMContentLoaded', init);
+
+  function installImportExportPageAdapter() {
+    const existing = window.SiteImportExportPageAdapter || {};
+    window.SiteImportExportPageAdapter = {
+      ...existing,
+      validateImport: validateSharedImport,
+      onContextChange: syncSharedImportContext,
+      applyImport: applySharedImport
+    };
+  }
+
+  function validateSharedImport(kind, raw) {
+    if (raw && raw.source === 'catalog') return raw;
+    const text = String(raw && Object.prototype.hasOwnProperty.call(raw, 'text') ? raw.text : (raw || '')).trim();
+    if (!text) throw new Error('Paste or choose data to import.');
+    return {
+      text,
+      data: parseImportText(text),
+      source: raw && raw.source ? raw.source : 'paste',
+      value: raw && raw.value ? raw.value : ''
+    };
+  }
+
+  function syncSharedImportContext(context = {}) {
+    const kind = cleanString(context.importKind);
+    if (!kind) return;
+    setImportMode(kind === 'preset' ? 'preset' : 'json');
+    setImportScope(kind.endsWith('whole') ? 'whole' : (kind.endsWith('node') ? 'node' : 'current'));
+  }
+
+  async function applySharedImport(kind, prepared = {}) {
+    syncSharedImportContext({ importKind: kind });
+    if (kind === 'preset') {
+      const preset = state.presets[Number(prepared.value)];
+      if (!preset) throw new Error('Choose a preset before applying.');
+      if (refs.presetSelect) refs.presetSelect.value = String(prepared.value);
+      const data = await readPresetData(preset);
+      applyImportData(data, preset.label, currentImportScope());
+      return;
+    }
+    const data = prepared.data || parseImportText(String(prepared.text || '').trim());
+    applyImportData(data, 'JSON text', currentImportScope());
+  }
 
   function init() {
     cacheRefs();
@@ -1264,6 +1308,10 @@
 
   function activeGraphDepth() {
     return (state.activePath || []).length;
+  }
+
+  function importRefreshesReferenceCollection(scope, depth = activeGraphDepth()) {
+    return scope === 'whole' || depth === 0;
   }
 
   function isTitleNode(node) {
@@ -6904,16 +6952,20 @@
     applyImportedCanvasView(canvasView);
     const next = normalizeImport(data, canvasView);
     const wholeImport = scope === 'whole';
+    const refreshReferences = importRefreshesReferenceCollection(scope);
     if (wholeImport) {
       state.rootGraph = next.graph;
       state.activePath = [];
-      state.references = next.references;
-      state.selectedReferenceKeys = next.selectedReferenceKeys;
       syncLinkedGraphTitlesFromOwners(state.rootGraph);
     } else {
       replaceActiveGraph(next.graph);
       if (activeGraphDepth()) syncActiveOwnerFromTitleNode();
       syncLinkedGraphTitlesFromOwners(currentGraph());
+    }
+    if (refreshReferences) {
+      state.references = next.references;
+      state.selectedReferenceKeys = next.selectedReferenceKeys;
+    } else {
       state.references = mergeReferencesByKey(state.references, next.references);
       state.selectedReferenceKeys = new Set([...state.selectedReferenceKeys].filter((key) => state.references.some((reference) => reference.key === key)));
     }

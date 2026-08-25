@@ -38,8 +38,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 76.4,
-      "y": 69.5,
+      "x": 76.3,
+      "y": 81.2,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -73,8 +73,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 116.6,
-      "y": 309.7
+      "x": 116.4,
+      "y": 309
     },
     {
       "id": "n39",
@@ -95,8 +95,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 292.2,
-      "y": 393.3
+      "x": 291.8,
+      "y": 369.8
     },
     {
       "id": "n58",
@@ -110,8 +110,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 269.1,
-      "y": 58.7
+      "x": 268.8,
+      "y": 81.2
     },
     {
       "id": "n60",
@@ -122,20 +122,18 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals",
           "label": "goals",
           "type": "checkbox",
-          "text": "- [x] \\cite{...} in reference chart can be touched. When touched, it shows the name of nodes/arrows which cites this article\n- [x] add a new type for the node: object/property\n- [x] For different type of nodes I should be able to change the default rows\n- [x] title in the tab should be the \"name of the title node\", like \"Maintenance Tracker\", but not \"Theorem Graph Calculator\"\n- [x] user should be also able to export a single reference"
+          "text": "The textbox in import chart does not allow copy-paste"
         }
       ],
       "setting": "",
       "condition": "",
       "result": "",
       "proofSketch": "",
-      "citationKeys": [
-        "..."
-      ],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 599.2,
-      "y": 87.8
+      "citationKeys": [],
+      "color": "#46786e",
+      "fillColor": "#eef7f4",
+      "x": 598.4,
+      "y": 87.6
     },
     {
       "id": "n63",
@@ -156,39 +154,11 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 469.6,
-      "y": 393.3,
+      "x": 468.4,
+      "y": 369.8,
       "childGraph": {
         "title": "double click",
         "nodes": [
-          {
-            "id": "n48",
-            "type": "misc",
-            "label": "minigame",
-            "details": [
-              {
-                "id": "future",
-                "label": "future?",
-                "type": "checkbox",
-                "text": "- [x] Go\n- [ ] Billiard\n- [x] Reversi"
-              },
-              {
-                "id": "bugs",
-                "label": "bugs",
-                "type": "checkbox",
-                "text": "- [x] actual loop in sokoban, allow reset in the loop\n- [x] allow to press Z long time to speed up cancellation"
-              }
-            ],
-            "setting": "",
-            "condition": "",
-            "result": "",
-            "proofSketch": "",
-            "citationKeys": [],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
-            "x": 454.9,
-            "y": 280
-          },
           {
             "id": "n59",
             "type": "misc",
@@ -210,7 +180,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
             ],
             "color": "#7a6f65",
             "fillColor": "#f7f5f1",
-            "x": 318.7,
+            "x": 319.6,
             "y": 333
           },
           {
@@ -268,7 +238,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "3-2d",
           "label": "3/2d",
           "type": "checkbox",
-          "text": "Isoball 4\nStephen's Sausage Roll\nThe Geometer's Sketchpad\nPlotTropCurve"
+          "text": "Isoball 4\nStephen's Sausage Roll\nThe Geometer's Sketchpad\nPlotTropCurve\nProjective Hex"
         },
         {
           "id": "updates",
@@ -284,8 +254,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 650.4,
-      "y": 344.5
+      "x": 657.2,
+      "y": 342.9
     },
     {
       "id": "n66",
@@ -306,8 +276,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 344.5,
-      "y": 153.4
+      "x": 358.5,
+      "y": 146.8
     },
     {
       "id": "n68",
@@ -318,7 +288,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "bugs",
           "label": "bugs",
           "type": "checkbox",
-          "text": "add chinese version"
+          "text": "Add hex support for Tile matching\n\"Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.\" should appear in the main canvas, like the caption. \"drag to shoot\" label can be removed\nFor the Hex, click undo should remove \"red wins. Start another round with the same game settings.\" chart\nLike \"Test in Minigames\" row in Mosaic calculator export page, there should be also a \"edit in Mosaic calculator\" row in minigames export page. When clicked, the default boundary should be \"Glued\", Mode being \"Background space\", Click action being \"Add/remove decorations\"\nThe code should only store reusable game-specific computations when the checkbox is clicked and user click \"refresh\".\nFor Import chart in Mosaic calculator, the Catalog row should be a selectbox of \"knot/link\", \"stable curve\" and \"minigames\". Under the minigames choice there is a row for the types of the minigame and finally the name of the level(there are some special cases where rows and colomns should be specified further). Remove the Preset row in the background space mode, as they will be covered by this.\nFor those objects in Decoration palette, if they appear in the main canvas and be dragged out of the main canvas then it should be removed, like what we see in Tiling preferences."
         }
       ],
       "setting": "",
@@ -326,27 +296,27 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 304.6,
-      "y": 239.2
+      "color": "#46786e",
+      "fillColor": "#eef7f4",
+      "x": 312.3,
+      "y": 238.6
     },
     {
-      "id": "n69",
+      "id": "n48",
       "type": "misc",
-      "label": "prompt",
+      "label": "minigame",
       "details": [
         {
-          "id": "goal",
-          "label": "goal",
+          "id": "future",
+          "label": "future?",
           "type": "checkbox",
-          "text": "- [x] In Theorem Graph Calculator, add a link before the \"send feedback\" hyperlink, which suggests user how to use the AI to generate the theorem graph, and what AI should usually do to create an ideal json text"
+          "text": "- [x] Go\n- [x] Billiard\n- [x] Reversi"
         },
         {
-          "id": "functions",
-          "label": "functions",
+          "id": "bugs",
+          "label": "bugs",
           "type": "checkbox",
-          "text": "- [x] told AI that:\n- [x] This page support ref, it is recommended to give a reference for each goal in detail(which page or which chapter, for example). If all goals use a citation for one whole book, then user may not find what they want quickly\n- [x] This page support MathJax rendering\n- [x] When generating roadmaps, focus on the examples and definitions; the AI can provide user a list of definition, and check if user know or not know. A quick recall of unknown definition(with reference) can help user to understand quickly\n- [x] The goal can be more realizable, avoid \"understand ...\" (It has several kind of understanding. Reader can written down the theorem and its proof, or check the logic of each step, or check where the conditions are used, these are all called \"understanding\"). Unless user specifies, if a question has concrete answer(correct/false, or a concrete number), then just tell the user(like \"compute the degree of map\" can be changed to \"verify that the degree of the map is 3\")\n- [x] This website should also make a introduction about the structure of json text, so that AI don't need to search for the js document for writing it."
+          "text": "- [x] actual loop in sokoban, allow reset in the loop\n- [x] allow to press Z long time to speed up cancellation"
         }
       ],
       "setting": "",
@@ -356,21 +326,30 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 494.1,
-      "y": 222.8,
-      "childGraph": {
-        "title": "prompt",
-        "nodes": [],
-        "arrows": [],
-        "view": {
-          "selectedId": "",
-          "layoutAvoidOverlap": true,
-          "layoutRunning": false,
-          "canvasHeight": 560,
-          "canvasRatioLocked": false,
-          "canvasAspectRatio": 1.7143
+      "x": 527,
+      "y": 296.5
+    },
+    {
+      "id": "n70",
+      "type": "misc",
+      "label": "index",
+      "details": [
+        {
+          "id": "goals",
+          "label": "goals",
+          "type": "checkbox",
+          "text": "For index.html, as those gifs take a lot of time to be loaded, I would like the corresponding demo-strip disappear when the gifs are not loaded. It should preserve the Masonn"
         }
-      }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#46786e",
+      "fillColor": "#eef7f4",
+      "x": 400.3,
+      "y": 303
     }
   ],
   "arrows": [
@@ -424,36 +403,19 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
-    },
-    {
-      "id": "a49",
-      "sourceId": "n69",
-      "targetId": "n60",
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 15,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
     }
   ],
   "view": {
-    "selectedId": "n69",
+    "selectedId": "n68",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 452,
+    "canvasHeight": 451,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 1.6674,
     "relativeNodePositions": {
       "n4": {
         "x": 0.1015,
-        "y": 0.1538
+        "y": 0.18
       },
       "n37": {
         "x": 0.1548,
@@ -461,35 +423,39 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       },
       "n39": {
         "x": 0.388,
-        "y": 0.8702
+        "y": 0.82
       },
       "n58": {
         "x": 0.3574,
-        "y": 0.1298
+        "y": 0.18
       },
       "n60": {
         "x": 0.7958,
         "y": 0.1943
       },
       "n63": {
-        "x": 0.6237,
-        "y": 0.8702
+        "x": 0.6229,
+        "y": 0.82
       },
       "n65": {
-        "x": 0.8638,
-        "y": 0.7621
+        "x": 0.874,
+        "y": 0.7603
       },
       "n66": {
-        "x": 0.4575,
-        "y": 0.3393
+        "x": 0.4768,
+        "y": 0.3255
       },
       "n68": {
-        "x": 0.4045,
+        "x": 0.4153,
         "y": 0.5291
       },
-      "n69": {
-        "x": 0.6562,
-        "y": 0.493
+      "n48": {
+        "x": 0.7008,
+        "y": 0.6575
+      },
+      "n70": {
+        "x": 0.5323,
+        "y": 0.6717
       }
     },
     "selectedReferenceKeys": []

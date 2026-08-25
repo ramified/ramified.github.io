@@ -43,6 +43,9 @@ assert.ok(adapter.includes("row('Import content'"), 'generic panels must identif
 assert.ok(adapter.includes("row('Format'"), 'generic panels must identify import and export formats');
 assert.ok(adapter.includes('exporterDescriptors[name]'), 'external exports must be registered as selectable content');
 assert.ok(adapter.includes('describe(prepared)'), 'import adapters must report detected content and format');
+assert.ok(adapter.includes('onContextChange: custom.onContextChange'), 'page adapters must be able to synchronize retained legacy controls');
+assert.ok(adapter.includes("kindSelect.value === 'preset' ? 'json-current'"), 'theorem graph paste and file sources must select a text-import kind');
+assert.ok(adapter.includes("preset ? presetRadio : jsonRadio"), 'theorem graph imports must dispatch the selected mode radio');
 assert.ok(panelCss.includes('margin-inline: auto'), 'shared tabs must remain centered');
 assert.ok(panelCss.includes('@media (max-width: 520px)'), 'shared controls need a narrow-layout rule');
 assert.ok(panelCss.includes('grid-template-columns: 116px minmax(0, 1fr)'), 'shared field rows must match calculator setup rows');

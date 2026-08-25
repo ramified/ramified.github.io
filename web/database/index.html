@@ -412,10 +412,27 @@
     return selected;
   };
 
+  const isPreviewActive = (card) => {
+    const grid = card.closest('.collapsible-grid');
+
+    return !grid
+      || !grid.classList.contains('is-single-column')
+      || card.classList.contains('is-expanded');
+  };
+
+  const refreshMasonryForCard = (card) => {
+    const grid = card.closest('.calculator-grid');
+
+    if (grid) {
+      arrangeMasonryGrid(grid);
+    }
+  };
+
   const loadPreview = (card) => {
     const object = card.querySelector('.demo-frame object[data-preview-key]');
+    const strip = card.querySelector('.demo-strip');
 
-    if (!object) {
+    if (!object || !strip) {
       return;
     }
 
@@ -428,9 +445,51 @@
     object.setAttribute('width', selected.width);
     object.setAttribute('height', selected.height);
 
-    if (object.getAttribute('data') !== selected.src) {
-      object.setAttribute('data', selected.src);
+    if (object.dataset.previewState === 'loaded') {
+      strip.classList.add('is-preview-loaded');
+
+      if (isPreviewActive(card) && object.getAttribute('data') !== selected.src) {
+        object.setAttribute('data', selected.src);
+      }
+
+      return;
     }
+
+    if (object.dataset.previewState === 'loading' || object.dataset.previewState === 'failed') {
+      return;
+    }
+
+    object.dataset.previewState = 'loading';
+
+    const preview = new Image();
+
+    preview.addEventListener('load', () => {
+      if (object.dataset.previewState !== 'loading' || object.dataset.previewSrc !== selected.src) {
+        return;
+      }
+
+      object.dataset.previewState = 'loaded';
+      strip.classList.add('is-preview-loaded');
+
+      if (isPreviewActive(card)) {
+        object.setAttribute('data', selected.src);
+      }
+
+      refreshMasonryForCard(card);
+    }, { once: true });
+
+    preview.addEventListener('error', () => {
+      if (object.dataset.previewState !== 'loading' || object.dataset.previewSrc !== selected.src) {
+        return;
+      }
+
+      object.dataset.previewState = 'failed';
+      strip.classList.remove('is-preview-loaded');
+      object.removeAttribute('data');
+      refreshMasonryForCard(card);
+    }, { once: true });
+
+    preview.src = selected.src;
   };
 
   const unloadPreview = (card) => {

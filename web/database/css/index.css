@@ -98,6 +98,10 @@
   padding: 12px;
 }
 
+.demo-strip:not(.is-preview-loaded) {
+  display: none;
+}
+
 .demo-frame {
   position: relative;
   aspect-ratio: 16 / 9;

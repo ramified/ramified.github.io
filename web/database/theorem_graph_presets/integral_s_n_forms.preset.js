@@ -3,7 +3,7 @@
 // { label: "Integral S_n Forms", key: "integral_s_n_forms", file: "integral_s_n_forms.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
-  "schemaVersion": 9,
+  "schemaVersion": 10,
   "title": "Integral S_n Forms",
   "titleNode": {
     "id": "__title__",
@@ -581,6 +581,395 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
           "canvasAspectRatio": 1.7143
         }
       }
+    },
+    {
+      "id": "n18",
+      "type": "misc",
+      "label": "Curtis–Reiner",
+      "details": [],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#8b5f2a",
+      "fillColor": "#fff7df",
+      "x": 348.1,
+      "y": 588.8,
+      "childGraph": {
+        "title": "Curtis–Reiner",
+        "nodes": [
+          {
+            "id": "n1",
+            "type": "definition",
+            "label": "§23 — Lattices and orders",
+            "setting": "Specialize the book's order-and-lattice language to the integral group ring $\\Lambda=\\mathbb{Z}S_n$.",
+            "condition": "Write the definitions of an $R$-order and a $\\Lambda$-lattice. Then check explicitly that a free integral representation $\\rho:S_n\\to\\mathrm{GL}_r(\\mathbb{Z})$ gives a $\\mathbb{Z}S_n$-lattice, and conversely.",
+            "result": "Checkpoint: translate without hesitation between integral matrix representations and $\\mathbb{Z}S_n$-lattices. \\cite[§23, p. 491]{CR81}",
+            "proofSketch": "Quick recall: the classification problem is classification of $\\mathbb{Z}S_n$-lattices up to $\\mathbb{Z}S_n$-isomorphism, with indecomposable lattices as the basic building blocks.",
+            "citationKeys": [
+              "CR81"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 144.5,
+            "y": 162.4
+          },
+          {
+            "id": "n2",
+            "type": "theorem",
+            "label": "§24 — Jordan–Zassenhaus finiteness",
+            "setting": "Fix the order $\\Lambda=\\mathbb{Z}S_n$ and a rank $r$.",
+            "condition": "Read the Jordan–Zassenhaus theorem and rewrite its hypotheses specifically for $\\mathbb{Z}S_n$-lattices.",
+            "result": "Checkpoint: state precisely why there are only finitely many isomorphism classes of $\\mathbb{Z}S_n$-lattices of a fixed $\\mathbb{Z}$-rank. Also explain why this does not imply finite representation type when rank varies. \\cite[§24, p. 503]{CR81}",
+            "proofSketch": "Use this as the finiteness guarantee for bounded-rank classification projects.",
+            "citationKeys": [
+              "CR81"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 182.1,
+            "y": 321.2
+          },
+          {
+            "id": "n3",
+            "type": "object",
+            "label": "§27 — Group rings and maximal orders",
+            "details": [
+              {
+                "id": "setting",
+                "label": "setting",
+                "type": "textbox",
+                "text": "Place $\\mathbb{Z}S_n$ inside the semisimple algebra $\\mathbb{Q}S_n$ and compare the integral group ring with maximal orders."
+              },
+              {
+                "id": "condition",
+                "label": "condition",
+                "type": "textbox",
+                "text": "Read the beginning of §27 and write the statement of Theorem 27.1. Record what changes when one passes from the nonmaximal order $\\mathbb{Z}S_n$ to a maximal order in $\\mathbb{Q}S_n$."
+              },
+              {
+                "id": "result",
+                "label": "result",
+                "type": "textbox",
+                "text": "Checkpoint: identify which part of the difficulty of integral representation theory comes from $\\mathbb{Z}S_n$ generally not being maximal. \\cite[§27, p. 559; Thm. 27.1]{CR81}"
+              },
+              {
+                "id": "proof-sketch",
+                "label": "proof sketch",
+                "type": "textbox",
+                "text": "This is the structural bridge from general orders to the arithmetic of integral group rings."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "CR81"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 463.1,
+            "y": 64.3
+          },
+          {
+            "id": "n4",
+            "type": "object",
+            "label": "§30 — Local theory",
+            "details": [
+              {
+                "id": "setting",
+                "label": "setting",
+                "type": "textbox",
+                "text": "For each prime $p$, pass from $L$ to the local lattice $L_p=\\mathbb{Z}*p\\otimes*{\\mathbb{Z}}L$ over $\\mathbb{Z}_pS_n$."
+              },
+              {
+                "id": "condition",
+                "label": "condition",
+                "type": "textbox",
+                "text": "Begin with primes $p\\mid n!$. For each such $p$, write a Sylow $p$-subgroup of $S_n$, compute the reduction of a sample lattice modulo $p$, and note which local invariants remain visible."
+              },
+              {
+                "id": "result",
+                "label": "result",
+                "type": "textbox",
+                "text": "Checkpoint: explain why the integral classification is attacked prime by prime and why primes dividing $|S_n|=n!$ are the essential ones. \\cite[§30, p. 603]{CR81}"
+              },
+              {
+                "id": "proof-sketch",
+                "label": "proof sketch",
+                "type": "textbox",
+                "text": "Use the local theory as the computational layer before attempting global isomorphism classification."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "CR81"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 430.2,
+            "y": 253.6
+          },
+          {
+            "id": "n5",
+            "type": "definition",
+            "label": "§31 — Genus and local-to-global classification",
+            "setting": "Compare two $\\mathbb{Z}S_n$-lattices $L$ and $M$ through their localizations $L_p$ and $M_p$.",
+            "condition": "Write the definition of genus from §31A. Then separate two questions: which local types occur, and how many global isomorphism classes occur inside one genus.",
+            "result": "Checkpoint: state the genus relation and summarize the role of Roiter's theorem in the local-to-global program. \\cite[§31, p. 642; §31A, p. 643; §31C, p. 659]{CR81}",
+            "proofSketch": "Classification by genus is the natural organization once the local $\\mathbb{Z}_pS_n$-types are known.",
+            "citationKeys": [
+              "CR81"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 624.6,
+            "y": 309.4
+          },
+          {
+            "id": "n6",
+            "type": "property",
+            "label": "§32 — Projective lattices over group rings",
+            "details": [
+              {
+                "id": "setting",
+                "label": "setting",
+                "type": "textbox",
+                "text": "Restrict the classification problem to projective $\\mathbb{Z}S_n$-lattices."
+              },
+              {
+                "id": "condition",
+                "label": "condition",
+                "type": "textbox",
+                "text": "Read the local and global cases separately, then compare the character information afforded by projective lattices."
+              },
+              {
+                "id": "result",
+                "label": "result",
+                "type": "textbox",
+                "text": "Checkpoint: write Swan's theorem in the form used here, identify the local-to-global input, and record which projective-lattice invariants are computable for $S_n$. \\cite[§32, p. 670; §32A, p. 671; §32B, p. 676; §32C, p. 679]{CR81}"
+              },
+              {
+                "id": "proof-sketch",
+                "label": "proof sketch",
+                "type": "textbox",
+                "text": "This gives a structured subclass where the general local/global machinery becomes concrete."
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [
+              "CR81"
+            ],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 656.3,
+            "y": 485.7
+          },
+          {
+            "id": "n7",
+            "type": "theorem",
+            "label": "§33 — Finite representation type",
+            "setting": "Now allow the rank of indecomposable $\\mathbb{Z}S_n$-lattices to vary.",
+            "condition": "Read the group-ring criterion in §33A and the finite-type machinery in §33B. Apply it to the Sylow subgroups of $S_n$.",
+            "result": "Concrete answer: the finite-type criterion gives finite integral representation type for $S_n$ exactly when $n\\le 3$. For $n\\ge 4$, verify directly that $V_4=\\{1,(12)(34),(13)(24),(14)(23)\\}\\le S_n$, so the 2-local structure is noncyclic. \\cite[§33, p. 686; §33A, p. 687; §33B, p. 691]{CR81}",
+            "proofSketch": "Checkpoint: distinguish carefully between Jordan–Zassenhaus fixed-rank finiteness and finite representation type across all ranks.",
+            "citationKeys": [
+              "CR81"
+            ],
+            "color": "#3d6b4f",
+            "fillColor": "#f4f7ed",
+            "x": 338.5,
+            "y": 447.8
+          },
+          {
+            "id": "n8",
+            "type": "example",
+            "label": "§34 — Explicit integral representations",
+            "setting": "Use §34 to turn the structural theory into explicit classifications and calculations.",
+            "condition": "First inspect the extension constructions in §34A. For $S_3$, use $S_3\\cong D_6$ and study the dihedral calculations in §34E. For $n\\ge 4$, treat these examples as models for restricted classification problems rather than expecting a finite list of all indecomposables.",
+            "result": "Checkpoint: carry out at least one explicit lattice calculation from §34 and write which ingredients came from §23, §30, §31, and §33. \\cite[§34, p. 711; §34A, p. 712; §34E, p. 755]{CR81}",
+            "proofSketch": "End goal: formulate a manageable $S_n$ project by fixing rank, rational type, genus, or a structured family such as projective or permutation lattices.",
+            "citationKeys": [
+              "CR81"
+            ],
+            "color": "#2f5f9f",
+            "fillColor": "#eef4fb",
+            "x": 485.8,
+            "y": 577
+          }
+        ],
+        "arrows": [
+          {
+            "id": "a1",
+            "sourceId": "n1",
+            "targetId": "n2",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a2",
+            "sourceId": "n1",
+            "targetId": "n3",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0.1,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a3",
+            "sourceId": "n3",
+            "targetId": "n4",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a4",
+            "sourceId": "n4",
+            "targetId": "n5",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a6",
+            "sourceId": "n5",
+            "targetId": "n6",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": -0.1,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a7",
+            "sourceId": "n2",
+            "targetId": "n7",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0.1,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a8",
+            "sourceId": "n4",
+            "targetId": "n7",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": -0.1,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a9",
+            "sourceId": "n7",
+            "targetId": "n8",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a10",
+            "sourceId": "n6",
+            "targetId": "n8",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 1,
+            "endpointScale": 1,
+            "curve": 0.1,
+            "labelOffset": 0,
+            "labelPosition": 0.5,
+            "labelAlign": "center-clear",
+            "color": "#5f574e"
+          }
+        ],
+        "view": {
+          "selectedId": "",
+          "layoutAvoidOverlap": true,
+          "layoutRunning": false,
+          "canvasHeight": 620,
+          "canvasRatioLocked": false,
+          "canvasAspectRatio": 1.8
+        }
+      }
     }
   ],
   "arrows": [
@@ -994,7 +1383,7 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
     }
   ],
   "view": {
-    "selectedId": "n1",
+    "selectedId": "",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasHeight": 1191,

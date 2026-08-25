@@ -45,7 +45,13 @@ function loadCalculator(options = {}) {
     mergeReferencesByKey,
     setReferenceSelected,
     syncReferenceMasterCheckbox,
-    syncGraphCitationKeys
+    syncGraphCitationKeys,
+    parseImportText,
+    validateSharedImport,
+    syncSharedImportContext,
+    applySharedImport,
+    importRefreshesReferenceCollection,
+    sharedImportExportAdapter: window.SiteImportExportPageAdapter
   };
 })();`);
   const sandbox = {
@@ -650,6 +656,83 @@ function testColorPaletteOverflowContainsOnlyHiddenPresets() {
   assert.deepStrictEqual(hostArray(plan.overflow.map((entry) => entry.value)), ['#333333', '#444444']);
 }
 
+function testImportParserAcceptsJsonAndExportedPresetText() {
+  const api = loadCalculator();
+  const json = '{"schemaVersion":10,"title":"JSON graph","nodes":[],"arrows":[]}';
+  const preset = [
+    '// Save this file as theorem_graph_presets/round_trip.preset.js',
+    '// Add this entry to theorem_graph_presets/presets.js:',
+    'window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};',
+    `window.THEOREM_GRAPH_PRESET_DATA.round_trip = ${json};`
+  ].join('\n');
+
+  assert.strictEqual(api.parseImportText(json).title, 'JSON graph');
+  assert.strictEqual(api.parseImportText(preset).title, 'JSON graph');
+
+  const prepared = api.validateSharedImport('json-current', { source: 'paste', text: preset });
+  assert.strictEqual(prepared.text, preset);
+  assert.strictEqual(prepared.data.title, 'JSON graph');
+  assert.strictEqual(prepared.source, 'paste');
+}
+
+function testImportParserRejectsMalformedPresetText() {
+  const api = loadCalculator();
+  const malformed = [
+    '// Save this file as theorem_graph_presets/broken.preset.js',
+    'window.THEOREM_GRAPH_PRESET_DATA.broken = { title: "not JSON" };'
+  ].join('\n');
+
+  assert.throws(() => api.parseImportText(malformed), /Invalid preset file/);
+  assert.throws(() => api.validateSharedImport('json-current', { source: 'paste', text: malformed }), /Invalid preset file/);
+}
+
+function testSharedImportContextEnablesTextImportsAndSynchronizesScope() {
+  const api = loadCalculator();
+  api.refs.importInput = { disabled: true };
+  api.refs.importModePreset = { checked: true };
+  api.refs.importModeJson = { checked: false };
+  api.refs.importScopeCurrent = { checked: true };
+  api.refs.importScopeWhole = { checked: false };
+  api.refs.importScopeNode = { checked: false };
+
+  api.syncSharedImportContext({ importKind: 'json-current' });
+  assert.strictEqual(api.refs.importInput.disabled, false);
+  assert.strictEqual(api.state.importMode, 'json');
+  assert.strictEqual(api.state.importScope, 'current');
+
+  api.syncSharedImportContext({ importKind: 'json-whole' });
+  assert.strictEqual(api.refs.importInput.disabled, false);
+  assert.strictEqual(api.refs.importScopeWhole.checked, true);
+  assert.strictEqual(api.state.importScope, 'whole');
+
+  api.syncSharedImportContext({ importKind: 'json-node' });
+  assert.strictEqual(api.refs.importInput.disabled, false);
+  assert.strictEqual(api.refs.importScopeNode.checked, true);
+  assert.strictEqual(api.state.importScope, 'node');
+
+  api.syncSharedImportContext({ importKind: 'preset' });
+  assert.strictEqual(api.refs.importInput.disabled, true);
+  assert.strictEqual(api.refs.importModePreset.checked, true);
+  assert.strictEqual(api.state.importScope, 'current');
+}
+
+function testSharedImportAdapterUsesAwaitedPageImport() {
+  const api = loadCalculator();
+
+  assert.strictEqual(api.sharedImportExportAdapter.validateImport, api.validateSharedImport);
+  assert.strictEqual(api.sharedImportExportAdapter.onContextChange, api.syncSharedImportContext);
+  assert.strictEqual(api.sharedImportExportAdapter.applyImport, api.applySharedImport);
+}
+
+function testReferenceRefreshPolicyMatchesImportCoverage() {
+  const api = loadCalculator();
+
+  assert.strictEqual(api.importRefreshesReferenceCollection('current', 0), true);
+  assert.strictEqual(api.importRefreshesReferenceCollection('whole', 0), true);
+  assert.strictEqual(api.importRefreshesReferenceCollection('whole', 2), true);
+  assert.strictEqual(api.importRefreshesReferenceCollection('current', 1), false);
+}
+
 testHiddenCitationKeysArePruned();
 testVisibleCitationKeysSurvive();
 testReferenceRenameRewritesNestedNodesTitleAndArrows();
@@ -678,5 +761,10 @@ testUndoRestoresCurrentNodeImport();
 testUndoRestoresNodeColorEditSnapshot();
 testCurrentNodeImportRejectsGraphPayload();
 testColorPaletteOverflowContainsOnlyHiddenPresets();
+testImportParserAcceptsJsonAndExportedPresetText();
+testImportParserRejectsMalformedPresetText();
+testSharedImportContextEnablesTextImportsAndSynchronizesScope();
+testSharedImportAdapterUsesAwaitedPageImport();
+testReferenceRefreshPolicyMatchesImportCoverage();
 
 console.log('theorem graph regression tests passed');

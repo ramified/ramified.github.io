@@ -245,9 +245,10 @@
   }
 
   function clickLegacy(node) {
-    if (!node) return;
+    if (!node || node.disabled) return false;
     node.setAttribute('data-import-export-running', 'true');
     try { node.click(); } finally { node.removeAttribute('data-import-export-running'); }
+    return true;
   }
 
   function jsonPayload(raw) {
@@ -272,7 +273,7 @@
     const scope = kind.endsWith('whole') ? 'whole' : kind.endsWith('node') ? 'node' : 'current';
     const scopeRadio = document.getElementById(`import-scope-${scope}`);
     if (scopeRadio) scopeRadio.checked = true;
-    presetRadio?.dispatchEvent(new Event('change', { bubbles: true }));
+    (preset ? presetRadio : jsonRadio)?.dispatchEvent(new Event('change', { bubbles: true }));
     scopeRadio?.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
@@ -318,7 +319,9 @@
       } else {
         document.getElementById('theorem-import-input').value = prepared.text;
       }
-      clickLegacy(document.getElementById('load-import'));
+      if (!clickLegacy(document.getElementById('load-import'))) {
+        throw new Error('The theorem graph import action is unavailable.');
+      }
       await new Promise((resolve) => window.setTimeout(resolve, 0));
       assertLegacyImportSucceeded(config, kind);
       return;
@@ -654,7 +657,8 @@
         source: sourceSelect, catalog: catalogSelect, input: importInput, file, filename, apply, clear
       },
       importers: importerMap,
-      confirmReplace
+      confirmReplace,
+      onContextChange: custom.onContextChange
     });
 
     // Keep the common query/input surface and retained page-specific editors in
@@ -691,6 +695,14 @@
         if (kindSelect.value === 'preset') sourceSelect.value = 'catalog';
         else if (sourceSelect.value === 'catalog') sourceSelect.value = 'paste';
         sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      sourceSelect.addEventListener('change', () => {
+        const nextKind = sourceSelect.value === 'catalog'
+          ? 'preset'
+          : (kindSelect.value === 'preset' ? 'json-current' : kindSelect.value);
+        if (nextKind === kindSelect.value) return;
+        kindSelect.value = nextKind;
+        kindSelect.dispatchEvent(new Event('change', { bubbles: true }));
       });
     }
 
