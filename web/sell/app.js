@@ -6,27 +6,27 @@
 const SHOP_CONFIG = {
   wechatName: "XxxxXxxxx-Zzzz",
   products: [
-  {
-    id: "small-strainer",
-    image: "strainer.jpg",
-    price: 3,
-    name: { en: "Small strainer", zh: "小漏勺" },
-    description: {
-      en: "Small strainer, €3 each.",
-      zh: "小漏勺，3欧1个。"
-    }
-  },
+  // {
+  //   id: "small-strainer",
+  //   image: "strainer.jpg",
+  //   price: 3,
+  //   name: { en: "Small strainer", zh: "小漏勺" },
+  //   description: {
+  //     en: "Small strainer, €3 each.",
+  //     zh: "小漏勺，3欧1个。"
+  //   }
+  // },
 
-  {
-    id: "large-strainer",
-    image: "strainer.jpg",
-    price: 2,
-    name: { en: "Large strainer", zh: "大漏勺" },
-    description: {
-      en: "Large strainer, €2 each.",
-      zh: "大漏勺，2欧1个。"
-    }
-  },
+  // {
+  //   id: "large-strainer",
+  //   image: "strainer.jpg",
+  //   price: 2,
+  //   name: { en: "Large strainer", zh: "大漏勺" },
+  //   description: {
+  //     en: "Large strainer, €2 each.",
+  //     zh: "大漏勺，2欧1个。"
+  //   }
+  // },
 
   {
     id: "small-baking-tray",

@@ -13,6 +13,7 @@ const JSON_HEADERS = {
 
 const SUPPORTED_GAME_MODES = new Set([
   'billiards',
+  'hex',
   'gomoku',
   'go',
   'connect-four',
@@ -23,6 +24,7 @@ const SUPPORTED_GAME_MODES = new Set([
 
 const PLAYER_ROLES_BY_MODE = {
   billiards: ['player-1', 'player-2'],
+  hex: ['red', 'blue'],
   gomoku: ['black', 'white'],
   go: ['black', 'white'],
   'connect-four': ['red', 'yellow'],
@@ -567,6 +569,18 @@ export class GameRoom {
       return;
     }
 
+    if (this.room.gameMode === 'hex' && action.type === 'pie-swap') {
+      const red = this.room.roles && this.room.roles.red;
+      const blue = this.room.roles && this.room.roles.blue;
+      if (!red || !blue || red === blue) {
+        this.safeSend(ws, { type: 'rejected', error: 'Pie swap requires both Hex players to be assigned.', version: this.room.version, snapshot: this.room.snapshot });
+        return;
+      }
+      this.room.roles.red = blue;
+      this.room.roles.blue = red;
+      this.refreshSessionRoles();
+    }
+
     this.room.version += 1;
     this.room.snapshot = payload.snapshot;
     this.room.summary = sanitizeText(payload.summary, 220);
@@ -765,9 +779,25 @@ export class GameRoom {
       if (expected && actionRole !== expected) return `${expected} to move.`;
       return '';
     }
+    if (this.room.gameMode === 'hex' && action.type === 'pie-swap') {
+      const current = this.room.snapshot && typeof this.room.snapshot === 'object' ? this.room.snapshot : {};
+      if (!owned.includes('blue')) return 'blue to move.';
+      if (!current.pieRule || !current.pieAvailable || normalizeRole(current.turn) !== 'blue') {
+        return 'The Hex pie swap is unavailable.';
+      }
+      if (!nextSnapshot || nextSnapshot.pieSwapped !== true || nextSnapshot.pieAvailable || normalizeRole(nextSnapshot.turn) !== 'blue') {
+        return 'Pie swap must preserve the Blue turn and close the swap window.';
+      }
+      if (!sameHexTiles(current.tiles, nextSnapshot.tiles)) return 'Pie swap cannot change any Hex tiles.';
+      return '';
+    }
     if (goReviewActionType(action.type) && this.room.snapshot && this.room.snapshot.scoringReview) return '';
     const expected = normalizeRole(this.room.snapshot && this.room.snapshot.turn);
     if (expected && !owned.includes(expected)) return `${expected} to move.`;
+    if (this.room.gameMode === 'hex' && action.type === 'place') {
+      const actionRole = normalizeRole(action.role);
+      if (actionRole && actionRole !== expected) return `${expected} to move.`;
+    }
     return '';
   }
 
@@ -1006,10 +1036,47 @@ export function validateSnapshot(snapshot, gameMode, options = {}) {
     throw new Error('Online Billiards requires Competitive rules.');
   }
   if (gameMode === 'billiards' && options.initial) validateInitialBilliardsSnapshot(snapshot);
+  if (gameMode === 'hex') validateHexSnapshot(snapshot, options);
   if (gameMode === 'fide-chess') {
     const variant = String(snapshot.fideChessVariant || snapshot.chessVariant || snapshot.variant || '').toLowerCase();
     if (variant.includes('puzzle')) throw new Error('FIDE chess puzzle mode is not supported online.');
   }
+}
+
+function validateHexSnapshot(snapshot, options = {}) {
+  const phase = String(snapshot.phase || '').trim().toLowerCase();
+  if (!['setup', 'ready', 'gameover'].includes(phase)) throw new Error('Hex snapshot has an invalid phase.');
+  const turn = normalizeRole(snapshot.turn);
+  if (!['red', 'blue'].includes(turn)) throw new Error('Hex snapshot needs a red or blue turn.');
+  const tiles = Array.isArray(snapshot.tiles) ? snapshot.tiles : null;
+  if (!tiles) throw new Error('Hex snapshot needs a tile array.');
+  if (tiles.length > 4096) throw new Error('Hex snapshot has too many tiles.');
+  const ids = new Set();
+  const indices = new Set();
+  tiles.forEach((tile) => {
+    if (!tile || typeof tile !== 'object' || Array.isArray(tile)) throw new Error('Hex snapshot has an invalid tile.');
+    const id = Number(tile.id);
+    const index = Number(tile.index);
+    const color = normalizeRole(tile.color);
+    if (!Number.isInteger(id) || id < 1 || ids.has(id)) throw new Error('Hex tile ids must be unique positive integers.');
+    if (!Number.isInteger(index) || index < 0 || indices.has(index)) throw new Error('Hex tile indices must be unique nonnegative integers.');
+    if (!['red', 'blue'].includes(color)) throw new Error('Hex tiles must be red or blue.');
+    ids.add(id);
+    indices.add(index);
+  });
+  if (snapshot.pieRule != null && typeof snapshot.pieRule !== 'boolean') throw new Error('Hex pieRule must be boolean.');
+  if (snapshot.pieAvailable != null && typeof snapshot.pieAvailable !== 'boolean') throw new Error('Hex pieAvailable must be boolean.');
+  if (snapshot.pieSwapped != null && typeof snapshot.pieSwapped !== 'boolean') throw new Error('Hex pieSwapped must be boolean.');
+  if (snapshot.pieAvailable && (!snapshot.pieRule || snapshot.pieSwapped || tiles.length !== 1 || turn !== 'blue')) {
+    throw new Error('Hex pieAvailable is only valid immediately after Red’s first tile.');
+  }
+  if (options.initial && phase !== 'ready') throw new Error('Finish the Hex setup before creating an online room.');
+}
+
+function sameHexTiles(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  const signature = (tiles) => tiles.map((tile) => `${tile && tile.id}:${tile && tile.index}:${normalizeRole(tile && tile.color)}`).sort().join('|');
+  return signature(left) === signature(right);
 }
 
 function validateInitialBilliardsSnapshot(snapshot) {

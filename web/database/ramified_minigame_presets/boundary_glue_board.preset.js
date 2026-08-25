@@ -13,6 +13,12 @@
     size: '4x4',
     surface: 'torus',
     boundaryGlueBoard: true,
-    boundaryGlueMode: 'torus'
+    boundaryGlueMode: 'torus',
+    hex: {
+      homology: {
+        version: 1,
+        scheme: 'square-boundary-glue-v1'
+      }
+    }
   };
 });

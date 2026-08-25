@@ -977,6 +977,93 @@
     return { changed: true, state: next, message: 'pocket added' };
   }
 
+  // A non-mutating counterpart to the setup tools.  Both the minigame and
+  // Mosaic Calculator use this so their cursor feedback describes exactly the
+  // action that the native engine would perform.
+  function setupInteractionPreview(state, selection, tileIndex, position) {
+    const requested = selection && typeof selection === 'object' ? selection : { kind: selection };
+    const kind = String(requested && requested.kind || '').trim().toLowerCase();
+    const point = position && typeof position === 'object'
+      ? { x: Number(position.x) || 0, y: Number(position.y) || 0 }
+      : { x: 0, y: 0 };
+    const base = { tileIndex, position: point, valid: false, action: 'none', message: 'choose a point inside an existing tile' };
+    const tile = state && state.atlas && state.atlas.tiles && state.atlas.tiles[tileIndex];
+    if (!tile || tile.removed) return base;
+    if (kind === 'cue' || kind === 'target') {
+      const normalized = kind === 'cue'
+        ? { kind: 'cue' }
+        : { kind: 'target', number: Math.max(1, Math.floor(Number(requested.number) || 1)) };
+      const result = placeBall(state, normalized, tileIndex, point);
+      return {
+        ...base,
+        type: 'ball',
+        kind: normalized.kind,
+        number: normalized.kind === 'target' ? normalized.number : 0,
+        radius: state.ballRadius,
+        valid: !!result.changed,
+        action: result.changed ? 'place' : 'blocked',
+        message: result.message || base.message
+      };
+    }
+    if (kind === 'pocket') {
+      const vertex = nearestVertex(state.atlas, tileIndex, point);
+      const vertexClass = vertex && state.atlas.vertexClasses[vertex.classIndex];
+      if (!vertex || !vertexClass) return { ...base, type: 'pocket', message: 'choose a quotient vertex' };
+      const existing = activePocketAtClass(state, vertex.classIndex);
+      return {
+        ...base,
+        type: 'pocket',
+        valid: true,
+        action: existing ? 'remove' : 'add',
+        message: existing ? 'pocket removed' : 'pocket added',
+        classIndex: vertex.classIndex,
+        radius: existing ? existing.radius : state.pocketRadius,
+        vertex: { tileIndex: vertex.tileIndex, position: { ...vertex.point } },
+        incidences: vertexClass.incidences.map((incidence) => ({
+          tileIndex: incidence.tileIndex,
+          position: { ...incidence.point }
+        }))
+      };
+    }
+    if (kind === 'clear' || kind === 'erase') {
+      const hit = ballAtPoint(state, tileIndex, point);
+      if (hit && hit.ball) {
+        return {
+          ...base,
+          type: 'ball',
+          valid: true,
+          action: 'erase',
+          message: 'ball erased',
+          ballId: hit.ball.id,
+          kind: hit.ball.kind,
+          number: hit.ball.number,
+          radius: hit.ball.radius,
+          image: { tileIndex: hit.image.tileIndex, position: { ...hit.image.position } }
+        };
+      }
+      const vertex = nearestVertex(state.atlas, tileIndex, point);
+      const pocket = vertex && activePocketAtClass(state, vertex.classIndex);
+      if (vertex && pocket && vertex.distance <= state.pocketRadius * 1.5) {
+        const vertexClass = state.atlas.vertexClasses[vertex.classIndex];
+        return {
+          ...base,
+          type: 'pocket',
+          valid: true,
+          action: 'erase',
+          message: 'pocket erased',
+          classIndex: vertex.classIndex,
+          radius: pocket.radius,
+          incidences: (vertexClass && vertexClass.incidences || []).map((incidence) => ({
+            tileIndex: incidence.tileIndex,
+            position: { ...incidence.point }
+          }))
+        };
+      }
+      return { ...base, type: 'clear', message: 'nothing to erase here' };
+    }
+    return base;
+  }
+
   function rackRowCount(count) {
     const normalized = Math.max(0, Math.floor(Number(count) || 0));
     const rows = Math.floor((Math.sqrt(1 + (8 * normalized)) - 1) / 2);
@@ -1002,20 +1089,24 @@
   function rackLayout(count, center, direction, ballRadius) {
     const rows = rackRowCount(count);
     const normalizedDirection = normalizedRackDirection(direction, { x: 0, y: 1 });
-    const spacing = ballRadius * 2.04;
+    // Centres in a billiards rack form a triangular lattice, not a square
+    // grid.  The minute gap prevents the strict collision test from reading
+    // the picture-perfect rack as overlapping balls.
+    const spacing = ballRadius * 2 * 1.005;
+    const rowSpacing = spacing * Math.sqrt(3) / 2;
     const centroidOffset = (2 * (rows - 1)) / 3;
-    const apex = M.sub2(center, M.scale2(normalizedDirection, spacing * centroidOffset));
+    const apex = M.sub2(center, M.scale2(normalizedDirection, rowSpacing * centroidOffset));
     const across = { x: -normalizedDirection.y, y: normalizedDirection.x };
     const positions = [];
     for (let row = 0; row < rows; row += 1) {
       for (let column = 0; column <= row; column += 1) {
         positions.push(M.add2(apex, M.add2(
-          M.scale2(normalizedDirection, spacing * row),
+          M.scale2(normalizedDirection, rowSpacing * row),
           M.scale2(across, spacing * (column - (row / 2)))
         )));
       }
     }
-    return { rows, direction: normalizedDirection, positions };
+    return { rows, direction: normalizedDirection, spacing, rowSpacing, positions };
   }
 
   function rackPreviewEntries(state, count, tileIndex, center, direction) {
@@ -1998,23 +2089,103 @@
     ctx.restore();
   }
 
+  function setupHoverColor(hover) {
+    if (!hover || hover.valid === false) return '#b23a48';
+    if (hover.action === 'remove' || hover.action === 'erase') return '#c47f17';
+    return '#1f7a8c';
+  }
+
+  function drawSetupHoverCircle(ctx, geometry, state, tileIndex, position, radius, color) {
+    const point = localToCanvas(tileIndex, position, geometry, state.atlas);
+    if (!point) return null;
+    const scale = state.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
+    ctx.save();
+    if (clipToTile(ctx, geometry, state, tileIndex)) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(2, scale * 0.026);
+      ctx.setLineDash([Math.max(4, scale * 0.10), Math.max(3, scale * 0.075)]);
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, Math.max(2, radius * scale), 0, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
+    return point;
+  }
+
+  function drawSetupHoverLabel(ctx, point, label, color) {
+    if (!point || !label) return;
+    const text = String(label);
+    ctx.save();
+    ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
+    const width = Math.ceil(ctx.measureText(text).width) + 14;
+    const x = point.x + 10;
+    const y = point.y - 28;
+    ctx.fillStyle = 'rgba(255,253,248,0.94)';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.rect(x, y, width, 22);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#202326';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + 7, y + 11.5);
+    ctx.restore();
+  }
+
+  function drawSetupHover(ctx, geometry, state, hover) {
+    if (!hover || !Number.isInteger(hover.tileIndex)) return;
+    const color = setupHoverColor(hover);
+    const radius = Number(hover.radius) || state.ballRadius;
+    let labelPoint = null;
+    if (hover.type === 'pocket' && Array.isArray(hover.incidences) && hover.incidences.length) {
+      hover.incidences.forEach((incidence) => {
+        const point = drawSetupHoverCircle(ctx, geometry, state, incidence.tileIndex, incidence.position, radius, color);
+        if (!labelPoint) labelPoint = point;
+      });
+    } else {
+      const point = hover.image || hover.vertex || hover;
+      const targetTile = Number.isInteger(point.tileIndex) ? point.tileIndex : hover.tileIndex;
+      const targetPosition = point.position && typeof point.position === 'object' ? point.position : hover.position;
+      if (targetPosition) labelPoint = drawSetupHoverCircle(ctx, geometry, state, targetTile, targetPosition, radius, color);
+    }
+    drawSetupHoverLabel(ctx, labelPoint, hover.label, color);
+  }
+
+  function drawCuePrompt(ctx, geometry, state, view) {
+    if (!view || !view.cuePrompt || state.phase !== 'ready') return;
+    const cue = state.balls.find((ball) => ball.active && ball.kind === 'cue');
+    if (!cue) return;
+    const scale = state.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
+    const time = Number.isFinite(Number(view.pulseTime)) ? Number(view.pulseTime) : 0;
+    const wave = (Math.sin(time / 340) + 1) * 0.5;
+    const radius = cue.radius * scale * (1.30 + wave * 0.34);
+    let labelPoint = null;
+    nearbyImages(cue, state.atlas, {
+      padding: cue.radius * 1.8,
+      maxDepth: state.deterministic.parameters.localCoverDepth,
+      onlyIntersecting: true
+    }).forEach((image) => {
+      const center = localToCanvas(image.tileIndex, image.position, geometry, state.atlas);
+      if (!center) return;
+      if (!labelPoint) labelPoint = center;
+      ctx.save();
+      if (clipToTile(ctx, geometry, state, image.tileIndex)) {
+        ctx.strokeStyle = `rgba(244, 207, 89, ${0.40 + wave * 0.42})`;
+        ctx.lineWidth = Math.max(2, scale * 0.035);
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, radius, 0, TAU);
+        ctx.stroke();
+      }
+      ctx.restore();
+    });
+    drawSetupHoverLabel(ctx, labelPoint, view.cueHintLabel, '#c49b24');
+  }
+
   function render(ctx, geometry, state, view = {}) {
     if (!ctx || !geometry || !state) return;
     drawPocketWedges(ctx, geometry, state);
-    if (view.setupHover && Number.isInteger(view.setupHover.tileIndex)) {
-      const point = localToCanvas(view.setupHover.tileIndex, view.setupHover.position, geometry, state.atlas);
-      if (point) {
-        const scale = state.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
-        ctx.save();
-        ctx.strokeStyle = view.setupHover.valid === false ? '#b23a48' : '#1f7a8c';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 4]);
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, state.ballRadius * scale, 0, TAU);
-        ctx.stroke();
-        ctx.restore();
-      }
-    }
+    if (view.setupHover && Number.isInteger(view.setupHover.tileIndex)) drawSetupHover(ctx, geometry, state, view.setupHover);
     if (view.rackPreview && Number.isInteger(view.rackPreview.tileIndex)) {
       const preview = view.rackPreview;
       const entries = rackPreviewEntries(state, preview.count, preview.tileIndex, preview.center, preview.direction);
@@ -2048,6 +2219,7 @@
       }
       ctx.restore();
     }
+    drawCuePrompt(ctx, geometry, state, view);
     drawAim(ctx, geometry, state, view);
     const renderer = typeof window !== 'undefined' ? window.TopologicalBilliardsRenderer : null;
     state.balls.filter((ball) => ball.active).forEach((ball) => {
@@ -2118,6 +2290,7 @@
     placeRack,
     placeCueBallInHand,
     placementIssue,
+    rackLayout,
     pocketExport,
     presetBlockFromState,
     render,
@@ -2128,6 +2301,7 @@
     setupIssue,
     stateExport,
     stateFromExport,
+    setupInteractionPreview,
     shotSimulationResult,
     traceAim,
     togglePocket,

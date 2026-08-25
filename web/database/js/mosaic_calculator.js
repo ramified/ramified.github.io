@@ -11,6 +11,20 @@
     }
     return null;
   })();
+  const TopologicalHex = (() => {
+    if (typeof globalThis !== 'undefined' && globalThis.TopologicalHex) return globalThis.TopologicalHex;
+    if (typeof module !== 'undefined' && module.exports && typeof require === 'function') {
+      try { return require('./hex_homology_game.js'); } catch (_) { return null; }
+    }
+    return null;
+  })();
+  const Billiards = (() => {
+    if (typeof globalThis !== 'undefined' && globalThis.TopologicalBilliardsNative) return globalThis.TopologicalBilliardsNative;
+    if (typeof module !== 'undefined' && module.exports && typeof require === 'function') {
+      try { return require('./billiards/topological_billiards_native.js'); } catch (_) { return null; }
+    }
+    return null;
+  })();
 
   const LATTICES = {
     hexagonal: {
@@ -98,7 +112,7 @@
     DSL: 'dsl',
     VERBOSE: 'verbose'
   };
-  const EXPORT_GROUP_FALLBACKS = ['2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Sokoban', 'FIDE Chess'];
+  const EXPORT_GROUP_FALLBACKS = ['2048', 'Hex (Nash)', 'Tile Matching', 'Billiard', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Sokoban', 'FIDE Chess'];
   const KNOT_PRESETS = [
     {
       id: 'hopf-link',
@@ -795,6 +809,8 @@
   const SOKOBAN_DECORATION_ORDER = ['sea', 'targets', 'ice', 'energyBridges', 'walls', 'boxes', 'players'];
   const SOKOBAN_OBJECT_SCALE_DEFAULT = 0.70;
   const SOKOBAN_ENERGY_GLOW_DEFAULT = { inner: 0.55, outer: 0.82, blur: 0.38 };
+  const BILLIARDS_RACK_COUNTS = [6, 10, 15];
+  const BILLIARDS_BALL_NUMBERS = Array.from({ length: 15 }, (_, index) => index + 1);
 
   const state = {
     rows: 5,
@@ -808,6 +824,12 @@
     cutEdges: new Set(),
     gluedEdges: [],
     inputHoles: new Set(),
+    lianliankanEmpty: new Set(),
+    hexSeeds: new Map(),
+    hexHomology: null,
+    billiards: createEmptyBilliardsDecorations(),
+    billiardsRack: null,
+    billiardsHover: null,
     presetPieces: [],
     sokoban: createEmptySokobanDecorations(),
     pendingGlueEdge: null,
@@ -1198,6 +1220,8 @@
     refs.exportType = document.getElementById('export-type');
     refs.exportFormat = document.getElementById('export-format');
     refs.exportFormatRow = document.getElementById('export-format-row');
+    refs.exportPrecomputedGameData = document.getElementById('export-precomputed-game-data');
+    refs.exportPrecomputedGameDataRow = document.getElementById('export-precomputed-game-data-row');
     refs.exportPresetMetaRow = document.getElementById('export-preset-meta-row');
     refs.exportPresetId = document.getElementById('export-preset-id');
     refs.exportPresetLabel = document.getElementById('export-preset-label');
@@ -1568,6 +1592,9 @@
         syncExportControls();
         refreshExport();
       });
+    }
+    if (refs.exportPrecomputedGameData) {
+      refs.exportPrecomputedGameData.addEventListener('change', () => refreshExport({ fillPresetDefaults: false }));
     }
     [refs.exportPresetLabel, refs.exportPresetId].forEach((input) => {
       if (!input) return;
@@ -2229,6 +2256,21 @@
     return [
       { id: 'clear', kind: 'clear', label: 'clear decoration' },
       { id: 'input-hole', kind: 'input-hole', label: 'input hole' },
+      { id: 'lianliankan-empty', kind: 'lianliankan-empty', label: 'Tile Matching empty cell' },
+      { id: 'hex-red-seed', kind: 'hex-red-seed', label: 'Hex Red seed' },
+      { id: 'hex-blue-seed', kind: 'hex-blue-seed', label: 'Hex Blue seed' },
+      { id: 'billiards-cue', kind: 'billiards-cue', label: 'Billiards cue ball' },
+      { id: 'billiards-pocket', kind: 'billiards-pocket', label: 'Billiards pocket' },
+      ...BILLIARDS_RACK_COUNTS.map((count) => ({
+        id: `billiards-rack-${count}`,
+        kind: `billiards-rack-${count}`,
+        label: `Billiards ${count}-ball rack`
+      })),
+      ...BILLIARDS_BALL_NUMBERS.map((number) => ({
+        id: `billiards-ball-${number}`,
+        kind: `billiards-ball-${number}`,
+        label: `Billiards ball ${number}`
+      })),
       { id: 'start', kind: 'start', label: 'start piece' },
       { id: 'target', kind: 'target', label: 'goal' },
       { id: 'sokoban-player', kind: 'sokoban-player', label: 'Sokoban player' },
@@ -2266,6 +2308,11 @@
 
   function selectDecorationPaletteEntry(entry) {
     const kind = normalizeBackgroundDecorationKind(entry && entry.kind);
+    const billiards = billiardsDecorationDescriptor(kind);
+    if (!billiards || billiards.kind !== 'rack' || !state.billiardsRack || state.billiardsRack.count !== billiards.count) {
+      state.billiardsRack = null;
+    }
+    state.billiardsHover = null;
     state.backgroundDecorationKind = kind;
     state.selectedDecorationPaletteId = kind;
     if (refs.backgroundDecorationKind) refs.backgroundDecorationKind.value = kind;
@@ -2358,6 +2405,9 @@
         startDecorationDragGhost(moveEvent.clientX, moveEvent.clientY, kind, event.currentTarget);
       }
       moveTileDragGhost(moveEvent.clientX, moveEvent.clientY);
+      if (billiardsDecorationDescriptor(kind)) {
+        updateBilliardsDecorationHover(moveEvent.clientX, moveEvent.clientY);
+      }
       updateDragPreview(moveEvent.clientX, moveEvent.clientY);
     };
     const onUp = (upEvent) => {
@@ -2367,7 +2417,12 @@
       window.removeEventListener('pointercancel', onUp);
       if (state.drag && state.drag.active && isOverCanvas(upEvent.clientX, upEvent.clientY)) {
         const hit = hitTest(upEvent.clientX, upEvent.clientY, { includeRemoved: true });
-        if (hit >= 0) toggleBackgroundDecoration(hit);
+        if (hit >= 0) {
+          toggleBackgroundDecoration(hit, {
+            clientX: upEvent.clientX,
+            clientY: upEvent.clientY
+          });
+        }
       }
       clearEditorDrag();
     };
@@ -2581,7 +2636,7 @@
     refs.canvas.addEventListener('pointerup', handlePointerUp);
     refs.canvas.addEventListener('pointercancel', clearPointerState);
     refs.canvas.addEventListener('wheel', handleWheel, { passive: false });
-    refs.canvas.addEventListener('dblclick', handleVertexDecorationDoubleClick);
+    refs.canvas.addEventListener('dblclick', handleCanvasDoubleClick);
     refs.canvas.addEventListener('contextmenu', (event) => {
       event.preventDefault();
       if (isDecorationMode()) {
@@ -2618,6 +2673,7 @@
       state.decorationHoverHit = null;
       state.backgroundHoverEdge = null;
       state.backgroundHoverCusp = null;
+      state.billiardsHover = null;
       if (state.backgroundBilliard) state.backgroundBilliard.aimPoint = null;
       syncMainCanvasCursor();
       draw(analyze());
@@ -2636,6 +2692,9 @@
       if (state.inputMode === 'background') {
         const debugChanged = clearDrawDebugHit(false);
         const isBilliard = isBackgroundBilliardAction();
+        const billiardsHoverChanged = isBackgroundDecorationAction()
+          ? updateBilliardsDecorationHover(event.clientX, event.clientY)
+          : !!state.billiardsHover && (state.billiardsHover = null, true);
         const cusp = isBilliard ? null : backgroundCuspHitTest(event.clientX, event.clientY);
         const edge = !isBilliard && isBackgroundBoundaryAction()
           ? backgroundEdgeHitTest(event.clientX, event.clientY)
@@ -2646,7 +2705,7 @@
         const aimChanged = isBilliard ? updateBackgroundBilliardAim(event.clientX, event.clientY, false) : false;
         const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
         const cuspChanged = !sameBackgroundCuspHit(cusp, state.backgroundHoverCusp);
-        if (hit !== state.hoverIndex || edgeChanged || cuspChanged || state.decorationHoverHit || debugChanged || aimChanged) {
+        if (hit !== state.hoverIndex || edgeChanged || cuspChanged || state.decorationHoverHit || debugChanged || aimChanged || billiardsHoverChanged) {
           state.hoverIndex = hit;
           state.backgroundHoverEdge = edge;
           state.backgroundHoverCusp = cusp;
@@ -2795,6 +2854,12 @@
     state.cutEdges = new Set();
     state.gluedEdges = [];
     state.inputHoles = new Set();
+    state.lianliankanEmpty = new Set();
+    state.hexSeeds = new Map();
+    state.hexHomology = null;
+    state.billiards = createEmptyBilliardsDecorations();
+    state.billiardsRack = null;
+    state.billiardsHover = null;
     state.presetPieces = [];
     state.sokoban = createEmptySokobanDecorations();
     clearPendingGlueEdge();
@@ -2855,6 +2920,9 @@
     const oldCutEdges = cloneCutEdgeSet();
     const oldGluedEdges = cloneGluedEdges();
     const oldInputHoles = cloneInputHoleSet();
+    const oldLianliankanEmpty = cloneLianliankanEmptySet();
+    const oldHexSeeds = cloneHexSeeds();
+    const oldBilliards = cloneBilliardsDecorations();
     const oldPresetPieces = clonePresetPieces();
     const oldSokoban = cloneSokobanDecorations();
     const oldBoundaryMode = state.boundaryMode;
@@ -2900,12 +2968,21 @@
       ? []
       : reshapeGluedEdges(oldGluedEdges, oldRows, oldCols, rows, cols);
     state.inputHoles = reshapeRemovedTiles(oldInputHoles, oldRows, oldCols, rows, cols);
+    state.lianliankanEmpty = reshapeRemovedTiles(oldLianliankanEmpty, oldRows, oldCols, rows, cols);
+    state.hexSeeds = reshapeHexSeeds(oldHexSeeds, oldRows, oldCols, rows, cols);
+    state.hexHomology = null;
+    state.billiards = reshapeBilliardsDecorations(oldBilliards, oldRows, oldCols, rows, cols);
+    state.billiardsRack = null;
+    state.billiardsHover = null;
     state.presetPieces = reshapePresetPieces(oldPresetPieces, oldRows, oldCols, rows, cols);
     state.sokoban = reshapeSokobanDecorations(oldSokoban, oldRows, oldCols, rows, cols);
     clearPendingGlueEdge();
     pruneCutEdges();
     pruneGluedEdges();
     pruneInputHoles();
+    pruneLianliankanEmptyCells();
+    pruneHexSeeds();
+    pruneBilliardsDecorations();
     prunePresetPieces();
     pruneSokobanDecorations();
     state.standardDualGraphInput = null;
@@ -3061,24 +3138,25 @@
       return;
     }
 
-    let payload;
+    let prepared;
     try {
-      payload = JSON.parse(text);
-    } catch (_) {
-      refs.statusLine.textContent = 'mosaic data is not valid JSON';
+      prepared = prepareExportImportText(text);
+    } catch (error) {
+      refs.statusLine.textContent = error && error.message ? error.message : 'mosaic data is not valid JSON or preset JS';
       refs.statusLine.classList.add('mosaic-status-bad');
       return;
     }
 
     try {
-      const graphPayload = standardDualGraphInputFromPayload(payload);
+      const graphPayload = standardDualGraphInputFromPayload(prepared.payload);
       if (graphPayload.isValid) {
         applyImportedStandardDualGraph(graphPayload.graph);
         refs.statusLine.textContent = 'dual graph generated';
         refs.statusLine.classList.remove('mosaic-status-bad');
         return;
       }
-      applyImportedMosaic(payload);
+      applyImportedMosaic(prepared.normalizedPayload);
+      syncExportImportMetadata(prepared.payload, prepared.metadata, prepared.sourceKind);
       refs.statusLine.textContent = 'mosaic generated';
       refs.statusLine.classList.remove('mosaic-status-bad');
     } catch (error) {
@@ -3187,6 +3265,9 @@
     const pieces = presetPiecesForExport();
     const pieceSets = pieceSetsForExport();
     const sokoban = sokobanDecorationsForExport();
+    const lianliankan = lianliankanDecorationsForExport();
+    const hex = hexDecorationsForExport();
+    const billiards = billiardsDecorationsForExport();
     if (holes.length) {
       payload.preset.connectFourHoles = holes;
       payload.preset.inputHoles = holes;
@@ -3194,6 +3275,9 @@
     if (pieceSets) payload.preset.pieceSets = pieceSets;
     if (pieces.length) payload.preset.pieces = pieces;
     if (sokoban) payload.preset.sokoban = sokoban;
+    if (lianliankan) payload.preset.lianliankan = lianliankan;
+    if (hex) payload.preset.hex = hex;
+    if (billiards) payload.preset.billiards = billiards;
     return payload;
   }
 
@@ -3202,6 +3286,9 @@
     const pieceSets = pieceSetsForExport();
     const pieces = presetPiecesForExport();
     const sokoban = sokobanDecorationsForExport();
+    const lianliankan = lianliankanDecorationsForExport();
+    const hex = hexDecorationsForExport();
+    const billiards = billiardsDecorationsForExport();
     return {
       id: metadata.id,
       label: metadata.label,
@@ -3216,7 +3303,10 @@
       gluedEdges: minigameGluedEdgesForExport(),
       ...(pieceSets ? { pieceSets } : {}),
       ...(pieces.length ? { pieces } : {}),
-      ...(sokoban ? { sokoban } : {})
+      ...(sokoban ? { sokoban } : {}),
+      ...(lianliankan ? { lianliankan } : {}),
+      ...(hex ? { hex } : {}),
+      ...(billiards ? { billiards } : {})
     };
   }
 
@@ -3238,12 +3328,18 @@
     const pieces = presetPiecesForExport();
     const pieceSets = pieceSetsForExport();
     const sokoban = compactSokobanDecorationsForExport();
+    const lianliankan = lianliankanDecorationsForExport();
+    const hex = hexDecorationsForExport();
+    const billiards = billiardsDecorationsForExport();
     if (removed) compact.removed = removed;
     if (cuts) compact.cuts = cuts;
     if (glue) compact.glue = glue;
     if (holes) compact.holes = holes;
     if (pieceSets) compact.pieceSets = pieceSets;
     if (sokoban) compact.sokoban = sokoban;
+    if (lianliankan) compact.lianliankan = lianliankan;
+    if (hex) compact.hex = hex;
+    if (billiards) compact.billiards = billiards;
     if (options.includePieces !== false && pieces.length) compact.pieces = pieces;
     return compact;
   }
@@ -3409,6 +3505,12 @@
       ? importGluedEdges(options, rows, cols)
       : (oldLattice === latticeName ? reshapeGluedEdges(oldGluedEdges, oldRows, oldCols, rows, cols) : []);
     state.inputHoles = new Set();
+    state.lianliankanEmpty = new Set();
+    state.hexSeeds = new Map();
+    state.hexHomology = null;
+    state.billiards = createEmptyBilliardsDecorations();
+    state.billiardsRack = null;
+    state.billiardsHover = null;
     state.presetPieces = [];
     state.sokoban = createEmptySokobanDecorations();
     state.wrappedViewMode = 'periodic';
@@ -3977,6 +4079,10 @@
     const oldCutEdges = cloneCutEdgeSet();
     const oldGluedEdges = cloneGluedEdges();
     const oldSokoban = cloneSokobanDecorations();
+    const oldLianliankanEmpty = cloneLianliankanEmptySet();
+    const oldHexSeeds = cloneHexSeeds();
+    const oldHexHomology = state.hexHomology;
+    const oldBilliards = cloneBilliardsDecorations();
     const rows = clampInt(payload.rows, MIN_BOARD, MAX_BOARD, state.rows);
     const cols = clampInt(payload.cols, MIN_BOARD, MAX_BOARD, state.cols);
     const latticeName = LATTICES[payload.lattice] ? payload.lattice : state.lattice;
@@ -4102,6 +4208,21 @@
     state.inputHoles = hasImportedInputHoles(payload)
       ? importInputHoles(payload, rows, cols)
       : reshapeRemovedTiles(cloneInputHoleSet(), oldRows, oldCols, rows, cols);
+    state.lianliankanEmpty = hasImportedGameBlock(payload, 'lianliankan')
+      ? importLianliankanEmptyCells(payload, rows, cols)
+      : reshapeRemovedTiles(oldLianliankanEmpty, oldRows, oldCols, rows, cols);
+    state.hexSeeds = hasImportedGameBlock(payload, 'hex')
+      ? importHexSeeds(payload, rows, cols)
+      : reshapeHexSeeds(oldHexSeeds, oldRows, oldCols, rows, cols);
+    state.hexHomology = hasImportedGameBlock(payload, 'hex')
+      ? importHexHomology(payload)
+      : oldHexHomology;
+    if (refs.exportPrecomputedGameData && state.hexHomology) refs.exportPrecomputedGameData.checked = true;
+    state.billiards = hasImportedGameBlock(payload, 'billiards')
+      ? importBilliardsDecorations(payload, rows, cols)
+      : reshapeBilliardsDecorations(oldBilliards, oldRows, oldCols, rows, cols);
+    state.billiardsRack = null;
+    state.billiardsHover = null;
     state.presetPieces = hasImportedPresetPieces(payload)
       ? importPresetPieces(payload, rows, cols)
       : reshapePresetPieces(clonePresetPieces(), oldRows, oldCols, rows, cols);
@@ -4114,6 +4235,9 @@
     pruneCutEdges();
     pruneGluedEdges();
     pruneInputHoles();
+    pruneLianliankanEmptyCells();
+    pruneHexSeeds();
+    pruneBilliardsDecorations();
     prunePresetPieces();
     pruneSokobanDecorations();
 
@@ -4187,6 +4311,101 @@
         if (index >= 0) holes.add(index);
       });
     return holes;
+  }
+
+  function importedGameBlock(payload, key) {
+    if (!payload || typeof payload !== 'object') return null;
+    const containers = [payload, payload.preset, payload.backgroundSpace]
+      .filter((entry) => entry && typeof entry === 'object' && !Array.isArray(entry));
+    for (const container of containers) {
+      if (container[key] && typeof container[key] === 'object' && !Array.isArray(container[key])) return container[key];
+    }
+    return null;
+  }
+
+  function importLianliankanEmptyCells(payload, rows, cols) {
+    const block = importedGameBlock(payload, 'lianliankan');
+    const values = block && Array.isArray(block.initiallyEmpty) ? block.initiallyEmpty : [];
+    const empty = new Set();
+    values.forEach((entry) => {
+      const index = importedEndpointIndex(entry, rows, cols);
+      if (index >= 0) empty.add(index);
+    });
+    return empty;
+  }
+
+  function importHexSeeds(payload, rows, cols) {
+    const block = importedGameBlock(payload, 'hex');
+    const values = block && Array.isArray(block.seeds) ? block.seeds : [];
+    const seeds = new Map();
+    values.forEach((entry) => {
+      const index = importedEndpointIndex(entry, rows, cols);
+      const color = String(entry && entry.color || '').trim().toLowerCase();
+      if (index >= 0 && (color === 'red' || color === 'blue') && !seeds.has(index)) seeds.set(index, color);
+    });
+    return seeds;
+  }
+
+  function importHexHomology(payload) {
+    const block = importedGameBlock(payload, 'hex');
+    const homology = block && block.homology;
+    if (!homology || typeof homology !== 'object' || Array.isArray(homology)) return null;
+    try { return JSON.parse(JSON.stringify(homology)); } catch (_) { return null; }
+  }
+
+  function importBilliardsDecorations(payload, rows, cols) {
+    const block = importedGameBlock(payload, 'billiards');
+    const decorations = createEmptyBilliardsDecorations();
+    if (!block) return decorations;
+    const settings = { ...block };
+    delete settings.balls;
+    delete settings.pockets;
+    decorations.settings = settings;
+    decorations.balls = Array.isArray(block.balls)
+      ? block.balls.map((ball) => normalizeBilliardsBallDecoration(ball, rows, cols)).filter(Boolean)
+      : [];
+    if (Object.prototype.hasOwnProperty.call(block, 'pockets')) {
+      decorations.pocketsExplicit = true;
+      decorations.pockets = Array.isArray(block.pockets)
+        ? block.pockets.map((pocket, index) => normalizeBilliardsPocketDecoration(pocket, rows, cols, index)).filter(Boolean)
+        : [];
+    }
+    return decorations;
+  }
+
+  function normalizeBilliardsBallDecoration(source, rows = state.rows, cols = state.cols) {
+    if (!source || typeof source !== 'object') return null;
+    const at = source.at && typeof source.at === 'object' ? source.at : source;
+    const index = importedEndpointIndex(at, rows, cols);
+    if (index < 0) return null;
+    const row = Math.floor(index / cols) + 1;
+    const col = (index % cols) + 1;
+    const kind = String(source.kind || source.id || '').toLowerCase() === 'cue' ? 'cue' : 'target';
+    const number = kind === 'target' ? Math.max(1, Math.floor(Number(source.number) || 1)) : 0;
+    return {
+      id: String(source.id || (kind === 'cue' ? 'cue' : number)),
+      kind,
+      ...(kind === 'target' ? { number } : {}),
+      at: {
+        row,
+        col,
+        x: Number.isFinite(Number(at.x)) ? Number(at.x) : 0,
+        y: Number.isFinite(Number(at.y)) ? Number(at.y) : 0
+      }
+    };
+  }
+
+  function normalizeBilliardsPocketDecoration(source, rows = state.rows, cols = state.cols, ordinal = 0) {
+    if (!source || typeof source !== 'object') return null;
+    if (Number.isInteger(Number(source.classIndex))) {
+      return { id: String(source.id || `p${ordinal + 1}`), classIndex: Number(source.classIndex) };
+    }
+    const vertex = source.vertex && typeof source.vertex === 'object' ? source.vertex : source;
+    const index = importedEndpointIndex(vertex, rows, cols);
+    if (index < 0 || vertex.corner == null) return null;
+    const row = Math.floor(index / cols) + 1;
+    const col = (index % cols) + 1;
+    return { id: String(source.id || `p${ordinal + 1}`), vertex: { row, col, corner: vertex.corner } };
   }
 
   function importPresetPieces(payload, rows, cols) {
@@ -4563,6 +4782,10 @@
     return hasImportedPresetValue(payload, ['inputHoles', 'connectFourHoles', 'holes']);
   }
 
+  function hasImportedGameBlock(payload, key) {
+    return !!importedGameBlock(payload, key);
+  }
+
   function hasImportedPresetPieces(payload) {
     return hasImportedPresetValue(payload, ['pieceSets', 'pieces']);
   }
@@ -4825,6 +5048,12 @@
     state.cutEdges = new Set();
     state.gluedEdges = [];
     state.inputHoles = new Set();
+    state.lianliankanEmpty = new Set();
+    state.hexSeeds = new Map();
+    state.hexHomology = null;
+    state.billiards = createEmptyBilliardsDecorations();
+    state.billiardsRack = null;
+    state.billiardsHover = null;
     state.presetPieces = [];
     state.sokoban = createEmptySokobanDecorations();
     clearPendingGlueEdge();
@@ -5051,6 +5280,34 @@
     return true;
   }
 
+  function eraseBilliardsBallAtClientPoint(clientX, clientY) {
+    const nativeState = currentBilliardsEditorState();
+    const local = billiardsLocalAtClientPoint(clientX, clientY, nativeState);
+    if (!nativeState || !local) return false;
+    const ball = Billiards.ballAtPoint(nativeState, local.tileIndex, local.position);
+    if (!ball || !ball.ball) return false;
+    const result = Billiards.eraseAt(nativeState, local.tileIndex, local.position);
+    if (!result.changed) return false;
+    saveBilliardsBallsFromNative(result.state);
+    return true;
+  }
+
+  function handleBilliardsDecorationDoubleClick(event) {
+    if (!isBackgroundDecorationAction()) return false;
+    if (!eraseBilliardsBallAtClientPoint(event.clientX, event.clientY)) return false;
+    event.preventDefault();
+    clearEditorDrag();
+    state.billiardsHover = null;
+    state.edits += 1;
+    updateReport(false);
+    return true;
+  }
+
+  function handleCanvasDoubleClick(event) {
+    if (handleBilliardsDecorationDoubleClick(event)) return true;
+    return handleVertexDecorationDoubleClick(event);
+  }
+
   function pruneVertexDecorations() {
     Object.keys(state.vertexDecorations).forEach((key) => {
       const index = Number(key);
@@ -5234,6 +5491,232 @@
 
   function cloneInputHoleSet() {
     return state.inputHoles instanceof Set ? new Set(state.inputHoles) : new Set();
+  }
+
+  function createEmptyBilliardsDecorations() {
+    return {
+      balls: [],
+      pockets: [],
+      pocketsExplicit: false,
+      settings: {}
+    };
+  }
+
+  function cloneLianliankanEmptySet(source = state.lianliankanEmpty) {
+    return source instanceof Set ? new Set(source) : new Set();
+  }
+
+  function cloneHexSeeds(source = state.hexSeeds) {
+    return source instanceof Map ? new Map(source) : new Map();
+  }
+
+  function cloneBilliardsDecorations(source = state.billiards) {
+    const result = createEmptyBilliardsDecorations();
+    if (!source || typeof source !== 'object') return result;
+    result.balls = Array.isArray(source.balls) ? source.balls.map((ball) => JSON.parse(JSON.stringify(ball))) : [];
+    result.pockets = Array.isArray(source.pockets) ? source.pockets.map((pocket) => JSON.parse(JSON.stringify(pocket))) : [];
+    result.pocketsExplicit = !!source.pocketsExplicit;
+    result.settings = source.settings && typeof source.settings === 'object' ? JSON.parse(JSON.stringify(source.settings)) : {};
+    return result;
+  }
+
+  function billiardsPresetBlockForExport(source = state.billiards) {
+    const decorations = cloneBilliardsDecorations(source);
+    const block = { ...decorations.settings };
+    if (decorations.balls.length) block.balls = decorations.balls.map((ball) => JSON.parse(JSON.stringify(ball)));
+    if (decorations.pocketsExplicit) block.pockets = decorations.pockets.map((pocket) => JSON.parse(JSON.stringify(pocket)));
+    return block;
+  }
+
+  function billiardsDecorationsPresent(source = state.billiards) {
+    const decorations = source && typeof source === 'object' ? source : createEmptyBilliardsDecorations();
+    return !!(
+      (Array.isArray(decorations.balls) && decorations.balls.length)
+      || decorations.pocketsExplicit
+      || (decorations.settings && Object.keys(decorations.settings).length)
+    );
+  }
+
+  function currentBilliardsPreset() {
+    return {
+      lattice: state.lattice,
+      rows: state.rows,
+      cols: state.cols,
+      removedTiles: minigameRemovedRefsForExport(),
+      cutEdges: minigameCutEdgesForExport(),
+      gluedEdges: minigameGluedEdgesForExport(),
+      billiards: billiardsPresetBlockForExport()
+    };
+  }
+
+  function billiardsEditorGeometry() {
+    return geometry ? { ...geometry, size: geometry.radius * 2 } : null;
+  }
+
+  function currentBilliardsEditorState() {
+    // Atlas construction is entirely topological; a canvas geometry is only
+    // needed when converting a pointer to a local point.  Keeping this usable
+    // without a rendered board lets import/export and resize pruning canonicalize
+    // balls and quotient-vertex pockets as well.
+    if (!Billiards) return null;
+    try { return Billiards.createState(currentBilliardsPreset()); } catch (_) { return null; }
+  }
+
+  function billiardsRenderStateForDecoration(nativeState) {
+    if (!nativeState || state.billiards.pocketsExplicit) return nativeState;
+    // Native states supply default pockets when no explicit list is exported.
+    // In the editor they remain an invisible suggested setup until the Pocket
+    // swatch materializes them, so the click has a clear visual effect.
+    return { ...nativeState, pockets: [] };
+  }
+
+  function billiardsLocalAtClientPoint(clientX, clientY, nativeState = currentBilliardsEditorState()) {
+    if (!nativeState || !Billiards || !geometry) return null;
+    return Billiards.canvasToLocal(clientPointToBoardPoint(clientX, clientY), billiardsEditorGeometry(), nativeState.atlas);
+  }
+
+  function billiardsHoverLabel(preview, descriptor, materializesDefaults = false) {
+    if (!preview) return '';
+    if (materializesDefaults) return 'click to materialize default pockets';
+    if (!preview.valid) return `cannot: ${preview.message || 'invalid position'}`;
+    if (preview.action === 'remove') return 'click to remove pocket';
+    if (preview.action === 'erase') return preview.type === 'pocket' ? 'click to erase pocket' : 'click to erase ball';
+    if (preview.action === 'move') return 'drop to move';
+    if (preview.type === 'pocket') return 'click to add pocket';
+    if (descriptor && descriptor.kind === 'cue') return 'click to place cue ball';
+    if (descriptor && descriptor.kind === 'target') return `click to place ball ${descriptor.number}`;
+    return preview.message || '';
+  }
+
+  function billiardsDragHoverPreview(nativeState, local, descriptor) {
+    if (!nativeState || !local || !descriptor || !Billiards) return null;
+    if (descriptor.type === 'billiards-ball') {
+      const ball = nativeState.balls.find((entry) => entry.id === descriptor.id && entry.active);
+      const result = ball ? Billiards.moveBall(nativeState, descriptor.id, local.tileIndex, local.position) : null;
+      return {
+        type: 'ball',
+        tileIndex: local.tileIndex,
+        position: { ...local.position },
+        radius: ball ? ball.radius : nativeState.ballRadius,
+        valid: !!(result && result.changed),
+        action: 'move',
+        message: result && result.message ? result.message : 'ball not found',
+        label: billiardsHoverLabel({ valid: !!(result && result.changed), action: 'move', message: result && result.message }, null)
+      };
+    }
+    if (descriptor.type === 'billiards-pocket') {
+      const removed = Billiards.togglePocket(nativeState, descriptor.tileIndex, descriptor.position);
+      const added = removed && removed.changed
+        ? Billiards.togglePocket(removed.state, local.tileIndex, local.position, true)
+        : null;
+      const preview = Billiards.setupInteractionPreview(nativeState, { kind: 'pocket' }, local.tileIndex, local.position);
+      if (!preview) return null;
+      preview.valid = !!(added && added.changed);
+      preview.action = 'move';
+      preview.message = added && added.message ? added.message : 'invalid pocket position';
+      preview.label = billiardsHoverLabel(preview, null);
+      return preview;
+    }
+    return null;
+  }
+
+  function billiardsHoverAtClientPoint(clientX, clientY) {
+    const kind = normalizeBackgroundDecorationKind(state.backgroundDecorationKind);
+    const descriptor = billiardsDecorationDescriptor(kind);
+    const canClear = kind === 'clear' && billiardsDecorationsPresent();
+    const dragging = state.drag && state.drag.type === 'billiards-decoration' && state.drag.active;
+    if ((!descriptor && !canClear && !dragging) || !Billiards) return null;
+    const nativeState = currentBilliardsEditorState();
+    const local = billiardsLocalAtClientPoint(clientX, clientY, nativeState);
+    if (!nativeState || !local) return null;
+    const canvasPoint = clientPointToBoardPoint(clientX, clientY);
+    if (dragging) {
+      const preview = billiardsDragHoverPreview(nativeState, local, state.drag.decoration);
+      return preview ? { ...preview, canvasPoint } : null;
+    }
+    if (descriptor && descriptor.kind === 'rack') {
+      return {
+        type: 'rack',
+        tileIndex: local.tileIndex,
+        position: { ...local.position },
+        valid: true,
+        action: state.billiardsRack ? 'direction' : 'center',
+        label: state.billiardsRack ? 'click to set rack direction' : 'click to set rack center',
+        canvasPoint
+      };
+    }
+    const selection = descriptor || { kind: 'clear' };
+    const preview = Billiards.setupInteractionPreview(nativeState, selection, local.tileIndex, local.position);
+    if (!preview) return null;
+    const materializesDefaults = descriptor && descriptor.kind === 'pocket' && !state.billiards.pocketsExplicit;
+    preview.label = billiardsHoverLabel(preview, descriptor, materializesDefaults);
+    if (materializesDefaults) preview.action = 'materialize';
+    return { ...preview, canvasPoint };
+  }
+
+  function billiardsRackPreviewForHover(nativeState, hover) {
+    const descriptor = billiardsDecorationDescriptor(state.backgroundDecorationKind);
+    if (!nativeState || !hover || !descriptor || descriptor.kind !== 'rack') return null;
+    const center = state.billiardsRack || (Number.isInteger(hover.tileIndex) ? hover : null);
+    if (!center || !Number.isInteger(center.tileIndex) || !center.position) return null;
+    let direction = { x: 0, y: 1 };
+    let directionPoint = null;
+    if (state.billiardsRack && hover.canvasPoint) {
+      const origin = Billiards.localToCanvas(center.tileIndex, center.position, billiardsEditorGeometry(), nativeState.atlas);
+      const dx = hover.canvasPoint.x - origin.x;
+      const dy = hover.canvasPoint.y - origin.y;
+      const length = Math.hypot(dx, dy);
+      if (length > Math.max(1, geometry.radius * 0.04)) {
+        direction = { x: dx / length, y: dy / length };
+        directionPoint = {
+          x: Number(center.position.x) + dx / geometry.radius,
+          y: Number(center.position.y) + dy / geometry.radius
+        };
+      }
+    }
+    return {
+      count: descriptor.count,
+      tileIndex: center.tileIndex,
+      center: { ...center.position },
+      direction,
+      directionPoint
+    };
+  }
+
+  function updateBilliardsDecorationHover(clientX, clientY) {
+    const next = billiardsHoverAtClientPoint(clientX, clientY);
+    const previous = state.billiardsHover;
+    const unchanged = !previous && !next;
+    state.billiardsHover = next;
+    return !unchanged;
+  }
+
+  function nativeBilliardsBallEntry(ball, nativeState) {
+    const exported = Billiards.ballExport(ball, nativeState.preset);
+    return {
+      id: exported.id,
+      kind: exported.kind,
+      ...(exported.kind === 'target' ? { number: exported.number } : {}),
+      at: { ...exported.at }
+    };
+  }
+
+  function nativeBilliardsPocketEntry(pocket, nativeState) {
+    const exported = Billiards.pocketExport(pocket, nativeState);
+    return { id: exported.id, vertex: exported.vertex ? { ...exported.vertex } : null };
+  }
+
+  function saveBilliardsBallsFromNative(nativeState) {
+    if (!nativeState) return;
+    if (!state.billiards || typeof state.billiards !== 'object') state.billiards = createEmptyBilliardsDecorations();
+    state.billiards.balls = nativeState.balls.filter((ball) => ball.active).map((ball) => nativeBilliardsBallEntry(ball, nativeState));
+  }
+
+  function saveBilliardsPocketsFromNative(nativeState) {
+    if (!nativeState) return;
+    if (!state.billiards || typeof state.billiards !== 'object') state.billiards = createEmptyBilliardsDecorations();
+    state.billiards.pockets = nativeState.pockets.map((pocket) => nativeBilliardsPocketEntry(pocket, nativeState));
+    state.billiards.pocketsExplicit = true;
   }
 
   function createEmptySokobanDecorations() {
@@ -5572,8 +6055,11 @@
     if (index < 0 || index >= state.tiles.length) return;
     state.tiles[index] = null;
     if (state.inputHoles instanceof Set) state.inputHoles.delete(index);
+    if (state.lianliankanEmpty instanceof Set) state.lianliankanEmpty.delete(index);
+    if (state.hexSeeds instanceof Map) state.hexSeeds.delete(index);
     removePresetPiecesAtIndex(index);
     removeSokobanDecorationsAtIndex(index);
+    removeBilliardsDecorationsAtIndex(index);
     delete state.vertexDecorations[index];
     removeCutEdgesForTile(index);
     removeGluedEdgesForTile(index);
@@ -5589,8 +6075,11 @@
       if (index < 0 || index >= state.tiles.length) return;
       state.tiles[index] = null;
       if (state.inputHoles instanceof Set) state.inputHoles.delete(index);
+      if (state.lianliankanEmpty instanceof Set) state.lianliankanEmpty.delete(index);
+      if (state.hexSeeds instanceof Map) state.hexSeeds.delete(index);
       removePresetPiecesAtIndex(index);
       delete state.vertexDecorations[index];
+      removeBilliardsDecorationsAtIndex(index);
       removeCutEdgesForTile(index);
       removeGluedEdgesForTile(index);
     });
@@ -5611,6 +6100,14 @@
     });
   }
 
+  function removeBilliardsDecorationsAtIndex(index) {
+    if (!state.billiards || typeof state.billiards !== 'object') return;
+    const row = Math.floor(index / state.cols) + 1;
+    const col = (index % state.cols) + 1;
+    state.billiards.balls = (state.billiards.balls || []).filter((ball) => !(ball && ball.at && ball.at.row === row && ball.at.col === col));
+    state.billiards.pockets = (state.billiards.pockets || []).filter((pocket) => !(pocket && pocket.vertex && pocket.vertex.row === row && pocket.vertex.col === col));
+  }
+
   function pruneInputHoles() {
     if (!(state.inputHoles instanceof Set)) {
       state.inputHoles = new Set();
@@ -5623,6 +6120,51 @@
       }
     });
     state.inputHoles = next;
+  }
+
+  function reshapeHexSeeds(source, oldRows, oldCols, rows, cols) {
+    const result = new Map();
+    (source instanceof Map ? source : new Map()).forEach((color, index) => {
+      const row = Math.floor(index / oldCols);
+      const col = index % oldCols;
+      if (row >= 0 && row < rows && col >= 0 && col < cols && (color === 'red' || color === 'blue')) {
+        result.set(indexOf(row, col, cols), color);
+      }
+    });
+    return result;
+  }
+
+  function reshapeBilliardsDecorations(source, oldRows, oldCols, rows, cols) {
+    const result = cloneBilliardsDecorations(source);
+    result.balls = result.balls
+      .map((ball) => normalizeBilliardsBallDecoration(ball, oldRows, oldCols))
+      .filter((ball) => ball && ball.at.row <= rows && ball.at.col <= cols);
+    result.pockets = result.pockets
+      .map((pocket, index) => normalizeBilliardsPocketDecoration(pocket, oldRows, oldCols, index))
+      .filter((pocket) => pocket && (!pocket.vertex || (pocket.vertex.row <= rows && pocket.vertex.col <= cols)));
+    return result;
+  }
+
+  function pruneLianliankanEmptyCells() {
+    state.lianliankanEmpty = new Set([...cloneLianliankanEmptySet()].filter((index) => tileExists(index)));
+  }
+
+  function pruneHexSeeds() {
+    const seeds = new Map();
+    cloneHexSeeds().forEach((color, index) => {
+      if (tileExists(index) && (color === 'red' || color === 'blue')) seeds.set(index, color);
+    });
+    state.hexSeeds = seeds;
+  }
+
+  function pruneBilliardsDecorations() {
+    const source = cloneBilliardsDecorations();
+    state.billiards = reshapeBilliardsDecorations(source, state.rows, state.cols, state.rows, state.cols);
+    if (!Billiards) return;
+    const nativeState = currentBilliardsEditorState();
+    if (!nativeState) return;
+    saveBilliardsBallsFromNative(nativeState);
+    if (state.billiards.pocketsExplicit) saveBilliardsPocketsFromNative(nativeState);
   }
 
   function prunePresetPieces() {
@@ -5664,14 +6206,30 @@
     if (state.removedTiles.has(index)) return false;
     clearBackgroundBilliard(false);
     clearStandardDualGraphInput();
-    if (kind === 'clear') {
+    if (isLianliankanEmptyDecorationKind(kind)) {
+      if (!(state.lianliankanEmpty instanceof Set)) state.lianliankanEmpty = new Set();
+      if (state.lianliankanEmpty.has(index)) state.lianliankanEmpty.delete(index);
+      else state.lianliankanEmpty.add(index);
+    } else if (hexSeedColorForDecorationKind(kind)) {
+      if (!(state.hexSeeds instanceof Map)) state.hexSeeds = new Map();
+      const color = hexSeedColorForDecorationKind(kind);
+      if (state.hexSeeds.get(index) === color) state.hexSeeds.delete(index);
+      else state.hexSeeds.set(index, color);
+    } else if (billiardsDecorationDescriptor(kind)) {
+      if (!toggleBilliardsDecoration(index, billiardsDecorationDescriptor(kind), options)) return false;
+    } else if (kind === 'clear') {
+      const billiardsChanged = clearBilliardsDecorationAt(index, options);
       const beforePieces = Array.isArray(state.presetPieces) ? state.presetPieces.length : 0;
       const beforeSokoban = sokobanDecorationCount();
       removePresetPiecesAtIndex(index);
       removeSokobanDecorationsAtIndex(index);
       const hadHole = state.inputHoles instanceof Set && state.inputHoles.has(index);
+      const hadEmpty = state.lianliankanEmpty instanceof Set && state.lianliankanEmpty.has(index);
+      const hadSeed = state.hexSeeds instanceof Map && state.hexSeeds.has(index);
       if (hadHole) state.inputHoles.delete(index);
-      if (beforePieces === (state.presetPieces || []).length && beforeSokoban === sokobanDecorationCount() && !hadHole) return false;
+      if (hadEmpty) state.lianliankanEmpty.delete(index);
+      if (hadSeed) state.hexSeeds.delete(index);
+      if (beforePieces === (state.presetPieces || []).length && beforeSokoban === sokobanDecorationCount() && !hadHole && !hadEmpty && !hadSeed && !billiardsChanged) return false;
     } else if (isSokobanDecorationKind(kind)) {
       if (!toggleSokobanDecoration(index, kind)) return false;
     } else if (isChessDecorationKind(kind)) {
@@ -5685,11 +6243,117 @@
     return true;
   }
 
+  function toggleBilliardsDecoration(index, descriptor, options = {}) {
+    const nativeState = currentBilliardsEditorState();
+    const local = options.clientX != null && options.clientY != null
+      ? billiardsLocalAtClientPoint(options.clientX, options.clientY, nativeState)
+      : null;
+    // In periodic display mode a pointer can be on a translated copy of a
+    // tile.  The native atlas returns its canonical tile index, while hitTest
+    // may report the visible copy.  Trust the native local coordinate so a
+    // palette drop works equally on every displayed copy.
+    if (!nativeState || !local || !nativeState.atlas.tiles[local.tileIndex] || nativeState.atlas.tiles[local.tileIndex].removed) return false;
+    if (descriptor.kind === 'rack') {
+      if (!state.billiardsRack) {
+        state.billiardsRack = { count: descriptor.count, tileIndex: local.tileIndex, position: { ...local.position } };
+        return true;
+      }
+      const center = state.billiardsRack;
+      const centerCanvas = Billiards.localToCanvas(center.tileIndex, center.position, billiardsEditorGeometry(), nativeState.atlas);
+      const point = clientPointToBoardPoint(options.clientX, options.clientY);
+      const scale = nativeState.atlas.info.shape === 'hex' ? geometry.radius : geometry.radius;
+      const dx = point.x - centerCanvas.x;
+      const dy = point.y - centerCanvas.y;
+      const length = Math.hypot(dx, dy);
+      if (length <= scale * 0.04) return false;
+      const result = Billiards.placeRack(nativeState, center.count, center.tileIndex, center.position, { x: dx / length, y: dy / length });
+      if (!result.changed) return false;
+      saveBilliardsBallsFromNative(result.state);
+      state.billiardsRack = null;
+      return true;
+    }
+    if (descriptor.kind === 'pocket') {
+      if (!state.billiards.pocketsExplicit) {
+        saveBilliardsPocketsFromNative(nativeState);
+        return true;
+      }
+      const result = Billiards.togglePocket(nativeState, local.tileIndex, local.position);
+      if (!result.changed) return false;
+      saveBilliardsPocketsFromNative(result.state);
+      return true;
+    }
+    const selection = descriptor.kind === 'cue' ? { kind: 'cue' } : { kind: 'target', number: descriptor.number };
+    const result = Billiards.placeBall(nativeState, selection, local.tileIndex, local.position);
+    if (!result.changed) return false;
+    saveBilliardsBallsFromNative(result.state);
+    return true;
+  }
+
+  function clearBilliardsDecorationAt(index, options = {}) {
+    if (options.clientX == null || options.clientY == null) return false;
+    const nativeState = currentBilliardsEditorState();
+    const local = billiardsLocalAtClientPoint(options.clientX, options.clientY, nativeState);
+    if (!nativeState || !local || !nativeState.atlas.tiles[local.tileIndex] || nativeState.atlas.tiles[local.tileIndex].removed) return false;
+    const result = Billiards.eraseAt(nativeState, local.tileIndex, local.position);
+    if (!result.changed) return false;
+    saveBilliardsBallsFromNative(result.state);
+    if (String(result.message || '').includes('pocket')) saveBilliardsPocketsFromNative(result.state);
+    return true;
+  }
+
+  function billiardsDecorationDragDescriptorAtClientPoint(clientX, clientY) {
+    // The native editor exposes implicit default pockets.  They should only be
+    // draggable after the Billiards layer has been explicitly materialized,
+    // otherwise an unrelated decoration click near a quotient vertex is stolen.
+    if (!billiardsDecorationsPresent()) return null;
+    const nativeState = currentBilliardsEditorState();
+    const local = billiardsLocalAtClientPoint(clientX, clientY, nativeState);
+    if (!nativeState || !local) return null;
+    const ball = Billiards.ballAtPoint(nativeState, local.tileIndex, local.position);
+    if (ball && ball.ball) return { type: 'billiards-ball', id: ball.ball.id };
+    const vertex = Billiards.nearestVertex(nativeState.atlas, local.tileIndex, local.position);
+    const pocket = vertex && Billiards.activePocketAtClass(nativeState, vertex.classIndex);
+    if (pocket && vertex.distance <= nativeState.pocketRadius * 1.5) return {
+      type: 'billiards-pocket',
+      tileIndex: local.tileIndex,
+      position: { ...local.position }
+    };
+    return null;
+  }
+
+  function moveBilliardsDecoration(descriptor, clientX, clientY) {
+    const nativeState = currentBilliardsEditorState();
+    const local = billiardsLocalAtClientPoint(clientX, clientY, nativeState);
+    if (!nativeState || !local || !descriptor) return false;
+    if (descriptor.type === 'billiards-ball') {
+      const result = Billiards.moveBall(nativeState, descriptor.id, local.tileIndex, local.position);
+      if (!result.changed) return false;
+      saveBilliardsBallsFromNative(result.state);
+      return true;
+    }
+    if (descriptor.type === 'billiards-pocket') {
+      const removed = Billiards.togglePocket(nativeState, descriptor.tileIndex, descriptor.position);
+      if (!removed.changed) return false;
+      const added = Billiards.togglePocket(removed.state, local.tileIndex, local.position, true);
+      if (!added.changed) return false;
+      saveBilliardsPocketsFromNative(added.state);
+      return true;
+    }
+    return false;
+  }
+
   function backgroundDecorationDragDescriptorAtIndex(index) {
     if (!tileExists(index)) return null;
     const layers = [];
     if (state.inputHoles instanceof Set && state.inputHoles.has(index)) {
       layers.push({ type: 'input-hole', kind: 'input-hole' });
+    }
+    if (state.lianliankanEmpty instanceof Set && state.lianliankanEmpty.has(index)) {
+      layers.push({ type: 'lianliankan-empty', kind: 'lianliankan-empty' });
+    }
+    if (state.hexSeeds instanceof Map && state.hexSeeds.has(index)) {
+      const color = state.hexSeeds.get(index);
+      layers.push({ type: 'hex-seed', color, kind: `hex-${color}-seed` });
     }
     const sokoban = cloneSokobanDecorations();
     SOKOBAN_DECORATION_ORDER.forEach((field) => {
@@ -5740,6 +6404,16 @@
       state.inputHoles.delete(index);
       return true;
     }
+    if (descriptor.type === 'lianliankan-empty') {
+      if (!(state.lianliankanEmpty instanceof Set) || !state.lianliankanEmpty.has(index)) return false;
+      state.lianliankanEmpty.delete(index);
+      return true;
+    }
+    if (descriptor.type === 'hex-seed') {
+      if (!(state.hexSeeds instanceof Map) || !state.hexSeeds.has(index)) return false;
+      state.hexSeeds.delete(index);
+      return true;
+    }
     if (descriptor.type === 'sokoban') {
       const field = descriptor.field;
       if (!state.sokoban || !(state.sokoban[field] instanceof Set) || !state.sokoban[field].has(index)) return false;
@@ -5764,6 +6438,8 @@
 
   function clearBackgroundDecorationsAtIndex(index) {
     if (state.inputHoles instanceof Set) state.inputHoles.delete(index);
+    if (state.lianliankanEmpty instanceof Set) state.lianliankanEmpty.delete(index);
+    if (state.hexSeeds instanceof Map) state.hexSeeds.delete(index);
     removePresetPiecesAtIndex(index);
     removeSokobanDecorationsAtIndex(index);
   }
@@ -5784,6 +6460,20 @@
         if (!(state.inputHoles instanceof Set)) state.inputHoles = new Set();
         state.inputHoles.add(index);
         placed = true;
+        return;
+      }
+      if (layer.type === 'lianliankan-empty') {
+        if (!(state.lianliankanEmpty instanceof Set)) state.lianliankanEmpty = new Set();
+        state.lianliankanEmpty.add(index);
+        placed = true;
+        return;
+      }
+      if (layer.type === 'hex-seed') {
+        if (!(state.hexSeeds instanceof Map)) state.hexSeeds = new Map();
+        if (layer.color === 'red' || layer.color === 'blue') {
+          state.hexSeeds.set(index, layer.color);
+          placed = true;
+        }
         return;
       }
       if (layer.type === 'sokoban') {
@@ -8430,6 +9120,12 @@
     const decoration = isBackgroundDecorationAction() && hit >= 0
       ? backgroundDecorationDragDescriptorAtIndex(hit)
       : null;
+    const billiardsDecoration = isBackgroundDecorationAction()
+      ? billiardsDecorationDragDescriptorAtClientPoint(event.clientX, event.clientY)
+      : null;
+    const billiardsHoverChanged = isBackgroundDecorationAction()
+      ? updateBilliardsDecorationHover(event.clientX, event.clientY)
+      : false;
     pointerState = {
       id: event.pointerId,
       index: hit,
@@ -8441,17 +9137,21 @@
       lastY: event.clientY,
       moved: false
     };
-    state.drag = decoration ? {
+    state.drag = billiardsDecoration ? {
+      type: 'billiards-decoration',
+      decoration: billiardsDecoration,
+      active: false
+    } : (decoration ? {
       type: 'background-decoration',
       sourceIndex: hit,
       decoration,
       active: false
-    } : null;
+    } : null);
     clearDrawDebugHit(false);
     if (isBilliard) updateBackgroundBilliardAim(event.clientX, event.clientY, false);
     const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
     const cuspChanged = !sameBackgroundCuspHit(cusp, state.backgroundHoverCusp);
-    if (hit !== state.hoverIndex || edgeChanged || cuspChanged) {
+    if (hit !== state.hoverIndex || edgeChanged || cuspChanged || billiardsHoverChanged) {
       state.hoverIndex = hit;
       state.backgroundHoverEdge = edge;
       state.backgroundHoverCusp = cusp;
@@ -8463,6 +9163,9 @@
 
   function updateBackgroundGesture(event) {
     if (!pointerState || event.pointerId !== pointerState.id) return;
+    const billiardsHoverChanged = isBackgroundDecorationAction()
+      ? updateBilliardsDecorationHover(event.clientX, event.clientY)
+      : false;
     const dx = event.clientX - pointerState.x;
     const dy = event.clientY - pointerState.y;
     if (Math.hypot(dx, dy) > 10) pointerState.moved = true;
@@ -8472,6 +9175,11 @@
       if (!wasActive) startBackgroundDecorationDragGhost(event.clientX, event.clientY, state.drag.decoration);
       moveTileDragGhost(event.clientX, event.clientY);
       updateDragPreview(event.clientX, event.clientY);
+      draw(analyze());
+      return;
+    }
+    if (state.drag && state.drag.type === 'billiards-decoration' && pointerState.moved) {
+      state.drag.active = true;
       draw(analyze());
       return;
     }
@@ -8492,7 +9200,7 @@
     const aimChanged = isBilliard ? updateBackgroundBilliardAim(event.clientX, event.clientY, false) : false;
     const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
     const cuspChanged = !sameBackgroundCuspHit(cusp, state.backgroundHoverCusp);
-    if (hit !== state.hoverIndex || edgeChanged || cuspChanged || aimChanged) {
+    if (hit !== state.hoverIndex || edgeChanged || cuspChanged || aimChanged || billiardsHoverChanged) {
       state.hoverIndex = hit;
       state.backgroundHoverEdge = edge;
       state.backgroundHoverCusp = cusp;
@@ -8508,6 +9216,28 @@
         ? hitTest(event.clientX, event.clientY)
         : -1;
       moveBackgroundDecoration(state.drag.sourceIndex, hit, state.drag.decoration);
+      clearEditorDrag();
+      return;
+    }
+    if (state.drag && state.drag.type === 'billiards-decoration' && state.drag.active) {
+      if (isOverCanvas(event.clientX, event.clientY) && moveBilliardsDecoration(state.drag.decoration, event.clientX, event.clientY)) {
+        state.edits += 1;
+        updateReport(false);
+      }
+      clearEditorDrag();
+      return;
+    }
+    // Selecting an existing ball or pocket starts a potential drag. A
+    // stationary click still needs to carry out the explicit Pocket and Clear
+    // actions advertised by their hover labels; other swatches remain inert.
+    if (state.drag && state.drag.type === 'billiards-decoration') {
+      const kind = normalizeBackgroundDecorationKind(state.backgroundDecorationKind);
+      const descriptor = billiardsDecorationDescriptor(kind);
+      const executesClickAction = kind === 'clear' || (descriptor && descriptor.kind === 'pocket');
+      const hit = !pointerState.moved && executesClickAction && isOverCanvas(event.clientX, event.clientY)
+        ? hitTest(event.clientX, event.clientY, { includeRemoved: true })
+        : -1;
+      if (hit >= 0) toggleBackgroundDecoration(hit, { clientX: event.clientX, clientY: event.clientY });
       clearEditorDrag();
       return;
     }
@@ -8560,7 +9290,7 @@
       }
       else toggleBackgroundBoundary(edge);
     } else if (!pointerState.moved && hit === pointerState.index && hit >= 0) {
-      if (isBackgroundDecorationAction()) toggleBackgroundDecoration(hit);
+      if (isBackgroundDecorationAction()) toggleBackgroundDecoration(hit, { clientX: event.clientX, clientY: event.clientY });
       else toggleBackgroundTile(hit);
     }
   }
@@ -8574,7 +9304,7 @@
     }
     pointerState = null;
     syncMainCanvasCursor();
-    if (!state.drag || state.drag.type === 'canvas' || state.drag.type === 'background-decoration') clearEditorDrag();
+    if (!state.drag || state.drag.type === 'canvas' || state.drag.type === 'background-decoration' || state.drag.type === 'billiards-decoration') clearEditorDrag();
     longPressFired = false;
   }
 
@@ -16277,8 +17007,11 @@
     drawSeifertBoundaryComponents(ctx);
     drawBackgroundBoundaries(ctx);
     drawInputHoleMarkers(ctx, palette);
+    drawLianliankanEmptyMarkers(ctx);
+    drawHexSeedMarkers(ctx);
     drawSokobanDecorationMarkers(ctx);
     drawPresetPieceMarkers(ctx);
+    drawBilliardsDecorationMarkers(ctx);
     ctx.restore();
   }
 
@@ -17786,6 +18519,55 @@
       ctx.stroke();
     });
     ctx.restore();
+  }
+
+  function drawLianliankanEmptyMarkers(ctx) {
+    if (!(state.lianliankanEmpty instanceof Set) || !state.lianliankanEmpty.size) return;
+    const lattice = getLattice();
+    ctx.save();
+    ctx.setLineDash([Math.max(3, geometry.radius * 0.14), Math.max(2, geometry.radius * 0.08)]);
+    ctx.strokeStyle = 'rgba(31,122,140,0.78)';
+    ctx.lineWidth = Math.max(1.4, geometry.radius * 0.045);
+    state.lianliankanEmpty.forEach((index) => {
+      if (!tileExists(index)) return;
+      const center = tileCenterPoint(index);
+      if (!center) return;
+      drawScaledTilePath(ctx, center, geometry.radius * 0.72, lattice);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(center.x - geometry.radius * 0.22, center.y);
+      ctx.lineTo(center.x + geometry.radius * 0.22, center.y);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function drawHexSeedMarkers(ctx) {
+    if (!(state.hexSeeds instanceof Map) || !state.hexSeeds.size) return;
+    const lattice = getLattice();
+    ctx.save();
+    state.hexSeeds.forEach((color, index) => {
+      if (!tileExists(index)) return;
+      const center = tileCenterPoint(index);
+      if (!center) return;
+      drawScaledTilePath(ctx, center, geometry.radius * 0.91, lattice);
+      ctx.fillStyle = color === 'red' ? 'rgba(191,52,61,0.82)' : 'rgba(47,112,187,0.82)';
+      ctx.strokeStyle = color === 'red' ? '#812d38' : '#1d4f8b';
+      ctx.lineWidth = Math.max(1.3, geometry.radius * 0.045);
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function drawBilliardsDecorationMarkers(ctx) {
+    const nativeState = currentBilliardsEditorState();
+    if (!nativeState || !Billiards || (!billiardsDecorationsPresent() && !state.billiardsHover)) return;
+    Billiards.render(ctx, billiardsEditorGeometry(), billiardsRenderStateForDecoration(nativeState), {
+      assistance: 'expert',
+      setupHover: state.billiardsHover,
+      rackPreview: billiardsRackPreviewForHover(nativeState, state.billiardsHover)
+    });
   }
 
   function drawSokobanDecorationMarkers(ctx) {
@@ -21991,6 +22773,38 @@
       ctx.restore();
       return;
     }
+    if (normalized === 'lianliankan-empty') {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(31,122,140,0.86)';
+      ctx.lineWidth = Math.max(1.6, radius * 0.07);
+      ctx.setLineDash([4, 3]);
+      drawScaledTilePath(ctx, point, radius * 0.58, lattice);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(point.x - radius * 0.25, point.y);
+      ctx.lineTo(point.x + radius * 0.25, point.y);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    const seedColor = hexSeedColorForDecorationKind(normalized);
+    if (seedColor) {
+      ctx.save();
+      drawScaledTilePath(ctx, point, radius * 0.79, lattice);
+      ctx.fillStyle = seedColor === 'red' ? '#c43b4b' : '#2f70bb';
+      ctx.strokeStyle = seedColor === 'red' ? '#812d38' : '#1d4f8b';
+      ctx.lineWidth = Math.max(1.5, radius * 0.05);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    const billiards = billiardsDecorationDescriptor(normalized);
+    if (billiards) {
+      drawBilliardsDecorationPreview(ctx, point, radius, billiards);
+      return;
+    }
     if (normalized === 'start' || normalized === 'target') {
       drawPresetPiecePreview(ctx, point, radius, normalized);
       return;
@@ -22003,6 +22817,51 @@
       return;
     }
     drawSokobanDecorationShape(ctx, point, radius, normalized, lattice);
+  }
+
+  function drawBilliardsDecorationPreview(ctx, point, radius, descriptor) {
+    ctx.save();
+    if (descriptor.kind === 'pocket') {
+      ctx.fillStyle = '#0b1013';
+      ctx.strokeStyle = '#6b7a80';
+      ctx.lineWidth = Math.max(1.4, radius * 0.05);
+      ctx.beginPath();
+      ctx.arc(point.x + radius * 0.36, point.y - radius * 0.36, radius * 0.24, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else if (descriptor.kind === 'rack') {
+      const rows = Math.floor((Math.sqrt(1 + (8 * descriptor.count)) - 1) / 2);
+      const ballRadius = radius * 0.09;
+      const spacing = ballRadius * 2 * 1.005;
+      const rowSpacing = spacing * Math.sqrt(3) / 2;
+      for (let row = 0; row < rows; row += 1) {
+        for (let column = 0; column <= row; column += 1) {
+          const ordinal = row * (row + 1) / 2 + column + 1;
+          ctx.fillStyle = Billiards ? Billiards.ballColor('target', ordinal) : '#2f70bb';
+          ctx.beginPath();
+          ctx.arc(point.x + (column - row / 2) * spacing, point.y + (row - (rows - 1) / 2) * rowSpacing, ballRadius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    } else {
+      const cue = descriptor.kind === 'cue';
+      const number = cue ? 0 : descriptor.number;
+      ctx.fillStyle = cue ? '#f7f4e9' : (Billiards ? Billiards.ballColor('target', number) : '#2f70bb');
+      ctx.strokeStyle = '#26343a';
+      ctx.lineWidth = Math.max(1.2, radius * 0.04);
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius * 0.30, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      if (!cue) {
+        ctx.fillStyle = '#fff';
+        ctx.font = `700 ${Math.max(8, radius * 0.24)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(number), point.x, point.y + 0.5);
+      }
+    }
+    ctx.restore();
   }
 
   function drawBackgroundDecorationDescriptorPreview(ctx, point, radius, descriptor, lattice = getLattice()) {
@@ -22640,9 +23499,8 @@
     }
 
     try {
-      const parsed = parseExportImportText(text);
-      const payload = normalizeExportImportPayload(parsed.payload);
-      applyImportedMosaic(payload);
+      const parsed = prepareExportImportText(text);
+      applyImportedMosaic(parsed.normalizedPayload);
       syncExportImportMetadata(parsed.payload, parsed.metadata, parsed.sourceKind);
       refreshExport({ fillPresetDefaults: false });
       setExportImportStatus('chart imported', false);
@@ -22799,7 +23657,7 @@
   }
 
   function exportImportPayloadSource(payload) {
-    const statusPayload = fideChessStatusPayloadForMosaicImport(payload);
+    const statusPayload = minigameStatusPayloadForMosaicImport(payload);
     if (statusPayload) return statusPayload;
     if (
       payload
@@ -22815,34 +23673,171 @@
   }
 
   function normalizeMosaicImportPayload(payload) {
-    return fideChessStatusPayloadForMosaicImport(payload) || payload;
+    return minigameStatusPayloadForMosaicImport(payload) || payload;
   }
 
-  function fideChessStatusPayloadForMosaicImport(payload) {
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
-    const preset = payload.preset && typeof payload.preset === 'object' && !Array.isArray(payload.preset)
-      ? payload.preset
-      : null;
-    if (!preset) return null;
-    const mode = String(payload.gameMode || payload.mode || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
-    const isFideStatus = mode === 'fide-chess'
-      || mode === 'fidechess'
-      || mode === 'chess'
-      || mode.includes('fide')
-      || mode.includes('chess');
-    if (!isFideStatus || !Array.isArray(payload.pieces)) return null;
-    const adapted = {
-      ...preset,
-      lattice: preset.lattice || payload.lattice || state.lattice,
-      rows: preset.rows || payload.rows,
-      cols: preset.cols || payload.cols,
-      inputMode: 'background',
-      backgroundAction: 'decoration',
-      pieces: payload.pieces
+  function prepareExportImportText(text) {
+    const parsed = parseExportImportText(text);
+    return {
+      ...parsed,
+      normalizedPayload: normalizeExportImportPayload(parsed.payload)
     };
-    delete adapted.pieceSets;
+  }
+
+  function minigameStatusPayloadForMosaicImport(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+    const record = String(payload.kind || '').trim().toLowerCase() === 'ramified-minigame-record';
+    const snapshot = record && payload.snapshot && typeof payload.snapshot === 'object' && !Array.isArray(payload.snapshot)
+      ? payload.snapshot
+      : null;
+    const status = snapshot
+      ? {
+        ...snapshot,
+        gameMode: snapshot.gameMode || payload.gameMode || payload.game,
+        preset: snapshot.preset || payload.preset
+      }
+      : payload;
+    const preset = status.preset && typeof status.preset === 'object' && !Array.isArray(status.preset)
+      ? status.preset
+      : (record && payload.preset && typeof payload.preset === 'object' && !Array.isArray(payload.preset) ? payload.preset : null);
+    const mode = normalizeImportedMinigameMode(status.gameMode || status.game || status.mode || (record && payload.gameMode));
+    if (!preset || !mode) return null;
+
+    const size = parseExportImportSize(preset.size || status.size || payload.size);
+    const rows = Number(preset.rows || status.rows || payload.rows || (size && size.rows));
+    const cols = Number(preset.cols || status.cols || payload.cols || (size && size.cols));
+    const adapted = {
+      ...JSON.parse(JSON.stringify(preset)),
+      lattice: preset.lattice || status.lattice || payload.lattice || state.lattice,
+      rows,
+      cols,
+      inputMode: 'background',
+      backgroundAction: 'decoration'
+    };
     if (!adapted.boundary && !adapted.boundaryMode) adapted.boundary = 'glued';
+    if (Array.isArray(status.removed)) {
+      adapted.removedTiles = status.removed.map((entry) => (
+        entry && typeof entry === 'object' ? { ...entry } : entry
+      ));
+    }
+
+    if (mode === 'hex') {
+      const seedEntries = adapted.hex && Array.isArray(adapted.hex.seeds) ? adapted.hex.seeds : [];
+      adapted.hex = {
+        ...(adapted.hex && typeof adapted.hex === 'object' ? adapted.hex : {}),
+        seeds: dedupeImportedMinigameEntries([
+          ...seedEntries,
+          ...(Array.isArray(status.tiles) ? status.tiles : [])
+        ], rows, cols, true)
+      };
+    } else if (mode === 'lianliankan' && Array.isArray(status.tiles)) {
+      const removed = new Set(importedMinigameEntryIndices(adapted.removedTiles || preset.removedTiles || [], rows, cols));
+      const occupied = new Set(importedMinigameEntryIndices(status.tiles, rows, cols));
+      const initiallyEmpty = [];
+      if (Number.isInteger(rows) && Number.isInteger(cols)) {
+        for (let index = 0; index < rows * cols; index += 1) {
+          if (!removed.has(index) && !occupied.has(index)) initiallyEmpty.push(importedMinigameRefFromIndex(index, cols));
+        }
+      }
+      adapted.lianliankan = {
+        ...(adapted.lianliankan && typeof adapted.lianliankan === 'object' ? adapted.lianliankan : {}),
+        initiallyEmpty
+      };
+    } else if (mode === 'billiards') {
+      const live = status.billiardsState && typeof status.billiardsState === 'object' && !Array.isArray(status.billiardsState)
+        ? status.billiardsState
+        : status;
+      const billiards = {
+        ...(adapted.billiards && typeof adapted.billiards === 'object' ? adapted.billiards : {})
+      };
+      ['rules', 'friction', 'deterministic', 'score', 'scores', 'turn', 'winner', 'ballInHand', 'ballInHandPlayer', 'shots', 'targetTotal'].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(live, key)) billiards[key] = JSON.parse(JSON.stringify(live[key]));
+      });
+      if (Array.isArray(live.balls)) billiards.balls = JSON.parse(JSON.stringify(live.balls));
+      if (Array.isArray(live.pockets)) billiards.pockets = JSON.parse(JSON.stringify(live.pockets));
+      adapted.billiards = billiards;
+    } else if (mode === 'sokoban') {
+      const sokoban = {
+        ...(adapted.sokoban && typeof adapted.sokoban === 'object' ? adapted.sokoban : {})
+      };
+      ['players', 'boxes', 'targets', 'walls', 'sea', 'ice', 'energyBridges'].forEach((key) => {
+        if (Array.isArray(status[key])) sokoban[key] = JSON.parse(JSON.stringify(status[key]));
+      });
+      adapted.sokoban = sokoban;
+    } else {
+      const pieces = minigameStatusPiecesForMosaic(status, mode);
+      if (pieces.length) {
+        adapted.pieces = pieces;
+        delete adapted.pieceSets;
+      }
+    }
     return adapted;
+  }
+
+  function normalizeImportedMinigameMode(value) {
+    const mode = String(value || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+    if (!mode) return '';
+    if (mode === 'hex' || mode.includes('nash')) return 'hex';
+    if (mode === 'lianliankan' || mode === 'tile-matching' || mode === 'tile-link') return 'lianliankan';
+    if (mode.includes('billiard')) return 'billiards';
+    if (mode === 'fide-chess' || mode === 'fidechess' || mode === 'chess' || mode.includes('fide')) return 'fide-chess';
+    if (mode === 'connect-four' || mode === 'connectfour') return 'connect-four';
+    if (mode === 'chinese-checkers' || mode === 'chinesecheckers') return 'chinese-checkers';
+    if (mode === 'gomoku' || mode === 'go' || mode === 'reversi' || mode === 'sokoban' || mode === '2048' || mode === 'number-2048') return mode;
+    return '';
+  }
+
+  function importedMinigameEntryIndices(entries, rows, cols) {
+    if (!Number.isInteger(rows) || !Number.isInteger(cols)) return [];
+    return (Array.isArray(entries) ? entries : [])
+      .map((entry) => {
+        if (Number.isInteger(Number(entry))) return Number(entry);
+        if (entry && Number.isInteger(Number(entry.index))) return Number(entry.index);
+        const row = Number(entry && entry.row);
+        const col = Number(entry && entry.col);
+        return Number.isInteger(row) && Number.isInteger(col) ? indexOf(row - 1, col - 1, cols) : -1;
+      })
+      .filter((index) => index >= 0 && index < rows * cols);
+  }
+
+  function importedMinigameRefFromIndex(index, cols) {
+    return { row: Math.floor(index / cols) + 1, col: (index % cols) + 1 };
+  }
+
+  function dedupeImportedMinigameEntries(entries, rows, cols, keepColor) {
+    const result = [];
+    const seen = new Set();
+    (Array.isArray(entries) ? entries : []).forEach((entry) => {
+      const index = importedMinigameEntryIndices([entry], rows, cols)[0];
+      if (!Number.isInteger(index) || seen.has(index)) return;
+      const ref = importedMinigameRefFromIndex(index, cols);
+      if (keepColor) {
+        const color = String(entry && entry.color || '').trim().toLowerCase();
+        if (color !== 'red' && color !== 'blue') return;
+        ref.color = color;
+      }
+      seen.add(index);
+      result.push(ref);
+    });
+    return result;
+  }
+
+  function minigameStatusPiecesForMosaic(status, mode) {
+    const field = mode === 'fide-chess'
+      ? 'pieces'
+      : (mode === 'connect-four'
+        ? 'tokens'
+        : (mode === 'reversi'
+          ? 'discs'
+          : (mode === 'chinese-checkers'
+            ? 'marbles'
+            : ((mode === 'gomoku' || mode === 'go') ? 'stones' : (mode === '2048' || mode === 'number-2048' ? 'boxes' : '')))));
+    if (!field || !Array.isArray(status[field])) return [];
+    return status[field].map((entry) => ({
+      ...JSON.parse(JSON.stringify(entry)),
+      role: 'start',
+      color: entry.color || entry.side || 'black'
+    }));
   }
 
   function parseExportImportSize(value) {
@@ -22949,7 +23944,7 @@
 
   function exportImportPayloadLooksLikeBackground(payload) {
     if (!payload || typeof payload !== 'object') return false;
-    return ['removedTiles', 'backgroundRemovedTiles', 'removed', 'cutEdges', 'backgroundCutEdges', 'cuts', 'gluedEdges', 'backgroundGluedEdges', 'glue', 'inputHoles', 'connectFourHoles', 'holes', 'pieceSets', 'pieces', 'sokoban']
+    return ['removedTiles', 'backgroundRemovedTiles', 'removed', 'cutEdges', 'backgroundCutEdges', 'cuts', 'gluedEdges', 'backgroundGluedEdges', 'glue', 'inputHoles', 'connectFourHoles', 'holes', 'pieceSets', 'pieces', 'sokoban', 'lianliankan', 'hex', 'billiards']
       .some((key) => Object.prototype.hasOwnProperty.call(payload, key));
   }
 
@@ -22985,7 +23980,15 @@
 
   function exportImportMetadataFromPayload(payload, registryMetadata) {
     const source = exportImportPayloadSource(payload);
+    const snapshot = payload && payload.snapshot && typeof payload.snapshot === 'object' && !Array.isArray(payload.snapshot)
+      ? payload.snapshot
+      : null;
+    const inferredGameType = exportGameTypeForImportedMinigameMode(
+      (snapshot && (snapshot.gameMode || snapshot.game || snapshot.mode))
+      || (payload && (payload.gameMode || payload.game || payload.mode))
+    );
     const groups = uniqueStrings([
+      inferredGameType,
       ...gameTypesFromPresetLike(registryMetadata),
       ...gameTypesFromPresetLike(source),
       ...gameTypesFromPresetLike(payload)
@@ -23012,6 +24015,22 @@
       label,
       gameTypes: groups
     };
+  }
+
+  function exportGameTypeForImportedMinigameMode(value) {
+    const mode = normalizeImportedMinigameMode(value);
+    if (mode === 'hex') return 'Hex';
+    if (mode === 'lianliankan') return 'Tile Matching';
+    if (mode === 'billiards') return 'Billiard';
+    if (mode === 'fide-chess') return 'FIDE Chess';
+    if (mode === 'connect-four') return 'Connect Four';
+    if (mode === 'chinese-checkers') return 'Chinese Checkers';
+    if (mode === 'gomoku') return 'Gomoku';
+    if (mode === 'go') return 'Go';
+    if (mode === 'reversi') return 'Reversi';
+    if (mode === 'sokoban') return 'Sokoban';
+    if (mode === '2048' || mode === 'number-2048') return '2048';
+    return '';
   }
 
   function exportImportTypeForPayload(payload, source, metadata) {
@@ -23072,6 +24091,9 @@
     const presetPieces = presetPiecesForExport();
     const pieceSets = pieceSetsForExport();
     const sokoban = sokobanDecorationsForExport();
+    const lianliankan = lianliankanDecorationsForExport();
+    const hex = hexDecorationsForExport();
+    const billiards = billiardsDecorationsForExport();
     const payload = {
       name: 'Mosaic Calculator',
       lattice: state.lattice,
@@ -23134,6 +24156,9 @@
       pieceSets,
       pieces: presetPieces,
       sokoban,
+      lianliankan,
+      hex,
+      billiards,
       tiles: state.tiles.map((tile, index) => {
         const mask = tileToMask(tile);
         return {
@@ -23154,6 +24179,9 @@
     if (!pieceSets) delete payload.pieceSets;
     if (!presetPieces.length) delete payload.pieces;
     if (!sokoban) delete payload.sokoban;
+    if (!lianliankan) delete payload.lianliankan;
+    if (!hex) delete payload.hex;
+    if (!billiards) delete payload.billiards;
     return payload;
   }
 
@@ -23198,6 +24226,68 @@
 
   function minigameHoleRefsForExport() {
     return inputHolesForExport().map(({ row, col }) => ({ row, col }));
+  }
+
+  function lianliankanDecorationsForExport() {
+    pruneLianliankanEmptyCells();
+    const initiallyEmpty = [...state.lianliankanEmpty]
+      .sort((left, right) => left - right)
+      .map((index) => ({ row: Math.floor(index / state.cols) + 1, col: (index % state.cols) + 1 }));
+    return initiallyEmpty.length ? { initiallyEmpty } : null;
+  }
+
+  function hexDecorationsForExport() {
+    pruneHexSeeds();
+    const seeds = [...state.hexSeeds.entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map(([index, color]) => ({ row: Math.floor(index / state.cols) + 1, col: (index % state.cols) + 1, color }));
+    const homology = hexHomologyForExport();
+    if (!seeds.length && !homology) return null;
+    return {
+      ...(seeds.length ? { seeds } : {}),
+      ...(homology ? { homology } : {})
+    };
+  }
+
+  function exportPrecomputedGameDataEnabled() {
+    return !!(refs.exportPrecomputedGameData && refs.exportPrecomputedGameData.checked);
+  }
+
+  function hexHomologyPresetForExport(storedHomology = null) {
+    return {
+      lattice: state.lattice,
+      rows: state.rows,
+      cols: state.cols,
+      removedTiles: minigameRemovedRefsForExport(),
+      cutEdges: minigameCutEdgesForExport(),
+      gluedEdges: minigameGluedEdgesForExport(),
+      ...(storedHomology ? { hex: { homology: storedHomology } } : {})
+    };
+  }
+
+  function hexHomologyForExport() {
+    if (!exportPrecomputedGameDataEnabled() || !TopologicalHex) return null;
+    const removed = cloneRemovedTileSet();
+    if (state.hexHomology && typeof TopologicalHex.topologyFromPresetHomology === 'function') {
+      const restored = TopologicalHex.topologyFromPresetHomology(
+        hexHomologyPresetForExport(state.hexHomology),
+        removed
+      );
+      if (restored) return JSON.parse(JSON.stringify(state.hexHomology));
+    }
+    const topology = TopologicalHex.buildTopology(hexHomologyPresetForExport(), removed, {
+      analysis: currentBackgroundHomologyAnalysis()
+    });
+    const stored = topology && topology.valid && typeof TopologicalHex.serializeTopology === 'function'
+      ? TopologicalHex.serializeTopology(topology)
+      : null;
+    state.hexHomology = stored;
+    return stored ? JSON.parse(JSON.stringify(stored)) : null;
+  }
+
+  function billiardsDecorationsForExport() {
+    pruneBilliardsDecorations();
+    return billiardsDecorationsPresent() ? billiardsPresetBlockForExport() : null;
   }
 
   function presetPiecesForExport() {
@@ -23711,6 +24801,7 @@
     const format = normalizeExportFormat(refs.exportFormat && refs.exportFormat.value);
     if (refs.exportType) refs.exportType.value = type;
     if (refs.exportFormat) refs.exportFormat.value = format;
+    if (refs.exportPrecomputedGameData) refs.exportPrecomputedGameData.disabled = !TopologicalHex;
     syncExportGroupOptions();
     if (refs.exportFormatRow) refs.exportFormatRow.hidden = type === EXPORT_TYPES.ALL;
     if (refs.exportPresetMetaRow) refs.exportPresetMetaRow.hidden = type !== EXPORT_TYPES.MINIGAME;
@@ -23779,7 +24870,7 @@
 
   function syncExportGroupOptions(groups = exportPresetGroupChoices()) {
     if (!refs.exportPresetGroup) return;
-    const previous = String(refs.exportPresetGroup.value || '').trim();
+    const previous = canonicalExportGameType(refs.exportPresetGroup.value);
     if (typeof document !== 'undefined' && document.createElement && refs.exportPresetGroup.appendChild) {
       refs.exportPresetGroup.textContent = '';
       groups.forEach((group) => {
@@ -23798,7 +24889,7 @@
   function exportPresetGroupChoices() {
     const groups = new Set(EXPORT_GROUP_FALLBACKS);
     (Array.isArray(state.exportPresetCustomGroups) ? state.exportPresetCustomGroups : []).forEach((group) => {
-      const gameType = String(group || '').trim();
+      const gameType = canonicalExportGameType(group);
       if (gameType) groups.add(gameType);
     });
     const root = typeof window !== 'undefined'
@@ -23828,13 +24919,22 @@
   function gameTypesFromPresetLike(entry) {
     const values = [];
     const add = (value) => {
-      const gameType = String(value || '').trim();
+      const gameType = canonicalExportGameType(value);
       if (gameType && !values.includes(gameType)) values.push(gameType);
     };
     if (entry && Array.isArray(entry.gameTypes)) entry.gameTypes.forEach(add);
     if (!values.length && entry && Array.isArray(entry.groups)) entry.groups.forEach(add);
     if (!values.length && entry && entry.group) add(entry.group);
     return values;
+  }
+
+  // Both spellings appeared in early presets. Keep them readable on import,
+  // but use the singular spelling for the one public game-type branch.
+  function canonicalExportGameType(value) {
+    const gameType = String(value || '').trim();
+    return /^(?:billiard|billiards|topological billiards)$/i.test(gameType)
+      ? 'Billiard'
+      : gameType;
   }
 
   function syncExportPresetGroupCheckOptions(groups = exportPresetGroupChoices()) {
@@ -23863,7 +24963,9 @@
 
   function syncExportPresetGroupChecks(options = {}) {
     if (!Array.isArray(refs.exportPresetGroupChecks)) return;
-    const primary = refs.exportPresetGroup && refs.exportPresetGroup.value ? refs.exportPresetGroup.value : '2048';
+    const primary = refs.exportPresetGroup && refs.exportPresetGroup.value
+      ? canonicalExportGameType(refs.exportPresetGroup.value)
+      : '2048';
     if (!exportPresetAdvancedEnabled()) {
       refs.exportPresetGroupChecks.forEach((input) => {
         input.checked = input.value === primary;
@@ -23883,12 +24985,12 @@
 
   function selectedExportPresetGameTypes() {
     const primary = refs.exportPresetGroup && refs.exportPresetGroup.value.trim()
-      ? refs.exportPresetGroup.value.trim()
+      ? canonicalExportGameType(refs.exportPresetGroup.value)
       : '2048';
     if (!exportPresetAdvancedEnabled() || !Array.isArray(refs.exportPresetGroupChecks)) return [primary];
     const checked = refs.exportPresetGroupChecks
       .filter((input) => input && input.checked && input.value)
-      .map((input) => input.value);
+      .map((input) => canonicalExportGameType(input.value));
     const unique = [];
     checked.forEach((group) => {
       if (group && !unique.includes(group)) unique.push(group);
@@ -23932,6 +25034,9 @@
 
   function minigameModeForExportGameType(gameType) {
     const normalized = String(gameType || '').trim().toLowerCase();
+    if (normalized.includes('hex') || normalized.includes('nash')) return 'hex';
+    if (normalized.includes('lianliankan') || normalized.includes('tile matching') || normalized.includes('tile-link') || normalized.includes('tile link')) return 'lianliankan';
+    if (normalized.includes('billiard')) return 'billiards';
     if (normalized.includes('fide') || normalized.includes('chess')) return 'fide-chess';
     if (normalized.includes('gomoku')) return 'gomoku';
     if (normalized.includes('connect')) return 'connect-four';
@@ -24923,6 +26028,15 @@
   function normalizeBackgroundDecorationKind(kind) {
     const value = String(kind || '').trim().toLowerCase();
     if (value === 'input' || value === 'inputhole' || value === 'input-hole' || value === 'hole' || value === 'holes') return 'input-hole';
+    if (value === 'lianliankan-empty' || value === 'tile-matching-empty' || value === 'tile-link-empty' || value === 'empty-cell' || value === 'empty') return 'lianliankan-empty';
+    if (value === 'hex-red' || value === 'hex-red-seed' || value === 'red-seed') return 'hex-red-seed';
+    if (value === 'hex-blue' || value === 'hex-blue-seed' || value === 'blue-seed') return 'hex-blue-seed';
+    if (value === 'billiards-cue' || value === 'billiard-cue' || value === 'cue-ball') return 'billiards-cue';
+    if (value === 'billiards-pocket' || value === 'billiard-pocket' || value === 'pocket') return 'billiards-pocket';
+    const billiardsBall = /^billiards-(?:ball-)?(\d+)$/.exec(value);
+    if (billiardsBall && BILLIARDS_BALL_NUMBERS.includes(Number(billiardsBall[1]))) return `billiards-ball-${Number(billiardsBall[1])}`;
+    const billiardsRack = /^billiards-rack-(\d+)$/.exec(value);
+    if (billiardsRack && BILLIARDS_RACK_COUNTS.includes(Number(billiardsRack[1]))) return `billiards-rack-${Number(billiardsRack[1])}`;
     if (value === 'goal' || value === 'target' || value === 'arrival' || value === 'finish') return 'target';
     if (value === 'piece' || value === 'start' || value === 'stone' || value === 'disc' || value === 'marble') return 'start';
     if (value === 'player' || value === 'sokoban-player' || value === 'sokobanplayer' || value === 'pusher') return 'sokoban-player';
@@ -24944,6 +26058,26 @@
 
   function isChessDecorationKind(kind) {
     return !!parseChessDecorationKind(kind);
+  }
+
+  function isLianliankanEmptyDecorationKind(kind) {
+    return normalizeBackgroundDecorationKind(kind) === 'lianliankan-empty';
+  }
+
+  function hexSeedColorForDecorationKind(kind) {
+    const normalized = normalizeBackgroundDecorationKind(kind);
+    return normalized === 'hex-red-seed' ? 'red' : (normalized === 'hex-blue-seed' ? 'blue' : '');
+  }
+
+  function billiardsDecorationDescriptor(kind) {
+    const normalized = normalizeBackgroundDecorationKind(kind);
+    if (normalized === 'billiards-cue') return { kind: 'cue' };
+    if (normalized === 'billiards-pocket') return { kind: 'pocket' };
+    const ball = /^billiards-ball-(\d+)$/.exec(normalized);
+    if (ball) return { kind: 'target', number: Number(ball[1]) };
+    const rack = /^billiards-rack-(\d+)$/.exec(normalized);
+    if (rack) return { kind: 'rack', count: Number(rack[1]) };
+    return null;
   }
 
   function normalizeChessPawnDirectionChoice(value) {
@@ -25627,11 +26761,22 @@
     state.tiles = Array(rows * cols).fill(null);
     state.removedTiles = importedIndexSetForTest(options.removedTiles || options.removed || [], rows, cols);
     state.inputHoles = importedIndexSetForTest(options.inputHoles || options.connectFourHoles || options.holes || [], rows, cols);
+    state.lianliankanEmpty = importedIndexSetForTest(
+      (options.lianliankan && options.lianliankan.initiallyEmpty) || options.lianliankanEmpty || [], rows, cols
+    );
+    state.hexSeeds = importHexSeeds({ hex: options.hex || { seeds: options.hexSeeds || [] } }, rows, cols);
+    state.hexHomology = importHexHomology({ hex: options.hex || {} });
+    state.billiards = importBilliardsDecorations({ billiards: options.billiards || {} }, rows, cols);
+    state.billiardsRack = null;
+    state.billiardsHover = null;
     state.cutEdges = importCutEdges({ cutEdges: options.cutEdges || options.cuts || [] }, rows, cols);
     state.gluedEdges = importGluedEdges({ gluedEdges: options.gluedEdges || options.glue || [] }, rows, cols);
     state.presetPieces = importPresetPieces({ pieceSets: options.pieceSets, pieces: options.pieces || [] }, rows, cols);
     state.sokoban = importSokobanDecorations(options, rows, cols);
     pruneInputHoles();
+    pruneLianliankanEmptyCells();
+    pruneHexSeeds();
+    pruneBilliardsDecorations();
     prunePresetPieces();
     pruneSokobanDecorations();
   }
@@ -25659,6 +26804,11 @@
     refs.exportType = { value: normalizeExportType(options.type) };
     refs.exportFormat = { value: normalizeExportFormat(options.format) };
     refs.exportFormatRow = { hidden: false };
+    refs.exportPrecomputedGameData = {
+      checked: !!(options.storePrecomputedGameData || options.storeHexHomology),
+      disabled: false
+    };
+    refs.exportPrecomputedGameDataRow = { hidden: false };
     refs.exportPresetMetaRow = { hidden: false };
     refs.exportPresetId = { value: options.id || '' };
     refs.exportPresetLabel = { value: options.label || '' };
@@ -25693,6 +26843,7 @@
       buildExportText,
       buildFullExport,
       buildMinigamePresetExport,
+      hexHomologyForExport,
       buildMinigamePresetJsExport,
       buildMinigameTestHref,
       backgroundDecorationPreferences,
@@ -25701,6 +26852,10 @@
       compactTileListForExport,
       currentExportPresetMetadata,
       exportPresetGroupChoices,
+      currentBilliardsEditorState,
+      billiardsEditorGeometry,
+      billiardsRenderStateForDecoration,
+      eraseBilliardsBallAtClientPoint,
       inputHolesForExport,
       pieceSetsForExport,
       sokobanDecorationsForExport,
@@ -25755,7 +26910,10 @@
       isBackgroundHomologyTraceClosed,
       selectedHomologyEdgeSide,
       normalizeExportImportPayload,
+      normalizeMosaicImportPayload,
+      exportImportMetadataFromPayload,
       parseExportImportText,
+      prepareExportImportText,
       refreshExport,
       setTestBoard,
       setTestGeometry,

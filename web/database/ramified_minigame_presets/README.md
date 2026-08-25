@@ -35,3 +35,5 @@ Concise helpers:
 - Glue ranges expand pairwise, e.g. `1..4,4,E=1..4,1,W`.
 - `g0~:` marks reversed glue. `g0~00:` also sets both glue-arrow display flags to false.
 - Procedural presets can use macros such as `generator: 'rubiksCube', cubeSize: 3`.
+- `hex.homology` may store a versioned topology fingerprint, homology generators, and sparse edge signatures so Hex can start without cellular-homology work.
+- Dynamic square boundary-glue boards use `{ version: 1, scheme: 'square-boundary-glue-v1' }`; the scheme covers torus, Klein bottle, and RP² signatures for any supported row/column size.

@@ -280,6 +280,7 @@
     'setup.japaneseCharacters': ['Japanese characters', '日文假名'],
     'setup.youngDiagrams3x3': ['Young diagrams (3×3)', '杨图（3×3）'],
 
+    'games.hex': ['Hex (Nash)', '拓扑六边棋'],
     'games.gomoku': ['Gomoku', '五子棋'],
     'games.go': ['Go', '围棋'],
     'games.connectFour': ['Connect Four', '四子棋'],
@@ -437,7 +438,7 @@
     'io.importCleared': ['Import input cleared.', '已清除导入内容。'],
     'io.operationFailed': ['{{message}}', '{{message}}'],
     'io.replaceConfirm': ['Importing will replace the active game. Continue?', '导入将替换当前游戏。是否继续？'],
-    'io.recordsAvailable': ['Game records are available for Billiard, Gomoku, Go, Connect Four, Reversi, and FIDE Chess.', '游戏记录支持台球、五子棋、围棋、四子棋、黑白棋和国际象棋。'],
+    'io.recordsAvailable': ['Game records are available for Hex, Billiard, Gomoku, Go, Connect Four, Reversi, and FIDE Chess.', '游戏记录支持拓扑六边棋、台球、五子棋、围棋、四子棋、黑白棋和国际象棋。'],
     'io.gameUnavailable': ['The game is not ready to export.', '游戏尚未准备好，无法导出。'],
 
     'status.stats': ['Game Stats', '游戏统计'],
@@ -539,6 +540,18 @@
     , 'runtime.billiardsRackDirection': ['choose a second point to set the rack direction', '请点击第二个点设置球框方向']
     , 'runtime.billiardsRackCenter': ['rack center selected', '已选择球框中心']
     , 'runtime.billiardsRackChooseDirection': ['click a second point to set the rack direction', '请点击第二个点设置球框方向']
+    , 'runtime.billiardsRackChooseCenter': ['click to set the rack center', '点击设置球框中心']
+    , 'runtime.billiardsHoverBlocked': ['cannot: {{reason}}', '无法放置：{{reason}}']
+    , 'runtime.billiardsHoverRemovePocket': ['click to remove pocket', '点击移除袋口']
+    , 'runtime.billiardsHoverErasePocket': ['click to erase pocket', '点击擦除袋口']
+    , 'runtime.billiardsHoverEraseBall': ['click to erase ball', '点击擦除球']
+    , 'runtime.billiardsHoverMove': ['drop to move', '松开以移动']
+    , 'runtime.billiardsHoverAddPocket': ['click to add pocket', '点击添加袋口']
+    , 'runtime.billiardsHoverPlaceCue': ['click to place cue ball', '点击放置母球']
+    , 'runtime.billiardsHoverPlaceBall': ['click to place ball {{number}}', '点击放置{{number}}号球']
+    , 'runtime.billiardsCueHintTitle': ['Aim from the white cue ball', '从白色母球瞄准']
+    , 'runtime.billiardsCueHint': ['Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.', '点击白色母球，并向目标反方向拖动；母球会沿相反方向前进。']
+    , 'runtime.billiardsCueHintCanvas': ['drag back to shoot', '向后拖动击球']
     , 'runtime.puzzleStatus': ['{{game}} puzzle {{count}}', '{{game}}谜题第{{count}}步']
     , 'runtime.toMove': ['to move', '行棋']
     , 'runtime.toPlay': ['to play', '落子']
@@ -652,6 +665,7 @@
     'Room': '房间',
     'Player': '玩家'
     , 'Chinese Checkers': '跳棋'
+    , 'Hex (Nash)': '拓扑六边棋'
     , 'Gomoku': '五子棋'
     , 'Connect Four': '四子棋'
     , 'Reversi': '黑白棋'

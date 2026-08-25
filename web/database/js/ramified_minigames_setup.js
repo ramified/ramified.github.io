@@ -10,6 +10,9 @@
   const LianliankanMosaicAdapter = typeof window !== 'undefined' && window.LianliankanMosaicAdapter
     ? window.LianliankanMosaicAdapter
     : (typeof require === 'function' ? require('../lianliankan/mosaic_adapter.js') : null);
+  const TopologicalHex = typeof window !== 'undefined' && window.TopologicalHex
+    ? window.TopologicalHex
+    : (typeof require === 'function' ? require('./hex_homology_game.js') : null);
 
   function tr(value) {
     if (typeof window === 'undefined' || !window.SiteI18n || typeof window.SiteI18n.translateSource !== 'function') {
@@ -35,6 +38,7 @@
       [GAME_MODES.CHINESE_CHECKERS]: 'games.checkers',
       [GAME_MODES.REVERSI]: 'games.reversi',
       [GAME_MODES.GO]: 'games.go',
+      [GAME_MODES.HEX]: 'games.hex',
       [GAME_MODES.GOMOKU]: 'games.gomoku'
     };
     const fallback = gameTypeForGameMode(mode);
@@ -166,6 +170,7 @@
   });
   const GAME_MODES = {
     NUMBER_2048: '2048',
+    HEX: 'hex',
     GOMOKU: 'gomoku',
     CONNECT_FOUR: 'connect-four',
     GO: 'go',
@@ -190,6 +195,7 @@
   const PLACEMENT_PIECE_RADIUS_MIN = 24;
   const PLACEMENT_PIECE_RADIUS_MAX = 100;
   const PLACEMENT_PIECE_RADIUS_DEFAULTS = {
+    [GAME_MODES.HEX]: 96,
     [GAME_MODES.GOMOKU]: 70,
     [GAME_MODES.GO]: 70,
     [GAME_MODES.REVERSI]: 70,
@@ -218,6 +224,7 @@
   const BILLIARDS_RECTANGLE_ROWS = 3;
   const BILLIARDS_RECTANGLE_COLS = 5;
   const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20260823-8';
+  const HEX_HOMOLOGY_WORKER_URL = 'js/hex_homology_worker.js?v=20260825-1';
   const BILLIARDS_FALLBACK_FRAME_BUDGET_MS = 8;
   const BILLIARDS_FALLBACK_STEP_CHUNK = 8;
   const FIDE_CHESS_PUZZLE_MIN_BOARD_SIZE = 2;
@@ -270,6 +277,7 @@
     }
   };
   const GOMOKU_WIN_LENGTH = 5;
+  const HEX_COLORS = ['red', 'blue'];
   const GOMOKU_COLORS = ['black', 'white'];
   const GOMOKU_DEFAULT_BOARD_SIZE = 15;
   const GOMOKU_MIN_BOARD_SIZE = 5;
@@ -302,6 +310,7 @@
   const CONNECT_FOUR_COLORS = ['red', 'yellow'];
   const ONLINE_SUPPORTED_GAME_MODES = new Set([
     GAME_MODES.BILLIARDS,
+    GAME_MODES.HEX,
     GAME_MODES.GOMOKU,
     GAME_MODES.GO,
     GAME_MODES.CONNECT_FOUR,
@@ -311,6 +320,7 @@
   ]);
   const ONLINE_PLAYER_ROLES_BY_MODE = {
     [GAME_MODES.BILLIARDS]: ['player-1', 'player-2'],
+    [GAME_MODES.HEX]: ['red', 'blue'],
     [GAME_MODES.GOMOKU]: ['black', 'white'],
     [GAME_MODES.GO]: ['black', 'white'],
     [GAME_MODES.CONNECT_FOUR]: ['red', 'yellow'],
@@ -340,7 +350,8 @@
   }
 
   const PRESET_FOLDER_URL = 'ramified_minigame_presets/';
-  const PRESET_GROUP_ORDER = ['2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Billiard', 'Tile Matching', 'Sokoban'];
+  const PRESET_ASSET_VERSION = '20260825-2';
+  const PRESET_GROUP_ORDER = ['Hex', '2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Billiard', 'Tile Matching', 'Sokoban'];
 
   function createRubiksCubePreset(size, id, label) {
     const rows = size * 3;
@@ -487,6 +498,9 @@
   let billiardsShotPending = null;
   let billiardsSimulationWorker = null;
   let billiardsSimulationSerial = 0;
+  let hexHomologyWorker = null;
+  let hexHomologySerial = 0;
+  let hexHomologyFrameId = null;
   let placementFeedbacks = [];
   let placementFeedbackFrameId = null;
   let eventQueue = [];
@@ -503,12 +517,18 @@
   let pendingBonusGameOver = false;
   let pendingBonusBlockedByBombs = false;
   let hoveredGlue = null;
+  let hoveredHexIndex = null;
   let swipeGesture = null;
   let billiardsPointer = null;
   let billiardsAim = { x: 1, y: 0 };
   let billiardsDragPower = 0;
   let billiardsSpinContact = { x: 0, y: 0 };
   let billiardsSetupHover = null;
+  let billiardsCueGuidanceDismissed = false;
+  let billiardsCueHintUntil = 0;
+  let billiardsCueGuidanceFrame = null;
+  let billiardsPaletteDrag = null;
+  let billiardsPaletteSuppressClickUntil = 0;
   let billiardsBallSelection = { kind: 'cue', number: 0 };
   let billiardsRackSelection = 0;
   let billiardsRackCenter = null;
@@ -598,6 +618,8 @@
     refs.placementPieceSizeValue = document.getElementById('placement-piece-size-value');
     refs.gomokuSizeRow = document.getElementById('gomoku-size-row');
     refs.gomokuSize = document.getElementById('gomoku-board-size');
+    refs.hexPieRule = document.getElementById('hex-pie-rule');
+    refs.hexPieSwap = document.getElementById('hex-pie-swap');
     refs.boundaryGlueModeRow = document.getElementById('boundary-glue-mode-row');
     refs.boundaryGlueMode = document.getElementById('boundary-glue-mode');
     refs.boundaryGlueShapeRow = document.getElementById('boundary-glue-shape-row');
@@ -696,6 +718,7 @@
     refs.moveRow = document.getElementById('move-row');
     refs.modeDirectionalControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="directional"]')) : [];
     refs.mode2048Controls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="2048"]')) : [];
+    refs.modeHexControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="hex"]')) : [];
     refs.modeGomokuControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="gomoku"]')) : [];
     refs.modeConnectFourControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="connect-four"]')) : [];
     refs.modeGoControls = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-mode-control="go"]')) : [];
@@ -773,6 +796,11 @@
     if (refs.fideChessPuzzleAttackBorders) refs.fideChessPuzzleAttackBorders.addEventListener('change', handleFideChessPuzzleAttackBordersChange);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('change', handleGomokuSizeChange);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('input', handleGomokuSizeChange);
+    if (refs.hexPieRule) refs.hexPieRule.addEventListener('change', () => {
+      if (isHexGame(game) && game.phase === 'setup') game.pieRule = !!refs.hexPieRule.checked;
+      syncControls();
+    });
+    if (refs.hexPieSwap) refs.hexPieSwap.addEventListener('click', handleHexPieSwap);
     if (refs.boundaryGlueMode) refs.boundaryGlueMode.addEventListener('change', handleBoundaryGlueBoardChange);
     if (refs.boundaryGlueShape) refs.boundaryGlueShape.addEventListener('change', handleBoundaryGlueShapeChange);
     [refs.boundaryGlueRows, refs.boundaryGlueCols].forEach((input) => {
@@ -867,10 +895,12 @@
       refs.canvas.addEventListener('mousemove', handleCanvasHover);
       refs.canvas.addEventListener('mouseleave', () => {
         clearGlueHover();
+        clearHexHover();
         clearPlacementReachAssist(true);
       });
       refs.canvas.addEventListener('blur', () => {
         clearGlueHover();
+        clearHexHover();
         clearPlacementReachAssist();
       });
       refs.canvas.addEventListener('pointerdown', handleCanvasPointerDown);
@@ -1054,7 +1084,7 @@
           exportSelectedOutput({ focus: false, action: 'refreshed' });
           const text = refs.debugExport ? String(refs.debugExport.value || '') : '';
           if (!text && selectedExportKind() === 'record') {
-            throw new Error(tr('Game records are available for Billiard, Gomoku, Go, Connect Four, Reversi, and FIDE Chess.'));
+            throw new Error(tr('Game records are available for Hex, Billiard, Gomoku, Go, Connect Four, Reversi, and FIDE Chess.'));
           }
           const filename = selectedExportKind() === 'background'
             ? 'ramified-minigame-background.json'
@@ -1253,7 +1283,7 @@
       return 'This FIDE Chess puzzle is a one-player game, so it cannot create a room. Search or join a multiplayer room instead.';
     }
     if (!onlineModeSupported(normalized)) {
-      return 'Room creation supports Billiards, Gomoku, Go, Connect Four, Reversi, Chinese Checkers, and non-puzzle FIDE Chess.';
+      return 'Room creation supports Hex, Billiards, Gomoku, Go, Connect Four, Reversi, Chinese Checkers, and non-puzzle FIDE Chess.';
     }
     return '';
   }
@@ -2271,7 +2301,20 @@
 
   function updateOnlineRoomMetaFromMessage(message, options = {}) {
     if (!onlineState || !message || typeof message !== 'object') return;
-    if (message.roles && typeof message.roles === 'object') onlineState.roomRoles = { ...message.roles };
+    if (message.roles && typeof message.roles === 'object') {
+      onlineState.roomRoles = { ...message.roles };
+      // A Hex pie swap changes room ownership without a join/claim event.
+      // Derive this client’s roles from the authoritative room map for every
+      // state message so the local turn gate changes atomically as well.
+      if (onlineState.clientId) {
+        const owned = Object.keys(message.roles)
+          .filter((role) => message.roles[role] === onlineState.clientId)
+          .map(normalizePlacementColor)
+          .filter(Boolean);
+        onlineState.roles = owned.length ? owned : ['spectator'];
+        onlineState.role = onlineState.roles[0] || 'spectator';
+      }
+    }
     if (message.rolePlayers && typeof message.rolePlayers === 'object') onlineState.rolePlayers = { ...message.rolePlayers };
     if (Object.prototype.hasOwnProperty.call(message, 'readyToPlay')) onlineState.readyToPlay = message.readyToPlay !== false;
     if (typeof message.roundState === 'string') onlineState.roundState = message.roundState;
@@ -2321,7 +2364,8 @@
     let applied = false;
     onlineState.applyingRemoteState = true;
     try {
-      if (mode === GAME_MODES.GOMOKU) applied = replayOnlineGomokuAction(action);
+      if (mode === GAME_MODES.HEX) applied = replayOnlineHexAction(action);
+      else if (mode === GAME_MODES.GOMOKU) applied = replayOnlineGomokuAction(action);
       else if (mode === GAME_MODES.BILLIARDS) applied = replayOnlineBilliardsAction(action, snapshot);
       else if (mode === GAME_MODES.CONNECT_FOUR) applied = replayOnlineConnectFourAction(action);
       else if (mode === GAME_MODES.GO) applied = replayOnlineGoAction(action);
@@ -2340,6 +2384,33 @@
     syncOnlineStatus('Opponent move synchronized.', 'idle');
     syncOnlineControls();
     syncControls();
+    return true;
+  }
+
+  function replayOnlineHexAction(action) {
+    if (!isHexGame(game)) return false;
+    const type = String(action.type || '').trim().toLowerCase();
+    let result = null;
+    if (type === 'pie-swap') {
+      result = swapHexPieColors(game);
+    } else if (type === 'place' || type === 'play' || type === 'tile') {
+      const index = onlineActionIndex(action.index);
+      if (!Number.isInteger(index)) return false;
+      result = placeHexTile(game, index);
+    } else {
+      return false;
+    }
+    if (!result.changed) return false;
+    pushUndoSnapshot(onlineActionHistoryLabel(action));
+    game = result.state;
+    if (game.phase === 'gameover') {
+      if (game.winner) syncStatus(localizedWinnerText(game.winner), `[loop] = ${game.winningExpression || 'nonzero H₁'}`, 'over');
+      else syncStatus(tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.HEX) }), `${game.round} moves`, 'over');
+    } else {
+      syncStatus(localizedMoveStatus(game, game.round), hexTurnInfo(game), 'ready');
+    }
+    render();
+    refreshDebugExportIfNeeded();
     return true;
   }
 
@@ -2622,6 +2693,8 @@
 
   function onlineActionHistoryLabel(action) {
     const type = String(action && action.type || 'move').trim().toLowerCase();
+    if (type === 'pie-swap') return 'online Hex pie swap';
+    if (type === 'place' && action && action.gameMode === GAME_MODES.HEX) return 'online Hex tile';
     if (type === 'drop') return 'online Connect Four drop';
     if (type === 'pass') return 'online Go pass';
     if (type.indexOf('go-') === 0) return 'online Go scoring edit';
@@ -2808,6 +2881,7 @@
   function onlineTurnActionText(state, role = null) {
     const turnRole = normalizePlacementColor(role || (state && state.turn));
     if (!turnRole) return 'player to move';
+    if (isHexGame(state)) return onlineRoleActionLabel(turnRole, 'to fill', hexColorLabel(turnRole));
     if (isGoGame(state)) return onlineRoleActionLabel(turnRole, 'to play', goColorLabel(turnRole));
     if (isConnectFourGame(state)) return onlineRoleActionLabel(turnRole, 'to drop', connectFourColorLabel(turnRole));
     if (isFideChessGame(state) && !isFideChessPuzzle(state)) {
@@ -2965,11 +3039,13 @@
   }
 
   function resetToPreview() {
+    cancelHexHomologyRequest();
     hideCanvasStartPrompt();
     clearCanvasStartPromptTimer();
     resetLocalResultPromptDismissal();
     clearLianliankanHint();
     clearPlacementReachAssist();
+    resetBilliardsCueGuidance();
     if (!presetCatalogReady || !PRESETS.length) {
       game = null;
       geometry = null;
@@ -2985,7 +3061,9 @@
     clearSuppressedCanvasClick();
     clearKeyboardState();
     applyDefaultPlacementDisplayForMode();
-    game = createSelectedGameState(selectedPreset(), selectedGameOptions({ glueRng: Math.random }));
+    const previewOptions = selectedGameOptions({ glueRng: Math.random });
+    if (selectedGameMode() === GAME_MODES.HEX) previewOptions.deferTopology = true;
+    game = createSelectedGameState(selectedPreset(), previewOptions);
     game.phase = 'setup';
     if (isBilliardsGame(game)) {
       billiardsBallSelection = { kind: 'cue', number: 0 };
@@ -3007,6 +3085,109 @@
     syncStatusForCurrentGame();
     syncControls();
     scheduleCanvasStartPrompt();
+    if (isHexGame(game) && game.hexTopologyState === 'pending') scheduleHexHomologyRequest(game);
+  }
+
+  function cancelHexHomologyRequest() {
+    hexHomologySerial += 1;
+    if (hexHomologyFrameId != null) cancelFrame(hexHomologyFrameId);
+    hexHomologyFrameId = null;
+    if (hexHomologyWorker) {
+      try { hexHomologyWorker.terminate(); } catch (_) {}
+    }
+    hexHomologyWorker = null;
+  }
+
+  function scheduleHexHomologyRequest(targetState) {
+    if (!isHexGame(targetState) || targetState.hexTopologyState !== 'pending') return;
+    const requestId = ++hexHomologySerial;
+    hexHomologyFrameId = requestFrame(() => {
+      hexHomologyFrameId = null;
+      if (!hexHomologyRequestIsCurrent(requestId, targetState)) return;
+      startHexHomologyRequest(requestId, targetState);
+    });
+  }
+
+  function startHexHomologyRequest(requestId, targetState) {
+    if (!hexHomologyRequestIsCurrent(requestId, targetState)) return;
+    if (typeof Worker !== 'function') {
+      deferHexHomologyFallback(requestId, targetState);
+      return;
+    }
+    let worker;
+    try {
+      worker = new Worker(HEX_HOMOLOGY_WORKER_URL);
+      hexHomologyWorker = worker;
+      worker.onmessage = (event) => {
+        const message = event && event.data ? event.data : {};
+        if (Number(message.id) !== requestId || !hexHomologyRequestIsCurrent(requestId, targetState)) return;
+        finishHexHomologyWorker(worker);
+        if (!message.ok || !message.topology) {
+          deferHexHomologyFallback(requestId, targetState);
+          return;
+        }
+        applyHexHomologyResult(requestId, targetState, message.topology);
+      };
+      worker.onerror = (event) => {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        if (!hexHomologyRequestIsCurrent(requestId, targetState)) return;
+        finishHexHomologyWorker(worker);
+        deferHexHomologyFallback(requestId, targetState);
+      };
+      worker.postMessage({
+        id: requestId,
+        preset: targetState.preset,
+        removed: Array.from(targetState.removed || [])
+      });
+    } catch (_) {
+      finishHexHomologyWorker(worker);
+      deferHexHomologyFallback(requestId, targetState);
+    }
+  }
+
+  function finishHexHomologyWorker(worker) {
+    if (worker) {
+      try { worker.terminate(); } catch (_) {}
+    }
+    if (hexHomologyWorker === worker) hexHomologyWorker = null;
+  }
+
+  function deferHexHomologyFallback(requestId, targetState) {
+    setTimeout(() => {
+      if (!hexHomologyRequestIsCurrent(requestId, targetState)) return;
+      let topology;
+      try {
+        topology = TopologicalHex
+          ? TopologicalHex.buildTopology(targetState.preset, targetState.removed)
+          : { valid: false, reason: 'The Hex homology engine is unavailable.' };
+      } catch (error) {
+        topology = {
+          valid: false,
+          reason: error && error.message ? error.message : 'Hex homology calculation failed'
+        };
+      }
+      applyHexHomologyResult(requestId, targetState, topology);
+    }, 0);
+  }
+
+  function hexHomologyRequestIsCurrent(requestId, targetState) {
+    return hexHomologyResultMatches(requestId, hexHomologySerial, targetState, game);
+  }
+
+  function hexHomologyResultMatches(requestId, latestRequestId, targetState, currentState) {
+    return requestId === latestRequestId
+      && currentState === targetState
+      && isHexGame(targetState)
+      && targetState.hexTopologyState === 'pending';
+  }
+
+  function applyHexHomologyResult(requestId, targetState, topology) {
+    if (!hexHomologyRequestIsCurrent(requestId, targetState)) return false;
+    rebuildHexRuntime(targetState, topology);
+    render();
+    syncStatusForCurrentGame();
+    syncControls();
+    return true;
   }
 
   function finishPresetCatalogInit() {
@@ -3040,7 +3221,9 @@
       if (refs.select) refs.select.value = importedPreset.id;
       setImportToolsVisible(false);
       resetToPreview();
-      syncStatus('preset imported from link', previewInfo(game.preset), 'setup');
+      if (!isHexGame(game) || game.hexTopologyState !== 'pending') {
+        syncStatus('preset imported from link', previewInfo(game.preset), 'setup');
+      }
     } catch (error) {
       const fallback = defaultPresetIdForMode(selectedGameMode());
       syncPresetSelectOptions(fallback);
@@ -3069,6 +3252,7 @@
 
   function gameModeFromUrlParam(value) {
     const mode = String(value || '').trim().toLowerCase();
+    if ([GAME_MODES.HEX, 'nash', 'topological hex', 'hex nash'].includes(mode)) return GAME_MODES.HEX;
     if ([GAME_MODES.LIANLIANKAN, 'tile-link', 'tile link', 'tile matching', '连连看'].includes(mode)) return GAME_MODES.LIANLIANKAN;
     if (mode === GAME_MODES.CHINESE_CHECKERS || mode === 'chinesecheckers' || mode === 'chinese checkers') return GAME_MODES.CHINESE_CHECKERS;
     if (mode === GAME_MODES.SOKOBAN) return GAME_MODES.SOKOBAN;
@@ -3085,6 +3269,7 @@
   function gameModeFromPresetGroup(preset) {
     const gameTypes = presetGameTypesForModes(preset);
     const gameType = String(gameTypes[0] || '').trim().toLowerCase();
+    if (gameType.includes('hex') || gameType.includes('nash')) return GAME_MODES.HEX;
     if (gameType.includes('lianliankan') || gameType.includes('tile-link') || gameType.includes('tile link') || gameType.includes('tile matching') || gameType.includes('连连看')) return GAME_MODES.LIANLIANKAN;
     if (gameType.includes('billiard')) return GAME_MODES.BILLIARDS;
     if (gameType.includes('fide') || gameType.includes('chess')) return GAME_MODES.FIDE_CHESS;
@@ -3108,6 +3293,7 @@
 
   function gameTypeToGameMode(gameType) {
     const normalized = String(gameType || '').trim().toLowerCase();
+    if (normalized.includes('hex') || normalized.includes('nash')) return GAME_MODES.HEX;
     if (normalized.includes('lianliankan') || normalized.includes('tile-link') || normalized.includes('tile link') || normalized.includes('tile matching') || normalized.includes('连连看')) return GAME_MODES.LIANLIANKAN;
     if (normalized.includes('billiard')) return GAME_MODES.BILLIARDS;
     if (normalized.includes('fide') || normalized.includes('chess')) return GAME_MODES.FIDE_CHESS;
@@ -3135,6 +3321,7 @@
   }
 
   function gameTypeForGameMode(mode) {
+    if (mode === GAME_MODES.HEX) return 'Hex (Nash)';
     if (mode === GAME_MODES.LIANLIANKAN) return 'Tile Matching';
     if (mode === GAME_MODES.BILLIARDS) return 'Billiard';
     if (mode === GAME_MODES.FIDE_CHESS) return 'FIDE Chess';
@@ -3236,7 +3423,7 @@
     if (!entry.file) return Promise.reject(new Error(`Preset "${entry.label}" has no file.`));
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = `${PRESET_FOLDER_URL}${presetUrlPath(entry.file)}`;
+      script.src = `${PRESET_FOLDER_URL}${presetUrlPath(entry.file)}?v=${PRESET_ASSET_VERSION}`;
       script.onload = () => {
         const spec = readPreloadedPresetSpec(entry);
         if (spec) resolve(spec);
@@ -3622,7 +3809,21 @@
   }
 
   function presetMatchesGameMode(preset, mode = selectedGameMode()) {
-    return gameModesForPreset(preset).includes(mode || GAME_MODES.NUMBER_2048);
+    const ownedModes = gameModesForPreset(preset);
+    if (mode === GAME_MODES.HEX) return ownedModes.includes(GAME_MODES.HEX) && hexPresetIsCompatible(preset);
+    return ownedModes.includes(mode || GAME_MODES.NUMBER_2048);
+  }
+
+  function hexPresetIsCompatible(preset) {
+    if (!preset || !TopologicalHex) return false;
+    // Ownership is checked by presetMatchesGameMode.  Keep this structural
+    // check cheap; the definitive nonzero-H1 check runs after preview render.
+    const lattice = String(preset.lattice || 'square').toLowerCase();
+    return isBoundaryGlueBoardPreset(preset) || ((lattice === 'square' || lattice === 'hexagonal')
+      && Number(preset.rows) > 0
+      && Number(preset.cols) > 0
+      && Array.isArray(preset.gluedEdges)
+      && preset.gluedEdges.length > 0);
   }
 
   function presetGameTypeLabelForMode(preset, mode) {
@@ -3678,6 +3879,22 @@
       if (refs.canvas) refs.canvas.focus();
       return;
     }
+    if (selectedGameMode() === GAME_MODES.HEX) {
+      const preview = isHexGame(game) ? game : createHexState(selectedPreset(), selectedGameOptions({ glueRng: Math.random }));
+      if (preview.hexTopologyState === 'pending') {
+        syncStatus('computing homology', 'Hex play will be available when the board topology is ready', 'setup');
+        syncControls();
+        return;
+      }
+      if (preview.setupIssue) {
+        showSetupAlert(preview.setupIssue);
+        syncStatus('Hex setup blocked', preview.setupIssue, 'warn');
+        render();
+        syncControls();
+        if (refs.canvas) refs.canvas.focus();
+        return;
+      }
+    }
     if (selectedGameMode() === GAME_MODES.SOKOBAN) {
       const preview = isSokobanGame(game) ? game : createSokobanState(selectedPreset(), selectedGameOptions({ glueRng: Math.random }));
       const issue = sokobanSetupIssue(preview);
@@ -3724,6 +3941,11 @@
     if (selectedGameMode() === GAME_MODES.BILLIARDS && isBilliardsGame(game)) {
       const result = Billiards.begin(game);
       game = result.state;
+      resetBilliardsCueGuidance();
+    } else if (selectedGameMode() === GAME_MODES.HEX && isHexGame(game)) {
+      // The preview already owns a fully initialized runtime from the worker.
+      // Reusing it avoids repeating the cellular-homology calculation here.
+      game.phase = 'ready';
     } else {
       game = beginSelectedGame(selectedPreset(), selectedGameOptions({
         rng: Math.random,
@@ -3743,7 +3965,9 @@
     eventQueueChangedBoard = false;
     if (game.phase !== 'gameover' && !isBilliardsGame(game)) game.phase = 'ready';
     render();
-    if (isGomokuGame(game)) {
+    if (isHexGame(game)) {
+      syncStatus(`${game.preset.label} Hex`, hexTurnInfo(game), 'ready');
+    } else if (isGomokuGame(game)) {
       syncStatus(`${game.preset.label} Gomoku`, gomokuTurnInfo(game), 'ready');
     } else if (isConnectFourGame(game)) {
       syncStatus(`${game.preset.label} Connect Four`, connectFourTurnInfo(game), 'ready');
@@ -3846,6 +4070,7 @@
     }
     if (isBilliardsGame(previous) && Billiards) {
       game = restartBilliardsRound(previous);
+      resetBilliardsCueGuidance();
       billiardsRackSelection = 0;
       billiardsRackCenter = null;
       billiardsSetupHover = null;
@@ -3956,15 +4181,17 @@
     }
     if (choice.kind === 'rack') {
       const rows = Math.floor((Math.sqrt(1 + (8 * choice.count)) - 1) / 2);
-      const spacing = size * 0.17;
-      const offsetY = size / 2 - ((rows - 1) * spacing * 0.5);
+      const ballRadius = size * 0.075;
+      const spacing = ballRadius * 2 * 1.005;
+      const rowSpacing = spacing * Math.sqrt(3) / 2;
+      const offsetY = size / 2 - ((rows - 1) * rowSpacing * 0.5);
       for (let row = 0; row < rows; row += 1) {
         for (let column = 0; column <= row; column += 1) {
           ctx.fillStyle = Billiards ? Billiards.ballColor('target', row * (row + 1) / 2 + column + 1) : '#2f70bb';
           ctx.strokeStyle = '#25282a';
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.arc(size / 2 + (column - (row / 2)) * spacing, offsetY + row * spacing, size * 0.068, 0, Math.PI * 2);
+          ctx.arc(size / 2 + (column - (row / 2)) * spacing, offsetY + row * rowSpacing, ballRadius, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
         }
@@ -4003,6 +4230,102 @@
     ctx.fillText(label, size / 2, size / 2);
   }
 
+  function billiardsCanvasContainsClientPoint(clientX, clientY) {
+    if (!refs.canvas || !refs.canvas.getBoundingClientRect) return false;
+    const rect = refs.canvas.getBoundingClientRect();
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  }
+
+  function updateBilliardsPaletteDragHover(event) {
+    if (!billiardsCanvasContainsClientPoint(event.clientX, event.clientY)) {
+      if (billiardsSetupHover) {
+        billiardsSetupHover = null;
+        render();
+      }
+      return;
+    }
+    const canvasPoint = canvasPointFromEvent(event);
+    const local = billiardsLocalFromEvent(event);
+    billiardsSetupHover = billiardsSetupHoverPreview(local, canvasPoint);
+    render();
+  }
+
+  function placeBilliardsPaletteChoiceAt(choice, local) {
+    if (!choice || !local || !isBilliardsGame(game) || game.phase !== 'setup' || !Billiards) return false;
+    if (choice.kind === 'rack') {
+      billiardsRackSelection = choice.count;
+      billiardsRackCenter = { tileIndex: local.tileIndex, position: { ...local.position } };
+      billiardsSetupHover = null;
+      syncBilliardsBallPalette();
+      syncCanvasCursor();
+      syncStatus(
+        tk('runtime.billiardsRackCenter', 'rack center selected'),
+        tk('runtime.billiardsRackChooseDirection', 'click a second point to set the rack direction'),
+        'setup'
+      );
+      render();
+      return true;
+    }
+    if (billiardsBallChoicePlaced(choice)) return false;
+    selectBilliardsBallChoice(choice);
+    if (!billiardsBallSelection) return false;
+    const result = billiardsBallSelection.kind === 'pocket'
+      ? Billiards.togglePocket(game, local.tileIndex, local.position)
+      : Billiards.placeBall(game, billiardsBallSelection, local.tileIndex, local.position);
+    const changed = applyBilliardsSetupResult(result, 'Billiards setup placement');
+    if (changed && billiardsBallSelection.kind !== 'pocket') {
+      selectNextMissingNumberedBall();
+      syncBilliardsBallPalette();
+    }
+    return changed;
+  }
+
+  function beginBilliardsPaletteDrag(event, choice) {
+    if (!choice || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    if (!isBilliardsGame(game) || game.phase !== 'setup' || onlineIsInRoom() || (choice.kind !== 'rack' && billiardsBallChoicePlaced(choice))) return;
+    const button = event.currentTarget;
+    try { button.setPointerCapture(event.pointerId); } catch (_) {}
+    const startX = event.clientX;
+    const startY = event.clientY;
+    billiardsPaletteDrag = { choice, active: false };
+    const onMove = (moveEvent) => {
+      if (!billiardsPaletteDrag) return;
+      if (!billiardsPaletteDrag.active) {
+        if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 4) return;
+        billiardsPaletteDrag.active = true;
+        button.classList.add('dragging');
+        if (choice.kind === 'rack') {
+          billiardsRackSelection = choice.count;
+          billiardsRackCenter = null;
+          syncBilliardsBallPalette();
+          syncCanvasCursor();
+        } else {
+          selectBilliardsBallChoice(choice);
+        }
+      }
+      updateBilliardsPaletteDragHover(moveEvent);
+    };
+    const onUp = (upEvent) => {
+      try { button.releasePointerCapture(event.pointerId); } catch (_) {}
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      const active = !!(billiardsPaletteDrag && billiardsPaletteDrag.active);
+      billiardsPaletteDrag = null;
+      button.classList.remove('dragging');
+      if (active) billiardsPaletteSuppressClickUntil = now() + 180;
+      if (active && billiardsCanvasContainsClientPoint(upEvent.clientX, upEvent.clientY)) {
+        const local = billiardsLocalFromEvent(upEvent);
+        placeBilliardsPaletteChoiceAt(choice, local);
+      }
+      if (!active) return;
+      updateBilliardsPaletteDragHover(upEvent);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  }
+
   function buildBilliardsBallPalette() {
     if (!refs.billiardsBallPalette || refs.billiardsBallPalette.children.length) return;
     billiardsBallPaletteChoices().forEach((choice) => {
@@ -4016,9 +4339,11 @@
       canvas.height = 64;
       button.appendChild(canvas);
       button.addEventListener('click', () => {
+        if (now() < billiardsPaletteSuppressClickUntil) return;
         if (choice.kind === 'rack') selectBilliardsRack(choice.count);
         else selectBilliardsBallChoice(choice);
       });
+      button.addEventListener('pointerdown', (event) => beginBilliardsPaletteDrag(event, choice));
       refs.billiardsBallPalette.appendChild(button);
       drawBilliardsBallPaletteSwatch(canvas, choice);
     });
@@ -4347,7 +4672,9 @@
     applyDefaultPlacementPieceSizeForMode(prepared.targetMode);
     resetToPreview();
     syncImportExportControls();
-    syncStatus('preset imported', previewInfo(game.preset), 'setup');
+    if (!isHexGame(game) || game.hexTopologyState !== 'pending') {
+      syncStatus('preset imported', previewInfo(game.preset), 'setup');
+    }
   }
 
   function confirmActiveGameReplacement() {
@@ -4371,6 +4698,8 @@
   function looksLikeStatusImportPayload(payload) {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
     const has = (key) => Object.prototype.hasOwnProperty.call(payload, key);
+    if (String(payload.schema || '').trim().toLowerCase() === 'ramified-minigame-background-preset') return false;
+    if (payload.name === 'Mosaic Calculator' && !has('gameMode') && !has('game') && !has('phase')) return false;
     if (looksLikeGameRecordImportPayload(payload)) return true;
     if (has('exportedAt') || has('status') || has('queue')) return true;
     if (has('gameMode') || has('game') || has('phase')) return true;
@@ -4849,6 +5178,99 @@
     return Billiards.canvasToLocal(canvasPointFromEvent(event), geometry, game.atlas);
   }
 
+  function billiardsSetupHoverLabel(preview, selection) {
+    if (!preview) return '';
+    if (!preview.valid) return tk('runtime.billiardsHoverBlocked', 'cannot: {{reason}}', { reason: localizedBilliardsIssue(preview.message) });
+    if (preview.action === 'remove') return tk('runtime.billiardsHoverRemovePocket', 'click to remove pocket');
+    if (preview.action === 'erase') return preview.type === 'pocket'
+      ? tk('runtime.billiardsHoverErasePocket', 'click to erase pocket')
+      : tk('runtime.billiardsHoverEraseBall', 'click to erase ball');
+    if (preview.action === 'move') return tk('runtime.billiardsHoverMove', 'drop to move');
+    if (preview.type === 'pocket') return tk('runtime.billiardsHoverAddPocket', 'click to add pocket');
+    if (selection && selection.kind === 'cue') return tk('runtime.billiardsHoverPlaceCue', 'click to place cue ball');
+    if (selection && selection.kind === 'target') return tk('runtime.billiardsHoverPlaceBall', 'click to place ball {{number}}', { number: selection.number });
+    return localizedBilliardsIssue(preview.message);
+  }
+
+  function billiardsSetupHoverPreview(local, canvasPoint) {
+    if (!isBilliardsGame(game) || !Billiards) return null;
+    if (billiardsRackSelection) {
+      if (!local && !billiardsRackCenter) return null;
+      return {
+        ...(local || {}),
+        canvasPoint,
+        valid: true,
+        action: billiardsRackCenter ? 'direction' : 'center',
+        label: billiardsRackCenter
+          ? tk('runtime.billiardsRackChooseDirection', 'click a second point to set the rack direction')
+          : tk('runtime.billiardsRackChooseCenter', 'click to set the rack center')
+      };
+    }
+    if (!local || !billiardsBallSelection) return null;
+    const preview = Billiards.setupInteractionPreview(game, billiardsBallSelection, local.tileIndex, local.position);
+    return preview ? { ...preview, canvasPoint, label: billiardsSetupHoverLabel(preview, billiardsBallSelection) } : null;
+  }
+
+  function billiardsMoveHoverPreview(local, pointer, canvasPoint) {
+    if (!local || !pointer || !Billiards) return null;
+    const ball = game.balls.find((entry) => entry.id === pointer.ballId && entry.active);
+    const result = ball ? Billiards.moveBall(game, pointer.ballId, local.tileIndex, local.position) : null;
+    const preview = {
+      type: 'ball',
+      tileIndex: local.tileIndex,
+      position: { ...local.position },
+      radius: ball ? ball.radius : game.ballRadius,
+      valid: !!(result && result.changed),
+      action: 'move',
+      message: result && result.message ? result.message : 'ball not found',
+      canvasPoint
+    };
+    preview.label = billiardsSetupHoverLabel(preview, null);
+    return preview;
+  }
+
+  function resetBilliardsCueGuidance() {
+    billiardsCueGuidanceDismissed = false;
+    billiardsCueHintUntil = 0;
+    if (billiardsCueGuidanceFrame != null) cancelFrame(billiardsCueGuidanceFrame);
+    billiardsCueGuidanceFrame = null;
+  }
+
+  function billiardsLocalCueGuidanceAllowed() {
+    if (!isBilliardsGame(game) || game.phase !== 'ready' || currentAnimation || billiardsShotPending) return false;
+    if (!game.balls.some((ball) => ball.active && ball.kind === 'cue')) return false;
+    return !onlineIsInRoom() || !onlineLocalPlayIssue('billiards-shot');
+  }
+
+  function billiardsCueGuidanceActive() {
+    return !billiardsCueGuidanceDismissed && billiardsLocalCueGuidanceAllowed();
+  }
+
+  function syncBilliardsCueGuidanceAnimation() {
+    if (typeof window === 'undefined' || !billiardsCueGuidanceActive()) {
+      if (billiardsCueGuidanceFrame != null) cancelFrame(billiardsCueGuidanceFrame);
+      billiardsCueGuidanceFrame = null;
+      return;
+    }
+    if (billiardsCueGuidanceFrame != null) return;
+    billiardsCueGuidanceFrame = requestFrame(() => {
+      billiardsCueGuidanceFrame = null;
+      if (!billiardsCueGuidanceActive()) return;
+      render();
+    });
+  }
+
+  function showBilliardsCueHint() {
+    if (!billiardsLocalCueGuidanceAllowed()) return;
+    billiardsCueHintUntil = now() + 4200;
+    syncStatus(
+      tk('runtime.billiardsCueHintTitle', 'Aim from the white cue ball'),
+      tk('runtime.billiardsCueHint', 'Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.'),
+      'ready'
+    );
+    render();
+  }
+
   function captureBilliardsPointer(pointerId) {
     if (refs.canvas && refs.canvas.setPointerCapture && Number.isInteger(pointerId)) {
       try { refs.canvas.setPointerCapture(pointerId); } catch (_) {}
@@ -4883,7 +5305,10 @@
     }
     if (game.phase !== 'ready') return false;
     const hit = Billiards.ballAtPoint(game, local.tileIndex, local.position);
-    if (!hit || hit.ball.kind !== 'cue') return false;
+    if (!hit || hit.ball.kind !== 'cue') {
+      showBilliardsCueHint();
+      return false;
+    }
     const cueCanvas = Billiards.localToCanvas(hit.image.tileIndex, hit.image.position, geometry, game.atlas);
     const point = canvasPointFromEvent(event);
     billiardsPointer = {
@@ -4904,9 +5329,7 @@
     const local = billiardsLocalFromEvent(event);
     if (game.phase === 'setup' && !billiardsPointer) {
       const canvasPoint = canvasPointFromEvent(event);
-      billiardsSetupHover = (local || (billiardsRackCenter && canvasPoint))
-        ? { ...(local || {}), canvasPoint, valid: true }
-        : null;
+      billiardsSetupHover = billiardsSetupHoverPreview(local, canvasPoint);
       render();
       return false;
     }
@@ -4918,7 +5341,7 @@
         if (point && billiardsPointer.startCanvas && Math.hypot(point.x - billiardsPointer.startCanvas.x, point.y - billiardsPointer.startCanvas.y) > 4) {
           billiardsPointer.moved = true;
         }
-        billiardsSetupHover = { ...local, canvasPoint: point, valid: true };
+        billiardsSetupHover = billiardsMoveHoverPreview(local, billiardsPointer, point);
         render();
       }
     } else if (billiardsPointer.kind === 'shot') {
@@ -5122,6 +5545,8 @@
     }
     pushUndoSnapshot(`Billiards shot ${source.shots + 1}`);
     game = result.state;
+    billiardsCueGuidanceDismissed = true;
+    billiardsCueHintUntil = 0;
     if (options.expectedSnapshot) {
       try {
         const expected = gameStateFromDebugImportPayload(options.expectedSnapshot).state;
@@ -6075,7 +6500,8 @@
   }
 
   function onlineTurnFeedbackUsesPiece(state) {
-    return isGomokuGame(state)
+    return isHexGame(state)
+      || isGomokuGame(state)
       || isGoGame(state)
       || isConnectFourGame(state)
       || isReversiGame(state)
@@ -6083,6 +6509,7 @@
   }
 
   function onlineTurnFeedbackActionText(state) {
+    if (isHexGame(state)) return localizedTurnAction('to fill');
     if (isGoGame(state)) return localizedTurnAction('to play');
     if (isConnectFourGame(state)) return localizedTurnAction('to drop');
     if (isChineseCheckersGame(state) && isChineseCheckersJumping(state)) return localizedTurnAction('jumping');
@@ -6600,6 +7027,7 @@
   }
 
   function debugModeInfo() {
+    if (isHexGame(game)) return 'export or import Hex status; homology runtime is rebuilt from tile placements';
     if (isGomokuGame(game)) return 'export or import Gomoku status';
     if (isConnectFourGame(game)) {
       return connectFourHoleEditingEnabled()
@@ -7260,6 +7688,7 @@
 
   function gameResultTitle(state) {
     if (isLianliankanGame(state)) return 'Tile Matching complete';
+    if (isHexGame(state)) return state.winner ? localizedWinnerText(state.winner) : tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.HEX) });
     if (isGomokuGame(state)) return state.winner ? localizedWinnerText(state.winner) : tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.GOMOKU) });
     if (isConnectFourGame(state)) return state.winner ? localizedWinnerText(state.winner) : tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.CONNECT_FOUR) });
     if (isGoGame(state)) return state.winner ? localizedWinnerText(state.winner) : tk('runtime.drawResult', '{{game}} draw', { game: localizedGameName(GAME_MODES.GO) });
@@ -7276,6 +7705,7 @@
 
   function gameResultDetail(state) {
     if (isLianliankanGame(state)) return `${state.matches || 0} pair${state.matches === 1 ? '' : 's'} cleared`;
+    if (isHexGame(state)) return state.winningExpression ? `[loop] = ${state.winningExpression}` : `${state.round || 0} move${state.round === 1 ? '' : 's'}`;
     if (isGomokuGame(state)) return `${state.round || 0} move${state.round === 1 ? '' : 's'}`;
     if (isConnectFourGame(state)) return `${state.round || 0} drop${state.round === 1 ? '' : 's'}`;
     if (isGoGame(state)) return goFinalScoreText(state);
@@ -7292,7 +7722,9 @@
     const gameName = tr(gameTypeForGameMode(mode));
     const presetLabel = tr(state && state.preset && state.preset.label ? state.preset.label : 'selected background');
     let rules = 'Read the quick rule, then begin the selected game on this glued mosaic.';
-    if (mode === GAME_MODES.GOMOKU) {
+    if (mode === GAME_MODES.HEX) {
+      rules = 'Red and blue alternately fill tiles. Create a connected loop with nonzero integral H₁ to win; the pie rule lets Blue swap colors after Red’s first tile.';
+    } else if (mode === GAME_MODES.GOMOKU) {
       rules = 'Place black and white stones on empty board points. The first player to make a line of five wins.';
     } else if (mode === GAME_MODES.CONNECT_FOUR) {
       const holes = isConnectFourGame(state) && state.holes ? state.holes.size : 0;
@@ -7365,6 +7797,10 @@
     }
     if (handleFideChessPromotionPickerClick(event)) return;
     if (game && game.phase !== 'setup') hideCanvasStartPrompt();
+    if (isHexGame(game)) {
+      handleHexCanvasClick(event);
+      return;
+    }
     if (isGomokuGame(game)) {
       handleGomokuCanvasClick(event);
       return;
@@ -7584,6 +8020,19 @@
     if (!geometry || !geometry.cells || !geometry.cells.length) return;
     const preset = game ? game.preset : selectedPreset();
     setGlueHover(hoveredGlueBoundaryAtPoint(preset, geometry, canvasPointFromEvent(event)));
+    const target = isHexGame(game) && game.phase === 'ready' ? tileFromCanvasEvent(event) : null;
+    setHexHover(target && !game.removed.has(target.index) && !hexTileAt(game, target.index) ? target.index : null);
+  }
+
+  function setHexHover(index) {
+    const next = Number.isInteger(index) ? index : null;
+    if (hoveredHexIndex === next) return;
+    hoveredHexIndex = next;
+    render();
+  }
+
+  function clearHexHover() {
+    setHexHover(null);
   }
 
   function setGlueHover(nextHover) {
@@ -7622,6 +8071,8 @@
       refs.canvas.style.cursor = 'grabbing';
     } else if (hoveredGlue) {
       refs.canvas.style.cursor = 'help';
+    } else if (isHexGame(game) && Number.isInteger(hoveredHexIndex)) {
+      refs.canvas.style.cursor = 'pointer';
     } else if (onlineBoardMoveBlockedForCursor()) {
       refs.canvas.style.cursor = 'not-allowed';
     } else {
@@ -7660,6 +8111,46 @@
       index: target.index,
       label: target.label
     });
+  }
+
+  function handleHexCanvasClick(event) {
+    if (!game || currentAnimation || game.phase === 'setup' || game.phase === 'gameover') return;
+    if (rejectOnlineLocalAction('online Hex turn blocked')) return;
+    const target = tileFromCanvasEvent(event);
+    if (!target) return;
+    const result = placeHexTile(game, target.index);
+    if (!result.changed) {
+      syncStatus('Hex move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
+      return;
+    }
+    pushUndoSnapshot(`Hex ${result.tile.color} at ${target.label}`);
+    game = result.state;
+    if (game.phase === 'gameover') {
+      if (game.winner) syncStatus(`${hexColorLabel(game.winner)} wins`, `[loop] = ${game.winningExpression}`, 'over');
+      else syncStatus('Hex draw', `${game.round} filled tiles`, 'over');
+    } else {
+      syncStatus(`Hex move ${game.round}`, hexTurnInfo(game), 'ready');
+    }
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+    onlineSendLocalAction({ type: 'place', gameMode: GAME_MODES.HEX, role: result.tile.color, index: target.index, label: target.label });
+  }
+
+  function handleHexPieSwap() {
+    if (!game || !isHexGame(game) || rejectOnlineLocalAction('online Hex pie swap blocked')) return;
+    const result = swapHexPieColors(game);
+    if (!result.changed) {
+      syncStatus('Hex pie swap rejected', result.message, phaseBadge(game.phase));
+      return;
+    }
+    pushUndoSnapshot('Hex pie swap');
+    game = result.state;
+    syncStatus('Hex colors swapped', hexTurnInfo(game), 'ready');
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+    onlineSendLocalAction({ type: 'pie-swap', gameMode: GAME_MODES.HEX, role: 'blue' });
   }
 
   function handleConnectFourCanvasClick(event) {
@@ -8788,7 +9279,7 @@
     if (!recordableGameMode(gameModeValue(game))) {
       refs.debugExport.value = '';
       if (refs.importExportController) refs.importExportController.sync();
-      syncStatus('record unavailable', 'Game records are available for Billiard, Gomoku, Go, Connect Four, Reversi, and FIDE Chess.', 'warn');
+      syncStatus('record unavailable', 'Game records are available for Tile Matching, Hex, Billiard, Gomoku, Go, Connect Four, Reversi, and FIDE Chess.', 'warn');
       return;
     }
     refs.debugExport.value = JSON.stringify(gameRecordExportPayload(game), null, 2);
@@ -8801,7 +9292,7 @@
   }
 
   function gameRecordExportPayload(state) {
-    const preset = backgroundPresetForExport();
+    const preset = backgroundPresetForExport(state);
     if (isBilliardsGame(state) && state.initialSetup) preset.billiards = clonePlain(state.initialSetup);
     return {
       kind: 'ramified-minigame-record',
@@ -8831,7 +9322,7 @@
       const tile = normalizeCompactTileRefText(move.entry || move.tile);
       if (tile) return tile;
     }
-    if ((isGomokuGame(state) || isGoGame(state)) && (action === 'place' || action === 'play' || action === 'stone')) {
+    if ((isHexGame(state) || isGomokuGame(state) || isGoGame(state)) && (action === 'place' || action === 'play' || action === 'stone')) {
       const tile = normalizeCompactTileRefText(move.tile);
       if (tile) return tile;
     }
@@ -8873,6 +9364,7 @@
         .sort((a, b) => a - b)
         .map((index) => compactTileRef(index, state.preset));
     }
+    if (isHexGame(state)) settings.pieRule = !!state.pieRule;
     return settings;
   }
 
@@ -8945,8 +9437,8 @@
     });
   }
 
-  function backgroundPresetForExport() {
-    const source = game ? game.preset : selectedPreset();
+  function backgroundPresetForExport(sourceState = game) {
+    const source = sourceState ? sourceState.preset : selectedPreset();
     const preset = {
       id: source.id,
       label: source.label,
@@ -8961,7 +9453,7 @@
       })),
       gluedEdges: (source.gluedEdges || []).map(cloneGluePair)
     };
-    const holes = backgroundConnectFourHolesForExport(source);
+    const holes = backgroundConnectFourHolesForExport(source, sourceState);
     if (holes.length) {
       preset.connectFourHoles = holes;
       preset.inputHoles = holes.map((tile) => ({ ...tile }));
@@ -8981,14 +9473,16 @@
     if (Array.isArray(source.chineseCheckersPlayers)) preset.chineseCheckersPlayers = source.chineseCheckersPlayers.map(normalizePlacementColor).filter(Boolean);
     const sokoban = sokobanPresetDecorationsForExport(source);
     if (sokoban) preset.sokoban = sokoban;
-    if (isBilliardsGame(game) && Billiards) preset.billiards = Billiards.presetBlockFromState(game);
+    if (source.lianliankan) preset.lianliankan = clonePlain(source.lianliankan);
+    if (source.hex) preset.hex = clonePlain(source.hex);
+    if (isBilliardsGame(sourceState) && Billiards) preset.billiards = Billiards.presetBlockFromState(sourceState);
     else if (source.billiards) preset.billiards = clonePlain(source.billiards);
     return preset;
   }
 
-  function backgroundConnectFourHolesForExport(preset) {
-    const holes = isConnectFourGame(game)
-      ? Array.from(game.holes || []).map((index) => rowCol(index, preset.cols))
+  function backgroundConnectFourHolesForExport(preset, sourceState = game) {
+    const holes = isConnectFourGame(sourceState)
+      ? Array.from(sourceState.holes || []).map((index) => rowCol(index, preset.cols))
       : (preset.connectFourHoles || []).map((tile) => ({ row: tile.row, col: tile.col }));
     return holes
       .filter((tile) => Number.isInteger(tile.row) && Number.isInteger(tile.col))
@@ -9021,6 +9515,8 @@
     if (Array.isArray(preset.chineseCheckersPlayers)) compact.chineseCheckersPlayers = preset.chineseCheckersPlayers.slice();
     const sokoban = sokobanPresetDecorationsForExport(preset, true);
     if (sokoban) compact.sokoban = sokoban;
+    if (preset.lianliankan) compact.lianliankan = clonePlain(preset.lianliankan);
+    if (preset.hex) compact.hex = clonePlain(preset.hex);
     if (preset.billiards) compact.billiards = clonePlain(preset.billiards);
     return compact;
   }
@@ -9160,6 +9656,7 @@
     if (refs.select) refs.select.value = importedPreset.id;
     game = imported.state;
     if (isBilliardsGame(game)) {
+      resetBilliardsCueGuidance();
       billiardsRackSelection = 0;
       billiardsRackCenter = null;
       ensureBilliardsBallSelection(true);
@@ -9232,6 +9729,8 @@
     if (Array.isArray(preset.chineseCheckersPlayers)) presetPayload.chineseCheckersPlayers = preset.chineseCheckersPlayers.slice();
     const presetSokoban = sokobanPresetDecorationsForExport(preset);
     if (presetSokoban) presetPayload.sokoban = presetSokoban;
+    if (preset.lianliankan) presetPayload.lianliankan = clonePlain(preset.lianliankan);
+    if (preset.hex) presetPayload.hex = clonePlain(preset.hex);
     if (isBilliardsGame(game) && Billiards) presetPayload.billiards = Billiards.presetBlockFromState(game);
     else if (preset.billiards) presetPayload.billiards = clonePlain(preset.billiards);
     const base = {
@@ -9268,6 +9767,31 @@
         ...base,
         ...billiardsState,
         billiardsState,
+        queue: {
+          eventIndex: 0,
+          eventCount: 0,
+          stepPaused: false,
+          currentAnimation: null,
+          events: []
+        }
+      };
+    }
+    if (isHexGame(game)) {
+      return {
+        ...base,
+        turn: game.turn || 'red',
+        winner: game.winner || '',
+        pieRule: !!game.pieRule,
+        pieAvailable: !!game.pieAvailable,
+        pieSwapped: !!game.pieSwapped,
+        resultDismissed: !!game.resultDismissed,
+        nextTileId: game.nextTileId || 1,
+        winningClass: Array.isArray(game.winningClass) ? game.winningClass.slice() : [],
+        winningExpression: game.winningExpression || '',
+        recordMoves: cloneGameRecordMoves(game.recordMoves),
+        tiles: (game.tiles || [])
+          .map((tile) => tokenExport(tile, preset.cols))
+          .sort((a, b) => a.index - b.index || a.id - b.id),
         queue: {
           eventIndex: 0,
           eventCount: 0,
@@ -9672,7 +10196,9 @@
   }
 
   function recordableGameMode(mode) {
-    return mode === GAME_MODES.BILLIARDS
+    return mode === GAME_MODES.LIANLIANKAN
+      || mode === GAME_MODES.BILLIARDS
+      || mode === GAME_MODES.HEX
       || mode === GAME_MODES.GOMOKU
       || mode === GAME_MODES.GO
       || mode === GAME_MODES.CONNECT_FOUR
@@ -9723,6 +10249,11 @@
     }
     if (isLianliankanGame(state) && Lianliankan) {
       return `${Lianliankan.remainingTileCount(state)} tiles, ${state.matches || 0} matches, ${state.refreshes || 0} refreshes`;
+    }
+    if (isHexGame(state)) {
+      const seedCount = (state.seedTiles || []).length;
+      const tileCount = state.tiles.length + seedCount;
+      return `${tileCount} tile${tileCount === 1 ? '' : 's'}${seedCount ? ` (${seedCount} seed)` : ''}, ${state.removed.size} removed${state.winningExpression ? `, [loop] = ${state.winningExpression}` : ''}`;
     }
     if (isGomokuGame(state)) {
       return `${state.stones.length} stone${state.stones.length === 1 ? '' : 's'}, ${state.removed.size} removed`;
@@ -9787,6 +10318,27 @@
         stepPaused: false,
         displayStyle: normalizePlacementDisplayStyle(payload.settings && payload.settings.displayStyle, 'billiards-table')
       };
+    }
+    if (normalizeStatusGameMode(payload) === GAME_MODES.HEX) {
+      const tiles = normalizeStatusHexTiles(payload.tiles, preset, removed);
+      const phase = normalizeStatusPhase(payload.phase);
+      const state = createHexState(preset, { pieRule: !!payload.pieRule });
+      state.removed = removed;
+      state.tiles = tiles;
+      state.nextTileId = Math.max(normalizeNonnegativeInteger(payload.nextTileId, 1), tiles.reduce((max, tile) => Math.max(max, tile.id + 1), 1));
+      state.turn = normalizeHexTurn(payload.turn, tiles.length);
+      state.phase = phase;
+      state.winner = phase === 'gameover' ? normalizeHexColor(payload.winner) : '';
+      state.pieRule = !!payload.pieRule;
+      state.pieAvailable = !!payload.pieAvailable && state.pieRule && state.turn === 'blue' && tiles.length === 1;
+      state.pieSwapped = !!payload.pieSwapped;
+      state.resultDismissed = !!payload.resultDismissed;
+      state.round = normalizeNonnegativeInteger(payload.round, tiles.length);
+      state.ending = phase === 'gameover' ? sanitizeImportedText(payload.ending || '', '') : '';
+      state.recordMoves = normalizeGameRecordMoves(payload.recordMoves);
+      rebuildHexRuntime(state);
+      if (state.setupIssue) throw new Error(state.setupIssue);
+      return { state, phase: state.phase, eventQueue: [], eventIndex: 0, stepPaused: false };
     }
     if (normalizeStatusGameMode(payload) === GAME_MODES.GOMOKU) {
       const stones = normalizeStatusGomokuStones(payload.stones, preset, removed);
@@ -10223,13 +10775,25 @@
   function gameStateFromRecordImportPayload(payload) {
     const mode = gameModeFromUrlParam(payload.gameMode || payload.game);
     if (!recordableGameMode(mode)) {
-      throw new Error('record gameMode must be Billiards, Gomoku, Go, Connect Four, Reversi, or FIDE Chess');
+      throw new Error('record gameMode must be Tile Matching, Hex, Billiards, Gomoku, Go, Connect Four, Reversi, or FIDE Chess');
     }
     const snapshot = payload.snapshot && typeof payload.snapshot === 'object' && !Array.isArray(payload.snapshot)
       ? payload.snapshot
       : null;
     const settings = gameRecordImportSettings(payload, snapshot);
     const preset = presetFromStatusPayload({ preset: payload.preset || (snapshot && snapshot.preset) || {} });
+    if (mode === GAME_MODES.LIANLIANKAN) {
+      if (snapshot) {
+        if (normalizeStatusGameMode(snapshot) !== GAME_MODES.LIANLIANKAN) {
+          throw new Error('record snapshot gameMode does not match Tile Matching');
+        }
+        const imported = gameStateFromDebugImportPayload(snapshot);
+        imported.settings = settings;
+        return imported;
+      }
+      const state = beginLianliankanGame(preset, {});
+      return { state, phase: state.phase, eventQueue: [], eventIndex: 0, stepPaused: false };
+    }
     const moves = normalizeGameRecordMoves(payload.moves);
     let state = beginRecordGame(mode, preset, settings);
     state.recordMoves = [];
@@ -10274,6 +10838,11 @@
       if (!result.changed) throw new Error(`record Billiards setup is invalid: ${result.message}`);
       return result.state;
     }
+    if (mode === GAME_MODES.HEX) {
+      const state = beginHexGame(preset, { pieRule: !!settings.pieRule });
+      if (state.setupIssue) throw new Error(`record Hex setup is invalid: ${state.setupIssue}`);
+      return state;
+    }
     if (mode === GAME_MODES.GOMOKU) return beginGomokuGame(preset, {});
     if (mode === GAME_MODES.GO) {
       return beginGoGame(preset, {
@@ -10311,6 +10880,16 @@
         return changedRecordState(result, label);
       }
       throw new Error(`${label} has an invalid Billiards action`);
+    }
+    if (isHexGame(state)) {
+      if (action === 'pie-swap' || action === 'swap') {
+        return changedRecordState(swapHexPieColors(state), label);
+      }
+      if (action !== 'place' && action !== 'play' && action !== 'tile') throw new Error(`${label} has an invalid Hex action`);
+      const index = gameRecordMoveIndex(move, state.preset, label);
+      const color = normalizeHexColor(move.color);
+      if (color && color !== state.turn) throw new Error(`${label} expected ${hexColorLabel(state.turn)} to fill`);
+      return changedRecordState(placeHexTile(state, index), label);
     }
     if (isGomokuGame(state)) {
       if (action !== 'place' && action !== 'play' && action !== 'stone') throw new Error(`${label} has an invalid Gomoku action`);
@@ -10515,6 +11094,12 @@
     if (billiardsSource && typeof billiardsSource === 'object' && !Array.isArray(billiardsSource)) {
       statusPreset.billiards = clonePlain(billiardsSource);
     }
+    const lianliankanSource = source.lianliankan || (base && base.lianliankan);
+    const lianliankan = normalizeLianliankanPresetDecorations(lianliankanSource, statusPreset, removedTileSet);
+    if (lianliankan.initiallyEmpty.length) statusPreset.lianliankan = lianliankan;
+    const hexSource = source.hex || (base && base.hex);
+    const hex = normalizeHexPresetDecorations(hexSource, statusPreset, removedTileSet);
+    if (hex.seeds.length || hex.homology) statusPreset.hex = hex;
     const sokobanSource = source.sokoban || (base && base.sokoban);
     const sokobanDecorations = normalizeSokobanDecorations(sokobanSource, statusPreset, new Set(removedTileSet));
     if (sokobanDecorationHasEntries(sokobanDecorations)) {
@@ -10658,6 +11243,26 @@
       if (!color) throw new Error(`status stone ${index + 1} color must be black or white`);
       const id = normalizePositiveInteger(entry && entry.id, index + 1);
       if (usedIds.has(id)) throw new Error(`status stone id ${id} is duplicated`);
+      usedIds.add(id);
+      return placementPieceWithOptionalMoveNumber({ id, index: tileIndex, color }, entry);
+    });
+  }
+
+  function normalizeStatusHexTiles(entries, preset, removed) {
+    if (!Array.isArray(entries)) throw new Error('status Hex tiles must be an array');
+    const usedIds = new Set();
+    const occupied = new Set();
+    return entries.map((entry, index) => {
+      const tile = normalizeImportedTileRef(entry, preset.rows, preset.cols);
+      if (!tile) throw new Error(`status Hex tile ${index + 1} has an invalid tile`);
+      const tileIndex = indexOf(tile.row, tile.col, preset.cols);
+      if (removed.has(tileIndex)) throw new Error(`status Hex tile ${index + 1} is on a removed tile`);
+      if (occupied.has(tileIndex)) throw new Error(`status Hex tile ${index + 1} shares an occupied tile`);
+      occupied.add(tileIndex);
+      const color = normalizeHexColor(entry && entry.color);
+      if (!color) throw new Error(`status Hex tile ${index + 1} color must be red or blue`);
+      const id = normalizePositiveInteger(entry && entry.id, index + 1);
+      if (usedIds.has(id)) throw new Error(`status Hex tile id ${id} is duplicated`);
       usedIds.add(id);
       return placementPieceWithOptionalMoveNumber({ id, index: tileIndex, color }, entry);
     });
@@ -10841,6 +11446,7 @@
 
   function normalizeStatusGameMode(payload) {
     const value = String((payload && (payload.gameMode || payload.game)) || '').trim().toLowerCase();
+    if ([GAME_MODES.HEX, 'nash', 'hex (nash)', 'topological hex'].includes(value)) return GAME_MODES.HEX;
     if ([GAME_MODES.LIANLIANKAN, 'tile-link', 'tile link', 'tile matching', '连连看'].includes(value)) return GAME_MODES.LIANLIANKAN;
     if ([GAME_MODES.BILLIARDS, 'billiard', 'topological billiards'].includes(value)) return GAME_MODES.BILLIARDS;
     if (value === GAME_MODES.CHINESE_CHECKERS || value === 'chinese checkers' || value === 'chinesecheckers') {
@@ -10888,6 +11494,15 @@
   function normalizeGomokuColor(value) {
     const color = String(value || '').trim().toLowerCase();
     return GOMOKU_COLORS.includes(color) ? color : '';
+  }
+
+  function normalizeHexColor(value) {
+    const color = String(value || '').trim().toLowerCase();
+    return HEX_COLORS.includes(color) ? color : '';
+  }
+
+  function normalizeHexTurn(value, tileCount) {
+    return normalizeHexColor(value) || (tileCount % 2 === 0 ? 'red' : 'blue');
   }
 
   function normalizeGomokuTurn(value, stoneCount) {
@@ -11111,6 +11726,22 @@
         return;
       }
       syncStatus(tk('runtime.shotStatus', '{{game}} shot {{count}}', { game: localizedGameName(GAME_MODES.BILLIARDS), count: game.shots || 0 }), billiardsTurnInfo(game), phaseBadge(game.phase));
+      return;
+    }
+    if (isHexGame(game)) {
+      if (game.phase === 'setup') {
+        if (game.hexTopologyState === 'pending') {
+          syncStatus('computing homology', 'rendering is ready; Hex play controls will unlock when topology finishes', 'setup');
+          return;
+        }
+        syncStatus(localizedPreviewTitle(game.preset, GAME_MODES.HEX), game.setupIssue || 'fill tiles to create a nonzero homology class', game.setupIssue ? 'warn' : 'setup');
+        return;
+      }
+      if (game.phase === 'gameover') {
+        syncStatus(game.winner ? localizedWinnerText(game.winner) : 'Hex draw', game.winner ? `[loop] = ${game.winningExpression || 'nonzero H₁'}` : `${game.round} filled tiles`, 'over');
+        return;
+      }
+      syncStatus(`Hex move ${game.round || 0}`, hexTurnInfo(game), phaseBadge(game.phase));
       return;
     }
     if (isGomokuGame(game)) {
@@ -11484,8 +12115,13 @@
         aim: billiardsAim,
         dragPower: billiardsDragPower,
         assistance: refs.billiardsAssistance ? refs.billiardsAssistance.value : 'beginner',
-        setupHover: billiardsRackSelection ? null : billiardsSetupHover,
-        rackPreview: billiardsRackPreview(),
+        setupHover: game.phase === 'setup' ? billiardsSetupHover : null,
+        rackPreview: game.phase === 'setup' ? billiardsRackPreview() : null,
+        cuePrompt: billiardsCueGuidanceActive(),
+        pulseTime: now(),
+        cueHintLabel: now() < billiardsCueHintUntil
+          ? tk('runtime.billiardsCueHintCanvas', 'drag back to shoot')
+          : '',
         debug: !!(refs.billiardsDebug && refs.billiardsDebug.checked),
         debugTexture: !!(refs.billiardsDebugTexture && refs.billiardsDebugTexture.checked)
       });
@@ -11494,12 +12130,14 @@
       else if (vertexDisplay) drawPlacementVertexBoard(ctx, geometry, game);
       else if (isConnectFourGame(game)) drawConnectFourHoles(ctx, geometry, game);
       drawPlacementReachAssistUnderlay(ctx, geometry, game);
-      if (!isConnectFourDropAnimation() && !isChineseCheckersGame(game)) drawPlacementWinningLine(ctx, geometry, game);
+      if (isHexGame(game)) drawHexTileFills(ctx, geometry, game);
+      if (isHexGame(game)) drawHexWinningCycle(ctx, geometry, game);
+      else if (!isConnectFourDropAnimation() && !isChineseCheckersGame(game)) drawPlacementWinningLine(ctx, geometry, game);
       if (isGoGame(game)) drawGoScoreOverlay(ctx, geometry, game);
       drawPlacementLastMoveUnderlays(ctx, geometry, game);
       drawPlacementSelectionOverlays(ctx, geometry, game);
       drawFideChessPuzzleWaitingTray(ctx, geometry, game);
-      drawPlacementPieces(ctx, geometry, placementPieces(game));
+      if (!isHexGame(game)) drawPlacementPieces(ctx, geometry, placementPieces(game));
       drawFideChessPendingPromotion(ctx, geometry, game);
       drawFideChessDraggedPiece(ctx, geometry, game);
       drawPlacementLastMovePieceMarkers(ctx, geometry, game);
@@ -11523,6 +12161,7 @@
     drawCanvasFeedbackOverlays(ctx, geometry);
     syncStats();
     requestFullscreenActionPlacement();
+    syncBilliardsCueGuidanceAnimation();
   }
 
   function drawLianliankanGame(ctx, geom, state) {
@@ -13072,6 +13711,98 @@
     ctx.restore();
   }
 
+  function drawHexTileFills(ctx, geom, state) {
+    if (!state) return;
+    const removed = state.removed || new Set();
+    hexAllTiles(state).forEach((tile) => {
+      if (!tile || removed.has(tile.index)) return;
+      drawHexTileFill(ctx, geom, tile.index, tile.color, 1);
+    });
+    if (state.phase !== 'ready' || !Number.isInteger(hoveredHexIndex)) return;
+    if (removed.has(hoveredHexIndex) || hexTileAt(state, hoveredHexIndex)) return;
+    drawHexTileFill(ctx, geom, hoveredHexIndex, state.turn, 0.4);
+  }
+
+  function drawHexTileFill(ctx, geom, index, color, alpha = 1) {
+    const cell = geom && geom.cells ? geom.cells[index] : null;
+    if (!cell) return;
+    // Leave a narrow, even border so the common mosaic board, grid lines, and
+    // glued seams remain readable while the colored square/hex still reads as
+    // the player's filled tile rather than a circular game stone.
+    const points = tilePoints(cell.x, cell.y, geom.radius * 0.88, geom.lattice);
+    const isBlue = color === 'blue';
+    ctx.save();
+    ctx.globalAlpha *= Math.max(0, Math.min(1, alpha));
+    ctx.beginPath();
+    points.forEach((point, pointIndex) => {
+      if (pointIndex) ctx.lineTo(point.x, point.y);
+      else ctx.moveTo(point.x, point.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = isBlue ? '#2f6fd6' : '#d83a3a';
+    ctx.fill();
+    ctx.lineWidth = Math.max(1.1, geom.radius * 0.038);
+    ctx.strokeStyle = isBlue ? '#174187' : '#841f24';
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function hexTraversalDirs(edge, traversal) {
+    if (!edge || !traversal) return null;
+    if (edge.u === traversal.from && edge.v === traversal.to) return { fromDir: edge.uDir, toDir: edge.vDir };
+    if (edge.v === traversal.from && edge.u === traversal.to) return { fromDir: edge.vDir, toDir: edge.uDir };
+    return null;
+  }
+
+  function drawHexWinningCycle(ctx, geom, state) {
+    const witness = state && state.winningCycle;
+    const topology = state && state.hexTopology;
+    if (!witness || !topology || !Array.isArray(witness.traversals)) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 236, 102, 0.96)';
+    ctx.shadowColor = 'rgba(119, 77, 0, 0.9)';
+    ctx.shadowBlur = Math.max(3, geom.radius * 0.13);
+    ctx.lineWidth = Math.max(2.5, geom.radius * 0.09);
+    ctx.lineCap = 'round';
+    witness.traversals.forEach((traversal) => {
+      const edge = topology.edges && topology.edges[traversal.edgeId];
+      const dirs = hexTraversalDirs(edge, traversal);
+      const from = geom.cells[traversal.from];
+      const to = geom.cells[traversal.to];
+      if (!edge || !dirs || !from || !to) return;
+      if (edge.kind !== 'glued') {
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+        ctx.stroke();
+        return;
+      }
+      const first = edgeSegmentFromIndex(geom, traversal.from, dirs.fromDir);
+      const second = edgeSegmentFromIndex(geom, traversal.to, dirs.toDir);
+      if (!first || !second) return;
+      const firstMid = { x: (first.start.x + first.end.x) / 2, y: (first.start.y + first.end.y) / 2 };
+      const secondMid = { x: (second.start.x + second.end.x) / 2, y: (second.start.y + second.end.y) / 2 };
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(firstMid.x, firstMid.y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(secondMid.x, secondMid.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+      // The two markers denote the identified seam.  Do not join them in the
+      // planar drawing: that straight segment would be a false path on the
+      // quotient surface.
+      [firstMid, secondMid].forEach((point) => {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, Math.max(2.3, geom.radius * 0.1), 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 236, 102, 0.98)';
+        ctx.fill();
+      });
+    });
+    ctx.restore();
+  }
+
   function drawPlacementWinningLine(ctx, geom, state) {
     if (isChineseCheckersGame(state)) return;
     if (!state || !state.winningLine || !state.winningLine.length) return;
@@ -13477,7 +14208,7 @@
     // from its centre to a top/bottom point.  Use that real perimeter extent so
     // rank labels sit just beyond the hex boundary instead of floating inward.
     const horizontalOffset = geom.lattice && geom.lattice.shape === 'hex'
-      ? (geom.size / 2) + (fontSize * 0.72)
+      ? (geom.size / 2) + (fontSize * 0.45)
       : verticalOffset;
     prepareBoardCoordinateText(ctx, geom);
     ctx.textAlign = 'center';
@@ -13537,7 +14268,7 @@
       if (!files.has(cell.q)) files.set(cell.q, []);
       files.get(cell.q).push({ cell, index });
     });
-    const outwardGap = Math.max(fontSize * 0.9, geom.radius * 0.18);
+    const outwardGap = Math.max(fontSize * 0.7, geom.radius * 0.14);
     return Array.from(files.entries())
       .sort(([leftQ], [rightQ]) => leftQ - rightQ)
       .flatMap(([q, cells], labelIndex) => {
@@ -16843,6 +17574,7 @@
     if (latticeForPreset(preset).id !== 'square') throw new Error('Lianliankan requires a square-lattice background');
     const initiallyEmpty = [
       ...(Array.isArray(options.initiallyEmpty) ? options.initiallyEmpty : []),
+      ...(preset.lianliankan && Array.isArray(preset.lianliankan.initiallyEmpty) ? preset.lianliankan.initiallyEmpty : []),
       ...lianliankanBoundaryRingEmptyCells(preset)
     ];
     return LianliankanMosaicAdapter.createSharedState(preset, { ...options, initiallyEmpty });
@@ -16877,6 +17609,56 @@
 
   function beginLianliankanGame(presetOrId, options = {}) {
     return createLianliankanState(presetOrId, options);
+  }
+
+  function createHexState(presetOrId, options = {}) {
+    const preset = materializePreset(resolvePreset(presetOrId), { ...options, gameMode: GAME_MODES.HEX });
+    const removed = initialRemovedSet(preset);
+    let seedTiles = [];
+    let seedIssue = '';
+    try { seedTiles = hexSeedTilesForPreset(preset, removed); } catch (error) { seedIssue = error && error.message ? error.message : 'Hex seeds are invalid'; }
+    const storedTopology = !seedIssue && options.deferTopology && TopologicalHex
+      && typeof TopologicalHex.topologyFromPresetHomology === 'function'
+      ? TopologicalHex.topologyFromPresetHomology(preset, removed)
+      : null;
+    const state = {
+      gameMode: GAME_MODES.HEX,
+      preset,
+      phase: 'setup',
+      removed,
+      boxes: [],
+      newBoxIds: new Set(),
+      nextBoxId: 1,
+      score: 0,
+      tiles: [],
+      seedTiles,
+      nextTileId: 1,
+      turn: 'red',
+      winner: '',
+      winningCycle: null,
+      winningClass: [],
+      winningExpression: '',
+      pieRule: !!options.pieRule,
+      pieAvailable: false,
+      pieSwapped: false,
+      resultDismissed: false,
+      round: 0,
+      ending: '',
+      recordMoves: [],
+      hexTopology: null,
+      hexRuntime: null,
+      hexTopologyState: seedIssue ? 'error' : (storedTopology ? 'computing' : (options.deferTopology ? 'pending' : 'computing')),
+      setupIssue: seedIssue
+    };
+    if (storedTopology) rebuildHexRuntime(state, storedTopology);
+    else if (!options.deferTopology && !state.setupIssue) rebuildHexRuntime(state);
+    return state;
+  }
+
+  function beginHexGame(presetOrId, options = {}) {
+    const state = createHexState(presetOrId, options);
+    if (!state.setupIssue) state.phase = 'ready';
+    return state;
   }
 
   function createGomokuState(presetOrId, options = {}) {
@@ -19353,6 +20135,219 @@
       });
     });
     return Array.from(plans.values());
+  }
+
+  function hexTileAt(state, index) {
+    if (!state) return null;
+    const seed = (state.seedTiles || []).find((tile) => tile.index === index);
+    if (seed) return seed;
+    return Array.isArray(state.tiles) ? state.tiles.find((tile) => tile.index === index) || null : null;
+  }
+
+  function hexSeedTilesForPreset(preset, removed = initialRemovedSet(preset)) {
+    const seeds = preset && preset.hex && Array.isArray(preset.hex.seeds) ? preset.hex.seeds : [];
+    const seen = new Set();
+    return seeds.map((entry, ordinal) => {
+      const row = Number(entry && entry.row);
+      const col = Number(entry && entry.col);
+      const color = normalizeHexColor(entry && entry.color);
+      const index = Number.isInteger(row) && Number.isInteger(col) ? indexOf(row, col, preset.cols) : -1;
+      if (index < 0 || index >= preset.rows * preset.cols || !color) throw new Error(`Hex seed ${ordinal + 1} must name a valid red or blue tile`);
+      if (removed.has(index)) throw new Error(`Hex seed ${ordinal + 1} is on a removed tile`);
+      if (seen.has(index)) throw new Error(`Hex seed ${ordinal + 1} duplicates another seed`);
+      seen.add(index);
+      return { id: `seed-${ordinal + 1}`, index, color, seed: true };
+    }).sort((left, right) => left.index - right.index || left.color.localeCompare(right.color));
+  }
+
+  function hexAllTiles(state) {
+    return [...(state && state.seedTiles || []), ...(state && state.tiles || [])];
+  }
+
+  function emptyHexIndices(state) {
+    return emptyPlayableIndices(state, new Set(hexAllTiles(state).map((tile) => tile.index)));
+  }
+
+  function hexColorLabel(color) {
+    return localizedRoleLabel(color === 'blue' ? 'blue' : 'red');
+  }
+
+  function oppositeHexColor(color) {
+    return color === 'blue' ? 'red' : 'blue';
+  }
+
+  function hexTurnInfo(state) {
+    if (state.pieAvailable && state.turn === 'blue') return `${onlineRoleActionLabel('blue', 'to move', hexColorLabel('blue'))}; may swap colors`;
+    return onlineRoleActionLabel(state.turn, 'to fill', hexColorLabel(state.turn));
+  }
+
+  function cloneHexWitness(witness) {
+    if (!witness || !Array.isArray(witness.traversals)) return null;
+    return {
+      traversals: witness.traversals.map((step) => ({ edgeId: step.edgeId, from: step.from, to: step.to })),
+      arcLoop: Array.isArray(witness.arcLoop) ? witness.arcLoop.map((arc) => ({ ...arc })) : []
+    };
+  }
+
+  function placeHexTile(sourceState, index) {
+    if (!isHexGame(sourceState)) return { changed: false, state: sourceState, message: 'not a Hex game' };
+    if (sourceState.phase === 'setup') return { changed: false, state: sourceState, message: sourceState.setupIssue || 'begin the game first' };
+    if (sourceState.phase === 'gameover') return { changed: false, state: sourceState, message: 'game is already over' };
+    const target = Number(index);
+    if (!validBoardIndex(sourceState, target)) return { changed: false, state: sourceState, message: 'tile is outside the board' };
+    if (sourceState.removed.has(target)) return { changed: false, state: sourceState, message: 'tile is removed' };
+    if (hexTileAt(sourceState, target)) return { changed: false, state: sourceState, message: 'tile is already filled' };
+    if (!sourceState.hexRuntime || !sourceState.hexTopology || !sourceState.hexTopology.valid) {
+      return { changed: false, state: sourceState, message: sourceState.setupIssue || 'Hex topology is unavailable' };
+    }
+
+    const state = cloneGameState(sourceState);
+    const color = HEX_COLORS.includes(state.turn) ? state.turn : 'red';
+    const moveNumber = (state.round || 0) + 1;
+    const tile = { id: state.nextTileId, index: target, color, moveNumber };
+    state.nextTileId += 1;
+    state.tiles.push(tile);
+    state.round = moveNumber;
+    state.winner = '';
+    state.winningCycle = null;
+    state.winningClass = [];
+    state.winningExpression = '';
+    state.resultDismissed = false;
+    state.ending = '';
+    const result = TopologicalHex.registerPlacement(state.hexRuntime, color, target, (member) => {
+      const placed = hexTileAt(state, member);
+      return placed ? placed.color : '';
+    });
+
+    if (result.win) {
+      state.phase = 'gameover';
+      state.winner = color;
+      state.winningCycle = cloneHexWitness(result.witness);
+      state.winningClass = result.cycleClass.slice();
+      state.winningExpression = result.classExpression;
+      state.ending = 'hex-win';
+    } else if (!emptyHexIndices(state).length) {
+      state.phase = 'gameover';
+      state.ending = 'draw';
+    } else {
+      state.phase = 'ready';
+      state.turn = oppositeHexColor(color);
+      if (state.pieAvailable && color === 'blue') state.pieAvailable = false;
+      else if (state.pieRule && state.round === 1 && color === 'red') state.pieAvailable = true;
+    }
+    appendGameRecordMove(state, { action: 'place', moveNumber, color, index: target });
+    return { changed: true, state, tile: { ...tile }, win: result.win ? result : null };
+  }
+
+  // The weighted DSU is deliberately not part of a saved state.  Replaying the
+  // placed tiles in their move order keeps imports, undo snapshots, and online
+  // snapshot fallbacks deterministic without exposing mutable DSU internals.
+  function rebuildHexRuntime(state, computedTopology = null) {
+    if (!isHexGame(state)) return state;
+    const topology = computedTopology || (TopologicalHex
+      ? TopologicalHex.buildTopology(state.preset, state.removed)
+      : { valid: false, reason: 'The Hex homology engine is unavailable.' });
+    state.hexTopology = topology;
+    state.hexRuntime = topology.valid && TopologicalHex ? TopologicalHex.createRuntime(topology) : null;
+    state.hexTopologyState = topology.valid ? 'ready' : 'error';
+    state.setupIssue = topology.valid ? '' : topology.reason;
+    state.winningCycle = null;
+    state.winningClass = [];
+    state.winningExpression = '';
+    if (!topology.valid) return state;
+
+    const byIndex = new Map();
+    try {
+      state.seedTiles = hexSeedTilesForPreset(state.preset, state.removed);
+    } catch (error) {
+      state.hexRuntime = null;
+      state.hexTopologyState = 'error';
+      state.setupIssue = error && error.message ? error.message : 'Invalid Hex opening seeds.';
+      state.phase = 'setup';
+      state.pieAvailable = false;
+      return state;
+    }
+    let seedWin = null;
+    state.seedTiles.forEach((tile) => {
+      if (seedWin) return;
+      byIndex.set(tile.index, tile.color);
+      const result = TopologicalHex.registerPlacement(
+        state.hexRuntime,
+        tile.color,
+        tile.index,
+        (index) => byIndex.get(index) || ''
+      );
+      if (result.win) seedWin = { ...result, color: tile.color };
+    });
+    if (seedWin) {
+      state.hexRuntime = null;
+      state.hexTopologyState = 'error';
+      state.setupIssue = `Hex seed tiles already form a nontrivial ${hexColorLabel(seedWin.color)} loop`;
+      state.phase = 'setup';
+      state.pieAvailable = false;
+      return state;
+    }
+    const ordered = (state.tiles || []).slice().sort((left, right) => (
+      (normalizeOptionalMoveNumber(left.moveNumber) || left.id)
+      - (normalizeOptionalMoveNumber(right.moveNumber) || right.id)
+      || left.id - right.id
+      || left.index - right.index
+    ));
+    let expected = 'red';
+    let winningResult = null;
+    ordered.forEach((tile, ordinal) => {
+      if (winningResult) throw new Error('Hex status contains a move after a winning loop');
+      if (tile.color !== expected) throw new Error(`Hex tile ${ordinal + 1} has the wrong color for its move order`);
+      if (byIndex.has(tile.index)) throw new Error(`Hex tile ${ordinal + 1} overlaps an opening seed`);
+      byIndex.set(tile.index, tile.color);
+      const result = TopologicalHex.registerPlacement(
+        state.hexRuntime,
+        tile.color,
+        tile.index,
+        (index) => byIndex.get(index) || ''
+      );
+      if (result.win) winningResult = { ...result, color: tile.color };
+      expected = oppositeHexColor(expected);
+    });
+    state.round = ordered.length;
+    state.nextTileId = Math.max(state.nextTileId || 1, ordered.reduce((max, tile) => Math.max(max, tile.id + 1), 1));
+    if (winningResult) {
+      state.phase = 'gameover';
+      state.winner = winningResult.color;
+      state.winningCycle = cloneHexWitness(winningResult.witness);
+      state.winningClass = winningResult.cycleClass.slice();
+      state.winningExpression = winningResult.classExpression;
+      state.ending = 'hex-win';
+      state.pieAvailable = false;
+    } else if (!emptyHexIndices(state).length) {
+      state.phase = 'gameover';
+      state.winner = '';
+      state.ending = 'draw';
+      state.pieAvailable = false;
+    } else {
+      state.winner = '';
+      state.turn = expected;
+      state.pieAvailable = !!(state.pieRule && !state.pieSwapped && ordered.length === 1 && expected === 'blue');
+      if (state.phase === 'gameover') {
+        throw new Error('Hex status declares game over without a winning loop or a full board');
+      }
+      state.phase = state.phase === 'setup' ? 'setup' : 'ready';
+      state.ending = '';
+    }
+    return state;
+  }
+
+  function swapHexPieColors(sourceState) {
+    if (!isHexGame(sourceState)) return { changed: false, state: sourceState, message: 'not a Hex game' };
+    if (sourceState.phase !== 'ready' || !sourceState.pieRule || !sourceState.pieAvailable || sourceState.turn !== 'blue') {
+      return { changed: false, state: sourceState, message: 'the pie swap is unavailable' };
+    }
+    const state = cloneGameState(sourceState);
+    state.pieAvailable = false;
+    state.pieSwapped = true;
+    state.turn = 'blue';
+    appendGameRecordMove(state, { action: 'pie-swap', color: 'blue' });
+    return { changed: true, state };
   }
 
   function placeGomokuStone(sourceState, index) {
@@ -24212,6 +25207,38 @@
   function cloneGameState(source) {
     if (isLianliankanGame(source) && LianliankanMosaicAdapter) return LianliankanMosaicAdapter.cloneSharedState(source);
     if (isBilliardsGame(source) && Billiards) return Billiards.cloneState(source);
+    if (isHexGame(source)) {
+      return {
+        gameMode: GAME_MODES.HEX,
+        preset: source.preset,
+        phase: source.phase,
+        removed: new Set(source.removed),
+        boxes: [],
+        newBoxIds: new Set(),
+        nextBoxId: 1,
+        score: 0,
+        tiles: (source.tiles || []).map((tile) => placementPieceClone(tile)),
+        seedTiles: (source.seedTiles || []).map((tile) => ({ ...tile })),
+        nextTileId: source.nextTileId || 1,
+        turn: HEX_COLORS.includes(source.turn) ? source.turn : 'red',
+        winner: HEX_COLORS.includes(source.winner) ? source.winner : '',
+        winningCycle: cloneHexWitness(source.winningCycle),
+        winningClass: Array.isArray(source.winningClass) ? source.winningClass.slice() : [],
+        winningExpression: source.winningExpression || '',
+        pieRule: !!source.pieRule,
+        pieAvailable: !!source.pieAvailable,
+        pieSwapped: !!source.pieSwapped,
+        resultDismissed: !!source.resultDismissed,
+        round: source.round || 0,
+        ending: source.ending || '',
+        recordMoves: cloneGameRecordMoves(source.recordMoves),
+        hexTopology: source.hexTopology,
+        hexRuntime: source.hexRuntime && TopologicalHex ? TopologicalHex.cloneRuntime(source.hexRuntime) : null,
+        hexTopologyState: source.hexTopologyState || (source.hexTopology && source.hexTopology.valid ? 'ready' : 'error'),
+        setupIssue: source.setupIssue || '',
+        debugMessage: source.debugMessage || ''
+      };
+    }
     if (isGomokuGame(source)) {
       return {
         gameMode: GAME_MODES.GOMOKU,
@@ -24398,6 +25425,7 @@
   }
 
   function emptyExistingIndices(state) {
+    if (isHexGame(state)) return emptyHexIndices(state);
     if (isGomokuGame(state)) return emptyGomokuIndices(state);
     if (isConnectFourGame(state)) return emptyConnectFourIndices(state);
     if (isGoGame(state)) return emptyGoIndices(state);
@@ -24585,6 +25613,7 @@
 
   function selectedGameMode() {
     const value = refs.gameMode ? refs.gameMode.value : GAME_MODES.NUMBER_2048;
+    if (value === GAME_MODES.HEX) return GAME_MODES.HEX;
     if (value === GAME_MODES.LIANLIANKAN) return GAME_MODES.LIANLIANKAN;
     if (value === GAME_MODES.BILLIARDS) return GAME_MODES.BILLIARDS;
     if (value === GAME_MODES.CHINESE_CHECKERS) return GAME_MODES.CHINESE_CHECKERS;
@@ -24633,7 +25662,7 @@
     if (normalized === GAME_MODES.FIDE_CHESS && selectedFideChessPresetIsPuzzle()) return 'center';
     const display = normalizePlacementDisplayStyle(presetDefaultDisplayByMode[normalized], '');
     if (display) return display;
-    if (normalized === GAME_MODES.NUMBER_2048 || normalized === GAME_MODES.SOKOBAN || normalized === GAME_MODES.LIANLIANKAN) return 'center';
+    if (normalized === GAME_MODES.HEX || normalized === GAME_MODES.NUMBER_2048 || normalized === GAME_MODES.SOKOBAN || normalized === GAME_MODES.LIANLIANKAN) return 'center';
     if (normalized === GAME_MODES.BILLIARDS) return 'billiards-table';
     if (normalized === GAME_MODES.FIDE_CHESS) return 'chessboard';
     return 'vertex';
@@ -24681,6 +25710,10 @@
   }
 
   function defaultBoardSizeForMode(mode) {
+    // Integral H₁ precomputation is performed in the browser before the
+    // first move.  Five keeps the default quotient board immediate while the
+    // existing boundary-size controls still allow larger games.
+    if (mode === GAME_MODES.HEX) return 5;
     if (mode === GAME_MODES.NUMBER_2048) return 4;
     if (mode === GAME_MODES.BILLIARDS) return BILLIARDS_SQUARE_BOARD_SIZE;
     if (mode === GAME_MODES.LIANLIANKAN) return 6;
@@ -24723,7 +25756,8 @@
   }
 
   function dynamicBoardSizeMode(mode) {
-    return mode === GAME_MODES.GOMOKU
+    return mode === GAME_MODES.HEX
+      || mode === GAME_MODES.GOMOKU
       || mode === GAME_MODES.GO
       || mode === GAME_MODES.REVERSI
       || mode === GAME_MODES.FIDE_CHESS
@@ -24780,6 +25814,7 @@
       options.komi = selectedGoKomi();
       options.scoringMethod = selectedGoScoringMethod();
     }
+    if (selectedGameMode() === GAME_MODES.HEX) options.pieRule = !!(refs.hexPieRule && refs.hexPieRule.checked);
     if (selectedGameMode() === GAME_MODES.CHINESE_CHECKERS) {
       options.playerColors = selectedChineseCheckersPlayerColors(selectedPreset());
       options.jumpRule = selectedChineseCheckersJumpRule();
@@ -24918,6 +25953,7 @@
 
   function createSelectedGameState(presetOrId, options = {}) {
     const mode = selectedGameMode();
+    if (mode === GAME_MODES.HEX) return createHexState(presetOrId, options);
     if (mode === GAME_MODES.LIANLIANKAN) return createLianliankanState(presetOrId, options);
     if (mode === GAME_MODES.BILLIARDS) return createBilliardsState(presetOrId, options);
     if (mode === GAME_MODES.FIDE_CHESS) return createFideChessState(presetOrId, options);
@@ -24932,6 +25968,7 @@
 
   function beginSelectedGame(presetOrId, options = {}) {
     const mode = selectedGameMode();
+    if (mode === GAME_MODES.HEX) return beginHexGame(presetOrId, options);
     if (mode === GAME_MODES.LIANLIANKAN) return beginLianliankanGame(presetOrId, options);
     if (mode === GAME_MODES.BILLIARDS) {
       const result = Billiards.begin(createBilliardsState(presetOrId, options));
@@ -24945,6 +25982,10 @@
     if (mode === GAME_MODES.CONNECT_FOUR) return beginConnectFourGame(presetOrId, options);
     if (mode === GAME_MODES.SOKOBAN) return beginSokobanGame(presetOrId, options);
     return beginGame(presetOrId, options);
+  }
+
+  function isHexGame(state) {
+    return !!state && state.gameMode === GAME_MODES.HEX;
   }
 
   function isGomokuGame(state) {
@@ -24990,7 +26031,8 @@
   }
 
   function isPlacementGame(state) {
-    return isGomokuGame(state)
+    return isHexGame(state)
+      || isGomokuGame(state)
       || isConnectFourGame(state)
       || isGoGame(state)
       || isReversiGame(state)
@@ -25003,6 +26045,7 @@
   }
 
   function gameModeValue(state) {
+    if (isHexGame(state)) return GAME_MODES.HEX;
     if (isLianliankanGame(state)) return GAME_MODES.LIANLIANKAN;
     if (isBilliardsGame(state)) return GAME_MODES.BILLIARDS;
     if (isChineseCheckersGame(state)) return GAME_MODES.CHINESE_CHECKERS;
@@ -25156,6 +26199,12 @@
     if (billiardsSource && typeof billiardsSource === 'object' && !Array.isArray(billiardsSource)) {
       normalized.billiards = clonePlain(billiardsSource);
     }
+    const lianliankanSource = firstPresentValue(source, ['lianliankan']) ?? firstPresentValue(payload, ['lianliankan']);
+    const lianliankan = normalizeLianliankanPresetDecorations(lianliankanSource, shell, removedSet);
+    if (lianliankan.initiallyEmpty.length) normalized.lianliankan = lianliankan;
+    const hexSource = firstPresentValue(source, ['hex']) ?? firstPresentValue(payload, ['hex']);
+    const hex = normalizeHexPresetDecorations(hexSource, shell, removedSet);
+    if (hex.seeds.length || hex.homology) normalized.hex = hex;
     const pieceSetSource = firstPresentValue(source, ['pieceSets']) || firstPresentValue(payload, ['pieceSets']);
     let pieceSets = normalizePieceSets(pieceSetSource, shell, removedSet);
     if (!pieceSetsHaveEntries(pieceSets)) {
@@ -25214,6 +26263,45 @@
     const boundaryGlueMode = firstPresentValue(source, ['boundaryGlueMode']) || firstPresentValue(payload, ['boundaryGlueMode']);
     if (boundaryGlueMode) normalized.boundaryGlueMode = normalizeBoundaryGlueMode(boundaryGlueMode);
     return normalized;
+  }
+
+  function normalizeLianliankanPresetDecorations(source, preset, removed = new Set()) {
+    const block = source && typeof source === 'object' && !Array.isArray(source) ? source : {};
+    const initiallyEmpty = Array.isArray(block.initiallyEmpty) ? block.initiallyEmpty : [];
+    const seen = new Set();
+    return {
+      initiallyEmpty: initiallyEmpty.map((entry) => normalizeImportedTileRef(entry, preset.rows, preset.cols)).filter((tile) => {
+        if (!tile) return false;
+        const index = indexOf(tile.row, tile.col, preset.cols);
+        if (removed.has(index) || seen.has(index)) return false;
+        seen.add(index);
+        return true;
+      })
+    };
+  }
+
+  function normalizeHexPresetDecorations(source, preset, removed = new Set()) {
+    const block = source && typeof source === 'object' && !Array.isArray(source) ? source : {};
+    const seeds = Array.isArray(block.seeds) ? block.seeds : [];
+    const seen = new Set();
+    const normalized = [];
+    seeds.forEach((entry, ordinal) => {
+      const tile = normalizeImportedTileRef(entry, preset.rows, preset.cols);
+      const color = normalizeHexColor(entry && entry.color);
+      if (!tile || !color) throw new Error(`Hex seed ${ordinal + 1} must name a valid red or blue tile`);
+      const index = indexOf(tile.row, tile.col, preset.cols);
+      if (removed.has(index)) throw new Error(`Hex seed ${ordinal + 1} is on a removed tile`);
+      if (seen.has(index)) throw new Error(`Hex seed ${ordinal + 1} duplicates another seed`);
+      seen.add(index);
+      normalized.push({ ...tile, color });
+    });
+    const homology = block.homology && typeof block.homology === 'object' && !Array.isArray(block.homology)
+      ? clonePlain(block.homology)
+      : null;
+    return {
+      seeds: normalized,
+      ...(homology ? { homology } : {})
+    };
   }
 
   function applyPresetGenerator(source) {
@@ -25820,7 +26908,9 @@
       chineseCheckersPlayers: Array.isArray(source.chineseCheckersPlayers) ? source.chineseCheckersPlayers.slice() : undefined,
       chineseCheckersCamps: source.chineseCheckersCamps ? clonePlain(source.chineseCheckersCamps) : undefined,
       sokoban: source.sokoban ? clonePlain(source.sokoban) : undefined,
-      billiards: source.billiards ? clonePlain(source.billiards) : undefined
+      billiards: source.billiards ? clonePlain(source.billiards) : undefined,
+      hex: source.hex ? clonePlain(source.hex) : undefined,
+      lianliankan: source.lianliankan ? clonePlain(source.lianliankan) : undefined
     };
   }
 
@@ -25998,6 +27088,23 @@
       if (refs.round) refs.round.textContent = String(game.shots || 0);
       return;
     }
+    if (isHexGame(game)) {
+      const counts = (game.tiles || []).reduce((out, tile) => {
+        out[tile.color === 'blue' ? 'blue' : 'red'] += 1;
+        return out;
+      }, { red: 0, blue: 0 });
+      if (refs.scoreLabel) refs.scoreLabel.textContent = game.phase === 'gameover' ? 'Result' : 'Turn';
+      if (refs.highestLabel) refs.highestLabel.textContent = 'Red tiles';
+      if (refs.existingLabel) refs.existingLabel.textContent = 'Blue tiles';
+      if (refs.removedLabel) refs.removedLabel.textContent = 'Removed tiles';
+      if (refs.roundLabel) refs.roundLabel.textContent = 'Moves';
+      if (refs.score) refs.score.textContent = game.phase === 'gameover' ? (game.winner ? `${hexColorLabel(game.winner)} wins` : 'draw') : hexColorLabel(game.turn);
+      if (refs.highest) refs.highest.textContent = String(counts.red);
+      if (refs.existing) refs.existing.textContent = String(counts.blue);
+      if (refs.removed) refs.removed.textContent = String(game.removed.size);
+      if (refs.round) refs.round.textContent = String(game.round || 0);
+      return;
+    }
     if (isGomokuGame(game)) {
       const counts = gomokuStoneCounts(game);
       if (refs.scoreLabel) refs.scoreLabel.textContent = game.phase === 'gameover' ? 'Result' : 'Turn';
@@ -26162,6 +27269,7 @@
   function syncControls() {
     const catalogAvailable = presetCatalogReady && PRESETS.length > 0;
     const mode2048 = catalogAvailable && is2048Game(game) && selectedGameMode() === GAME_MODES.NUMBER_2048;
+    const modeHex = catalogAvailable && (isHexGame(game) || selectedGameMode() === GAME_MODES.HEX);
     const modeGomoku = catalogAvailable && (isGomokuGame(game) || selectedGameMode() === GAME_MODES.GOMOKU);
     const modeConnectFour = catalogAvailable && (isConnectFourGame(game) || selectedGameMode() === GAME_MODES.CONNECT_FOUR);
     const modeGo = catalogAvailable && (isGoGame(game) || selectedGameMode() === GAME_MODES.GO);
@@ -26173,22 +27281,28 @@
     const modeLianliankan = catalogAvailable && (isLianliankanGame(game) || selectedGameMode() === GAME_MODES.LIANLIANKAN);
     const modeFideChessPuzzle = modeFideChess && (isFideChessPuzzle(game) || selectedFideChessPresetIsPuzzle());
     const modeDirectional = mode2048 || modeSokoban;
-    const modePlacement = modeGomoku || modeConnectFour || modeGo || modeReversi || modeChineseCheckers || modeFideChess;
+    const modePlacement = modeHex || modeGomoku || modeConnectFour || modeGo || modeReversi || modeChineseCheckers || modeFideChess;
     const boundaryGlueBoard = catalogAvailable && selectedPresetIsBoundaryGlueBoard();
     const boundaryRectangle = boundaryGlueBoard && selectedBoundaryGlueShape() === 'rectangle';
     const onlineRoomActive = onlineIsInRoom();
+    const hexTopologyPending = modeHex && isHexGame(game) && game.hexTopologyState === 'pending';
     syncConnectFourFallOptions();
     if (refs.begin) {
       refs.begin.textContent = isLianliankanGame(game) && game.phase === 'deadlock'
         ? 'Refresh remaining tiles'
         : (game && game.phase !== 'setup' ? 'stop the game' : 'begin the game');
-      refs.begin.disabled = !catalogAvailable || onlineRoomActive;
+      refs.begin.disabled = !catalogAvailable || onlineRoomActive || hexTopologyPending;
     }
     if (refs.gameMode) refs.gameMode.disabled = onlineRoomActive;
     if (refs.select) refs.select.disabled = !catalogAvailable || onlineRoomActive;
     if (refs.mode2048Controls) {
       refs.mode2048Controls.forEach((control) => {
         control.hidden = !mode2048;
+      });
+    }
+    if (refs.modeHexControls) {
+      refs.modeHexControls.forEach((control) => {
+        control.hidden = !modeHex;
       });
     }
     if (refs.modeGomokuControls) {
@@ -26251,6 +27365,13 @@
     if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = false;
     if (refs.moveNumberLabelRow) refs.moveNumberLabelRow.hidden = !(modeGomoku || modeConnectFour || modeGo);
     if (refs.placementPieceSizeRow) refs.placementPieceSizeRow.hidden = !(modeGomoku || modeConnectFour || modeGo || modeReversi || modeFideChess);
+    if (refs.hexPieRule) refs.hexPieRule.disabled = !modeHex || !game || game.phase !== 'setup' || onlineRoomActive || hexTopologyPending;
+    if (refs.hexPieRule && isHexGame(game) && game.phase === 'setup') refs.hexPieRule.checked = !!game.pieRule;
+    if (refs.hexPieSwap) {
+      const available = modeHex && isHexGame(game) && game.phase === 'ready' && game.pieAvailable && game.turn === 'blue';
+      refs.hexPieSwap.disabled = !available || onlineRoomActive && !onlineStateOwnsRole('blue');
+      if (refs.hexPieSwap.parentElement) refs.hexPieSwap.parentElement.hidden = !available;
+    }
     if (refs.billiardsRules) refs.billiardsRules.disabled = !modeBilliards || !!(game && game.phase !== 'setup') || onlineRoomActive || !!billiardsShotPending;
     if (refs.lianliankanTileSet) refs.lianliankanTileSet.disabled = !modeLianliankan || !game || game.phase !== 'setup' || onlineRoomActive;
     if (refs.billiardsBallPaletteRow) refs.billiardsBallPaletteRow.hidden = !modeBilliards || !game || game.phase !== 'setup';
@@ -27112,6 +28233,23 @@
         deterministic: exported.deterministic
       };
     }
+    if (isHexGame(state)) {
+      return {
+        gameMode: GAME_MODES.HEX,
+        tiles: (state.tiles || [])
+          .map((tile) => placementPieceSummary(tile))
+          .sort((a, b) => a.index - b.index || a.id - b.id),
+        removed: Array.from(state.removed).sort((a, b) => a - b),
+        turn: state.turn,
+        winner: state.winner || '',
+        pieRule: !!state.pieRule,
+        pieAvailable: !!state.pieAvailable,
+        pieSwapped: !!state.pieSwapped,
+        winningClass: Array.isArray(state.winningClass) ? state.winningClass.slice() : [],
+        winningExpression: state.winningExpression || '',
+        round: state.round || 0
+      };
+    }
     if (isGomokuGame(state)) {
       return {
         gameMode: GAME_MODES.GOMOKU,
@@ -27298,6 +28436,7 @@
     beginChineseCheckersGame,
     beginConnectFourGame,
     beginGoGame,
+    beginHexGame,
     beginGomokuGame,
     beginReversiGame,
     beginSokobanGame,
@@ -27316,6 +28455,7 @@
     createChineseCheckersState,
     createConnectFourState,
     createGoState,
+    createHexState,
     createGomokuState,
     createReversiState,
     createSokobanState,
@@ -27366,6 +28506,7 @@
     passGoTurn,
     placeChineseCheckerMarble: moveChineseCheckerMarble,
     placeGoStone,
+    placeHexTile,
     placeGomokuStone,
     placeConnectFourToken,
     placeReversiDisc,
@@ -27376,6 +28517,7 @@
     reversiFlipsForMove,
     chineseCheckerMoveMap,
     scoreGoGame,
+    swapHexPieColors,
     normalizePresetPayload,
     presetFromImportPayload,
     presetFromImportText,
@@ -27395,7 +28537,19 @@
     spawnInitialValue,
     spawnRoundValue,
     stateSummary,
-    surfaceSuccessor
+    surfaceSuccessor,
+    __test: {
+      backgroundPresetForExport,
+      compactBackgroundPresetForExport,
+      debugExportPayload,
+      gameRecordExportPayload,
+      hexHomologyResultMatches,
+      looksLikeStatusImportPayload,
+      prepareImportRequest,
+      rebuildHexRuntime,
+      setGame(state) { game = state; },
+      getGame() { return game; }
+    }
   };
 
   if (typeof window !== 'undefined') window.RamifiedMinigames = api;

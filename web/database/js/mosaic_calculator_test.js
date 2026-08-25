@@ -4,6 +4,7 @@ const vm = require('vm');
 
 const mosaic = require('./mosaic_calculator.js').__test;
 const minigames = require('./ramified_minigames_setup.js');
+const billiards = require('./billiards/topological_billiards_native.js');
 
 function tile(row, col) {
   return { row, col };
@@ -69,7 +70,15 @@ function testFullExportIncludesMarkers() {
   assert.ok(Array.isArray(payload.tiles));
   assert.deepStrictEqual(payload.inputHoles.map((entry) => `${entry.row},${entry.col}`), ['1,1', '1,2', '1,3', '1,4']);
   assert.deepStrictEqual(payload.pieceSets, { starts: { white: [tile(4, 4)] }, targets: {} });
-  assert.deepStrictEqual(payload.pieces, [{ row: 4, col: 4, kind: 'king', side: 'white', value: 'K' }]);
+  assert.deepStrictEqual(payload.pieces, [{
+    row: 4,
+    col: 4,
+    role: 'start',
+    color: 'white',
+    kind: 'king',
+    value: 'K',
+    side: 'white'
+  }]);
 }
 
 function testBackgroundFormats() {
@@ -110,7 +119,15 @@ function testMinigameFormats() {
   assert.strictEqual(verbose.display, undefined);
   assert.deepStrictEqual(verbose.connectFourHoles, [tile(1, 1), tile(1, 2), tile(1, 3), tile(1, 4)]);
   assert.deepStrictEqual(verbose.pieceSets, { starts: { white: [tile(4, 4)] }, targets: {} });
-  assert.strictEqual(verbose.pieces, undefined);
+  assert.deepStrictEqual(verbose.pieces, [{
+    row: 4,
+    col: 4,
+    role: 'start',
+    color: 'white',
+    kind: 'king',
+    value: 'K',
+    side: 'white'
+  }]);
 
   mosaic.setTestExportControls({
     type: 'minigame',
@@ -125,7 +142,7 @@ function testMinigameFormats() {
   assert.match(source, /Add this entry to ramified_minigame_presets\/presets\.js:/);
   assert.match(source, /\/\/\s+"gameTypes": \[/);
   assert.match(source, /\/\/\s+"file": "connect_four_export\.preset\.js"/);
-  assert.match(source, /\/\/ \};/);
+  assert.match(source, /\/\/ \},/);
   assert.match(source, /Store gameTypes in presets\.js only/);
   assert.doesNotMatch(source.slice(source.indexOf('  return {')), /"gameTypes"\s*:/);
   assert.match(source, /connect_four_export\.preset\.js/);
@@ -276,10 +293,160 @@ function testMinigameTestLink() {
   assert.strictEqual(mosaic.minigameModeForExportGameType('2048'), '2048');
 }
 
+function testHexAndTileMatchingTestLinks() {
+  const gluedEdges = minigames.generateTorusBoundaryGlue(4, 4);
+  mosaic.setTestBoard({
+    rows: 4,
+    cols: 4,
+    lattice: 'square',
+    gluedEdges,
+    hex: { seeds: [{ row: 2, col: 2, color: 'red' }] }
+  });
+  mosaic.setTestExportControls({ type: 'minigame', format: 'dsl', label: 'Hex link', group: 'Hex' });
+  let url = new URL(mosaic.buildMinigameTestHref(), 'https://example.test/');
+  let payload = decodeBase64UrlJson(url.searchParams.get('minigamePreset'));
+  assert.strictEqual(url.searchParams.get('mode'), 'hex');
+  assert.deepStrictEqual(payload.hex, { seeds: [{ row: 2, col: 2, color: 'red' }] });
+  let preset = minigames.normalizePresetPayload(payload);
+  let state = minigames.createHexState(preset);
+  assert.deepStrictEqual(state.seedTiles.map((entry) => [entry.index, entry.color]), [[5, 'red']]);
+
+  mosaic.setTestBoard({
+    rows: 2,
+    cols: 4,
+    lattice: 'square',
+    lianliankan: { initiallyEmpty: [{ row: 1, col: 1 }, { row: 2, col: 4 }] }
+  });
+  mosaic.setTestExportControls({ type: 'minigame', format: 'dsl', label: 'Matching link', group: 'Tile Matching' });
+  url = new URL(mosaic.buildMinigameTestHref(), 'https://example.test/');
+  payload = decodeBase64UrlJson(url.searchParams.get('minigamePreset'));
+  assert.strictEqual(url.searchParams.get('mode'), 'lianliankan');
+  assert.deepStrictEqual(payload.lianliankan.initiallyEmpty, [tile(1, 1), tile(2, 4)]);
+  preset = minigames.normalizePresetPayload(payload);
+  state = minigames.createLianliankanState(preset, { rng: () => 0.25, maxShuffleAttempts: 0 });
+  assert.strictEqual(state.board.cells[0].tile, null);
+  assert.strictEqual(state.board.cells[7].tile, null);
+}
+
+function testMinigameStatusAndRecordProjection() {
+  const base = { id: 'status-board', label: 'Status board', lattice: 'square', rows: 2, cols: 3 };
+  const hex = mosaic.normalizeExportImportPayload({
+    gameMode: 'hex',
+    preset: { ...base, hex: { seeds: [{ row: 1, col: 1, color: 'red' }] } },
+    tiles: [{ index: 5, color: 'blue' }]
+  });
+  assert.deepStrictEqual(hex.hex.seeds, [
+    { row: 1, col: 1, color: 'red' },
+    { row: 2, col: 3, color: 'blue' }
+  ]);
+  assert.strictEqual(hex.inputMode, 'background');
+  assert.strictEqual(hex.backgroundAction, 'decoration');
+
+  const matching = mosaic.normalizeExportImportPayload({
+    gameMode: 'lianliankan',
+    preset: { ...base, lianliankan: { initiallyEmpty: [tile(1, 1)] } },
+    removed: [{ index: 4, row: 2, col: 2 }],
+    tiles: [{ index: 1, id: 'a' }, { index: 3, id: 'a' }]
+  });
+  assert.deepStrictEqual(matching.lianliankan.initiallyEmpty, [tile(1, 1), tile(1, 3), tile(2, 3)]);
+
+  const record = {
+    kind: 'ramified-minigame-record',
+    gameMode: 'gomoku',
+    preset: { ...base, pieces: [{ row: 1, col: 1, color: 'white' }] },
+    snapshot: {
+      gameMode: 'gomoku',
+      preset: base,
+      stones: [{ index: 4, color: 'black' }]
+    }
+  };
+  const projectedRecord = mosaic.normalizeExportImportPayload(record);
+  assert.deepStrictEqual(projectedRecord.pieces, [{ index: 4, color: 'black', role: 'start' }]);
+  assert.deepStrictEqual(mosaic.exportImportMetadataFromPayload(record, null).gameTypes, ['Gomoku']);
+
+  const recordFallback = mosaic.normalizeExportImportPayload({
+    kind: 'ramified-minigame-record',
+    gameMode: 'hex',
+    preset: { ...base, hex: { seeds: [{ row: 1, col: 2, color: 'blue' }] } }
+  });
+  assert.deepStrictEqual(recordFallback.hex, { seeds: [{ row: 1, col: 2, color: 'blue' }] });
+
+  const billiards = mosaic.normalizeExportImportPayload({
+    gameMode: 'billiards',
+    preset: { ...base, billiards: { ballRadius: 0.07 } },
+    billiardsState: {
+      balls: [{ id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0, y: 0 } }],
+      pockets: [{ id: 'p1', vertex: { row: 1, col: 1, corner: 'NW' } }],
+      rules: 'eight-ball'
+    }
+  });
+  assert.strictEqual(billiards.billiards.ballRadius, 0.07);
+  assert.strictEqual(billiards.billiards.balls.length, 1);
+  assert.strictEqual(billiards.billiards.pockets.length, 1);
+
+  const sokoban = mosaic.normalizeExportImportPayload({
+    gameMode: 'sokoban',
+    preset: base,
+    players: [{ index: 0 }],
+    boxes: [{ index: 1, z: 0 }],
+    targets: [{ index: 2 }],
+    walls: [{ index: 3 }]
+  });
+  assert.deepStrictEqual(sokoban.sokoban.players, [{ index: 0 }]);
+  assert.deepStrictEqual(sokoban.sokoban.boxes, [{ index: 1, z: 0 }]);
+  assert.deepStrictEqual(sokoban.sokoban.targets, [{ index: 2 }]);
+  assert.deepStrictEqual(sokoban.sokoban.walls, [{ index: 3 }]);
+}
+
+function testCompactMinigamePresetUsesSharedImportNormalization() {
+  const preset = {
+    id: 'boundary-glue-board',
+    label: 'Klein bottle 4x4',
+    lattice: 'square',
+    size: '4x4',
+    surface: 'Klein bottle',
+    glue: 'g0~:1..4,4,E=4..1,1,W; g1:1,1..4,N=4,1..4,S'
+  };
+  const prepared = mosaic.prepareExportImportText(JSON.stringify(preset));
+  const imported = prepared.normalizedPayload;
+  assert.strictEqual(imported.rows, 4);
+  assert.strictEqual(imported.cols, 4);
+  assert.strictEqual(imported.lattice, 'square');
+  assert.strictEqual(imported.boundary, 'glued');
+  assert.strictEqual(imported.gluedEdges.length, 8);
+  assert.deepStrictEqual(imported.gluedEdges[0], {
+    group: 0,
+    reversed: true,
+    firstArrowReversed: true,
+    secondArrowReversed: true,
+    first: { row: 1, col: 4, dir: 'E' },
+    second: { row: 4, col: 1, dir: 'W' }
+  });
+  assert.deepStrictEqual(imported.gluedEdges[7], {
+    group: 1,
+    reversed: false,
+    firstArrowReversed: false,
+    secondArrowReversed: true,
+    first: { row: 1, col: 4, dir: 'N' },
+    second: { row: 4, col: 4, dir: 'S' }
+  });
+}
+
 function testExportHiddenRowsHaveCssRule() {
   const html = fs.readFileSync(require.resolve('../mosaic_calculator.html'), 'utf8');
+  const pageAdapter = fs.readFileSync(require.resolve('./import_export_page_adapters.js'), 'utf8');
   assert.ok(html.includes('.export-meta-field[hidden]'));
   assert.ok(html.includes('display: none !important;'));
+  const presetRow = html.indexOf('id="export-preset-meta-row"');
+  const storedDataRow = html.indexOf('id="export-precomputed-game-data-row"');
+  const testRow = html.indexOf('id="export-test-link-row"');
+  assert.ok(html.includes('id="export-precomputed-game-data"'));
+  assert.ok(html.includes('store precomputed game data'));
+  assert.ok(presetRow < storedDataRow && storedDataRow < testRow, 'stored game data occupies one row immediately before Test');
+  assert.ok(
+    pageAdapter.includes("controls: ['#export-preset-meta-row', '#export-precomputed-game-data-row', '#export-test-link-row']"),
+    'shared Import/Export panel must retain the stored game data row'
+  );
 }
 
 function testHolePruningAndToggle() {
@@ -312,7 +479,15 @@ function testImportStyleMarkers() {
   const compact = mosaic.buildCompactBackgroundExport(false);
   assert.strictEqual(compact.holes, 'top');
   assert.deepStrictEqual(compact.pieceSets, { starts: { black: [tile(2, 2)] }, targets: {} });
-  assert.deepStrictEqual(compact.pieces, [{ row: 2, col: 2, kind: 'rook', side: 'black', value: 'r' }]);
+  assert.deepStrictEqual(compact.pieces, [{
+    row: 2,
+    col: 2,
+    role: 'start',
+    color: 'black',
+    kind: 'rook',
+    value: 'R',
+    side: 'black'
+  }]);
 }
 
 function testPieceSetsImportExportAndDecorationToggle() {
@@ -356,22 +531,20 @@ function testPieceSetsImportExportAndDecorationToggle() {
 
 function testSokobanDecorationPaletteAndExports() {
   const palette = mosaic.backgroundDecorationPreferences();
-  assert.deepStrictEqual(
-    palette.map((entry) => entry.kind),
-    [
-      'clear',
-      'input-hole',
-      'start',
-      'target',
-      'sokoban-player',
-      'sokoban-box',
-      'sokoban-target',
-      'sokoban-sea',
-      'sokoban-wall',
-      'sokoban-ice',
-      'sokoban-energy-bridge'
-    ]
-  );
+  const paletteKinds = palette.map((entry) => entry.kind);
+  [
+    'clear',
+    'input-hole',
+    'start',
+    'target',
+    'sokoban-player',
+    'sokoban-box',
+    'sokoban-target',
+    'sokoban-sea',
+    'sokoban-wall',
+    'sokoban-ice',
+    'sokoban-energy-bridge'
+  ].forEach((kind) => assert.ok(paletteKinds.includes(kind), `palette missing ${kind}`));
 
   mosaic.setTestBoard({
     rows: 3,
@@ -432,6 +605,200 @@ function testSokobanDecorationPaletteAndExports() {
   assert.deepStrictEqual(normalized.sokoban.walls, [tile(1, 1)]);
   assert.deepStrictEqual(normalized.sokoban.sea, [tile(3, 1)]);
   assert.deepStrictEqual(normalized.removedTiles, []);
+}
+
+function testGameSpecificDecorationExports() {
+  mosaic.setTestBoard({
+    rows: 4,
+    cols: 4,
+    lattice: 'square',
+    lianliankan: { initiallyEmpty: [tile(1, 2)] },
+    hex: { seeds: [{ row: 2, col: 2, color: 'red' }, { row: 3, col: 3, color: 'blue' }] },
+    billiards: {
+      balls: [
+        { id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0, y: 0 } },
+        { id: '1', kind: 'target', number: 1, at: { row: 4, col: 4, x: 0.1, y: -0.1 } }
+      ],
+      pockets: [{ id: 'p1', vertex: { row: 1, col: 1, corner: 'NW' } }]
+    }
+  });
+  const exported = mosaic.buildMinigamePresetExport();
+  assert.deepStrictEqual(exported.lianliankan, { initiallyEmpty: [tile(1, 2)] });
+  assert.deepStrictEqual(exported.hex.seeds, [
+    { row: 2, col: 2, color: 'red' },
+    { row: 3, col: 3, color: 'blue' }
+  ]);
+  assert.strictEqual(exported.billiards.balls.length, 2);
+  assert.deepStrictEqual(exported.billiards.pockets, [{ id: 'p1', vertex: { row: 1, col: 1, corner: 'NW' } }]);
+  assert.strictEqual(mosaic.minigameModeForExportGameType('Tile Matching'), 'lianliankan');
+  assert.strictEqual(mosaic.minigameModeForExportGameType('Hex (Nash)'), 'hex');
+  assert.strictEqual(mosaic.minigameModeForExportGameType('Billiard'), 'billiards');
+  assert.strictEqual(mosaic.minigameModeForExportGameType('Billiards'), 'billiards');
+
+  mosaic.setTestBoard({
+    rows: 3,
+    cols: 3,
+    lattice: 'square',
+    removedTiles: [tile(1, 1)],
+    lianliankan: { initiallyEmpty: [tile(1, 1)] },
+    hex: { seeds: [{ row: 1, col: 1, color: 'red' }] },
+    billiards: {
+      balls: [{ id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0, y: 0 } }],
+      pockets: [{ id: 'p1', vertex: { row: 1, col: 1, corner: 'NW' } }]
+    }
+  });
+  const pruned = mosaic.buildMinigamePresetExport();
+  assert.strictEqual(pruned.lianliankan, undefined);
+  assert.strictEqual(pruned.hex, undefined);
+  assert.deepStrictEqual(pruned.billiards, { pockets: [] });
+}
+
+function testBilliardsPaletteDropAndRackDirection() {
+  mosaic.setTestBoard({
+    rows: 2,
+    cols: 2,
+    lattice: 'square',
+    boundary: 'glued',
+    inputMode: 'background',
+    backgroundAction: 'decoration',
+    backgroundDecorationKind: 'billiards-rack-6',
+    billiards: { ballRadius: 0.05, pockets: [] }
+  });
+  mosaic.setTestGeometry({
+    width: 220,
+    height: 220,
+    radius: 50,
+    cells: [
+      { x: 50, y: 50 }, { x: 150, y: 50 },
+      { x: 50, y: 150 }, { x: 150, y: 150 }
+    ]
+  });
+  mosaic.refs.canvas = {
+    style: {},
+    getBoundingClientRect() { return { left: 0, top: 0, width: 220, height: 220 }; }
+  };
+  assert.strictEqual(mosaic.billiardsEditorGeometry().size, 100);
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(0, { clientX: 50, clientY: 50, update: false }), true);
+  assert.deepStrictEqual(mosaic.state.billiardsRack, {
+    count: 6,
+    tileIndex: 0,
+    position: { x: 0, y: 0 }
+  });
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(1, { clientX: 80, clientY: 50, update: false }), true);
+  assert.strictEqual(mosaic.state.billiardsRack, null);
+  assert.deepStrictEqual(
+    mosaic.buildMinigamePresetExport().billiards.balls.map((ball) => ball.number).sort((a, b) => a - b),
+    [1, 2, 3, 4, 5, 6]
+  );
+  delete mosaic.refs.canvas;
+}
+
+function testSquareBilliardsUsesFullTileSide() {
+  mosaic.setTestBoard({
+    rows: 1,
+    cols: 2,
+    lattice: 'square',
+    boundary: 'glued',
+    billiards: {
+      ballRadius: 0.05,
+      balls: [{ id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0, y: 0 } }],
+      pockets: []
+    }
+  });
+  mosaic.setTestGeometry({
+    width: 180,
+    height: 100,
+    radius: 40,
+    cells: [{ x: 40, y: 40 }, { x: 120, y: 40 }]
+  });
+  const geometry = mosaic.billiardsEditorGeometry();
+  const state = mosaic.currentBilliardsEditorState();
+  assert.strictEqual(geometry.size, 80);
+  const local = billiards.canvasToLocal({ x: 120, y: 40 }, geometry, state.atlas);
+  assert.strictEqual(local.tileIndex, 1);
+  assert.ok(Math.abs(local.position.x) < 1e-9);
+  assert.ok(Math.abs(local.position.y) < 1e-9);
+
+  const arcRadii = [];
+  const ctx = {
+    save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, clip() {},
+    fill() {}, stroke() {}, fillText() {}, setLineDash() {},
+    arc(x, y, radius) { arcRadii.push(radius); }
+  };
+  billiards.render(ctx, geometry, state);
+  assert.ok(arcRadii.some((radius) => Math.abs(radius - 4) < 1e-9), '0.05 local-radius ball should render at 4 px');
+}
+
+function testBilliardsBallDoubleClickRemovalAndCanonicalExportType() {
+  mosaic.setTestBoard({
+    rows: 2,
+    cols: 2,
+    lattice: 'square',
+    boundary: 'glued',
+    inputMode: 'background',
+    backgroundAction: 'decoration',
+    billiards: {
+      ballRadius: 0.05,
+      balls: [{ id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0, y: 0 } }],
+      pockets: []
+    }
+  });
+  mosaic.setTestGeometry({
+    width: 220,
+    height: 220,
+    radius: 50,
+    cells: [
+      { x: 50, y: 50 }, { x: 150, y: 50 },
+      { x: 50, y: 150 }, { x: 150, y: 150 }
+    ]
+  });
+  mosaic.refs.canvas = {
+    style: {},
+    getBoundingClientRect() { return { left: 0, top: 0, width: 220, height: 220 }; }
+  };
+  assert.strictEqual(mosaic.eraseBilliardsBallAtClientPoint(50, 50), true);
+  assert.deepStrictEqual(mosaic.buildMinigamePresetExport().billiards, { ballRadius: 0.05, pockets: [] });
+  assert.strictEqual(mosaic.eraseBilliardsBallAtClientPoint(50, 50), false);
+  assert.ok(mosaic.exportPresetGroupChoices().includes('Billiard'));
+  assert.ok(!mosaic.exportPresetGroupChoices().includes('Billiards'));
+  delete mosaic.refs.canvas;
+}
+
+function testBilliardsPocketMaterializationAndRemoval() {
+  mosaic.setTestBoard({
+    rows: 2,
+    cols: 2,
+    lattice: 'square',
+    boundary: 'glued',
+    inputMode: 'background',
+    backgroundAction: 'decoration',
+    backgroundDecorationKind: 'billiards-pocket',
+    billiards: { ballRadius: 0.05 }
+  });
+  mosaic.setTestGeometry({
+    width: 220,
+    height: 220,
+    radius: 50,
+    cells: [
+      { x: 50, y: 50 }, { x: 150, y: 50 },
+      { x: 50, y: 150 }, { x: 150, y: 150 }
+    ]
+  });
+  mosaic.refs.canvas = {
+    style: {},
+    getBoundingClientRect() { return { left: 0, top: 0, width: 220, height: 220 }; }
+  };
+  const implicit = mosaic.currentBilliardsEditorState();
+  assert.ok(implicit.pockets.length > 0);
+  assert.strictEqual(mosaic.billiardsRenderStateForDecoration(implicit).pockets.length, 0);
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(0, { clientX: 50, clientY: 50, update: false }), true);
+  assert.strictEqual(mosaic.state.billiards.pocketsExplicit, true);
+  const materialized = mosaic.currentBilliardsEditorState();
+  assert.strictEqual(mosaic.billiardsRenderStateForDecoration(materialized).pockets.length, materialized.pockets.length);
+  const pocketCount = mosaic.state.billiards.pockets.length;
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(0, { clientX: 50, clientY: 50, update: false }), true);
+  assert.strictEqual(mosaic.state.billiards.pockets.length, pocketCount - 1);
+  delete mosaic.refs.canvas;
 }
 
 function testSokobanDecorationCoexistenceRules() {
@@ -608,11 +975,19 @@ const tests = [
   testAdvancedMultiGroupExport,
   testPresetMetadataCanBeClearedWhileEditing,
   testMinigameTestLink,
+  testHexAndTileMatchingTestLinks,
+  testMinigameStatusAndRecordProjection,
+  testCompactMinigamePresetUsesSharedImportNormalization,
   testExportHiddenRowsHaveCssRule,
   testHolePruningAndToggle,
   testImportStyleMarkers,
   testPieceSetsImportExportAndDecorationToggle,
   testSokobanDecorationPaletteAndExports,
+  testGameSpecificDecorationExports,
+  testBilliardsPaletteDropAndRackDirection,
+  testSquareBilliardsUsesFullTileSide,
+  testBilliardsBallDoubleClickRemovalAndCanonicalExportType,
+  testBilliardsPocketMaterializationAndRemoval,
   testSokobanDecorationCoexistenceRules,
   testSokobanWallToggleDoesNotRemoveTile,
   testHoleMarkerDrawingMatchesConnectFour,

@@ -1763,6 +1763,7 @@
         <div class="mosaic-inline-row">
           <span class="input-label">Game</span>
           <select id="game-mode-select" aria-label="Game">
+            <option value="hex">Hex (Nash)</option>
             <option value="gomoku">Gomoku</option>
             <option value="go">Go</option>
             <option value="connect-four">Connect Four</option>
@@ -1961,6 +1962,14 @@
             <input type="range" id="chinese-checkers-jump-pause" min="0" max="240" step="40" value="120" aria-label="Chinese Checkers pause at multi-jump landings">
             <output id="chinese-checkers-jump-pause-value">120 ms</output>
           </span>
+        </div>
+        <div class="mosaic-inline-row" id="hex-pie-rule-row" data-mode-control="hex" hidden>
+          <span class="input-label">Rules</span>
+          <label class="opt-row"><input type="checkbox" id="hex-pie-rule"> standard pie rule</label>
+        </div>
+        <div class="mosaic-inline-row" id="hex-pie-swap-row" data-mode-control="hex" hidden>
+          <span class="input-label">Pie rule</span>
+          <button class="btn" id="hex-pie-swap" type="button">swap colors</button>
         </div>
         <div class="mosaic-inline-row" id="chinese-checkers-jump-rule-row" data-mode-control="chinese-checkers" hidden>
           <span class="input-label" data-i18n="setup.checkersJumpRule">Jump rule</span>
@@ -2299,21 +2308,23 @@
   <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
 </footer>
 
-<script src="ramified_minigame_presets/presets.js?v=20260824-3"></script>
+<script src="ramified_minigame_presets/presets.js?v=20260825-1"></script>
 <script src="js/calculator_cards.js"></script>
 <script src="js/site_i18n.js?v=20260824-3"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260824-19"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260825-2"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
+<script src="js/background_homology.js?v=20260824-1"></script>
+<script src="js/hex_homology_game.js?v=20260825-3"></script>
 <script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_renderer.js?v=20260823-6"></script>
-<script src="js/billiards/topological_billiards_native.js?v=20260824-14"></script>
+<script src="js/billiards/topological_billiards_native.js?v=20260825-1"></script>
 <script src="lianliankan/lianliankan_engine.js?v=20260823-1"></script>
 <script src="lianliankan/mosaic_adapter.js?v=20260824-2"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
-<script src="js/ramified_minigames_setup.js?v=20260824-50"></script>
+<script src="js/ramified_minigames_setup.js?v=20260825-4"></script>
 </body>
 </html>

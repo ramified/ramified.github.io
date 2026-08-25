@@ -4,6 +4,7 @@
   if (root) root.RAMIFIED_MINIGAME_PRESETS = presets;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
   const defaultForEntries = [
+    ["hex", "classic-hex", "center"],
     ["gomoku", "wormhole", "vertex"],
     ["go", "gomoku-big-hole", "vertex"],
     ["connect-four", "connect-four-exchange", "vertex"],
@@ -22,6 +23,7 @@
     presets: [
     {
       "gameTypes": [
+        "Hex",
         "2048",
         "Gomoku",
         "Go",
@@ -130,8 +132,9 @@
     },
     {
       "gameTypes": [
-        "2048"
-      ],
+        "2048",
+        "Tile Matching"
+        ],
       "id": "ramified-cover",
       "label": "ramified cover",
       "key": "ramified_cover",
@@ -150,8 +153,10 @@
     },
     {
       "gameTypes": [
-        "Gomoku", "Go", "Tile Matching"
-      ],
+        "Tile Matching",
+        "Gomoku",
+        "Go"
+        ],
       "id": "rubiks-cube-3x3x3",
       "label": "Rubik's Cube 3*3*3",
       "key": "rubiks_cube_3x3x3",
@@ -159,8 +164,10 @@
     },
     {
       "gameTypes": [
-        "2048"
-      ],
+        "2048",
+        "Tile Matching",
+        "Billiard"
+        ],
       "id": "usual-strip",
       "label": "usual strip",
       "key": "usual_strip",
@@ -655,6 +662,42 @@
       "key": "queens_on_double_cover",
       "file": "queens_on_double_cover.preset.js"
     },
+    {
+      "gameTypes": [
+        "Hex"
+        ],
+      "id": "classic-hex",
+      "label": "classic hex",
+      "key": "classic_hex",
+      "file": "classic_hex.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Hex"
+        ],
+      "id": "hex-torus-5-5",
+      "label": "hex torus 5*5",
+      "key": "hex_torus_5_5",
+      "file": "hex_torus_5_5.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Hex"
+        ],
+      "id": "hex-klein-bottle-5-5",
+      "label": "hex Klein bottle 5*5",
+      "key": "hex_klein_bottle_5_5",
+      "file": "hex_klein_bottle_5_5.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Hex"
+        ],
+      "id": "hex-rp2-5-5",
+      "label": "hex RP2 5*5",
+      "key": "hex_rp2_5_5",
+      "file": "hex_rp2_5_5.preset.js"
+    },   
     ]
   };
 });

@@ -34,7 +34,7 @@
       input: '#import-input',
       accept: '.json,.txt,application/json,text/plain',
       exportContent: '#export-type', exportFormat: '#export-format',
-      controls: ['#export-preset-meta-row', '#export-test-link-row'],
+      controls: ['#export-preset-meta-row', '#export-precomputed-game-data-row', '#export-test-link-row'],
       importKinds: [{ value: 'chart', label: 'Mosaic chart or preset' }], catalog: '#import-preset-select'
     },
     'matrix_calculator.html': {

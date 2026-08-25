@@ -1391,6 +1391,29 @@
             <span class="background-decoration-controls">
               <select id="background-decoration-kind" aria-label="Decoration kind" hidden>
                 <option value="input-hole">Input hole</option>
+                <option value="lianliankan-empty">Tile Matching empty cell</option>
+                <option value="hex-red-seed">Hex Red seed</option>
+                <option value="hex-blue-seed">Hex Blue seed</option>
+                <option value="billiards-cue">Billiards cue ball</option>
+                <option value="billiards-pocket">Billiards pocket</option>
+                <option value="billiards-rack-6">Billiards 6-ball rack</option>
+                <option value="billiards-rack-10">Billiards 10-ball rack</option>
+                <option value="billiards-rack-15">Billiards 15-ball rack</option>
+                <option value="billiards-ball-1">Billiards ball 1</option>
+                <option value="billiards-ball-2">Billiards ball 2</option>
+                <option value="billiards-ball-3">Billiards ball 3</option>
+                <option value="billiards-ball-4">Billiards ball 4</option>
+                <option value="billiards-ball-5">Billiards ball 5</option>
+                <option value="billiards-ball-6">Billiards ball 6</option>
+                <option value="billiards-ball-7">Billiards ball 7</option>
+                <option value="billiards-ball-8">Billiards ball 8</option>
+                <option value="billiards-ball-9">Billiards ball 9</option>
+                <option value="billiards-ball-10">Billiards ball 10</option>
+                <option value="billiards-ball-11">Billiards ball 11</option>
+                <option value="billiards-ball-12">Billiards ball 12</option>
+                <option value="billiards-ball-13">Billiards ball 13</option>
+                <option value="billiards-ball-14">Billiards ball 14</option>
+                <option value="billiards-ball-15">Billiards ball 15</option>
                 <option value="start">Start piece</option>
                 <option value="target">Goal</option>
                 <option value="sokoban-player">Sokoban player</option>
@@ -1859,6 +1882,12 @@
             </span>
           </span>
         </div>
+        <div class="mosaic-inline-row" id="export-precomputed-game-data-row">
+          <span class="input-label">Stored data</span>
+          <label class="opt-row" for="export-precomputed-game-data" title="Store reusable game-specific computations in this export. Currently this includes Hex homology generators and edge signatures.">
+            <input type="checkbox" id="export-precomputed-game-data"> store precomputed game data
+          </label>
+        </div>
         <div class="mosaic-inline-row" id="export-test-link-row" hidden>
           <span class="input-label">Test</span>
           <a class="export-test-link" id="export-test-link" href="ramified_minigames.html" target="_blank" rel="noopener">Test in Minigames</a>
@@ -1882,12 +1911,16 @@
 <script src="js/mosaic_knot_data.js"></script>
 <script src="js/mosaic_link_data.js"></script>
 <script src="js/mosaic_knot_engine.js"></script>
-<script src="ramified_minigame_presets/presets.js"></script>
+<script src="ramified_minigame_presets/presets.js?v=20260825-1"></script>
 <script src="js/calculator_cards.js"></script>
 <script src="js/background_homology.js?v=20260821-2"></script>
-<script src="js/mosaic_calculator.js?v=export-formats-homology-26"></script>
+<script src="js/hex_homology_game.js?v=20260825-3"></script>
+<script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
+<script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
+<script src="js/billiards/topological_billiards_native.js?v=20260825-1"></script>
+<script src="js/mosaic_calculator.js?v=import-compatibility-8"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
-<script src="js/import_export_page_adapters.js?v=20260821-9"></script>
+<script src="js/import_export_page_adapters.js?v=20260825-10"></script>
 <script>
   window.MathJax = {
     tex: {

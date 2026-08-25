@@ -741,9 +741,20 @@
     const columns = matrix[0].length;
     if (vector.length !== matrix.length || matrix.some((row) => row.length !== columns)) return null;
     const snf = smithNormalForm(matrix);
+    return solveIntegerSystemFromSmith(snf, vector);
+  }
+
+  // Arc-loop classification asks for several reductions against the same
+  // subdivision boundary matrix.  The Smith form is the expensive part, so
+  // keep the linear solve separate and allow callers to cache that form.
+  function solveIntegerSystemFromSmith(snf, vector) {
+    if (!snf || !Array.isArray(snf.matrix) || !Array.isArray(snf.left) || !Array.isArray(snf.right)) return null;
+    const rows = snf.matrix.length;
+    const columns = snf.right.length;
+    if (vector.length !== rows) return null;
     const transformed = multiplyMatrixVector(snf.left, vector);
     const solutionInDiagonalCoordinates = Array(columns).fill(0n);
-    const limit = Math.min(matrix.length, columns);
+    const limit = Math.min(rows, columns);
     for (let index = 0; index < limit; index += 1) {
       const divisor = snf.matrix[index][index];
       if (divisor === 0n) {
@@ -805,8 +816,11 @@
       boundary[subdivision.edges[edge].target] += coefficient;
     });
     if (boundary.some((value) => value !== 0n)) return { valid: false, reason: 'the selected knot component is not closed in the quotient' };
-    const relationMatrix = subdivision.subdivisionMap.map((row, rowIndex) => row.concat(subdivision.boundary2[rowIndex]));
-    const solution = solveIntegerSystem(relationMatrix, chain);
+    if (!subdivision.arcReductionSmith) {
+      const relationMatrix = subdivision.subdivisionMap.map((row, rowIndex) => row.concat(subdivision.boundary2[rowIndex]));
+      subdivision.arcReductionSmith = smithNormalForm(relationMatrix);
+    }
+    const solution = solveIntegerSystemFromSmith(subdivision.arcReductionSmith, chain);
     if (!solution) return { valid: false, reason: 'could not reduce the knot to the quotient cell complex' };
     const quotientChain = solution.slice(0, analysis.complex.edges.length);
     const classified = classifyChain(analysis, quotientChain);

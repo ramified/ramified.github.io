@@ -65,13 +65,34 @@ function testSharedModeContract() {
   assert.deepStrictEqual(minigames.stateSummary(imported), summary);
 }
 
+function testPresetEmptyCellsRemainPlayable() {
+  const preset = minigames.normalizePresetPayload({
+    ...sharedPreset(),
+    lianliankan: { initiallyEmpty: [{ row: 1, col: 1 }] }
+  });
+  const state = minigames.createLianliankanState(preset, {
+    rng: minigames.createRng([0.2, 0.8, 0.4, 0.6]),
+    maxShuffleAttempts: 0
+  });
+  const first = state.board.cells[0];
+  assert.strictEqual(first.playable, true);
+  assert.strictEqual(first.tile, null, 'configured empty cell must remain a path cell');
+  assert.strictEqual(state.board.cells.filter((cell) => cell.tile).length, 6, 'odd capacity gains one deterministic empty cell');
+}
+
 function testExplicitCatalogEligibility() {
   const tileMatchingPresets = minigames.presetListForMode(minigames.GAME_MODES.LIANLIANKAN).map((preset) => preset.id);
-  assert.deepStrictEqual(tileMatchingPresets, ['boundary-glue-board', 'rubiks-cube-2x2x2', 'rubiks-cube-3x3x3']);
+  assert.deepStrictEqual(tileMatchingPresets, [
+    'boundary-glue-board',
+    'ramified-cover',
+    'rubiks-cube-2x2x2',
+    'rubiks-cube-3x3x3',
+    'usual-strip'
+  ]);
   assert.strictEqual(minigames.defaultPresetIdForMode(minigames.GAME_MODES.LIANLIANKAN), 'rubiks-cube-2x2x2');
 
   const billiardsPresets = minigames.presetListForMode(minigames.GAME_MODES.BILLIARDS).map((preset) => preset.id);
-  assert.deepStrictEqual(billiardsPresets, ['boundary-glue-board', 'twisted-torus', 'genus-2', 'half-glued', 'rubiks-cube-2x2x2']);
+  assert.deepStrictEqual(billiardsPresets, ['boundary-glue-board', 'twisted-torus', 'genus-2', 'half-glued', 'rubiks-cube-2x2x2', 'usual-strip']);
 
   const boundaryModes = minigames.gameModesForPreset(minigames.normalizePresetPayload({
     id: 'untagged-square',
@@ -210,6 +231,7 @@ function testLargeBoundaryBoardEmptyRing() {
 }
 
 testSharedModeContract();
+testPresetEmptyCellsRemainPlayable();
 testExplicitCatalogEligibility();
 testTileMatchingTileSets();
 testSharedLocaleContract();
