@@ -1963,14 +1963,32 @@
             <output id="chinese-checkers-jump-pause-value">120 ms</output>
           </span>
         </div>
-        <div class="mosaic-inline-row" id="hex-pie-rule-row" data-mode-control="hex" hidden>
-          <span class="input-label">Rules</span>
-          <label class="opt-row"><input type="checkbox" id="hex-pie-rule"> standard pie rule</label>
-        </div>
-        <div class="mosaic-inline-row" id="hex-pie-swap-row" data-mode-control="hex" hidden>
-          <span class="input-label">Pie rule</span>
-          <button class="btn" id="hex-pie-swap" type="button">swap colors</button>
-        </div>
+        <div class="mosaic-inline-row"
+        id="hex-pie-rule-row"
+        data-mode-control="hex"
+        hidden>
+
+        <span class="input-label"
+        data-i18n="setup.rules">Rules</span>
+
+        <label class="opt-row">
+          <input type="checkbox" id="hex-pie-rule">
+          <span data-i18n="setup.hexStandardPieRule">standard pie rule</span>
+        </label>
+      </div>
+      <div class="mosaic-inline-row"
+      id="hex-pie-swap-row"
+      data-mode-control="hex"
+      hidden>
+
+      <span class="input-label"
+      data-i18n="setup.hexPieRule">Pie rule</span>
+
+      <button class="btn"
+      id="hex-pie-swap"
+      type="button"
+      data-i18n="setup.hexSwapColors">swap colors</button>
+    </div>
         <div class="mosaic-inline-row" id="chinese-checkers-jump-rule-row" data-mode-control="chinese-checkers" hidden>
           <span class="input-label" data-i18n="setup.checkersJumpRule">Jump rule</span>
           <select id="chinese-checkers-jump-rule" data-i18n-aria-label="access.checkersJumpRule" aria-label="Chinese Checkers jump rule">

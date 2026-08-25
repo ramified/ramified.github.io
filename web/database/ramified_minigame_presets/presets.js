@@ -697,7 +697,16 @@
       "label": "hex RP2 5*5",
       "key": "hex_rp2_5_5",
       "file": "hex_rp2_5_5.preset.js"
-    },   
+    },  
+    {
+      "gameTypes": [
+        "Hex"
+        ],
+      "id": "hex-with-three-slits",
+      "label": "hex with three slits",
+      "key": "hex_with_three_slits",
+      "file": "hex_with_three_slits.preset.js"
+    }, 
     ]
   };
 });

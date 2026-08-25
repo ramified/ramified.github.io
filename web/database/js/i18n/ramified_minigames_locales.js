@@ -249,14 +249,18 @@
     'setup.clearBomb': ['clear bomb', '清除炸弹'],
     'setup.readyOnline': ['Ready to create or join an online room.', '可以创建或加入在线房间。'],
     'setup.beginFromCanvas': ['begin from canvas', '从画布开始'],
-    'setup.rulesStatus': ['quick rules shown; begin here or use the setup panel', '已显示快速规则；可在此开始，也可使用设置面板'],
-    'setup.defaultRules': ['Read the quick rule, then begin the selected game on this glued mosaic.', '阅读快速规则，然后在此粘合镶嵌上开始所选游戏。'],
+    'setup.rulesStatus': ['quick rules shown; begin here or use the setup panel', '已显示规则；可在此开始，也可使用设置面板'],
+    'setup.defaultRules': ['Read the quick rule, then begin the selected game on this glued mosaic.', '阅读规则，然后在此粘合镶嵌上开始所选游戏。'],
     'setup.gomokuRules': ['Place black and white stones on empty board points. The first player to make a line of five wins.', '在空棋盘交点轮流放置黑白棋子，率先连成五子者获胜。'],
     'setup.connectRules': ['Drop red and yellow tokens through white input holes. Connect four along any board line to win.', '从白色入口投入红黄棋子，沿棋盘任意直线连成四子即可获胜。'],
     'setup.connectSetupRules': ['Click tiles to mark white input holes, then begin. Drop tokens through those holes and connect four to win.', '点击方格标记白色入口后开始游戏；从入口投入棋子并连成四子即可获胜。'],
     'setup.goRules': ['Place stones on empty points; surrounded opposing groups are captured. Pass when both players are done.', '在空交点落子；完全包围对方棋群即可提子。双方结束时请选择停一手。'],
     'setup.reversiRules': ['Place a disc to bracket opposing discs along a line and flip them. Most discs at the end wins.', '落子夹住直线上的对方棋子并将其翻转，终局棋子较多者获胜。'],
     'setup.checkersRules': ['Select one of your marbles, then move or jump through connected cells. Race into the opposite camp.', '选择己方弹珠，沿相邻格移动或连续跳跃，率先进入对面营地。'],
+    'setup.hexRules': [
+      'Red and blue alternately fill tiles. Create a connected loop with nonzero integral H₁ to win; the pie rule lets Blue swap colors after Red’s first tile.',
+      '红蓝双方轮流占据格子。率先形成一个在整数系数第一同调群 H₁ 中代表非零类的连通闭环者获胜；红方首步后，蓝方可按交换规则（pie rule）交换双方颜色。'
+      ],
     'setup.checkersJumpRule': ['Jump rule', '跳跃规则'],
     'setup.checkersJumpUnlimited': ['unlimited mirror jump', '不限距离镜像跳跃'],
     'setup.checkersJumpAdjacent': ['adjacent jump only', '仅可跳过相邻棋子'],
@@ -279,8 +283,20 @@
     'setup.chineseCharacters': ['Chinese characters', '汉字'],
     'setup.japaneseCharacters': ['Japanese characters', '日文假名'],
     'setup.youngDiagrams3x3': ['Young diagrams (3×3)', '杨图（3×3）'],
+    'setup.hexStandardPieRule': [
+      'standard pie rule',
+      '标准交换规则'
+      ],
+    'setup.hexPieRule': [
+      'Pie rule',
+      '交换规则'
+      ],
+    'setup.hexSwapColors': [
+      'swap colors',
+      '交换颜色'
+      ],
 
-    'games.hex': ['Hex (Nash)', '拓扑六边棋'],
+    'games.hex': ['Hex (Nash)', '六贯棋'],
     'games.gomoku': ['Gomoku', '五子棋'],
     'games.go': ['Go', '围棋'],
     'games.connectFour': ['Connect Four', '四子棋'],
@@ -438,7 +454,7 @@
     'io.importCleared': ['Import input cleared.', '已清除导入内容。'],
     'io.operationFailed': ['{{message}}', '{{message}}'],
     'io.replaceConfirm': ['Importing will replace the active game. Continue?', '导入将替换当前游戏。是否继续？'],
-    'io.recordsAvailable': ['Game records are available for Hex, Billiard, Gomoku, Go, Connect Four, Reversi, and FIDE Chess.', '游戏记录支持拓扑六边棋、台球、五子棋、围棋、四子棋、黑白棋和国际象棋。'],
+    'io.recordsAvailable': ['Game records are available for Hex, Billiard, Gomoku, Go, Connect Four, Reversi, and FIDE Chess.', '游戏记录支持六贯棋、台球、五子棋、围棋、四子棋、黑白棋和国际象棋。'],
     'io.gameUnavailable': ['The game is not ready to export.', '游戏尚未准备好，无法导出。'],
 
     'status.stats': ['Game Stats', '游戏统计'],
@@ -593,10 +609,10 @@
     ['^(.+) pieces$', '$1 pieces'],
     ['^(.+) stones$', '$1 stones'],
     ['^(.+) discs$', '$1 discs']
-  ];
+    ];
   chinese.__patterns = [
     ['^(.+) to move$', '轮到$1'],
-    ['^(.+) quick rules$', '$1快速规则'],
+    ['^(.+) quick rules$', '$1规则'],
     ['^(.+) on (.+)$', '$1｜$2'],
     ['^(.+) wins!?$', '$1获胜！'],
     ['^(.+) restarted$', '$1已重新开始'],
@@ -635,7 +651,7 @@
     , ['^(\\d+) pair cleared$', '已消除 $1 对']
     , ['^(\\d+) pairs cleared$', '已消除 $1 对']
     , ['^(\\d+)x(\\d+), (.+), (\\d+) unmatched, (\\d+) removed, (\\d+) cut, (\\d+) glued$', '$1×$2，$3，$4 条未匹配边，$5 个已移除，$6 条切边，$7 条粘合边']
-  ];
+    ];
   chinese.__fragments = {
     'Online play unavailable.': '在线游戏不可用。',
     'Waiting for colors.': '正在等待颜色选择。',
@@ -644,7 +660,8 @@
     'Ready to create or join an online room.': '可以创建或加入在线房间。',
     'game not started': '游戏尚未开始',
     'begin from canvas': '从画布开始',
-    'quick rules shown': '已显示快速规则',
+    'quick rules shown': '已显示规则',
+    'may swap colors': '可交换颜色',
     'to move': '行动',
     'game over': '游戏结束',
     'wins': '获胜',
@@ -665,7 +682,7 @@
     'Room': '房间',
     'Player': '玩家'
     , 'Chinese Checkers': '跳棋'
-    , 'Hex (Nash)': '拓扑六边棋'
+    , 'Hex (Nash)': '六贯棋'
     , 'Gomoku': '五子棋'
     , 'Connect Four': '四子棋'
     , 'Reversi': '黑白棋'
