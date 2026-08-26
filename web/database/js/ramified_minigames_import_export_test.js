@@ -32,8 +32,13 @@ assert.ok(html.includes('data-i18n="io.editInMosaicCalculator"'));
 assert.ok(html.includes('id="hex-neighbor-delay" min="0.1" max="0.8" step="0.1" value="0.4"'));
 assert.ok(html.includes('id="hex-neighbor-size" min="50" max="100" step="1" value="75"'));
 assert.ok(html.includes('id="hex-neighbor-stroke" min="1" max="5" step="0.5" value="3"'));
-assert.ok(setup.includes("if (geom.lattice && geom.lattice.shape === 'hex')"));
-assert.ok(setup.includes('boxPath(ctx, point, size, geom.lattice);'));
+const pngBombRenderer = setup.slice(setup.indexOf('function drawPngBomb'), setup.indexOf('function bombTint'));
+assert.ok(!pngBombRenderer.includes('ctx.clip()'), 'transparent bomb artwork should not be clipped to create its backdrop');
+assert.ok(!pngBombRenderer.includes("globalCompositeOperation = 'source-atop'"), 'PNG tinting must not composite against the painted board');
+assert.ok(!pngBombRenderer.includes('ctx.fillRect('), 'PNG bomb rendering must not paint a rectangular tint background');
+assert.deepStrictEqual(minigames.bombBackdropPalette('blue'), {
+  fill: '#d7edf1', stroke: '#1f7a8c', glow: '#1f7a8c'
+});
 assert.ok(setup.includes('tilePoints(cell.x, cell.y, radius, geom.lattice)'));
 
 assert.ok(setup.includes('window.ImportExportPanel.mount'));
@@ -124,5 +129,59 @@ assert.deepStrictEqual(
   [2, 3],
   'Hex neighbor hints respect cut edges and include glued-edge neighbors'
 );
+
+const bombChainState = minigames.createGameState({
+  id: 'red-bomb-chain-test',
+  label: 'red bomb chain test',
+  lattice: 'square',
+  rows: 2,
+  cols: 3,
+  removedTiles: [],
+  cutEdges: [],
+  gluedEdges: []
+});
+bombChainState.bombs = [
+  { index: minigames.indexOf(1, 1, 3), kind: 'red', value: 128 },
+  { index: minigames.indexOf(1, 2, 3), kind: 'red', value: 128 },
+  { index: minigames.indexOf(1, 3, 3), kind: 'blue', value: 2 }
+];
+bombChainState.boxes = [
+  { id: 1, index: minigames.indexOf(2, 1, 3), value: 4 },
+  { id: 2, index: minigames.indexOf(2, 2, 3), value: 8 }
+];
+const bombChain = minigames.detonateBombAt(bombChainState, minigames.indexOf(1, 2, 3));
+assert.deepStrictEqual(bombChain.detonations.map((entry) => entry.kind), ['red', 'blue', 'red']);
+assert.deepStrictEqual(bombChain.state.bombs, [], 'red bombs trigger every adjacent bomb exactly once');
+assert.deepStrictEqual(bombChain.state.boxes, [], 'triggered red bombs apply their own adjacent blast');
+assert.deepStrictEqual(bombChain.clearedBoxIds.sort((left, right) => left - right), [1, 2]);
+
+function boundaryBombChainState(gluedEdges) {
+  const state = minigames.createGameState({
+    id: 'boundary-bomb-chain-test',
+    label: 'boundary bomb chain test',
+    lattice: 'square',
+    rows: 1,
+    cols: 2,
+    removedTiles: [],
+    cutEdges: [{ left: { row: 1, col: 1 }, right: { row: 1, col: 2 } }],
+    gluedEdges
+  });
+  state.bombs = [
+    { index: 0, kind: 'red', value: 128 },
+    { index: 1, kind: 'blue', value: 2 }
+  ];
+  return state;
+}
+
+const cutBombChain = minigames.detonateBombAt(boundaryBombChainState([]), 0);
+assert.deepStrictEqual(cutBombChain.detonations.map((entry) => entry.index), [0]);
+assert.deepStrictEqual(cutBombChain.state.bombs.map((entry) => entry.index), [1], 'a cut edge blocks bomb propagation');
+
+const gluedBombChain = minigames.detonateBombAt(boundaryBombChainState([{
+  first: { row: 1, col: 1, dir: minigames.DIRS.W },
+  second: { row: 1, col: 2, dir: minigames.DIRS.E }
+}]), 0);
+assert.deepStrictEqual(gluedBombChain.detonations.map((entry) => entry.index), [0, 1]);
+assert.deepStrictEqual(gluedBombChain.state.bombs, [], 'a glued boundary triggers its partner bomb exactly once');
 
 console.log('ramified_minigames_import_export_test: all tests passed');

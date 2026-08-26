@@ -284,7 +284,7 @@
     'setup.queensRules': ['Rearrange all queens so no queen threatens another across the transported square-board routes.', '重新排列所有后，使任意两个后都不会沿传送后的方格路径互相攻击。'],
     'setup.chessRules': ['Move FIDE chess pieces across transported square-board routes. Checkmate wins; stalemate and dead positions draw.', '沿传送后的方格路径移动国际象棋棋子；将死获胜，逼和与死局为和棋。'],
     'setup.lianliankanRules': ['Match identical tiles through empty cells with an orthogonal path that turns at most twice. Only configured boundary glue may cross the board edge.', '用最多转弯两次的正交路径穿过空格连接相同方块；只有已配置的边界粘合可以跨越棋盘边缘。'],
-    'setup.2048Rules': ['Slide boxes with arrow keys, move buttons, or a swipe. Matching powers of two merge; explosions leave clickable bombs.', '使用方向键、移动按钮或滑动来移动方块；相同的数字会合并，爆炸后会留下可点击的炸弹。'],
+    'setup.2048Rules': ['Slide boxes with arrow keys, move buttons, or a swipe. Matching powers of two merge; explosions leave clickable bombs. Red bombs clear adjacent numbers and trigger adjacent bombs.', '使用方向键、移动按钮或滑动来移动方块；相同的数字会合并，爆炸后会留下可点击的炸弹。红色炸弹会清除相邻数字并引爆相邻炸弹。'],
     'setup.refreshRemainingTiles': ['Refresh remaining tiles', '刷新剩余方块'],
     'setup.tileSet': ['Tile set', '图案组'],
     'setup.chineseCharacters': ['Chinese characters', '汉字'],

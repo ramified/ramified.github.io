@@ -7816,7 +7816,7 @@
         ? 'Rearrange all queens so no queen threatens another across the transported square-board routes.'
         : 'Move FIDE chess pieces across transported square-board routes. Checkmate wins; stalemate and dead positions draw.';
     } else {
-      rules = 'Slide boxes with arrow keys, move buttons, or a swipe. Matching powers of two merge; explosions leave clickable bombs.';
+      rules = 'Slide boxes with arrow keys, move buttons, or a swipe. Matching powers of two merge; explosions leave clickable bombs. Red bombs clear adjacent numbers and trigger adjacent bombs.';
     }
     return {
       title: `${gameName} quick rules`,
@@ -7988,8 +7988,9 @@
     game.ending = '';
     clearNoMoveTrial();
     const cleared = result.clearedBoxIds.length;
+    const chained = Math.max(0, (result.detonations || []).length - 1);
     const detail = bomb.kind === BOMB_KINDS.RED
-      ? `${cleared} adjacent number${cleared === 1 ? '' : 's'} cleared`
+      ? `${cleared} adjacent number${cleared === 1 ? '' : 's'} cleared; ${chained} bomb${chained === 1 ? '' : 's'} triggered`
       : 'tile restored';
     syncStatus(`${bomb.kind} bomb`, detail, 'ready');
     startBombDetonationFeedback(target.index, bomb, result);
@@ -9132,25 +9133,48 @@
         clearedBoxIds: [],
         clearedIndices: [],
         rangeIndices: [],
+        detonations: [],
         message: 'no bomb there'
       };
     }
     const state = cloneGameState(sourceState);
-    const bomb = removeBombAtIndex(state, index);
+    const bomb = cloneBomb(sourceBomb);
     const clearedBoxIds = [];
     const clearedIndices = [];
     const rangeIndices = [];
-    if (bomb && bomb.kind === BOMB_KINDS.RED) {
-      const clearIndices = blastIndicesWithinDistance(state, index, 1);
-      clearIndices.forEach((clearIndex) => {
-        if (!rangeIndices.includes(clearIndex)) rangeIndices.push(clearIndex);
-      });
-      const clearBoxes = boxesAtIndices(state, clearIndices);
-      clearBoxes.forEach((box) => {
-        clearedBoxIds.push(box.id);
-        if (!clearedIndices.includes(box.index)) clearedIndices.push(box.index);
-        removeBox(state, box.id);
-      });
+    const detonations = [];
+    const queued = new Set([index]);
+    const queue = [index];
+    while (queue.length) {
+      const bombIndex = queue.shift();
+      const detonated = removeBombAtIndex(state, bombIndex);
+      if (!detonated) continue;
+      const detonation = {
+        index: bombIndex,
+        kind: detonated.kind,
+        value: detonated.value,
+        rangeIndices: [],
+        clearedIndices: []
+      };
+      if (detonated.kind === BOMB_KINDS.RED) {
+        const affected = bombBlastNeighborIndices(state, bombIndex);
+        affected.forEach((affectedIndex) => {
+          detonation.rangeIndices.push(affectedIndex);
+          if (!rangeIndices.includes(affectedIndex)) rangeIndices.push(affectedIndex);
+          const adjacentBomb = bombAtIndex(state, affectedIndex);
+          if (adjacentBomb && !queued.has(affectedIndex)) {
+            queued.add(affectedIndex);
+            queue.push(affectedIndex);
+          }
+        });
+        boxesAtIndices(state, affected).forEach((box) => {
+          if (!clearedBoxIds.includes(box.id)) clearedBoxIds.push(box.id);
+          if (!clearedIndices.includes(box.index)) clearedIndices.push(box.index);
+          if (!detonation.clearedIndices.includes(box.index)) detonation.clearedIndices.push(box.index);
+          removeBox(state, box.id);
+        });
+      }
+      detonations.push(detonation);
     }
     return {
       changed: true,
@@ -9159,23 +9183,58 @@
       clearedBoxIds,
       clearedIndices,
       rangeIndices,
+      detonations,
       message: bomb && bomb.kind === BOMB_KINDS.RED
-        ? `${clearedBoxIds.length} adjacent number${clearedBoxIds.length === 1 ? '' : 's'} cleared`
+        ? `${clearedBoxIds.length} adjacent number${clearedBoxIds.length === 1 ? '' : 's'} cleared; ${Math.max(0, detonations.length - 1)} bomb${detonations.length === 2 ? '' : 's'} triggered`
         : 'tile restored'
     };
   }
 
+  function bombBlastNeighborIndices(state, center) {
+    const preset = state && state.preset;
+    if (!preset || !Number.isInteger(center)) return [];
+    const neighbors = new Set();
+    directionsForPreset(preset).forEach((dir) => {
+      const pos = rowCol(center, preset.cols);
+      const direct = neighbor(pos.row, pos.col, dir, preset);
+      if (direct) {
+        const nextIndex = indexOf(direct.row, direct.col, preset.cols);
+        if (!(state.removed instanceof Set && state.removed.has(nextIndex))
+          && !cutEdgeKeySet(preset).has(cutKey(center, nextIndex))) neighbors.add(nextIndex);
+        return;
+      }
+      const partner = gluedPartner(preset, center, dir);
+      if (partner && !(state.removed instanceof Set && state.removed.has(partner.index))) neighbors.add(partner.index);
+    });
+    neighbors.delete(center);
+    return Array.from(neighbors);
+  }
+
   function startBombDetonationFeedback(index, bomb, result) {
-    const kind = normalizeBombKind(bomb && bomb.kind) || BOMB_KINDS.BLUE;
-    startPlacementFeedback({
-      kind: 'bombDetonation',
-      index,
-      bombKind: kind,
-      value: Math.max(0, Number(bomb && bomb.value) || 0),
-      rangeIndices: uniqueIntegerList(result && result.rangeIndices),
-      clearedIndices: uniqueIntegerList(result && result.clearedIndices),
-      startedAt: now(),
-      duration: eventDuration({ kind: 'detonateBomb', bombKind: kind })
+    const records = result && Array.isArray(result.detonations) && result.detonations.length
+      ? result.detonations
+      : [{
+        index,
+        kind: normalizeBombKind(bomb && bomb.kind) || BOMB_KINDS.BLUE,
+        value: Math.max(0, Number(bomb && bomb.value) || 0),
+        rangeIndices: result && result.rangeIndices,
+        clearedIndices: result && result.clearedIndices
+      }];
+    let startedAt = now();
+    records.forEach((record) => {
+      const kind = normalizeBombKind(record.kind) || BOMB_KINDS.BLUE;
+      const duration = eventDuration({ kind: 'detonateBomb', bombKind: kind });
+      startPlacementFeedback({
+        kind: 'bombDetonation',
+        index: record.index,
+        bombKind: kind,
+        value: Math.max(0, Number(record.value) || 0),
+        rangeIndices: uniqueIntegerList(record.rangeIndices),
+        clearedIndices: uniqueIntegerList(record.clearedIndices),
+        startedAt,
+        duration
+      });
+      startedAt += duration;
     });
   }
 
@@ -12740,18 +12799,23 @@
   }
 
   function drawBombBlockedHalo(ctx, geom, point, kind, scale) {
-    const color = kind === BOMB_KINDS.RED ? '#b23a48' : '#1f7a8c';
+    const palette = bombBackdropPalette(kind);
     ctx.save();
-    ctx.globalAlpha *= 0.75;
-    ctx.fillStyle = kind === BOMB_KINDS.RED ? 'rgba(178,58,72,0.13)' : 'rgba(31,122,140,0.13)';
-    ctx.strokeStyle = kind === BOMB_KINDS.RED ? 'rgba(178,58,72,0.48)' : 'rgba(31,122,140,0.48)';
+    ctx.fillStyle = palette.fill;
+    ctx.strokeStyle = palette.stroke;
     ctx.lineWidth = Math.max(1.2, geom.radius * 0.045);
-    ctx.shadowColor = color;
+    ctx.shadowColor = palette.glow;
     ctx.shadowBlur = geom.radius * 0.16;
     boxPath(ctx, point, geom.radius * 1.46 * scale, geom.lattice);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
+  }
+
+  function bombBackdropPalette(kind) {
+    return kind === BOMB_KINDS.RED
+      ? { fill: '#f4dadd', stroke: '#b23a48', glow: '#b23a48' }
+      : { fill: '#d7edf1', stroke: '#1f7a8c', glow: '#1f7a8c' };
   }
 
   function drawPngBomb(ctx, geom, point, kind, scale, option) {
@@ -12760,14 +12824,7 @@
     const size = geom.radius * 1.62 * scale;
     ctx.save();
     ctx.globalAlpha *= 0.95;
-    if (geom.lattice && geom.lattice.shape === 'hex') {
-      boxPath(ctx, point, size, geom.lattice);
-      ctx.clip();
-    }
     ctx.drawImage(image, point.x - size / 2, point.y - size / 2, size, size);
-    ctx.globalCompositeOperation = 'source-atop';
-    ctx.fillStyle = kind === BOMB_KINDS.RED ? 'rgba(255,48,54,0.42)' : 'rgba(0,172,219,0.42)';
-    ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
     ctx.restore();
     return true;
   }
@@ -16148,6 +16205,10 @@
       const duration = Number.isFinite(feedback.duration) ? Math.max(1, feedback.duration) : REVERSI_INVALID_MARK_DURATION;
       const age = current - feedback.startedAt;
       if (age >= duration) return false;
+      if (age < 0) {
+        if (feedback.kind === 'bombDetonation') drawBombAtIndex(ctx, geom, feedback.index, feedback.bombKind, 1);
+        return true;
+      }
       const progress = Math.max(0, Math.min(1, age / duration));
       if (feedback.kind === 'onlineTurnBlocked') drawOnlineTurnFeedback(ctx, geom, feedback, progress);
       if (feedback.kind === 'bombDetonation') drawBombDetonationFeedback(ctx, geom, feedback, progress);
@@ -28728,6 +28789,7 @@
     rowCol,
     BOMB_ART_OPTIONS,
     BOMB_KINDS,
+    bombBackdropPalette,
     blockedTileCount,
     bombAtIndex,
     canOfferBonusEnding,
