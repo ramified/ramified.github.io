@@ -2160,7 +2160,6 @@
     const time = Number.isFinite(Number(view.pulseTime)) ? Number(view.pulseTime) : 0;
     const wave = (Math.sin(time / 340) + 1) * 0.5;
     const radius = cue.radius * scale * (1.30 + wave * 0.34);
-    let labelPoint = null;
     nearbyImages(cue, state.atlas, {
       padding: cue.radius * 1.8,
       maxDepth: state.deterministic.parameters.localCoverDepth,
@@ -2168,7 +2167,6 @@
     }).forEach((image) => {
       const center = localToCanvas(image.tileIndex, image.position, geometry, state.atlas);
       if (!center) return;
-      if (!labelPoint) labelPoint = center;
       ctx.save();
       if (clipToTile(ctx, geometry, state, image.tileIndex)) {
         ctx.strokeStyle = `rgba(244, 207, 89, ${0.40 + wave * 0.42})`;
@@ -2179,7 +2177,6 @@
       }
       ctx.restore();
     });
-    drawSetupHoverLabel(ctx, labelPoint, view.cueHintLabel, '#c49b24');
   }
 
   function render(ctx, geometry, state, view = {}) {

@@ -90,25 +90,26 @@ A new game is not complete until it has:
 
 ## Missing-translation detection
 
-Add a development-only warning when Chinese is active and a translatable English string remains unchanged.
+The Minigames debug panel provides an unchecked **check translation** option. Enabling it audits the current UI for Chinese gaps and monitors later dynamic updates until it is unchecked.
 
-Example:
+Diagnostics warn when an explicit key has no Chinese value or when an unkeyed English source remains unchanged. Warnings are non-blocking and deduplicated once per unique issue for the page session.
+
+### Intentional English
+
+Some names, abbreviations, brands, and mathematical notation are intentionally the same in both languages.
+
+- An explicit key with equal, non-empty English and Chinese values is valid and produces no warning.
+- Mark intentionally untranslated static text with `lang="en" data-i18n-ignore`.
+- Put unavoidable legacy dynamic sources in the exact-match `__intentionalEnglish` list.
+- Never suppress by substring: allowing `CD` must not conceal an untranslated sentence that happens to contain `CD`.
+
+For example, this is valid:
 
 ```js
-function warnIfUntranslated(source, translated) {
-  if (
-    window.SiteI18n?.getLocale?.() === 'zh-CN' &&
-    source === translated &&
-    /[A-Za-z]{2,}/.test(source)
-  ) {
-    console.warn('[i18n] Possibly untranslated:', source);
-  }
-}
+'media.cd': ['CD', 'CD']
 ```
 
-Integrate this into the translation path used by dynamic UI.
-
-This should be a warning, not a hard error, because some names may intentionally remain in English.
+Run `node js/ramified_minigames_i18n_test.js` after adding or changing UI text. The validator requires every literal `data-i18n*` and `tk()` key to exist in both catalogs and checks parameter parity, but it deliberately allows equal translations.
 
 ## Recommended Codex implementation work
 

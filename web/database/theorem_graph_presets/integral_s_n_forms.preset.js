@@ -504,8 +504,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 351.9,
-      "y": 488.7,
+      "x": 351.3,
+      "y": 490.2,
       "childGraph": {
         "title": "my graph",
         "nodes": [
@@ -603,6 +603,14 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
             "id": "n1",
             "type": "definition",
             "label": "§23 — Lattices and orders",
+            "details": [
+              {
+                "id": "concepts",
+                "label": "concepts",
+                "type": "list",
+                "text": "$R$-lattice, p522\nprojective is required for $R$-lattice\nproj->torsion free\nDedekind domain + f.g., get reverse\n$R->\\operatorname{End}_R(M)$ helps understand a $\\Lambda$-module $M$, where $\\Lambda$ is an $R$-algebra, p523\n$\\operatorname{End}_R(M)$ is an $R$-lattice\n$R$-order: $R$-algebra + $R$-lattice, p523\n$R$-order in f.g. $K(R)$-algebra\n$\\Lambda$-lattice, p524\n$R$-pure $\\Lambda$-sublattice, p526"
+              }
+            ],
             "setting": "Specialize the book's order-and-lattice language to the integral group ring $\\Lambda=\\mathbb{Z}S_n$.",
             "condition": "Write the definitions of an $R$-order and a $\\Lambda$-lattice. Then check explicitly that a free integral representation $\\rho:S_n\\to\\mathrm{GL}_r(\\mathbb{Z})$ gives a $\\mathbb{Z}S_n$-lattice, and conversely.",
             "result": "Checkpoint: translate without hesitation between integral matrix representations and $\\mathbb{Z}S_n$-lattices. \\cite[§23, p. 491]{CR81}",
@@ -610,10 +618,10 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
             "citationKeys": [
               "CR81"
             ],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
+            "color": "#46786e",
+            "fillColor": "#eef7f4",
             "x": 144.5,
-            "y": 162.4
+            "y": 203.5
           },
           {
             "id": "n2",
@@ -803,7 +811,7 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
             "color": "#2f5f9f",
             "fillColor": "#eef4fb",
             "x": 485.8,
-            "y": 577
+            "y": 566
           }
         ],
         "arrows": [
@@ -1383,7 +1391,7 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
     }
   ],
   "view": {
-    "selectedId": "",
+    "selectedId": "n1",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasHeight": 1191,

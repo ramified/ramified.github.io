@@ -235,10 +235,11 @@ function testPageIntegration() {
   assert.ok(html.includes('id="billiards-ball-palette"'));
   assert.ok(html.includes('class="tile-palette-grid billiards-ball-palette"'));
   assert.ok(html.includes('.billiards-spin-row[hidden]'));
-  assert.ok(html.includes('topological_billiards_math.js'));
-  assert.ok(html.includes('topological_billiards_physics.js'));
-  assert.ok(html.includes('topological_billiards_renderer.js'));
-  assert.ok(html.includes('topological_billiards_native.js'));
+  assert.ok(setup.includes('topological_billiards_math.js'));
+  assert.ok(setup.includes('topological_billiards_physics.js'));
+  assert.ok(setup.includes('topological_billiards_renderer.js'));
+  assert.ok(setup.includes('topological_billiards_native.js'));
+  assert.ok(!html.includes('<script src="js/billiards/topological_billiards_native.js'));
   assert.ok(setup.includes('topological_billiards_simulation_worker.js'));
   assert.ok(setup.includes('BILLIARDS_FALLBACK_FRAME_BUDGET_MS'));
   assert.ok(setup.includes('BILLIARDS_SQUARE_BOARD_SIZE = 4'));
@@ -255,6 +256,7 @@ function testPageIntegration() {
   assert.ok(renderer.includes('function numberedBallSprite'));
   assert.ok(native.includes("const fixedLabel = state.phase === 'setup'"));
   assert.ok(native.includes('showNumberPatch: !fixedLabel'));
+  assert.ok(!native.includes('view.cueHintLabel'));
   assert.ok(!setup.includes('togglePocket(game, local.tileIndex, local.position, true)'));
 }
 

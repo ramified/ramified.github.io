@@ -32,6 +32,53 @@ assert.ok(html.includes('data-i18n="io.editInMosaicCalculator"'));
 assert.ok(html.includes('id="hex-neighbor-delay" min="0.1" max="0.8" step="0.1" value="0.4"'));
 assert.ok(html.includes('id="hex-neighbor-size" min="50" max="100" step="1" value="75"'));
 assert.ok(html.includes('id="hex-neighbor-stroke" min="1" max="5" step="0.5" value="3"'));
+[
+  'js/background_homology.js',
+  'js/hex_homology_game.js',
+  'js/billiards/topological_billiards_math.js',
+  'js/billiards/topological_billiards_physics.js',
+  'js/billiards/topological_billiards_renderer.js',
+  'js/billiards/topological_billiards_native.js',
+  'lianliankan/lianliankan_engine.js',
+  'lianliankan/mosaic_adapter.js'
+].forEach((asset) => assert.ok(
+  !html.includes(`<script src="${asset}`),
+  `${asset} must be loaded only when its game is selected`
+));
+assert.ok(!setup.includes('initBombImages();'), 'bomb artwork must not preload during initialization');
+assert.ok(!setup.includes('Promise.all(registry.map'), 'the browser catalog must not preload every preset file');
+assert.deepStrictEqual(
+  minigames.__test.lazyPresetFromRegistryEntry({
+    id: 'lazy-test', label: 'Lazy test', gameTypes: ['2048']
+  }),
+  { id: 'lazy-test', label: 'Lazy test', gameTypes: ['2048'], __lazyPreset: true }
+);
+assert.deepStrictEqual(minigames.__test.optionalScriptGroups.hex.map((url) => url.split('?')[0]), [
+  'js/background_homology.js',
+  'js/hex_homology_game.js'
+]);
+assert.deepStrictEqual(minigames.__test.optionalScriptGroups.billiards.map((url) => url.split('?')[0]), [
+  'js/billiards/topological_billiards_math.js',
+  'js/billiards/topological_billiards_physics.js',
+  'js/billiards/topological_billiards_renderer.js',
+  'js/billiards/topological_billiards_native.js'
+]);
+assert.deepStrictEqual(minigames.__test.optionalScriptGroups.lianliankan.map((url) => url.split('?')[0]), [
+  'lianliankan/lianliankan_engine.js',
+  'lianliankan/mosaic_adapter.js'
+]);
+const previousImage = global.Image;
+const requestedBombImages = [];
+global.Image = class FakeImage {
+  set src(value) { requestedBombImages.push(value); }
+};
+const lazyBombOption = { id: 'test-lazy-bomb', kind: 'png', src: 'test-bomb.png' };
+const firstLazyBombImage = minigames.__test.ensureBombImage(lazyBombOption);
+const secondLazyBombImage = minigames.__test.ensureBombImage(lazyBombOption);
+assert.strictEqual(firstLazyBombImage, secondLazyBombImage, 'the selected bomb image request is cached');
+assert.deepStrictEqual(requestedBombImages, ['test-bomb.png'], 'only an explicitly requested bomb image is loaded');
+if (previousImage === undefined) delete global.Image;
+else global.Image = previousImage;
 const pngBombRenderer = setup.slice(setup.indexOf('function drawPngBomb'), setup.indexOf('function bombTint'));
 assert.ok(!pngBombRenderer.includes('ctx.clip()'), 'transparent bomb artwork should not be clipped to create its backdrop');
 assert.ok(!pngBombRenderer.includes("globalCompositeOperation = 'source-atop'"), 'PNG tinting must not composite against the painted board');

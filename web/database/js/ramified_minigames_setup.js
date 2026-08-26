@@ -1,16 +1,16 @@
 (() => {
   'use strict';
 
-  const Billiards = typeof window !== 'undefined' && window.TopologicalBilliardsNative
+  let Billiards = typeof window !== 'undefined' && window.TopologicalBilliardsNative
     ? window.TopologicalBilliardsNative
     : (typeof require === 'function' ? require('./billiards/topological_billiards_native.js') : null);
-  const Lianliankan = typeof window !== 'undefined' && window.Lianliankan
+  let Lianliankan = typeof window !== 'undefined' && window.Lianliankan
     ? window.Lianliankan
     : (typeof require === 'function' ? require('../lianliankan/lianliankan_engine.js') : null);
-  const LianliankanMosaicAdapter = typeof window !== 'undefined' && window.LianliankanMosaicAdapter
+  let LianliankanMosaicAdapter = typeof window !== 'undefined' && window.LianliankanMosaicAdapter
     ? window.LianliankanMosaicAdapter
     : (typeof require === 'function' ? require('../lianliankan/mosaic_adapter.js') : null);
-  const TopologicalHex = typeof window !== 'undefined' && window.TopologicalHex
+  let TopologicalHex = typeof window !== 'undefined' && window.TopologicalHex
     ? window.TopologicalHex
     : (typeof require === 'function' ? require('./hex_homology_game.js') : null);
 
@@ -162,16 +162,23 @@
   const GO_LIBERTY_DOT_SCALE_REFERENCE = 500;
   const GO_LIBERTY_DOT_BORDER_SCALE = 300;
   const GO_LIBERTY_DOT_BORDER_SCALE_REFERENCE = 100;
-  const LIANLIANKAN_TILE_SETS = Object.freeze({
-    japanese: Object.freeze((Lianliankan && Array.isArray(Lianliankan.HIRAGANA_SYMBOLS) ? Lianliankan.HIRAGANA_SYMBOLS : [])
-      .map((symbol) => Object.freeze({ ...symbol }))),
+  const LIANLIANKAN_TILE_SETS = {
+    japanese: [],
     chinese: Object.freeze(['山', '水', '云', '月', '风', '花', '雪', '雨', '星', '日', '春', '夏', '秋', '冬', '梅', '兰', '竹', '菊']
       .map((glyph) => Object.freeze({ id: `han_${glyph}`, glyph: glyph }))),
     'young-3x3': Object.freeze([
       [1, 0, 0], [2, 0, 0], [3, 0, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0], [2, 2, 0], [3, 2, 0], [3, 3, 0],
       [1, 1, 1], [2, 1, 1], [3, 1, 1], [2, 2, 1], [3, 2, 1], [3, 3, 1], [2, 2, 2], [3, 2, 2], [3, 3, 2], [3, 3, 3]
     ].map((rows) => Object.freeze({ id: `young_${rows.join('')}`, glyph: '' })))
-  });
+  };
+
+  function refreshLianliankanTileSets() {
+    LIANLIANKAN_TILE_SETS.japanese = (Lianliankan && Array.isArray(Lianliankan.HIRAGANA_SYMBOLS)
+      ? Lianliankan.HIRAGANA_SYMBOLS
+      : []).map((symbol) => Object.freeze({ ...symbol }));
+  }
+
+  refreshLianliankanTileSets();
   const GAME_MODES = {
     NUMBER_2048: '2048',
     HEX: 'hex',
@@ -355,6 +362,22 @@
 
   const PRESET_FOLDER_URL = 'ramified_minigame_presets/';
   const PRESET_ASSET_VERSION = '20260825-2';
+  const OPTIONAL_SCRIPT_GROUPS = Object.freeze({
+    [GAME_MODES.HEX]: Object.freeze([
+      'js/background_homology.js?v=20260824-1',
+      'js/hex_homology_game.js?v=20260825-3'
+    ]),
+    [GAME_MODES.BILLIARDS]: Object.freeze([
+      'js/billiards/topological_billiards_math.js?v=20260823-1',
+      'js/billiards/topological_billiards_physics.js?v=20260823-1',
+      'js/billiards/topological_billiards_renderer.js?v=20260823-6',
+      'js/billiards/topological_billiards_native.js?v=20260826-1'
+    ]),
+    [GAME_MODES.LIANLIANKAN]: Object.freeze([
+      'lianliankan/lianliankan_engine.js?v=20260826-1',
+      'lianliankan/mosaic_adapter.js?v=20260826-2'
+    ])
+  });
   const PRESET_GROUP_ORDER = ['Hex', '2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Billiard', 'Tile Matching', 'Sokoban'];
 
   function createRubiksCubePreset(size, id, label) {
@@ -487,6 +510,10 @@
   let presetGameModeOrder = [];
   let presetCatalogReady = false;
   let presetCatalogError = '';
+  const presetLoadPromises = new Map();
+  const optionalScriptPromises = new Map();
+  let selectionLoadSerial = 0;
+  let selectionLoading = false;
 
   const IMPORTED_PRESET_ID = 'imported-preset';
   const IMPORT_PRESET_CHOICE_ID = 'import-preset';
@@ -697,6 +724,7 @@
     refs.nextStep = document.getElementById('next-step');
     refs.debugToggle = document.getElementById('debug-toggle');
     refs.debugTools = document.getElementById('debug-tools');
+    refs.translationCheck = document.getElementById('check-translation');
     refs.debugTileValue = document.getElementById('debug-tile-value');
     refs.debugBombTool = document.getElementById('debug-bomb-tool');
     refs.bombArtStyle = document.getElementById('bomb-art-style');
@@ -894,6 +922,10 @@
     });
     if (refs.nextStep) refs.nextStep.addEventListener('click', playNextStep);
     if (refs.debugToggle) refs.debugToggle.addEventListener('click', toggleDebugMode);
+    if (refs.translationCheck) {
+      refs.translationCheck.checked = false;
+      refs.translationCheck.addEventListener('change', handleTranslationCheckChange);
+    }
     if (refs.undo) refs.undo.addEventListener('click', undoPreviousStep);
     if (refs.redo) refs.redo.addEventListener('click', redoPreviousUndo);
     if (!refs.importExportController && refs.exportState) refs.exportState.addEventListener('click', exportFromUi);
@@ -966,7 +998,6 @@
     syncHexNeighborHintOutputs();
     syncDebugModeUi();
     syncCanvasDisplayModeUi();
-    initBombImages();
     initOnlinePlay();
     setPresetSelectLoading();
     const catalogLoad = ensurePresetCatalogLoaded();
@@ -3217,6 +3248,93 @@
     return true;
   }
 
+  function loadOptionalScript(url) {
+    if (optionalScriptPromises.has(url)) return optionalScriptPromises.get(url);
+    if (typeof document === 'undefined' || !document.createElement || !document.head) {
+      return Promise.reject(new Error(`Optional game script is unavailable: ${url}`));
+    }
+    const pending = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = url;
+      script.async = false;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error(`Could not load ${url}.`));
+      document.head.appendChild(script);
+    }).catch((error) => {
+      optionalScriptPromises.delete(url);
+      throw error;
+    });
+    optionalScriptPromises.set(url, pending);
+    return pending;
+  }
+
+  function modeDependenciesReady(mode) {
+    if (mode === GAME_MODES.HEX) return !!TopologicalHex;
+    if (mode === GAME_MODES.BILLIARDS) return !!Billiards;
+    if (mode === GAME_MODES.LIANLIANKAN) return !!(Lianliankan && LianliankanMosaicAdapter);
+    return true;
+  }
+
+  function ensureModeDependencies(mode) {
+    if (modeDependenciesReady(mode)) return Promise.resolve();
+    const urls = OPTIONAL_SCRIPT_GROUPS[mode] || [];
+    if (!urls.length) return Promise.resolve();
+    let chain = Promise.resolve();
+    urls.forEach((url) => { chain = chain.then(() => loadOptionalScript(url)); });
+    return chain.then(() => {
+      if (typeof window !== 'undefined') {
+        if (mode === GAME_MODES.HEX) TopologicalHex = window.TopologicalHex || TopologicalHex;
+        if (mode === GAME_MODES.BILLIARDS) {
+          Billiards = window.TopologicalBilliardsNative || Billiards;
+          if (Billiards) redrawBilliardsBallPalette();
+        }
+        if (mode === GAME_MODES.LIANLIANKAN) {
+          Lianliankan = window.Lianliankan || Lianliankan;
+          LianliankanMosaicAdapter = window.LianliankanMosaicAdapter || LianliankanMosaicAdapter;
+          refreshLianliankanTileSets();
+        }
+      }
+      if (mode === GAME_MODES.HEX && !TopologicalHex) throw new Error('The Hex homology engine did not initialize.');
+      if (mode === GAME_MODES.BILLIARDS && !Billiards) throw new Error('The Billiards engine did not initialize.');
+      if (mode === GAME_MODES.LIANLIANKAN && (!Lianliankan || !LianliankanMosaicAdapter)) {
+        throw new Error('The Tile Matching engine did not initialize.');
+      }
+    });
+  }
+
+  function loadSelectionAndReset(options = {}) {
+    const serial = ++selectionLoadSerial;
+    const mode = options.mode || selectedGameMode();
+    const preset = options.preset || selectedPreset();
+    if ((!preset || !preset.__lazyPreset) && modeDependenciesReady(mode)) {
+      selectionLoading = false;
+      if (typeof options.onReady === 'function') options.onReady();
+      resetToPreview();
+      if (options.focus && refs.canvas) refs.canvas.focus();
+      return Promise.resolve(true);
+    }
+    selectionLoading = true;
+    syncStatus('loading setup', `loading ${gameTypeForGameMode(mode)}${preset && preset.label ? `: ${preset.label}` : ''}`, 'setup');
+    syncControls();
+    const presetLoad = preset && preset.__lazyPreset ? ensurePresetLoaded(preset.id) : Promise.resolve(preset);
+    return Promise.all([ensureModeDependencies(mode), presetLoad])
+      .then(() => {
+        if (serial !== selectionLoadSerial) return false;
+        selectionLoading = false;
+        if (typeof options.onReady === 'function') options.onReady();
+        resetToPreview();
+        if (options.focus && refs.canvas) refs.canvas.focus();
+        return true;
+      })
+      .catch((error) => {
+        if (serial !== selectionLoadSerial) return false;
+        selectionLoading = false;
+        syncStatus('setup load failed', error && error.message ? error.message : 'could not load setup', 'error');
+        syncControls();
+        return false;
+      });
+  }
+
   function finishPresetCatalogInit() {
     syncGameModeSelectOptions();
     syncImportGameModeSelectOptions();
@@ -3229,7 +3347,7 @@
       ? refs.select.value
       : defaultPresetIdForMode(selectedGameMode());
     syncPresetSelectOptions(preferred);
-    resetToPreview();
+    loadSelectionAndReset();
   }
 
   function importPresetFromUrlParams() {
@@ -3247,15 +3365,17 @@
       ensureImportedPresetOption(importedPreset);
       if (refs.select) refs.select.value = importedPreset.id;
       setImportToolsVisible(false);
-      resetToPreview();
-      if (!isHexGame(game) || game.hexTopologyState !== 'pending') {
-        syncStatus('preset imported from link', previewInfo(game.preset), 'setup');
-      }
+      loadSelectionAndReset({ mode, preset: importedPreset }).then((loaded) => {
+        if (loaded && (!isHexGame(game) || game.hexTopologyState !== 'pending')) {
+          syncStatus('preset imported from link', previewInfo(game.preset), 'setup');
+        }
+      });
     } catch (error) {
       const fallback = defaultPresetIdForMode(selectedGameMode());
       syncPresetSelectOptions(fallback);
-      resetToPreview();
-      syncStatus('link import failed', error && error.message ? error.message : 'invalid minigame preset link', 'error');
+      loadSelectionAndReset().then(() => {
+        syncStatus('link import failed', error && error.message ? error.message : 'invalid minigame preset link', 'error');
+      });
     }
     return true;
   }
@@ -3422,8 +3542,10 @@
     const nextPresets = [];
     const nextRegistry = [];
     items.forEach((item) => {
-      if (!item || !item.entry || !item.spec) return;
-      const preset = normalizePresetPayload(item.spec, { registryEntry: item.entry });
+      if (!item || !item.entry) return;
+      const preset = item.spec
+        ? normalizePresetPayload(item.spec, { registryEntry: item.entry })
+        : lazyPresetFromRegistryEntry(item.entry);
       if (!preset.id || seen.has(preset.id)) return;
       seen.add(preset.id);
       nextPresets.push(preset);
@@ -3437,6 +3559,15 @@
     presetGameModeOrder = orderedCatalogGameModes(catalog.defaultFor, nextPresets, catalog.gameOrder);
     presetCatalogReady = true;
     presetCatalogError = '';
+  }
+
+  function lazyPresetFromRegistryEntry(entry) {
+    return {
+      id: entry.id,
+      label: entry.label,
+      gameTypes: entry.gameTypes.slice(),
+      __lazyPreset: true
+    };
   }
 
   function globalPresetCatalogItems() {
@@ -3463,8 +3594,34 @@
     if (!registry.length) {
       return Promise.reject(new Error('No presets are registered in ramified_minigame_presets/presets.js.'));
     }
-    return Promise.all(registry.map((entry) => loadBrowserPresetSpec(entry).then((spec) => ({ entry, spec }))))
-      .then((items) => ({ items, defaultFor: catalog.defaultFor, defaultDisplayFor: catalog.defaultDisplayFor, gameOrder: catalog.gameOrder }));
+    return Promise.resolve({
+      items: registry.map((entry) => ({ entry, spec: readPreloadedPresetSpec(entry) })),
+      defaultFor: catalog.defaultFor,
+      defaultDisplayFor: catalog.defaultDisplayFor,
+      gameOrder: catalog.gameOrder
+    });
+  }
+
+  function ensurePresetLoaded(presetOrId) {
+    const id = cleanPresetId(presetOrId && typeof presetOrId === 'object' ? presetOrId.id : presetOrId);
+    const current = PRESETS.find((preset) => preset.id === id);
+    if (!current || !current.__lazyPreset) return Promise.resolve(current || null);
+    if (presetLoadPromises.has(id)) return presetLoadPromises.get(id);
+    const entry = presetRegistry.find((item) => item.id === id);
+    if (!entry) return Promise.reject(new Error(`Preset "${id}" is not registered.`));
+    const pending = loadBrowserPresetSpec(entry)
+      .then((spec) => {
+        const preset = normalizePresetPayload(spec, { registryEntry: entry });
+        const index = PRESETS.findIndex((item) => item.id === id);
+        if (index >= 0) PRESETS.splice(index, 1, preset);
+        return preset;
+      })
+      .catch((error) => {
+        presetLoadPromises.delete(id);
+        throw error;
+      });
+    presetLoadPromises.set(id, pending);
+    return pending;
   }
 
   function loadBrowserPresetSpec(entry) {
@@ -3782,8 +3939,7 @@
     if (refs.importGameMode) refs.importGameMode.value = choice.mode;
     syncPresetSelectOptions(choice.preset.id);
     setImportToolsVisible(false);
-    resetToPreview();
-    if (options.focus !== false && refs.canvas) refs.canvas.focus();
+    loadSelectionAndReset({ mode: choice.mode, preset: choice.preset, focus: options.focus !== false });
     return true;
   }
 
@@ -3796,8 +3952,7 @@
     if (!preset || !refs.select) return false;
     refs.select.value = preset.id;
     setImportToolsVisible(false);
-    resetToPreview();
-    if (refs.canvas) refs.canvas.focus();
+    loadSelectionAndReset({ mode: selectedGameMode(), preset, focus: true });
     return true;
   }
 
@@ -3860,7 +4015,9 @@
 
   function presetMatchesGameMode(preset, mode = selectedGameMode()) {
     const ownedModes = gameModesForPreset(preset);
-    if (mode === GAME_MODES.HEX) return ownedModes.includes(GAME_MODES.HEX) && hexPresetIsCompatible(preset);
+    if (mode === GAME_MODES.HEX) {
+      return ownedModes.includes(GAME_MODES.HEX) && (preset.__lazyPreset || hexPresetIsCompatible(preset));
+    }
     return ownedModes.includes(mode || GAME_MODES.NUMBER_2048);
   }
 
@@ -4167,7 +4324,7 @@
     syncDefaultPresetForGameMode();
     syncOnlineRoleOptions();
     if (refs.importGameMode) refs.importGameMode.value = selectedGameMode();
-    resetToPreview();
+    loadSelectionAndReset();
   }
 
   function billiardsBallPaletteChoices() {
@@ -4278,6 +4435,16 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, size / 2, size / 2);
+  }
+
+  function redrawBilliardsBallPalette(palette = refs.billiardsBallPalette) {
+    if (!palette) return;
+    const choices = new Map(billiardsBallPaletteChoices().map((choice) => [choice.key, choice]));
+    palette.querySelectorAll('.billiards-ball-swatch').forEach((button) => {
+      const choice = choices.get(button.dataset.ballKey);
+      const canvas = button.querySelector('canvas');
+      if (choice && canvas) drawBilliardsBallPaletteSwatch(canvas, choice);
+    });
   }
 
   function billiardsCanvasContainsClientPoint(clientX, clientY) {
@@ -4584,13 +4751,15 @@
       return;
     }
     setImportToolsVisible(false);
-    if (selectedGameMode() === GAME_MODES.BILLIARDS && refs.billiardsRules) {
-      const block = selectedPreset() && selectedPreset().billiards;
-      refs.billiardsRules.value = Billiards ? Billiards.normalizeRules(block && block.rules) : 'solo';
-    }
-    syncBoardSizeInputForSelectedPreset();
-    syncOnlineRoleOptions();
-    resetToPreview();
+    const preset = selectedPreset();
+    loadSelectionAndReset({ preset, onReady() {
+      if (selectedGameMode() === GAME_MODES.BILLIARDS && refs.billiardsRules) {
+        const block = selectedPreset() && selectedPreset().billiards;
+        refs.billiardsRules.value = Billiards ? Billiards.normalizeRules(block && block.rules) : 'solo';
+      }
+      syncBoardSizeInputForSelectedPreset();
+      syncOnlineRoleOptions();
+    } });
   }
 
   function syncBoardSizeInputForSelectedPreset() {
@@ -4625,32 +4794,44 @@
   }
 
   function importPresetFromUi() {
-    try {
-      const prepared = prepareImportRequest(importRequestFromUi());
-      if (!confirmActiveGameReplacement()) {
-        syncStatus('import cancelled', 'current game unchanged', phaseBadge(game && game.phase));
-        return;
-      }
-      applyPreparedImport(prepared);
-    } catch (error) {
-      syncStatus('import failed', error && error.message ? error.message : 'invalid preset JSON', 'error');
-    }
+    executeImportRequest(importRequestFromUi());
   }
 
   function importStateFromUi() {
-    try {
-      const prepared = prepareImportRequest(importRequestFromUi({
-        importSource: 'paste',
-        importText: refs.debugExport ? refs.debugExport.value : ''
-      }));
-      if (!confirmActiveGameReplacement()) {
-        syncStatus('import cancelled', 'current game unchanged', phaseBadge(game && game.phase));
-        return;
-      }
-      applyPreparedImport(prepared);
-    } catch (error) {
-      syncStatus('import failed', error && error.message ? error.message : 'invalid preset JSON', 'error');
+    executeImportRequest(importRequestFromUi({
+      importSource: 'paste',
+      importText: refs.debugExport ? refs.debugExport.value : ''
+    }));
+  }
+
+  function executeImportRequest(request) {
+    if (!confirmActiveGameReplacement()) {
+      syncStatus('import cancelled', 'current game unchanged', phaseBadge(game && game.phase));
+      return;
     }
+    const catalogLoad = request.source === 'catalog'
+      ? ensurePresetLoaded(request.catalogId || defaultPresetIdForMode(request.importMode))
+      : Promise.resolve();
+    selectionLoading = true;
+    syncStatus('loading import', 'loading the selected game data', 'setup');
+    syncControls();
+    catalogLoad
+      .then(() => {
+        const prepared = prepareImportRequest(request);
+        const mode = prepared.kind === 'status'
+          ? gameModeValue(prepared.imported)
+          : prepared.targetMode;
+        return ensureModeDependencies(mode).then(() => prepared);
+      })
+      .then((prepared) => {
+        selectionLoading = false;
+        applyPreparedImport(prepared);
+      })
+      .catch((error) => {
+        selectionLoading = false;
+        syncStatus('import failed', error && error.message ? error.message : 'invalid preset JSON', 'error');
+        syncControls();
+      });
   }
 
   function importRequestFromUi(context = {}) {
@@ -5309,12 +5490,26 @@
     return !onlineIsInRoom() || !onlineLocalPlayIssue('billiards-shot');
   }
 
-  function billiardsCueGuidanceActive() {
-    return !billiardsCueGuidanceDismissed && billiardsLocalCueGuidanceAllowed();
+  function billiardsCueGuidanceFlags(allowed, dismissed, hintUntil, currentTime) {
+    const transient = !!allowed && Number(currentTime) < Number(hintUntil || 0);
+    return {
+      caption: transient,
+      highlight: !!allowed && (!dismissed || transient),
+      transient
+    };
+  }
+
+  function billiardsCueGuidanceState(currentTime = now()) {
+    return billiardsCueGuidanceFlags(
+      billiardsLocalCueGuidanceAllowed(),
+      billiardsCueGuidanceDismissed,
+      billiardsCueHintUntil,
+      currentTime
+    );
   }
 
   function syncBilliardsCueGuidanceAnimation() {
-    if (typeof window === 'undefined' || !billiardsCueGuidanceActive()) {
+    if (typeof window === 'undefined' || !billiardsCueGuidanceState().highlight) {
       if (billiardsCueGuidanceFrame != null) cancelFrame(billiardsCueGuidanceFrame);
       billiardsCueGuidanceFrame = null;
       return;
@@ -5322,9 +5517,77 @@
     if (billiardsCueGuidanceFrame != null) return;
     billiardsCueGuidanceFrame = requestFrame(() => {
       billiardsCueGuidanceFrame = null;
-      if (!billiardsCueGuidanceActive()) return;
       render();
     });
+  }
+
+  function wrapCanvasCaptionLines(ctx, text, maxWidth) {
+    const characters = Array.from(String(text || '').trim());
+    if (!characters.length) return [];
+    const lines = [];
+    let line = '';
+    characters.forEach((character) => {
+      const candidate = line + character;
+      if (!line || ctx.measureText(candidate).width <= maxWidth) {
+        line = candidate;
+        return;
+      }
+      const breakAt = line.lastIndexOf(' ');
+      if (breakAt > 0) {
+        lines.push(line.slice(0, breakAt).trimEnd());
+        line = `${line.slice(breakAt + 1)}${character}`.trimStart();
+      } else {
+        lines.push(line);
+        line = character.trimStart();
+      }
+    });
+    if (line) lines.push(line.trimEnd());
+    return lines;
+  }
+
+  function billiardsCueCaptionLayout(ctx, logicalWidth, logicalHeight, text) {
+    const fontSize = Math.max(11, Math.min(15, logicalWidth * 0.026));
+    const lineHeight = fontSize * 1.38;
+    const paddingX = 12;
+    const paddingY = 8;
+    const maxTextWidth = Math.max(48, Math.min(620, logicalWidth - 48));
+    ctx.font = `600 ${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+    const lines = wrapCanvasCaptionLines(ctx, text, maxTextWidth);
+    const textWidth = lines.reduce((width, line) => Math.max(width, ctx.measureText(line).width), 0);
+    const width = Math.min(logicalWidth - 16, Math.max(72, textWidth + paddingX * 2));
+    const height = Math.max(lineHeight + paddingY * 2, lines.length * lineHeight + paddingY * 2);
+    return {
+      fontSize,
+      height,
+      lineHeight,
+      lines,
+      paddingX,
+      paddingY,
+      width,
+      x: (logicalWidth - width) / 2,
+      y: Math.max(8, logicalHeight - height - 12)
+    };
+  }
+
+  function drawBilliardsCueCaption(ctx, logicalWidth, logicalHeight, text) {
+    if (!ctx || !text) return;
+    ctx.save();
+    const layout = billiardsCueCaptionLayout(ctx, logicalWidth, logicalHeight, text);
+    ctx.fillStyle = 'rgba(255,253,248,0.95)';
+    ctx.strokeStyle = '#c49b24';
+    ctx.lineWidth = 1.5;
+    roundedRectPath(ctx, layout.x, layout.y, layout.width, layout.height, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#202326';
+    ctx.font = `600 ${layout.fontSize}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    layout.lines.forEach((line, index) => {
+      const textY = layout.y + layout.paddingY + (layout.lineHeight * (index + 0.5));
+      ctx.fillText(line, layout.x + layout.width / 2, textY);
+    });
+    ctx.restore();
   }
 
   function showBilliardsCueHint() {
@@ -5353,8 +5616,8 @@
   function handleBilliardsPointerDown(event) {
     if (!isBilliardsGame(game) || !Billiards || currentAnimation || billiardsShotPending) return false;
     const local = billiardsLocalFromEvent(event);
-    if (!local) return false;
     if (game.phase === 'setup') {
+      if (!local) return false;
       const hit = Billiards.ballAtPoint(game, local.tileIndex, local.position);
       if (!hit) return false;
       billiardsPointer = {
@@ -5371,6 +5634,10 @@
       return true;
     }
     if (game.phase !== 'ready') return false;
+    if (!local) {
+      showBilliardsCueHint();
+      return false;
+    }
     const hit = Billiards.ballAtPoint(game, local.tileIndex, local.position);
     if (!hit || hit.ball.kind !== 'cue') {
       showBilliardsCueHint();
@@ -7109,12 +7376,23 @@
     return 'click a tile to assign a value or bomb';
   }
 
+  function handleTranslationCheckChange() {
+    const enabled = !!(refs.translationCheck && refs.translationCheck.checked);
+    const i18n = typeof window !== 'undefined' ? window.SiteI18n : null;
+    if (!i18n || typeof i18n.setTranslationWarnings !== 'function') return;
+    i18n.setTranslationWarnings(enabled, { locale: 'zh-CN' });
+    if (enabled && typeof i18n.auditTranslations === 'function' && typeof document !== 'undefined') {
+      i18n.auditTranslations(document, { locale: 'zh-CN' });
+    }
+  }
+
   function syncDebugModeUi() {
     if (refs.debugToggle) {
       refs.debugToggle.classList.toggle('debug-active', debugMode);
       refs.debugToggle.setAttribute('aria-pressed', debugMode ? 'true' : 'false');
     }
     if (refs.debugTools) refs.debugTools.hidden = !debugMode;
+    if (refs.translationCheck) refs.translationCheck.disabled = !debugMode;
     if (refs.debugTileValue) refs.debugTileValue.disabled = !debugMode || !is2048Game(game);
     if (refs.debugBombTool) refs.debugBombTool.disabled = !debugMode || !is2048Game(game);
     if (refs.bombArtStyle) refs.bombArtStyle.disabled = !debugMode || !is2048Game(game);
@@ -7803,6 +8081,16 @@
         : 'Click tiles to mark white input holes, then begin. Drop tokens through those holes and connect four to win.';
     } else if (mode === GAME_MODES.LIANLIANKAN) {
       rules = 'Match identical tiles through empty cells with an orthogonal path that turns at most twice. Only configured boundary glue may cross the board edge.';
+    } else if (mode === GAME_MODES.BILLIARDS) {
+      rules = state && state.rules === 'competitive'
+        ? tk(
+          'setup.billiardsCompetitiveRules',
+          'Pull back from the white cue ball and release to shoot. Balls cross glued edges and rebound from unglued boundaries. Each pocketed numbered ball scores one point and keeps your turn; a miss or scratch passes play, and a scratch gives the opponent ball in hand. After every numbered ball is pocketed, the higher score wins and equal scores draw.'
+        )
+        : tk(
+          'setup.billiardsSoloRules',
+          'Pull back from the white cue ball and release to shoot. Balls cross glued edges and rebound from unglued boundaries. Pocket every numbered ball; a scratch gives you ball in hand.'
+        );
     } else if (mode === GAME_MODES.GO) {
       rules = 'Place stones on empty points; surrounded opposing groups are captured. Pass when both players are done.';
     } else if (mode === GAME_MODES.REVERSI) {
@@ -8113,6 +8401,7 @@
 
   function updateHexNeighborHover(index) {
     const next = Number.isInteger(index) ? index : null;
+    if (hexNeighborHoverIndex === next) return;
     if (hexNeighborHintTimer != null) clearTimeout(hexNeighborHintTimer);
     hexNeighborHintTimer = null;
     const hintWasVisible = Number.isInteger(hexNeighborHintIndex);
@@ -9036,18 +9325,15 @@
       .filter((value) => Number.isInteger(value));
   }
 
-  function initBombImages() {
-    if (typeof Image === 'undefined') return;
-    BOMB_ART_OPTIONS
-      .filter((option) => option.kind === 'png' && option.src)
-      .forEach((option) => {
-        if (bombImageCache.has(option.id)) return;
-        const image = new Image();
-        image.onload = render;
-        image.onerror = render;
-        image.src = option.src;
-        bombImageCache.set(option.id, image);
-      });
+  function ensureBombImage(option) {
+    if (!option || option.kind !== 'png' || !option.src || typeof Image === 'undefined') return null;
+    if (bombImageCache.has(option.id)) return bombImageCache.get(option.id);
+    const image = new Image();
+    image.onload = render;
+    image.onerror = render;
+    image.src = option.src;
+    bombImageCache.set(option.id, image);
+    return image;
   }
 
   function isPowerOfTwo(value) {
@@ -12245,6 +12531,7 @@
     refs.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const ctx = refs.ctx;
+    const billiardsGuidance = isBilliardsGame(game) ? billiardsCueGuidanceState() : null;
     ctx.clearRect(0, 0, logicalWidth, logicalHeight);
     const explosionMode = is2048Game(game) && isExplosionModeActive(game);
     const bombBlocked = is2048Game(game) ? bombIndexSet(game) : new Set();
@@ -12285,11 +12572,8 @@
         assistance: refs.billiardsAssistance ? refs.billiardsAssistance.value : 'beginner',
         setupHover: game.phase === 'setup' ? billiardsSetupHover : null,
         rackPreview: game.phase === 'setup' ? billiardsRackPreview() : null,
-        cuePrompt: billiardsCueGuidanceActive(),
+        cuePrompt: !!(billiardsGuidance && billiardsGuidance.highlight),
         pulseTime: now(),
-        cueHintLabel: now() < billiardsCueHintUntil
-          ? tk('runtime.billiardsCueHint', 'Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.')
-          : '',
         debug: !!(refs.billiardsDebug && refs.billiardsDebug.checked),
         debugTexture: !!(refs.billiardsDebugTexture && refs.billiardsDebugTexture.checked)
       });
@@ -12328,6 +12612,14 @@
     }
     ctx.restore();
     drawCanvasFeedbackOverlays(ctx, geometry);
+    if (billiardsGuidance && billiardsGuidance.caption) {
+      drawBilliardsCueCaption(
+        ctx,
+        logicalWidth,
+        logicalHeight,
+        tk('runtime.billiardsCueHint', 'Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.')
+      );
+    }
     syncStats();
     requestFullscreenActionPlacement();
     syncBilliardsCueGuidanceAnimation();
@@ -12819,7 +13111,7 @@
   }
 
   function drawPngBomb(ctx, geom, point, kind, scale, option) {
-    const image = bombImageCache.get(option.id);
+    const image = ensureBombImage(option);
     if (!image || !image.complete || !image.naturalWidth || !image.naturalHeight) return false;
     const size = geom.radius * 1.62 * scale;
     ctx.save();
@@ -27520,10 +27812,10 @@
       refs.begin.textContent = isLianliankanGame(game) && game.phase === 'deadlock'
         ? 'Refresh remaining tiles'
         : (game && game.phase !== 'setup' ? 'stop the game' : 'begin the game');
-      refs.begin.disabled = !catalogAvailable || onlineRoomActive || hexTopologyPending;
+      refs.begin.disabled = !catalogAvailable || selectionLoading || onlineRoomActive || hexTopologyPending;
     }
-    if (refs.gameMode) refs.gameMode.disabled = onlineRoomActive;
-    if (refs.select) refs.select.disabled = !catalogAvailable || onlineRoomActive;
+    if (refs.gameMode) refs.gameMode.disabled = selectionLoading || onlineRoomActive;
+    if (refs.select) refs.select.disabled = !catalogAvailable || selectionLoading || onlineRoomActive;
     if (refs.mode2048Controls) {
       refs.mode2048Controls.forEach((control) => {
         control.hidden = !mode2048;
@@ -28805,6 +29097,9 @@
       backgroundPresetForExport,
       buildMosaicCalculatorHref,
       base64UrlEncodeUtf8,
+      lazyPresetFromRegistryEntry,
+      optionalScriptGroups: OPTIONAL_SCRIPT_GROUPS,
+      ensureBombImage,
       compactBackgroundPresetForExport,
       debugExportPayload,
       gameRecordExportPayload,
@@ -28812,6 +29107,10 @@
       looksLikeStatusImportPayload,
       prepareImportRequest,
       rebuildHexRuntime,
+      billiardsCueCaptionLayout,
+      billiardsCueGuidanceFlags,
+      canvasStartPromptCopy,
+      redrawBilliardsBallPalette,
       setGame(state) { game = state; },
       getGame() { return game; }
     }

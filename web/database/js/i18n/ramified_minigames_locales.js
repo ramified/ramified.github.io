@@ -44,11 +44,13 @@
     'common.selectedBackground': ['selected background', '所选背景'],
     'common.stale': ['stale', '已过期'],
     'common.canvasSpark': ['canvas spark', '画布火花'],
+    'debug.checkTranslation': ['check translation', '检查翻译'],
 
     'access.canvasPanel': ['Ramified minigame canvas panel', '歧趣游境画布面板'],
     'access.status': ['Ramified minigame status', '歧趣游境游戏状态'],
     'access.canvasView': ['Canvas view', '画布视图'],
     'access.canvas': ['Ramified minigame mosaic canvas', '歧趣游境马赛克画布'],
+    'access.checkTranslation': ['Check Chinese translations', '检查中文翻译'],
     'access.fullscreenControls': ['Fullscreen action controls', '全屏操作控件'],
     'access.openFullscreenBar': ['Open fullscreen action bar', '打开全屏操作栏'],
     'access.fullscreenBar': ['Fullscreen action bar', '全屏操作栏'],
@@ -258,6 +260,8 @@
     'setup.beginFromCanvas': ['begin from canvas', '从画布开始'],
     'setup.rulesStatus': ['quick rules shown; begin here or use the setup panel', '已显示规则；可在此开始，也可使用设置面板'],
     'setup.defaultRules': ['Read the quick rule, then begin the selected game on this glued mosaic.', '阅读规则，然后在此粘合镶嵌上开始所选游戏。'],
+    'setup.billiardsSoloRules': ['Pull back from the white cue ball and release to shoot. Balls cross glued edges and rebound from unglued boundaries. Pocket every numbered ball; a scratch gives you ball in hand.', '从白色母球向后拖动并松开击球。球会穿过粘合边，并从未粘合的边界反弹。将所有编号球打入袋中；母球落袋后可以自由摆放母球。'],
+    'setup.billiardsCompetitiveRules': ['Pull back from the white cue ball and release to shoot. Balls cross glued edges and rebound from unglued boundaries. Each pocketed numbered ball scores one point and keeps your turn; a miss or scratch passes play, and a scratch gives the opponent ball in hand. After every numbered ball is pocketed, the higher score wins and equal scores draw.', '从白色母球向后拖动并松开击球。球会穿过粘合边，并从未粘合的边界反弹。每打入一个编号球得一分并继续击球；未进球或母球落袋时交换回合，母球落袋还会让对手获得自由球。所有编号球入袋后，得分较高者获胜，同分则为和局。'],
     'setup.gomokuRules': ['Place black and white stones on empty board points. The first player to make a line of five wins.', '在空棋盘交点轮流放置黑白棋子，率先连成五子者获胜。'],
     'setup.connectRules': ['Drop red and yellow tokens through white input holes. Connect four along any board line to win.', '从白色入口投入红黄棋子，沿棋盘任意直线连成四子即可获胜。'],
     'setup.connectSetupRules': ['Click tiles to mark white input holes, then begin. Drop tokens through those holes and connect four to win.', '点击方格标记白色入口后开始游戏；从入口投入棋子并连成四子即可获胜。'],
@@ -596,6 +600,7 @@
   // These stable aliases let legacy HTML/JS find a key even after its editable
   // English wording changes above. Translation edits belong in `pairs` only.
   english.__sources = window.RAMIFIED_MINIGAMES_I18N_LEGACY_SOURCES || {};
+  chinese.__intentionalEnglish = ['CD'];
   english.__patterns = [
     ['^(.+) to move$', '$1 to move'],
     ['^(.+) quick rules$', '$1 quick rules'],

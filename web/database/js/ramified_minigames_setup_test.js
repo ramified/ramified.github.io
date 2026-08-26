@@ -10,6 +10,120 @@ const presetDataByKey = Object.fromEntries(
   presetRegistry.map((entry) => [entry.key, require(`../ramified_minigame_presets/${entry.file}`)])
 );
 
+function billiardsPaletteCanvas() {
+  const paintedFills = [];
+  const context = {
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 0,
+    font: '',
+    direction: '',
+    textAlign: '',
+    textBaseline: '',
+    clearRect() {},
+    beginPath() {},
+    arc() {},
+    fill() { paintedFills.push(this.fillStyle); },
+    stroke() {},
+    fillText() {}
+  };
+  return {
+    width: 64,
+    paintedFills,
+    getContext() { return context; }
+  };
+}
+
+function testBilliardsPaletteRepaintsAfterLazyLoad() {
+  const ballOne = billiardsPaletteCanvas();
+  const ballTwo = billiardsPaletteCanvas();
+  const buttons = [
+    { dataset: { ballKey: '1' }, querySelector: () => ballOne },
+    { dataset: { ballKey: '2' }, querySelector: () => ballTwo }
+  ];
+  game.__test.redrawBilliardsBallPalette({
+    querySelectorAll: () => buttons
+  });
+  assert.strictEqual(ballOne.paintedFills[0], '#f1c84c');
+  assert.strictEqual(ballTwo.paintedFills[0], '#2f70bb');
+  assert.notStrictEqual(ballOne.paintedFills[0], ballTwo.paintedFills[0]);
+}
+
+function testBilliardsCueGuidanceAndQuickRules() {
+  assert.deepStrictEqual(
+    game.__test.billiardsCueGuidanceFlags(true, false, 0, 100),
+    { caption: false, highlight: true, transient: false }
+  );
+  assert.deepStrictEqual(
+    game.__test.billiardsCueGuidanceFlags(true, true, 5000, 1000),
+    { caption: true, highlight: true, transient: true }
+  );
+  assert.deepStrictEqual(
+    game.__test.billiardsCueGuidanceFlags(true, true, 5000, 5000),
+    { caption: false, highlight: false, transient: false }
+  );
+  assert.deepStrictEqual(
+    game.__test.billiardsCueGuidanceFlags(false, false, 5000, 1000),
+    { caption: false, highlight: false, transient: false }
+  );
+
+  const measureContext = {
+    font: '',
+    measureText(text) { return { width: Array.from(String(text)).length * 7 }; }
+  };
+  const caption = game.__test.billiardsCueCaptionLayout(
+    measureContext,
+    320,
+    240,
+    'Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.'
+  );
+  assert.ok(caption.lines.length > 1);
+  assert.strictEqual(caption.x + caption.width / 2, 160);
+  assert.strictEqual(caption.y + caption.height, 228);
+  assert.ok(caption.width <= 304);
+
+  const preset = { id: 'billiards-rules-test', label: 'Billiards rules test' };
+  const solo = game.__test.canvasStartPromptCopy({ gameMode: game.GAME_MODES.BILLIARDS, preset, rules: 'solo' });
+  const competitive = game.__test.canvasStartPromptCopy({ gameMode: game.GAME_MODES.BILLIARDS, preset, rules: 'competitive' });
+  assert.ok(solo.rules.includes('Pocket every numbered ball'));
+  assert.ok(solo.rules.includes('glued edges'));
+  assert.ok(competitive.rules.includes('Each pocketed numbered ball scores one point'));
+  assert.ok(competitive.rules.includes('equal scores draw'));
+  assert.ok(!solo.rules.includes('powers of two'));
+  assert.ok(!competitive.rules.includes('powers of two'));
+
+  const setupSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
+  const nativeSource = fs.readFileSync(require.resolve('./billiards/topological_billiards_native.js'), 'utf8');
+  assert.match(setupSource, /if \(!local\) \{\s+showBilliardsCueHint\(\);/);
+  assert.match(setupSource, /ctx\.restore\(\);\s+drawCanvasFeedbackOverlays[\s\S]{0,240}drawBilliardsCueCaption\(/);
+  assert.ok(!nativeSource.includes('view.cueHintLabel'));
+}
+
+function testQuickRulesFadeAndHexSameTileHoverPersistence() {
+  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  assert.ok(html.includes('animation: canvas-start-sheet-fade-in 300ms ease-out both'));
+  assert.ok(html.includes('@keyframes canvas-start-sheet-fade-in'));
+  assert.ok(html.includes('@media (prefers-reduced-motion: reduce)'));
+
+  const { canvas, calls, advanceTimers } = createHeadlessDomHarness({
+    gameMode: game.GAME_MODES.HEX,
+    preset: 'classic-hex'
+  });
+  canvas.listeners.mousemove(pointerEvent(144, 144));
+  const beforeDwell = calls.length;
+  advanceTimers(399);
+  assert.strictEqual(calls.length, beforeDwell, 'Hex neighbors wait for the configured dwell delay');
+  canvas.listeners.mousemove(pointerEvent(145, 144));
+  advanceTimers(1);
+  assert.ok(calls.length > beforeDwell, 'movement inside the same Hex tile preserves the dwell timer');
+
+  const afterHint = calls.length;
+  canvas.listeners.mousemove(pointerEvent(146, 144));
+  assert.strictEqual(calls.length, afterHint, 'movement inside the same Hex tile preserves visible neighbors');
+  canvas.listeners.mousemove(pointerEvent(280, 280));
+  assert.ok(calls.length > afterHint, 'leaving the Hex tile clears or changes its neighbor hint');
+}
+
 function tile(row, col) {
   return { row, col };
 }
@@ -4288,6 +4402,7 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('next-step'),
     makeElement('debug-toggle'),
     makeElement('debug-tools'),
+    makeElement('check-translation', { checked: true }),
     makeElement('debug-tile-value', { value: '128' }),
     makeElement('debug-bomb-tool', { value: 'number' }),
     makeElement('bomb-art-style', { value: 'png-1' }),
@@ -4386,6 +4501,7 @@ function createHeadlessDomHarness(options = {}) {
       devicePixelRatio: 1,
       location: { search: options.locationSearch || '' },
       RAMIFIED_MINIGAMES_ONLINE_URL: options.onlineUrl || '',
+      SiteI18n: options.siteI18n || null,
       RAMIFIED_MINIGAME_PRESETS: presetRegistrySource,
       RAMIFIED_MINIGAME_PRESET_DATA: presetDataByKey,
       localStorage: {
@@ -4435,6 +4551,43 @@ async function invokeHeadlessListener(element, type = 'click') {
   for (let index = 0; index < 5; index += 1) {
     await new Promise((resolve) => setImmediate(resolve));
   }
+}
+
+function testTranslationCheckLifecycle() {
+  const warningCalls = [];
+  const auditCalls = [];
+  const harness = createHeadlessDomHarness({
+    siteI18n: {
+      setTranslationWarnings(enabled, options) {
+        warningCalls.push({ enabled, options });
+      },
+      auditTranslations(root, options) {
+        auditCalls.push({ root, options });
+        return [{ kind: 'untranslated-source' }];
+      }
+    }
+  });
+  const checkbox = harness.elements.get('check-translation');
+  assert.strictEqual(checkbox.checked, false, 'translation checking is session-only and starts unchecked');
+  assert.strictEqual(checkbox.disabled, true, 'translation checking is available only from the open debug panel');
+
+  harness.elements.get('debug-toggle').listeners.click();
+  assert.strictEqual(harness.elements.get('debug-tools').hidden, false);
+  assert.strictEqual(checkbox.disabled, false);
+  checkbox.checked = true;
+  checkbox.listeners.change();
+  assert.strictEqual(warningCalls.length, 1);
+  assert.strictEqual(warningCalls[0].enabled, true);
+  assert.strictEqual(warningCalls[0].options.locale, 'zh-CN');
+  assert.strictEqual(auditCalls.length, 1, 'checking immediately audits the current UI');
+  assert.strictEqual(auditCalls[0].root, harness.context.document);
+  assert.strictEqual(auditCalls[0].options.locale, 'zh-CN');
+
+  checkbox.checked = false;
+  checkbox.listeners.change();
+  assert.strictEqual(warningCalls[1].enabled, false);
+  assert.strictEqual(warningCalls[1].options.locale, 'zh-CN');
+  assert.strictEqual(auditCalls.length, 1, 'unchecking stops diagnostics without another audit');
 }
 
 async function testOnlineControlsVisibleForSinglePlayerModes() {
@@ -7429,6 +7582,8 @@ function testRuntimeChineseLocaleCatalog() {
   }), '4个目标球，1个袋口；必须且只能放置一个母球');
   assert.strictEqual(window.SiteI18n.t('setup.billiardsContactTopLeft'), '左上');
   assert.strictEqual(window.SiteI18n.t('runtime.billiardsRackDirection'), '请点击第二个点设置球框方向');
+  assert.strictEqual(window.SiteI18n.t('setup.billiardsSoloRules'), '从白色母球向后拖动并松开击球。球会穿过粘合边，并从未粘合的边界反弹。将所有编号球打入袋中；母球落袋后可以自由摆放母球。');
+  assert.ok(window.SiteI18n.t('setup.billiardsCompetitiveRules').includes('所有编号球入袋后，得分较高者获胜，同分则为和局。'));
   assert.strictEqual(window.SiteI18n.translateSource('yellow wins'), '黄方获胜！');
   assert.strictEqual(window.SiteI18n.translateSource('Chinese Checkers restarted'), '跳棋已重新开始');
 }
@@ -7489,6 +7644,9 @@ function testBilliardsReplayRestoresRoundSetup() {
 async function run() {
   testReusableLocalizationWiring();
   testRuntimeChineseLocaleCatalog();
+  testBilliardsPaletteRepaintsAfterLazyLoad();
+  testBilliardsCueGuidanceAndQuickRules();
+  testQuickRulesFadeAndHexSameTileHoverPersistence();
   testBilliardsQuickRulesAvailability();
   testBilliardsReplayRestoresRoundSetup();
   testInitialSpawnWeights();
@@ -7531,6 +7689,7 @@ async function run() {
   testRandomGluePresetIsDeterministicWithGlueRng();
   testBoundaryGlueBoardPresetSizingAndGlueModes();
   test2048BonusEndingEligibilityWithBombs();
+  testTranslationCheckLifecycle();
   await testOnlineControlsVisibleForSinglePlayerModes();
   await testOnlineRoomSearchPopulatesSelect();
   await testOnlineRoomSearchEmptyResults();

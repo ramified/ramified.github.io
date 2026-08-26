@@ -14,6 +14,8 @@
   let applying = false;
   const originals = new WeakMap();
   const attributeOriginals = new WeakMap();
+  const warnedTranslationIssues = new Set();
+  let translationWarnings = { enabled: false, locale: '' };
 
   function normalizeLocale(value, supported = config.supportedLocales) {
     const raw = String(value || '').trim().replace('_', '-').toLowerCase();
@@ -57,6 +59,7 @@
   }
 
   function t(key, parameters) {
+    if (translationWarnings.enabled) diagnoseTranslationKey(key, translationWarnings.locale);
     return interpolate(lookup(key), parameters);
   }
 
@@ -77,7 +80,7 @@
     return index;
   }
 
-  function translateSource(value, locale = config.locale) {
+  function translateSourceRaw(value, locale = config.locale) {
     const text = String(value ?? '');
     if (!text) return text;
     const exact = sourceIndex(locale).get(text);
@@ -103,8 +106,90 @@
       .reduce((result, [source, replacement]) => result.split(source).join(replacement), translated);
   }
 
+  function translateSource(value, locale = config.locale) {
+    const text = String(value ?? '');
+    const translated = translateSourceRaw(text, locale);
+    if (translationWarnings.enabled) diagnoseTranslationSource(text, translationWarnings.locale);
+    return translated;
+  }
+
+  function diagnosticLocale(value) {
+    return normalizeLocale(value || translationWarnings.locale)
+      || config.supportedLocales.find((locale) => locale !== config.defaultLocale)
+      || config.defaultLocale;
+  }
+
+  function translationIssueSignature(issue) {
+    return [issue.namespace, issue.locale, issue.kind, issue.key || issue.source || ''].join('\u0000');
+  }
+
+  function emitTranslationIssue(issue) {
+    const signature = translationIssueSignature(issue);
+    if (!translationWarnings.enabled || warnedTranslationIssues.has(signature)) return;
+    warnedTranslationIssues.add(signature);
+    if (typeof console === 'undefined' || typeof console.warn !== 'function') return;
+    if (issue.kind === 'missing-key') {
+      console.warn(`[i18n] Missing ${issue.locale} translation for key "${issue.key}".`);
+    } else {
+      console.warn(`[i18n] Possibly untranslated for ${issue.locale}:`, issue.source);
+    }
+  }
+
+  function diagnoseTranslationKey(key, locale, issues = null) {
+    const targetLocale = diagnosticLocale(locale);
+    const catalog = namespaceCatalog(config.namespace, targetLocale) || {};
+    if (typeof catalog[key] === 'string' && catalog[key].trim()) return null;
+    const issue = { kind: 'missing-key', namespace: config.namespace, locale: targetLocale, key: String(key || '') };
+    if (issues) issues.set(translationIssueSignature(issue), issue);
+    emitTranslationIssue(issue);
+    return issue;
+  }
+
+  function intentionalEnglishSources(locale) {
+    const catalog = namespaceCatalog(config.namespace, diagnosticLocale(locale)) || {};
+    return Array.isArray(catalog.__intentionalEnglish)
+      ? catalog.__intentionalEnglish.filter((source) => typeof source === 'string')
+      : [];
+  }
+
+  function sourceHasExplicitEqualTranslation(source, locale) {
+    const english = namespaceCatalog(config.namespace, config.defaultLocale) || {};
+    const localized = namespaceCatalog(config.namespace, diagnosticLocale(locale)) || {};
+    return Object.keys(english).some((key) => (
+      !key.startsWith('__')
+      && english[key] === source
+      && localized[key] === source
+    ));
+  }
+
+  function sourceLooksEnglish(source) {
+    return /[A-Za-z]{2,}/.test(source) && !/[\u3400-\u9fff]/.test(source);
+  }
+
+  function diagnoseTranslationSource(value, locale, issues = null) {
+    const source = String(value ?? '').trim();
+    const targetLocale = diagnosticLocale(locale);
+    if (!source || !sourceLooksEnglish(source)) return null;
+    if (intentionalEnglishSources(targetLocale).includes(source)) return null;
+    if (sourceHasExplicitEqualTranslation(source, targetLocale)) return null;
+    if (translateSourceRaw(source, targetLocale) !== source) return null;
+    const issue = { kind: 'untranslated-source', namespace: config.namespace, locale: targetLocale, source };
+    if (issues) issues.set(translationIssueSignature(issue), issue);
+    emitTranslationIssue(issue);
+    return issue;
+  }
+
+  function elementIsIgnored(element) {
+    return !!(element && element.closest && element.closest('[data-i18n-ignore], script, style, textarea'));
+  }
+
+  function sourceNodeIsIgnored(node) {
+    const parent = node && node.parentElement;
+    return !parent || elementIsIgnored(parent) || !!(parent.closest && parent.closest('[data-i18n]'));
+  }
+
   function translateTextNode(node) {
-    if (!node || !node.parentElement || node.parentElement.closest('[data-i18n-ignore], script, style, textarea')) return;
+    if (!node || !node.parentElement || elementIsIgnored(node.parentElement)) return;
     const current = node.nodeValue || '';
     const previous = originals.get(node);
     if (!previous || (current !== previous.applied && !applying)) {
@@ -115,6 +200,9 @@
     const leading = source.match(/^\s*/)?.[0] || '';
     const trailing = source.match(/\s*$/)?.[0] || '';
     const core = source.slice(leading.length, source.length - trailing.length || undefined);
+    if (translationWarnings.enabled && !sourceNodeIsIgnored(node)) {
+      diagnoseTranslationSource(core, translationWarnings.locale);
+    }
     const next = config.locale === config.defaultLocale ? source : `${leading}${translateSource(core)}${trailing}`;
     if (next !== current) {
       node.nodeValue = next;
@@ -149,6 +237,7 @@
           attributeOriginals.set(element, records);
         }
         const record = records[attribute];
+        if (translationWarnings.enabled) diagnoseTranslationSource(record.source, translationWarnings.locale);
         const next = config.locale === config.defaultLocale ? record.source : translateSource(record.source);
         if (next !== current) element.setAttribute(attribute, next);
         records[attribute] = { source: record.source, applied: next };
@@ -170,6 +259,47 @@
     } finally {
       applying = false;
     }
+  }
+
+  function setTranslationWarnings(enabled, options = {}) {
+    translationWarnings = {
+      enabled: !!enabled,
+      locale: diagnosticLocale(options.locale || translationWarnings.locale)
+    };
+    return { ...translationWarnings };
+  }
+
+  function auditTranslations(root = typeof document !== 'undefined' ? document : null, options = {}) {
+    const issues = new Map();
+    if (!root) return [];
+    const locale = diagnosticLocale(options.locale || translationWarnings.locale);
+    const elements = [];
+    if (root.nodeType === 1) elements.push(root);
+    if (root.querySelectorAll) elements.push(...root.querySelectorAll('*'));
+    elements.forEach((element) => {
+      if (elementIsIgnored(element)) return;
+      ['data-i18n', 'data-i18n-aria-label', 'data-i18n-placeholder', 'data-i18n-title'].forEach((attribute) => {
+        const key = element.getAttribute && element.getAttribute(attribute);
+        if (key) diagnoseTranslationKey(key, locale, issues);
+      });
+      [['aria-label', 'data-i18n-aria-label'], ['placeholder', 'data-i18n-placeholder'], ['title', 'data-i18n-title']]
+        .forEach(([attribute, keyAttribute]) => {
+          if (!element.hasAttribute || !element.hasAttribute(attribute) || element.hasAttribute(keyAttribute)) return;
+          const records = attributeOriginals.get(element);
+          const source = records && records[attribute] ? records[attribute].source : element.getAttribute(attribute);
+          diagnoseTranslationSource(source, locale, issues);
+        });
+    });
+    if (typeof document !== 'undefined' && document.createTreeWalker) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (sourceNodeIsIgnored(node)) continue;
+        const record = originals.get(node);
+        diagnoseTranslationSource(record ? record.source : node.nodeValue, locale, issues);
+      }
+    }
+    return Array.from(issues.values());
   }
 
   function updateUrl(locale) {
@@ -262,6 +392,8 @@
     setLocale,
     translate,
     translateSource,
+    setTranslationWarnings,
+    auditTranslations,
     normalizeLocale,
     getLocale: () => config.locale
   };

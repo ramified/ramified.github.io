@@ -38,8 +38,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 76.4,
-      "y": 81.4,
+      "x": 76.3,
+      "y": 81.2,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -73,8 +73,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 116.6,
-      "y": 309.7
+      "x": 116.4,
+      "y": 309
     },
     {
       "id": "n39",
@@ -95,8 +95,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 292.2,
-      "y": 370.6
+      "x": 291.8,
+      "y": 369.8
     },
     {
       "id": "n58",
@@ -110,30 +110,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 269.1,
-      "y": 81.4
-    },
-    {
-      "id": "n60",
-      "type": "misc",
-      "label": "Theorem Graph Calculator",
-      "details": [
-        {
-          "id": "goals",
-          "label": "goals",
-          "type": "checkbox",
-          "text": "- [x] The textbox in import chart does not allow copy-paste"
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 599.2,
-      "y": 87.8
+      "x": 268.8,
+      "y": 81.2
     },
     {
       "id": "n63",
@@ -154,8 +132,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 469,
-      "y": 370.6,
+      "x": 468.4,
+      "y": 369.8,
       "childGraph": {
         "title": "double click",
         "nodes": [
@@ -254,8 +232,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 658.1,
-      "y": 343.7
+      "x": 657.2,
+      "y": 342.9
     },
     {
       "id": "n66",
@@ -276,8 +254,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 359,
-      "y": 147.1
+      "x": 358.6,
+      "y": 144.2
     },
     {
       "id": "n68",
@@ -288,29 +266,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "bugs",
           "label": "bugs",
           "type": "checkbox",
-          "text": "- [ ] Add hex support for Tile matching\n- [ ] \"Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.\" should appear in the main canvas, like the caption. \"drag to shoot\" label can be removed\n- [ ] For the Hex, click undo should remove \"red wins. Start another round with the same game settings.\" chart\n- [ ] Like \"Test in Minigames\" row in Mosaic calculator export page, there should be also a \"edit in Mosaic calculator\" row in minigames export page. When clicked, the default boundary should be \"Glued\", Mode being \"Background space\", Click action being \"Add/remove decorations\"\n- [x] The code should only store reusable game-specific computations when the checkbox is clicked and user click \"refresh\".\n- [x] For Import chart in Mosaic calculator, the Catalog row should be a selectbox of \"knot/link\", \"stable curve\" and \"minigames\". Under the minigames choice there is a row for the types of the minigame and finally the name of the level(there are some special cases where rows and colomns should be specified further). Remove the Preset row in the background space mode, as they will be covered by this.\n- [x] For those objects in Decoration palette, if they appear in the main canvas and be dragged out of the main canvas then it should be removed, like what we see in Tiling preferences."
-        }
-      ],
-      "setting": "",
-      "condition": "",
-      "result": "",
-      "proofSketch": "",
-      "citationKeys": [],
-      "color": "#8b3a2a",
-      "fillColor": "#fbefee",
-      "x": 419.4,
-      "y": 271.2
-    },
-    {
-      "id": "n70",
-      "type": "misc",
-      "label": "index",
-      "details": [
-        {
-          "id": "goals",
-          "label": "goals",
-          "type": "checkbox",
-          "text": "- [x] For index.html, as those gifs take a lot of time to be loaded, I would like the corresponding demo-strip disappear when the gifs are not loaded. It should preserve the Masonn"
+          "text": "- [x] Add hex support for Tile matching\n- [x] \"Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.\" should appear in the main canvas, like the caption. \"drag to shoot\" label can be removed\n- [x] For the Hex, click undo should remove \"red wins. Start another round with the same game settings.\" chart\n- [x] Like \"Test in Minigames\" row in Mosaic calculator export page, there should be also a \"edit in Mosaic calculator\" row in minigames export page. When clicked, the default boundary should be \"Glued\", Mode being \"Background space\", Click action being \"Add/remove decorations\"\n- [x] The code should only store reusable game-specific computations when the checkbox is clicked and user click \"refresh\".\n- [x] For Import chart in Mosaic calculator, the Catalog row should be a selectbox of \"knot/link\", \"stable curve\" and \"minigames\". Under the minigames choice there is a row for the types of the minigame and finally the name of the level(there are some special cases where rows and colomns should be specified further). Remove the Preset row in the background space mode, as they will be covered by this.\n- [x] For those objects in Decoration palette, if they appear in the main canvas and be dragged out of the main canvas then it should be removed, like what we see in Tiling preferences."
         }
       ],
       "setting": "",
@@ -320,8 +276,36 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 628.8,
-      "y": 178.9
+      "x": 536.8,
+      "y": 220.9
+    },
+    {
+      "id": "n71",
+      "type": "misc",
+      "label": "bugs",
+      "details": [
+        {
+          "id": "goals-2",
+          "label": "Billiard",
+          "type": "checkbox",
+          "text": "- [ ] \"Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.\" should appear in the main canvas, like the caption. For the caption I mean on the bottom of the main canvas,not on the right up side of the cue ball\nThe yellow circle emphasize and the sentence should also appear when user click something which is not the cue ball.\n- [ ] the rule is not the billiard rule, that describes the rule of 2048 instead. Please give a correct billiard rule."
+        },
+        {
+          "id": "hex",
+          "label": "hex",
+          "type": "checkbox",
+          "text": "For hex, the green hex/square just disappear when user's cursor move, even when the cursor is still inside the same tile. Please only disappear when user's cursor moves out of the tile"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#6b7f3d",
+      "fillColor": "#f4f7ed",
+      "x": 634.2,
+      "y": 130.5
     }
   ],
   "arrows": [
@@ -375,13 +359,30 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
+    },
+    {
+      "id": "a49",
+      "sourceId": "n71",
+      "targetId": "n68",
+      "label": "",
+      "remark": "",
+      "body": "solid",
+      "head": "arrow",
+      "tail": "hook",
+      "level": 1,
+      "endpointScale": 1,
+      "curve": 0,
+      "labelOffset": 15,
+      "labelPosition": 0.5,
+      "labelAlign": "left",
+      "color": "#5f574e"
     }
   ],
   "view": {
-    "selectedId": "n68",
+    "selectedId": "",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 452,
+    "canvasHeight": 451,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 1.6674,
     "relativeNodePositions": {
@@ -401,10 +402,6 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
         "x": 0.3574,
         "y": 0.18
       },
-      "n60": {
-        "x": 0.7958,
-        "y": 0.1943
-      },
       "n63": {
         "x": 0.6229,
         "y": 0.82
@@ -415,15 +412,15 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       },
       "n66": {
         "x": 0.4768,
-        "y": 0.3255
+        "y": 0.3197
       },
       "n68": {
-        "x": 0.557,
-        "y": 0.5999
+        "x": 0.7138,
+        "y": 0.4899
       },
-      "n70": {
-        "x": 0.8351,
-        "y": 0.3959
+      "n71": {
+        "x": 0.8434,
+        "y": 0.2893
       }
     },
     "selectedReferenceKeys": []
