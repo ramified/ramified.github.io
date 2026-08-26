@@ -157,6 +157,7 @@
   const HEX_NEIGHBOR_HINT_DELAY_DEFAULT = 0.4;
   const HEX_NEIGHBOR_HINT_SIZE_DEFAULT = 75;
   const HEX_NEIGHBOR_HINT_STROKE_DEFAULT = 3;
+  const HEX_NEIGHBOR_HINT_FADE_MS = 300;
   const GO_LIBERTY_DOT_SCALE = 600;
   const GO_LIBERTY_DOT_SCALE_REFERENCE = 500;
   const GO_LIBERTY_DOT_BORDER_SCALE = 300;
@@ -524,6 +525,8 @@
   let hexNeighborHoverIndex = null;
   let hexNeighborHintIndex = null;
   let hexNeighborHintTimer = null;
+  let hexNeighborHintStartedAt = 0;
+  let hexNeighborHintFrame = null;
   let swipeGesture = null;
   let billiardsPointer = null;
   let billiardsAim = { x: 1, y: 0 };
@@ -8121,6 +8124,7 @@
       hexNeighborHintTimer = null;
       if (game !== targetState || !isHexGame(game) || hexNeighborHoverIndex !== next) return;
       hexNeighborHintIndex = next;
+      hexNeighborHintStartedAt = now();
       render();
     }, selectedHexNeighborHintDelay() * 1000);
   }
@@ -8128,9 +8132,12 @@
   function clearHexNeighborHint(shouldRender = true) {
     if (hexNeighborHintTimer != null) clearTimeout(hexNeighborHintTimer);
     hexNeighborHintTimer = null;
+    if (hexNeighborHintFrame != null) cancelFrame(hexNeighborHintFrame);
+    hexNeighborHintFrame = null;
     const changed = Number.isInteger(hexNeighborHoverIndex) || Number.isInteger(hexNeighborHintIndex);
     hexNeighborHoverIndex = null;
     hexNeighborHintIndex = null;
+    hexNeighborHintStartedAt = 0;
     if (changed && shouldRender) render();
   }
 
@@ -13875,7 +13882,10 @@
     const indices = hexNeighborHintIndices(state, hexNeighborHintIndex);
     if (!indices.length) return;
     const radius = geom.radius * selectedHexNeighborHintSize();
+    const elapsed = Math.max(0, now() - hexNeighborHintStartedAt);
+    const opacity = hexNeighborHintOpacity(elapsed);
     ctx.save();
+    ctx.globalAlpha *= opacity;
     ctx.strokeStyle = '#1f9d55';
     ctx.lineWidth = selectedHexNeighborHintStroke();
     ctx.lineJoin = 'round';
@@ -13883,7 +13893,7 @@
     indices.forEach((index) => {
       const cell = geom.cells[index];
       if (!cell) return;
-      const points = hexPoints(cell.x, cell.y, radius, LATTICES.hexagonal);
+      const points = tilePoints(cell.x, cell.y, radius, geom.lattice);
       ctx.beginPath();
       points.forEach((point, pointIndex) => {
         if (pointIndex === 0) ctx.moveTo(point.x, point.y);
@@ -13893,6 +13903,17 @@
       ctx.stroke();
     });
     ctx.restore();
+    if (elapsed < HEX_NEIGHBOR_HINT_FADE_MS && hexNeighborHintFrame == null) {
+      hexNeighborHintFrame = requestFrame(() => {
+        hexNeighborHintFrame = null;
+        if (Number.isInteger(hexNeighborHintIndex)) render();
+      });
+    }
+  }
+
+  function hexNeighborHintOpacity(elapsedMs) {
+    const progress = clampNumber(Number(elapsedMs) / HEX_NEIGHBOR_HINT_FADE_MS, 0, 1, 0);
+    return 1 - Math.pow(1 - progress, 3);
   }
 
   function hexTraversalDirs(edge, traversal) {
@@ -27619,17 +27640,17 @@
 
   function selectedHexNeighborHintDelay() {
     const value = refs.hexNeighborDelay ? Number(refs.hexNeighborDelay.value) : HEX_NEIGHBOR_HINT_DELAY_DEFAULT;
-    return clampNumber(value, 0.5, 5, HEX_NEIGHBOR_HINT_DELAY_DEFAULT);
+    return clampNumber(value, 0.1, 0.8, HEX_NEIGHBOR_HINT_DELAY_DEFAULT);
   }
 
   function selectedHexNeighborHintSize() {
     const value = refs.hexNeighborSize ? Number(refs.hexNeighborSize.value) : HEX_NEIGHBOR_HINT_SIZE_DEFAULT;
-    return clampNumber(value, 20, 80, HEX_NEIGHBOR_HINT_SIZE_DEFAULT) / 100;
+    return clampNumber(value, 50, 100, HEX_NEIGHBOR_HINT_SIZE_DEFAULT) / 100;
   }
 
   function selectedHexNeighborHintStroke() {
     const value = refs.hexNeighborStroke ? Number(refs.hexNeighborStroke.value) : HEX_NEIGHBOR_HINT_STROKE_DEFAULT;
-    return clampNumber(value, 1, 8, HEX_NEIGHBOR_HINT_STROKE_DEFAULT);
+    return clampNumber(value, 1, 5, HEX_NEIGHBOR_HINT_STROKE_DEFAULT);
   }
 
   function syncHexNeighborHintOutputs() {
@@ -28608,6 +28629,7 @@
     HEX_NEIGHBOR_HINT_DELAY_DEFAULT,
     HEX_NEIGHBOR_HINT_SIZE_DEFAULT,
     HEX_NEIGHBOR_HINT_STROKE_DEFAULT,
+    HEX_NEIGHBOR_HINT_FADE_MS,
     beginGame,
     beginLianliankanGame,
     beginChineseCheckersGame,
@@ -28658,6 +28680,7 @@
     goCoordinateFile,
     hexQFileLabelAnchors,
     hexNeighborHintIndices,
+    hexNeighborHintOpacity,
     hoveredGlueBoundaryAtPoint,
     hoveredGlueEdgeKeys,
     indexOf,
