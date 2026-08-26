@@ -154,6 +154,9 @@
   const LIANLIANKAN_PATH_DISPLAY_MS = 500;
   const PLACEMENT_ASSIST_DWELL_MS = 500;
   const PLACEMENT_ASSIST_HOLD_MS = 1000;
+  const HEX_NEIGHBOR_HINT_DELAY_DEFAULT = 3;
+  const HEX_NEIGHBOR_HINT_SIZE_DEFAULT = 40;
+  const HEX_NEIGHBOR_HINT_STROKE_DEFAULT = 3;
   const GO_LIBERTY_DOT_SCALE = 600;
   const GO_LIBERTY_DOT_SCALE_REFERENCE = 500;
   const GO_LIBERTY_DOT_BORDER_SCALE = 300;
@@ -518,6 +521,9 @@
   let pendingBonusBlockedByBombs = false;
   let hoveredGlue = null;
   let hoveredHexIndex = null;
+  let hexNeighborHoverIndex = null;
+  let hexNeighborHintIndex = null;
+  let hexNeighborHintTimer = null;
   let swipeGesture = null;
   let billiardsPointer = null;
   let billiardsAim = { x: 1, y: 0 };
@@ -691,6 +697,12 @@
     refs.debugTileValue = document.getElementById('debug-tile-value');
     refs.debugBombTool = document.getElementById('debug-bomb-tool');
     refs.bombArtStyle = document.getElementById('bomb-art-style');
+    refs.hexNeighborDelay = document.getElementById('hex-neighbor-delay');
+    refs.hexNeighborDelayValue = document.getElementById('hex-neighbor-delay-value');
+    refs.hexNeighborSize = document.getElementById('hex-neighbor-size');
+    refs.hexNeighborSizeValue = document.getElementById('hex-neighbor-size-value');
+    refs.hexNeighborStroke = document.getElementById('hex-neighbor-stroke');
+    refs.hexNeighborStrokeValue = document.getElementById('hex-neighbor-stroke-value');
     refs.sokobanObjectSize = document.getElementById('sokoban-object-size');
     refs.sokobanObjectSizeValue = document.getElementById('sokoban-object-size-value');
     refs.sokobanGlowInner = document.getElementById('sokoban-glow-inner');
@@ -713,6 +725,8 @@
     refs.exportStateKind = document.getElementById('export-state-kind');
     refs.exportBackgroundFormatRow = document.getElementById('export-background-format-row');
     refs.exportBackgroundFormat = document.getElementById('export-background-format');
+    refs.editMosaicLinkRow = document.getElementById('edit-mosaic-link-row');
+    refs.editMosaicLink = document.getElementById('edit-mosaic-link');
     refs.moveButtons = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-move-dir]')) : [];
     refs.moveGroups = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-move-lattice]')) : [];
     refs.moveRow = document.getElementById('move-row');
@@ -829,6 +843,14 @@
     if (refs.highlightNewBoxes) refs.highlightNewBoxes.addEventListener('change', render);
     if (refs.debugBombTool) refs.debugBombTool.addEventListener('change', syncDebugModeUi);
     if (refs.bombArtStyle) refs.bombArtStyle.addEventListener('change', render);
+    [refs.hexNeighborDelay, refs.hexNeighborSize, refs.hexNeighborStroke].forEach((input) => {
+      if (!input) return;
+      input.addEventListener('input', () => {
+        syncHexNeighborHintOutputs();
+        clearHexNeighborHint(false);
+        render();
+      });
+    });
     if (refs.begin) refs.begin.addEventListener('click', beginGameFromUi);
     if (refs.canvasStartBegin) refs.canvasStartBegin.addEventListener('click', handleCanvasStartBeginClick);
     if (refs.canvasStartClose) refs.canvasStartClose.addEventListener('click', handleCanvasStartCloseClick);
@@ -938,6 +960,7 @@
     syncChineseCheckersTimingOutput();
     syncPlacementPieceSizeOutput();
     syncOnlineTurnFeedbackDurationOutput();
+    syncHexNeighborHintOutputs();
     syncDebugModeUi();
     syncCanvasDisplayModeUi();
     initBombImages();
@@ -3040,6 +3063,7 @@
 
   function resetToPreview() {
     cancelHexHomologyRequest();
+    clearHexNeighborHint(false);
     hideCanvasStartPrompt();
     clearCanvasStartPromptTimer();
     resetLocalResultPromptDismissal();
@@ -3248,6 +3272,29 @@
       )).join(''));
     }
     throw new Error('base64url decoding is unavailable');
+  }
+
+  function base64UrlEncodeUtf8(text) {
+    const source = String(text || '');
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(source, 'utf8')
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+    }
+    const encoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
+    const bytes = encoder
+      ? encoder.encode(source)
+      : Array.from(unescape(encodeURIComponent(source)), (char) => char.charCodeAt(0));
+    let binary = '';
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      binary += String.fromCharCode(...bytes.slice(index, index + 0x8000));
+    }
+    return btoa(binary)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/g, '');
   }
 
   function gameModeFromUrlParam(value) {
@@ -4762,6 +4809,23 @@
     }
     const backgroundExport = selectedExportKind() === 'background';
     if (!refs.importExportController && refs.exportBackgroundFormatRow) refs.exportBackgroundFormatRow.hidden = !backgroundExport;
+    syncEditMosaicLink();
+  }
+
+  function syncEditMosaicLink() {
+    if (refs.editMosaicLinkRow) refs.editMosaicLinkRow.hidden = !game;
+    if (!refs.editMosaicLink) return;
+    refs.editMosaicLink.href = game ? buildMosaicCalculatorHref(game) : 'mosaic_calculator.html';
+  }
+
+  function buildMosaicCalculatorHref(state = game) {
+    const payload = backgroundPresetForExport(state);
+    payload.boundary = 'glued';
+    payload.boundaryMode = 'glued';
+    payload.inputMode = 'background';
+    payload.backgroundAction = 'decoration';
+    const encoded = base64UrlEncodeUtf8(JSON.stringify(payload));
+    return `mosaic_calculator.html?mosaicPreset=${encodeURIComponent(encoded)}`;
   }
 
   function syncImportCatalogOptions() {
@@ -7051,6 +7115,9 @@
     if (refs.debugTileValue) refs.debugTileValue.disabled = !debugMode || !is2048Game(game);
     if (refs.debugBombTool) refs.debugBombTool.disabled = !debugMode || !is2048Game(game);
     if (refs.bombArtStyle) refs.bombArtStyle.disabled = !debugMode || !is2048Game(game);
+    [refs.hexNeighborDelay, refs.hexNeighborSize, refs.hexNeighborStroke].forEach((input) => {
+      if (input) input.disabled = !debugMode || !isHexGame(game);
+    });
     if (refs.onlineTurnFeedbackDuration) refs.onlineTurnFeedbackDuration.disabled = !debugMode;
     if (refs.onlineTurnFeedbackPreview) refs.onlineTurnFeedbackPreview.disabled = !debugMode;
     syncConnectFourHoleEditControl();
@@ -8020,8 +8087,12 @@
     if (!geometry || !geometry.cells || !geometry.cells.length) return;
     const preset = game ? game.preset : selectedPreset();
     setGlueHover(hoveredGlueBoundaryAtPoint(preset, geometry, canvasPointFromEvent(event)));
-    const target = isHexGame(game) && game.phase === 'ready' ? tileFromCanvasEvent(event) : null;
-    setHexHover(target && !game.removed.has(target.index) && !hexTileAt(game, target.index) ? target.index : null);
+    const target = isHexGame(game) ? tileFromCanvasEvent(event) : null;
+    const playableTarget = target && !game.removed.has(target.index) ? target : null;
+    updateHexNeighborHover(playableTarget ? playableTarget.index : null);
+    setHexHover(game && game.phase === 'ready' && playableTarget && !hexTileAt(game, playableTarget.index)
+      ? playableTarget.index
+      : null);
   }
 
   function setHexHover(index) {
@@ -8033,6 +8104,34 @@
 
   function clearHexHover() {
     setHexHover(null);
+    clearHexNeighborHint();
+  }
+
+  function updateHexNeighborHover(index) {
+    const next = Number.isInteger(index) ? index : null;
+    if (hexNeighborHintTimer != null) clearTimeout(hexNeighborHintTimer);
+    hexNeighborHintTimer = null;
+    const hintWasVisible = Number.isInteger(hexNeighborHintIndex);
+    hexNeighborHoverIndex = next;
+    hexNeighborHintIndex = null;
+    if (hintWasVisible) render();
+    if (!Number.isInteger(next) || !isHexGame(game)) return;
+    const targetState = game;
+    hexNeighborHintTimer = setTimeout(() => {
+      hexNeighborHintTimer = null;
+      if (game !== targetState || !isHexGame(game) || hexNeighborHoverIndex !== next) return;
+      hexNeighborHintIndex = next;
+      render();
+    }, selectedHexNeighborHintDelay() * 1000);
+  }
+
+  function clearHexNeighborHint(shouldRender = true) {
+    if (hexNeighborHintTimer != null) clearTimeout(hexNeighborHintTimer);
+    hexNeighborHintTimer = null;
+    const changed = Number.isInteger(hexNeighborHoverIndex) || Number.isInteger(hexNeighborHintIndex);
+    hexNeighborHoverIndex = null;
+    hexNeighborHintIndex = null;
+    if (changed && shouldRender) render();
   }
 
   function setGlueHover(nextHover) {
@@ -9135,6 +9234,9 @@
     syncGoScoringMethodInputFromGame();
     if (isChineseCheckersGame(game)) setChineseCheckersSelectedPlayers(chineseCheckersPlayerColors(game), game.preset);
     if (isGoGame(game) && game.scoringReview) activateGoScoringReviewControls();
+    // A finished Hex round opens a restart overlay.  Restoring a pre-win
+    // snapshot must close that overlay before redrawing the active board.
+    if (isHexGame(game) && !['gameover', 'complete'].includes(game.phase)) hideCanvasStartPrompt();
     syncStatus(status, info, phaseBadge(game.phase));
     showLocalReplayPrompt();
     render();
@@ -12120,7 +12222,7 @@
         cuePrompt: billiardsCueGuidanceActive(),
         pulseTime: now(),
         cueHintLabel: now() < billiardsCueHintUntil
-          ? tk('runtime.billiardsCueHintCanvas', 'drag back to shoot')
+          ? tk('runtime.billiardsCueHint', 'Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.')
           : '',
         debug: !!(refs.billiardsDebug && refs.billiardsDebug.checked),
         debugTexture: !!(refs.billiardsDebugTexture && refs.billiardsDebugTexture.checked)
@@ -12131,6 +12233,7 @@
       else if (isConnectFourGame(game)) drawConnectFourHoles(ctx, geometry, game);
       drawPlacementReachAssistUnderlay(ctx, geometry, game);
       if (isHexGame(game)) drawHexTileFills(ctx, geometry, game);
+      if (isHexGame(game)) drawHexNeighborHints(ctx, geometry, game);
       if (isHexGame(game)) drawHexWinningCycle(ctx, geometry, game);
       else if (!isConnectFourDropAnimation() && !isChineseCheckersGame(game)) drawPlacementWinningLine(ctx, geometry, game);
       if (isGoGame(game)) drawGoScoreOverlay(ctx, geometry, game);
@@ -12195,11 +12298,22 @@
 
   function drawLianliankanTile(ctx, geom, index, tile, selected) {
     const cell = geom.cells[index];
-    const size = geom.radius * 1.48;
-    const left = cell.x - (size / 2);
-    const top = cell.y - (size / 2);
+    const hexagonal = geom.lattice && geom.lattice.shape === 'hex';
+    const size = geom.radius * (hexagonal ? 1.4 : 1.48);
     ctx.save();
-    roundedRectPath(ctx, left, top, size, size, Math.max(3, geom.radius * 0.16));
+    if (hexagonal) {
+      const points = tilePoints(cell.x, cell.y, geom.radius * 0.78, geom.lattice);
+      ctx.beginPath();
+      points.forEach((point, pointIndex) => {
+        if (pointIndex === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.closePath();
+    } else {
+      const left = cell.x - (size / 2);
+      const top = cell.y - (size / 2);
+      roundedRectPath(ctx, left, top, size, size, Math.max(3, geom.radius * 0.16));
+    }
     ctx.fillStyle = selected ? '#dff3ef' : '#fffdf8';
     ctx.fill();
     ctx.lineWidth = selected ? Math.max(3, geom.radius * 0.1) : Math.max(1.5, geom.radius * 0.055);
@@ -12639,6 +12753,10 @@
     const size = geom.radius * 1.62 * scale;
     ctx.save();
     ctx.globalAlpha *= 0.95;
+    if (geom.lattice && geom.lattice.shape === 'hex') {
+      boxPath(ctx, point, size, geom.lattice);
+      ctx.clip();
+    }
     ctx.drawImage(image, point.x - size / 2, point.y - size / 2, size, size);
     ctx.globalCompositeOperation = 'source-atop';
     ctx.fillStyle = kind === BOMB_KINDS.RED ? 'rgba(255,48,54,0.42)' : 'rgba(0,172,219,0.42)';
@@ -13744,6 +13862,36 @@
     ctx.lineWidth = Math.max(1.1, geom.radius * 0.038);
     ctx.strokeStyle = isBlue ? '#174187' : '#841f24';
     ctx.stroke();
+    ctx.restore();
+  }
+
+  function hexNeighborHintIndices(state, index) {
+    if (!isHexGame(state) || !Number.isInteger(index) || (state.removed && state.removed.has(index))) return [];
+    return adjacentExistingIndices(state, index).filter((neighborIndex) => neighborIndex !== index);
+  }
+
+  function drawHexNeighborHints(ctx, geom, state) {
+    if (!Number.isInteger(hexNeighborHintIndex) || !state || !geom) return;
+    const indices = hexNeighborHintIndices(state, hexNeighborHintIndex);
+    if (!indices.length) return;
+    const radius = geom.radius * selectedHexNeighborHintSize();
+    ctx.save();
+    ctx.strokeStyle = '#1f9d55';
+    ctx.lineWidth = selectedHexNeighborHintStroke();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    indices.forEach((index) => {
+      const cell = geom.cells[index];
+      if (!cell) return;
+      const points = hexPoints(cell.x, cell.y, radius, LATTICES.hexagonal);
+      ctx.beginPath();
+      points.forEach((point, pointIndex) => {
+        if (pointIndex === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.closePath();
+      ctx.stroke();
+    });
     ctx.restore();
   }
 
@@ -17571,7 +17719,6 @@
   function createLianliankanState(presetOrId, options = {}) {
     if (!Lianliankan || !LianliankanMosaicAdapter) throw new Error('Lianliankan module is unavailable');
     const preset = materializePreset(resolvePreset(presetOrId), { ...options, gameMode: GAME_MODES.LIANLIANKAN });
-    if (latticeForPreset(preset).id !== 'square') throw new Error('Lianliankan requires a square-lattice background');
     const initiallyEmpty = [
       ...(Array.isArray(options.initiallyEmpty) ? options.initiallyEmpty : []),
       ...(preset.lianliankan && Array.isArray(preset.lianliankan.initiallyEmpty) ? preset.lianliankan.initiallyEmpty : []),
@@ -27470,6 +27617,33 @@
     if (refs.onlineTurnFeedbackDurationValue) refs.onlineTurnFeedbackDurationValue.textContent = `${duration} ms`;
   }
 
+  function selectedHexNeighborHintDelay() {
+    const value = refs.hexNeighborDelay ? Number(refs.hexNeighborDelay.value) : HEX_NEIGHBOR_HINT_DELAY_DEFAULT;
+    return clampNumber(value, 0.5, 5, HEX_NEIGHBOR_HINT_DELAY_DEFAULT);
+  }
+
+  function selectedHexNeighborHintSize() {
+    const value = refs.hexNeighborSize ? Number(refs.hexNeighborSize.value) : HEX_NEIGHBOR_HINT_SIZE_DEFAULT;
+    return clampNumber(value, 20, 80, HEX_NEIGHBOR_HINT_SIZE_DEFAULT) / 100;
+  }
+
+  function selectedHexNeighborHintStroke() {
+    const value = refs.hexNeighborStroke ? Number(refs.hexNeighborStroke.value) : HEX_NEIGHBOR_HINT_STROKE_DEFAULT;
+    return clampNumber(value, 1, 8, HEX_NEIGHBOR_HINT_STROKE_DEFAULT);
+  }
+
+  function syncHexNeighborHintOutputs() {
+    const delay = selectedHexNeighborHintDelay();
+    const size = Math.round(selectedHexNeighborHintSize() * 100);
+    const stroke = selectedHexNeighborHintStroke();
+    if (refs.hexNeighborDelay) refs.hexNeighborDelay.value = String(delay);
+    if (refs.hexNeighborDelayValue) refs.hexNeighborDelayValue.textContent = `${delay} s`;
+    if (refs.hexNeighborSize) refs.hexNeighborSize.value = String(size);
+    if (refs.hexNeighborSizeValue) refs.hexNeighborSizeValue.textContent = `${size}%`;
+    if (refs.hexNeighborStroke) refs.hexNeighborStroke.value = String(stroke);
+    if (refs.hexNeighborStrokeValue) refs.hexNeighborStrokeValue.textContent = `${stroke} px`;
+  }
+
   function syncPlacementPieceSizeOutput() {
     if (!refs.placementPieceSizeValue) return;
     refs.placementPieceSizeValue.textContent = `${selectedPlacementPieceRadiusPercent()}%`;
@@ -28431,6 +28605,9 @@
     SOKOBAN_BEAM_WIDTH_DEFAULT,
     SOKOBAN_BEAM_OPACITY_DEFAULT,
     SOKOBAN_OBJECT_SCALE_DEFAULT,
+    HEX_NEIGHBOR_HINT_DELAY_DEFAULT,
+    HEX_NEIGHBOR_HINT_SIZE_DEFAULT,
+    HEX_NEIGHBOR_HINT_STROKE_DEFAULT,
     beginGame,
     beginLianliankanGame,
     beginChineseCheckersGame,
@@ -28480,6 +28657,7 @@
     generateRandomBoundaryGlue,
     goCoordinateFile,
     hexQFileLabelAnchors,
+    hexNeighborHintIndices,
     hoveredGlueBoundaryAtPoint,
     hoveredGlueEdgeKeys,
     indexOf,
@@ -28540,6 +28718,8 @@
     surfaceSuccessor,
     __test: {
       backgroundPresetForExport,
+      buildMosaicCalculatorHref,
+      base64UrlEncodeUtf8,
       compactBackgroundPresetForExport,
       debugExportPayload,
       gameRecordExportPayload,

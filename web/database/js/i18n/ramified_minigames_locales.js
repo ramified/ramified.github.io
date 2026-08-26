@@ -32,6 +32,7 @@
     'common.confirmReset': ['Confirm reset', '确认重置'],
     'common.confirmResetGame': ['Confirm reset game', '确认重置游戏'],
     'common.clear': ['clear', '清除'],
+    'common.edit': ['edit', '编辑'],
     'common.debug': ['debug', '调试'],
     'common.empty': ['empty', '空'],
     'common.yes': ['yes', '是'],
@@ -123,6 +124,9 @@
     'access.debugValue': ['Debug tile value', '调试方块数值'],
     'access.debugTool': ['Debug tile tool', '调试方块工具'],
     'access.bombStyle': ['Bomb art style', '炸弹图案样式'],
+    'access.hexNeighborDelay': ['Hex neighbor hint delay', 'Hex 相邻格提示延迟'],
+    'access.hexNeighborSize': ['Hex neighbor marker size', 'Hex 相邻格标记大小'],
+    'access.hexNeighborStroke': ['Hex neighbor marker stroke width', 'Hex 相邻格标记线宽'],
     'access.sokobanSize': ['Sokoban object size', '推箱子物体大小'],
     'access.innerGlow': ['Energy Bridge inner glow', '能量桥内发光'],
     'access.outerGlow': ['Energy Bridge outer glow', '能量桥外发光'],
@@ -184,6 +188,9 @@
     'setup.tileValue': ['Tile value', '方块数值'],
     'setup.tileTool': ['Tile tool', '方块工具'],
     'setup.bombArt': ['Bomb art', '炸弹图案'],
+    'setup.hexNeighborDelay': ['Neighbor delay', '相邻格延迟'],
+    'setup.hexNeighborSize': ['Neighbor size', '相邻格大小'],
+    'setup.hexNeighborStroke': ['Neighbor stroke', '相邻格线宽'],
     'setup.objectSize': ['Object size', '物体大小'],
     'setup.innerGlow': ['Inner glow', '内发光'],
     'setup.outerGlow': ['Outer glow', '外发光'],
@@ -425,6 +432,7 @@
     'io.exportLabel': ['Export', '导出'],
     'io.exportKind': ['Export kind', '导出类型'],
     'io.exportContent': ['Export content', '导出内容'],
+    'io.editInMosaicCalculator': ['edit in Mosaic calculator', '在马赛克计算器中编辑'],
     'io.importContent': ['Import content', '导入内容'],
     'io.importPayloadContent': ['Preset or game status', '预设或游戏状态'],
     'io.backgroundPreset': ['Background preset', '背景预设'],
@@ -567,7 +575,6 @@
     , 'runtime.billiardsHoverPlaceBall': ['click to place ball {{number}}', '点击放置{{number}}号球']
     , 'runtime.billiardsCueHintTitle': ['Aim from the white cue ball', '从白色母球瞄准']
     , 'runtime.billiardsCueHint': ['Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.', '点击白色母球，并向目标反方向拖动；母球会沿相反方向前进。']
-    , 'runtime.billiardsCueHintCanvas': ['drag back to shoot', '向后拖动击球']
     , 'runtime.puzzleStatus': ['{{game}} puzzle {{count}}', '{{game}}谜题第{{count}}步']
     , 'runtime.toMove': ['to move', '行棋']
     , 'runtime.toPlay': ['to play', '落子']

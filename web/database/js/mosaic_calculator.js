@@ -1049,6 +1049,28 @@
     initCustomTooltips();
 
     createBoard(5, 5, state.lattice, state.wrapped);
+    importMosaicFromUrlParams();
+  }
+
+  function importMosaicFromUrlParams() {
+    if (typeof window === 'undefined' || !window.location || typeof URLSearchParams === 'undefined') return false;
+    const encoded = new URLSearchParams(window.location.search || '').get('mosaicPreset');
+    if (!encoded) return false;
+    try {
+      const payload = JSON.parse(base64UrlDecodeUtf8(encoded));
+      const imported = normalizeExportImportPayload(payload);
+      // Links from Minigames always open the background-space decoration editor,
+      // even when the exported game happened to carry a different UI mode.
+      imported.boundary = 'glued';
+      imported.boundaryMode = 'glued';
+      imported.inputMode = 'background';
+      imported.backgroundAction = 'decoration';
+      applyImportedMosaic(imported);
+      syncStatus('Mosaic imported from Minigames', 'Glued background space: add/remove decorations.', 'ready');
+    } catch (error) {
+      syncStatus('Mosaic link import failed', error && error.message ? error.message : 'invalid Mosaic preset link', 'error');
+    }
+    return true;
   }
 
   function collectRefs() {
@@ -3206,7 +3228,8 @@
       if (!entry) return;
       try {
         const source = await loadMinigamePresetData(entry);
-        const payload = materializeMinigamePresetForMosaic(entry, source);
+        const gameType = refs.importMinigameType ? refs.importMinigameType.value : entry.gameTypes[0];
+        const payload = normalizeExportImportPayload(materializeMinigamePresetForMosaic(entry, source, gameType));
         refs.importInput.value = JSON.stringify(payload, null, 2);
         applyImportedMosaic(payload);
         refs.statusLine.textContent = `${entry.label} minigame level loaded`;
@@ -3220,7 +3243,10 @@
 
     const preset = KNOT_PRESETS.find((entry) => entry.id === id) || KNOT_PRESETS[0];
     if (!preset) return;
-    const payload = { ...knotPresetPayloadForCurrentLattice(preset), inputMode: 'import' };
+    const payload = clearDecorationsForKnotLinkImport({
+      ...knotPresetPayloadForCurrentLattice(preset),
+      inputMode: 'import'
+    });
     refs.importInput.value = JSON.stringify(payload, null, 2);
     try {
       applyImportedMosaic(payload);
@@ -3499,7 +3525,7 @@
     if (typeof document === 'undefined' || !document.createElement) return Promise.reject(new Error('Minigame preset loading is unavailable.'));
     const request = new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = `ramified_minigame_presets/${entry.file.split('/').map(encodeURIComponent).join('/')}`;
+      script.src = `ramified_minigame_presets/${entry.file.split('/').map(encodeURIComponent).join('/')}?v=20260826-2`;
       script.async = true;
       script.onload = () => {
         const data = root && root.RAMIFIED_MINIGAME_PRESET_DATA && root.RAMIFIED_MINIGAME_PRESET_DATA[entry.key];
@@ -3513,8 +3539,8 @@
     return request;
   }
 
-  function materializeMinigamePresetForMosaic(entry, source) {
-    const payload = JSON.parse(JSON.stringify(source || {}));
+  function materializeMinigamePresetForMosaic(entry, source, gameType) {
+    const payload = JSON.parse(JSON.stringify(materializeMinigamePresetGenerator(entry, source) || {}));
     payload.diagramType = 'link';
     payload.inputMode = 'background';
     payload.backgroundAction = 'decoration';
@@ -3541,7 +3567,129 @@
         id: index + 1, row: index + 1, col: index + 1, side: 'black', color: 'black', kind: 'queen'
       }));
     }
-    return payload;
+    return isolateMinigamePresetDecorations(payload, gameType || (entry && entry.gameTypes && entry.gameTypes[0]));
+  }
+
+  function isolateMinigamePresetDecorations(payload, gameType) {
+    const isolated = { ...(payload || {}) };
+    const normalizedType = String(gameType || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+    const family = normalizedType === 'tile-matching' || normalizedType === 'lianliankan'
+      ? 'lianliankan'
+      : (normalizedType === 'hex'
+        ? 'hex'
+        : (normalizedType.includes('billiard')
+          ? 'billiards'
+          : (normalizedType === 'sokoban'
+            ? 'sokoban'
+            : (normalizedType === 'connect-four' || normalizedType === 'connectfour' ? 'holes' : 'pieces'))));
+
+    const hasOwn = (key) => Object.prototype.hasOwnProperty.call(isolated, key);
+    if (!hasImportedRemovedTiles(isolated) && !hasOwn('removed')) isolated.removedTiles = [];
+    if (!hasImportedCutEdges(isolated) && !hasOwn('cuts')) isolated.cutEdges = [];
+    if (!hasImportedGluedEdges(isolated) && !hasOwn('glue')) isolated.gluedEdges = [];
+
+    if (family !== 'holes') {
+      delete isolated.holes;
+      delete isolated.connectFourHoles;
+      isolated.inputHoles = [];
+    } else if (!hasImportedInputHoles(isolated)) {
+      isolated.inputHoles = [];
+    }
+
+    if (family !== 'lianliankan' || !hasImportedGameBlock(isolated, 'lianliankan')) {
+      isolated.lianliankan = { initiallyEmpty: [] };
+    }
+    if (family !== 'hex' || !hasImportedGameBlock(isolated, 'hex')) {
+      isolated.hex = { seeds: [] };
+    }
+    if (family !== 'billiards' || !hasImportedGameBlock(isolated, 'billiards')) {
+      isolated.billiards = { balls: [], pockets: [] };
+    }
+
+    if (family !== 'pieces') {
+      delete isolated.pieceSets;
+      isolated.pieces = [];
+    } else if (!hasImportedPresetPieces(isolated)) {
+      isolated.pieces = [];
+    }
+
+    if (family !== 'sokoban') {
+      delete isolated.sokoban;
+      SOKOBAN_DECORATION_ORDER.forEach((field) => {
+        sokobanFieldImportKeys(field).forEach((key) => delete isolated[key]);
+      });
+      isolated.sokoban = createEmptySokobanPresetBlock();
+    } else if (!hasImportedSokobanDecorations(isolated)) {
+      isolated.sokoban = createEmptySokobanPresetBlock();
+    }
+    return isolated;
+  }
+
+  function createEmptySokobanPresetBlock() {
+    return {
+      players: [], boxes: [], targets: [], sea: [], walls: [], ice: [], energyBridges: []
+    };
+  }
+
+  function materializeMinigamePresetGenerator(entry, source) {
+    const generator = String(source && (source.generator || source.macro) || '').trim().toLowerCase();
+    if (!['rubikscube', 'rubiks-cube', 'rubiks'].includes(generator)) return source;
+    const cubeSize = Number(source && (source.cubeSize || source.n || source.generatorSize));
+    if (cubeSize !== 2) throw new Error(`Unsupported Rubik's Cube size for ${entry && entry.label ? entry.label : 'this preset'}.`);
+    const rows = 6;
+    const cols = 8;
+    const removedTiles = [];
+    for (let row = 1; row <= rows; row += 1) {
+      for (let col = 1; col <= cols; col += 1) {
+        const middleBand = row > 2 && row <= 4;
+        const centerColumnBand = col > 2 && col <= 4;
+        if (!middleBand && !centerColumnBand) removedTiles.push({ row, col });
+      }
+    }
+    const gluedEdges = [];
+    const add = (group, first, second) => gluedEdges.push(backgroundGluedEdge('square', group, first, second));
+    for (let row = 3; row <= 4; row += 1) add(6, { row, col: 1, dir: 2 }, { row, col: 8, dir: 0 });
+    add(9, { row: 3, col: 2, dir: 3 }, { row: 2, col: 3, dir: 2 });
+    add(9, { row: 3, col: 1, dir: 3 }, { row: 1, col: 3, dir: 2 });
+    add(10, { row: 2, col: 4, dir: 0 }, { row: 3, col: 5, dir: 3 });
+    add(10, { row: 1, col: 4, dir: 0 }, { row: 3, col: 6, dir: 3 });
+    add(12, { row: 4, col: 5, dir: 1 }, { row: 5, col: 4, dir: 0 });
+    add(12, { row: 4, col: 6, dir: 1 }, { row: 6, col: 4, dir: 0 });
+    add(13, { row: 1, col: 4, dir: 3 }, { row: 3, col: 7, dir: 3 });
+    add(13, { row: 1, col: 3, dir: 3 }, { row: 3, col: 8, dir: 3 });
+    add(14, { row: 4, col: 8, dir: 1 }, { row: 6, col: 3, dir: 1 });
+    add(14, { row: 4, col: 7, dir: 1 }, { row: 6, col: 4, dir: 1 });
+    add(15, { row: 5, col: 3, dir: 2 }, { row: 4, col: 2, dir: 1 });
+    add(15, { row: 6, col: 3, dir: 2 }, { row: 4, col: 1, dir: 1 });
+    return {
+      ...source,
+      lattice: 'square',
+      rows,
+      cols,
+      surface: 'M_0,8',
+      removedTiles,
+      cutEdges: [],
+      gluedEdges
+    };
+  }
+
+  function clearDecorationsForKnotLinkImport(payload) {
+    return {
+      ...payload,
+      removedTiles: [],
+      cutEdges: [],
+      gluedEdges: [],
+      inputHoles: [],
+      lianliankan: { initiallyEmpty: [] },
+      hex: { seeds: [] },
+      billiards: { balls: [], pockets: [] },
+      pieces: [],
+      sokoban: {
+        players: [], boxes: [], targets: [], sea: [], walls: [], ice: [], energyBridges: []
+      },
+      vertexDecorations: {},
+      halfEdgeDecorations: {}
+    };
   }
 
   function torusGluedEdgesForMinigameImport(rows, cols) {
@@ -25224,6 +25372,23 @@
       .replace(/=+$/g, '');
   }
 
+  function base64UrlDecodeUtf8(encoded) {
+    const source = String(encoded || '').replace(/-/g, '+').replace(/_/g, '/');
+    const padded = source + '='.repeat((4 - (source.length % 4)) % 4);
+    if (typeof Buffer !== 'undefined') return Buffer.from(padded, 'base64').toString('utf8');
+    if (typeof atob === 'function') {
+      const binary = atob(padded);
+      if (typeof TextDecoder !== 'undefined') {
+        const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+        return new TextDecoder().decode(bytes);
+      }
+      return decodeURIComponent(Array.from(binary, (char) => (
+        `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`
+      )).join(''));
+    }
+    throw new Error('base64url decoding is unavailable');
+  }
+
   function cleanExportPresetId(value) {
     const cleaned = String(value || '')
       .trim()
@@ -27019,6 +27184,9 @@
       minigamePresetRegistryEntry,
       minigamePresetRegistryEntries,
       materializeMinigamePresetForMosaic,
+      materializeMinigamePresetGenerator,
+      isolateMinigamePresetDecorations,
+      clearDecorationsForKnotLinkImport,
       moveBackgroundDecoration,
       removeBilliardsDecoration,
       normalizeBackgroundAction,

@@ -36,12 +36,15 @@
   function normalizedPresetData(preset) {
     if (!preset || typeof preset !== 'object') throw new TypeError('A Mosaic preset object is required');
     const lattice = String(preset.lattice || 'square').toLowerCase();
-    if (lattice !== 'square') throw new Error('Lianliankan currently requires a square Mosaic lattice');
+    if (lattice !== 'square' && lattice !== 'hexagonal') {
+      throw new Error('Lianliankan requires a square or hexagonal Mosaic lattice');
+    }
     const size = dimensions(preset);
     const background = preset.backgroundSpace && typeof preset.backgroundSpace === 'object'
       ? preset.backgroundSpace
       : {};
     return {
+      lattice: lattice,
       rows: size.rows,
       cols: size.cols,
       removedTiles: firstArray(preset, ['removedTiles', 'backgroundRemovedTiles', 'removed']).length
@@ -60,6 +63,7 @@
     const config = options || {};
     const normalized = normalizedPresetData(preset);
     return engine.createGame({
+      lattice: normalized.lattice,
       rows: normalized.rows,
       cols: normalized.cols,
       removedTiles: normalized.removedTiles,
@@ -214,13 +218,38 @@
 
   function edgeMidpoint(cell, direction, geometry) {
     if (geometry && typeof geometry.edgePoint === 'function') {
-      return geometry.edgePoint(cell.index, direction);
+      const index = Number.isInteger(cell.index) ? cell.index : geometry.cells.indexOf(cell);
+      return geometry.edgePoint(index, direction);
     }
     const radius = Number(cell.radius || (geometry && geometry.radius) || 0);
-    const offsets = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+    const lattice = geometry && geometry.lattice && typeof geometry.lattice === 'object'
+      ? geometry.lattice
+      : null;
+    const hexagonal = !!(lattice && (lattice.shape === 'hex' || lattice.id === 'hexagonal'));
+    const sides = hexagonal ? 6 : 4;
+    const numericDirection = Number(direction);
+    const normalizedDirection = Number.isFinite(numericDirection)
+      ? ((Math.trunc(numericDirection) % sides) + sides) % sides
+      : 0;
+    // Square geometry stores the inradius, while hex geometry stores the
+    // circumradius. Convert the latter to the center-to-edge distance.
+    const edgeDistance = hexagonal ? radius * Math.cos(Math.PI / 6) : radius;
+    if (!hexagonal) {
+      const squareOffsets = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+      return {
+        x: cell.x + squareOffsets[normalizedDirection][0] * edgeDistance,
+        y: cell.y + squareOffsets[normalizedDirection][1] * edgeDistance
+      };
+    }
+    const latticeAngle = lattice && Array.isArray(lattice.angles)
+      ? Number(lattice.angles[normalizedDirection])
+      : NaN;
+    const angle = Number.isFinite(latticeAngle)
+      ? latticeAngle
+      : normalizedDirection * ((Math.PI * 2) / sides);
     return {
-      x: cell.x + offsets[direction][0] * radius,
-      y: cell.y + offsets[direction][1] * radius
+      x: cell.x + Math.cos(angle) * edgeDistance,
+      y: cell.y + Math.sin(angle) * edgeDistance
     };
   }
 

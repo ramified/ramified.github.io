@@ -693,6 +693,15 @@
       "gameTypes": [
         "Hex"
         ],
+      "id": "symmetric-rp2",
+      "label": "symmetric RP2",
+      "key": "symmetric_rp2",
+      "file": "symmetric_rp2.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Hex"
+        ],
       "id": "hex-rp2-5-5",
       "label": "hex RP2 5*5",
       "key": "hex_rp2_5_5",

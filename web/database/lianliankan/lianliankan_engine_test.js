@@ -311,6 +311,48 @@ function testMosaicAdapter() {
   };
   const segments = mosaicAdapter.pathSegments(path, geometry);
   assert.deepStrictEqual(segments.map((segment) => segment.kind), ['glue-source', 'glue-target']);
+  assert.deepStrictEqual(segments[0], {
+    kind: 'glue-source',
+    group: 2,
+    from: { x: 15, y: 5 },
+    to: { x: 20, y: 5 }
+  }, 'a square portal path stops at the source edge midpoint');
+  assert.deepStrictEqual(segments[1], {
+    kind: 'glue-target',
+    group: 2,
+    from: { x: 5, y: 10 },
+    to: { x: 5, y: 15 }
+  }, 'a square portal path resumes at the target edge midpoint without bridging the portal');
+
+  const hexGeometry = {
+    radius: 10,
+    lattice: {
+      id: 'hexagonal',
+      shape: 'hex',
+      sides: 6,
+      angles: [0, 60, 120, 180, 240, 300].map((degrees) => degrees * Math.PI / 180)
+    },
+    cells: [
+      { x: 10, y: 20 },
+      { x: 100, y: 120 }
+    ]
+  };
+  const hexSegments = mosaicAdapter.pathSegments({
+    transitions: [{
+      kind: 'glued',
+      group: 7,
+      from: 0,
+      to: 1,
+      sourceEdge: { dir: 5 },
+      targetEdge: { dir: 2 }
+    }]
+  }, hexGeometry);
+  assert.deepStrictEqual(hexSegments.map((segment) => segment.kind), ['glue-source', 'glue-target']);
+  assert.strictEqual(hexSegments.length, 2, 'a hex portal is drawn as two disconnected half-lines');
+  assert.ok(Math.abs(hexSegments[0].to.x - 14.330127018922193) < 1e-9);
+  assert.ok(Math.abs(hexSegments[0].to.y - 12.5) < 1e-9);
+  assert.ok(Math.abs(hexSegments[1].from.x - 95.6698729810778) < 1e-9);
+  assert.ok(Math.abs(hexSegments[1].from.y - 127.5) < 1e-9);
 }
 
 function run() {

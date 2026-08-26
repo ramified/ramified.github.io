@@ -977,6 +977,13 @@ function testStagedImportCatalogAndParameterizedLevels() {
   assert.ok(!html.includes('id="background-preset-select"'));
   assert.ok(!html.includes('id="load-background-preset"'));
   assert.ok(adapter.includes("catalogContainer: '#mosaic-import-catalog-controls'"));
+  assert.ok(adapter.includes('if (catalogSource && catalogContainer)'));
+  assert.ok(adapter.includes("catalogContainer.setAttribute('data-import-source-panel', 'catalog')"));
+  const source = fs.readFileSync(require.resolve('./mosaic_calculator.js'), 'utf8');
+  assert.ok(source.includes('function importMosaicFromUrlParams()'));
+  assert.ok(source.includes("get('mosaicPreset')"));
+  assert.ok(source.includes("imported.inputMode = 'background'"));
+  assert.ok(source.includes("imported.backgroundAction = 'decoration'"));
 
   const catalog = mosaic.minigamePresetRegistryEntries();
   const boundary = catalog.find((entry) => entry.id === 'boundary-glue-board');
@@ -996,6 +1003,77 @@ function testStagedImportCatalogAndParameterizedLevels() {
   );
   assert.strictEqual(queensPayload.rows, queensPayload.cols);
   assert.strictEqual(queensPayload.pieces.length, queensPayload.rows);
+}
+
+function testEveryMinigameCatalogLevelMaterializesForImport() {
+  const registry = require('../ramified_minigame_presets/presets.js').presets;
+  registry.forEach((entry) => {
+    const source = require(`../ramified_minigame_presets/${entry.file}`);
+    const payload = mosaic.normalizeExportImportPayload(
+      mosaic.materializeMinigamePresetForMosaic(entry, source)
+    );
+    assert.ok(payload.rows >= 2 && payload.rows <= 20, `${entry.id} needs valid imported rows`);
+    assert.ok(payload.cols >= 2 && payload.cols <= 20, `${entry.id} needs valid imported columns`);
+    if (typeof source.removed === 'string' && source.removed) {
+      assert.ok(Array.isArray(payload.removedTiles) && payload.removedTiles.length, `${entry.id} needs compact removed tiles normalized`);
+    }
+    if (typeof source.glue === 'string' && source.glue) {
+      assert.ok(Array.isArray(payload.gluedEdges) && payload.gluedEdges.length, `${entry.id} needs compact gluing normalized`);
+    }
+  });
+  const rubiks = registry.find((entry) => entry.id === 'rubiks-cube-2x2x2');
+  const rubiksPayload = mosaic.materializeMinigamePresetForMosaic(
+    rubiks,
+    require('../ramified_minigame_presets/rubiks_cube_2x2x2.preset.js')
+  );
+  assert.strictEqual(rubiksPayload.rows, 6);
+  assert.strictEqual(rubiksPayload.cols, 8);
+  assert.strictEqual(rubiksPayload.gluedEdges.length, 14);
+  assert.ok(rubiksPayload.removedTiles.length > 0);
+}
+
+function testMinigameImportsClearOtherGameDecorations() {
+  const registry = require('../ramified_minigame_presets/presets.js').presets;
+  const ramifiedCover = registry.find((entry) => entry.id === 'ramified-cover');
+  const coverSource = require('../ramified_minigame_presets/ramified_cover.preset.js');
+  const matching = mosaic.materializeMinigamePresetForMosaic(ramifiedCover, coverSource, 'Tile Matching');
+  assert.ok(matching.lianliankan.initiallyEmpty.length > 0, 'the selected game keeps its preset decorations');
+  assert.deepStrictEqual(matching.inputHoles, []);
+  assert.deepStrictEqual(matching.hex, { seeds: [] });
+  assert.deepStrictEqual(matching.billiards, { balls: [], pockets: [] });
+  assert.deepStrictEqual(matching.pieces, []);
+  assert.ok(Object.values(matching.sokoban).every((entries) => entries.length === 0));
+
+  const game2048 = mosaic.materializeMinigamePresetForMosaic(ramifiedCover, coverSource, '2048');
+  assert.deepStrictEqual(game2048.lianliankan, { initiallyEmpty: [] }, 'shared levels do not leak Tile Matching decorations into 2048');
+
+  const usualStrip = registry.find((entry) => entry.id === 'usual-strip');
+  const billiards = mosaic.materializeMinigamePresetForMosaic(
+    usualStrip,
+    require('../ramified_minigame_presets/usual_strip.preset.js'),
+    'Billiard'
+  );
+  assert.ok(billiards.billiards.balls.length > 0, 'the selected Billiards decorations are retained');
+  assert.deepStrictEqual(billiards.lianliankan, { initiallyEmpty: [] });
+  assert.deepStrictEqual(billiards.pieces, []);
+
+  const topologyOnly = mosaic.isolateMinigamePresetDecorations({ rows: 4, cols: 4 }, 'Gomoku');
+  assert.deepStrictEqual(topologyOnly.removedTiles, []);
+  assert.deepStrictEqual(topologyOnly.cutEdges, []);
+  assert.deepStrictEqual(topologyOnly.gluedEdges, []);
+}
+
+function testKnotImportClearsExistingDecorations() {
+  const cleared = mosaic.clearDecorationsForKnotLinkImport({
+    lattice: 'square', rows: 5, cols: 5, tiles: []
+  });
+  assert.deepStrictEqual(cleared.inputHoles, []);
+  assert.deepStrictEqual(cleared.lianliankan.initiallyEmpty, []);
+  assert.deepStrictEqual(cleared.hex.seeds, []);
+  assert.deepStrictEqual(cleared.billiards.balls, []);
+  assert.deepStrictEqual(cleared.billiards.pockets, []);
+  assert.deepStrictEqual(cleared.pieces, []);
+  assert.ok(Object.values(cleared.sokoban).every((entries) => Array.isArray(entries) && entries.length === 0));
 }
 
 function testManualExportRefreshAndOutsideDecorationRemoval() {
@@ -1068,6 +1146,9 @@ const tests = [
   testRemovedBoundaryPresetIdsAreNotAdvertised,
   testPaletteSwatchRatios,
   testStagedImportCatalogAndParameterizedLevels,
+  testEveryMinigameCatalogLevelMaterializesForImport,
+  testMinigameImportsClearOtherGameDecorations,
+  testKnotImportClearsExistingDecorations,
   testManualExportRefreshAndOutsideDecorationRemoval,
   testPrecomputedDataRequiresManualRefresh
 ];

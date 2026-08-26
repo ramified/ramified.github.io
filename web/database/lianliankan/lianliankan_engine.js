@@ -6,9 +6,11 @@
   'use strict';
 
   const DIRS = Object.freeze({ E: 0, S: 1, W: 2, N: 3 });
+  const HEX_DIRS = Object.freeze({ E: 0, SE: 1, SW: 2, W: 3, NW: 4, NE: 5 });
   const DIR_NAMES = Object.freeze(['E', 'S', 'W', 'N']);
   const DIRECTION_ORDER = Object.freeze([DIRS.N, DIRS.E, DIRS.S, DIRS.W]);
   const OFFSETS = Object.freeze([[0, 1], [1, 0], [0, -1], [-1, 0]]);
+  const HEX_OFFSETS = Object.freeze([[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]]);
   const DEFAULT_MAX_SHUFFLE_ATTEMPTS = 50;
   const HIRAGANA_SYMBOLS = Object.freeze([
     ['a', 'あ'], ['i', 'い'], ['u', 'う'], ['e', 'え'], ['o', 'お'],
@@ -43,15 +45,22 @@
     };
   }
 
-  function oppositeDirection(direction) {
-    return (normalizeDirection(direction) + 2) % 4;
+  function oppositeDirection(direction, directions) {
+    const directionCount = Number.isInteger(directions) ? directions : 4;
+    return (normalizeDirection(direction, directionCount) + (directionCount / 2)) % directionCount;
   }
 
-  function normalizeDirection(value) {
-    if (Number.isInteger(value) && value >= 0 && value < 4) return value;
+  function normalizeDirection(value, directions) {
+    const directionCount = typeof directions === 'object'
+      ? Object.keys(directions).length
+      : (Number.isInteger(directions) ? directions : 4);
+    const names = typeof directions === 'object'
+      ? directions
+      : (directionCount === 6 ? HEX_DIRS : DIRS);
+    if (Number.isInteger(value) && value >= 0 && value < directionCount) return value;
     const name = String(value == null ? '' : value).trim().toUpperCase();
-    if (Object.prototype.hasOwnProperty.call(DIRS, name)) return DIRS[name];
-    throw new TypeError('Invalid square-lattice direction: ' + value);
+    if (Object.prototype.hasOwnProperty.call(names, name)) return names[name];
+    throw new TypeError('Invalid lattice direction: ' + value);
   }
 
   function normalizeIndex(ref, cols, total) {
@@ -131,12 +140,12 @@
     });
   }
 
-  function normalizeEdge(edge, board) {
+  function normalizeEdge(edge, board, directions) {
     if (!edge || typeof edge !== 'object') throw new TypeError('Glue endpoints must be edge objects');
     const directionValue = Object.prototype.hasOwnProperty.call(edge, 'dir') ? edge.dir : edge.edge;
     return {
       index: normalizeIndex(edge, board.cols, board.cells.length),
-      dir: normalizeDirection(directionValue)
+      dir: normalizeDirection(directionValue, directions)
     };
   }
 
@@ -144,7 +153,7 @@
     return first < second ? first + ':' + second : second + ':' + first;
   }
 
-  function normalizeCutEdge(entry, board) {
+  function normalizeCutEdge(entry, board, directions, neighborAt) {
     if (!entry || typeof entry !== 'object') throw new TypeError('Cut edges must be objects');
     const firstRef = entry.first || entry.left || entry.a || entry.from;
     const secondRef = entry.second || entry.right || entry.b || entry.to;
@@ -156,29 +165,42 @@
     }
     if (entry.cell != null && entry.dir != null) {
       const source = normalizeIndex(entry.cell, board.cols, board.cells.length);
-      const position = rowCol(source, board.cols);
-      const offset = OFFSETS[normalizeDirection(entry.dir)];
-      const nextRow = position.row + offset[0];
-      const nextCol = position.col + offset[1];
-      if (nextRow < 1 || nextRow > board.rows || nextCol < 1 || nextCol > board.cols) {
+      const destination = neighborAt(source, normalizeDirection(entry.dir, directions));
+      if (destination == null) {
         throw new RangeError('A cut edge requires two in-board cells');
       }
-      return unorderedPairKey(source, indexOf(nextRow, nextCol, board.cols));
+      return unorderedPairKey(source, destination);
     }
     throw new TypeError('A cut edge requires two cell references');
   }
 
-  function createSquareTopology(board, options) {
+  function createLatticeTopology(board, options) {
     if (!board || !Array.isArray(board.cells)) throw new TypeError('A board is required');
     const config = options || {};
+    const directions = config.directions || DIRS;
+    const directionOrder = Array.isArray(config.directionOrder)
+      ? config.directionOrder
+      : Array.from({ length: Object.keys(directions).length }, function(_, index) { return index; });
+    const directionCount = Object.keys(directions).length;
+    const neighborAt = typeof config.neighborAt === 'function'
+      ? config.neighborAt
+      : function(source, direction) {
+        const position = rowCol(source, board.cols);
+        const offset = OFFSETS[direction];
+        const row = position.row + offset[0];
+        const col = position.col + offset[1];
+        return row < 1 || row > board.rows || col < 1 || col > board.cols
+          ? null
+          : indexOf(row, col, board.cols);
+      };
     const cutEdges = new Set((config.cutEdges || []).map(function(entry) {
-      return normalizeCutEdge(entry, board);
+      return normalizeCutEdge(entry, board, directions, neighborAt);
     }));
     const glueMap = new Map();
     const gluedEdges = (config.gluedEdges || []).map(function(pair, pairIndex) {
       if (!pair || !pair.first || !pair.second) throw new TypeError('Glue pair requires first and second endpoints');
-      const first = normalizeEdge(pair.first, board);
-      const second = normalizeEdge(pair.second, board);
+      const first = normalizeEdge(pair.first, board, directions);
+      const second = normalizeEdge(pair.second, board, directions);
       if (!board.cells[first.index].playable || !board.cells[second.index].playable) {
         throw new RangeError('Glue endpoints must belong to playable cells');
       }
@@ -198,12 +220,8 @@
     });
 
     function directNeighbor(source, direction) {
-      const position = rowCol(source, board.cols);
-      const offset = OFFSETS[direction];
-      const row = position.row + offset[0];
-      const col = position.col + offset[1];
-      if (row < 1 || row > board.rows || col < 1 || col > board.cols) return null;
-      const destination = indexOf(row, col, board.cols);
+      const destination = neighborAt(source, direction);
+      if (destination == null) return null;
       if (!board.cells[destination].playable) return null;
       if (cutEdges.has(unorderedPairKey(source, destination))) return null;
       return destination;
@@ -212,7 +230,7 @@
     function nextStep(cellRef, directionValue) {
       const source = normalizeIndex(cellRef, board.cols, board.cells.length);
       if (!board.cells[source].playable) return null;
-      const inputDirection = normalizeDirection(directionValue);
+      const inputDirection = normalizeDirection(directionValue, directions);
       const direct = directNeighbor(source, inputDirection);
       if (direct != null) {
         return {
@@ -230,7 +248,7 @@
         from: source,
         cell: partner.edge.index,
         inputDirection: inputDirection,
-        direction: oppositeDirection(partner.edge.dir),
+        direction: oppositeDirection(partner.edge.dir, directionCount),
         sourceEdge: { index: source, dir: inputDirection },
         targetEdge: { index: partner.edge.index, dir: partner.edge.dir },
         group: partner.pair.group,
@@ -243,8 +261,38 @@
       board: board,
       cutEdges: cutEdges,
       gluedEdges: gluedEdges,
+      directions: directionOrder,
       nextStep: nextStep
     };
+  }
+
+  function createSquareTopology(board, options) {
+    return createLatticeTopology(board, {
+      ...(options || {}),
+      directions: DIRS,
+      directionOrder: DIRECTION_ORDER
+    });
+  }
+
+  function createHexTopology(board, options) {
+    return createLatticeTopology(board, {
+      ...(options || {}),
+      directions: HEX_DIRS,
+      directionOrder: [HEX_DIRS.NW, HEX_DIRS.NE, HEX_DIRS.E, HEX_DIRS.SE, HEX_DIRS.SW, HEX_DIRS.W],
+      neighborAt: function(source, direction) {
+        const position = rowCol(source, board.cols);
+        const row = position.row - 1;
+        const col = position.col - 1;
+        const q = col - Math.floor(row / 2);
+        const delta = HEX_OFFSETS[direction];
+        if (!delta) return null;
+        const nextR = row + delta[1];
+        const nextQ = q + delta[0];
+        const nextCol = nextQ + Math.floor(nextR / 2);
+        if (nextR < 0 || nextR >= board.rows || nextCol < 0 || nextCol >= board.cols) return null;
+        return indexOf(nextR + 1, nextCol + 1, board.cols);
+      }
+    });
   }
 
   function compareSearchStates(left, right) {
@@ -298,8 +346,9 @@
       const current = queue.shift();
       if (current.cell === target) return buildPathResult(current, start, target);
 
-      for (let orderIndex = 0; orderIndex < DIRECTION_ORDER.length; orderIndex += 1) {
-        const inputDirection = DIRECTION_ORDER[orderIndex];
+      const directionOrder = Array.isArray(topology.directions) ? topology.directions : DIRECTION_ORDER;
+      for (let orderIndex = 0; orderIndex < directionOrder.length; orderIndex += 1) {
+        const inputDirection = directionOrder[orderIndex];
         const nextTurns = current.direction == null || inputDirection === current.direction
           ? current.turns
           : current.turns + 1;
@@ -582,7 +631,12 @@
   function createGame(options) {
     const config = options || {};
     const board = config.board ? cloneBoard(config.board) : createBoard(config);
-    const topology = createSquareTopology(board, {
+    const topology = config.lattice === 'hexagonal'
+      ? createHexTopology(board, {
+        cutEdges: config.cutEdges || [],
+        gluedEdges: config.gluedEdges || []
+      })
+      : createSquareTopology(board, {
       cutEdges: config.cutEdges || [],
       gluedEdges: config.gluedEdges || []
     });
@@ -662,6 +716,7 @@
 
   return Object.freeze({
     DIRS: DIRS,
+    HEX_DIRS: HEX_DIRS,
     DIR_NAMES: DIR_NAMES,
     DIRECTION_ORDER: DIRECTION_ORDER,
     HIRAGANA_SYMBOLS: HIRAGANA_SYMBOLS,
@@ -670,6 +725,7 @@
     commitPendingMatch: commitPendingMatch,
     createBoard: createBoard,
     createGame: createGame,
+    createHexTopology: createHexTopology,
     createPairedTiles: createPairedTiles,
     createSeededRng: createSeededRng,
     createSquareTopology: createSquareTopology,

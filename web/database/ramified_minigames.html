@@ -780,6 +780,17 @@
       white-space: nowrap;
     }
 
+    .export-test-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.86rem;
+      white-space: nowrap;
+    }
+
+    .export-test-link:hover {
+      text-decoration: underline;
+    }
+
     .display-style-controls {
       display: flex;
       align-items: center;
@@ -2053,6 +2064,27 @@
             </span>
             <button class="btn" id="online-turn-feedback-preview" type="button">preview</button>
           </div>
+          <div class="mosaic-inline-row" id="hex-neighbor-delay-row" data-mode-control="hex" hidden>
+            <span class="input-label" data-i18n="setup.hexNeighborDelay">Neighbor delay</span>
+            <span class="background-slider-controls">
+              <input type="range" id="hex-neighbor-delay" min="0.5" max="5" step="0.5" value="3" data-i18n-aria-label="access.hexNeighborDelay" aria-label="Hex neighbor hint delay">
+              <output id="hex-neighbor-delay-value">3 s</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="hex-neighbor-size-row" data-mode-control="hex" hidden>
+            <span class="input-label" data-i18n="setup.hexNeighborSize">Neighbor size</span>
+            <span class="background-slider-controls">
+              <input type="range" id="hex-neighbor-size" min="20" max="80" step="5" value="40" data-i18n-aria-label="access.hexNeighborSize" aria-label="Hex neighbor marker size">
+              <output id="hex-neighbor-size-value">40%</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="hex-neighbor-stroke-row" data-mode-control="hex" hidden>
+            <span class="input-label" data-i18n="setup.hexNeighborStroke">Neighbor stroke</span>
+            <span class="background-slider-controls">
+              <input type="range" id="hex-neighbor-stroke" min="1" max="8" step="0.5" value="3" data-i18n-aria-label="access.hexNeighborStroke" aria-label="Hex neighbor marker stroke width">
+              <output id="hex-neighbor-stroke-value">3 px</output>
+            </span>
+          </div>
           <div class="mosaic-inline-row" id="debug-tile-row" data-mode-control="2048">
             <span class="input-label">Tile value</span>
             <select class="mosaic-editor-input" id="debug-tile-value" aria-label="Debug tile value">
@@ -2246,6 +2278,10 @@
               </span>
             </div>
             <textarea class="mosaic-editor-input minigame-status-export" id="debug-export-output" data-export-output spellcheck="false" autocomplete="off" data-i18n-aria-label="access.exportOutput" aria-label="Current game status or preset export" readonly></textarea>
+            <div class="mosaic-inline-row" id="edit-mosaic-link-row">
+              <span class="input-label" data-i18n="common.edit">edit</span>
+              <a class="export-test-link" id="edit-mosaic-link" href="mosaic_calculator.html" target="_blank" rel="noopener" data-i18n="io.editInMosaicCalculator">edit in Mosaic calculator</a>
+            </div>
             <div class="import-export-actions">
               <button class="btn" id="export-state" type="button" data-export-action="refresh" data-i18n="common.refresh">refresh</button>
               <button class="btn" id="copy-state" type="button" data-export-action="copy" data-i18n="common.copy" disabled>copy</button>
@@ -2330,7 +2366,7 @@
 <script src="js/calculator_cards.js"></script>
 <script src="js/site_i18n.js?v=20260824-3"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260825-2"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260826-3"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/background_homology.js?v=20260824-1"></script>
 <script src="js/hex_homology_game.js?v=20260825-3"></script>
@@ -2338,11 +2374,11 @@
 <script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_renderer.js?v=20260823-6"></script>
 <script src="js/billiards/topological_billiards_native.js?v=20260825-1"></script>
-<script src="lianliankan/lianliankan_engine.js?v=20260823-1"></script>
-<script src="lianliankan/mosaic_adapter.js?v=20260824-2"></script>
+<script src="lianliankan/lianliankan_engine.js?v=20260826-1"></script>
+<script src="lianliankan/mosaic_adapter.js?v=20260826-2"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
-<script src="js/ramified_minigames_setup.js?v=20260825-4"></script>
+<script src="js/ramified_minigames_setup.js?v=20260826-2"></script>
 </body>
 </html>

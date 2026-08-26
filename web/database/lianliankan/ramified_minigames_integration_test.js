@@ -137,6 +137,23 @@ function testTileMatchingTileSets() {
   assert.ok(html.includes('value="young-3x3"'));
 }
 
+function testHexTileMatchingUsesHexTopology() {
+  const rawPreset = require('../ramified_minigame_presets/usual_strip.preset.js');
+  const preset = minigames.normalizePresetPayload({
+    ...rawPreset,
+    gameTypes: ['Tile Matching']
+  });
+  const state = minigames.createLianliankanState(preset, {
+    rng: minigames.createRng([0.1, 0.7, 0.3, 0.9]),
+    maxShuffleAttempts: 0
+  });
+  assert.strictEqual(state.preset.lattice, 'hexagonal');
+  assert.strictEqual(state.topology.directions.length, 6);
+  assert.strictEqual(state.board.rows, 4);
+  assert.strictEqual(state.board.cols, 5);
+  assert.ok(['ready', 'deadlock'].includes(state.phase));
+}
+
 function testSharedLocaleContract() {
   const locales = fs.readFileSync(path.join(__dirname, '..', 'js', 'i18n', 'ramified_minigames_locales.js'), 'utf8');
   [
@@ -234,6 +251,7 @@ testSharedModeContract();
 testPresetEmptyCellsRemainPlayable();
 testExplicitCatalogEligibility();
 testTileMatchingTileSets();
+testHexTileMatchingUsesHexTopology();
 testSharedLocaleContract();
 testLargeBoundaryBoardEmptyRing();
 console.log('Lianliankan shared minigames integration tests passed.');
