@@ -108,6 +108,100 @@ function assertBandAvoidsObstacles(subject, obstacles) {
   });
 }
 
+const responsibilityObstacle = {
+  polygons: [{
+    center: { x: 0, y: 0 },
+    points: [
+      { x: -1, y: -1 },
+      { x: 1, y: -1 },
+      { x: 1, y: 1 },
+      { x: -1, y: 1 }
+    ]
+  }],
+  barriers: []
+};
+
+// Regression: neighboring candidates may move into an obstacle while the
+// particle between them moves away. Only the responsible neighbors may be
+// restricted; the legal outward displacement must survive.
+const responsibilityPoints = [
+  { x: 3.7646, y: 0 },
+  { x: 0.7871, y: 1.3632 },
+  { x: -1.6459, y: 2.8508 },
+  { x: -1.7259, y: 0 },
+  { x: -1.8639, y: -3.2283 },
+  { x: 0.7475, y: -1.2947 }
+];
+const responsibilityBand = closedChain(responsibilityPoints, 'responsibility-left');
+responsibilityBand.obstacles = responsibilityObstacle;
+const outwardBefore = { x: responsibilityBand.points[3].x, y: responsibilityBand.points[3].y };
+const responsibilityResult = elastic.stepPlanarElasticBand(responsibilityBand, { distanceContraction: 0.8 });
+assert.strictEqual(responsibilityResult.resolved, true);
+assert.ok(responsibilityBand.points[3].x < outwardBefore.x,
+  'a leftward displacement away from the obstacle must not be collateral rollback');
+assertBandAvoidsObstacles(responsibilityBand, responsibilityObstacle);
+
+const mirroredResponsibilityBand = closedChain(
+  responsibilityPoints.map((point) => ({ x: -point.x, y: point.y })),
+  'responsibility-right'
+);
+mirroredResponsibilityBand.obstacles = responsibilityObstacle;
+const mirroredBefore = mirroredResponsibilityBand.points[3].x;
+assert.strictEqual(
+  elastic.stepPlanarElasticBand(mirroredResponsibilityBand, { distanceContraction: 0.8 }).resolved,
+  true
+);
+assert.ok(mirroredResponsibilityBand.points[3].x > mirroredBefore,
+  'the mirrored rightward outward displacement must also survive');
+assertBandAvoidsObstacles(mirroredResponsibilityBand, responsibilityObstacle);
+
+// Neither endpoint alone crosses this obstacle, but their simultaneous move
+// does. Shared backtracking must keep the largest valid part of both moves.
+const sharedOld = [
+  { index: 0, x: -3, y: -3 },
+  { index: 1, x: -3, y: -3 },
+  { index: 2, x: -3, y: -3 }
+];
+const sharedCandidate = [
+  { x: -3, y: 1.2 },
+  { x: 1.2, y: -3 },
+  { x: -3, y: 1.2 }
+];
+const sharedResolution = elastic.resolvePlanarElasticBandCandidate(
+  sharedOld,
+  sharedCandidate,
+  responsibilityObstacle
+);
+assert.strictEqual(sharedResolution.resolved, true);
+assert.ok(sharedCandidate[0].y > sharedOld[0].y && sharedCandidate[1].x > sharedOld[1].x,
+  'shared backtracking preserves a positive fraction instead of reverting both endpoints');
+assert.strictEqual(
+  elastic.planarElasticBandSegmentCrossesObstacle(sharedCandidate[0], sharedCandidate[1], responsibilityObstacle),
+  false
+);
+
+// Even a malformed pre-existing crossing supplied directly to the low-level
+// solver must terminate with bounded work. Production construction rejects
+// this state before it reaches the animator.
+const malformedPoints = [];
+for (let index = 0; index < 100; index += 1) {
+  if (index === 0) malformedPoints.push({ x: -2, y: 0 });
+  else if (index === 1) malformedPoints.push({ x: 2, y: 0 });
+  else malformedPoints.push({ x: 2 - (4 * (index - 2) / 98), y: 2 });
+}
+const malformedBand = closedChain(malformedPoints, 'malformed-crossing');
+malformedBand.obstacles = responsibilityObstacle;
+const malformedMetrics = {};
+const malformedResult = elastic.stepPlanarElasticBandMacro(malformedBand, {
+  distanceContraction: 0.8,
+  substeps: 4,
+  metrics: malformedMetrics
+});
+assert.strictEqual(typeof malformedResult.resolved, 'boolean');
+if (malformedResult.resolved) assertBandAvoidsObstacles(malformedBand, responsibilityObstacle);
+assert.ok(malformedMetrics.segmentQueries < malformedPoints.length * 20,
+  'malformed input must use bounded local work instead of N full-chain passes');
+
 // Normalized neighboring directions do not redistribute an unequally spaced
 // point that is already on the straight segment between its neighbors.
 const straight = closedChain([
@@ -162,6 +256,36 @@ const distanceStepLength = bandLength(distanceStepBand);
 const distanceStep = elastic.stepPlanarElasticBand(distanceStepBand, { distanceContraction: 0.8 });
 assert.strictEqual(distanceStep.distanceContraction, 0.8);
 assert.ok(bandLength(distanceStepBand) < distanceStepLength);
+
+// Five runtime macro steps must be numerically equivalent to the previous
+// twenty unconstrained Jacobi steps. The macro kernel directly applies T^4.
+const macroSource = [
+  { x: 0, y: 0 },
+  { x: 1, y: 2 },
+  { x: 3, y: -1 },
+  { x: 4, y: 0.4 },
+  { x: 2.5, y: 1.7 }
+];
+const legacyTwenty = closedChain(macroSource, 'legacy-twenty');
+const fiveMacros = closedChain(macroSource, 'five-macros');
+for (let index = 0; index < 20; index += 1) {
+  elastic.stepPlanarElasticBand(legacyTwenty, { distanceContraction: 0.8 });
+}
+for (let index = 0; index < 5; index += 1) {
+  elastic.stepPlanarElasticBandMacro(fiveMacros, { distanceContraction: 0.8, substeps: 4 });
+}
+coordinates(legacyTwenty).forEach((point, index) => assertPointNear(point, coordinates(fiveMacros)[index], 1e-10));
+assert.ok(Math.abs(bandLength(legacyTwenty) - bandLength(fiveMacros)) <= 1e-10);
+
+// A held point remains fixed across all four internal substeps.
+const macroHeld = closedChain(macroSource, 'macro-held');
+const macroHeldBefore = { x: macroHeld.points[2].x, y: macroHeld.points[2].y };
+elastic.stepPlanarElasticBandMacro(macroHeld, {
+  distanceContraction: 0.8,
+  substeps: 4,
+  heldIndex: 2
+});
+assert.deepStrictEqual({ x: macroHeld.points[2].x, y: macroHeld.points[2].y }, macroHeldBefore);
 
 // Reversing traversal order produces the same synchronous Jacobi update in
 // reverse, showing that no point observes an already-updated neighbor.
@@ -310,16 +434,48 @@ const holeSurfaceChain = elastic.makeHomologyCordChain(
   elastic.homologyChainDisplayEntries(holeAnalysis, holeGenerator),
   holeAnalysis
 );
+const holeBandCreatedBefore = elastic.homologyCordNow();
 const holeBand = elastic.makePlanarElasticBandChain(holeSurfaceChain);
+const holeBandCreatedAfter = elastic.homologyCordNow();
 assert.ok(holeBand);
+assert.ok(holeBand.relaxationNotBefore >= holeBandCreatedBefore + 300);
+assert.ok(holeBand.relaxationNotBefore <= holeBandCreatedAfter + 300);
 const holeInitialLength = bandLength(holeBand);
 const holeParticleCount = holeBand.points.length;
+assert.ok(holeParticleCount <= elastic.homologyCordPhysicalIndices(holeSurfaceChain).length + 4,
+  'boundary-corner repair must not materially increase the runtime particle count');
 assert.strictEqual(holeBand.obstacles.polygons.length, 1);
 const expandedHole = holeBand.obstacles.polygons[0];
 assert.ok(Math.abs(
   Math.hypot(expandedHole.points[0].x - expandedHole.center.x, expandedHole.points[0].y - expandedHole.center.y)
   - (hexRadius * 1.115)
 ) < 1e-9, 'the collision boundary must be slightly larger than the visible tile boundary');
+const initialDistanceFromExpandedHole = Math.min(...holeBand.points.slice(0, -1).map((point) => (
+  distanceToPolygonBoundary(point, expandedHole.points)
+)));
+assert.ok(initialDistanceFromExpandedHole >= hexRadius * 0.012,
+  'new obstacle loops must begin visibly clear of the collision boundary');
+
+const invalidAcrossHole = {
+  generatorId: 'invalid-across-hole',
+  fingerprint: 'invalid-across-hole',
+  points: [
+    { x: expandedHole.center.x - (hexRadius * 2), y: expandedHole.center.y },
+    { x: expandedHole.center.x + (hexRadius * 2), y: expandedHole.center.y },
+    { x: expandedHole.center.x, y: expandedHole.center.y - (hexRadius * 2) },
+    { x: expandedHole.center.x - (hexRadius * 2), y: expandedHole.center.y }
+  ].map((point) => ({
+    ...point,
+    frame: elastic.homologyCordAffineIdentity(),
+    tileIndex: 0,
+    portal: false
+  }))
+};
+assert.strictEqual(
+  elastic.makePlanarElasticBandChain(invalidAcrossHole),
+  null,
+  'an initially intersecting material segment must fall back instead of entering the runtime solver'
+);
 let holePreviousLength = holeInitialLength;
 for (let index = 0; index < 1500; index += 1) {
   elastic.stepPlanarElasticBand(holeBand, { distanceContraction: 0.8 });
@@ -387,6 +543,18 @@ assert.strictEqual(squareObstacles.barriers.some((barrier) => (
   (barrier.tileIndex === 0 && barrier.dir === 3) || (barrier.tileIndex === 2 && barrier.dir === 1)
 )), false, 'glued boundary edges must not become planar obstacles');
 const outerBarrier = squareObstacles.barriers.find((barrier) => barrier.tileIndex === 0 && barrier.dir === 2);
+const barrierMidpoint = {
+  x: (outerBarrier.start.x + outerBarrier.end.x) / 2,
+  y: (outerBarrier.start.y + outerBarrier.end.y) / 2
+};
+const initialBoundaryPoint = elastic.constrainInitialPlanarElasticBandPoint({
+  x: barrierMidpoint.x - (outerBarrier.inward.x * 0.5),
+  y: barrierMidpoint.y - (outerBarrier.inward.y * 0.5)
+}, outerBarrier.tileIndex, { polygons: [], barriers: [outerBarrier] });
+const initialBoundaryDistance = ((initialBoundaryPoint.x - outerBarrier.start.x) * outerBarrier.inward.x)
+  + ((initialBoundaryPoint.y - outerBarrier.start.y) * outerBarrier.inward.y);
+assert.ok(initialBoundaryDistance >= 0.25 - 1e-12,
+  'initial real-boundary points must receive a 0.025R inward safety gap');
 const outsideAttempt = elastic.constrainPlanarElasticBandPoint(
   { x: 10, y: 10 },
   { x: -10, y: 10 },
@@ -423,6 +591,16 @@ const gluedEntries = [{
 }];
 const gluedSurface = elastic.makeHomologyCordChain({ id: 'a1', edgeChain: [1n] }, gluedEntries, gluedAnalysis);
 assert.ok(gluedSurface && Math.hypot(gluedSurface.deck.x, gluedSurface.deck.y) > 0);
+const straightMaterialPoints = gluedSurface.points.slice(0, -1);
+const straightStart = straightMaterialPoints[0];
+const straightEnd = straightMaterialPoints.at(-1);
+const straightDx = straightEnd.x - straightStart.x;
+const straightDy = straightEnd.y - straightStart.y;
+straightMaterialPoints.forEach((point) => {
+  assert.ok(Math.abs(((point.x - straightStart.x) * straightDy)
+    - ((point.y - straightStart.y) * straightDx)) <= 1e-10,
+  'a cellular side must be initialized as a straight sampled segment, without a synthetic bow');
+});
 const gluedBand = elastic.makePlanarElasticBandChain(gluedSurface);
 assert.deepStrictEqual(gluedBand.deck, { x: 0, y: 0 });
 assert.deepStrictEqual(gluedBand.closure, elastic.homologyCordAffineIdentity());
@@ -520,16 +698,26 @@ calculator.__test.setTestBoard({
 });
 calculator.__test.setTestGeometry({ radius: 10, width: 20, height: 20, cells: [{ x: 10, y: 10 }] });
 
-// Exercise the exact requestAnimationFrame adapter: it uses a fixed number of
-// steps and deliberately reports continuing work while at least one band exists.
+// Exercise the runtime adapter: five macro steps replace twenty full collision
+// passes while retaining four old Jacobi substeps per macro.
 elastic.state.homologyCordChains = { [gluedBand.generatorId]: gluedBand };
 elastic.state.homologyCordDrag = null;
 elastic.state.homologyCordRelaxSpeed = 1;
-assert.strictEqual(elastic.state.homologyCordIterationsPerFrame, 20,
-  'the default animation budget is five times the previous four iterations per frame');
+assert.strictEqual(elastic.state.homologyCordIterationsPerFrame, 5,
+  'the runtime budget must contain five four-substep macro iterations');
 const animationLength = bandLength(gluedBand);
 const animationCount = gluedBand.points.length;
-assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands(), true);
+const pausedCoordinates = coordinates(gluedBand);
+assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands({
+  now: gluedBand.relaxationNotBefore - 1
+}), true, 'a newly generated band remains pending during its 300ms presentation pause');
+assert.deepStrictEqual(coordinates(gluedBand), pausedCoordinates,
+  'the presentation pause must not perform hidden relaxation steps');
+assert.ok(elastic.backgroundHomologyCordAnimationDelay(gluedBand.relaxationNotBefore - 1) >= 1,
+  'the scheduler must wait instead of spinning requestAnimationFrame during the pause');
+assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands({
+  now: gluedBand.relaxationNotBefore
+}), true);
 assert.ok(bandLength(gluedBand) < animationLength);
 assert.strictEqual(gluedBand.points.length, animationCount);
 
@@ -544,6 +732,42 @@ elastic.state.homologyCordRelaxSpeed = 10;
 elastic.advanceBackgroundHomologyPlanarBands();
 assert.ok(bandLength(highSpeedBand) < bandLength(normalSpeedBand),
   'the multiplier must strengthen each solver step without adding iterations');
+
+const legacyCollisionBand = closedChain(responsibilityPoints, 'legacy-collision-budget');
+legacyCollisionBand.obstacles = responsibilityObstacle;
+const legacyMetrics = {};
+for (let index = 0; index < 20; index += 1) {
+  elastic.stepPlanarElasticBand(legacyCollisionBand, {
+    distanceContraction: 0.8,
+    metrics: legacyMetrics
+  });
+}
+const macroCollisionBand = closedChain(responsibilityPoints, 'macro-collision-budget');
+macroCollisionBand.obstacles = responsibilityObstacle;
+const macroMetrics = {};
+elastic.state.homologyCordChains = { [macroCollisionBand.generatorId]: macroCollisionBand };
+elastic.state.homologyCordRelaxSpeed = 10;
+elastic.state.homologyCordIterationsPerFrame = 5;
+elastic.advanceBackgroundHomologyPlanarBands({ metrics: macroMetrics });
+assert.strictEqual(legacyMetrics.fullCollisionPasses, 20);
+assert.strictEqual(macroMetrics.fullCollisionPasses, 5);
+assert.ok(macroMetrics.fullCollisionPasses <= legacyMetrics.fullCollisionPasses * 0.25);
+assertBandAvoidsObstacles(macroCollisionBand, responsibilityObstacle);
+
+// An equilibrium chain settles within five stable macro steps and then
+// reports no more animation work. Explicit wake-up clears that state.
+const settledBand = closedChain([
+  { x: 3, y: -2 },
+  { x: 3, y: -2 },
+  { x: 3, y: -2 }
+], 'settled-runtime');
+elastic.state.homologyCordChains = { [settledBand.generatorId]: settledBand };
+elastic.state.homologyCordRelaxSpeed = 10;
+assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands(), false);
+assert.strictEqual(settledBand.settled, true);
+elastic.markBackgroundHomologyCordsUnsettled(settledBand.generatorId);
+assert.strictEqual(settledBand.settled, false);
+assert.strictEqual(settledBand.stableMacroSteps, 0);
 
 // Particle hit-testing uses the same planar x/y values and maps the closing
 // duplicate to canonical particle zero.
@@ -560,6 +784,13 @@ const sourceText = fs.readFileSync(path.join(__dirname, 'mosaic_calculator.js'),
 const htmlText = fs.readFileSync(path.join(__dirname, '..', 'mosaic_calculator.html'), 'utf8');
 assert.strictEqual(htmlText.includes('id="homology-cord-contraction-strength"'), false);
 assert.ok(htmlText.includes('id="homology-cord-relax-speed" min="0.1" max="10" step="0.1" value="10"'));
+assert.ok(htmlText.includes('js/mosaic_calculator.js?v=elastic-band-initial-gap-13'));
+const drawCordSource = sourceText.slice(
+  sourceText.indexOf('function drawBackgroundHomologyCords'),
+  sourceText.indexOf('function drawHomologyCordSeamMarkers')
+);
+assert.strictEqual(drawCordSource.includes('scheduleBackgroundHomologyCordAnimation()'), false,
+  'drawing a settled cord must not restart requestAnimationFrame');
 [
   'homologyCordElasticBandCandidates',
   'relaxHomologyCordElasticBandIteration',

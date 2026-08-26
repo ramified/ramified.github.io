@@ -86,8 +86,17 @@
   const HOMOLOGY_CORD_REAL_BOUNDARY_INSET_RATIO = 0.05;
   // Leaves the outer cord stroke almost touching boundaries drawn at 0.96R.
   const HOMOLOGY_CORD_BOUNDARY_OBSTACLE_RATIO = 0.115;
+  // Initial representatives start just clear of collision boundaries, then
+  // remain free to contract back towards them once relaxation begins.
+  const HOMOLOGY_CORD_INITIAL_BOUNDARY_GAP_RATIO = 0.025;
+  const HOMOLOGY_CORD_INITIAL_PAUSE_MS = 300;
   const HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE = 1e-4;
-  const HOMOLOGY_CORD_DEFAULT_ITERATIONS_PER_FRAME = 20;
+  const HOMOLOGY_CORD_DEFAULT_ITERATIONS_PER_FRAME = 5;
+  const HOMOLOGY_CORD_MACRO_SUBSTEPS = 4;
+  const HOMOLOGY_CORD_STABLE_MACRO_STEPS = 5;
+  const HOMOLOGY_CORD_RELATIVE_LENGTH_TOLERANCE = 1e-4;
+  const HOMOLOGY_CORD_POSITION_TOLERANCE_RATIO = 1e-4;
+  const HOMOLOGY_CORD_COLLISION_BACKTRACK_STEPS = 18;
   const HOMOLOGY_CORD_DEFAULT_RELAX_SPEED = 10;
   const HOMOLOGY_CORD_BASE_DISTANCE_CONTRACTION = 0.08;
   const DEFAULT_SEIFERT_BAND_WIDTH = 0.42;
@@ -870,6 +879,7 @@
     homologyCordChains: {},
     homologyCordDrag: null,
     homologyCordAnimation: null,
+    homologyCordStartTimer: null,
     homologyCordRelaxSpeed: HOMOLOGY_CORD_DEFAULT_RELAX_SPEED,
     homologyCordPointSpacing: 0.12,
     homologyCordIterationsPerFrame: HOMOLOGY_CORD_DEFAULT_ITERATIONS_PER_FRAME,
@@ -1528,9 +1538,10 @@
       input.addEventListener('input', () => {
         state[stateKey] = normalize(input.value);
         if (refs[outputKey]) refs[outputKey].textContent = String(state[stateKey]);
-        if (inputId === 'homology-cord-particles') resetBackgroundHomologyCords(false);
-        scheduleBackgroundHomologyCordAnimation();
+        if (stateKey === 'homologyCordPointSpacing') resetBackgroundHomologyCords(false);
+        else markBackgroundHomologyCordsUnsettled();
         draw(analyze());
+        scheduleBackgroundHomologyCordAnimation();
       });
     });
     if (refs.showHomologyCordParticles) {
@@ -17503,9 +17514,14 @@
       cancelAnimationFrame(state.homologyCordAnimation);
       state.homologyCordAnimation = null;
     }
+    if (state.homologyCordStartTimer != null && typeof clearTimeout === 'function') {
+      clearTimeout(state.homologyCordStartTimer);
+      state.homologyCordStartTimer = null;
+    }
     if (redraw) {
       state.homologyStatus = 'Basis cords reset to their selected cellular sides.';
       updateReport(false);
+      if (state.homologyCordMode) scheduleBackgroundHomologyCordAnimation();
     }
   }
 
@@ -17694,7 +17710,6 @@
     let finalDevelopedEnd = null;
     ordered.forEach((record, recordIndex) => {
       const { entry } = record;
-      const cell = geometry.cells[entry.side.index];
       const materialSegment = homologyCordMaterialSegment(entry, insetSingleBoundary);
       if (!materialSegment) return;
       const start = entry.reverse ? materialSegment.end : materialSegment.start;
@@ -17705,18 +17720,9 @@
         const t = index / (samples - 1);
         const tangentX = end.x - start.x;
         const tangentY = end.y - start.y;
-        const tangentLength = Math.hypot(tangentX, tangentY) || 1;
-        const bow = Math.sin(Math.PI * t) * geometry.radius * 0.12;
-        let normalX = -tangentY / tangentLength;
-        let normalY = tangentX / tangentLength;
-        const midpoint = { x: (start.x + end.x) * 0.5, y: (start.y + end.y) * 0.5 };
-        if ((normalX * (cell.x - midpoint.x)) + (normalY * (cell.y - midpoint.y)) < 0) {
-          normalX *= -1;
-          normalY *= -1;
-        }
         const local = {
-          x: start.x + (tangentX * t) + (normalX * bow),
-          y: start.y + (tangentY * t) + (normalY * bow)
+          x: start.x + (tangentX * t),
+          y: start.y + (tangentY * t)
         };
         const developed = applyHomologyCordAffine(frame, local);
         const point = {
@@ -17843,9 +17849,16 @@
     removed.forEach((index) => {
       const cell = geometry.cells[index];
       if (!cell) return;
+      const points = tilePoints(cell.x, cell.y, geometry.radius * (1 + HOMOLOGY_CORD_BOUNDARY_OBSTACLE_RATIO));
+      const edges = points.map((start, edgeIndex) => ({
+        start,
+        end: points[(edgeIndex + 1) % points.length]
+      }));
       polygons.push({
         center: { x: cell.x, y: cell.y },
-        points: tilePoints(cell.x, cell.y, geometry.radius * (1 + HOMOLOGY_CORD_BOUNDARY_OBSTACLE_RATIO))
+        points,
+        edges,
+        bounds: planarElasticBandBounds(points)
       });
     });
     const barriers = [];
@@ -17870,33 +17883,65 @@
           y: (segment.start.y + segment.end.y) * 0.5
         };
         const inward = homologyCordNormalize({ x: cell.x - midpoint.x, y: cell.y - midpoint.y });
+        const start = {
+          x: segment.start.x + (inward.x * clearance) - (tangent.x * clearance),
+          y: segment.start.y + (inward.y * clearance) - (tangent.y * clearance)
+        };
+        const end = {
+          x: segment.end.x + (inward.x * clearance) + (tangent.x * clearance),
+          y: segment.end.y + (inward.y * clearance) + (tangent.y * clearance)
+        };
         barriers.push({
           tileIndex: index,
           dir,
           inward,
-          start: {
-            x: segment.start.x + (inward.x * clearance) - (tangent.x * clearance),
-            y: segment.start.y + (inward.y * clearance) - (tangent.y * clearance)
-          },
-          end: {
-            x: segment.end.x + (inward.x * clearance) + (tangent.x * clearance),
-            y: segment.end.y + (inward.y * clearance) + (tangent.y * clearance)
-          }
+          start,
+          end,
+          bounds: planarElasticBandBounds([start, end])
         });
       }
     }
     return { polygons, barriers };
   }
 
+  function planarElasticBandBounds(points) {
+    const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    (points || []).forEach((point) => {
+      bounds.minX = Math.min(bounds.minX, point.x);
+      bounds.minY = Math.min(bounds.minY, point.y);
+      bounds.maxX = Math.max(bounds.maxX, point.x);
+      bounds.maxY = Math.max(bounds.maxY, point.y);
+    });
+    return bounds;
+  }
+
+  function planarElasticBandBoundsOverlap(left, right, tolerance = 0) {
+    return left.maxX + tolerance >= right.minX
+      && right.maxX + tolerance >= left.minX
+      && left.maxY + tolerance >= right.minY
+      && right.maxY + tolerance >= left.minY;
+  }
+
+  function planarElasticBandHasObstacles(obstacles) {
+    return !!obstacles && ((obstacles.polygons || []).length > 0 || (obstacles.barriers || []).length > 0);
+  }
+
   function planarElasticBandPolygonEdges(polygon) {
-    return polygon.points.map((start, index) => ({
+    if (Array.isArray(polygon.edges)) return polygon.edges;
+    const edges = polygon.points.map((start, index) => ({
       start,
       end: polygon.points[(index + 1) % polygon.points.length]
     }));
+    polygon.edges = edges;
+    if (!polygon.bounds) polygon.bounds = planarElasticBandBounds(polygon.points);
+    return edges;
   }
 
-  function planarElasticBandPolygonProjection(point, polygon) {
+  function planarElasticBandPolygonProjection(point, polygon, requestedClearance = null) {
     const epsilon = geometry ? geometry.radius * 1e-6 : 1e-6;
+    const clearance = Number.isFinite(requestedClearance)
+      ? Math.max(epsilon, requestedClearance)
+      : epsilon;
     const direction = homologyCordNormalize({
       x: point.x - polygon.center.x,
       y: point.y - polygon.center.y
@@ -17930,21 +17975,27 @@
         x: best.point.x - polygon.center.x,
         y: best.point.y - polygon.center.y
       });
-      return { x: best.point.x + (outward.x * epsilon), y: best.point.y + (outward.y * epsilon) };
+      return { x: best.point.x + (outward.x * clearance), y: best.point.y + (outward.y * clearance) };
     }
     const boundary = {
       x: polygon.center.x + ((rayEnd.x - polygon.center.x) * best.pathT),
       y: polygon.center.y + ((rayEnd.y - polygon.center.y) * best.pathT)
     };
     return {
-      x: boundary.x + (rayDirection.x * epsilon),
-      y: boundary.y + (rayDirection.y * epsilon)
+      x: boundary.x + (rayDirection.x * clearance),
+      y: boundary.y + (rayDirection.y * clearance)
     };
   }
 
-  function planarElasticBandFirstPolygonHit(start, end, polygon, endpointTolerance = 0) {
+  function planarElasticBandFirstPolygonHit(start, end, polygon, endpointTolerance = 0, metrics = null) {
+    if (metrics) metrics.polygonQueries = (metrics.polygonQueries || 0) + 1;
+    const pathBounds = planarElasticBandBounds([start, end]);
+    const polygonBounds = polygon.bounds || planarElasticBandBounds(polygon.points);
+    polygon.bounds = polygonBounds;
+    if (!planarElasticBandBoundsOverlap(pathBounds, polygonBounds, HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE)) return null;
     let first = null;
     planarElasticBandPolygonEdges(polygon).forEach((edge) => {
+      if (metrics) metrics.narrowPhaseChecks = (metrics.narrowPhaseChecks || 0) + 1;
       const hit = segmentIntersectionParameters(start, end, edge.start, edge.end);
       if (!hit
         || hit.pathT <= endpointTolerance
@@ -17956,15 +18007,16 @@
     return first;
   }
 
-  function constrainPlanarElasticBandPoint(previous, proposed, obstacles) {
+  function constrainPlanarElasticBandPoint(previous, proposed, obstacles, metrics = null) {
     if (!obstacles) return { ...proposed };
+    if (metrics) metrics.pointConstraintCalls = (metrics.pointConstraintCalls || 0) + 1;
     const epsilon = geometry ? geometry.radius * 1e-6 : 1e-6;
     let constrained = { ...proposed };
     for (let pass = 0; pass < 4; pass += 1) {
       let changed = false;
       for (const polygon of obstacles.polygons || []) {
         if (!pointInPolygon(previous, polygon.points)) {
-          const hit = planarElasticBandFirstPolygonHit(previous, constrained, polygon);
+          const hit = planarElasticBandFirstPolygonHit(previous, constrained, polygon, 0, metrics);
           if (hit) {
             const contact = {
               x: previous.x + ((constrained.x - previous.x) * hit.pathT),
@@ -17999,7 +18051,10 @@
         }
       }
       let firstBarrier = null;
+      const motionBounds = planarElasticBandBounds([previous, constrained]);
       for (const barrier of obstacles.barriers || []) {
+        if (barrier.bounds && !planarElasticBandBoundsOverlap(motionBounds, barrier.bounds, epsilon)) continue;
+        if (metrics) metrics.narrowPhaseChecks = (metrics.narrowPhaseChecks || 0) + 1;
         const oldDistance = ((previous.x - barrier.start.x) * barrier.inward.x)
           + ((previous.y - barrier.start.y) * barrier.inward.y);
         const newDistance = ((constrained.x - barrier.start.x) * barrier.inward.x)
@@ -18044,20 +18099,28 @@
     return constrained;
   }
 
-  function planarElasticBandSegmentCrossesObstacle(start, end, obstacles) {
+  function planarElasticBandSegmentCrossesObstacle(start, end, obstacles, metrics = null) {
     if (!obstacles) return false;
+    if (metrics) metrics.segmentQueries = (metrics.segmentQueries || 0) + 1;
+    const segmentBounds = planarElasticBandBounds([start, end]);
     const midpoint = { x: (start.x + end.x) * 0.5, y: (start.y + end.y) * 0.5 };
     for (const polygon of obstacles.polygons || []) {
+      const polygonBounds = polygon.bounds || planarElasticBandBounds(polygon.points);
+      polygon.bounds = polygonBounds;
+      if (!planarElasticBandBoundsOverlap(segmentBounds, polygonBounds, HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE)) continue;
       if (pointInPolygon(start, polygon.points) || pointInPolygon(end, polygon.points)
         || pointInPolygon(midpoint, polygon.points)) return true;
       if (planarElasticBandFirstPolygonHit(
         start,
         end,
         polygon,
-        HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE
+        HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE,
+        metrics
       )) return true;
     }
     for (const barrier of obstacles.barriers || []) {
+      if (barrier.bounds && !planarElasticBandBoundsOverlap(segmentBounds, barrier.bounds, HOMOLOGY_CORD_OBSTACLE_CONTACT_TOLERANCE)) continue;
+      if (metrics) metrics.narrowPhaseChecks = (metrics.narrowPhaseChecks || 0) + 1;
       const startDistance = ((start.x - barrier.start.x) * barrier.inward.x)
         + ((start.y - barrier.start.y) * barrier.inward.y);
       const endDistance = ((end.x - barrier.start.x) * barrier.inward.x)
@@ -18074,24 +18137,47 @@
   }
 
   function constrainInitialPlanarElasticBandPoint(point, tileIndex, obstacles) {
-    const epsilon = geometry ? geometry.radius * 1e-6 : 1e-6;
+    const initialGap = geometry
+      ? geometry.radius * HOMOLOGY_CORD_INITIAL_BOUNDARY_GAP_RATIO
+      : HOMOLOGY_CORD_INITIAL_BOUNDARY_GAP_RATIO;
+    const tileIndices = new Set(Array.isArray(tileIndex) ? tileIndex : [tileIndex]);
     let constrained = { ...point };
     for (const barrier of obstacles.barriers || []) {
-      if (barrier.tileIndex !== tileIndex) continue;
       const edgeVector = { x: barrier.end.x - barrier.start.x, y: barrier.end.y - barrier.start.y };
       const lengthSquared = (edgeVector.x * edgeVector.x) + (edgeVector.y * edgeVector.y);
       if (lengthSquared <= 0) continue;
+      const cornerMargin = geometry
+        ? (geometry.radius * (HOMOLOGY_CORD_BOUNDARY_OBSTACLE_RATIO
+          + HOMOLOGY_CORD_INITIAL_BOUNDARY_GAP_RATIO)) / Math.sqrt(lengthSquared)
+        : 0;
       const rawT = (((constrained.x - barrier.start.x) * edgeVector.x)
         + ((constrained.y - barrier.start.y) * edgeVector.y)) / lengthSquared;
+      const clampedT = clamp(rawT, 0, 1);
+      const finiteBarrierDistance = Math.hypot(
+        constrained.x - barrier.start.x - (edgeVector.x * clampedT),
+        constrained.y - barrier.start.y - (edgeVector.y * clampedT)
+      );
+      const nearNeighboringCorner = geometry
+        && finiteBarrierDistance <= geometry.radius * (
+          HOMOLOGY_CORD_BOUNDARY_OBSTACLE_RATIO + HOMOLOGY_CORD_INITIAL_BOUNDARY_GAP_RATIO
+        );
+      if (!tileIndices.has(barrier.tileIndex) && !nearNeighboringCorner) continue;
       const distance = ((constrained.x - barrier.start.x) * barrier.inward.x)
         + ((constrained.y - barrier.start.y) * barrier.inward.y);
-      if (rawT < 0 || rawT > 1 || distance >= 0) continue;
-      constrained.x += barrier.inward.x * (-distance + epsilon);
-      constrained.y += barrier.inward.y * (-distance + epsilon);
+      if (rawT < -cornerMargin || rawT > 1 + cornerMargin || distance >= initialGap) continue;
+      constrained.x += barrier.inward.x * (initialGap - distance);
+      constrained.y += barrier.inward.y * (initialGap - distance);
     }
     for (const polygon of obstacles.polygons || []) {
-      if (pointInPolygon(constrained, polygon.points)) {
-        constrained = planarElasticBandPolygonProjection(constrained, polygon);
+      let boundaryDistance = Infinity;
+      planarElasticBandPolygonEdges(polygon).forEach((edge) => {
+        boundaryDistance = Math.min(
+          boundaryDistance,
+          projectPointToSegment(constrained, edge.start, edge.end).distance
+        );
+      });
+      if (pointInPolygon(constrained, polygon.points) || boundaryDistance < initialGap) {
+        constrained = planarElasticBandPolygonProjection(constrained, polygon, initialGap);
       }
     }
     return constrained;
@@ -18102,16 +18188,27 @@
     const material = homologyCordPhysicalIndices(surfaceChain);
     if (material.length < 3) return null;
     const obstacles = makePlanarElasticBandObstacles();
-    const points = material.map((index) => {
-      const projected = projectedHomologyCordChainPoint(surfaceChain.points[index]);
+    const logicalCount = Math.max(1, material.length - 1);
+    const projectedPoints = material.map((index) => projectedHomologyCordChainPoint(surfaceChain.points[index]));
+    const points = material.map((index, materialIndex) => {
+      const canonicalIndex = materialIndex === material.length - 1 ? 0 : materialIndex;
+      const neighboringMaterialIndices = [
+        (canonicalIndex + logicalCount - 1) % logicalCount,
+        canonicalIndex,
+        (canonicalIndex + 1) % logicalCount
+      ];
+      const neighboringTileIndices = neighboringMaterialIndices.map((neighborIndex) => (
+        surfaceChain.points[material[neighborIndex]].tileIndex
+      ));
       const constrained = constrainInitialPlanarElasticBandPoint(
-        projected,
-        surfaceChain.points[index].tileIndex,
+        projectedPoints[materialIndex],
+        neighboringTileIndices,
         obstacles
       );
       return {
         x: constrained.x,
         y: constrained.y,
+        initialTileIndices: neighboringTileIndices,
         optimizationDirection: { x: 0, y: 0 }
       };
     });
@@ -18119,8 +18216,44 @@
     points[points.length - 1] = {
       x: points[0].x,
       y: points[0].y,
+      initialTileIndices: [...points[0].initialTileIndices],
       optimizationDirection: { x: 0, y: 0 }
     };
+    const maximumInitialRefinements = Math.max(4, material.length * 4);
+    let initialRefinements = 0;
+    let segmentIndex = 0;
+    while (segmentIndex < points.length - 1) {
+      const start = points[segmentIndex];
+      const end = points[segmentIndex + 1];
+      if (!planarElasticBandSegmentCrossesObstacle(start, end, obstacles)) {
+        segmentIndex += 1;
+        continue;
+      }
+      if (planarElasticBandSegmentCrossesObstacle(start, end, {
+        polygons: obstacles.polygons,
+        barriers: []
+      })) return null;
+      if (initialRefinements >= maximumInitialRefinements) return null;
+      const tileIndices = [...new Set([
+        ...(start.initialTileIndices || []),
+        ...(end.initialTileIndices || [])
+      ])];
+      const waypoint = constrainInitialPlanarElasticBandPoint({
+        x: (start.x + end.x) * 0.5,
+        y: (start.y + end.y) * 0.5
+      }, tileIndices, obstacles);
+      if (!Number.isFinite(waypoint.x) || !Number.isFinite(waypoint.y)
+        || Math.hypot(waypoint.x - start.x, waypoint.y - start.y) <= 1e-10
+        || Math.hypot(waypoint.x - end.x, waypoint.y - end.y) <= 1e-10) return null;
+      points.splice(segmentIndex + 1, 0, {
+        x: waypoint.x,
+        y: waypoint.y,
+        initialTileIndices: tileIndices,
+        optimizationDirection: { x: 0, y: 0 }
+      });
+      initialRefinements += 1;
+    }
+    points.forEach((point) => { delete point.initialTileIndices; });
     return {
       generatorId: surfaceChain.generatorId,
       fingerprint: surfaceChain.fingerprint,
@@ -18128,7 +18261,11 @@
       points,
       obstacles,
       deck: { x: 0, y: 0 },
-      closure: homologyCordAffineIdentity()
+      closure: homologyCordAffineIdentity(),
+      settled: false,
+      stableMacroSteps: 0,
+      relaxationNotBefore: homologyCordNow() + HOMOLOGY_CORD_INITIAL_PAUSE_MS,
+      solverScratch: null
     };
   }
 
@@ -18160,6 +18297,246 @@
     return directions;
   }
 
+  function planarElasticBandPointLerp(start, end, amount) {
+    return {
+      x: start.x + ((end.x - start.x) * amount),
+      y: start.y + ((end.y - start.y) * amount)
+    };
+  }
+
+  function planarElasticBandPositionsLength(positions, logicalCount = Math.max(0, positions.length - 1)) {
+    let length = 0;
+    for (let index = 0; index < logicalCount; index += 1) {
+      const next = (index + 1) % logicalCount;
+      length += Math.hypot(positions[next].x - positions[index].x, positions[next].y - positions[index].y);
+    }
+    return length;
+  }
+
+  function planarElasticBandMaximumEndpointFraction(start, end, other, movingFirst, obstacles, metrics) {
+    const validAt = (amount) => {
+      const point = planarElasticBandPointLerp(start, end, amount);
+      return !planarElasticBandSegmentCrossesObstacle(
+        movingFirst ? point : other,
+        movingFirst ? other : point,
+        obstacles,
+        metrics
+      );
+    };
+    if (!validAt(0)) return 0;
+    if (validAt(1)) return 1;
+    let low = 0;
+    let high = 1;
+    for (let attempt = 0; attempt < HOMOLOGY_CORD_COLLISION_BACKTRACK_STEPS; attempt += 1) {
+      const middle = (low + high) * 0.5;
+      if (validAt(middle)) low = middle;
+      else high = middle;
+    }
+    if (metrics) metrics.collisionBacktracks = (metrics.collisionBacktracks || 0) + 1;
+    return low;
+  }
+
+  function planarElasticBandMaximumSharedFraction(oldLeft, nextLeft, oldRight, nextRight, obstacles, metrics) {
+    const validAt = (amount) => !planarElasticBandSegmentCrossesObstacle(
+      planarElasticBandPointLerp(oldLeft, nextLeft, amount),
+      planarElasticBandPointLerp(oldRight, nextRight, amount),
+      obstacles,
+      metrics
+    );
+    if (!validAt(0)) return 0;
+    if (validAt(1)) return 1;
+    let low = 0;
+    let high = 1;
+    for (let attempt = 0; attempt < HOMOLOGY_CORD_COLLISION_BACKTRACK_STEPS; attempt += 1) {
+      const middle = (low + high) * 0.5;
+      if (validAt(middle)) low = middle;
+      else high = middle;
+    }
+    if (metrics) metrics.collisionBacktracks = (metrics.collisionBacktracks || 0) + 1;
+    return low;
+  }
+
+  function resolvePlanarElasticBandCandidate(snapshot, nextPositions, obstacles, options = {}) {
+    const logicalCount = Math.max(0, snapshot.length - 1);
+    const heldIndex = options.heldIndex === logicalCount ? 0 : options.heldIndex;
+    const metrics = options.metrics || null;
+    if (!planarElasticBandHasObstacles(obstacles) || logicalCount < 2) return { resolved: true, adjustments: 0 };
+    if (metrics) metrics.fullCollisionPasses = (metrics.fullCollisionPasses || 0) + 1;
+
+    for (let index = 0; index < logicalCount; index += 1) {
+      if (index === heldIndex) continue;
+      nextPositions[index] = constrainPlanarElasticBandPoint(
+        snapshot[index],
+        nextPositions[index],
+        obstacles,
+        metrics
+      );
+    }
+
+    const queued = new Uint8Array(logicalCount);
+    const queue = [];
+    const enqueue = (segmentIndex) => {
+      const canonical = modulo(segmentIndex, logicalCount);
+      if (queued[canonical]) return;
+      queued[canonical] = 1;
+      queue.push(canonical);
+    };
+    for (let index = 0; index < logicalCount; index += 1) enqueue(index);
+    const adjustmentLimit = Math.max(4, logicalCount * 4);
+    let cursor = 0;
+    let adjustments = 0;
+    let resolutionAborted = false;
+
+    while (cursor < queue.length && adjustments < adjustmentLimit) {
+      const leftIndex = queue[cursor];
+      cursor += 1;
+      queued[leftIndex] = 0;
+      const rightIndex = (leftIndex + 1) % logicalCount;
+      const left = nextPositions[leftIndex];
+      const right = nextPositions[rightIndex];
+      if (!planarElasticBandSegmentCrossesObstacle(left, right, obstacles, metrics)) continue;
+
+      const oldLeft = snapshot[leftIndex];
+      const oldRight = snapshot[rightIndex];
+      if (planarElasticBandSegmentCrossesObstacle(oldLeft, oldRight, obstacles, metrics)) {
+        resolutionAborted = true;
+        break;
+      }
+      const leftHeld = leftIndex === heldIndex;
+      const rightHeld = rightIndex === heldIndex;
+      let changedLeft = false;
+      let changedRight = false;
+
+      const restrictLeft = () => {
+        if (leftHeld) return false;
+        const amount = planarElasticBandMaximumEndpointFraction(oldLeft, left, nextPositions[rightIndex], true, obstacles, metrics);
+        const replacement = planarElasticBandPointLerp(oldLeft, left, amount);
+        changedLeft = Math.hypot(replacement.x - left.x, replacement.y - left.y) > HOMOLOGY_CORD_EPSILON;
+        nextPositions[leftIndex] = replacement;
+        return changedLeft;
+      };
+      const restrictRight = () => {
+        if (rightHeld) return false;
+        const amount = planarElasticBandMaximumEndpointFraction(oldRight, right, nextPositions[leftIndex], false, obstacles, metrics);
+        const replacement = planarElasticBandPointLerp(oldRight, right, amount);
+        changedRight = Math.hypot(replacement.x - right.x, replacement.y - right.y) > HOMOLOGY_CORD_EPSILON;
+        nextPositions[rightIndex] = replacement;
+        return changedRight;
+      };
+
+      if (leftHeld) {
+        restrictRight();
+      } else if (rightHeld) {
+        restrictLeft();
+      } else {
+        const leftAloneInvalid = planarElasticBandSegmentCrossesObstacle(left, oldRight, obstacles, metrics);
+        const rightAloneInvalid = planarElasticBandSegmentCrossesObstacle(oldLeft, right, obstacles, metrics);
+        if (leftAloneInvalid && !rightAloneInvalid) {
+          restrictLeft();
+        } else if (!leftAloneInvalid && rightAloneInvalid) {
+          restrictRight();
+        } else {
+          const amount = planarElasticBandMaximumSharedFraction(oldLeft, left, oldRight, right, obstacles, metrics);
+          const replacementLeft = planarElasticBandPointLerp(oldLeft, left, amount);
+          const replacementRight = planarElasticBandPointLerp(oldRight, right, amount);
+          changedLeft = Math.hypot(replacementLeft.x - left.x, replacementLeft.y - left.y) > HOMOLOGY_CORD_EPSILON;
+          changedRight = Math.hypot(replacementRight.x - right.x, replacementRight.y - right.y) > HOMOLOGY_CORD_EPSILON;
+          nextPositions[leftIndex] = replacementLeft;
+          nextPositions[rightIndex] = replacementRight;
+        }
+      }
+
+      if (!changedLeft && !changedRight) {
+        resolutionAborted = true;
+        break;
+      }
+      adjustments += 1;
+      if (changedLeft) {
+        enqueue(leftIndex - 1);
+        enqueue(leftIndex);
+      }
+      if (changedRight) {
+        enqueue(rightIndex - 1);
+        enqueue(rightIndex);
+      }
+    }
+
+    if (!resolutionAborted && cursor >= queue.length) return { resolved: true, adjustments };
+
+    const unresolved = [];
+    for (let index = 0; index < logicalCount; index += 1) {
+      const next = (index + 1) % logicalCount;
+      if (planarElasticBandSegmentCrossesObstacle(nextPositions[index], nextPositions[next], obstacles, metrics)) unresolved.push(index);
+    }
+    if (unresolved.length) {
+      const fallbackQueue = [];
+      const fallbackQueued = new Uint8Array(logicalCount);
+      const enqueueFallback = (segmentIndex) => {
+        const canonical = modulo(segmentIndex, logicalCount);
+        if (fallbackQueued[canonical]) return;
+        fallbackQueued[canonical] = 1;
+        fallbackQueue.push(canonical);
+      };
+      unresolved.forEach(enqueueFallback);
+      let fallbackCursor = 0;
+      while (fallbackCursor < fallbackQueue.length) {
+        const leftIndex = fallbackQueue[fallbackCursor];
+        fallbackCursor += 1;
+        fallbackQueued[leftIndex] = 0;
+        const rightIndex = (leftIndex + 1) % logicalCount;
+        if (!planarElasticBandSegmentCrossesObstacle(
+          nextPositions[leftIndex],
+          nextPositions[rightIndex],
+          obstacles,
+          metrics
+        )) continue;
+        [leftIndex, rightIndex].forEach((index) => {
+          if (index === heldIndex) return;
+          if (Math.hypot(
+            nextPositions[index].x - snapshot[index].x,
+            nextPositions[index].y - snapshot[index].y
+          ) <= HOMOLOGY_CORD_EPSILON) return;
+          nextPositions[index] = { x: snapshot[index].x, y: snapshot[index].y };
+          enqueueFallback(index - 1);
+          enqueueFallback(index);
+        });
+      }
+    }
+    const resolved = Array.from({ length: logicalCount }, (_, index) => {
+      const next = (index + 1) % logicalCount;
+      return !planarElasticBandSegmentCrossesObstacle(nextPositions[index], nextPositions[next], obstacles, metrics);
+    }).every(Boolean);
+    return { resolved, adjustments };
+  }
+
+  function applyPlanarElasticBandCandidate(chain, snapshot, nextPositions, options = {}) {
+    const logicalCount = Math.max(0, snapshot.length - 1);
+    const obstacles = options.obstacles || chain.obstacles;
+    const collision = resolvePlanarElasticBandCandidate(snapshot, nextPositions, obstacles, options);
+    if (snapshot.length) nextPositions[snapshot.length - 1] = { ...nextPositions[0] };
+    const oldLength = planarElasticBandPositionsLength(snapshot, logicalCount);
+    const nextLength = planarElasticBandPositionsLength(nextPositions, logicalCount);
+    let maximumDisplacement = 0;
+    nextPositions.forEach((position, index) => {
+      maximumDisplacement = Math.max(maximumDisplacement, Math.hypot(
+        position.x - snapshot[index].x,
+        position.y - snapshot[index].y
+      ));
+      chain.points[index].x = position.x;
+      chain.points[index].y = position.y;
+      chain.points[index].optimizationDirection = index < logicalCount
+        ? { x: position.x - snapshot[index].x, y: position.y - snapshot[index].y }
+        : { x: 0, y: 0 };
+    });
+    return {
+      ...collision,
+      oldLength,
+      length: nextLength,
+      relativeLengthChange: Math.abs(oldLength - nextLength) / Math.max(1, oldLength),
+      maximumDisplacement
+    };
+  }
+
   function stepPlanarElasticBand(chain, options = {}) {
     const snapshot = snapshotPlanarElasticBand(chain);
     const logicalCount = Math.max(0, snapshot.length - 1);
@@ -18173,91 +18550,152 @@
       ? clamp(configuredDistanceContraction, 0, 0.8)
       : null;
     const heldIndex = Number.isInteger(options.heldIndex) ? options.heldIndex : -1;
-    const directions = computePlanarElasticBandDirections(snapshot, heldIndex);
-    let shortestNonzeroEdge = Infinity;
-    for (let index = 0; index < logicalCount; index += 1) {
-      const next = (index + 1) % logicalCount;
-      const length = Math.hypot(snapshot[next].x - snapshot[index].x, snapshot[next].y - snapshot[index].y);
-      if (length > 0 && Number.isFinite(length) && length < shortestNonzeroEdge) shortestNonzeroEdge = length;
-    }
-    const safeStep = shortestNonzeroEdge === Infinity
-      ? 0
-      : Math.min(configuredStep, contractionRatio * shortestNonzeroEdge);
     const held = heldIndex === logicalCount ? 0 : heldIndex;
     const nextPositions = snapshot.map((point) => ({ x: point.x, y: point.y }));
-    const appliedDirections = directions.map((direction) => ({ ...direction }));
-    for (let index = 0; index < logicalCount; index += 1) {
-      if (index === held) continue;
-      if (distanceContraction != null) {
-        const previous = snapshot[(index + logicalCount - 1) % logicalCount];
-        const next = snapshot[(index + 1) % logicalCount];
-        const midpointForce = {
-          x: ((previous.x + next.x) * 0.5) - snapshot[index].x,
-          y: ((previous.y + next.y) * 0.5) - snapshot[index].y
-        };
-        appliedDirections[index] = midpointForce;
-        nextPositions[index] = {
-          x: snapshot[index].x + (midpointForce.x * distanceContraction),
-          y: snapshot[index].y + (midpointForce.y * distanceContraction)
-        };
-        continue;
-      }
-      nextPositions[index] = {
-        x: snapshot[index].x + (directions[index].x * safeStep),
-        y: snapshot[index].y + (directions[index].y * safeStep)
-      };
-    }
-    const obstacles = options.obstacles || chain.obstacles;
-    if (obstacles) {
+    let shortestNonzeroEdge = Infinity;
+    let safeStep = 0;
+
+    if (distanceContraction != null) {
       for (let index = 0; index < logicalCount; index += 1) {
         if (index === held) continue;
-        nextPositions[index] = constrainPlanarElasticBandPoint(
-          snapshot[index],
-          nextPositions[index],
-          obstacles
-        );
+        const previous = snapshot[(index + logicalCount - 1) % logicalCount];
+        const next = snapshot[(index + 1) % logicalCount];
+        nextPositions[index] = {
+          x: snapshot[index].x + ((((previous.x + next.x) * 0.5) - snapshot[index].x) * distanceContraction),
+          y: snapshot[index].y + ((((previous.y + next.y) * 0.5) - snapshot[index].y) * distanceContraction)
+        };
       }
-      for (let pass = 0; pass < logicalCount; pass += 1) {
-        const blocked = new Set();
-        for (let index = 0; index < logicalCount; index += 1) {
-          const next = (index + 1) % logicalCount;
-          if (!planarElasticBandSegmentCrossesObstacle(nextPositions[index], nextPositions[next], obstacles)) continue;
-          if (index !== held) blocked.add(index);
-          if (next !== held) blocked.add(next);
-        }
-        if (!blocked.size) break;
-        blocked.forEach((index) => {
-          nextPositions[index] = { x: snapshot[index].x, y: snapshot[index].y };
-          appliedDirections[index] = { x: 0, y: 0 };
-        });
+    } else {
+      const directions = computePlanarElasticBandDirections(snapshot, heldIndex);
+      for (let index = 0; index < logicalCount; index += 1) {
+        const next = (index + 1) % logicalCount;
+        const length = Math.hypot(snapshot[next].x - snapshot[index].x, snapshot[next].y - snapshot[index].y);
+        if (length > 0 && Number.isFinite(length) && length < shortestNonzeroEdge) shortestNonzeroEdge = length;
+      }
+      safeStep = shortestNonzeroEdge === Infinity ? 0 : Math.min(configuredStep, contractionRatio * shortestNonzeroEdge);
+      for (let index = 0; index < logicalCount; index += 1) {
+        if (index === held) continue;
+        nextPositions[index] = {
+          x: snapshot[index].x + (directions[index].x * safeStep),
+          y: snapshot[index].y + (directions[index].y * safeStep)
+        };
       }
     }
-    if (snapshot.length) {
-      nextPositions[snapshot.length - 1] = {
-        x: nextPositions[0].x,
-        y: nextPositions[0].y
-      };
-    }
-    let maximumDisplacement = 0;
-    nextPositions.forEach((position, index) => {
-      maximumDisplacement = Math.max(maximumDisplacement, Math.hypot(
-        position.x - snapshot[index].x,
-        position.y - snapshot[index].y
-      ));
-    });
-    nextPositions.forEach((position, index) => {
-      chain.points[index].x = position.x;
-      chain.points[index].y = position.y;
-      chain.points[index].optimizationDirection = index < logicalCount
-        ? { ...appliedDirections[index] }
-        : { x: 0, y: 0 };
-    });
+
     return {
       safeStep,
       contractionRatio,
       distanceContraction,
       shortestNonzeroEdge: shortestNonzeroEdge === Infinity ? 0 : shortestNonzeroEdge,
-      maximumDisplacement
+      ...applyPlanarElasticBandCandidate(chain, snapshot, nextPositions, {
+        ...options,
+        heldIndex: held
+      })
+    };
+  }
+
+  function planarElasticBandJacobiKernel(distanceContraction, substeps) {
+    const cache = planarElasticBandJacobiKernel.cache || (planarElasticBandJacobiKernel.cache = new Map());
+    const cacheKey = `${distanceContraction}:${substeps}`;
+    if (cache.has(cacheKey)) return cache.get(cacheKey);
+    const side = distanceContraction * 0.5;
+    const center = 1 - distanceContraction;
+    let kernel = [1];
+    for (let pass = 0; pass < substeps; pass += 1) {
+      const next = Array(kernel.length + 2).fill(0);
+      kernel.forEach((coefficient, index) => {
+        next[index] += coefficient * side;
+        next[index + 1] += coefficient * center;
+        next[index + 2] += coefficient * side;
+      });
+      kernel = next;
+    }
+    cache.set(cacheKey, kernel);
+    return kernel;
+  }
+
+  function ensurePlanarElasticBandScratch(chain, logicalCount) {
+    if (chain.solverScratch && chain.solverScratch.logicalCount === logicalCount) return chain.solverScratch;
+    chain.solverScratch = {
+      logicalCount,
+      xA: new Float64Array(logicalCount),
+      yA: new Float64Array(logicalCount),
+      xB: new Float64Array(logicalCount),
+      yB: new Float64Array(logicalCount),
+      snapshot: Array.from({ length: logicalCount + 1 }, (_, index) => ({ index, x: 0, y: 0 })),
+      candidate: Array.from({ length: logicalCount + 1 }, () => ({ x: 0, y: 0 }))
+    };
+    return chain.solverScratch;
+  }
+
+  function stepPlanarElasticBandMacro(chain, options = {}) {
+    const logicalCount = Math.max(0, (chain.points || []).length - 1);
+    const scratch = ensurePlanarElasticBandScratch(chain, logicalCount);
+    const snapshot = scratch.snapshot;
+    const nextPositions = scratch.candidate;
+    for (let index = 0; index <= logicalCount; index += 1) {
+      snapshot[index].index = index;
+      snapshot[index].x = chain.points[index].x;
+      snapshot[index].y = chain.points[index].y;
+      nextPositions[index].x = chain.points[index].x;
+      nextPositions[index].y = chain.points[index].y;
+    }
+    const configured = Number(options.distanceContraction);
+    const distanceContraction = Number.isFinite(configured) ? clamp(configured, 0, 0.8) : 0.05;
+    const substeps = Math.max(1, Math.floor(options.substeps || HOMOLOGY_CORD_MACRO_SUBSTEPS));
+    const heldIndex = Number.isInteger(options.heldIndex)
+      ? (options.heldIndex === logicalCount ? 0 : options.heldIndex)
+      : -1;
+    if (logicalCount < 2) return applyPlanarElasticBandCandidate(chain, snapshot, nextPositions, options);
+
+    if (heldIndex < 0) {
+      const kernel = planarElasticBandJacobiKernel(distanceContraction, substeps);
+      const radius = substeps;
+      for (let index = 0; index < logicalCount; index += 1) {
+        let x = kernel[radius] * snapshot[index].x;
+        let y = kernel[radius] * snapshot[index].y;
+        for (let offset = 1; offset <= radius; offset += 1) {
+          const coefficient = kernel[radius + offset];
+          const left = snapshot[modulo(index - offset, logicalCount)];
+          const right = snapshot[(index + offset) % logicalCount];
+          x += coefficient * (left.x + right.x);
+          y += coefficient * (left.y + right.y);
+        }
+        nextPositions[index] = { x, y };
+      }
+    } else {
+      for (let index = 0; index < logicalCount; index += 1) {
+        scratch.xA[index] = snapshot[index].x;
+        scratch.yA[index] = snapshot[index].y;
+      }
+      let sourceX = scratch.xA;
+      let sourceY = scratch.yA;
+      let targetX = scratch.xB;
+      let targetY = scratch.yB;
+      for (let pass = 0; pass < substeps; pass += 1) {
+        for (let index = 0; index < logicalCount; index += 1) {
+          if (index === heldIndex) {
+            targetX[index] = snapshot[index].x;
+            targetY[index] = snapshot[index].y;
+            continue;
+          }
+          const previous = (index + logicalCount - 1) % logicalCount;
+          const next = (index + 1) % logicalCount;
+          targetX[index] = sourceX[index] + ((((sourceX[previous] + sourceX[next]) * 0.5) - sourceX[index]) * distanceContraction);
+          targetY[index] = sourceY[index] + ((((sourceY[previous] + sourceY[next]) * 0.5) - sourceY[index]) * distanceContraction);
+        }
+        [sourceX, targetX] = [targetX, sourceX];
+        [sourceY, targetY] = [targetY, sourceY];
+      }
+      for (let index = 0; index < logicalCount; index += 1) nextPositions[index] = { x: sourceX[index], y: sourceY[index] };
+    }
+    return {
+      distanceContraction,
+      substeps,
+      ...applyPlanarElasticBandCandidate(chain, snapshot, nextPositions, {
+        ...options,
+        heldIndex
+      })
     };
   }
 
@@ -18474,8 +18912,42 @@
     return { mapPosition, mapVector, affine, sourceTangent: sourceUnitTangent, sourceOutward, targetTangent: targetUnitTangent, targetInward };
   }
 
+  function homologyCordNow() {
+    return typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now();
+  }
+
+  function backgroundHomologyCordAnimationDelay(now = homologyCordNow()) {
+    let minimumDelay = Infinity;
+    let hasUnsettledChain = false;
+    Object.values(state.homologyCordChains || {}).forEach((chain) => {
+      const dragging = state.homologyCordDrag && state.homologyCordDrag.generatorId === chain.generatorId;
+      if (chain.settled && !dragging) return;
+      hasUnsettledChain = true;
+      if (dragging || !Number.isFinite(chain.relaxationNotBefore) || chain.relaxationNotBefore <= now) {
+        minimumDelay = 0;
+        return;
+      }
+      minimumDelay = Math.min(minimumDelay, chain.relaxationNotBefore - now);
+    });
+    return hasUnsettledChain ? minimumDelay : Infinity;
+  }
+
   function scheduleBackgroundHomologyCordAnimation() {
-    if (!state.homologyCordMode || state.homologyCordAnimation != null || typeof requestAnimationFrame !== 'function') return;
+    if (!state.homologyCordMode
+      || state.homologyCordAnimation != null
+      || state.homologyCordStartTimer != null
+      || typeof requestAnimationFrame !== 'function') return;
+    const delay = backgroundHomologyCordAnimationDelay();
+    if (!Number.isFinite(delay)) return;
+    if (delay > 1 && typeof setTimeout === 'function') {
+      state.homologyCordStartTimer = setTimeout(() => {
+        state.homologyCordStartTimer = null;
+        scheduleBackgroundHomologyCordAnimation();
+      }, delay);
+      return;
+    }
     state.homologyCordAnimation = requestAnimationFrame((time) => {
       state.homologyCordAnimation = null;
       const moving = advanceBackgroundHomologyCords(time);
@@ -18484,15 +18956,23 @@
     });
   }
 
-  function advanceBackgroundHomologyCords() {
-    return advanceBackgroundHomologyCordChains();
+  function advanceBackgroundHomologyCords(time) {
+    return advanceBackgroundHomologyCordChains(time);
   }
 
-  function advanceBackgroundHomologyCordChains() {
-    return advanceBackgroundHomologyPlanarBands();
+  function advanceBackgroundHomologyCordChains(time) {
+    return advanceBackgroundHomologyPlanarBands({ now: time });
   }
 
-  function advanceBackgroundHomologyPlanarBands() {
+  function markBackgroundHomologyCordsUnsettled(generatorId = '') {
+    Object.values(state.homologyCordChains || {}).forEach((chain) => {
+      if (generatorId && chain.generatorId !== generatorId) return;
+      chain.settled = false;
+      chain.stableMacroSteps = 0;
+    });
+  }
+
+  function advanceBackgroundHomologyPlanarBands(options = {}) {
     if (!geometry) return false;
     const chains = Object.values(state.homologyCordChains || {});
     if (!chains.length) return false;
@@ -18501,18 +18981,38 @@
     const iterations = Math.max(1, Math.floor(
       state.homologyCordIterationsPerFrame || HOMOLOGY_CORD_DEFAULT_ITERATIONS_PER_FRAME
     ));
+    const now = Number.isFinite(options.now) ? options.now : homologyCordNow();
+    let moving = false;
     chains.forEach((chain) => {
       const drag = state.homologyCordDrag && state.homologyCordDrag.generatorId === chain.generatorId
         ? state.homologyCordDrag
         : null;
-      for (let iteration = 0; iteration < iterations; iteration += 1) {
-        stepPlanarElasticBand(chain, {
-          distanceContraction,
-          heldIndex: drag ? drag.part : -1
-        });
+      if (chain.settled && !drag) return;
+      if (!drag && Number.isFinite(chain.relaxationNotBefore) && now < chain.relaxationNotBefore) {
+        moving = true;
+        return;
       }
+      for (let iteration = 0; iteration < iterations; iteration += 1) {
+        const result = stepPlanarElasticBandMacro(chain, {
+          distanceContraction,
+          heldIndex: drag ? drag.part : -1,
+          substeps: HOMOLOGY_CORD_MACRO_SUBSTEPS,
+          metrics: options.metrics || null
+        });
+        if (drag || !result.resolved) {
+          chain.stableMacroSteps = 0;
+          chain.settled = false;
+          continue;
+        }
+        const stable = result.relativeLengthChange <= HOMOLOGY_CORD_RELATIVE_LENGTH_TOLERANCE
+          && result.maximumDisplacement <= geometry.radius * HOMOLOGY_CORD_POSITION_TOLERANCE_RATIO;
+        chain.stableMacroSteps = stable ? (chain.stableMacroSteps || 0) + 1 : 0;
+        chain.settled = chain.stableMacroSteps >= HOMOLOGY_CORD_STABLE_MACRO_STEPS;
+        if (chain.settled) break;
+      }
+      if (drag || !chain.settled) moving = true;
     });
-    return true;
+    return moving;
   }
 
   function homologyCordAtPoint(clientX, clientY) {
@@ -18541,7 +19041,6 @@
     const hit = homologyCordAtPoint(event.clientX, event.clientY);
     if (!hit || !hit.chain) return false;
     state.homologyCordOptimizationSelection = { generatorId: hit.chain.generatorId, part: hit.part };
-    scheduleBackgroundHomologyCordAnimation();
     draw(analyze());
     return true;
   }
@@ -18550,6 +19049,8 @@
     const hit = homologyCordAtPoint(event.clientX, event.clientY);
     if (!hit) return false;
     state.homologyCordDrag = { generatorId: hit.chain.generatorId, part: hit.part, pointerId: event.pointerId };
+    markBackgroundHomologyCordsUnsettled(hit.chain.generatorId);
+    scheduleBackgroundHomologyCordAnimation();
     activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     refs.canvas.setPointerCapture(event.pointerId);
     return true;
@@ -18571,6 +19072,8 @@
     particle.y = constrained.y;
     chain.points[lastIndex].x = chain.points[0].x;
     chain.points[lastIndex].y = chain.points[0].y;
+    chain.settled = false;
+    chain.stableMacroSteps = 0;
     return true;
   }
 
@@ -18592,6 +19095,7 @@
     const drag = state.homologyCordDrag;
     if (!drag || drag.pointerId !== event.pointerId) return false;
     state.homologyCordDrag = null;
+    markBackgroundHomologyCordsUnsettled(drag.generatorId);
     scheduleBackgroundHomologyCordAnimation();
     clearPointerState(event);
     return true;
@@ -18753,7 +19257,6 @@
     ctx.fillStyle = color;
     ctx.fillText(generator.id, anchor.x, anchor.y);
     ctx.restore();
-    scheduleBackgroundHomologyCordAnimation();
   }
 
   function drawHomologyCordSeamMarkers(ctx, edge, color) {
@@ -27218,16 +27721,23 @@
       homologyCordClosure,
       applyHomologyCordClosure,
       makePlanarElasticBandObstacles,
+      constrainInitialPlanarElasticBandPoint,
       constrainPlanarElasticBandPoint,
       planarElasticBandSegmentCrossesObstacle,
       makePlanarElasticBandChain,
       snapshotPlanarElasticBand,
       computePlanarElasticBandDirections,
+      resolvePlanarElasticBandCandidate,
       stepPlanarElasticBand,
+      stepPlanarElasticBandMacro,
+      planarElasticBandJacobiKernel,
       homologyCordAffinePortalTransform,
       homologyCordSegmentTrace,
       homologyCordCandidateItinerary,
       advanceBackgroundHomologyPlanarBands,
+      homologyCordNow,
+      backgroundHomologyCordAnimationDelay,
+      markBackgroundHomologyCordsUnsettled,
       homologyCordAtPoint,
       movePlanarElasticBandPoint,
       hasVisibleHomologyGenerators,
