@@ -159,12 +159,21 @@ function testSeededOpeningAndValidation() {
 }
 
 function testOwnedCatalogAndDeferredTopologyLifecycle() {
+  const ownedHexPresetIds = [
+    'boundary-glue-board',
+    'classic-hex',
+    'hex-torus-5-5',
+    'hex-klein-bottle-5-5',
+    'symmetric-rp2',
+    'hex-rp2-5-5',
+    'hex-with-three-slits'
+  ];
   assert.deepStrictEqual(
     game.presetListForMode(game.GAME_MODES.HEX).map((preset) => preset.id),
-    ['boundary-glue-board', 'classic-hex']
+    ownedHexPresetIds
   );
   assert.ok(!game.presetListForMode(game.GAME_MODES.LIANLIANKAN).some((preset) => preset.id === 'classic-hex'));
-  ['boundary-glue-board', 'classic-hex'].forEach((id) => {
+  ownedHexPresetIds.forEach((id) => {
     const owned = game.presetListForMode(game.GAME_MODES.HEX).find((preset) => preset.id === id);
     assert.ok(owned.hex && owned.hex.homology, `${id} stores Hex homology information`);
     const cached = game.createHexState(owned, { deferTopology: true });
@@ -213,7 +222,7 @@ function testOwnedCatalogAndDeferredTopologyLifecycle() {
   assert.ok(resetBlock.indexOf('render();') < resetBlock.indexOf('scheduleHexHomologyRequest(game)'));
   assert.ok(source.includes("syncStatus('computing homology'"));
   assert.ok(source.includes('deferHexHomologyFallback'));
-  assert.ok(source.includes('refs.begin.disabled = !catalogAvailable || onlineRoomActive || hexTopologyPending'));
+  assert.ok(source.includes('refs.begin.disabled = !catalogAvailable || selectionLoading || onlineRoomActive || hexTopologyPending'));
   assert.ok(fs.existsSync(require.resolve('./hex_homology_worker.js')));
 }
 

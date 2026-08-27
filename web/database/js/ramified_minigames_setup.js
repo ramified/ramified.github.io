@@ -235,7 +235,7 @@
   const BILLIARDS_RECTANGLE_ROWS = 3;
   const BILLIARDS_RECTANGLE_COLS = 5;
   const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20260823-8';
-  const HEX_HOMOLOGY_WORKER_URL = 'js/hex_homology_worker.js?v=20260825-1';
+  const HEX_HOMOLOGY_WORKER_URL = 'js/hex_homology_worker.js?v=20260827-1';
   const BILLIARDS_FALLBACK_FRAME_BUDGET_MS = 8;
   const BILLIARDS_FALLBACK_STEP_CHUNK = 8;
   const FIDE_CHESS_PUZZLE_MIN_BOARD_SIZE = 2;
@@ -364,8 +364,8 @@
   const PRESET_ASSET_VERSION = '20260825-2';
   const OPTIONAL_SCRIPT_GROUPS = Object.freeze({
     [GAME_MODES.HEX]: Object.freeze([
-      'js/background_homology.js?v=20260824-1',
-      'js/hex_homology_game.js?v=20260825-3'
+      'js/background_homology.js?v=20260827-1',
+      'js/hex_homology_game.js?v=20260827-1'
     ]),
     [GAME_MODES.BILLIARDS]: Object.freeze([
       'js/billiards/topological_billiards_math.js?v=20260823-1',

@@ -51,6 +51,39 @@ function assertClosed(subject) {
   );
 }
 
+function setSquareGeometry(rows, cols, radius = 10) {
+  elastic.setTestGeometry({
+    radius,
+    width: cols * radius * 2,
+    height: rows * radius * 2,
+    cells: Array.from({ length: rows * cols }, (_, index) => ({
+      row: Math.floor(index / cols),
+      col: index % cols,
+      x: radius + (index % cols) * radius * 2,
+      y: radius + Math.floor(index / cols) * radius * 2
+    }))
+  });
+}
+
+function setHexGeometry(rows, cols, radius = 10) {
+  const width = Math.sqrt(3) * radius;
+  elastic.setTestGeometry({
+    radius,
+    width: width * (cols + 0.5),
+    height: (2 * radius) + ((rows - 1) * 1.5 * radius),
+    cells: Array.from({ length: rows * cols }, (_, index) => {
+      const row = Math.floor(index / cols);
+      const col = index % cols;
+      return {
+        row,
+        col,
+        x: (width / 2) + (width * (col + ((row % 2) * 0.5))),
+        y: radius + (row * 1.5 * radius)
+      };
+    })
+  });
+}
+
 function stepMany(subject, count, options = { stepSize: 0.4 }) {
   for (let index = 0; index < count; index += 1) {
     elastic.stepPlanarElasticBand(subject, options);
@@ -752,6 +785,8 @@ elastic.advanceBackgroundHomologyPlanarBands({ metrics: macroMetrics });
 assert.strictEqual(legacyMetrics.fullCollisionPasses, 20);
 assert.strictEqual(macroMetrics.fullCollisionPasses, 5);
 assert.ok(macroMetrics.fullCollisionPasses <= legacyMetrics.fullCollisionPasses * 0.25);
+assert.ok(macroMetrics.narrowPhaseChecks <= legacyMetrics.narrowPhaseChecks * 0.25,
+  'representative obstacle narrow-phase work must remain at or below 25%');
 assertBandAvoidsObstacles(macroCollisionBand, responsibilityObstacle);
 
 // An equilibrium chain settles within five stable macro steps and then
@@ -779,12 +814,382 @@ const hitPoint = gluedBand.points[1];
 const hit = elastic.homologyCordAtPoint(hitPoint.x, hitPoint.y);
 assert.ok(hit && hit.chain === gluedBand);
 
+// Quotient runtime: a one-tile torus keeps tile-local particles and one
+// immutable ordered spring per pair of consecutive particles. Portal copies
+// are drawing trace segments, never extra optimizer particles.
+elastic.setTestBoard({
+  rows: 2,
+  cols: 2,
+  lattice: 'square',
+  boundary: 'glued',
+  removedTiles: [1, 2, 3],
+  gluedEdges: [
+    { first: { index: 0, dir: 0 }, second: { index: 0, dir: 2 }, reversed: false },
+    { first: { index: 0, dir: 1 }, second: { index: 0, dir: 3 }, reversed: false }
+  ]
+});
+setSquareGeometry(1, 1);
+const torusAnalysis = calculator.analyzeBackgroundHomology();
+const torusGenerator = torusAnalysis.generators[0];
+const torusSurface = elastic.makeHomologyCordChain(
+  torusGenerator,
+  elastic.homologyChainDisplayEntries(torusAnalysis, torusGenerator),
+  torusAnalysis
+);
+const quotientCreatedBefore = elastic.homologyCordNow();
+const torusBand = elastic.makeHomologyCordRuntimeChain(torusSurface, torusAnalysis);
+const quotientCreatedAfter = elastic.homologyCordNow();
+assert.ok(torusBand && torusBand.solverSpace === 'quotient');
+assert.ok(torusBand.relaxationNotBefore >= quotientCreatedBefore + 300
+  && torusBand.relaxationNotBefore <= quotientCreatedAfter + 300);
+assert.strictEqual(torusBand.springs.length, torusBand.points.length - 1);
+assert.strictEqual(torusBand.atlas.portals.size, 4);
+assert.strictEqual(elastic.validateQuotientElasticBand(torusBand), true);
+const torusStar = Array.from(torusBand.atlas.vertexStars.values())[0];
+assert.strictEqual(torusStar.manifold, true);
+assert.ok(Math.abs(torusStar.totalAngle - Math.PI * 2) < 1e-12);
+const portalSpringIndex = torusBand.springs.findIndex((spring) => spring.word.length > 0);
+assert.ok(portalSpringIndex >= 0);
+const torusTrace = elastic.traceQuotientSegment(
+  torusBand.points[portalSpringIndex],
+  torusBand.points[(portalSpringIndex + 1) % (torusBand.points.length - 1)],
+  torusBand.springs[portalSpringIndex],
+  torusBand
+);
+assert.strictEqual(torusTrace.valid, true);
+assert.ok(torusTrace.crossings.length > 0);
+assert.ok(torusTrace.segments.length >= 2);
+assert.ok(torusTrace.segments.every((segment) => segment.tileIndex === 0));
+torusTrace.crossings.forEach((crossing) => {
+  assert.strictEqual(torusTrace.segments.some((segment) => (
+    Math.hypot(segment.start.x - crossing.point.x, segment.start.y - crossing.point.y) < 1e-7
+    && Math.hypot(segment.end.x - crossing.mapped.x, segment.end.y - crossing.mapped.y) < 1e-7
+  )), false, 'drawing trace must not connect paired edge copies with a canvas-spanning shortcut');
+});
+
+const quotientInitialLength = elastic.quotientElasticBandLength(torusBand);
+const quotientMetrics = {};
+for (let index = 0; index < 5; index += 1) {
+  const result = elastic.stepQuotientElasticBandMacro(torusBand, {
+    distanceContraction: 0.8,
+    substeps: 4,
+    metrics: quotientMetrics
+  });
+  assert.strictEqual(result.resolved, true);
+  assert.strictEqual(elastic.validateQuotientElasticBand(torusBand), true);
+}
+assert.strictEqual(quotientMetrics.fullCollisionPasses, 5);
+assert.ok(elastic.quotientElasticBandLength(torusBand) < quotientInitialLength);
+assert.ok(quotientMetrics.quotientActiveParticles < 5 * (torusBand.points.length - 1),
+  'far particles must avoid per-particle portal tracing');
+
+// Dragging a material point across a portal updates the two adjacent spring
+// gauges with a cancellable inverse pair, preserving the cyclic word and
+// closure holonomy exactly.
+const gaugeBand = elastic.makeQuotientElasticBandChain(torusSurface, torusAnalysis);
+const gaugeSignature = elastic.canonicalHomologyCordCyclicWord(
+  elastic.homologyCordCyclicPortalWord(gaugeBand)
+);
+const rightmostIndex = gaugeBand.points.slice(0, -1).reduce((best, point, index, points) => (
+  point.x > points[best].x ? index : best
+), 0);
+const rightmost = { ...gaugeBand.points[rightmostIndex] };
+assert.strictEqual(elastic.movePlanarElasticBandPoint(gaugeBand, rightmostIndex, {
+  x: rightmost.x + 8,
+  y: rightmost.y
+}), true);
+assert.strictEqual(elastic.canonicalHomologyCordCyclicWord(
+  elastic.homologyCordCyclicPortalWord(gaugeBand)
+), gaugeSignature);
+assert.strictEqual(elastic.validateQuotientElasticBand(gaugeBand), true);
+assert.notStrictEqual(gaugeBand.points[rightmostIndex].x, rightmost.x + 8);
+
+const heldQuotient = elastic.makeQuotientElasticBandChain(torusSurface, torusAnalysis);
+const heldQuotientBefore = { ...heldQuotient.points[3] };
+assert.strictEqual(elastic.stepQuotientElasticBandMacro(heldQuotient, {
+  distanceContraction: 0.8,
+  substeps: 4,
+  heldIndex: 3
+}).resolved, true);
+assert.deepStrictEqual({
+  x: heldQuotient.points[3].x,
+  y: heldQuotient.points[3].y,
+  tileIndex: heldQuotient.points[3].tileIndex
+}, {
+  x: heldQuotientBefore.x,
+  y: heldQuotientBefore.y,
+  tileIndex: heldQuotientBefore.tileIndex
+});
+
+// A single displacement can traverse several different portals, but the
+// hard eight-crossing cap guarantees finite termination.
+const multiPortal = elastic.traceQuotientMotion(
+  torusBand,
+  0,
+  { x: 10, y: 10, tileIndex: 0 },
+  { x: 55, y: 35 }
+);
+assert.strictEqual(multiPortal.valid, true);
+assert.ok(multiPortal.crossings.length >= 3);
+assert.ok(new Set(multiPortal.crossings.map((crossing) => crossing.portalId)).size >= 2);
+const overLimit = elastic.traceQuotientMotion(
+  torusBand,
+  0,
+  { x: 10, y: 10, tileIndex: 0 },
+  { x: 255, y: 10 }
+);
+assert.strictEqual(overLimit.valid, false);
+assert.strictEqual(overLimit.reason, 'portal-crossing-limit');
+const invalidQuotientSurface = {
+  ...torusSurface,
+  points: torusSurface.points.map((point) => ({ ...point }))
+};
+invalidQuotientSurface.points[elastic.homologyCordPhysicalIndices(invalidQuotientSurface)[0]].tileIndex = 1;
+assert.strictEqual(elastic.makeQuotientElasticBandChain(invalidQuotientSurface, torusAnalysis), null,
+  'an initial quotient chain touching a removed tile must fall back before animation');
+
+// Reversed self-gluing reflects the tangential coordinate while preserving a
+// continuous normal displacement through the paired edge.
+elastic.setTestBoard({
+  rows: 2,
+  cols: 2,
+  lattice: 'square',
+  boundary: 'glued',
+  removedTiles: [1, 2, 3],
+  gluedEdges: [
+    { first: { index: 0, dir: 0 }, second: { index: 0, dir: 2 }, reversed: true }
+  ]
+});
+setSquareGeometry(1, 1);
+const mobiusAnalysis = calculator.analyzeBackgroundHomology();
+const mobiusGenerator = mobiusAnalysis.generators[0];
+const mobiusBand = elastic.makeQuotientElasticBandChain(elastic.makeHomologyCordChain(
+  mobiusGenerator,
+  elastic.homologyChainDisplayEntries(mobiusAnalysis, mobiusGenerator),
+  mobiusAnalysis
+), mobiusAnalysis);
+assert.ok(mobiusBand);
+const reflectedMotion = elastic.traceQuotientMotion(
+  mobiusBand,
+  0,
+  { x: 10, y: 6, tileIndex: 0 },
+  { x: 25, y: 6 }
+);
+assert.strictEqual(reflectedMotion.valid, true);
+assertPointNear(reflectedMotion.point, { x: 5, y: 14 });
+
+// The usual-strip generator changes charts at the endpoint of its bottom
+// portal.  That endpoint crossing must remain in the spring word; otherwise
+// the two distant display copies are mistaken for a disconnected segment.
+// Its following boundary-corner switch starts as a finite construction
+// bridge and detaches once an ordinary inset route is available.
+elastic.setTestBoard({
+  rows: 4,
+  cols: 5,
+  lattice: 'hexagonal',
+  boundary: 'glued',
+  gluedEdges: [
+    [0, 3, 4, 0],
+    [0, 2, 9, 5],
+    [5, 3, 9, 0],
+    [10, 4, 9, 1],
+    [10, 3, 14, 0],
+    [10, 2, 19, 5],
+    [15, 3, 19, 0]
+  ].map(([fromIndex, fromDir, toIndex, toDir]) => ({
+    first: { index: fromIndex, dir: fromDir },
+    second: { index: toIndex, dir: toDir }
+  }))
+});
+setHexGeometry(4, 5);
+const usualStripAnalysis = calculator.analyzeBackgroundHomology();
+assert.strictEqual(usualStripAnalysis.group, 'Z');
+const usualStripGenerator = usualStripAnalysis.generators[0];
+const usualStripSurfaceChain = elastic.makeHomologyCordChain(
+  usualStripGenerator,
+  elastic.homologyChainDisplayEntries(usualStripAnalysis, usualStripGenerator),
+  usualStripAnalysis
+);
+const usualStripBand = elastic.makeHomologyCordRuntimeChain(
+  usualStripSurfaceChain,
+  usualStripAnalysis
+);
+assert.ok(usualStripBand, 'usual strip must form one continuous quotient elastic cord');
+assert.strictEqual(usualStripBand.solverSpace, 'quotient');
+assert.ok(usualStripBand.springs.some((spring) => spring.word.includes('15:3>19:0')),
+  'a portal crossing at a glued endpoint remains part of the spring itinerary');
+assert.ok(usualStripBand.springs.some((spring) => spring.vertexEvent?.constructionBridge));
+usualStripBand.relaxationNotBefore = 0;
+for (let step = 0; step < 50; step += 1) {
+  assert.strictEqual(
+    elastic.stepQuotientElasticBandMacro(usualStripBand, { distanceContraction: 0.05 }).resolved,
+    true,
+    `usual-strip quotient macro ${step} remains valid`
+  );
+  assert.strictEqual(elastic.validateQuotientElasticBand(usualStripBand), true);
+}
+assert.strictEqual(usualStripBand.fallbackToCellular, false);
+assert.strictEqual(
+  usualStripBand.springs.some((spring) => spring.vertexEvent?.constructionBridge),
+  false,
+  'the temporary boundary-corner bridge detaches after an inset route opens'
+);
+
+// A normal four-square 2pi vertex is traversed through its continuous sector
+// fan. Cone shortcuts use the exact two-sided geodesic predicate.
+elastic.setTestBoard({
+  rows: 2,
+  cols: 2,
+  lattice: 'square',
+  boundary: 'glued',
+  gluedEdges: [
+    { first: { index: 0, dir: 3 }, second: { index: 1, dir: 3 }, reversed: true }
+  ]
+});
+setSquareGeometry(2, 2);
+const vertexAnalysis = calculator.analyzeBackgroundHomology();
+const vertexAtlas = elastic.makeHomologyCordQuotientAtlas(vertexAnalysis);
+const centralStar = Array.from(vertexAtlas.vertexStars.values()).find((star) => (
+  star.sectors.length === 4 && Math.abs(star.totalAngle - Math.PI * 2) < 1e-12
+));
+assert.ok(centralStar && centralStar.manifold);
+const throughOrdinaryVertex = elastic.traceQuotientMotion(
+  { atlas: vertexAtlas },
+  0,
+  { x: 15, y: 15, tileIndex: 0 },
+  { x: 35, y: 35 }
+);
+assert.strictEqual(throughOrdinaryVertex.valid, true);
+assert.strictEqual(throughOrdinaryVertex.point.tileIndex, 3);
+assert.strictEqual(throughOrdinaryVertex.crossings.length, 0);
+assert.strictEqual(elastic.homologyCordApexRouteAllowed(Math.PI, Math.PI / 2), false);
+assert.strictEqual(elastic.homologyCordApexRouteAllowed(Math.PI * 2, Math.PI), true);
+assert.strictEqual(elastic.homologyCordApexRouteAllowed(Math.PI * 3, Math.PI), true);
+assert.strictEqual(elastic.homologyCordApexRouteAllowed(Math.PI * 3, Math.PI * 0.9), false);
+const traversedStar = vertexAtlas.vertexStars.get(throughOrdinaryVertex.vertexEvents[0].vertexId);
+const oldManifold = traversedStar.manifold;
+traversedStar.manifold = false;
+assert.strictEqual(elastic.traceQuotientMotion(
+  { atlas: vertexAtlas },
+  0,
+  { x: 15, y: 15, tileIndex: 0 },
+  { x: 35, y: 35 }
+).reason, 'non-manifold-vertex');
+traversedStar.manifold = oldManifold;
+
+// Regression for portal-word intersection migrating through a normal vertex:
+// this reflected seam used to fail at macro step 65 and then fall back.
+const mixedGenerator = vertexAnalysis.generators[0];
+const mixedBand = elastic.makeQuotientElasticBandChain(elastic.makeHomologyCordChain(
+  mixedGenerator,
+  elastic.homologyChainDisplayEntries(vertexAnalysis, mixedGenerator),
+  vertexAnalysis
+), vertexAnalysis);
+assert.ok(mixedBand);
+const mixedInitialLength = elastic.quotientElasticBandLength(mixedBand);
+for (let index = 0; index < 120; index += 1) {
+  assert.strictEqual(elastic.stepQuotientElasticBandMacro(mixedBand, {
+    distanceContraction: 0.8,
+    substeps: 4
+  }).resolved, true);
+}
+assert.strictEqual(mixedBand.fallbackToCellular, false);
+assert.strictEqual(elastic.validateQuotientElasticBand(mixedBand), true);
+assert.ok(elastic.quotientElasticBandLength(mixedBand) < mixedInitialLength * 0.3);
+
+// Runtime invariant failures are counted once per frame, not once per macro;
+// only the third consecutive failed frame activates cellular fallback.
+const failingBand = elastic.makeQuotientElasticBandChain(elastic.makeHomologyCordChain(
+  mixedGenerator,
+  elastic.homologyChainDisplayEntries(vertexAnalysis, mixedGenerator),
+  vertexAnalysis
+), vertexAnalysis);
+failingBand.springs[0].word = ['missing-portal'];
+failingBand.relaxationNotBefore = 0;
+elastic.state.homologyCordChains = { [failingBand.generatorId]: failingBand };
+elastic.state.homologyCordDrag = null;
+elastic.state.homologyCordRelaxSpeed = 10;
+assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands({ now: 1e9 }), true);
+assert.strictEqual(failingBand.quotientFailureCount, 1);
+assert.strictEqual(failingBand.fallbackToCellular, false);
+assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands({ now: 1e9 }), true);
+assert.strictEqual(failingBand.quotientFailureCount, 2);
+assert.strictEqual(failingBand.fallbackToCellular, false);
+assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands({ now: 1e9 }), false);
+assert.strictEqual(failingBand.fallbackToCellular, true);
+
+// An atlas containing a portal but failing its affine/inverse invariant must
+// reject the elastic runtime instead of silently using the planar fast path.
+const validAtlasFlag = vertexAtlas.valid;
+vertexAtlas.valid = false;
+assert.strictEqual(elastic.makeHomologyCordRuntimeChain(elastic.makeHomologyCordChain(
+  mixedGenerator,
+  elastic.homologyChainDisplayEntries(vertexAnalysis, mixedGenerator),
+  vertexAnalysis
+), vertexAnalysis), null);
+vertexAtlas.valid = validAtlasFlag;
+
+// Cut edges, unglued outer edges, and removed tiles remain one-sided
+// obstacles even when another boundary pair activates the quotient solver.
+elastic.setTestBoard({
+  rows: 2,
+  cols: 2,
+  lattice: 'square',
+  boundary: 'glued',
+  cutEdges: [{ left: { row: 1, col: 1 }, right: { row: 1, col: 2 } }],
+  gluedEdges: [
+    { first: { index: 0, dir: 3 }, second: { index: 1, dir: 3 }, reversed: true }
+  ]
+});
+setSquareGeometry(2, 2);
+const cutAtlas = elastic.makeHomologyCordQuotientAtlas(calculator.analyzeBackgroundHomology());
+const cutBlocked = elastic.traceQuotientMotion(
+  { atlas: cutAtlas },
+  0,
+  { x: 15, y: 10, tileIndex: 0 },
+  { x: 35, y: 10 }
+);
+assert.strictEqual(cutBlocked.valid, true);
+assert.strictEqual(cutBlocked.blocked, true);
+assert.strictEqual(cutBlocked.point.tileIndex, 0);
+const outerBlocked = elastic.traceQuotientMotion(
+  { atlas: cutAtlas },
+  0,
+  { x: 10, y: 15, tileIndex: 0 },
+  { x: -15, y: 15 }
+);
+assert.strictEqual(outerBlocked.valid, true);
+assert.strictEqual(outerBlocked.blocked, true);
+assert.strictEqual(outerBlocked.point.tileIndex, 0);
+
+elastic.setTestBoard({
+  rows: 2,
+  cols: 2,
+  lattice: 'square',
+  boundary: 'glued',
+  removedTiles: [3],
+  gluedEdges: [
+    { first: { index: 0, dir: 3 }, second: { index: 1, dir: 3 }, reversed: true }
+  ]
+});
+setSquareGeometry(2, 2);
+const removedAtlas = elastic.makeHomologyCordQuotientAtlas(calculator.analyzeBackgroundHomology());
+const removedBlocked = elastic.traceQuotientMotion(
+  { atlas: removedAtlas },
+  0,
+  { x: 30, y: 15, tileIndex: 1 },
+  { x: 30, y: 35 }
+);
+assert.strictEqual(removedBlocked.valid, true);
+assert.strictEqual(removedBlocked.blocked, true);
+assert.strictEqual(removedBlocked.point.tileIndex, 1);
+
 // Removed solver entry points must not survive as functions or test exports.
 const sourceText = fs.readFileSync(path.join(__dirname, 'mosaic_calculator.js'), 'utf8');
 const htmlText = fs.readFileSync(path.join(__dirname, '..', 'mosaic_calculator.html'), 'utf8');
 assert.strictEqual(htmlText.includes('id="homology-cord-contraction-strength"'), false);
 assert.ok(htmlText.includes('id="homology-cord-relax-speed" min="0.1" max="10" step="0.1" value="10"'));
-assert.ok(htmlText.includes('js/mosaic_calculator.js?v=elastic-band-initial-gap-13'));
+assert.ok(htmlText.includes('js/mosaic_calculator.js?v=quotient-cord-vertex-star-15'));
 const drawCordSource = sourceText.slice(
   sourceText.indexOf('function drawBackgroundHomologyCords'),
   sourceText.indexOf('function drawHomologyCordSeamMarkers')
@@ -806,4 +1211,4 @@ assert.strictEqual(drawCordSource.includes('scheduleBackgroundHomologyCordAnimat
   'lastOptimization'
 ].forEach((name) => assert.strictEqual(sourceText.includes(name), false, `${name} state is removed`));
 
-console.log('mosaic_calculator_elastic_band_test: minimal planar elastic-band tests passed');
+console.log('mosaic_calculator_elastic_band_test: planar and quotient elastic-band tests passed');

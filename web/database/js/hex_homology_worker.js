@@ -1,7 +1,7 @@
 /* global importScripts, TopologicalHex */
 'use strict';
 
-importScripts('background_homology.js?v=20260824-1', 'hex_homology_game.js?v=20260825-2');
+importScripts('background_homology.js?v=20260827-1', 'hex_homology_game.js?v=20260827-1');
 
 self.onmessage = (event) => {
   const message = event && event.data ? event.data : {};

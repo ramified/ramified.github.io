@@ -153,6 +153,39 @@ function testRejectsUngluedAndTrivialBoards() {
   assert.strictEqual(hex.buildTopology({ lattice: 'square', rows: 2, cols: 2, cutEdges: [], gluedEdges: [] }).valid, false);
 }
 
+function testTileLocalVerticesWithCornerTouchingHoles() {
+  const preset = {
+    lattice: 'square',
+    rows: 4,
+    cols: 4,
+    cutEdges: [],
+    gluedEdges: [
+      { first: { row: 1, col: 1, dir: 3 }, second: { row: 4, col: 1, dir: 1 } }
+    ]
+  };
+  const removed = new Set([5, 10]);
+  hex.__test.topologyCache.clear();
+  const topology = hex.buildTopology(preset, removed);
+  assert.strictEqual(topology.valid, true);
+  assert.strictEqual(topology.analysis.group, 'Z^2');
+  const first = topology.analysis.complex.vertices.find((vertex) => (
+    vertex.corners.some((corner) => corner.index === 6 && corner.vertex === 3)
+  ));
+  const second = topology.analysis.complex.vertices.find((vertex) => (
+    vertex.corners.some((corner) => corner.index === 9 && corner.vertex === 1)
+  ));
+  assert.ok(first && second);
+  assert.notStrictEqual(first.id, second.id);
+  assert.strictEqual(hex.__test.snapshotHasSplitCanvasVertex(topology.snapshot), true);
+
+  const stored = hex.serializeTopology(topology);
+  assert.strictEqual(stored.vertexEquivalence, hex.TILE_LOCAL_VERTEX_SCHEME);
+  const legacy = { ...stored };
+  delete legacy.vertexEquivalence;
+  assert.strictEqual(hex.topologyFromPresetHomology({ ...preset, hex: { homology: legacy } }, removed), null);
+  assert.ok(hex.topologyFromPresetHomology({ ...preset, hex: { homology: stored } }, removed));
+}
+
 function testSerializedTopologyRoundTripAndMismatch() {
   const preset = squareTorus(2, 3);
   const computed = hex.buildTopology(preset);
@@ -206,6 +239,7 @@ function testDynamicBoundaryGlueHomologySchemes() {
   testContractibleLoopsAreIgnored,
   testHolesHexLatticeAndParallelSeams,
   testRejectsUngluedAndTrivialBoards,
+  testTileLocalVerticesWithCornerTouchingHoles,
   testSerializedTopologyRoundTripAndMismatch,
   testDynamicBoundaryGlueHomologySchemes
 ].forEach((test) => test());

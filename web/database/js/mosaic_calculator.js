@@ -97,6 +97,14 @@
   const HOMOLOGY_CORD_RELATIVE_LENGTH_TOLERANCE = 1e-4;
   const HOMOLOGY_CORD_POSITION_TOLERANCE_RATIO = 1e-4;
   const HOMOLOGY_CORD_COLLISION_BACKTRACK_STEPS = 18;
+  const HOMOLOGY_CORD_MAX_PORTAL_CROSSINGS = 8;
+  const HOMOLOGY_CORD_PORTAL_ACTIVE_RATIO = 0.15;
+  const HOMOLOGY_CORD_VERTEX_ENTER_RATIO = 0.02;
+  const HOMOLOGY_CORD_VERTEX_EXIT_RATIO = 0.03;
+  const HOMOLOGY_CORD_APEX_ENTER_IMPROVEMENT_RATIO = 1e-4;
+  const HOMOLOGY_CORD_APEX_EXIT_IMPROVEMENT_RATIO = 2e-4;
+  const HOMOLOGY_CORD_QUOTIENT_INVARIANT_TOLERANCE = 1e-10;
+  const HOMOLOGY_CORD_QUOTIENT_FAILURE_LIMIT = 3;
   const HOMOLOGY_CORD_DEFAULT_RELAX_SPEED = 10;
   const HOMOLOGY_CORD_BASE_DISTANCE_CONTRACTION = 0.08;
   const DEFAULT_SEIFERT_BAND_WIDTH = 0.42;
@@ -880,6 +888,7 @@
     homologyCordDrag: null,
     homologyCordAnimation: null,
     homologyCordStartTimer: null,
+    homologyCordQuotientAtlas: null,
     homologyCordRelaxSpeed: HOMOLOGY_CORD_DEFAULT_RELAX_SPEED,
     homologyCordPointSpacing: 0.12,
     homologyCordIterationsPerFrame: HOMOLOGY_CORD_DEFAULT_ITERATIONS_PER_FRAME,
@@ -10442,14 +10451,12 @@
       union(parent, rank, cornerId(left.index, left.end), cornerId(right.index, reversed ? right.end : right.start));
     };
 
-    const logicalVertexIds = new Map();
+    // Keep every tile-local corner (T, v) separate until a real internal or
+    // glued side identifies it with another corner.  Equal canvas coordinates
+    // do not imply equality in the quotient: removed tiles and cuts can split
+    // the vertex star into multiple points drawn at the same pixel.
     for (let index = 0; index < state.rows * state.cols; index += 1) {
       if (!tileExists(index)) continue;
-      for (let vertex = 0; vertex < lattice.sides; vertex += 1) {
-        const key = tileCornerLogicalVertexKey(index, vertex);
-        if (logicalVertexIds.has(key)) union(parent, rank, cornerId(index, vertex), logicalVertexIds.get(key));
-        else logicalVertexIds.set(key, cornerId(index, vertex));
-      }
       const row = Math.floor(index / state.cols);
       const col = index % state.cols;
       for (let dir = 0; dir < lattice.sides; dir += 1) {
@@ -10521,12 +10528,12 @@
   }
 
   function computeBackgroundMarkedBoundaryVertices() {
-    const gluedKeys = gluedBoundaryLogicalVertexKeySet();
+    const gluedKeys = gluedBoundaryLocalCornerKeySet();
     if (!gluedKeys.size) return computeBackgroundCuspVertices();
     const vertices = computeBackgroundQuotientVertices().vertices
       .filter((entry) => (
         isBackgroundConeCusp(entry)
-        || (entry.corners || []).some((corner) => gluedKeys.has(tileCornerLogicalVertexKey(corner.index, corner.vertex)))
+        || (entry.corners || []).some((corner) => gluedKeys.has(tileLocalCornerKey(corner.index, corner.vertex)))
       ))
       .sort(compareBackgroundCusps);
     let cuspIndex = 0;
@@ -10545,10 +10552,10 @@
 
   function computeDisplayedBackgroundCuspVertices() {
     if (!hasRealBlackBackgroundBoundaryEdges()) return computeBackgroundMarkedBoundaryVertices();
-    const blackBoundaryKeys = realBlackBoundaryLogicalVertexKeySet();
+    const blackBoundaryKeys = realBlackBoundaryLocalCornerKeySet();
     const displayed = computeBackgroundMarkedBoundaryVertices()
       .filter((entry) => !(entry.corners || []).some((corner) => (
-        blackBoundaryKeys.has(tileCornerLogicalVertexKey(corner.index, corner.vertex))
+        blackBoundaryKeys.has(tileLocalCornerKey(corner.index, corner.vertex))
       )))
       .sort(compareBackgroundCusps);
     labelBackgroundDisplayedVertices(displayed);
@@ -10579,11 +10586,11 @@
     return cusps;
   }
 
-  function gluedBoundaryLogicalVertexKeySet() {
+  function gluedBoundaryLocalCornerKeySet() {
     const keys = new Set();
     cloneGluedEdges().forEach((pair) => {
       [pair.first, pair.second].forEach((edge) => {
-        boundaryEdgeLogicalVertexKeys(edge).forEach((key) => {
+        boundaryEdgeLocalCornerKeys(edge).forEach((key) => {
           if (key) keys.add(key);
         });
       });
@@ -10602,7 +10609,7 @@
     return false;
   }
 
-  function realBlackBoundaryLogicalVertexKeySet() {
+  function realBlackBoundaryLocalCornerKeySet() {
     const keys = new Set();
     const lattice = getLattice();
     for (let index = 0; index < state.rows * state.cols; index += 1) {
@@ -10610,7 +10617,7 @@
       for (let dir = 0; dir < lattice.sides; dir += 1) {
         const edge = { index, dir };
         if (!isRealBlackBackgroundBoundaryEdge(edge)) continue;
-        boundaryEdgeLogicalVertexKeys(edge).forEach((key) => {
+        boundaryEdgeLocalCornerKeys(edge).forEach((key) => {
           if (key) keys.add(key);
         });
       }
@@ -10643,14 +10650,18 @@
       .join('|');
   }
 
-  function boundaryEdgeLogicalVertexKeys(edge) {
+  function boundaryEdgeLocalCornerKeys(edge) {
     const normalized = cloneBoundaryEdge(edge);
     if (!normalized || !isValidBoundaryEdge(normalized)) return [];
     const corners = orientedBoundaryEdgeCorners(normalized.index, normalized.dir);
     return [
-      tileCornerLogicalVertexKey(corners.index, corners.start),
-      tileCornerLogicalVertexKey(corners.index, corners.end)
+      tileLocalCornerKey(corners.index, corners.start),
+      tileLocalCornerKey(corners.index, corners.end)
     ];
+  }
+
+  function tileLocalCornerKey(index, vertex) {
+    return `${index}:${modulo(vertex, getLattice().sides)}`;
   }
 
   function tileCornerLogicalVertexKey(index, vertex) {
@@ -10978,7 +10989,7 @@
 
     if (typeof Worker !== 'undefined') {
       try {
-        const worker = new Worker('js/background_homology_worker.js');
+        const worker = new Worker('js/background_homology_worker.js?v=20260827-1');
         worker.onmessage = (event) => {
           const message = event && event.data ? event.data : {};
           worker.terminate();
@@ -17365,13 +17376,14 @@
     if (!shouldShowBackgroundCusps(report)) return;
     const vertices = computeDisplayedBackgroundCuspVertices();
     if (!vertices.length) return;
+    const displayLayout = backgroundCuspDisplayLayout(vertices);
     const selectedKey = state.selectedBackgroundCusp;
     const hoverKey = state.backgroundHoverCusp && state.backgroundHoverCusp.id;
     ctx.save();
     vertices.forEach((vertex) => {
       const active = vertex.id === selectedKey;
       const hover = vertex.id === hoverKey;
-      drawBackgroundCuspMarker(ctx, vertex, palette, active, hover);
+      drawBackgroundCuspMarker(ctx, vertex, palette, active, hover, displayLayout.get(vertex.id));
       if (active) drawBackgroundCuspCornerHighlights(ctx, vertex, palette);
     });
     ctx.restore();
@@ -17793,11 +17805,15 @@
     return chain;
   }
 
-  function homologyCordChainForGenerator(generator, entries) {
+  function homologyCordChainForGenerator(generator, entries, analysisOverride = null) {
     const fingerprint = homologyCordChainFingerprint(generator, entries);
     const current = state.homologyCordChains[generator.id];
     if (current && current.fingerprint === fingerprint) return current;
-    const next = makePlanarElasticBandChain(makeHomologyCordChain(generator, entries));
+    const analysis = analysisOverride || currentBackgroundHomologyAnalysis();
+    const next = makeHomologyCordRuntimeChain(
+      makeHomologyCordChain(generator, entries, analysis),
+      analysis
+    );
     if (next) state.homologyCordChains[generator.id] = next;
     else delete state.homologyCordChains[generator.id];
     return next;
@@ -17812,7 +17828,7 @@
     let relaxable = 0;
     visible.forEach((generator) => {
       const entries = homologyChainDisplayEntries(analysis, generator);
-      if (homologyCordChainForGenerator(generator, entries)) relaxable += 1;
+      if (homologyCordChainForGenerator(generator, entries, analysis)) relaxable += 1;
     });
     return { ready: true, visible: visible.length, relaxable, unsupported: visible.length - relaxable };
   }
@@ -17839,6 +17855,272 @@
 
   function homologyCordMaterialSnapshot(chain) {
     return homologyCordPhysicalIndices(chain).map((index) => ({ index, ...chain.points[index] }));
+  }
+
+  function homologyCordPortalId(fromTile, fromDir, toTile, toDir) {
+    return `${fromTile}:${fromDir}>${toTile}:${toDir}`;
+  }
+
+  function homologyCordAffineClose(left, right, tolerance = HOMOLOGY_CORD_QUOTIENT_INVARIANT_TOLERANCE) {
+    if (!left || !right) return false;
+    return Math.abs(left.matrix.a - right.matrix.a) <= tolerance
+      && Math.abs(left.matrix.b - right.matrix.b) <= tolerance
+      && Math.abs(left.matrix.c - right.matrix.c) <= tolerance
+      && Math.abs(left.matrix.d - right.matrix.d) <= tolerance
+      && Math.abs(left.offset.x - right.offset.x) <= tolerance
+      && Math.abs(left.offset.y - right.offset.y) <= tolerance;
+  }
+
+  function quotientVertexIdForCorner(analysis, tileIndex, vertex) {
+    const complex = analysis && analysis.complex;
+    const cornerToVertex = complex && complex.cornerToVertex;
+    const sides = getLattice().sides;
+    const flatIndex = tileIndex * sides + modulo(vertex, sides);
+    const value = Array.isArray(cornerToVertex) ? cornerToVertex[flatIndex] : -1;
+    return Number.isInteger(value) ? value : -1;
+  }
+
+  function quotientCornerIncidentDirs(vertex) {
+    const result = [];
+    for (let dir = 0; dir < getLattice().sides; dir += 1) {
+      const corners = orientedBoundaryEdgeCorners(0, dir);
+      if (corners.start === vertex || corners.end === vertex) result.push(dir);
+    }
+    return result;
+  }
+
+  function buildHomologyCordVertexStar(analysis, vertex) {
+    const sectors = (vertex && vertex.corners ? vertex.corners : []).map((corner, sectorIndex) => ({
+      id: sectorIndex,
+      tileIndex: corner.index,
+      vertex: corner.vertex,
+      point: geometry && geometry.cells[corner.index]
+        ? tilePoints(
+          geometry.cells[corner.index].x,
+          geometry.cells[corner.index].y,
+          geometry.radius
+        )[modulo(corner.vertex, getLattice().sides)]
+        : null,
+      angle: tileCornerAngle(),
+      neighbors: []
+    }));
+    const sectorByCorner = new Map(sectors.map((sector) => [`${sector.tileIndex}:${sector.vertex}`, sector]));
+    sectors.forEach((sector) => {
+      quotientCornerIncidentDirs(sector.vertex).forEach((dir) => {
+        const neighbor = connectedSurfaceNeighbor(sector.tileIndex, dir);
+        if (!neighbor) return;
+        const sourceCorners = orientedBoundaryEdgeCorners(sector.tileIndex, dir);
+        const targetCorners = orientedBoundaryEdgeCorners(neighbor.index, neighbor.dir);
+        const sameOrientation = homologyCordPortalSameOrientation(
+          analysis,
+          { side: { index: sector.tileIndex, dir } },
+          { side: { index: neighbor.index, dir: neighbor.dir } }
+        );
+        const sourceAtStart = sourceCorners.start === sector.vertex;
+        const targetVertex = sourceAtStart
+          ? (sameOrientation ? targetCorners.start : targetCorners.end)
+          : (sameOrientation ? targetCorners.end : targetCorners.start);
+        const candidates = [sectorByCorner.get(`${neighbor.index}:${targetVertex}`)]
+          .filter((candidate) => candidate && quotientVertexIdForCorner(
+            analysis,
+            candidate.tileIndex,
+            candidate.vertex
+          ) === vertex.id);
+        candidates.forEach((candidate) => {
+          if (!sector.neighbors.includes(candidate.id)) sector.neighbors.push(candidate.id);
+        });
+      });
+    });
+    const components = [];
+    const visited = new Set();
+    sectors.forEach((sector) => {
+      if (visited.has(sector.id)) return;
+      const component = [];
+      const queue = [sector.id];
+      visited.add(sector.id);
+      for (let cursor = 0; cursor < queue.length; cursor += 1) {
+        const id = queue[cursor];
+        component.push(id);
+        (sectors[id].neighbors || []).forEach((neighborId) => {
+          if (visited.has(neighborId)) return;
+          visited.add(neighborId);
+          queue.push(neighborId);
+        });
+      }
+      components.push(component);
+    });
+    const orderedComponents = components.map((component) => {
+      if (component.length <= 1) return component.slice();
+      const componentSet = new Set(component);
+      const endpoint = component.find((id) => (
+        (sectors[id].neighbors || []).filter((neighborId) => componentSet.has(neighborId)).length === 1
+      ));
+      const start = endpoint == null ? Math.min(...component) : endpoint;
+      const ordered = [];
+      let previous = -1;
+      let current = start;
+      while (current != null && !ordered.includes(current)) {
+        ordered.push(current);
+        const next = (sectors[current].neighbors || [])
+          .filter((neighborId) => componentSet.has(neighborId) && neighborId !== previous)
+          .sort((left, right) => left - right)[0];
+        previous = current;
+        current = next;
+      }
+      return ordered.length === component.length ? ordered : component.slice().sort((left, right) => left - right);
+    });
+    const degrees = sectors.map((sector) => new Set(sector.neighbors).size);
+    const endpoints = degrees.filter((degree) => degree === 1).length;
+    const manifold = sectors.length > 0
+      && components.length === 1
+      && (sectors.length === 1
+        ? degrees[0] === 0
+        : (degrees.every((degree) => degree === 1 || degree === 2)
+          && (endpoints === 0 || endpoints === 2)));
+    return {
+      vertexId: vertex.id,
+      sectors,
+      cyclicComponents: orderedComponents,
+      totalAngle: sectors.reduce((sum, sector) => sum + sector.angle, 0),
+      manifold,
+      boundary: sectors.length === 1 || endpoints === 2
+    };
+  }
+
+  function makeHomologyCordQuotientAtlas(analysisOverride = null) {
+    const analysis = analysisOverride || currentBackgroundHomologyAnalysis();
+    if (!analysis || !geometry) return null;
+    const cacheKey = `${backgroundHomologyTopologyKey()}|${geometry.radius.toFixed(8)}`;
+    const cached = state.homologyCordQuotientAtlas;
+    if (cached && cached.cacheKey === cacheKey && cached.analysis === analysis) return cached;
+    const portals = new Map();
+    const gluePairs = cloneGluedEdges();
+    let valid = true;
+    gluePairs.forEach((pair, pairIndex) => {
+      const addPortal = (sourceSide, targetSide) => {
+        const sourceCell = geometry.cells[sourceSide.index];
+        const targetCell = geometry.cells[targetSide.index];
+        if (!sourceCell || !targetCell) return false;
+        const source = edgeSegmentPoints(sourceCell.x, sourceCell.y, sourceSide.dir, geometry.radius);
+        const target = edgeSegmentPoints(targetCell.x, targetCell.y, targetSide.dir, geometry.radius);
+        const sameOrientation = homologyCordPortalSameOrientation(
+          analysis,
+          { side: sourceSide },
+          { side: targetSide }
+        );
+        const portalTransform = homologyCordAffinePortalTransform(
+          source,
+          target,
+          sameOrientation,
+          sourceCell,
+          targetCell
+        );
+        const inverse = invertHomologyCordAffine(portalTransform.affine);
+        if (!inverse) return false;
+        const id = homologyCordPortalId(sourceSide.index, sourceSide.dir, targetSide.index, targetSide.dir);
+        const inverseId = homologyCordPortalId(targetSide.index, targetSide.dir, sourceSide.index, sourceSide.dir);
+        portals.set(id, {
+          id,
+          inverseId,
+          pairIndex,
+          fromTile: sourceSide.index,
+          fromDir: sourceSide.dir,
+          toTile: targetSide.index,
+          toDir: targetSide.dir,
+          forward: portalTransform.affine,
+          inverse,
+          sameOrientation,
+          source,
+          target,
+          bounds: planarElasticBandBounds([source.start, source.end])
+        });
+        return true;
+      };
+      if (!addPortal(pair.first, pair.second) || !addPortal(pair.second, pair.first)) valid = false;
+    });
+    if (portals.size !== gluePairs.length * 2) valid = false;
+    portals.forEach((portal) => {
+      const inversePortal = portals.get(portal.inverseId);
+      if (!inversePortal
+        || inversePortal.inverseId !== portal.id
+        || !homologyCordAffineClose(
+          composeHomologyCordAffine(inversePortal.forward, portal.forward),
+          homologyCordAffineIdentity()
+        )) valid = false;
+    });
+    const vertexStars = new Map();
+    ((analysis.complex && analysis.complex.vertices) || []).forEach((vertex) => {
+      vertexStars.set(vertex.id, buildHomologyCordVertexStar(analysis, vertex));
+    });
+    const atlas = {
+      cacheKey,
+      analysis,
+      portals,
+      vertexStars,
+      valid,
+      hasPortals: portals.size > 0
+    };
+    state.homologyCordQuotientAtlas = atlas;
+    return atlas;
+  }
+
+  function homologyCordPortalForCrossing(atlas, crossing) {
+    if (!atlas || !crossing) return null;
+    return atlas.portals.get(homologyCordPortalId(
+      crossing.fromTile,
+      crossing.fromDir,
+      crossing.toTile,
+      crossing.toDir
+    )) || null;
+  }
+
+  function reduceHomologyCordPortalWord(word, atlas) {
+    const reduced = [];
+    (word || []).forEach((portalId) => {
+      const previous = reduced[reduced.length - 1];
+      const portal = atlas && atlas.portals.get(portalId);
+      if (portal && previous === portal.inverseId) reduced.pop();
+      else reduced.push(portalId);
+    });
+    return reduced;
+  }
+
+  function homologyCordPortalWordTransform(word, atlas) {
+    let transform = homologyCordAffineIdentity();
+    for (const portalId of word || []) {
+      const portal = atlas && atlas.portals.get(portalId);
+      if (!portal) return null;
+      transform = composeHomologyCordAffine(portal.forward, transform);
+    }
+    return transform;
+  }
+
+  function homologyCordCyclicPortalWord(chain) {
+    const word = [];
+    (chain && chain.springs || []).forEach((spring) => word.push(...(spring.word || [])));
+    const atlas = chain && chain.atlas;
+    const reduced = reduceHomologyCordPortalWord(word, atlas);
+    while (reduced.length > 1) {
+      const first = atlas && atlas.portals.get(reduced[0]);
+      if (!first || first.inverseId !== reduced[reduced.length - 1]) break;
+      reduced.shift();
+      reduced.pop();
+    }
+    return reduced;
+  }
+
+  function canonicalHomologyCordCyclicWord(word) {
+    if (!word || !word.length) return '';
+    let best = null;
+    for (let offset = 0; offset < word.length; offset += 1) {
+      const candidate = word.slice(offset).concat(word.slice(0, offset)).join('|');
+      if (best == null || candidate < best) best = candidate;
+    }
+    return best || '';
+  }
+
+  function homologyCordCyclicHolonomy(chain) {
+    return homologyCordPortalWordTransform(homologyCordCyclicPortalWord(chain), chain && chain.atlas);
   }
 
   function makePlanarElasticBandObstacles() {
@@ -18269,6 +18551,866 @@
     };
   }
 
+  function constrainInitialQuotientElasticBandPoint(point, tileIndex, obstacles) {
+    // Quotient particles live in one tile chart. A barrier belonging only to
+    // another on-screen chart copy must not push this particle out of its own
+    // polygon merely because the two copies meet at a displayed corner.
+    const localObstacles = {
+      polygons: (obstacles && obstacles.polygons) || [],
+      barriers: ((obstacles && obstacles.barriers) || []).filter((barrier) => (
+        barrier.tileIndex === tileIndex
+      ))
+    };
+    let constrained = constrainInitialPlanarElasticBandPoint(point, tileIndex, localObstacles);
+    const cell = geometry && geometry.cells[tileIndex];
+    if (!cell) return constrained;
+    const initialGap = geometry.radius * HOMOLOGY_CORD_INITIAL_BOUNDARY_GAP_RATIO;
+    // Finish with a convex half-plane projection against every side, not only
+    // portals. Besides providing the requested initial safety gap, this keeps
+    // a vertex sample inside its declared tile after two boundary constraints
+    // act near the same cusp.
+    for (let pass = 0; pass < 3; pass += 1) {
+      for (let dir = 0; dir < getLattice().sides; dir += 1) {
+        const edge = edgeSegmentPoints(cell.x, cell.y, dir, geometry.radius);
+        const requiredGap = gluedBoundaryPartner(tileIndex, dir)
+          ? initialGap
+          : geometry.radius * 1e-6;
+        const midpoint = {
+          x: (edge.start.x + edge.end.x) * 0.5,
+          y: (edge.start.y + edge.end.y) * 0.5
+        };
+        const inward = homologyCordNormalize({ x: cell.x - midpoint.x, y: cell.y - midpoint.y });
+        const signedDistance = ((constrained.x - edge.start.x) * inward.x)
+          + ((constrained.y - edge.start.y) * inward.y);
+        if (signedDistance >= requiredGap) continue;
+        constrained = {
+          x: constrained.x + (inward.x * (requiredGap - signedDistance)),
+          y: constrained.y + (inward.y * (requiredGap - signedDistance))
+        };
+      }
+    }
+    return constrained;
+  }
+
+  function homologyCordApexRouteAllowed(totalAngle, sideAngle, tolerance = 1e-9) {
+    return Number.isFinite(totalAngle)
+      && Number.isFinite(sideAngle)
+      && sideAngle >= Math.PI - tolerance
+      && totalAngle - sideAngle >= Math.PI - tolerance;
+  }
+
+  function quotientVertexNearPoint(analysis, tileIndex, point, tolerance) {
+    let best = null;
+    for (let vertex = 0; vertex < getLattice().sides; vertex += 1) {
+      const cell = geometry && geometry.cells[tileIndex];
+      const corner = cell
+        ? tilePoints(cell.x, cell.y, geometry.radius)[modulo(vertex, getLattice().sides)]
+        : null;
+      if (!corner) continue;
+      const distance = Math.hypot(point.x - corner.x, point.y - corner.y);
+      if (distance > tolerance || (best && best.distance <= distance)) continue;
+      best = {
+        vertexId: quotientVertexIdForCorner(analysis, tileIndex, vertex),
+        tileIndex,
+        vertex,
+        point: corner,
+        distance
+      };
+    }
+    return best;
+  }
+
+  function homologyCordApexSideAngle(apex, left, right) {
+    if (!apex || !left || !right) return 0;
+    const incoming = homologyCordNormalize({ x: left.x - apex.x, y: left.y - apex.y });
+    const outgoing = homologyCordNormalize({ x: right.x - apex.x, y: right.y - apex.y });
+    const dot = clamp((incoming.x * outgoing.x) + (incoming.y * outgoing.y), -1, 1);
+    return Math.acos(dot);
+  }
+
+  function quotientPortalEndpointEvent(atlas, portal, hit, left, rightInSourceChart) {
+    if (!atlas || !portal || !hit || hit.pathT < -HOMOLOGY_CORD_EPSILON
+      || hit.pathT > 1 + HOMOLOGY_CORD_EPSILON) return null;
+    const edgeLength = Math.hypot(
+      portal.source.end.x - portal.source.start.x,
+      portal.source.end.y - portal.source.start.y
+    );
+    const endpointIndex = hit.edgeT < 0 ? 0 : 1;
+    const overshoot = Math.abs(hit.edgeT - endpointIndex) * edgeLength;
+    if (overshoot > geometry.radius * HOMOLOGY_CORD_VERTEX_EXIT_RATIO) return null;
+    const point = endpointIndex === 0 ? portal.source.start : portal.source.end;
+    const near = quotientVertexNearPoint(
+      atlas.analysis,
+      portal.fromTile,
+      point,
+      geometry.radius * HOMOLOGY_CORD_VERTEX_EXIT_RATIO
+    );
+    const star = near && atlas.vertexStars.get(near.vertexId);
+    if (!star) return null;
+    const sideAngle = homologyCordApexSideAngle(point, left, rightInSourceChart);
+    const ordinaryVertex = Math.abs(star.totalAngle - (Math.PI * 2)) <= 1e-7;
+    return {
+      vertexId: star.vertexId,
+      totalAngle: star.totalAngle,
+      sideAngle,
+      allowed: star.manifold && (ordinaryVertex
+        || homologyCordApexRouteAllowed(star.totalAngle, sideAngle, 0.08)),
+      manifold: star.manifold,
+      endpointIndex,
+      point,
+      overshoot
+    };
+  }
+
+  function traceQuotientSegment(start, end, spring, chain, options = {}) {
+    const atlas = options.atlas || (chain && chain.atlas);
+    if (!atlas || !start || !end) return { valid: false, segments: [], crossings: [], vertexEvents: [] };
+    const word = (spring && spring.word) || [];
+    const segments = [];
+    const crossings = [];
+    const vertexEvents = [];
+    let current = { x: start.x, y: start.y };
+    let currentTile = start.tileIndex;
+    if (spring && spring.vertexEvent
+      && (spring.vertexEvent.active || spring.vertexEvent.constructionBridge)) {
+      const star = atlas.vertexStars.get(spring.vertexEvent.vertexId);
+      const analyticApex = !!spring.vertexEvent.active;
+      if (!star || !star.manifold
+        || (analyticApex && Math.abs(star.totalAngle - (Math.PI * 2)) > 1e-7
+          && !homologyCordApexRouteAllowed(
+            star.totalAngle,
+            Number.isFinite(spring.vertexEvent.sideAngle) ? spring.vertexEvent.sideAngle : star.totalAngle * 0.5,
+            0.08
+          ))) {
+        return { valid: false, segments, crossings, vertexEvents, reason: 'invalid-apex-event' };
+      }
+      const nearestSectorPoint = (particle) => {
+        const choices = star.sectors
+          .filter((sector) => sector.tileIndex === particle.tileIndex && sector.point)
+          .map((sector) => ({
+            point: sector.point,
+            distance: Math.hypot(particle.x - sector.point.x, particle.y - sector.point.y)
+          }))
+          .sort((left, right) => left.distance - right.distance);
+        return choices.length ? choices[0].point : null;
+      };
+      const leftApex = nearestSectorPoint(start);
+      const rightApex = nearestSectorPoint(end);
+      if (!leftApex || !rightApex) {
+        return { valid: false, segments, crossings, vertexEvents, reason: 'missing-apex-sector' };
+      }
+      segments.push({ tileIndex: start.tileIndex, start: { x: start.x, y: start.y }, end: { ...leftApex } });
+      segments.push({ tileIndex: end.tileIndex, start: { ...rightApex }, end: { x: end.x, y: end.y } });
+      vertexEvents.push({
+        vertexId: star.vertexId,
+        totalAngle: star.totalAngle,
+        allowed: analyticApex,
+        virtual: analyticApex,
+        constructionBridge: !analyticApex,
+        point: leftApex
+      });
+      return { valid: true, segments, crossings, vertexEvents, reason: '' };
+    }
+    const traceInternalToTile = (targetPoint, desiredTile) => {
+      for (let attempt = 0; attempt <= HOMOLOGY_CORD_MAX_PORTAL_CROSSINGS; attempt += 1) {
+        if (currentTile === desiredTile) return true;
+        // A cellular representative often changes tile labels while running
+        // exactly along their common edge or through its endpoint. Standard
+        // segment intersection is singular in that collinear case, so split
+        // it with signed half-plane distances instead of rejecting the chart
+        // switch as a missing portal.
+        let directInternal = null;
+        for (let dir = 0; dir < getLattice().sides; dir += 1) {
+          const neighbor = connectedSurfaceNeighbor(currentTile, dir);
+          if (!neighbor || neighbor.index !== desiredTile || atlas.portals.get(homologyCordPortalId(
+            currentTile,
+            dir,
+            neighbor.index,
+            neighbor.dir
+          ))) continue;
+          const cell = geometry.cells[currentTile];
+          const edge = edgeSegmentPoints(cell.x, cell.y, dir, geometry.radius);
+          const midpoint = {
+            x: (edge.start.x + edge.end.x) * 0.5,
+            y: (edge.start.y + edge.end.y) * 0.5
+          };
+          const inward = homologyCordNormalize({ x: cell.x - midpoint.x, y: cell.y - midpoint.y });
+          const startDistance = ((current.x - edge.start.x) * inward.x)
+            + ((current.y - edge.start.y) * inward.y);
+          const targetDistance = ((targetPoint.x - edge.start.x) * inward.x)
+            + ((targetPoint.y - edge.start.y) * inward.y);
+          const tolerance = geometry.radius * 1e-3;
+          if (startDistance < -tolerance || targetDistance > tolerance) continue;
+          const denominator = startDistance - targetDistance;
+          const pathT = Math.abs(denominator) > HOMOLOGY_CORD_EPSILON
+            ? clamp(startDistance / denominator, 0, 1)
+            : 0.5;
+          const contact = {
+            x: current.x + ((targetPoint.x - current.x) * pathT),
+            y: current.y + ((targetPoint.y - current.y) * pathT)
+          };
+          const projection = projectPointToSegment(contact, edge.start, edge.end);
+          if (projection.distance > tolerance
+            || projection.t < -HOMOLOGY_CORD_EPSILON
+            || projection.t > 1 + HOMOLOGY_CORD_EPSILON) continue;
+          directInternal = { neighbor, contact };
+          break;
+        }
+        if (directInternal) {
+          segments.push({ tileIndex: currentTile, start: { ...current }, end: { ...directInternal.contact } });
+          const targetCell = geometry.cells[directInternal.neighbor.index];
+          const targetInward = homologyCordNormalize({
+            x: targetCell.x - directInternal.contact.x,
+            y: targetCell.y - directInternal.contact.y
+          });
+          current = {
+            x: directInternal.contact.x + (targetInward.x * geometry.radius * 1e-6),
+            y: directInternal.contact.y + (targetInward.y * geometry.radius * 1e-6)
+          };
+          currentTile = directInternal.neighbor.index;
+          continue;
+        }
+        const choices = quotientTileExitCandidates(current, targetPoint, currentTile)
+          .map((exit) => ({ exit, neighbor: connectedSurfaceNeighbor(currentTile, exit.dir) }))
+          .filter((choice) => choice.neighbor && !atlas.portals.get(homologyCordPortalId(
+            currentTile,
+            choice.exit.dir,
+            choice.neighbor.index,
+            choice.neighbor.dir
+          )))
+          .sort((left, right) => (
+            Number(right.neighbor.index === desiredTile) - Number(left.neighbor.index === desiredTile)
+            || Math.hypot(
+              targetPoint.x - geometry.cells[left.neighbor.index].x,
+              targetPoint.y - geometry.cells[left.neighbor.index].y
+            ) - Math.hypot(
+              targetPoint.x - geometry.cells[right.neighbor.index].x,
+              targetPoint.y - geometry.cells[right.neighbor.index].y
+            )
+            || left.exit.dir - right.exit.dir
+          ));
+        if (!choices.length) return false;
+        const { exit, neighbor } = choices[0];
+        const contact = {
+          x: current.x + ((targetPoint.x - current.x) * clamp(exit.pathT, 0, 1)),
+          y: current.y + ((targetPoint.y - current.y) * clamp(exit.pathT, 0, 1))
+        };
+        segments.push({ tileIndex: currentTile, start: { ...current }, end: contact });
+        const targetCell = geometry.cells[neighbor.index];
+        const inward = homologyCordNormalize({ x: targetCell.x - contact.x, y: targetCell.y - contact.y });
+        current = {
+          x: contact.x + (inward.x * geometry.radius * 1e-6),
+          y: contact.y + (inward.y * geometry.radius * 1e-6)
+        };
+        currentTile = neighbor.index;
+      }
+      return false;
+    };
+    for (let wordIndex = 0; wordIndex < word.length; wordIndex += 1) {
+      const portal = atlas.portals.get(word[wordIndex]);
+      if (!portal) {
+        return { valid: false, segments, crossings, vertexEvents, reason: 'portal-word-chart' };
+      }
+      const suffix = homologyCordPortalWordTransform(word.slice(wordIndex), atlas);
+      const suffixInverse = suffix && invertHomologyCordAffine(suffix);
+      if (!suffixInverse) return { valid: false, segments, crossings, vertexEvents, reason: 'portal-word-transform' };
+      const targetInCurrent = applyHomologyCordAffine(suffixInverse, end);
+      if (!traceInternalToTile(targetInCurrent, portal.fromTile)) {
+        return { valid: false, segments, crossings, vertexEvents, reason: 'portal-word-chart' };
+      }
+      const hit = segmentIntersectionParameters(current, targetInCurrent, portal.source.start, portal.source.end);
+      const endpointEvent = hit && (hit.edgeT < -HOMOLOGY_CORD_EPSILON || hit.edgeT > 1 + HOMOLOGY_CORD_EPSILON)
+        ? quotientPortalEndpointEvent(atlas, portal, hit, current, targetInCurrent)
+        : null;
+      if (!hit || hit.pathT < -HOMOLOGY_CORD_EPSILON || hit.pathT > 1 + HOMOLOGY_CORD_EPSILON
+        || ((hit.edgeT < -HOMOLOGY_CORD_EPSILON || hit.edgeT > 1 + HOMOLOGY_CORD_EPSILON) && !endpointEvent)) {
+        return { valid: false, segments, crossings, vertexEvents, reason: 'portal-word-miss' };
+      }
+      if (endpointEvent && !endpointEvent.manifold) {
+        return { valid: false, segments, crossings, vertexEvents, reason: 'non-manifold-vertex' };
+      }
+      const contact = endpointEvent
+        ? { ...endpointEvent.point }
+        : {
+          x: current.x + ((targetInCurrent.x - current.x) * clamp(hit.pathT, 0, 1)),
+          y: current.y + ((targetInCurrent.y - current.y) * clamp(hit.pathT, 0, 1))
+        };
+      segments.push({ tileIndex: currentTile, start: { ...current }, end: contact });
+      const mapped = applyHomologyCordAffine(portal.forward, contact);
+      crossings.push({
+        portalId: portal.id,
+        parameter: endpointEvent ? endpointEvent.endpointIndex : clamp(hit.edgeT, 0, 1),
+        point: contact,
+        mapped
+      });
+      if (endpointEvent) vertexEvents.push({ ...endpointEvent, virtual: endpointEvent.allowed });
+      if (Math.min(hit.edgeT, 1 - hit.edgeT) * Math.hypot(
+        portal.source.end.x - portal.source.start.x,
+        portal.source.end.y - portal.source.start.y
+      ) <= geometry.radius * HOMOLOGY_CORD_VERTEX_ENTER_RATIO) {
+        const near = quotientVertexNearPoint(atlas.analysis, currentTile, contact,
+          geometry.radius * HOMOLOGY_CORD_VERTEX_EXIT_RATIO);
+        const star = near && atlas.vertexStars.get(near.vertexId);
+        if (star && !star.manifold) {
+          return { valid: false, segments, crossings, vertexEvents, reason: 'non-manifold-vertex' };
+        }
+        if (star && !vertexEvents.some((event) => event.vertexId === star.vertexId)) vertexEvents.push({
+          vertexId: star.vertexId,
+          totalAngle: star.totalAngle,
+          sideAngle: star.totalAngle * 0.5,
+          allowed: homologyCordApexRouteAllowed(star.totalAngle, star.totalAngle * 0.5),
+          point: near.point
+        });
+      }
+      const targetCell = geometry.cells[portal.toTile];
+      const targetMidpoint = {
+        x: (portal.target.start.x + portal.target.end.x) * 0.5,
+        y: (portal.target.start.y + portal.target.end.y) * 0.5
+      };
+      const targetInward = homologyCordNormalize({
+        x: targetCell.x - targetMidpoint.x,
+        y: targetCell.y - targetMidpoint.y
+      });
+      current = {
+        x: mapped.x + (targetInward.x * geometry.radius * 1e-6),
+        y: mapped.y + (targetInward.y * geometry.radius * 1e-6)
+      };
+      currentTile = portal.toTile;
+    }
+    if (!traceInternalToTile(end, end.tileIndex)) {
+      return { valid: false, segments, crossings, vertexEvents, reason: 'portal-word-target-chart' };
+    }
+    segments.push({ tileIndex: currentTile, start: { ...current }, end: { x: end.x, y: end.y } });
+    const valid = segments.every((segment) => {
+      const cell = geometry.cells[segment.tileIndex];
+      if (!cell || !tileExists(segment.tileIndex)) return false;
+      const tile = tilePoints(cell.x, cell.y, geometry.radius * 1.002);
+      const midpoint = {
+        x: (segment.start.x + segment.end.x) * 0.5,
+        y: (segment.start.y + segment.end.y) * 0.5
+      };
+      return pointInPolygon(segment.start, tile)
+        && pointInPolygon(segment.end, tile)
+        && pointInPolygon(midpoint, tile);
+    });
+    return { valid, segments, crossings, vertexEvents, reason: valid ? '' : 'tile-segment' };
+  }
+
+  // A cellular circuit can change tile charts exactly at a quotient vertex.
+  // When those two sectors are the endpoints of one explicit gluing, retain
+  // that portal in the spring word even though the geometric intersection is
+  // at edge parameter 0 or 1.  Treating it as a wordless vertex event would
+  // compare two distant on-screen chart copies and reject a valid cord (the
+  // usual-strip preset is the smallest such example).
+  function homologyCordDirectPortalAtVertex(atlas, fromTile, toTile, vertexId) {
+    if (!atlas || !Number.isInteger(vertexId) || vertexId < 0) return null;
+    const analysis = atlas.analysis;
+    const candidates = [];
+    atlas.portals.forEach((portal) => {
+      if (portal.fromTile !== fromTile || portal.toTile !== toTile) return;
+      const sourceCorners = orientedBoundaryEdgeCorners(fromTile, portal.fromDir);
+      const targetCorners = orientedBoundaryEdgeCorners(toTile, portal.toDir);
+      const touchesSource = [sourceCorners.start, sourceCorners.end].some((corner) => (
+        quotientVertexIdForCorner(analysis, fromTile, corner) === vertexId
+      ));
+      const touchesTarget = [targetCorners.start, targetCorners.end].some((corner) => (
+        quotientVertexIdForCorner(analysis, toTile, corner) === vertexId
+      ));
+      if (touchesSource && touchesTarget) candidates.push(portal);
+    });
+    return candidates.sort((left, right) => left.id.localeCompare(right.id))[0] || null;
+  }
+
+  function makeQuotientElasticBandChain(surfaceChain, analysisOverride = null) {
+    const analysis = analysisOverride || currentBackgroundHomologyAnalysis();
+    if (!surfaceChain || !analysis || !geometry) return null;
+    const atlas = makeHomologyCordQuotientAtlas(analysis);
+    if (!atlas || !atlas.valid || !atlas.hasPortals) return null;
+    const material = homologyCordPhysicalIndices(surfaceChain);
+    if (material.length < 3) return null;
+    const logicalCount = material.length - 1;
+    const obstacles = makePlanarElasticBandObstacles();
+    const points = material.map((surfaceIndex) => {
+      const source = surfaceChain.points[surfaceIndex];
+      const local = constrainInitialQuotientElasticBandPoint(
+        projectedHomologyCordChainPoint(source),
+        source.tileIndex,
+        obstacles
+      );
+      return {
+        x: local.x,
+        y: local.y,
+        tileIndex: source.tileIndex,
+        optimizationDirection: { x: 0, y: 0 }
+      };
+    });
+    if (points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y)
+      || !tileExists(point.tileIndex))) return null;
+    points[logicalCount] = {
+      x: points[0].x,
+      y: points[0].y,
+      tileIndex: points[0].tileIndex,
+      optimizationDirection: { x: 0, y: 0 }
+    };
+    const springs = [];
+    for (let index = 0; index < logicalCount; index += 1) {
+      const leftSource = surfaceChain.points[material[index]];
+      const rightSource = surfaceChain.points[material[index + 1]];
+      const trace = homologyCordSegmentTrace(leftSource, rightSource, analysis);
+      if (!trace) return null;
+      const word = [];
+      let vertexEvent = null;
+      (trace.crossings || []).forEach((crossing) => {
+        if (crossing.kind === 'vertex') {
+          const directPortal = homologyCordDirectPortalAtVertex(
+            atlas,
+            crossing.fromTile,
+            crossing.toTile,
+            crossing.vertex
+          );
+          if (directPortal) {
+            word.push(directPortal.id);
+            return;
+          }
+          const star = atlas.vertexStars.get(crossing.vertex);
+          if (!star || !star.manifold) vertexEvent = { invalid: true };
+          else {
+            const active = Math.abs(star.totalAngle - (Math.PI * 2)) <= 1e-7
+              || homologyCordApexRouteAllowed(star.totalAngle, star.totalAngle * 0.5);
+            vertexEvent = {
+              vertexId: star.vertexId,
+              totalAngle: star.totalAngle,
+              sideAngle: star.totalAngle * 0.5,
+              active,
+              // This is not an apex shortcut. It only records the exact
+              // cellular chart switch until an ordinary inset path becomes
+              // valid, at which point refreshQuotientSpringVertexEvents drops
+              // it atomically.
+              constructionBridge: !active
+            };
+          }
+          return;
+        }
+        const portal = homologyCordPortalForCrossing(atlas, crossing);
+        if (portal) word.push(portal.id);
+      });
+      if (vertexEvent && vertexEvent.invalid) return null;
+      springs.push({
+        word: reduceHomologyCordPortalWord(word, atlas),
+        transform: null,
+        vertexEvent
+      });
+    }
+    const closingWord = (surfaceChain.closurePortalItinerary || [])
+      .map((crossing) => homologyCordPortalForCrossing(atlas, crossing))
+      .filter(Boolean)
+      .map((portal) => portal.id);
+    if (closingWord.length && springs.length && !springs[springs.length - 1].word.length) {
+      springs[springs.length - 1].word = reduceHomologyCordPortalWord(closingWord, atlas);
+    }
+    for (const spring of springs) {
+      spring.transform = homologyCordPortalWordTransform(spring.word, atlas);
+      if (!spring.transform) return null;
+    }
+    const chain = {
+      generatorId: surfaceChain.generatorId,
+      fingerprint: surfaceChain.fingerprint,
+      solverSpace: 'quotient',
+      points,
+      springs,
+      atlas,
+      obstacles,
+      initialCyclicWord: null,
+      initialFreeHomotopySignature: '',
+      expectedHolonomy: null,
+      quotientFailureCount: 0,
+      fallbackToCellular: false,
+      discreteStateVersion: 0,
+      stableDiscreteStateVersion: 0,
+      deck: surfaceChain.deck || { x: 0, y: 0 },
+      closure: surfaceChain.closure || homologyCordAffineIdentity(),
+      settled: false,
+      stableMacroSteps: 0,
+      relaxationNotBefore: homologyCordNow() + HOMOLOGY_CORD_INITIAL_PAUSE_MS,
+      solverScratch: null
+    };
+    chain.initialCyclicWord = homologyCordCyclicPortalWord(chain);
+    chain.initialFreeHomotopySignature = canonicalHomologyCordCyclicWord(chain.initialCyclicWord);
+    chain.expectedHolonomy = homologyCordCyclicHolonomy(chain) || homologyCordAffineIdentity();
+    for (let index = 0; index < logicalCount; index += 1) {
+      const trace = traceQuotientSegment(points[index], points[(index + 1) % logicalCount], springs[index], chain);
+      if (!trace.valid) return null;
+      if (!springs[index].vertexEvent?.constructionBridge
+        && trace.vertexEvents.some((event) => !event.allowed && event.totalAngle < Math.PI * 2 - 1e-9)) {
+        springs[index].vertexEvent = null;
+      }
+    }
+    return chain;
+  }
+
+  function makeHomologyCordRuntimeChain(surfaceChain, analysisOverride = null) {
+    if (!surfaceChain) return null;
+    const analysis = analysisOverride || currentBackgroundHomologyAnalysis();
+    const atlas = makeHomologyCordQuotientAtlas(analysis);
+    if (atlas && atlas.hasPortals) {
+      return atlas.valid ? makeQuotientElasticBandChain(surfaceChain, analysis) : null;
+    }
+    return makePlanarElasticBandChain(surfaceChain);
+  }
+
+  function quotientTileExitCandidates(start, target, tileIndex) {
+    const cell = geometry && geometry.cells[tileIndex];
+    if (!cell) return [];
+    const polygon = tilePoints(cell.x, cell.y, geometry.radius * 1.000001);
+    if (pointInPolygon(target, polygon)) return [];
+    const hits = [];
+    let firstPathT = Infinity;
+    for (let dir = 0; dir < getLattice().sides; dir += 1) {
+      const edge = edgeSegmentPoints(cell.x, cell.y, dir, geometry.radius);
+      const hit = segmentIntersectionParameters(start, target, edge.start, edge.end);
+      if (!hit || hit.pathT < -HOMOLOGY_CORD_EPSILON || hit.pathT > 1 + HOMOLOGY_CORD_EPSILON
+        || hit.edgeT < -HOMOLOGY_CORD_EPSILON || hit.edgeT > 1 + HOMOLOGY_CORD_EPSILON) continue;
+      if (hit.pathT < firstPathT - HOMOLOGY_CORD_EPSILON) {
+        firstPathT = hit.pathT;
+        hits.length = 0;
+      }
+      if (Math.abs(hit.pathT - firstPathT) <= HOMOLOGY_CORD_EPSILON) hits.push({ ...hit, dir, edge });
+    }
+    if (!hits.length) {
+      // Recover a crossing when the motion starts numerically on an edge and
+      // then leaves almost parallel to it. The determinant-based intersection
+      // above is ill-conditioned there, but convex signed distances still
+      // identify the first crossed half-plane unambiguously.
+      for (let dir = 0; dir < getLattice().sides; dir += 1) {
+        const edge = edgeSegmentPoints(cell.x, cell.y, dir, geometry.radius);
+        const midpoint = {
+          x: (edge.start.x + edge.end.x) * 0.5,
+          y: (edge.start.y + edge.end.y) * 0.5
+        };
+        const inward = homologyCordNormalize({ x: cell.x - midpoint.x, y: cell.y - midpoint.y });
+        const startDistance = ((start.x - edge.start.x) * inward.x)
+          + ((start.y - edge.start.y) * inward.y);
+        const targetDistance = ((target.x - edge.start.x) * inward.x)
+          + ((target.y - edge.start.y) * inward.y);
+        if (targetDistance >= -HOMOLOGY_CORD_EPSILON || startDistance < -geometry.radius * 1e-3) continue;
+        const denominator = startDistance - targetDistance;
+        if (denominator <= HOMOLOGY_CORD_EPSILON) continue;
+        const pathT = clamp(startDistance / denominator, 0, 1);
+        const contact = {
+          x: start.x + ((target.x - start.x) * pathT),
+          y: start.y + ((target.y - start.y) * pathT)
+        };
+        const projection = projectPointToSegment(contact, edge.start, edge.end);
+        if (projection.distance > geometry.radius * 1e-3
+          || projection.t < -HOMOLOGY_CORD_EPSILON
+          || projection.t > 1 + HOMOLOGY_CORD_EPSILON) continue;
+        if (pathT < firstPathT - HOMOLOGY_CORD_EPSILON) {
+          firstPathT = pathT;
+          hits.length = 0;
+        }
+        if (Math.abs(pathT - firstPathT) <= HOMOLOGY_CORD_EPSILON) {
+          hits.push({ pathT, edgeT: clamp(projection.t, 0, 1), dir, edge });
+        }
+      }
+    }
+    return hits.sort((left, right) => left.dir - right.dir);
+  }
+
+  function quotientTileExit(start, target, tileIndex) {
+    return quotientTileExitCandidates(start, target, tileIndex)[0] || null;
+  }
+
+  function traceQuotientMotion(chain, particleIndex, start, proposed, options = {}) {
+    const atlas = options.atlas || (chain && chain.atlas);
+    if (!atlas || !start || !Number.isFinite(proposed.x) || !Number.isFinite(proposed.y)) {
+      return { valid: false, point: { ...start }, crossings: [], vertexEvents: [], reason: 'invalid-motion' };
+    }
+    const epsilon = geometry.radius * 1e-6;
+    let current = { x: start.x, y: start.y };
+    let target = { x: proposed.x, y: proposed.y };
+    let tileIndex = start.tileIndex;
+    const crossings = [];
+    const vertexEvents = [];
+    let intrinsicDisplacement = 0;
+    for (let attempt = 0; attempt <= HOMOLOGY_CORD_MAX_PORTAL_CROSSINGS; attempt += 1) {
+      const exitChoices = quotientTileExitCandidates(current, target, tileIndex);
+      if (!exitChoices.length) {
+        intrinsicDisplacement += Math.hypot(target.x - current.x, target.y - current.y);
+        return {
+          valid: true,
+          point: { x: target.x, y: target.y, tileIndex },
+          crossings,
+          vertexEvents,
+          intrinsicDisplacement,
+          discreteChanged: crossings.length > 0 || vertexEvents.length > 0
+        };
+      }
+      if (attempt >= HOMOLOGY_CORD_MAX_PORTAL_CROSSINGS) {
+        return { valid: false, point: { ...start }, crossings, vertexEvents, reason: 'portal-crossing-limit' };
+      }
+      const rankedExits = exitChoices.map((exit) => {
+        const neighbor = connectedSurfaceNeighbor(tileIndex, exit.dir);
+        if (!neighbor) return { exit, neighbor: null, score: Infinity };
+        const portal = atlas.portals.get(homologyCordPortalId(
+          tileIndex,
+          exit.dir,
+          neighbor.index,
+          neighbor.dir
+        ));
+        const mappedTarget = portal ? applyHomologyCordAffine(portal.forward, target) : target;
+        const targetCell = geometry.cells[neighbor.index];
+        const inside = targetCell && pointInPolygon(
+          mappedTarget,
+          tilePoints(targetCell.x, targetCell.y, geometry.radius * 1.000001)
+        );
+        return {
+          exit,
+          neighbor,
+          portal,
+          score: inside ? -1 : Math.hypot(mappedTarget.x - targetCell.x, mappedTarget.y - targetCell.y)
+        };
+      }).sort((left, right) => (
+        Number(!left.neighbor) - Number(!right.neighbor)
+        || left.score - right.score
+        || left.exit.dir - right.exit.dir
+      ));
+      const selected = rankedExits[0];
+      const exit = selected.exit;
+      const contact = {
+        x: current.x + ((target.x - current.x) * clamp(exit.pathT, 0, 1)),
+        y: current.y + ((target.y - current.y) * clamp(exit.pathT, 0, 1))
+      };
+      intrinsicDisplacement += Math.hypot(contact.x - current.x, contact.y - current.y);
+      const edgeLength = Math.hypot(exit.edge.end.x - exit.edge.start.x, exit.edge.end.y - exit.edge.start.y);
+      const nearApex = Math.min(Math.abs(exit.edgeT), Math.abs(1 - exit.edgeT)) * edgeLength
+        <= geometry.radius * HOMOLOGY_CORD_VERTEX_ENTER_RATIO;
+      if (nearApex) {
+        const near = quotientVertexNearPoint(
+          atlas.analysis,
+          tileIndex,
+          contact,
+          geometry.radius * HOMOLOGY_CORD_VERTEX_EXIT_RATIO
+        );
+        const star = near && atlas.vertexStars.get(near.vertexId);
+        if (star && !star.manifold) {
+          return { valid: false, point: { ...start }, crossings, vertexEvents, reason: 'non-manifold-vertex' };
+        }
+        if (star) {
+          const allowed = homologyCordApexRouteAllowed(star.totalAngle, star.totalAngle * 0.5);
+          if (!vertexEvents.some((event) => event.vertexId === star.vertexId)) vertexEvents.push({
+            vertexId: star.vertexId,
+            totalAngle: star.totalAngle,
+            sideAngle: star.totalAngle * 0.5,
+            allowed,
+            point: near.point,
+            enterThreshold: geometry.radius * HOMOLOGY_CORD_APEX_ENTER_IMPROVEMENT_RATIO,
+            exitThreshold: geometry.radius * HOMOLOGY_CORD_APEX_EXIT_IMPROVEMENT_RATIO
+          });
+          if (!allowed) {
+            const cell = geometry.cells[tileIndex];
+            const inward = homologyCordNormalize({ x: cell.x - contact.x, y: cell.y - contact.y });
+            return {
+              valid: true,
+              point: {
+                x: contact.x + (inward.x * epsilon),
+                y: contact.y + (inward.y * epsilon),
+                tileIndex
+              },
+              crossings,
+              vertexEvents,
+              intrinsicDisplacement,
+              blocked: true,
+              discreteChanged: vertexEvents.length > 0
+            };
+          }
+        }
+      }
+      const neighbor = selected.neighbor;
+      if (!neighbor) {
+        const cell = geometry.cells[tileIndex];
+        const midpoint = {
+          x: (exit.edge.start.x + exit.edge.end.x) * 0.5,
+          y: (exit.edge.start.y + exit.edge.end.y) * 0.5
+        };
+        const inward = homologyCordNormalize({ x: cell.x - midpoint.x, y: cell.y - midpoint.y });
+        return {
+          valid: true,
+          point: {
+            x: contact.x + (inward.x * epsilon),
+            y: contact.y + (inward.y * epsilon),
+            tileIndex
+          },
+          crossings,
+          vertexEvents,
+          intrinsicDisplacement,
+          blocked: true,
+          discreteChanged: vertexEvents.length > 0
+        };
+      }
+      const portal = selected.portal || atlas.portals.get(homologyCordPortalId(
+        tileIndex,
+        exit.dir,
+        neighbor.index,
+        neighbor.dir
+      ));
+      if (portal) {
+        const mappedContact = applyHomologyCordAffine(portal.forward, contact);
+        target = applyHomologyCordAffine(portal.forward, target);
+        const targetCell = geometry.cells[portal.toTile];
+        const targetMidpoint = {
+          x: (portal.target.start.x + portal.target.end.x) * 0.5,
+          y: (portal.target.start.y + portal.target.end.y) * 0.5
+        };
+        const inward = homologyCordNormalize({
+          x: targetCell.x - targetMidpoint.x,
+          y: targetCell.y - targetMidpoint.y
+        });
+        current = {
+          x: mappedContact.x + (inward.x * epsilon),
+          y: mappedContact.y + (inward.y * epsilon)
+        };
+        tileIndex = portal.toTile;
+        crossings.push({ portalId: portal.id, inverseId: portal.inverseId, point: contact, mapped: mappedContact });
+      } else {
+        const targetCell = geometry.cells[neighbor.index];
+        const inward = homologyCordNormalize({ x: targetCell.x - contact.x, y: targetCell.y - contact.y });
+        current = { x: contact.x + (inward.x * epsilon), y: contact.y + (inward.y * epsilon) };
+        tileIndex = neighbor.index;
+      }
+    }
+    return { valid: false, point: { ...start }, crossings, vertexEvents, reason: 'portal-crossing-limit' };
+  }
+
+  function updateQuotientSpringTransform(spring, atlas) {
+    spring.word = reduceHomologyCordPortalWord(spring.word, atlas);
+    spring.transform = homologyCordPortalWordTransform(spring.word, atlas);
+    return !!spring.transform;
+  }
+
+  function applyQuotientGaugeCrossings(chain, particleIndex, crossings) {
+    const logicalCount = chain.points.length - 1;
+    if (!logicalCount || !crossings || !crossings.length) return true;
+    const previousSpring = chain.springs[modulo(particleIndex - 1, logicalCount)];
+    const nextSpring = chain.springs[particleIndex % logicalCount];
+    for (const crossing of crossings) {
+      const portal = chain.atlas.portals.get(crossing.portalId);
+      if (!portal) return false;
+      previousSpring.word.push(portal.id);
+      nextSpring.word.unshift(portal.inverseId);
+      if (particleIndex === 0) {
+        chain.expectedHolonomy = composeHomologyCordAffine(
+          portal.forward,
+          composeHomologyCordAffine(chain.expectedHolonomy, portal.inverse)
+        );
+      }
+    }
+    if (!updateQuotientSpringTransform(previousSpring, chain.atlas)
+      || !updateQuotientSpringTransform(nextSpring, chain.atlas)) return false;
+    chain.discreteStateVersion += 1;
+    return true;
+  }
+
+  function quotientElasticBandLength(chain) {
+    const logicalCount = Math.max(0, chain.points.length - 1);
+    let length = 0;
+    for (let index = 0; index < logicalCount; index += 1) {
+      const trace = traceQuotientSegment(
+        chain.points[index],
+        chain.points[(index + 1) % logicalCount],
+        chain.springs[index],
+        chain
+      );
+      if (!trace.valid) return Infinity;
+      trace.segments.forEach((segment) => {
+        length += Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y);
+      });
+    }
+    return length;
+  }
+
+  function validateQuotientElasticBand(chain) {
+    const fail = (reason) => {
+      if (chain) chain.lastQuotientInvariantFailure = reason;
+      return false;
+    };
+    if (!chain || chain.solverSpace !== 'quotient' || !chain.atlas) return fail('chain');
+    const logicalCount = Math.max(0, chain.points.length - 1);
+    if (chain.springs.length !== logicalCount || logicalCount < 2) return fail('count');
+    for (let index = 0; index < logicalCount; index += 1) {
+      const point = chain.points[index];
+      const cell = geometry.cells[point.tileIndex];
+      if (!cell || !tileExists(point.tileIndex) || !Number.isFinite(point.x) || !Number.isFinite(point.y)
+        || !pointInPolygon(point, tilePoints(cell.x, cell.y, geometry.radius * 1.002))) return fail(`point:${index}`);
+      const spring = chain.springs[index];
+      if (!spring.transform) return fail(`transform:${index}`);
+      const trace = traceQuotientSegment(point, chain.points[(index + 1) % logicalCount], spring, chain);
+      if (!trace.valid) {
+        chain.lastQuotientInvariantDetail = {
+          index,
+          point: { x: point.x, y: point.y, tileIndex: point.tileIndex },
+          next: {
+            x: chain.points[(index + 1) % logicalCount].x,
+            y: chain.points[(index + 1) % logicalCount].y,
+            tileIndex: chain.points[(index + 1) % logicalCount].tileIndex
+          },
+          word: [...spring.word],
+          reason: trace.reason
+        };
+        return fail(`segment:${index}:${trace.reason}`);
+      }
+    }
+    const signature = canonicalHomologyCordCyclicWord(homologyCordCyclicPortalWord(chain));
+    if (signature !== chain.initialFreeHomotopySignature) return fail('free-homotopy');
+    const holonomy = homologyCordCyclicHolonomy(chain);
+    if (!holonomy || !homologyCordAffineClose(holonomy, chain.expectedHolonomy)) return fail('holonomy');
+    chain.lastQuotientInvariantFailure = '';
+    return true;
+  }
+
+  function snapshotQuotientElasticBand(chain) {
+    return {
+      points: chain.points.map((point) => ({
+        x: point.x,
+        y: point.y,
+        tileIndex: point.tileIndex,
+        optimizationDirection: { ...(point.optimizationDirection || { x: 0, y: 0 }) }
+      })),
+      springs: chain.springs.map((spring) => ({
+        word: [...spring.word],
+        transform: {
+          matrix: { ...spring.transform.matrix },
+          offset: { ...spring.transform.offset }
+        },
+        vertexEvent: spring.vertexEvent ? { ...spring.vertexEvent } : null
+      })),
+      expectedHolonomy: {
+        matrix: { ...chain.expectedHolonomy.matrix },
+        offset: { ...chain.expectedHolonomy.offset }
+      },
+      discreteStateVersion: chain.discreteStateVersion
+    };
+  }
+
+  function restoreQuotientElasticBand(chain, snapshot) {
+    chain.points = snapshot.points.map((point) => ({
+      ...point,
+      optimizationDirection: { ...point.optimizationDirection }
+    }));
+    chain.springs = snapshot.springs.map((spring) => ({
+      word: [...spring.word],
+      transform: {
+        matrix: { ...spring.transform.matrix },
+        offset: { ...spring.transform.offset }
+      },
+      vertexEvent: spring.vertexEvent ? { ...spring.vertexEvent } : null
+    }));
+    chain.expectedHolonomy = {
+      matrix: { ...snapshot.expectedHolonomy.matrix },
+      offset: { ...snapshot.expectedHolonomy.offset }
+    };
+    chain.discreteStateVersion = snapshot.discreteStateVersion;
+  }
+
   function snapshotPlanarElasticBand(chain) {
     if (!chain || !Array.isArray(chain.points)) return [];
     return chain.points.map((point, index) => ({ index, x: point.x, y: point.y }));
@@ -18652,16 +19794,51 @@
       const kernel = planarElasticBandJacobiKernel(distanceContraction, substeps);
       const radius = substeps;
       for (let index = 0; index < logicalCount; index += 1) {
-        let x = kernel[radius] * snapshot[index].x;
-        let y = kernel[radius] * snapshot[index].y;
-        for (let offset = 1; offset <= radius; offset += 1) {
-          const coefficient = kernel[radius + offset];
-          const left = snapshot[modulo(index - offset, logicalCount)];
-          const right = snapshot[(index + offset) % logicalCount];
-          x += coefficient * (left.x + right.x);
-          y += coefficient * (left.y + right.y);
+        scratch.xA[index] = snapshot[index].x;
+        scratch.yA[index] = snapshot[index].y;
+      }
+      if (radius === 4) {
+        const center = kernel[4];
+        const one = kernel[5];
+        const two = kernel[6];
+        const three = kernel[7];
+        const four = kernel[8];
+        for (let index = 0; index < logicalCount; index += 1) {
+          const left1 = index === 0 ? logicalCount - 1 : index - 1;
+          const right1 = index + 1 === logicalCount ? 0 : index + 1;
+          const left2 = left1 === 0 ? logicalCount - 1 : left1 - 1;
+          const right2 = right1 + 1 === logicalCount ? 0 : right1 + 1;
+          const left3 = left2 === 0 ? logicalCount - 1 : left2 - 1;
+          const right3 = right2 + 1 === logicalCount ? 0 : right2 + 1;
+          const left4 = left3 === 0 ? logicalCount - 1 : left3 - 1;
+          const right4 = right3 + 1 === logicalCount ? 0 : right3 + 1;
+          nextPositions[index].x = (center * scratch.xA[index])
+            + (one * (scratch.xA[left1] + scratch.xA[right1]))
+            + (two * (scratch.xA[left2] + scratch.xA[right2]))
+            + (three * (scratch.xA[left3] + scratch.xA[right3]))
+            + (four * (scratch.xA[left4] + scratch.xA[right4]));
+          nextPositions[index].y = (center * scratch.yA[index])
+            + (one * (scratch.yA[left1] + scratch.yA[right1]))
+            + (two * (scratch.yA[left2] + scratch.yA[right2]))
+            + (three * (scratch.yA[left3] + scratch.yA[right3]))
+            + (four * (scratch.yA[left4] + scratch.yA[right4]));
         }
-        nextPositions[index] = { x, y };
+      } else {
+        for (let index = 0; index < logicalCount; index += 1) {
+          let x = kernel[radius] * scratch.xA[index];
+          let y = kernel[radius] * scratch.yA[index];
+          let leftIndex = index;
+          let rightIndex = index;
+          for (let offset = 1; offset <= radius; offset += 1) {
+            const coefficient = kernel[radius + offset];
+            leftIndex = leftIndex === 0 ? logicalCount - 1 : leftIndex - 1;
+            rightIndex = rightIndex + 1 === logicalCount ? 0 : rightIndex + 1;
+            x += coefficient * (scratch.xA[leftIndex] + scratch.xA[rightIndex]);
+            y += coefficient * (scratch.yA[leftIndex] + scratch.yA[rightIndex]);
+          }
+          nextPositions[index].x = x;
+          nextPositions[index].y = y;
+        }
       }
     } else {
       for (let index = 0; index < logicalCount; index += 1) {
@@ -18687,7 +19864,10 @@
         [sourceX, targetX] = [targetX, sourceX];
         [sourceY, targetY] = [targetY, sourceY];
       }
-      for (let index = 0; index < logicalCount; index += 1) nextPositions[index] = { x: sourceX[index], y: sourceY[index] };
+      for (let index = 0; index < logicalCount; index += 1) {
+        nextPositions[index].x = sourceX[index];
+        nextPositions[index].y = sourceY[index];
+      }
     }
     return {
       distanceContraction,
@@ -18696,6 +19876,296 @@
         ...options,
         heldIndex
       })
+    };
+  }
+
+  function quotientParticleInActiveZone(chain, particle) {
+    const threshold = geometry.radius * HOMOLOGY_CORD_PORTAL_ACTIVE_RATIO;
+    for (const portal of chain.atlas.portals.values()) {
+      if (portal.fromTile !== particle.tileIndex) continue;
+      if (projectPointToSegment(particle, portal.source.start, portal.source.end).distance <= threshold) return true;
+    }
+    return !!quotientVertexNearPoint(chain.atlas.analysis, particle.tileIndex, particle, threshold);
+  }
+
+  function ensureQuotientElasticBandScratch(chain, logicalCount) {
+    if (chain.solverScratch && chain.solverScratch.kind === 'quotient'
+      && chain.solverScratch.logicalCount === logicalCount) return chain.solverScratch;
+    chain.solverScratch = {
+      kind: 'quotient',
+      logicalCount,
+      source: Array.from({ length: logicalCount }, () => ({ x: 0, y: 0, tileIndex: -1 })),
+      target: Array.from({ length: logicalCount }, () => ({ x: 0, y: 0, tileIndex: -1 }))
+    };
+    return chain.solverScratch;
+  }
+
+  function updateQuotientVertexEvent(chain, springIndex, events) {
+    const spring = chain.springs[springIndex];
+    const allowed = (events || []).find((event) => event.allowed);
+    if (allowed) {
+      const pathInfo = quotientVertexEventPathInfo(chain, springIndex, allowed.vertexId);
+      const enterImprovement = geometry.radius * HOMOLOGY_CORD_APEX_ENTER_IMPROVEMENT_RATIO;
+      const ordinaryVertex = Math.abs(allowed.totalAngle - (Math.PI * 2)) <= 1e-7;
+      if (!ordinaryVertex && pathInfo && Number.isFinite(pathInfo.ordinaryLength)
+        && pathInfo.ordinaryLength - pathInfo.apexLength < enterImprovement
+        && !(spring.vertexEvent && spring.vertexEvent.active)) return;
+      const previousId = spring.vertexEvent && spring.vertexEvent.vertexId;
+      spring.vertexEvent = {
+        vertexId: allowed.vertexId,
+        totalAngle: allowed.totalAngle,
+        sideAngle: allowed.sideAngle,
+        active: true,
+        virtual: true,
+        enterImprovement,
+        exitImprovement: geometry.radius * HOMOLOGY_CORD_APEX_EXIT_IMPROVEMENT_RATIO
+      };
+      if (previousId !== allowed.vertexId) chain.discreteStateVersion += 1;
+      return;
+    }
+    if (spring.vertexEvent && spring.vertexEvent.constructionBridge) {
+      const logicalCount = Math.max(0, chain.points.length - 1);
+      const ordinaryProbe = traceQuotientSegment(
+        chain.points[springIndex],
+        chain.points[(springIndex + 1) % logicalCount],
+        { ...spring, vertexEvent: null },
+        chain
+      );
+      if (ordinaryProbe.valid) {
+        spring.vertexEvent = null;
+        chain.discreteStateVersion += 1;
+      }
+      return;
+    }
+    if (!spring.vertexEvent || !spring.vertexEvent.active) return;
+    const star = chain.atlas.vertexStars.get(spring.vertexEvent.vertexId);
+    const corners = star && star.sectors.map((sector) => sector.point).filter(Boolean);
+    const left = chain.points[springIndex];
+    const right = chain.points[(springIndex + 1) % (chain.points.length - 1)];
+    const distance = corners && corners.length
+      ? Math.min(...corners.flatMap((corner) => [
+        Math.hypot(left.x - corner.x, left.y - corner.y),
+        Math.hypot(right.x - corner.x, right.y - corner.y)
+      ]))
+      : Infinity;
+    const pathInfo = quotientVertexEventPathInfo(chain, springIndex, spring.vertexEvent.vertexId);
+    const alternativeWins = pathInfo && Number.isFinite(pathInfo.ordinaryLength)
+      && pathInfo.apexLength - pathInfo.ordinaryLength
+        >= geometry.radius * HOMOLOGY_CORD_APEX_EXIT_IMPROVEMENT_RATIO;
+    const ordinaryProbe = traceQuotientSegment(
+      left,
+      right,
+      { ...spring, vertexEvent: null },
+      chain
+    );
+    const ordinaryStillTouchesVertex = ordinaryProbe.valid && ordinaryProbe.vertexEvents.some((event) => (
+      event.vertexId === spring.vertexEvent.vertexId
+    ));
+    const leftActiveZone = distance > geometry.radius * HOMOLOGY_CORD_VERTEX_EXIT_RATIO
+      && ordinaryProbe.valid
+      && !ordinaryStillTouchesVertex;
+    if (leftActiveZone || alternativeWins) {
+      spring.vertexEvent = null;
+      chain.discreteStateVersion += 1;
+    }
+  }
+
+  function quotientVertexEventPathInfo(chain, springIndex, vertexId) {
+    const logicalCount = Math.max(0, chain && chain.points ? chain.points.length - 1 : 0);
+    if (!logicalCount) return null;
+    const spring = chain.springs[springIndex];
+    const star = chain.atlas.vertexStars.get(vertexId);
+    const left = chain.points[springIndex];
+    const right = chain.points[(springIndex + 1) % logicalCount];
+    if (!spring || !star || !left || !right) return null;
+    const nearest = (particle) => star.sectors
+      .filter((sector) => sector.tileIndex === particle.tileIndex && sector.point)
+      .map((sector) => ({
+        point: sector.point,
+        distance: Math.hypot(particle.x - sector.point.x, particle.y - sector.point.y)
+      }))
+      .sort((a, b) => a.distance - b.distance)[0] || null;
+    const leftApex = nearest(left);
+    const rightApex = nearest(right);
+    if (!leftApex || !rightApex) return null;
+    const apexLength = leftApex.distance + rightApex.distance;
+    const ordinarySpring = { ...spring, vertexEvent: null };
+    const ordinary = traceQuotientSegment(left, right, ordinarySpring, chain);
+    const ordinaryLength = ordinary.valid
+      ? ordinary.segments.reduce((sum, segment) => (
+        sum + Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y)
+      ), 0)
+      : Infinity;
+    return { apexLength, ordinaryLength };
+  }
+
+  function refreshQuotientSpringVertexEvents(chain) {
+    const logicalCount = Math.max(0, chain.points.length - 1);
+    for (let index = 0; index < logicalCount; index += 1) {
+      const spring = chain.springs[index];
+      if (spring.vertexEvent && spring.vertexEvent.active) {
+        updateQuotientVertexEvent(chain, index, []);
+        continue;
+      }
+      const probe = traceQuotientSegment(
+        chain.points[index],
+        chain.points[(index + 1) % logicalCount],
+        { ...spring, vertexEvent: null },
+        chain
+      );
+      if (probe.valid && probe.vertexEvents.length) updateQuotientVertexEvent(chain, index, probe.vertexEvents);
+    }
+  }
+
+  function stepQuotientElasticBandMacro(chain, options = {}) {
+    const logicalCount = Math.max(0, (chain.points || []).length - 1);
+    if (logicalCount < 2 || chain.fallbackToCellular) {
+      return {
+        resolved: false,
+        oldLength: 0,
+        length: 0,
+        relativeLengthChange: 0,
+        maximumDisplacement: 0,
+        discreteChanged: false
+      };
+    }
+    const rollback = snapshotQuotientElasticBand(chain);
+    const oldLength = quotientElasticBandLength(chain);
+    const configured = Number(options.distanceContraction);
+    const distanceContraction = Number.isFinite(configured) ? clamp(configured, 0, 0.8) : 0.05;
+    const substeps = Math.max(1, Math.floor(options.substeps || HOMOLOGY_CORD_MACRO_SUBSTEPS));
+    const heldIndex = Number.isInteger(options.heldIndex)
+      ? (options.heldIndex === logicalCount ? 0 : options.heldIndex)
+      : -1;
+    const metrics = options.metrics || null;
+    if (metrics) metrics.fullCollisionPasses = (metrics.fullCollisionPasses || 0) + 1;
+    const scratch = ensureQuotientElasticBandScratch(chain, logicalCount);
+    for (let index = 0; index < logicalCount; index += 1) {
+      scratch.source[index].x = chain.points[index].x;
+      scratch.source[index].y = chain.points[index].y;
+      scratch.source[index].tileIndex = chain.points[index].tileIndex;
+    }
+    let source = scratch.source;
+    let target = scratch.target;
+    for (let pass = 0; pass < substeps; pass += 1) {
+      for (let index = 0; index < logicalCount; index += 1) {
+        const current = source[index];
+        target[index].tileIndex = current.tileIndex;
+        if (index === heldIndex) {
+          target[index].x = chain.points[index].x;
+          target[index].y = chain.points[index].y;
+          continue;
+        }
+        const previousIndex = modulo(index - 1, logicalCount);
+        const nextIndex = (index + 1) % logicalCount;
+        const previousInCurrent = applyHomologyCordAffine(
+          chain.springs[previousIndex].transform,
+          source[previousIndex]
+        );
+        const nextInverse = invertHomologyCordAffine(chain.springs[index].transform);
+        if (!nextInverse) {
+          restoreQuotientElasticBand(chain, rollback);
+          return { resolved: false, oldLength, length: oldLength, relativeLengthChange: 0, maximumDisplacement: 0 };
+        }
+        const nextInCurrent = applyHomologyCordAffine(nextInverse, source[nextIndex]);
+        target[index].x = current.x + ((((previousInCurrent.x + nextInCurrent.x) * 0.5) - current.x)
+          * distanceContraction);
+        target[index].y = current.y + ((((previousInCurrent.y + nextInCurrent.y) * 0.5) - current.y)
+          * distanceContraction);
+      }
+      [source, target] = [target, source];
+    }
+    const motions = [];
+    let maximumDisplacement = 0;
+    let activeParticles = 0;
+    for (let index = 0; index < logicalCount; index += 1) {
+      const particle = chain.points[index];
+      const active = quotientParticleInActiveZone(chain, particle)
+        || !!(chain.springs[index] && (chain.springs[index].word.length || chain.springs[index].vertexEvent))
+        || !!(chain.springs[modulo(index - 1, logicalCount)]
+          && (chain.springs[modulo(index - 1, logicalCount)].word.length
+            || chain.springs[modulo(index - 1, logicalCount)].vertexEvent));
+      const cell = geometry.cells[particle.tileIndex];
+      const proposedStaysInChart = cell && pointInPolygon(
+        source[index],
+        tilePoints(cell.x, cell.y, geometry.radius * 1.000001)
+      );
+      if (active || !proposedStaysInChart) activeParticles += 1;
+      const motion = !active && proposedStaysInChart
+        ? {
+          valid: true,
+          point: { x: source[index].x, y: source[index].y, tileIndex: particle.tileIndex },
+          crossings: [],
+          vertexEvents: [],
+          intrinsicDisplacement: Math.hypot(source[index].x - particle.x, source[index].y - particle.y),
+          discreteChanged: false
+        }
+        : traceQuotientMotion(chain, index, particle, source[index], options);
+      if (!motion.valid) {
+        restoreQuotientElasticBand(chain, rollback);
+        return {
+          resolved: false,
+          oldLength,
+          length: oldLength,
+          relativeLengthChange: 0,
+          maximumDisplacement: 0,
+          reason: motion.reason
+        };
+      }
+      motions.push(motion);
+      maximumDisplacement = Math.max(maximumDisplacement, motion.intrinsicDisplacement || 0);
+    }
+    const oldDiscreteVersion = chain.discreteStateVersion;
+    for (let index = 0; index < logicalCount; index += 1) {
+      const old = chain.points[index];
+      const motion = motions[index];
+      if (!applyQuotientGaugeCrossings(chain, index, motion.crossings)) {
+        restoreQuotientElasticBand(chain, rollback);
+        return { resolved: false, oldLength, length: oldLength, relativeLengthChange: 0, maximumDisplacement: 0 };
+      }
+      if (old.tileIndex !== motion.point.tileIndex && !motion.crossings.length) chain.discreteStateVersion += 1;
+      old.x = motion.point.x;
+      old.y = motion.point.y;
+      old.tileIndex = motion.point.tileIndex;
+      old.optimizationDirection = {
+        x: motion.point.x - rollback.points[index].x,
+        y: motion.point.y - rollback.points[index].y
+      };
+      updateQuotientVertexEvent(chain, index, motion.vertexEvents);
+    }
+    chain.points[logicalCount] = {
+      x: chain.points[0].x,
+      y: chain.points[0].y,
+      tileIndex: chain.points[0].tileIndex,
+      optimizationDirection: { x: 0, y: 0 }
+    };
+    refreshQuotientSpringVertexEvents(chain);
+    if (!validateQuotientElasticBand(chain)) {
+      restoreQuotientElasticBand(chain, rollback);
+      return {
+        resolved: false,
+        oldLength,
+        length: oldLength,
+        relativeLengthChange: 0,
+        maximumDisplacement: 0,
+        reason: 'quotient-invariant'
+      };
+    }
+    const length = quotientElasticBandLength(chain);
+    if (metrics) {
+      metrics.quotientActiveParticles = (metrics.quotientActiveParticles || 0) + activeParticles;
+      metrics.portalCrossings = (metrics.portalCrossings || 0)
+        + motions.reduce((sum, motion) => sum + motion.crossings.length, 0);
+    }
+    return {
+      resolved: Number.isFinite(length),
+      distanceContraction,
+      substeps,
+      oldLength,
+      length,
+      relativeLengthChange: Math.abs(oldLength - length) / Math.max(1, oldLength),
+      maximumDisplacement,
+      discreteChanged: chain.discreteStateVersion !== oldDiscreteVersion
     };
   }
 
@@ -18992,25 +20462,48 @@
         moving = true;
         return;
       }
+      let quotientFrameFailed = false;
       for (let iteration = 0; iteration < iterations; iteration += 1) {
-        const result = stepPlanarElasticBandMacro(chain, {
+        const result = chain.solverSpace === 'quotient'
+          ? stepQuotientElasticBandMacro(chain, {
+            distanceContraction,
+            heldIndex: drag ? drag.part : -1,
+            substeps: HOMOLOGY_CORD_MACRO_SUBSTEPS,
+            metrics: options.metrics || null
+          })
+          : stepPlanarElasticBandMacro(chain, {
           distanceContraction,
           heldIndex: drag ? drag.part : -1,
           substeps: HOMOLOGY_CORD_MACRO_SUBSTEPS,
           metrics: options.metrics || null
         });
-        if (drag || !result.resolved) {
+        if (!result.resolved) {
+          chain.stableMacroSteps = 0;
+          chain.settled = false;
+          quotientFrameFailed = chain.solverSpace === 'quotient';
+          break;
+        }
+        if (drag) {
           chain.stableMacroSteps = 0;
           chain.settled = false;
           continue;
         }
-        const stable = result.relativeLengthChange <= HOMOLOGY_CORD_RELATIVE_LENGTH_TOLERANCE
+        const stable = !result.discreteChanged
+          && result.relativeLengthChange <= HOMOLOGY_CORD_RELATIVE_LENGTH_TOLERANCE
           && result.maximumDisplacement <= geometry.radius * HOMOLOGY_CORD_POSITION_TOLERANCE_RATIO;
         chain.stableMacroSteps = stable ? (chain.stableMacroSteps || 0) + 1 : 0;
         chain.settled = chain.stableMacroSteps >= HOMOLOGY_CORD_STABLE_MACRO_STEPS;
         if (chain.settled) break;
       }
-      if (drag || !chain.settled) moving = true;
+      if (chain.solverSpace === 'quotient') {
+        chain.quotientFailureCount = quotientFrameFailed ? (chain.quotientFailureCount || 0) + 1 : 0;
+        if (chain.quotientFailureCount >= HOMOLOGY_CORD_QUOTIENT_FAILURE_LIMIT) {
+          chain.fallbackToCellular = true;
+          chain.settled = true;
+          chain.stableMacroSteps = HOMOLOGY_CORD_STABLE_MACRO_STEPS;
+        }
+      }
+      if (!chain.fallbackToCellular && (drag || !chain.settled)) moving = true;
     });
     return moving;
   }
@@ -19062,6 +20555,36 @@
     const lastIndex = chain.points.length - 1;
     const canonicalPart = part === lastIndex ? 0 : part;
     if (canonicalPart < 0 || canonicalPart >= lastIndex) return false;
+    if (chain.solverSpace === 'quotient') {
+      const rollback = snapshotQuotientElasticBand(chain);
+      const particle = chain.points[canonicalPart];
+      const motion = traceQuotientMotion(chain, canonicalPart, particle, projected);
+      if (!motion.valid || !applyQuotientGaugeCrossings(chain, canonicalPart, motion.crossings)) {
+        restoreQuotientElasticBand(chain, rollback);
+        return false;
+      }
+      particle.x = motion.point.x;
+      particle.y = motion.point.y;
+      particle.tileIndex = motion.point.tileIndex;
+      particle.optimizationDirection = {
+        x: particle.x - rollback.points[canonicalPart].x,
+        y: particle.y - rollback.points[canonicalPart].y
+      };
+      updateQuotientVertexEvent(chain, canonicalPart, motion.vertexEvents);
+      chain.points[lastIndex] = {
+        x: chain.points[0].x,
+        y: chain.points[0].y,
+        tileIndex: chain.points[0].tileIndex,
+        optimizationDirection: { x: 0, y: 0 }
+      };
+      if (!validateQuotientElasticBand(chain)) {
+        restoreQuotientElasticBand(chain, rollback);
+        return false;
+      }
+      chain.settled = false;
+      chain.stableMacroSteps = 0;
+      return true;
+    }
     const particle = chain.points[canonicalPart];
     const constrained = constrainPlanarElasticBandPoint(particle, projected, chain.obstacles);
     const previousIndex = (canonicalPart + lastIndex - 1) % lastIndex;
@@ -19134,16 +20657,35 @@
   function drawBackgroundHomologyCords(ctx, analysis, generator, color) {
     const entries = homologyChainDisplayEntries(analysis, generator);
     const lineWidth = Math.max(2.4, geometry.radius * 0.065);
-    const chain = homologyCordChainForGenerator(generator, entries);
+    const chain = homologyCordChainForGenerator(generator, entries, analysis);
     // Cellular chains on non-manifold quotients may branch.  They remain
     // exact, but cannot honestly be shown as one physical cord.
-    if (!chain) {
+    if (!chain || chain.fallbackToCellular) {
       drawBackgroundHomologyChain(ctx, analysis, generator, color);
       return;
     }
     const hasObstacles = !!chain.obstacles
       && ((chain.obstacles.polygons || []).length > 0 || (chain.obstacles.barriers || []).length > 0);
     const drawPath = () => {
+      if (chain.solverSpace === 'quotient') {
+        ctx.beginPath();
+        const logicalCount = chain.points.length - 1;
+        for (let index = 0; index < logicalCount; index += 1) {
+          const trace = traceQuotientSegment(
+            chain.points[index],
+            chain.points[(index + 1) % logicalCount],
+            chain.springs[index],
+            chain
+          );
+          if (!trace.valid) continue;
+          trace.segments.forEach((segment) => {
+            ctx.moveTo(segment.start.x, segment.start.y);
+            ctx.lineTo(segment.end.x, segment.end.y);
+          });
+        }
+        ctx.stroke();
+        return;
+      }
       let run = [];
       const strokeRun = () => {
         if (run.length < 2) return;
@@ -20092,18 +21634,26 @@
     return hits.filter((point) => point.kind === 'boundary' || point.kind === 'glued');
   }
 
-  function drawBackgroundCuspMarker(ctx, vertex, palette, active, hover) {
+  function drawBackgroundCuspMarker(ctx, vertex, palette, active, hover, displayPositions = null) {
     if (!vertex || !Array.isArray(vertex.corners)) return;
     const radius = geometry.radius;
     const markerScale = normalizeBackgroundCuspMarkerScale(state.backgroundCuspMarkerScale);
     const markerRadius = Math.max(0.8, radius * 0.11 * markerScale);
     const markerStroke = Math.max(0.55, Math.min(radius * 0.025, markerRadius * 0.38));
     const cusp = isBackgroundConeCusp(vertex);
-    const positions = backgroundCuspDisplayPositions(vertex);
+    const positions = Array.isArray(displayPositions) ? displayPositions : backgroundCuspDisplayPositions(vertex);
     ctx.save();
     positions.forEach((entry) => {
-      const point = entry.point;
+      const point = entry.markerPoint || entry.point;
       if (!point) return;
+      if (entry.markerPoint && entry.point) {
+        ctx.beginPath();
+        ctx.moveTo(entry.point.x, entry.point.y);
+        ctx.lineTo(point.x, point.y);
+        ctx.strokeStyle = cusp ? 'rgba(47,52,55,0.42)' : 'rgba(92,92,92,0.48)';
+        ctx.lineWidth = Math.max(0.5, markerStroke * 0.75);
+        ctx.stroke();
+      }
       ctx.fillStyle = cusp ? 'rgba(255,253,248,0.94)' : 'rgba(128,128,128,0.30)';
       circle(ctx, point.x, point.y, markerRadius * 1.28);
       ctx.strokeStyle = cusp
@@ -21355,7 +22905,7 @@
       const key = tileCornerLogicalVertexKey(corner.index, corner.vertex);
       let cluster = clusters.get(key);
       if (!cluster) {
-        cluster = { point: { x: point.x, y: point.y }, corners: [] };
+        cluster = { displayKey: key, point: { x: point.x, y: point.y }, corners: [] };
         clusters.set(key, cluster);
       }
       cluster.corners.push(corner);
@@ -21364,6 +22914,74 @@
         .filter(Boolean));
     });
     return Array.from(clusters.values());
+  }
+
+  // Distinct quotient vertices may deliberately occupy the same canvas
+  // coordinate (for example, two disconnected vertex-star components around
+  // corner-touching removed tiles).  Keep their identity topological, then
+  // offset only their markers into their own incident sectors so both remain
+  // visible and independently clickable.
+  function backgroundCuspDisplayLayout(vertices) {
+    const layout = new Map();
+    const groups = new Map();
+    (Array.isArray(vertices) ? vertices : []).forEach((vertex) => {
+      const entries = backgroundCuspDisplayPositions(vertex).map((entry) => ({ ...entry }));
+      layout.set(vertex.id, entries);
+      entries.forEach((entry) => {
+        const key = entry.displayKey || `${Number(entry.point && entry.point.x).toFixed(6)}:${Number(entry.point && entry.point.y).toFixed(6)}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push({ vertex, entry });
+      });
+    });
+    groups.forEach((records) => {
+      const quotientIds = new Set(records.map((record) => record.vertex.id));
+      if (quotientIds.size < 2) return;
+      const ordered = records.slice().sort((left, right) => String(left.vertex.id).localeCompare(String(right.vertex.id)));
+      const directions = ordered.map((record, index) => backgroundCuspIncidentDirection(
+        record.entry,
+        (Math.PI * 2 * index) / Math.max(1, ordered.length)
+      ));
+      let directionsOverlap = false;
+      for (let left = 0; left < directions.length; left += 1) {
+        for (let right = left + 1; right < directions.length; right += 1) {
+          if ((directions[left].x * directions[right].x) + (directions[left].y * directions[right].y) > 0.82) {
+            directionsOverlap = true;
+          }
+        }
+      }
+      const fallbackStart = Math.atan2(directions[0].y, directions[0].x);
+      const offset = Math.max(2.5, Number(geometry && geometry.radius) * 0.14 || 2.5);
+      ordered.forEach((record, index) => {
+        const direction = directionsOverlap
+          ? {
+            x: Math.cos(fallbackStart + (Math.PI * 2 * index) / ordered.length),
+            y: Math.sin(fallbackStart + (Math.PI * 2 * index) / ordered.length)
+          }
+          : directions[index];
+        record.entry.markerPoint = {
+          x: record.entry.point.x + direction.x * offset,
+          y: record.entry.point.y + direction.y * offset
+        };
+      });
+    });
+    return layout;
+  }
+
+  function backgroundCuspIncidentDirection(entry, fallbackAngle = 0) {
+    let x = 0;
+    let y = 0;
+    (entry && Array.isArray(entry.corners) ? entry.corners : []).forEach((corner) => {
+      const center = tileCenterPoint(corner.index);
+      const point = entry.point;
+      if (!center || !point) return;
+      const direction = normalizeVector(center.x - point.x, center.y - point.y, 0, 0);
+      x += direction.x;
+      y += direction.y;
+    });
+    const length = Math.hypot(x, y);
+    return length > 1e-8
+      ? { x: x / length, y: y / length }
+      : { x: Math.cos(fallbackAngle), y: Math.sin(fallbackAngle) };
   }
 
   function drawPendingGlueChains(ctx) {
@@ -24089,11 +25707,12 @@
 
   function backgroundCuspHitAtBoardPoint(point) {
     const vertices = computeDisplayedBackgroundCuspVertices();
+    const displayLayout = backgroundCuspDisplayLayout(vertices);
     const maxDistance = Math.max(7, geometry.radius * 0.2);
     let best = null;
     vertices.forEach((vertex) => {
-      backgroundCuspDisplayPositions(vertex).forEach((entry) => {
-        const displayPoint = entry.point;
+      (displayLayout.get(vertex.id) || []).forEach((entry) => {
+        const displayPoint = entry.markerPoint || entry.point;
         if (!displayPoint) return;
         const distance = Math.hypot(point.x - displayPoint.x, point.y - displayPoint.y);
         if (distance > maxDistance) return;
@@ -27701,6 +29320,10 @@
       clearBackgroundHomologyKnot,
       clearBackgroundHomologyDisplay,
       computeBackgroundQuotientVertices,
+      computeDisplayedBackgroundCuspVertices,
+      backgroundCuspDisplayPositions,
+      backgroundCuspDisplayLayout,
+      backgroundCuspHitAtBoardPoint,
       homologyLabelEntry,
       homologyChainDisplayEntries,
       homologyGeneratorVisible,
@@ -27720,8 +29343,22 @@
       homologyCordPointLocal,
       homologyCordClosure,
       applyHomologyCordClosure,
+      makeHomologyCordQuotientAtlas,
+      makeQuotientElasticBandChain,
+      makeHomologyCordRuntimeChain,
+      traceQuotientMotion,
+      traceQuotientSegment,
+      reduceHomologyCordPortalWord,
+      homologyCordPortalWordTransform,
+      homologyCordCyclicPortalWord,
+      canonicalHomologyCordCyclicWord,
+      validateQuotientElasticBand,
+      quotientElasticBandLength,
+      stepQuotientElasticBandMacro,
+      homologyCordApexRouteAllowed,
       makePlanarElasticBandObstacles,
       constrainInitialPlanarElasticBandPoint,
+      constrainInitialQuotientElasticBandPoint,
       constrainPlanarElasticBandPoint,
       planarElasticBandSegmentCrossesObstacle,
       makePlanarElasticBandChain,

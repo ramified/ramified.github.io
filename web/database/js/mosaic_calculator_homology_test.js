@@ -121,4 +121,72 @@ assert.strictEqual(JSON.stringify(exported).includes('homologyTrace'), false);
 assert.strictEqual(JSON.stringify(exported).includes('homologyKnot'), false);
 assert.strictEqual(JSON.stringify(exported).includes('homologyCord'), false);
 
+// Cusp display keeps quotient identity even when disconnected tile-local
+// vertices occupy one logical canvas corner.  Their visual markers are nudged
+// into the respective incident sectors so both can be selected.
+calculator.__test.setTestBoard({
+  rows: 4,
+  cols: 4,
+  lattice: 'square',
+  boundary: 'glued',
+  removedTiles: [5, 10]
+});
+calculator.__test.setTestGeometry({
+  radius: 10,
+  width: 80,
+  height: 80,
+  cells: Array.from({ length: 16 }, (_, index) => ({
+    row: Math.floor(index / 4),
+    col: index % 4,
+    x: 10 + (index % 4) * 20,
+    y: 10 + Math.floor(index / 4) * 20
+  }))
+});
+const quotientVertices = calculator.__test.computeBackgroundQuotientVertices().vertices;
+const firstCentral = quotientVertices.find((vertex) => vertex.corners.some((corner) => corner.index === 6 && corner.vertex === 3));
+const secondCentral = quotientVertices.find((vertex) => vertex.corners.some((corner) => corner.index === 9 && corner.vertex === 1));
+assert.ok(firstCentral && secondCentral);
+assert.notStrictEqual(firstCentral.id, secondCentral.id);
+const cuspLayout = calculator.__test.backgroundCuspDisplayLayout([firstCentral, secondCentral]);
+const firstDisplay = cuspLayout.get(firstCentral.id)[0];
+const secondDisplay = cuspLayout.get(secondCentral.id)[0];
+assert.strictEqual(firstDisplay.displayKey, secondDisplay.displayKey);
+assert.ok(firstDisplay.markerPoint && secondDisplay.markerPoint);
+assert.ok(Math.hypot(
+  firstDisplay.markerPoint.x - secondDisplay.markerPoint.x,
+  firstDisplay.markerPoint.y - secondDisplay.markerPoint.y
+) > 1);
+
+// Cusp filtering also uses exact local corners. A black-boundary corner on a
+// diagonal tile must not hide an unrelated glued cusp drawn at the same
+// logical canvas coordinate.
+calculator.__test.setTestBoard({
+  rows: 2,
+  cols: 2,
+  lattice: 'square',
+  boundary: 'glued',
+  removedTiles: [1, 2],
+  gluedEdges: [
+    { first: { index: 0, dir: 0 }, second: { index: 0, dir: 1 }, reversed: false }
+  ]
+});
+calculator.__test.setTestGeometry({
+  radius: 10,
+  width: 40,
+  height: 40,
+  cells: [
+    { row: 0, col: 0, x: 10, y: 10 },
+    null,
+    null,
+    { row: 1, col: 1, x: 30, y: 30 }
+  ]
+});
+const displayedCusps = calculator.__test.computeDisplayedBackgroundCuspVertices();
+assert.ok(displayedCusps.some((vertex) => (
+  vertex.corners.some((corner) => corner.index === 0 && corner.vertex === 2)
+)));
+assert.strictEqual(displayedCusps.some((vertex) => (
+  vertex.corners.some((corner) => corner.index === 3 && corner.vertex === 0)
+)), false);
+
 console.log('mosaic_calculator_homology_test: all tests passed');

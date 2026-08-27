@@ -25,6 +25,67 @@ function faceChain(complex, face = complex.faces[0]) {
   return chain;
 }
 
+function quotientVertexForCorner(complex, index, vertex) {
+  return complex.vertices.find((entry) => (
+    entry.corners.some((corner) => corner.index === index && corner.vertex === vertex)
+  ));
+}
+
+function testTileLocalVertexEquivalence() {
+  // These two squares touch at one canvas coordinate, but no surface edge
+  // connects their local corners.  They therefore contribute two different
+  // quotient vertices.
+  const diagonal = homology.buildCellComplex({
+    lattice: 'square',
+    rows: 2,
+    cols: 2,
+    activeTiles: [true, false, false, true]
+  });
+  assert.strictEqual(diagonal.vertices.length, 8);
+  assert.notStrictEqual(
+    quotientVertexForCorner(diagonal, 0, 2).id,
+    quotientVertexForCorner(diagonal, 3, 0).id
+  );
+
+  // Crossing an existing internal edge identifies exactly its matched
+  // endpoints.  Cutting that edge must split the same two pairs again.
+  const joined = homology.buildCellComplex({ lattice: 'square', rows: 1, cols: 2 });
+  assert.strictEqual(quotientVertexForCorner(joined, 0, 1).id, quotientVertexForCorner(joined, 1, 0).id);
+  assert.strictEqual(quotientVertexForCorner(joined, 0, 2).id, quotientVertexForCorner(joined, 1, 3).id);
+  const cut = homology.buildCellComplex({ lattice: 'square', rows: 1, cols: 2, cutEdges: ['0:1'] });
+  assert.notStrictEqual(quotientVertexForCorner(cut, 0, 1).id, quotientVertexForCorner(cut, 1, 0).id);
+  assert.notStrictEqual(quotientVertexForCorner(cut, 0, 2).id, quotientVertexForCorner(cut, 1, 3).id);
+}
+
+function testCornerTouchingRemovedTilesRegression() {
+  // Compact export:
+  // { lattice: "square", size: "4x4", surface: "Sigma_0.5,2",
+  //   removed: "2,2; 3,3" }
+  // The old coordinate-based merge collapsed the two central local corners,
+  // produced chi=-1 and the impossible half-genus label Sigma_0.5,2.  The
+  // edge-generated quotient has two central vertices, chi=0 and H_1 = Z.
+  const analysis = homology.analyze({
+    lattice: 'square',
+    rows: 4,
+    cols: 4,
+    removedTiles: [5, 10]
+  });
+  const { complex } = analysis;
+  assert.strictEqual(complex.vertices.length, 26);
+  assert.strictEqual(complex.vertices.length - complex.edges.length + complex.faces.length, 0);
+  assert.notStrictEqual(
+    quotientVertexForCorner(complex, 6, 3).id,
+    quotientVertexForCorner(complex, 9, 1).id
+  );
+  assert.strictEqual(analysis.group, 'Z');
+  assert.strictEqual(analysis.generators.length, 1);
+  assert.strictEqual(homology.isCycle(analysis.generators[0].edgeChain, complex), true);
+  analysis.generators[0].edgeChain.forEach((coefficient, edgeIndex) => {
+    if (coefficient === 0n) return;
+    assert.ok(complex.edges[edgeIndex].sides.every((side) => side.index !== 5 && side.index !== 10));
+  });
+}
+
 function testCellularBoundariesAreCycles() {
   const complex = homology.buildCellComplex(squareBoard([
     squarePair(0, 2),
@@ -127,6 +188,8 @@ function testInvalidPathsAreExplained() {
 }
 
 [
+  testTileLocalVertexEquivalence,
+  testCornerTouchingRemovedTilesRegression,
   testCellularBoundariesAreCycles,
   testStandardIntegralGroups,
   testGenusTwoSurface,

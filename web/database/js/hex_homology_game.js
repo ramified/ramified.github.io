@@ -28,6 +28,7 @@
   const TOPOLOGY_CACHE_LIMIT = 32;
   const HOMOLOGY_CACHE_VERSION = 1;
   const BOUNDARY_GLUE_HOMOLOGY_SCHEME = 'square-boundary-glue-v1';
+  const TILE_LOCAL_VERTEX_SCHEME = 'tile-edge-quotient-v2';
 
   function modulo(value, size) {
     return ((value % size) + size) % size;
@@ -212,6 +213,7 @@
     if (!signaturesValid || topology.signatures.length !== topology.edges.length) return null;
     return {
       version: HOMOLOGY_CACHE_VERSION,
+      vertexEquivalence: TILE_LOCAL_VERTEX_SCHEME,
       fingerprint: topologyFingerprint(topology.snapshot),
       generators,
       signatures
@@ -225,6 +227,11 @@
     if (stored.scheme === BOUNDARY_GLUE_HOMOLOGY_SCHEME) {
       return topologyFromBoundaryGlueScheme(preset, removed, snapshot, stored);
     }
+    // Version-1 preset payloads predate tile-local quotient vertices.  They
+    // remain valid on boards where every canvas vertex has one connected
+    // vertex star, but must be recomputed when removed tiles or cuts split one
+    // drawn coordinate into multiple topological points.
+    if (stored.vertexEquivalence !== TILE_LOCAL_VERTEX_SCHEME && snapshotHasSplitCanvasVertex(snapshot)) return null;
     const fingerprintMatches = typeof stored.fingerprint === 'string'
       && stored.fingerprint === topologyFingerprint(snapshot);
     const legacySnapshotMatches = stored.snapshot
@@ -362,6 +369,41 @@
       second = Math.imul(second ^ code, 0x85ebca6b);
     }
     return `v1:${text.length}:${(first >>> 0).toString(16).padStart(8, '0')}:${(second >>> 0).toString(16).padStart(8, '0')}`;
+  }
+
+  function snapshotHasSplitCanvasVertex(snapshot) {
+    if (!BackgroundHomology || typeof BackgroundHomology.buildCellComplex !== 'function') return true;
+    let complex;
+    try {
+      complex = BackgroundHomology.buildCellComplex(snapshot);
+    } catch (_) {
+      return true;
+    }
+    const vertexIdsByCanvasKey = new Map();
+    (complex.vertices || []).forEach((vertex) => {
+      (vertex.corners || []).forEach((corner) => {
+        const key = canvasVertexKey(snapshot, corner.index, corner.vertex);
+        if (!vertexIdsByCanvasKey.has(key)) vertexIdsByCanvasKey.set(key, new Set());
+        vertexIdsByCanvasKey.get(key).add(vertex.id);
+      });
+    });
+    return Array.from(vertexIdsByCanvasKey.values()).some((ids) => ids.size > 1);
+  }
+
+  // Canvas keys are used only to detect whether an old cache would have
+  // collapsed distinct vertices.  They never identify vertices in the live
+  // quotient complex.
+  function canvasVertexKey(snapshot, index, vertex) {
+    const lattice = latticeFor(snapshot);
+    const { row, col } = rowCol(index, snapshot.cols);
+    const normalizedVertex = modulo(vertex, lattice.sides);
+    if (lattice === LATTICES.square) {
+      const offset = [[0, 0], [0, 1], [1, 1], [1, 0]][normalizedVertex];
+      return `s:${row + offset[0]}:${col + offset[1]}`;
+    }
+    const axial = offsetToAxial(row, col);
+    const offset = [[1, 1], [0, 2], [-1, 1], [-1, -1], [0, -2], [1, -1]][normalizedVertex];
+    return `h:${(2 * axial.q) + axial.r + offset[0]}:${(3 * axial.r) + offset[1]}`;
   }
 
   function rememberTopology(cacheKey, topology) {
@@ -697,6 +739,7 @@
     PLAYERS,
     HOMOLOGY_CACHE_VERSION,
     BOUNDARY_GLUE_HOMOLOGY_SCHEME,
+    TILE_LOCAL_VERTEX_SCHEME,
     buildTopology,
     topologySnapshot,
     serializeTopology,
@@ -712,6 +755,13 @@
     isZeroVector,
     formatClass,
     traversalsToArcLoop,
-    __test: { buildAdjacencyGraph, treePath, forestPath, connect, topologyCache }
+    __test: {
+      buildAdjacencyGraph,
+      treePath,
+      forestPath,
+      connect,
+      snapshotHasSplitCanvasVertex,
+      topologyCache
+    }
   };
 });

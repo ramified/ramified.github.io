@@ -1,7 +1,7 @@
 /* global importScripts, BackgroundHomology */
 'use strict';
 
-importScripts('background_homology.js?v=20260821-2');
+importScripts('background_homology.js?v=20260827-1');
 
 self.onmessage = (event) => {
   const message = event && event.data ? event.data : {};
