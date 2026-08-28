@@ -309,7 +309,10 @@
 
 <script>
 (() => {
+  const PREVIEW_MOTION_DURATION = 320;
+  const PREVIEW_MOTION_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
   const masonryState = new WeakMap();
+  const masonryAnimationState = new WeakMap();
   const gifManifest = {
     'gif/young_diagrams_gif_1.gif': [
       { src: 'gif/young_diagrams_gif_1.gif', width: 522, height: 747 },
@@ -348,6 +351,23 @@
   };
 
   const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
+
+  const prefersReducedMotion = () => (
+    typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+
+  const requestFrame = (callback) => {
+    if (typeof window.requestAnimationFrame === 'function') {
+      return window.requestAnimationFrame(callback);
+    }
+
+    return window.setTimeout(callback, 0);
+  };
+
+  const afterNextPaint = (callback) => {
+    requestFrame(() => requestFrame(callback));
+  };
 
   const getGridGap = (grid) => {
     const style = window.getComputedStyle(grid);
@@ -420,12 +440,71 @@
       || card.classList.contains('is-expanded');
   };
 
-  const refreshMasonryForCard = (card) => {
-    const grid = card.closest('.calculator-grid');
+  const waitForPreviewReveal = (strip, callback) => {
+    let finished = false;
+    let fallbackTimer = 0;
 
-    if (grid) {
-      arrangeMasonryGrid(grid);
+    const finish = () => {
+      if (finished) {
+        return;
+      }
+
+      finished = true;
+      strip.removeEventListener('transitionend', handleTransitionEnd);
+      strip.removeEventListener('transitioncancel', finish);
+      window.clearTimeout(fallbackTimer);
+      callback();
+    };
+
+    const handleTransitionEnd = (event) => {
+      if (event.target === strip && event.propertyName === 'grid-template-rows') {
+        finish();
+      }
+    };
+
+    strip.addEventListener('transitionend', handleTransitionEnd);
+    strip.addEventListener('transitioncancel', finish, { once: true });
+    fallbackTimer = window.setTimeout(finish, PREVIEW_MOTION_DURATION + 100);
+  };
+
+  const revealPreview = (card, strip) => {
+    if (strip.classList.contains('is-preview-loaded') || strip.dataset.previewRevealPending === 'true') {
+      return;
     }
+
+    if (!isPreviewActive(card)) {
+      strip.classList.add('is-preview-loaded');
+      return;
+    }
+
+    if (prefersReducedMotion()) {
+      strip.classList.add('is-preview-loaded');
+      requestAnimatedMasonryRefresh(card);
+      return;
+    }
+
+    strip.dataset.previewRevealPending = 'true';
+
+    afterNextPaint(() => {
+      delete strip.dataset.previewRevealPending;
+
+      if (strip.classList.contains('is-preview-loaded')) {
+        return;
+      }
+
+      strip.classList.add('is-preview-loaded');
+
+      if (!isPreviewActive(card)) {
+        return;
+      }
+
+      if (prefersReducedMotion()) {
+        requestAnimatedMasonryRefresh(card);
+        return;
+      }
+
+      waitForPreviewReveal(strip, () => requestAnimatedMasonryRefresh(card));
+    });
   };
 
   const loadPreview = (card) => {
@@ -446,11 +525,11 @@
     object.setAttribute('height', selected.height);
 
     if (object.dataset.previewState === 'loaded') {
-      strip.classList.add('is-preview-loaded');
-
       if (isPreviewActive(card) && object.getAttribute('data') !== selected.src) {
         object.setAttribute('data', selected.src);
       }
+
+      revealPreview(card, strip);
 
       return;
     }
@@ -469,13 +548,12 @@
       }
 
       object.dataset.previewState = 'loaded';
-      strip.classList.add('is-preview-loaded');
 
       if (isPreviewActive(card)) {
         object.setAttribute('data', selected.src);
       }
 
-      refreshMasonryForCard(card);
+      revealPreview(card, strip);
     }, { once: true });
 
     preview.addEventListener('error', () => {
@@ -485,8 +563,8 @@
 
       object.dataset.previewState = 'failed';
       strip.classList.remove('is-preview-loaded');
+      delete strip.dataset.previewRevealPending;
       object.removeAttribute('data');
-      refreshMasonryForCard(card);
     }, { once: true });
 
     preview.src = selected.src;
@@ -589,8 +667,150 @@
     masonryState.set(grid, { columns, items });
   };
 
+  const animationStateForGrid = (grid) => {
+    let state = masonryAnimationState.get(grid);
+
+    if (!state) {
+      state = {
+        animations: [],
+        pending: false,
+        running: false,
+        scheduled: false,
+        token: 0
+      };
+      masonryAnimationState.set(grid, state);
+    }
+
+    return state;
+  };
+
+  const cancelMasonryAnimations = (grid) => {
+    const state = masonryAnimationState.get(grid);
+
+    if (!state) {
+      return;
+    }
+
+    state.token += 1;
+    state.pending = false;
+    state.running = false;
+    state.scheduled = false;
+    state.animations.forEach((animation) => animation.cancel());
+    state.animations = [];
+  };
+
+  const animateMasonryGrid = (grid, state) => {
+    const items = getGridCards(grid);
+    const previousRects = new Map(items.map((item) => [item, item.getBoundingClientRect()]));
+    const previousHeight = grid.getBoundingClientRect().height;
+
+    arrangeMasonryGrid(grid);
+
+    if (prefersReducedMotion() || typeof grid.animate !== 'function') {
+      state.animations = [];
+      return Promise.resolve();
+    }
+
+    const nextHeight = grid.getBoundingClientRect().height;
+    const animations = [];
+    const options = {
+      duration: PREVIEW_MOTION_DURATION,
+      easing: PREVIEW_MOTION_EASING
+    };
+
+    items.forEach((item) => {
+      if (typeof item.animate !== 'function') {
+        return;
+      }
+
+      const previousRect = previousRects.get(item);
+      const nextRect = item.getBoundingClientRect();
+      const deltaX = previousRect.left - nextRect.left;
+      const deltaY = previousRect.top - nextRect.top;
+
+      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) {
+        return;
+      }
+
+      animations.push(item.animate([
+        { transform: `translate(${deltaX}px, ${deltaY}px)` },
+        { transform: 'translate(0, 0)' }
+      ], options));
+    });
+
+    if (Math.abs(previousHeight - nextHeight) >= 0.5) {
+      animations.push(grid.animate([
+        { height: `${previousHeight}px` },
+        { height: `${nextHeight}px` }
+      ], options));
+    }
+
+    state.animations = animations;
+
+    return Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
+      if (state.animations === animations) {
+        state.animations = [];
+      }
+    });
+  };
+
+  const requestAnimatedMasonryRefresh = (card) => {
+    const grid = card.closest('.calculator-grid');
+
+    if (!grid) {
+      return;
+    }
+
+    if (prefersReducedMotion()) {
+      cancelMasonryAnimations(grid);
+      arrangeMasonryGrid(grid);
+      return;
+    }
+
+    const state = animationStateForGrid(grid);
+
+    state.pending = true;
+
+    if (state.running || state.scheduled) {
+      return;
+    }
+
+    state.scheduled = true;
+    const token = state.token;
+
+    requestFrame(() => {
+      if (state.token !== token) {
+        return;
+      }
+
+      state.scheduled = false;
+
+      if (!state.pending) {
+        return;
+      }
+
+      state.pending = false;
+      state.running = true;
+
+      animateMasonryGrid(grid, state).finally(() => {
+        if (state.token !== token) {
+          return;
+        }
+
+        state.running = false;
+
+        if (state.pending) {
+          requestAnimatedMasonryRefresh(card);
+        }
+      });
+    });
+  };
+
   const arrangeAllMasonryGrids = () => {
-    document.querySelectorAll('.calculator-grid').forEach(arrangeMasonryGrid);
+    document.querySelectorAll('.calculator-grid').forEach((grid) => {
+      cancelMasonryAnimations(grid);
+      arrangeMasonryGrid(grid);
+    });
   };
 
   const updateAllResponsiveGrids = () => {
