@@ -522,6 +522,111 @@
       overflow-wrap: anywhere;
     }
 
+    .strand-calculation-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .strand-calculation-source {
+      display: grid;
+      grid-template-columns: 104px minmax(0, 1fr);
+      gap: 10px;
+      align-items: baseline;
+      min-width: 0;
+      padding-bottom: 8px;
+      border-bottom: 1px dotted var(--border);
+    }
+
+    .strand-calculation-source-output {
+      min-width: 0;
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.74rem;
+      overflow-wrap: anywhere;
+      text-align: right;
+    }
+
+    .strand-calculation-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 2px;
+    }
+
+    .strand-calculation-message {
+      min-height: 1.25em;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .strand-calculation-message.is-error {
+      color: var(--accent2);
+    }
+
+    .strand-calculation-message.is-stale {
+      color: var(--accent);
+    }
+
+    .strand-calculation-details {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      box-sizing: border-box;
+      border-top: 1px dotted var(--border);
+      padding-top: 7px;
+    }
+
+    .strand-calculation-details summary {
+      color: var(--muted);
+      cursor: pointer;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      user-select: none;
+    }
+
+    .strand-calculation-relations {
+      display: grid;
+      gap: 4px;
+      margin: 8px 0 0;
+      padding: 0;
+      list-style: none;
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.7rem;
+      overflow-wrap: anywhere;
+    }
+
+    .strand-calculation-equation,
+    .strand-calculation-matrix {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 4px 0 7px;
+      scrollbar-gutter: stable;
+      text-align: left;
+    }
+
+    .strand-calculation-equation mjx-container[jax="CHTML"][display="true"],
+    .strand-calculation-matrix mjx-container[jax="CHTML"][display="true"] {
+      margin: 0.45em 0 !important;
+      min-width: max-content;
+    }
+
+    .strand-calculation-matrix-label {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 0.76rem;
+    }
+
     @media (max-width: 780px) {
       .strand-layout {
         grid-template-columns: 1fr;
@@ -552,7 +657,8 @@
       }
 
       .strand-field-row,
-      .strand-stat-row {
+      .strand-stat-row,
+      .strand-calculation-source {
         grid-template-columns: 1fr;
         gap: 3px;
       }
@@ -571,6 +677,10 @@
       }
 
       .strand-stat-value {
+        text-align: left;
+      }
+
+      .strand-calculation-source-output {
         text-align: left;
       }
     }
@@ -688,6 +798,52 @@
       </div>
     </section>
 
+    <section class="card collapsed" id="strand-calculation-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Calculation</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="strand-calculation-controls">
+          <div class="strand-calculation-source">
+            <span class="input-label">source</span>
+            <output class="strand-calculation-source-output" id="strand-calculation-source">identity</output>
+          </div>
+          <div class="strand-field-row">
+            <label class="input-label" for="strand-calculation-target">target</label>
+            <select id="strand-calculation-target">
+              <option value="symmetric">Symmetric group</option>
+              <option value="braid">Braid group</option>
+              <option value="hecke">Hecke algebra</option>
+              <option value="tl" selected>Temperley-Lieb algebra</option>
+              <option value="burau">Burau representation</option>
+            </select>
+          </div>
+          <div class="strand-field-row">
+            <label class="input-label" for="strand-calculation-basis">basis</label>
+            <select id="strand-calculation-basis">
+              <option value="diagram" selected>Diagram basis</option>
+            </select>
+          </div>
+          <div class="strand-calculation-actions">
+            <button class="btn" id="strand-calculate" type="button">calculate</button>
+            <button class="btn btn-ghost strand-small-button" id="strand-copy-calculation-latex" type="button" disabled>copy LaTeX</button>
+            <button class="btn btn-ghost strand-small-button" id="strand-copy-calculation-result" type="button" disabled>copy result</button>
+          </div>
+          <div class="strand-calculation-message" id="strand-calculation-message" aria-live="polite">Choose a target and calculate.</div>
+          <details class="strand-calculation-details" id="strand-calculation-relations-details">
+            <summary>relations</summary>
+            <ul class="strand-calculation-relations" id="strand-calculation-relations"></ul>
+          </details>
+          <details class="strand-calculation-details" id="strand-calculation-details" open>
+            <summary>calculation</summary>
+            <div class="strand-calculation-equation" id="strand-calculation-equation"></div>
+            <div id="strand-calculation-matrix-section" hidden>
+              <div class="strand-calculation-matrix-label">ordinary matrix</div>
+              <div class="strand-calculation-matrix" id="strand-calculation-matrix"></div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
     <section class="card collapsed" id="strand-export-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Import / Export</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
@@ -735,9 +891,16 @@
     }
   };
 </script>
-<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
-<script src="js/calculator_cards.js"></script>
-<script src="js/strand_diagram_calculator.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+  <script src="js/calculator_cards.js"></script>
+  <script src="js/strand_math/core.js"></script>
+  <script src="js/strand_math/permutation.js"></script>
+  <script src="js/strand_math/hecke.js"></script>
+  <script src="js/strand_math/kl.js"></script>
+  <script src="js/strand_math/temperley_lieb.js"></script>
+  <script src="js/strand_math/burau.js"></script>
+  <script src="js/strand_math/calculate.js"></script>
+  <script src="js/strand_diagram_calculator.js"></script>
   <script src="js/import_export_panel.js?v=20260821-7"></script>
   <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

@@ -101,10 +101,10 @@
   overflow: hidden;
   padding: 0 12px;
   transition:
-    border-bottom-width 320ms cubic-bezier(0.22, 1, 0.36, 1),
-    grid-template-rows 320ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 180ms ease-out,
-    padding-block 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    border-bottom-width 640ms cubic-bezier(0.22, 1, 0.36, 1),
+    grid-template-rows 640ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 360ms ease-out,
+    padding-block 640ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .demo-strip.is-preview-loaded {
@@ -213,14 +213,18 @@
   outline-offset: 4px;
 }
 
-.collapsible-grid.is-single-column .is-collapsed .demo-strip,
-.collapsible-grid.is-single-column .is-collapsed .applet-kind,
-.collapsible-grid.is-single-column .is-collapsed .applet-body p:not(.applet-kind),
-.collapsible-grid.is-single-column .is-collapsed .applet-link,
-.collapsible-grid.is-single-column .reference-card.is-collapsed > p:not(.applet-kind),
-.collapsible-grid.is-single-column .reference-card.is-collapsed > a,
-.collapsible-grid.is-single-column .reference-card.is-collapsed > .reference-links {
+.collapsible-grid.is-single-column .is-collapsed:not(.is-card-collapsing) .demo-strip,
+.collapsible-grid.is-single-column .is-collapsed:not(.is-card-collapsing) .applet-kind,
+.collapsible-grid.is-single-column .is-collapsed:not(.is-card-collapsing) .applet-body p:not(.applet-kind),
+.collapsible-grid.is-single-column .is-collapsed:not(.is-card-collapsing) .applet-link,
+.collapsible-grid.is-single-column .reference-card.is-collapsed:not(.is-card-collapsing) > p:not(.applet-kind),
+.collapsible-grid.is-single-column .reference-card.is-collapsed:not(.is-card-collapsing) > a,
+.collapsible-grid.is-single-column .reference-card.is-collapsed:not(.is-card-collapsing) > .reference-links {
   display: none;
+}
+
+.collapsible-grid.is-single-column .is-card-resizing {
+  overflow: hidden;
 }
 
 .applet-body p:not(.applet-kind) {

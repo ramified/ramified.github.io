@@ -894,6 +894,22 @@
     showHomologyCordParticles: false,
     inspectHomologyCordOptimization: false,
     homologyCordOptimizationSelection: null,
+    inspectHomologyLocalVertex: false,
+    homologyLocalChartMode: 'radial',
+    homologyLocalChartRadius: 1,
+    homologyLocalChartLayers: {
+      geometry: true,
+      cords: true,
+      vectors: true,
+      failures: true,
+      metadata: true
+    },
+    homologyLocalChartSelection: null,
+    homologyLocalChartParticleSelection: null,
+    homologyLocalChartHits: [],
+    homologyLocalChartFailures: {},
+    homologyLocalChartTopologyAnalysis: null,
+    homologyLocalChartTopologyKey: '',
     homologyStatus: '',
     backgroundBilliard: {
       tileIndex: -1,
@@ -1064,6 +1080,7 @@
     bindControls();
     bindCards();
     bindCanvas();
+    bindHomologyLocalChartResize();
     initCustomTooltips();
 
     createBoard(5, 5, state.lattice, state.wrapped);
@@ -1171,6 +1188,15 @@
     refs.showHomologyCordParticles = document.getElementById('show-homology-cord-particles');
     refs.inspectHomologyCordOptimization = document.getElementById('inspect-homology-cord-optimization');
     refs.homologyCordOptimizationReadout = document.getElementById('homology-cord-optimization-readout');
+    refs.homologyLocalChartCard = document.getElementById('homology-local-chart-card');
+    refs.inspectHomologyLocalVertex = document.getElementById('inspect-homology-local-vertex');
+    refs.homologyLocalChartRadius = document.getElementById('homology-local-chart-radius');
+    refs.homologyLocalChartRadiusValue = document.getElementById('homology-local-chart-radius-value');
+    refs.homologyLocalChartCanvas = document.getElementById('homology-local-chart-canvas');
+    refs.homologyLocalChartStatus = document.getElementById('homology-local-chart-status');
+    refs.homologyLocalChartDetail = document.getElementById('homology-local-chart-detail');
+    refs.homologyLocalChartModeButtons = Array.from(document.querySelectorAll('[data-homology-local-chart-mode]'));
+    refs.homologyLocalChartLayerInputs = Array.from(document.querySelectorAll('[data-homology-local-chart-layer]'));
     refs.backgroundCuspMarkerRow = document.getElementById('background-cusp-marker-row');
     refs.backgroundCuspMarkerScale = document.getElementById('background-cusp-marker-scale');
     refs.backgroundCuspMarkerScaleValue = document.getElementById('background-cusp-marker-scale-value');
@@ -1561,6 +1587,10 @@
     if (refs.inspectHomologyCordOptimization) {
       refs.inspectHomologyCordOptimization.addEventListener('change', () => {
         state.inspectHomologyCordOptimization = !!refs.inspectHomologyCordOptimization.checked;
+        if (state.inspectHomologyCordOptimization) {
+          state.inspectHomologyLocalVertex = false;
+          if (refs.inspectHomologyLocalVertex) refs.inspectHomologyLocalVertex.checked = false;
+        }
         if (!state.inspectHomologyCordOptimization) state.homologyCordOptimizationSelection = null;
         if (refs.homologyCordOptimizationReadout) {
           refs.homologyCordOptimizationReadout.textContent = state.inspectHomologyCordOptimization
@@ -1570,6 +1600,46 @@
         draw(analyze());
       });
     }
+    if (refs.inspectHomologyLocalVertex) {
+      refs.inspectHomologyLocalVertex.addEventListener('change', () => {
+        state.inspectHomologyLocalVertex = !!refs.inspectHomologyLocalVertex.checked;
+        if (state.inspectHomologyLocalVertex) {
+          state.inspectHomologyCordOptimization = false;
+          state.homologyCordOptimizationSelection = null;
+          if (refs.inspectHomologyCordOptimization) refs.inspectHomologyCordOptimization.checked = false;
+        } else {
+          state.homologyLocalChartSelection = null;
+          state.homologyLocalChartParticleSelection = null;
+        }
+        syncMainCanvasCursor();
+        draw(analyze());
+      });
+    }
+    (refs.homologyLocalChartModeButtons || []).forEach((button) => {
+      button.addEventListener('click', () => {
+        state.homologyLocalChartMode = button.dataset.homologyLocalChartMode === 'conformal'
+          ? 'conformal' : 'radial';
+        syncHomologyLocalChartViewControls();
+        draw(analyze());
+      });
+    });
+    if (refs.homologyLocalChartRadius) {
+      refs.homologyLocalChartRadius.addEventListener('input', () => {
+        state.homologyLocalChartRadius = clamp(Number(refs.homologyLocalChartRadius.value) || 1, 0.25, 2);
+        syncHomologyLocalChartViewControls();
+        draw(analyze());
+      });
+    }
+    (refs.homologyLocalChartLayerInputs || []).forEach((input) => {
+      input.addEventListener('change', () => {
+        const layer = input.dataset.homologyLocalChartLayer;
+        if (Object.prototype.hasOwnProperty.call(state.homologyLocalChartLayers, layer)) {
+          state.homologyLocalChartLayers[layer] = !!input.checked;
+          syncHomologyLocalChartViewControls();
+          draw(analyze());
+        }
+      });
+    });
     if (refs.homologyLabelPosition) {
       refs.homologyLabelPosition.addEventListener('change', () => {
         state.homologyLabelPosition = refs.homologyLabelPosition.value === 'middle' ? 'middle' : 'side';
@@ -2685,6 +2755,9 @@
     refs.canvas.addEventListener('pointercancel', clearPointerState);
     refs.canvas.addEventListener('wheel', handleWheel, { passive: false });
     refs.canvas.addEventListener('dblclick', handleCanvasDoubleClick);
+    if (refs.homologyLocalChartCanvas) {
+      refs.homologyLocalChartCanvas.addEventListener('pointerdown', handleHomologyLocalChartPointerDown);
+    }
     refs.canvas.addEventListener('contextmenu', (event) => {
       event.preventDefault();
       if (isDecorationMode()) {
@@ -5432,6 +5505,10 @@
     if (!refs.canvas) return;
     if (state.wanderSelectingStart) {
       refs.canvas.style.cursor = 'copy';
+      return;
+    }
+    if (state.inspectHomologyLocalVertex && isGluedBoundaryMode()) {
+      refs.canvas.style.cursor = 'crosshair';
       return;
     }
     if (state.homologyCordMode && state.showHomology) {
@@ -9197,6 +9274,10 @@
 
   function handlePointerDown(event) {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (inspectBackgroundHomologyLocalVertex(event)) {
+      event.preventDefault();
+      return;
+    }
     if (inspectBackgroundHomologyCordOptimization(event)) {
       event.preventDefault();
       return;
@@ -10767,6 +10848,11 @@
     state.homologyAnalysis = null;
     state.homologyTopologyKey = '';
     state.homologyComputing = false;
+    state.homologyLocalChartTopologyAnalysis = null;
+    state.homologyLocalChartTopologyKey = '';
+    state.homologyLocalChartSelection = null;
+    state.homologyLocalChartParticleSelection = null;
+    state.homologyLocalChartFailures = {};
     clearBackgroundHomologyDisplay();
     clearBackgroundHomologyTrace(false);
     state.homologyStatus = reason;
@@ -10793,6 +10879,21 @@
     return state.homologyAnalysis && state.homologyTopologyKey === key
       ? state.homologyAnalysis
       : null;
+  }
+
+  function homologyLocalChartTopologyAnalysis() {
+    const computed = currentBackgroundHomologyAnalysis();
+    if (computed) return computed;
+    const key = backgroundHomologyTopologyKey();
+    if (state.homologyLocalChartTopologyAnalysis && state.homologyLocalChartTopologyKey === key) {
+      return state.homologyLocalChartTopologyAnalysis;
+    }
+    const complex = currentBackgroundCellComplex();
+    if (!complex) return null;
+    const analysis = { complex, generators: [] };
+    state.homologyLocalChartTopologyAnalysis = analysis;
+    state.homologyLocalChartTopologyKey = key;
+    return analysis;
   }
 
   // Public programmatic entry point.  It has no UI side effects, so callers
@@ -11355,10 +11456,31 @@
     queueBackgroundHomologyMathTypeset(refs.homologyKnotResult);
   }
 
+  function syncHomologyLocalChartViewControls() {
+    const mode = state.homologyLocalChartMode === 'conformal' ? 'conformal' : 'radial';
+    (refs.homologyLocalChartModeButtons || []).forEach((button) => {
+      const active = button.dataset.homologyLocalChartMode === mode;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    const radius = clamp(Number(state.homologyLocalChartRadius) || 1, 0.25, 2);
+    if (refs.homologyLocalChartRadiusValue) {
+      refs.homologyLocalChartRadiusValue.textContent = radius.toFixed(2);
+    }
+    (refs.homologyLocalChartLayerInputs || []).forEach((input) => {
+      const layer = input.dataset.homologyLocalChartLayer;
+      input.checked = state.homologyLocalChartLayers[layer] !== false;
+    });
+  }
+
   function syncBackgroundHomologyCard(report) {
     const visible = isGluedBoundaryMode();
     const snapshotKey = backgroundHomologyTopologyKey();
+    if (refs.homologyLocalChartCard) refs.homologyLocalChartCard.hidden = !visible;
     if (!visible) {
+      state.inspectHomologyLocalVertex = false;
+      state.homologyLocalChartSelection = null;
+      state.homologyLocalChartParticleSelection = null;
       if (state.homologyTopologyKey || state.homologyTrace.length || state.homologyComputing) invalidateBackgroundHomology();
       if (refs.homologyCard) refs.homologyCard.hidden = true;
       return;
@@ -11399,6 +11521,22 @@
       refs.inspectHomologyCordOptimization.checked = !!(cordAvailable && state.inspectHomologyCordOptimization);
       if (!cordAvailable) state.homologyCordOptimizationSelection = null;
     }
+    if (refs.inspectHomologyLocalVertex) {
+      refs.inspectHomologyLocalVertex.disabled = false;
+      refs.inspectHomologyLocalVertex.checked = !!state.inspectHomologyLocalVertex;
+    }
+    state.homologyLocalChartRadius = clamp(Number(state.homologyLocalChartRadius) || 1, 0.25, 2);
+    if (refs.homologyLocalChartRadius) {
+      refs.homologyLocalChartRadius.disabled = false;
+      refs.homologyLocalChartRadius.value = String(state.homologyLocalChartRadius);
+    }
+    (refs.homologyLocalChartLayerInputs || []).forEach((input) => {
+      input.disabled = false;
+    });
+    (refs.homologyLocalChartModeButtons || []).forEach((button) => {
+      button.disabled = false;
+    });
+    syncHomologyLocalChartViewControls();
     [
       ['homologyCordRelaxSpeed', 'homologyCordRelaxSpeedValue', normalizeHomologyCordRelaxSpeed],
       ['homologyCordPointSpacing', 'homologyCordPointSpacingValue', normalizeHomologyCordPointSpacing]
@@ -17304,6 +17442,7 @@
       drawDragGhost(ctx, palette);
       drawMainWanderMarker(ctx, palette);
       renderWanderChart();
+      renderHomologyLocalChart();
       return;
     }
 
@@ -17314,10 +17453,26 @@
     drawBackgroundCuspOverlay(ctx, palette, report);
     drawBackgroundBilliardOverlay(ctx, palette);
     drawBackgroundHomologyOverlay(ctx);
+    drawHomologyLocalVertexSelection(ctx);
     drawPickHoverOverlay(ctx, palette, report);
     drawDragGhost(ctx, palette);
     drawMainWanderMarker(ctx, palette);
     renderWanderChart();
+    renderHomologyLocalChart();
+  }
+
+  function bindHomologyLocalChartResize() {
+    const canvas = refs.homologyLocalChartCanvas;
+    if (!canvas || typeof ResizeObserver === 'undefined') return;
+    let frame = null;
+    const observer = new ResizeObserver(() => {
+      if (frame != null || typeof requestAnimationFrame !== 'function') return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        renderHomologyLocalChart();
+      });
+    });
+    observer.observe(canvas);
   }
 
   function drawBoardCopy(ctx, report, palette, offset, pickedLift) {
@@ -17334,6 +17489,22 @@
     drawSokobanDecorationMarkers(ctx);
     drawPresetPieceMarkers(ctx);
     drawBilliardsDecorationMarkers(ctx);
+    ctx.restore();
+  }
+
+  function drawHomologyLocalVertexSelection(ctx) {
+    const selection = state.homologyLocalChartSelection;
+    if (!selection || !state.inspectHomologyLocalVertex || !geometry) return;
+    const point = tileCornerPoint(selection.tileIndex, selection.corner);
+    if (!point) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(224,108,38,0.22)';
+    ctx.strokeStyle = '#e06c26';
+    ctx.lineWidth = Math.max(1.6, geometry.radius * 0.04);
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, Math.max(6, geometry.radius * 0.15), 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -17539,7 +17710,10 @@
   function setBackgroundHomologyCordMode(enabled) {
     const available = !!state.showHomology && hasVisibleHomologyGenerators();
     state.homologyCordMode = !!enabled && available;
-    if (!state.homologyCordMode) resetBackgroundHomologyCords(false);
+    if (!state.homologyCordMode) {
+      state.homologyLocalChartFailures = {};
+      resetBackgroundHomologyCords(false);
+    }
     if (state.homologyCordMode) {
       const preparation = prepareBackgroundHomologyCordChains();
       if (preparation.ready && preparation.relaxable === 0) {
@@ -17889,6 +18063,7 @@
   }
 
   function buildHomologyCordVertexStar(analysis, vertex) {
+    const gluePairs = cloneGluedEdges();
     const sectors = (vertex && vertex.corners ? vertex.corners : []).map((corner, sectorIndex) => ({
       id: sectorIndex,
       tileIndex: corner.index,
@@ -17901,7 +18076,8 @@
         )[modulo(corner.vertex, getLattice().sides)]
         : null,
       angle: tileCornerAngle(),
-      neighbors: []
+      neighbors: [],
+      links: []
     }));
     const sectorByCorner = new Map(sectors.map((sector) => [`${sector.tileIndex}:${sector.vertex}`, sector]));
     sectors.forEach((sector) => {
@@ -17916,6 +18092,13 @@
           { side: { index: neighbor.index, dir: neighbor.dir } }
         );
         const sourceAtStart = sourceCorners.start === sector.vertex;
+        const sourceEdge = { index: sector.tileIndex, dir };
+        const sourceEdgeKey = boundaryEdgeKey(sourceEdge);
+        const pairIndex = gluePairs.findIndex((pair) => (
+          boundaryEdgeKey(pair.first) === sourceEdgeKey || boundaryEdgeKey(pair.second) === sourceEdgeKey
+        ));
+        const gluePair = pairIndex >= 0 ? gluePairs[pairIndex] : null;
+        const sourceIsFirst = !!gluePair && boundaryEdgeKey(gluePair.first) === sourceEdgeKey;
         const targetVertex = sourceAtStart
           ? (sameOrientation ? targetCorners.start : targetCorners.end)
           : (sameOrientation ? targetCorners.end : targetCorners.start);
@@ -17927,6 +18110,21 @@
           ) === vertex.id);
         candidates.forEach((candidate) => {
           if (!sector.neighbors.includes(candidate.id)) sector.neighbors.push(candidate.id);
+          if (!sector.links.some((link) => link.neighborId === candidate.id && link.dir === dir)) {
+            sector.links.push({
+              neighborId: candidate.id,
+              dir,
+              boundary: sourceAtStart ? 'start' : 'end',
+              glued: !!gluePair,
+              glueGroup: gluePair ? gluePairGroup(gluePair, pairIndex) : null,
+              color: gluePair ? gluedBoundaryColor(gluePairGroup(gluePair, pairIndex)) : null,
+              arrowReversed: gluePair
+                ? (sourceIsFirst
+                  ? gluePairFirstArrowReversed(gluePair)
+                  : gluePairSecondArrowReversed(gluePair))
+                : false
+            });
+          }
         });
       });
     });
@@ -17983,6 +18181,176 @@
       totalAngle: sectors.reduce((sum, sector) => sum + sector.angle, 0),
       manifold,
       boundary: sectors.length === 1 || endpoints === 2
+    };
+  }
+
+  function homologyLocalChartComponent(vertexStar, selectedSectorId) {
+    if (!vertexStar || !Array.isArray(vertexStar.sectors)) return null;
+    const sectorsById = new Map(vertexStar.sectors.map((sector) => [sector.id, sector]));
+    const sourceComponent = (vertexStar.cyclicComponents || []).find((component) => (
+      component.includes(selectedSectorId)
+    ));
+    if (!sourceComponent || !sourceComponent.length) return null;
+    let sectorIds = sourceComponent.filter((id) => sectorsById.has(id));
+    const componentSet = new Set(sectorIds);
+    const degrees = sectorIds.map((id) => ({
+      id,
+      degree: new Set((sectorsById.get(id).neighbors || []).filter((neighborId) => componentSet.has(neighborId))).size
+    }));
+    const endpoints = degrees.filter((entry) => entry.degree === 1).map((entry) => entry.id);
+    const open = sectorIds.length === 1
+      ? degrees[0].degree === 0
+      : endpoints.length === 2 && degrees.every((entry) => entry.degree === 1 || entry.degree === 2);
+    const closed = sectorIds.length > 1
+      && endpoints.length === 0
+      && degrees.every((entry) => entry.degree === 2);
+    let valid = open || closed;
+    if (open && sectorIds.length > 1 && !endpoints.includes(sectorIds[0])) sectorIds = sectorIds.slice().reverse();
+    if (closed) {
+      const offset = sectorIds.indexOf(selectedSectorId);
+      if (offset > 0) sectorIds = sectorIds.slice(offset).concat(sectorIds.slice(0, offset));
+    }
+    const totalAngle = sectorIds.reduce((sum, id) => sum + (Number(sectorsById.get(id).angle) || 0), 0);
+    const targetAngle = open ? Math.PI : 2 * Math.PI;
+    const alpha = totalAngle > HOMOLOGY_CORD_EPSILON ? targetAngle / totalAngle : 1;
+    let sourceAngle = 0;
+    const frames = sectorIds.map((id, index) => {
+      const sector = sectorsById.get(id);
+      const previousId = index > 0 ? sectorIds[index - 1] : (closed ? sectorIds[sectorIds.length - 1] : null);
+      const nextId = index + 1 < sectorIds.length ? sectorIds[index + 1] : (closed ? sectorIds[0] : null);
+      const previousLink = previousId == null ? null : (sector.links || []).find((link) => link.neighborId === previousId);
+      const nextLink = nextId == null ? null : (sector.links || []).find((link) => link.neighborId === nextId);
+      let reverse = false;
+      if (previousId != null) {
+        if (!previousLink) valid = false;
+        else reverse = previousLink.boundary === 'end';
+      } else if (nextId != null) {
+        if (!nextLink) valid = false;
+        else reverse = nextLink.boundary === 'start';
+      }
+      const chartBoundary = (link) => {
+        if (!link) return null;
+        return reverse
+          ? (link.boundary === 'start' ? 'end' : 'start')
+          : link.boundary;
+      };
+      if ((previousId != null && chartBoundary(previousLink) !== 'start')
+        || (nextId != null && chartBoundary(nextLink) !== 'end')) valid = false;
+      const frame = {
+        sector,
+        sectorId: id,
+        index,
+        previousId,
+        nextId,
+        reverse,
+        sourceStart: sourceAngle,
+        sourceEnd: sourceAngle + sector.angle,
+        targetStart: sourceAngle * alpha,
+        targetEnd: (sourceAngle + sector.angle) * alpha,
+        alpha
+      };
+      sourceAngle += sector.angle;
+      return frame;
+    });
+    if (!valid) {
+      const gap = Math.min(0.12, (2 * Math.PI) / Math.max(24, frames.length * 8));
+      const available = Math.max(Math.PI, (2 * Math.PI) - (gap * frames.length));
+      let targetCursor = 0;
+      frames.forEach((frame) => {
+        const span = totalAngle > HOMOLOGY_CORD_EPSILON
+          ? available * ((frame.sourceEnd - frame.sourceStart) / totalAngle)
+          : available / Math.max(1, frames.length);
+        frame.targetStart = targetCursor;
+        frame.targetEnd = targetCursor + span;
+        frame.alpha = span / Math.max(HOMOLOGY_CORD_EPSILON, frame.sourceEnd - frame.sourceStart);
+        targetCursor += span + gap;
+      });
+    }
+    return {
+      vertexId: vertexStar.vertexId,
+      selectedSectorId,
+      sectorIds,
+      frames,
+      totalAngle,
+      targetAngle,
+      alpha,
+      open,
+      closed,
+      valid,
+      reason: valid ? '' : 'non-manifold sector adjacency'
+    };
+  }
+
+  function mapHomologyLocalChartPolar(radius, theta, alpha, mode = 'radial', radiusLimit = 1) {
+    const safeRadius = Math.max(0, Number(radius) || 0);
+    const safeAlpha = Number.isFinite(alpha) && alpha > 0 ? alpha : 1;
+    const limit = Math.max(HOMOLOGY_CORD_EPSILON, Number(radiusLimit) || 1);
+    const conformal = mode === 'conformal';
+    const mappedRadius = conformal
+      ? Math.pow(safeRadius, safeAlpha) / Math.pow(limit, safeAlpha)
+      : safeRadius / limit;
+    const mappedAngle = safeAlpha * theta;
+    return {
+      x: mappedRadius * Math.cos(mappedAngle),
+      y: -mappedRadius * Math.sin(mappedAngle),
+      radius: mappedRadius,
+      angle: mappedAngle,
+      alpha: safeAlpha,
+      valid: Number.isFinite(mappedRadius) && Number.isFinite(mappedAngle)
+    };
+  }
+
+  function mapHomologyLocalChartVector(radius, theta, radial, tangential, alpha, mode = 'radial', radiusLimit = 1) {
+    const safeAlpha = Number.isFinite(alpha) && alpha > 0 ? alpha : 1;
+    const limit = Math.max(HOMOLOGY_CORD_EPSILON, Number(radiusLimit) || 1);
+    const mappedAngle = safeAlpha * theta;
+    let radialScale = 1 / limit;
+    let tangentialScale = safeAlpha / limit;
+    if (mode === 'conformal') {
+      if (radius <= HOMOLOGY_CORD_EPSILON && Math.abs(safeAlpha - 1) > HOMOLOGY_CORD_EPSILON) {
+        return { x: 0, y: 0, valid: false, reason: 'singular at cone apex' };
+      }
+      const derivative = safeAlpha * Math.pow(Math.max(radius, HOMOLOGY_CORD_EPSILON), safeAlpha - 1)
+        / Math.pow(limit, safeAlpha);
+      radialScale = derivative;
+      tangentialScale = derivative;
+    }
+    const radialBasis = { x: Math.cos(mappedAngle), y: -Math.sin(mappedAngle) };
+    const tangentBasis = { x: -Math.sin(mappedAngle), y: -Math.cos(mappedAngle) };
+    const x = (radialBasis.x * radial * radialScale) + (tangentBasis.x * tangential * tangentialScale);
+    const y = (radialBasis.y * radial * radialScale) + (tangentBasis.y * tangential * tangentialScale);
+    return { x, y, valid: Number.isFinite(x) && Number.isFinite(y), reason: '' };
+  }
+
+  function clipHomologyLocalChartSegment(start, end, center, radius) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const fx = start.x - center.x;
+    const fy = start.y - center.y;
+    const a = (dx * dx) + (dy * dy);
+    const limit = Math.max(0, radius);
+    if (a <= HOMOLOGY_CORD_EPSILON) {
+      return Math.hypot(fx, fy) <= limit
+        ? { start: { ...start }, end: { ...end }, t0: 0, t1: 1 }
+        : null;
+    }
+    const b = 2 * ((fx * dx) + (fy * dy));
+    const c = (fx * fx) + (fy * fy) - (limit * limit);
+    const discriminant = (b * b) - (4 * a * c);
+    if (discriminant < 0) {
+      return c <= 0 ? { start: { ...start }, end: { ...end }, t0: 0, t1: 1 } : null;
+    }
+    const root = Math.sqrt(Math.max(0, discriminant));
+    const first = (-b - root) / (2 * a);
+    const second = (-b + root) / (2 * a);
+    const t0 = Math.max(0, Math.min(first, second));
+    const t1 = Math.min(1, Math.max(first, second));
+    if (t1 < t0 || t1 < 0 || t0 > 1) return null;
+    return {
+      start: { x: start.x + (dx * t0), y: start.y + (dy * t0) },
+      end: { x: start.x + (dx * t1), y: start.y + (dy * t1) },
+      t0,
+      t1
     };
   }
 
@@ -18061,6 +18429,516 @@
     };
     state.homologyCordQuotientAtlas = atlas;
     return atlas;
+  }
+
+  function homologyLocalChartFrameGeometry(frame) {
+    const sector = frame && frame.sector;
+    const cell = sector && geometry && geometry.cells[sector.tileIndex];
+    if (!cell) return null;
+    const points = tilePoints(cell.x, cell.y, geometry.radius);
+    const corner = modulo(sector.vertex, points.length);
+    const apex = points[corner];
+    const next = points[(corner + 1) % points.length];
+    return {
+      ...frame,
+      apex,
+      naturalStartAngle: Math.atan2(next.y - apex.y, next.x - apex.x)
+    };
+  }
+
+  function homologyLocalChartFramePolar(frame, point, mode, radiusLimit) {
+    if (!frame || !frame.apex || !point || !geometry) return null;
+    const dx = point.x - frame.apex.x;
+    const dy = point.y - frame.apex.y;
+    const radius = Math.hypot(dx, dy) / Math.max(HOMOLOGY_CORD_EPSILON, geometry.radius);
+    let naturalAngle = Math.atan2(dy, dx) - frame.naturalStartAngle;
+    naturalAngle = modulo(naturalAngle, 2 * Math.PI);
+    const sectorAngle = frame.sourceEnd - frame.sourceStart;
+    if (radius > HOMOLOGY_CORD_EPSILON && naturalAngle > sectorAngle + 1e-5) return null;
+    naturalAngle = clamp(naturalAngle, 0, sectorAngle);
+    const localAngle = frame.reverse ? sectorAngle - naturalAngle : naturalAngle;
+    const sourceTheta = frame.sourceStart + localAngle;
+    const mappingTheta = (frame.targetStart / frame.alpha) + localAngle;
+    const mapped = mapHomologyLocalChartPolar(radius, mappingTheta, frame.alpha, mode, radiusLimit);
+    return { radius, naturalAngle, localAngle, sourceTheta, mapped };
+  }
+
+  function homologyLocalChartVectorForLift(frame, particle, polar, mode, radiusLimit) {
+    const vector = particle.optimizationDirection || { x: 0, y: 0 };
+    const dx = particle.x - frame.apex.x;
+    const dy = particle.y - frame.apex.y;
+    const length = Math.hypot(dx, dy);
+    if (length <= HOMOLOGY_CORD_EPSILON) {
+      return mapHomologyLocalChartVector(0, 0, 0, 0, frame.alpha, mode, radiusLimit);
+    }
+    const radialBasis = { x: dx / length, y: dy / length };
+    const orientation = frame.reverse ? -1 : 1;
+    const tangentBasis = { x: -radialBasis.y * orientation, y: radialBasis.x * orientation };
+    const radial = ((vector.x * radialBasis.x) + (vector.y * radialBasis.y)) / geometry.radius;
+    const tangential = ((vector.x * tangentBasis.x) + (vector.y * tangentBasis.y)) / geometry.radius;
+    const mappingTheta = (frame.targetStart / frame.alpha) + polar.localAngle;
+    return mapHomologyLocalChartVector(
+      polar.radius,
+      mappingTheta,
+      radial,
+      tangential,
+      frame.alpha,
+      mode,
+      radiusLimit
+    );
+  }
+
+  function homologyLocalChartCornerHit(clientX, clientY) {
+    const analysis = homologyLocalChartTopologyAnalysis();
+    const atlas = analysis && makeHomologyCordQuotientAtlas(analysis);
+    if (!analysis || !atlas || !geometry) return null;
+    const point = clientPointToBoardPoint(clientX, clientY);
+    const host = tileHitAtBoardPoint(point, 1.08);
+    const threshold = geometry.radius * 0.3;
+    let best = null;
+    const considerTile = (tileIndex, localPoint) => {
+      const cell = geometry.cells[tileIndex];
+      if (!cell || !tileExists(tileIndex)) return;
+      tilePoints(cell.x, cell.y, geometry.radius).forEach((cornerPoint, corner) => {
+        const distance = Math.hypot(localPoint.x - cornerPoint.x, localPoint.y - cornerPoint.y);
+        if (distance <= threshold && (!best || distance < best.distance - 1e-8)) {
+          best = { tileIndex, corner, distance };
+        }
+      });
+    };
+    if (host) considerTile(host.index, host.local);
+    if (!best) {
+      const offsets = state.wrapped ? getBoardCopyOffsets() : [{ x: 0, y: 0 }];
+      offsets.forEach((offset) => {
+        const localPoint = { x: point.x - offset.x, y: point.y - offset.y };
+        geometry.cells.forEach((cell, tileIndex) => considerTile(tileIndex, localPoint));
+      });
+    }
+    if (!best) return null;
+    const vertexId = quotientVertexIdForCorner(analysis, best.tileIndex, best.corner);
+    const star = atlas.vertexStars.get(vertexId);
+    const sector = star && star.sectors.find((entry) => (
+      entry.tileIndex === best.tileIndex && entry.vertex === best.corner
+    ));
+    if (!star || !sector) return null;
+    const componentIndex = (star.cyclicComponents || []).findIndex((component) => component.includes(sector.id));
+    if (componentIndex < 0) return null;
+    return {
+      topologyKey: backgroundHomologyTopologyKey(),
+      vertexId,
+      sectorId: sector.id,
+      componentIndex,
+      tileIndex: best.tileIndex,
+      corner: best.corner
+    };
+  }
+
+  function inspectBackgroundHomologyLocalVertex(event) {
+    if (!state.inspectHomologyLocalVertex || !isGluedBoundaryMode()) return false;
+    state.homologyLocalChartSelection = homologyLocalChartCornerHit(event.clientX, event.clientY);
+    state.homologyLocalChartParticleSelection = null;
+    draw(analyze());
+    return true;
+  }
+
+  function homologyLocalChartFailureRecords(generatorId) {
+    const records = state.homologyLocalChartFailures[generatorId];
+    return Array.isArray(records) ? records : [];
+  }
+
+  function homologyLocalChartLiftFrames(frames, tileIndex) {
+    return (frames || []).filter((frame) => frame && frame.sector && frame.sector.tileIndex === tileIndex);
+  }
+
+  function homologyLocalChartGlueArrows(frames) {
+    const arrows = [];
+    (frames || []).forEach((frame) => {
+      (frame && frame.sector && frame.sector.links || []).forEach((link) => {
+        if (!link.glued || (link.boundary !== 'start' && link.boundary !== 'end')) return;
+        const chartBoundary = frame.reverse
+          ? (link.boundary === 'start' ? 'end' : 'start')
+          : link.boundary;
+        arrows.push({
+          sectorId: frame.sectorId,
+          neighborId: link.neighborId,
+          dir: link.dir,
+          boundary: chartBoundary,
+          angle: chartBoundary === 'start' ? frame.targetStart : frame.targetEnd,
+          outward: (link.boundary === 'start') !== !!link.arrowReversed,
+          glueGroup: link.glueGroup,
+          color: link.color
+        });
+      });
+    });
+    const coincident = new Map();
+    arrows.forEach((arrow) => {
+      const normalized = modulo(arrow.angle, 2 * Math.PI);
+      const key = `${Math.round(Math.cos(normalized) * 1e6)}:${Math.round(Math.sin(normalized) * 1e6)}`;
+      if (!coincident.has(key)) coincident.set(key, []);
+      coincident.get(key).push(arrow);
+    });
+    coincident.forEach((group) => {
+      group.sort((left, right) => (
+        (Number(left.glueGroup) || 0) - (Number(right.glueGroup) || 0)
+        || left.sectorId - right.sectorId
+        || Number(left.outward) - Number(right.outward)
+      ));
+      group.forEach((arrow, index) => {
+        arrow.displayAngle = arrow.angle + ((index - ((group.length - 1) / 2)) * 0.018);
+      });
+    });
+    return arrows;
+  }
+
+  function buildHomologyLocalChartModel() {
+    const selection = state.homologyLocalChartSelection;
+    const analysis = homologyLocalChartTopologyAnalysis();
+    const atlas = analysis && makeHomologyCordQuotientAtlas(analysis);
+    if (!selection || !analysis || !atlas || selection.topologyKey !== backgroundHomologyTopologyKey()) return null;
+    const star = atlas.vertexStars.get(selection.vertexId);
+    const component = homologyLocalChartComponent(star, selection.sectorId);
+    if (!component || component.sectorIds.indexOf(selection.sectorId) < 0) return null;
+    const frames = component.frames.map(homologyLocalChartFrameGeometry).filter(Boolean);
+    if (frames.length !== component.frames.length) return null;
+    const mode = state.homologyLocalChartMode === 'conformal' ? 'conformal' : 'radial';
+    const radiusLimit = clamp(Number(state.homologyLocalChartRadius) || 1, 0.25, 2);
+    const particles = [];
+    const cords = [];
+    const globalFailures = [];
+    const generators = (analysis.generators || []).filter((generator) => homologyGeneratorVisible(generator.id));
+    generators.forEach((generator) => {
+      const generatorIndex = (analysis.generators || []).findIndex((entry) => entry.id === generator.id);
+      const color = HOMOLOGY_COLORS[modulo(generatorIndex, HOMOLOGY_COLORS.length)];
+      const chain = state.homologyCordChains[generator.id];
+      if (!chain || chain.solverSpace !== 'quotient') return;
+      const failures = homologyLocalChartFailureRecords(generator.id);
+      failures.filter((failure) => failure.index < 0).forEach((failure) => {
+        globalFailures.push({ generatorId: generator.id, reason: failure.reason });
+      });
+      const failureByIndex = new Map(failures.map((failure) => [failure.index, failure]));
+      const logicalCount = Math.max(0, chain.points.length - 1);
+      for (let particleIndex = 0; particleIndex < logicalCount; particleIndex += 1) {
+        const particle = chain.points[particleIndex];
+        homologyLocalChartLiftFrames(frames, particle.tileIndex).forEach((frame) => {
+          const polar = homologyLocalChartFramePolar(frame, particle, mode, radiusLimit);
+          if (!polar || polar.radius > radiusLimit + 1e-7 || !polar.mapped.valid) return;
+          particles.push({
+            generatorId: generator.id,
+            particleIndex,
+            tileIndex: particle.tileIndex,
+            corner: frame.sector.vertex,
+            sectorId: frame.sectorId,
+            frame,
+            polar,
+            mapped: polar.mapped,
+            vector: homologyLocalChartVectorForLift(frame, particle, polar, mode, radiusLimit),
+            failure: failureByIndex.get(particleIndex) || null,
+            color
+          });
+        });
+      }
+      for (let springIndex = 0; springIndex < logicalCount; springIndex += 1) {
+        const trace = traceQuotientSegment(
+          chain.points[springIndex],
+          chain.points[(springIndex + 1) % logicalCount],
+          chain.springs[springIndex],
+          chain
+        );
+        if (!trace.valid) continue;
+        trace.segments.forEach((segment) => {
+          homologyLocalChartLiftFrames(frames, segment.tileIndex).forEach((frame) => {
+            const clipped = clipHomologyLocalChartSegment(
+              segment.start,
+              segment.end,
+              frame.apex,
+              radiusLimit * geometry.radius
+            );
+            if (!clipped) return;
+            const points = [];
+            const samples = 16;
+            for (let sample = 0; sample <= samples; sample += 1) {
+              const ratio = sample / samples;
+              const source = {
+                x: clipped.start.x + ((clipped.end.x - clipped.start.x) * ratio),
+                y: clipped.start.y + ((clipped.end.y - clipped.start.y) * ratio)
+              };
+              const polar = homologyLocalChartFramePolar(frame, source, mode, radiusLimit);
+              if (polar && polar.mapped.valid) points.push(polar.mapped);
+            }
+            if (points.length > 1) cords.push({ generatorId: generator.id, springIndex, sectorId: frame.sectorId, points, color });
+          });
+        });
+      }
+    });
+    const glueArrows = homologyLocalChartGlueArrows(frames);
+    return { selection, star, component, frames, mode, radiusLimit, particles, cords, glueArrows, globalFailures };
+  }
+
+  function homologyLocalChartCanvasPoint(center, plotRadius, point) {
+    return { x: center.x + (point.x * plotRadius), y: center.y + (point.y * plotRadius) };
+  }
+
+  function homologyLocalChartTargetPoint(center, plotRadius, radius, angle) {
+    return {
+      x: center.x + (Math.cos(angle) * radius * plotRadius),
+      y: center.y - (Math.sin(angle) * radius * plotRadius)
+    };
+  }
+
+  function drawHomologyLocalChartArrow(ctx, start, end, color) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 1) return;
+    const size = Math.min(7, Math.max(3.5, length * 0.3));
+    const ux = dx / length;
+    const uy = dy / length;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 1.25;
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(end.x, end.y);
+    ctx.lineTo(end.x - (ux * size) - (uy * size * 0.55), end.y - (uy * size) + (ux * size * 0.55));
+    ctx.lineTo(end.x - (ux * size) + (uy * size * 0.55), end.y - (uy * size) - (ux * size * 0.55));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function setHomologyLocalChartDetail(lift) {
+    if (!refs.homologyLocalChartDetail) return;
+    if (!lift) {
+      refs.homologyLocalChartDetail.textContent = '-';
+      return;
+    }
+    const vector = lift.vector && lift.vector.valid
+      ? `mapped vector (${lift.vector.x.toFixed(4)}, ${lift.vector.y.toFixed(4)})`
+      : `mapped vector unavailable${lift.vector && lift.vector.reason ? `: ${lift.vector.reason}` : ''}`;
+    const failure = lift.failure ? `failure: ${lift.failure.reason || 'local motion rejected'}` : 'failure: none';
+    refs.homologyLocalChartDetail.textContent = [
+      `${lift.generatorId} particle ${lift.particleIndex}`,
+      `tile ${lift.tileIndex}, corner ${lift.corner}, sector ${lift.sectorId}`,
+      `r/R ${lift.polar.radius.toFixed(5)}, theta ${lift.polar.sourceTheta.toFixed(5)} rad`,
+      vector,
+      failure
+    ].join(' | ');
+  }
+
+  function renderHomologyLocalChart() {
+    const canvas = refs.homologyLocalChartCanvas;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return;
+    const dpr = clamp(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 1, 2.5);
+    const width = Math.max(1, Math.round(rect.width));
+    const height = Math.max(1, Math.round(rect.height));
+    const pixelWidth = Math.max(1, Math.round(width * dpr));
+    const pixelHeight = Math.max(1, Math.round(height * dpr));
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#fffdf8';
+    ctx.fillRect(0, 0, width, height);
+    const model = buildHomologyLocalChartModel();
+    state.homologyLocalChartHits = [];
+    if (!model) {
+      if (state.homologyLocalChartSelection) {
+        state.homologyLocalChartSelection = null;
+        state.homologyLocalChartParticleSelection = null;
+      }
+      if (refs.homologyLocalChartStatus) refs.homologyLocalChartStatus.textContent = 'No vertex selected.';
+      setHomologyLocalChartDetail(null);
+      ctx.fillStyle = '#77736c';
+      ctx.font = '12px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('No vertex selected', width / 2, height / 2);
+      return;
+    }
+    const open = model.component.open && model.component.valid;
+    const center = open
+      ? { x: width * 0.5, y: height * 0.82 }
+      : { x: width * 0.5, y: height * 0.53 };
+    const plotRadius = Math.max(40, Math.min(width * 0.43, height * (open ? 0.72 : 0.42)));
+    const layers = state.homologyLocalChartLayers;
+    if (layers.geometry !== false) {
+      model.frames.forEach((frame, frameIndex) => {
+        const samples = 24;
+        ctx.beginPath();
+        ctx.moveTo(center.x, center.y);
+        for (let sample = 0; sample <= samples; sample += 1) {
+          const angle = frame.targetStart + ((frame.targetEnd - frame.targetStart) * sample / samples);
+          const point = homologyLocalChartTargetPoint(center, plotRadius, 1, angle);
+          ctx.lineTo(point.x, point.y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = frameIndex % 2 ? 'rgba(31,122,140,0.055)' : 'rgba(196,127,23,0.06)';
+        ctx.fill();
+        ctx.strokeStyle = model.component.valid ? 'rgba(47,52,55,0.32)' : 'rgba(178,58,72,0.72)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash(model.component.valid ? [] : [5, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const labelPoint = homologyLocalChartTargetPoint(
+          center,
+          plotRadius,
+          0.68,
+          (frame.targetStart + frame.targetEnd) * 0.5
+        );
+        ctx.fillStyle = '#5f5b55';
+        ctx.font = '10px JetBrains Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`t${frame.sector.tileIndex}:c${frame.sector.vertex} / s${frame.sectorId}`, labelPoint.x, labelPoint.y);
+      });
+      ctx.beginPath();
+      const boundarySamples = 96;
+      const boundaryStart = 0;
+      const boundaryEnd = model.component.valid ? model.component.targetAngle : 2 * Math.PI;
+      for (let sample = 0; sample <= boundarySamples; sample += 1) {
+        const point = homologyLocalChartTargetPoint(
+          center,
+          plotRadius,
+          1,
+          boundaryStart + ((boundaryEnd - boundaryStart) * sample / boundarySamples)
+        );
+        if (sample === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      }
+      ctx.strokeStyle = '#817b72';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      model.glueArrows.forEach((arrow) => {
+        const angle = Number.isFinite(arrow.displayAngle) ? arrow.displayAngle : arrow.angle;
+        const inner = homologyLocalChartTargetPoint(center, plotRadius, 0.14, angle);
+        const outer = homologyLocalChartTargetPoint(center, plotRadius, 0.92, angle);
+        drawHomologyLocalChartArrow(
+          ctx,
+          arrow.outward ? inner : outer,
+          arrow.outward ? outer : inner,
+          arrow.color || '#817b72'
+        );
+      });
+    }
+    if (layers.cords !== false) {
+      model.cords.forEach((cord) => {
+        ctx.beginPath();
+        cord.points.forEach((point, index) => {
+          const canvasPoint = homologyLocalChartCanvasPoint(center, plotRadius, point);
+          if (index === 0) ctx.moveTo(canvasPoint.x, canvasPoint.y);
+          else ctx.lineTo(canvasPoint.x, canvasPoint.y);
+        });
+        ctx.strokeStyle = cord.color;
+        ctx.globalAlpha = 0.76;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      });
+    }
+    if (layers.vectors !== false) {
+      model.particles.forEach((lift) => {
+        if (!lift.vector || !lift.vector.valid) return;
+        const start = homologyLocalChartCanvasPoint(center, plotRadius, lift.mapped);
+        const scale = Math.min(1, 0.16 / Math.max(0.02, Math.hypot(lift.vector.x, lift.vector.y)));
+        const end = {
+          x: start.x + (lift.vector.x * plotRadius * scale),
+          y: start.y + (lift.vector.y * plotRadius * scale)
+        };
+        drawHomologyLocalChartArrow(ctx, start, end, lift.color);
+      });
+    }
+    if (layers.cords !== false || layers.failures !== false) {
+      model.particles.forEach((lift) => {
+        const point = homologyLocalChartCanvasPoint(center, plotRadius, lift.mapped);
+        const selected = state.homologyLocalChartParticleSelection
+          && state.homologyLocalChartParticleSelection.generatorId === lift.generatorId
+          && state.homologyLocalChartParticleSelection.particleIndex === lift.particleIndex
+          && state.homologyLocalChartParticleSelection.sectorId === lift.sectorId;
+        if (layers.cords !== false) {
+          ctx.fillStyle = lift.color;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, selected ? 5.5 : 4, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = '#fffdf8';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        }
+        if (layers.failures !== false && lift.failure) {
+          ctx.strokeStyle = '#d11f1f';
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 8, 0, 2 * Math.PI);
+          ctx.stroke();
+        }
+        state.homologyLocalChartHits.push({ ...lift, canvasX: point.x, canvasY: point.y });
+      });
+    }
+    if (layers.metadata !== false) {
+      ctx.fillStyle = '#45413c';
+      ctx.font = '11px JetBrains Mono, monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(
+        `v${model.selection.vertexId}  ${model.mode}  alpha=${model.component.alpha.toFixed(5)}`,
+        10,
+        10
+      );
+      if (!model.component.valid) {
+        ctx.fillStyle = '#b23a48';
+        ctx.fillText(model.component.reason, 10, 27);
+      }
+    }
+    const statusParts = [
+      `vertex ${model.selection.vertexId}`,
+      `tile ${model.selection.tileIndex} corner ${model.selection.corner}`,
+      `component ${model.selection.componentIndex}`,
+      `${model.component.open ? 'boundary' : 'closed'}`,
+      `sectors ${model.frames.length}`,
+      `Theta ${model.component.totalAngle.toFixed(5)}`,
+      `alpha ${model.component.alpha.toFixed(5)}`,
+      `radius ${model.radiusLimit.toFixed(2)}R`,
+      model.component.valid ? 'valid chart' : model.component.reason,
+      model.globalFailures.length
+        ? `failure ${model.globalFailures.map((failure) => `${failure.generatorId}: ${failure.reason}`).join(', ')}`
+        : 'failure none'
+    ];
+    if (refs.homologyLocalChartStatus) {
+      refs.homologyLocalChartStatus.textContent = layers.metadata === false ? '' : statusParts.join(' | ');
+    }
+    const selectedLift = model.particles.find((lift) => (
+      state.homologyLocalChartParticleSelection
+      && state.homologyLocalChartParticleSelection.generatorId === lift.generatorId
+      && state.homologyLocalChartParticleSelection.particleIndex === lift.particleIndex
+      && state.homologyLocalChartParticleSelection.sectorId === lift.sectorId
+    ));
+    if (state.homologyLocalChartParticleSelection && !selectedLift) state.homologyLocalChartParticleSelection = null;
+    setHomologyLocalChartDetail(selectedLift || null);
+  }
+
+  function handleHomologyLocalChartPointerDown(event) {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const canvas = refs.homologyLocalChartCanvas;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const hit = (state.homologyLocalChartHits || []).reduce((best, candidate) => {
+      const distance = Math.hypot(point.x - candidate.canvasX, point.y - candidate.canvasY);
+      return distance <= 14 && (!best || distance < best.distance) ? { candidate, distance } : best;
+    }, null);
+    state.homologyLocalChartParticleSelection = hit ? {
+      generatorId: hit.candidate.generatorId,
+      particleIndex: hit.candidate.particleIndex,
+      sectorId: hit.candidate.sectorId
+    } : null;
+    renderHomologyLocalChart();
+    event.preventDefault();
   }
 
   function homologyCordPortalForCrossing(atlas, crossing) {
@@ -20541,6 +21419,7 @@
         return;
       }
       let quotientFrameFailed = false;
+      const localChartFailures = [];
       for (let iteration = 0; iteration < iterations; iteration += 1) {
         const result = chain.solverSpace === 'quotient'
           ? stepQuotientElasticBandMacro(chain, {
@@ -20555,6 +21434,17 @@
           substeps: HOMOLOGY_CORD_MACRO_SUBSTEPS,
           metrics: options.metrics || null
         });
+        if (chain.solverSpace === 'quotient') {
+          if (Array.isArray(result.failures)) {
+            result.failures.forEach((failure) => localChartFailures.push({
+              index: Number.isInteger(failure.index) ? failure.index : -1,
+              reason: failure.reason || 'local motion rejected'
+            }));
+          }
+          if (!result.resolved && !result.failures?.length) {
+            localChartFailures.push({ index: -1, reason: result.reason || 'quotient macro rejected' });
+          }
+        }
         if (!result.resolved) {
           chain.stableMacroSteps = 0;
           chain.settled = false;
@@ -20574,6 +21464,9 @@
         if (chain.settled) break;
       }
       if (chain.solverSpace === 'quotient') {
+        const uniqueFailures = new Map();
+        localChartFailures.forEach((failure) => uniqueFailures.set(`${failure.index}:${failure.reason}`, failure));
+        state.homologyLocalChartFailures[chain.generatorId] = Array.from(uniqueFailures.values());
         chain.quotientFailureCount = quotientFrameFailed ? (chain.quotientFailureCount || 0) + 1 : 0;
         if (quotientFrameFailed) {
           // A globally invalid carrier cannot be advanced safely. Keep the
@@ -20706,7 +21599,10 @@
       const chain = state.homologyCordChains[drag.generatorId];
       if (!chain || !chain.points[drag.part]) return false;
       const projected = clientPointToBoardPoint(event.clientX, event.clientY);
-      movePlanarElasticBandPoint(chain, drag.part, projected);
+      const moved = movePlanarElasticBandPoint(chain, drag.part, projected);
+      state.homologyLocalChartFailures[chain.generatorId] = moved
+        ? []
+        : [{ index: drag.part, reason: 'drag motion rejected' }];
       draw(analyze());
       return true;
     }
@@ -29443,6 +30339,13 @@
       homologyCordClosure,
       applyHomologyCordClosure,
       makeHomologyCordQuotientAtlas,
+      homologyLocalChartComponent,
+      homologyLocalChartLiftFrames,
+      homologyLocalChartGlueArrows,
+      mapHomologyLocalChartPolar,
+      mapHomologyLocalChartVector,
+      clipHomologyLocalChartSegment,
+      buildHomologyLocalChartModel,
       makeQuotientElasticBandChain,
       makeHomologyCordRuntimeChain,
       traceQuotientMotion,

@@ -309,10 +309,12 @@
 
 <script>
 (() => {
-  const PREVIEW_MOTION_DURATION = 320;
-  const PREVIEW_MOTION_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
+  const INDEX_MOTION_DURATION = 640;
+  const INDEX_FADE_DURATION = 360;
+  const INDEX_MOTION_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
   const masonryState = new WeakMap();
   const masonryAnimationState = new WeakMap();
+  const cardAnimationState = new WeakMap();
   const gifManifest = {
     'gif/young_diagrams_gif_1.gif': [
       { src: 'gif/young_diagrams_gif_1.gif', width: 522, height: 747 },
@@ -464,7 +466,7 @@
 
     strip.addEventListener('transitionend', handleTransitionEnd);
     strip.addEventListener('transitioncancel', finish, { once: true });
-    fallbackTimer = window.setTimeout(finish, PREVIEW_MOTION_DURATION + 100);
+    fallbackTimer = window.setTimeout(finish, INDEX_MOTION_DURATION + 100);
   };
 
   const revealPreview = (card, strip) => {
@@ -578,7 +580,7 @@
     }
   };
 
-  const setCardExpanded = (card, isExpanded, isSingleColumn) => {
+  const setCardExpanded = (card, isExpanded, isSingleColumn, options = {}) => {
     const button = card.querySelector('.applet-title-toggle');
 
     card.classList.toggle('is-expanded', isSingleColumn && isExpanded);
@@ -596,9 +598,154 @@
 
     if (!isSingleColumn || isExpanded) {
       loadPreview(card);
-    } else {
+    } else if (!options.deferPreviewUnload) {
       unloadPreview(card);
     }
+  };
+
+  const getCollapsibleCardContent = (card) => {
+    const selector = card.classList.contains('reference-card')
+      ? ':scope > p:not(.applet-kind), :scope > a, :scope > .reference-links'
+      : ':scope > .demo-strip, .applet-body > .applet-kind, .applet-body > p:not(.applet-kind), .applet-body > .applet-link';
+
+    return Array.from(card.querySelectorAll(selector));
+  };
+
+  const clearCardAnimationStyles = (card) => {
+    card.classList.remove('is-card-resizing', 'is-card-collapsing');
+    card.style.removeProperty('height');
+    getCollapsibleCardContent(card).forEach((element) => element.style.removeProperty('opacity'));
+  };
+
+  const cancelCardAnimation = (card, preserveVisual = false) => {
+    const state = cardAnimationState.get(card);
+
+    if (!state) {
+      clearCardAnimationStyles(card);
+      return null;
+    }
+
+    const preserved = preserveVisual
+      ? {
+          height: card.getBoundingClientRect().height,
+          opacities: new Map(getCollapsibleCardContent(card).map((element) => (
+            [element, parseFloat(window.getComputedStyle(element).opacity) || 0]
+          )))
+        }
+      : null;
+
+    state.animations.forEach((animation) => animation.cancel());
+    cardAnimationState.delete(card);
+    clearCardAnimationStyles(card);
+
+    if (preserved) {
+      card.style.height = `${preserved.height}px`;
+      preserved.opacities.forEach((opacity, element) => {
+        element.style.opacity = String(opacity);
+      });
+    } else if (card.classList.contains('is-collapsed')) {
+      unloadPreview(card);
+    }
+
+    return preserved;
+  };
+
+  const finishCardAnimation = (card, state) => {
+    if (cardAnimationState.get(card) !== state) {
+      return;
+    }
+
+    cardAnimationState.delete(card);
+    clearCardAnimationStyles(card);
+
+    if (card.classList.contains('is-collapsed')) {
+      unloadPreview(card);
+    }
+  };
+
+  const animateCardExpanded = (card, isExpanded) => {
+    const wasExpanded = card.classList.contains('is-expanded');
+    const interrupted = cancelCardAnimation(card, true);
+    const startHeight = interrupted ? interrupted.height : card.getBoundingClientRect().height;
+    const startOpacities = interrupted ? interrupted.opacities : null;
+
+    if (!isExpanded) {
+      card.classList.add('is-card-collapsing');
+    }
+
+    setCardExpanded(card, isExpanded, true, { deferPreviewUnload: !isExpanded });
+    card.style.removeProperty('height');
+
+    if (!isExpanded) {
+      card.classList.remove('is-card-collapsing');
+    }
+
+    const targetHeight = card.getBoundingClientRect().height;
+
+    if (!isExpanded) {
+      card.classList.add('is-card-collapsing');
+    }
+
+    const content = getCollapsibleCardContent(card);
+    const shouldAnimate = !prefersReducedMotion()
+      && typeof card.animate === 'function'
+      && Math.abs(startHeight - targetHeight) >= 0.5;
+
+    if (!shouldAnimate) {
+      clearCardAnimationStyles(card);
+
+      if (!isExpanded) {
+        unloadPreview(card);
+      }
+
+      return Promise.resolve();
+    }
+
+    card.classList.add('is-card-resizing');
+    card.style.height = `${startHeight}px`;
+
+    const options = {
+      duration: INDEX_MOTION_DURATION,
+      easing: INDEX_MOTION_EASING,
+      fill: 'both'
+    };
+    const animations = [card.animate([
+      { height: `${startHeight}px` },
+      { height: `${targetHeight}px` }
+    ], options)];
+
+    content.forEach((element) => {
+      if (typeof element.animate !== 'function') {
+        return;
+      }
+
+      const startOpacity = startOpacities && startOpacities.has(element)
+        ? startOpacities.get(element)
+        : wasExpanded ? 1 : 0;
+      const endOpacity = isExpanded ? 1 : 0;
+
+      element.style.opacity = String(startOpacity);
+      animations.push(element.animate([
+        { opacity: startOpacity },
+        { opacity: endOpacity }
+      ], {
+        duration: INDEX_FADE_DURATION,
+        easing: 'ease-out',
+        fill: 'both'
+      }));
+    });
+
+    const state = { animations };
+    cardAnimationState.set(card, state);
+
+    return Promise.allSettled(animations.map((animation) => animation.finished))
+      .then(() => finishCardAnimation(card, state));
+  };
+
+  const cancelAllCardAnimations = () => {
+    document.querySelectorAll('.is-card-resizing, .is-card-collapsing').forEach((card) => (
+      cancelCardAnimation(card)
+    ));
   };
 
   const setGridSingleColumnMode = (grid, items, isSingleColumn) => {
@@ -714,8 +861,8 @@
     const nextHeight = grid.getBoundingClientRect().height;
     const animations = [];
     const options = {
-      duration: PREVIEW_MOTION_DURATION,
-      easing: PREVIEW_MOTION_EASING
+      duration: INDEX_MOTION_DURATION,
+      easing: INDEX_MOTION_EASING
     };
 
     items.forEach((item) => {
@@ -814,6 +961,7 @@
   };
 
   const updateAllResponsiveGrids = () => {
+    cancelAllCardAnimations();
     arrangeAllMasonryGrids();
     document.querySelectorAll('.collapsible-grid:not(.calculator-grid)').forEach(updateCollapsibleGrid);
   };
@@ -829,11 +977,9 @@
 
       const shouldExpand = !card.classList.contains('is-expanded');
 
-      getGridCards(grid).forEach((item) => setCardExpanded(item, item === card && shouldExpand, true));
-
-      if (grid.classList.contains('calculator-grid')) {
-        arrangeMasonryGrid(grid);
-      }
+      getGridCards(grid).forEach((item) => (
+        animateCardExpanded(item, item === card && shouldExpand)
+      ));
     });
   });
 

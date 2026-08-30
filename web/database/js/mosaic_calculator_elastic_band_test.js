@@ -867,6 +867,45 @@ torusTrace.crossings.forEach((crossing) => {
   )), false, 'drawing trace must not connect paired edge copies with a canvas-spanning shortcut');
 });
 
+// The runtime chart model reads the current quotient chain without changing it.
+const torusChartSector = torusStar.sectors[0];
+elastic.state.homologyAnalysis = torusAnalysis;
+elastic.state.homologyTopologyKey = elastic.backgroundHomologyTopologyKey();
+elastic.state.showHomology = true;
+elastic.state.homologyCordMode = true;
+elastic.state.homologyCordChains = { [torusGenerator.id]: torusBand };
+elastic.state.homologyLocalChartRadius = 2;
+elastic.state.homologyLocalChartMode = 'radial';
+elastic.state.homologyLocalChartSelection = {
+  topologyKey: elastic.backgroundHomologyTopologyKey(),
+  vertexId: torusStar.vertexId,
+  sectorId: torusChartSector.id,
+  componentIndex: 0,
+  tileIndex: torusChartSector.tileIndex,
+  corner: torusChartSector.vertex
+};
+const torusChartModel = elastic.buildHomologyLocalChartModel();
+assert.ok(torusChartModel && torusChartModel.component.valid);
+assert.ok(torusChartModel.particles.length > torusBand.points.length - 1,
+  'equivalent corners retain multiple local lifts of a material particle');
+assert.ok(torusChartModel.cords.length > 0);
+assert.ok(torusChartModel.glueArrows.length > 0);
+assert.ok(torusChartModel.glueArrows.some((arrow) => arrow.color === '#1f7a8c'));
+assert.ok(torusChartModel.glueArrows.every((arrow) => (
+  ['#1f7a8c', '#b23a48', '#6a4c93', '#c47f17', '#2f855a', '#8a4f7d'].includes(arrow.color)
+)));
+assert.ok(torusChartModel.glueArrows.some((arrow) => arrow.outward));
+assert.ok(torusChartModel.glueArrows.some((arrow) => !arrow.outward));
+elastic.state.homologyCordChains = {};
+elastic.state.homologyAnalysis = null;
+elastic.state.homologyTopologyKey = '';
+const geometryOnlyChartModel = elastic.buildHomologyLocalChartModel();
+assert.ok(geometryOnlyChartModel && geometryOnlyChartModel.frames.length > 0,
+  'local geometry remains available before computing a homology basis');
+assert.strictEqual(geometryOnlyChartModel.particles.length, 0);
+assert.ok(geometryOnlyChartModel.glueArrows.length > 0);
+elastic.state.homologyLocalChartSelection = null;
+
 const quotientInitialLength = elastic.quotientElasticBandLength(torusBand);
 const quotientMetrics = {};
 for (let index = 0; index < 5; index += 1) {
@@ -1255,12 +1294,86 @@ assert.strictEqual(removedBlocked.valid, true);
 assert.strictEqual(removedBlocked.blocked, true);
 assert.strictEqual(removedBlocked.point.tileIndex, 1);
 
+// The local-geometry debug chart unfolds only the clicked connected component.
+// Closed stars target 2pi, boundary stars target pi, and malformed branching
+// components are reported instead of being presented as a valid cone.
+function syntheticLocalStar(count, options = {}) {
+  const closed = !!options.closed;
+  const angle = options.angle || Math.PI / 2;
+  const sectors = Array.from({ length: count }, (_, id) => {
+    const previous = id > 0 ? id - 1 : (closed ? count - 1 : null);
+    const next = id + 1 < count ? id + 1 : (closed ? 0 : null);
+    const neighbors = [previous, next].filter((value) => value != null);
+    return {
+      id,
+      tileIndex: options.tileIndices ? options.tileIndices[id] : id,
+      vertex: id,
+      angle,
+      neighbors,
+      links: [
+        previous == null ? null : { neighborId: previous, boundary: 'start', dir: 0 },
+        next == null ? null : { neighborId: next, boundary: 'end', dir: 1 }
+      ].filter(Boolean)
+    };
+  });
+  return { vertexId: 7, sectors, cyclicComponents: [sectors.map((sector) => sector.id)] };
+}
+
+const ordinaryLocal = elastic.homologyLocalChartComponent(syntheticLocalStar(4, { closed: true }), 0);
+assert.ok(ordinaryLocal.valid && ordinaryLocal.closed);
+assert.ok(Math.abs(ordinaryLocal.totalAngle - (2 * Math.PI)) < 1e-12);
+assert.ok(Math.abs(ordinaryLocal.alpha - 1) < 1e-12);
+const coneLocal = elastic.homologyLocalChartComponent(syntheticLocalStar(8, { closed: true }), 3);
+assert.ok(coneLocal.valid && Math.abs(coneLocal.totalAngle - (4 * Math.PI)) < 1e-12);
+assert.ok(Math.abs(coneLocal.alpha - 0.5) < 1e-12);
+const boundaryLocal = elastic.homologyLocalChartComponent(syntheticLocalStar(2), 0);
+assert.ok(boundaryLocal.valid && boundaryLocal.open);
+assert.ok(Math.abs(boundaryLocal.targetAngle - Math.PI) < 1e-12);
+
+const disconnectedStar = syntheticLocalStar(1);
+disconnectedStar.sectors.push({
+  id: 1, tileIndex: 4, vertex: 1, angle: Math.PI / 2, neighbors: [], links: []
+});
+disconnectedStar.cyclicComponents = [[0], [1]];
+assert.deepStrictEqual(elastic.homologyLocalChartComponent(disconnectedStar, 1).sectorIds, [1]);
+assert.strictEqual(elastic.homologyLocalChartLiftFrames([
+  { sector: { tileIndex: 2 }, sectorId: 0 },
+  { sector: { tileIndex: 2 }, sectorId: 1 },
+  { sector: { tileIndex: 3 }, sectorId: 2 }
+], 2).length, 2, 'one particle keeps every matching corner lift');
+
+const branchedStar = {
+  vertexId: 9,
+  sectors: [
+    { id: 0, angle: Math.PI / 2, neighbors: [1, 2, 3], links: [] },
+    { id: 1, angle: Math.PI / 2, neighbors: [0], links: [] },
+    { id: 2, angle: Math.PI / 2, neighbors: [0], links: [] },
+    { id: 3, angle: Math.PI / 2, neighbors: [0], links: [] }
+  ],
+  cyclicComponents: [[0, 1, 2, 3]]
+};
+assert.strictEqual(elastic.homologyLocalChartComponent(branchedStar, 0).valid, false);
+
+const radialMap = elastic.mapHomologyLocalChartPolar(0.5, Math.PI, 0.5, 'radial', 1);
+const conformalMap = elastic.mapHomologyLocalChartPolar(0.5, Math.PI, 0.5, 'conformal', 1);
+assert.ok(Math.abs(radialMap.radius - 0.5) < 1e-12);
+assert.ok(Math.abs(conformalMap.radius - Math.sqrt(0.5)) < 1e-12);
+assert.strictEqual(elastic.mapHomologyLocalChartVector(0, 0, 1, 0, 0.5, 'conformal', 1).valid, false);
+assert.strictEqual(elastic.mapHomologyLocalChartVector(0.5, 0, 1, 0, 0.5, 'radial', 1).valid, true);
+const clippedLocalSegment = elastic.clipHomologyLocalChartSegment(
+  { x: -2, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 0 }, 1
+);
+assertPointNear(clippedLocalSegment.start, { x: -1, y: 0 });
+assertPointNear(clippedLocalSegment.end, { x: 1, y: 0 });
+
 // Removed solver entry points must not survive as functions or test exports.
 const sourceText = fs.readFileSync(path.join(__dirname, 'mosaic_calculator.js'), 'utf8');
 const htmlText = fs.readFileSync(path.join(__dirname, '..', 'mosaic_calculator.html'), 'utf8');
 assert.strictEqual(htmlText.includes('id="homology-cord-contraction-strength"'), false);
 assert.ok(htmlText.includes('id="homology-cord-relax-speed" min="0.1" max="10" step="0.1" value="10"'));
-assert.ok(htmlText.includes('js/mosaic_calculator.js?v=quotient-cord-local-transactions-16'));
+assert.ok(htmlText.includes('js/mosaic_calculator.js?v=homology-local-chart-3'));
+assert.ok(htmlText.includes('id="homology-local-chart-card"'));
+assert.ok(htmlText.includes('id="inspect-homology-local-vertex"'));
 const drawCordSource = sourceText.slice(
   sourceText.indexOf('function drawBackgroundHomologyCords'),
   sourceText.indexOf('function drawHomologyCordSeamMarkers')

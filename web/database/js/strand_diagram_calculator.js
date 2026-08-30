@@ -2,7 +2,7 @@
   'use strict';
 
   const EXPORT_KIND = 'strand-diagram-calculator';
-  const EXPORT_VERSION = 3;
+  const EXPORT_VERSION = 4;
   const DEFAULT_GROUP_TYPE = 'symmetric';
   const DEFAULT_STRAND_COUNT = 5;
   const DEFAULT_DIRECTION = 'up-down';
@@ -27,6 +27,20 @@
   const STRAND_SIZE_MODES = new Set(['fit', 'fixed']);
   const BASIC_EXPRESSION_FORMATS = new Set(['composition', 'transpositions', 'cycle', 'one-line', 'two-line', 'matrix']);
   const BASIC_REDUCED_FORMATS = new Set(['composition', 'transpositions']);
+  const CALCULATION_TARGETS = new Set(['symmetric', 'braid', 'hecke', 'tl', 'burau']);
+  const CALCULATION_BASES = {
+    symmetric: [{ value: 'permutation', label: 'Permutation basis' }],
+    braid: [{ value: 'freely-reduced-word', label: 'Freely reduced word' }],
+    hecke: [
+      { value: 'standard', label: 'Standard basis' },
+      { value: 'kl', label: 'KL basis' }
+    ],
+    tl: [{ value: 'diagram', label: 'Diagram basis' }],
+    burau: [
+      { value: 'matrix-unit', label: 'Matrix-unit basis' },
+      { value: 'vector', label: 'Vector basis' }
+    ]
+  };
   const DIRECTION_LABELS = {
     'up-down': 'up to down',
     'down-up': 'down to up',
@@ -42,7 +56,7 @@
   const GENERATOR_FAMILY_SECTIONS = [
     { family: 'coxeter', title: 'Coxeter / Weyl' },
     { family: 'braid', title: 'Braid' },
-    { family: 'kl', title: 'KL basis' },
+    { family: 'kl', title: 'KL generators' },
     { family: 'tl', title: 'Temperley-Lieb' }
   ];
   const STRAND_COLORS = [
@@ -68,6 +82,13 @@
     generatorGapEnabled: DEFAULT_GENERATOR_GAP_ENABLED,
     strandSizeMode: DEFAULT_STRAND_SIZE_MODE,
     fixedGeneratorSize: DEFAULT_FIXED_GENERATOR_SIZE,
+    calculationTarget: 'tl',
+    calculationBasis: 'diagram',
+    calculationResult: null,
+    calculationKey: '',
+    calculationStale: false,
+    calculationLatex: '',
+    calculationPlain: '',
     dragInput: null,
     canvasWidth: 0,
     canvasHeight: 0
@@ -132,6 +153,18 @@
     refs.loadImport = $('strand-load-import');
     refs.clearImport = $('strand-clear-import');
     refs.exportMessage = $('strand-export-message');
+    refs.calculationCard = $('strand-calculation-card');
+    refs.calculationSource = $('strand-calculation-source');
+    refs.calculationTarget = $('strand-calculation-target');
+    refs.calculationBasis = $('strand-calculation-basis');
+    refs.calculate = $('strand-calculate');
+    refs.copyCalculationLatex = $('strand-copy-calculation-latex');
+    refs.copyCalculationResult = $('strand-copy-calculation-result');
+    refs.calculationMessage = $('strand-calculation-message');
+    refs.calculationRelations = $('strand-calculation-relations');
+    refs.calculationEquation = $('strand-calculation-equation');
+    refs.calculationMatrixSection = $('strand-calculation-matrix-section');
+    refs.calculationMatrix = $('strand-calculation-matrix');
   }
 
   function bindEvents() {
@@ -192,6 +225,20 @@
       refs.importInput.value = '';
       setExportMessage('Import input cleared.');
     });
+    refs.calculationTarget?.addEventListener('change', () => {
+      state.calculationTarget = calculationTargetValue(refs.calculationTarget.value);
+      syncCalculationBasisOptions();
+      markCalculationStale();
+      refreshExport();
+    });
+    refs.calculationBasis?.addEventListener('change', () => {
+      state.calculationBasis = calculationBasisValue(state.calculationTarget, refs.calculationBasis.value);
+      markCalculationStale();
+      refreshExport();
+    });
+    refs.calculate?.addEventListener('click', calculateCurrentWord);
+    refs.copyCalculationLatex?.addEventListener('click', () => copyCalculationText(state.calculationLatex, 'Calculation LaTeX copied.'));
+    refs.copyCalculationResult?.addEventListener('click', () => copyCalculationText(state.calculationPlain, 'Calculation result copied.'));
   }
 
   function handleBasicInfoControlChange(event) {
@@ -644,7 +691,25 @@
     refs.clear.disabled = state.appliedSteps.length === 0;
     syncGeneratorBounds();
     syncBasicInfoControls();
+    syncCalculationControls();
     renderInputChart();
+  }
+
+  function syncCalculationControls() {
+    state.calculationTarget = calculationTargetValue(state.calculationTarget);
+    if (refs.calculationTarget) refs.calculationTarget.value = state.calculationTarget;
+    syncCalculationBasisOptions();
+    if (refs.calculationSource) refs.calculationSource.textContent = calculationSourceLabel();
+  }
+
+  function syncCalculationBasisOptions() {
+    if (!refs.calculationBasis) return;
+    const choices = CALCULATION_BASES[state.calculationTarget] || CALCULATION_BASES.tl;
+    state.calculationBasis = calculationBasisValue(state.calculationTarget, state.calculationBasis);
+    refs.calculationBasis.innerHTML = choices
+      .map((choice) => `<option value="${escapeHtml(choice.value)}">${escapeHtml(choice.label)}</option>`)
+      .join('');
+    refs.calculationBasis.value = state.calculationBasis;
   }
 
   function syncBasicInfoControls() {
@@ -740,6 +805,7 @@
     const data = buildPermutationData();
     renderCanvas(data);
     renderBasicInfo(data);
+    syncCalculationResultState();
     refreshExport(data);
     renderSummary(data);
     if (!options.preserveMessage && refs.exportMessage) refs.exportMessage.textContent = '';
@@ -2360,7 +2426,7 @@
     const record = normalizeGeneratorRecord(generator);
     if (!record) return 'generator';
     if (record.family === 'braid') return record.sign === -1 ? `inverse braid generator sigma ${record.index}` : `braid generator sigma ${record.index}`;
-    if (record.family === 'kl') return `KL basis generator b ${record.index}`;
+    if (record.family === 'kl') return `KL generator b ${record.index}`;
     if (record.family === 'tl') return `Temperley-Lieb generator e ${record.index}`;
     return `Coxeter generator s ${record.index}`;
   }
@@ -2476,6 +2542,188 @@
     return `\\begin{pmatrix}${top}\\\\${bottom}\\end{pmatrix}\\quad\\text{on moved strands}`;
   }
 
+  function calculationTargetValue(value) {
+    return CALCULATION_TARGETS.has(value) ? value : 'tl';
+  }
+
+  function calculationBasisValue(target, value) {
+    const choices = CALCULATION_BASES[calculationTargetValue(target)] || CALCULATION_BASES.tl;
+    return choices.some((choice) => choice.value === value) ? value : choices[0].value;
+  }
+
+  function calculationSourceFamily() {
+    const families = new Set(filterValidSteps(state.appliedSteps, state.strandCount, state.groupType).map((record) => record.family));
+    if (!families.size) return 'identity';
+    if (families.size > 1) return 'mixed';
+    return [...families][0];
+  }
+
+  function calculationSourceLabel() {
+    const source = calculationSourceFamily();
+    const labels = {
+      identity: 'identity',
+      mixed: 'mixed typed word',
+      coxeter: 'Coxeter generators',
+      braid: 'braid generators',
+      kl: 'KL generators',
+      tl: 'Temperley-Lieb generators'
+    };
+    const suffix = state.groupType === 'symmetric' ? ` in type A (${groupPlainLabel()})` : ` in type ${state.groupType}`;
+    return `${labels[source] || source}${suffix}`;
+  }
+
+  function calculationWordFromState() {
+    return filterValidSteps(state.appliedSteps, state.strandCount, state.groupType)
+      .slice()
+      .reverse()
+      .map(exportGeneratorRecord)
+      .filter(Boolean);
+  }
+
+  function calculationFingerprint() {
+    return JSON.stringify({
+      groupType: state.groupType,
+      rank: state.strandCount,
+      word: calculationWordFromState(),
+      target: calculationTargetValue(state.calculationTarget),
+      basis: calculationBasisValue(state.calculationTarget, state.calculationBasis),
+      convention: 'burau-compatible-v'
+    });
+  }
+
+  function syncCalculationResultState() {
+    if (state.calculationResult && state.calculationKey !== calculationFingerprint()) {
+      markCalculationStale();
+      return;
+    }
+    syncCalculationButtons();
+  }
+
+  function markCalculationStale() {
+    if (!state.calculationResult) {
+      syncCalculationButtons();
+      return;
+    }
+    state.calculationStale = true;
+    setCalculationMessage('Inputs changed. The displayed calculation is stale; calculate again.', false, true);
+    syncCalculationButtons();
+  }
+
+  function syncCalculationButtons() {
+    const current = !!state.calculationResult && !state.calculationStale && state.calculationKey === calculationFingerprint();
+    if (refs.copyCalculationLatex) refs.copyCalculationLatex.disabled = !current;
+    if (refs.copyCalculationResult) refs.copyCalculationResult.disabled = !current;
+  }
+
+  function calculateCurrentWord() {
+    const engine = window.StrandMath;
+    if (!engine?.calculateStrandWord) {
+      setCalculationMessage('The calculation engine did not load.', true);
+      return;
+    }
+    state.calculationTarget = calculationTargetValue(refs.calculationTarget?.value || state.calculationTarget);
+    state.calculationBasis = calculationBasisValue(state.calculationTarget, refs.calculationBasis?.value || state.calculationBasis);
+    if (refs.calculate) refs.calculate.disabled = true;
+    setCalculationMessage('Calculating...');
+    try {
+      const calculation = engine.calculateStrandWord(calculationWordFromState(), {
+        rank: state.strandCount,
+        type: state.groupType === 'symmetric' ? 'A' : state.groupType,
+        target: state.calculationTarget,
+        basis: state.calculationBasis,
+        convention: 'burau-compatible-v',
+        includeTrace: true
+      });
+      state.calculationResult = calculation;
+      state.calculationKey = calculationFingerprint();
+      state.calculationStale = false;
+      state.calculationLatex = engine.formatAlignedTrace(calculation.trace);
+      state.calculationPlain = engine.formatLinearCombinationPlain(calculation.result, calculation.basis);
+      renderCalculationResult();
+      setCalculationMessage(calculation.warnings.length ? calculation.warnings.join(' ') : 'Calculation complete.');
+      refreshExport();
+    } catch (error) {
+      state.calculationResult = null;
+      state.calculationKey = '';
+      state.calculationStale = false;
+      state.calculationLatex = '';
+      state.calculationPlain = '';
+      clearCalculationResultDisplay();
+      setCalculationMessage(error?.message || 'Unable to calculate this word.', true);
+      refreshExport();
+    } finally {
+      if (refs.calculate) refs.calculate.disabled = false;
+      syncCalculationButtons();
+    }
+  }
+
+  function renderCalculationResult() {
+    const calculation = state.calculationResult;
+    if (!calculation) {
+      clearCalculationResultDisplay();
+      return;
+    }
+    if (refs.calculationEquation) refs.calculationEquation.textContent = state.calculationLatex;
+    if (refs.calculationRelations) {
+      refs.calculationRelations.replaceChildren();
+      const relations = calculation.relationsUsed.length ? calculation.relationsUsed : ['identity'];
+      relations.forEach((relation) => {
+        const item = document.createElement('li');
+        item.dataset.relationId = relation;
+        item.textContent = relation === 'identity'
+          ? 'identity'
+          : `\\(${window.StrandMath.relationLatex(relation)}\\)`;
+        refs.calculationRelations.appendChild(item);
+      });
+    }
+    const matrix = calculation.metadata?.matrix;
+    if (refs.calculationMatrixSection) refs.calculationMatrixSection.hidden = !matrix;
+    if (refs.calculationMatrix) {
+      refs.calculationMatrix.textContent = matrix
+        ? `\\[\\rho(\\beta)=${window.StrandMath.formatMatrixLatex(matrix)}\\]`
+        : '';
+    }
+    queueCalculationMathTypeset();
+  }
+
+  function clearCalculationResultDisplay() {
+    if (refs.calculationEquation) refs.calculationEquation.textContent = '';
+    if (refs.calculationRelations) refs.calculationRelations.innerHTML = '';
+    if (refs.calculationMatrixSection) refs.calculationMatrixSection.hidden = true;
+    if (refs.calculationMatrix) refs.calculationMatrix.textContent = '';
+  }
+
+  function setCalculationMessage(message, isError = false, isStale = false) {
+    if (!refs.calculationMessage) return;
+    refs.calculationMessage.textContent = message || '';
+    refs.calculationMessage.classList.toggle('is-error', !!isError);
+    refs.calculationMessage.classList.toggle('is-stale', !!isStale);
+  }
+
+  function copyCalculationText(text, successMessage) {
+    if (!text || state.calculationStale || state.calculationKey !== calculationFingerprint()) return;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(() => setCalculationMessage(successMessage))
+        .catch(() => fallbackCopyText(text, successMessage));
+      return;
+    }
+    fallbackCopyText(text, successMessage);
+  }
+
+  function fallbackCopyText(text, successMessage) {
+    const input = document.createElement('textarea');
+    input.value = text;
+    input.setAttribute('readonly', '');
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    input.remove();
+    setCalculationMessage(successMessage);
+  }
+
   function refreshExport(data = buildPermutationData()) {
     if (!refs.exportOut) return;
     const format = refs.exportFormat.value;
@@ -2500,9 +2748,19 @@
       generatorGapEnabled: state.generatorGapEnabled,
       strandSizeMode: state.strandSizeMode,
       fixedGeneratorSize: state.fixedGeneratorSize,
-      appliedGenerators
+      appliedGenerators,
+      calculationSettings: {
+        target: state.calculationTarget,
+        basis: state.calculationBasis,
+        convention: 'burau-compatible-v'
+      }
     };
     if (coxeterOnly) payload.appliedSteps = appliedGenerators.map((record) => record.index);
+    if (state.calculationResult && !state.calculationStale && state.calculationKey === calculationFingerprint()) {
+      payload.calculation = window.StrandMath?.serializeCalculation
+        ? window.StrandMath.serializeCalculation(state.calculationResult)
+        : null;
+    }
     return JSON.stringify(payload, null, 2);
   }
 
@@ -2636,6 +2894,8 @@
         : 'JSON imported.');
       setStatus('imported JSON preset');
       renderAll({ preserveMessage: true });
+      clearCalculationResultDisplay();
+      setCalculationMessage('Calculation settings imported. Calculate to verify the result locally.');
     } catch (error) {
       setExportMessage(error?.message || 'Unable to import JSON.', true);
     }
@@ -2652,6 +2912,11 @@
     const generatorGapEnabled = data.generatorGapEnabled === true;
     const strandSizeMode = strandSizeModeValue(data.strandSizeMode);
     const fixedGeneratorSize = fixedGeneratorSizeValue(data.fixedGeneratorSize);
+    const calculationTarget = calculationTargetValue(data.calculationSettings?.target || data.calculation?.target || 'tl');
+    const calculationBasis = calculationBasisValue(
+      calculationTarget,
+      data.calculationSettings?.basis || data.calculation?.basis
+    );
     const rawSteps = Array.isArray(data.appliedGenerators)
       ? data.appliedGenerators
       : Array.isArray(data.appliedSteps)
@@ -2670,6 +2935,13 @@
     state.strandSizeMode = strandSizeMode;
     state.fixedGeneratorSize = fixedGeneratorSize;
     state.appliedSteps = valid;
+    state.calculationTarget = calculationTarget;
+    state.calculationBasis = calculationBasis;
+    state.calculationResult = null;
+    state.calculationKey = '';
+    state.calculationStale = false;
+    state.calculationLatex = '';
+    state.calculationPlain = '';
     return { dropped: steps.length - valid.length };
   }
 
@@ -2728,6 +3000,24 @@
     if (!refs.exportMessage) return;
     refs.exportMessage.textContent = message || '';
     refs.exportMessage.classList.toggle('is-error', !!isError);
+  }
+
+  let calculationMathTypesetQueued = false;
+  function queueCalculationMathTypeset() {
+    if (!window.MathJax || calculationMathTypesetQueued) return;
+    calculationMathTypesetQueued = true;
+    const run = () => {
+      calculationMathTypesetQueued = false;
+      if (!window.MathJax?.typesetPromise) return;
+      const targets = [refs.calculationRelations, refs.calculationEquation, refs.calculationMatrix].filter(Boolean);
+      if (window.MathJax.typesetClear) window.MathJax.typesetClear(targets);
+      window.MathJax.typesetPromise(targets).catch(() => {});
+    };
+    if (window.MathJax.startup?.promise) {
+      window.MathJax.startup.promise.then(run).catch(() => { calculationMathTypesetQueued = false; });
+    } else {
+      window.setTimeout(run, 0);
+    }
   }
 
   let mathTypesetQueued = false;

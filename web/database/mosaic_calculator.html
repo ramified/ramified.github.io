@@ -901,6 +901,88 @@
       display: none !important;
     }
 
+    #homology-local-chart-card.wide {
+      margin-top: 16px;
+    }
+
+    #homology-local-chart-side-host[hidden],
+    #homology-local-chart-wide-host[hidden] {
+      display: none !important;
+    }
+
+    #homology-local-chart-side-host:not(:has(> #homology-local-chart-card:not([hidden]))) {
+      display: none !important;
+    }
+
+    .homology-local-chart-toolbar,
+    .homology-local-chart-layers {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .homology-local-chart-toolbar {
+      justify-content: space-between;
+    }
+
+    .homology-local-chart-toolbar .opt-row,
+    .homology-local-chart-layers .opt-row {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .homology-local-chart-layers {
+      margin-top: 8px;
+      gap: 5px 12px;
+    }
+
+    .homology-local-chart-layers .opt-row {
+      font-size: 0.76rem;
+    }
+
+    .homology-local-chart-canvas-wrap {
+      width: 100%;
+      margin-top: 8px;
+      aspect-ratio: 4 / 3;
+      min-height: 220px;
+      max-height: 540px;
+    }
+
+    #homology-local-chart-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fffdf8;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    #homology-local-chart-card.wide .homology-local-chart-canvas-wrap {
+      aspect-ratio: 16 / 7;
+      min-height: 320px;
+      max-height: min(70vh, 720px);
+    }
+
+    .homology-local-chart-status,
+    .homology-local-chart-detail {
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .homology-local-chart-detail {
+      min-height: 2.8em;
+      color: var(--text);
+    }
+
     .mosaic-decoration-actions {
       display: flex;
       align-items: center;
@@ -1196,6 +1278,7 @@
     </div>
     <section id="dual-graph-degenerations-wide-host" hidden></section>
     <section id="wander-wide-host" hidden></section>
+    <section id="homology-local-chart-wide-host" hidden></section>
   </section>
 
   <aside class="side">
@@ -1645,6 +1728,37 @@
       </div>
     </section>
 
+    <div id="homology-local-chart-side-host">
+      <section class="card collapsed" id="homology-local-chart-card" hidden data-card-wide="true" data-card-wide-host="#homology-local-chart-wide-host" data-card-side-host="#homology-local-chart-side-host">
+        <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Local geometry debug</span><em class="toggle-icon">&#9662;</em></div>
+        <div class="card-body">
+          <div class="homology-local-chart-toolbar">
+            <label class="opt-row"><input type="checkbox" id="inspect-homology-local-vertex"> Inspect vertex</label>
+            <span class="slice-mode-row" aria-label="Local chart mapping">
+              <button class="slice-mode-btn active" id="homology-local-chart-radial" data-homology-local-chart-mode="radial" type="button" aria-pressed="true">Radial</button>
+              <button class="slice-mode-btn" id="homology-local-chart-conformal" data-homology-local-chart-mode="conformal" type="button" aria-pressed="false">Conformal</button>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Local radius / R</span>
+            <span class="background-slider-controls"><input type="range" id="homology-local-chart-radius" min="0.25" max="2" step="0.05" value="1"><output id="homology-local-chart-radius-value">1.00</output></span>
+          </div>
+          <div class="homology-local-chart-layers" aria-label="Local chart layers">
+            <label class="opt-row"><input type="checkbox" data-homology-local-chart-layer="geometry" checked> geometry / IDs</label>
+            <label class="opt-row"><input type="checkbox" data-homology-local-chart-layer="cords" checked> cords / particles</label>
+            <label class="opt-row"><input type="checkbox" data-homology-local-chart-layer="vectors" checked> optimization vectors</label>
+            <label class="opt-row"><input type="checkbox" data-homology-local-chart-layer="failures" checked> failures</label>
+            <label class="opt-row"><input type="checkbox" data-homology-local-chart-layer="metadata" checked> metadata</label>
+          </div>
+          <div class="homology-local-chart-canvas-wrap">
+            <canvas id="homology-local-chart-canvas" width="640" height="480" tabindex="0" aria-label="Selected quotient vertex local geometry"></canvas>
+          </div>
+          <output class="homology-local-chart-status" id="homology-local-chart-status">No vertex selected.</output>
+          <output class="homology-local-chart-detail" id="homology-local-chart-detail">-</output>
+        </div>
+      </section>
+    </div>
+
     <section class="card collapsed" id="dual-graph-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Dual Graph Visualization</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
@@ -1937,7 +2051,7 @@
 <script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_native.js?v=20260825-1"></script>
-<script src="js/mosaic_calculator.js?v=quotient-cord-local-transactions-16"></script>
+<script src="js/mosaic_calculator.js?v=homology-local-chart-3"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260826-1"></script>
 <script>
