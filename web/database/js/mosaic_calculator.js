@@ -104,7 +104,6 @@
   const HOMOLOGY_CORD_APEX_ENTER_IMPROVEMENT_RATIO = 1e-4;
   const HOMOLOGY_CORD_APEX_EXIT_IMPROVEMENT_RATIO = 2e-4;
   const HOMOLOGY_CORD_QUOTIENT_INVARIANT_TOLERANCE = 1e-10;
-  const HOMOLOGY_CORD_QUOTIENT_FAILURE_LIMIT = 3;
   const HOMOLOGY_CORD_DEFAULT_RELAX_SPEED = 10;
   const HOMOLOGY_CORD_BASE_DISTANCE_CONTRACTION = 0.08;
   const DEFAULT_SEIFERT_BAND_WIDTH = 0.42;
@@ -19024,6 +19023,7 @@
       initialFreeHomotopySignature: '',
       expectedHolonomy: null,
       quotientFailureCount: 0,
+      lastQuotientLocalFailures: [],
       fallbackToCellular: false,
       discreteStateVersion: 0,
       stableDiscreteStateVersion: 0,
@@ -19387,7 +19387,20 @@
         matrix: { ...chain.expectedHolonomy.matrix },
         offset: { ...chain.expectedHolonomy.offset }
       },
-      discreteStateVersion: chain.discreteStateVersion
+      discreteStateVersion: chain.discreteStateVersion,
+      settled: !!chain.settled,
+      stableMacroSteps: chain.stableMacroSteps || 0,
+      quotientFailureCount: chain.quotientFailureCount || 0,
+      lastQuotientInvariantFailure: chain.lastQuotientInvariantFailure || '',
+      lastQuotientInvariantDetail: chain.lastQuotientInvariantDetail ? {
+        ...chain.lastQuotientInvariantDetail,
+        point: chain.lastQuotientInvariantDetail.point
+          ? { ...chain.lastQuotientInvariantDetail.point } : null,
+        next: chain.lastQuotientInvariantDetail.next
+          ? { ...chain.lastQuotientInvariantDetail.next } : null,
+        word: [...(chain.lastQuotientInvariantDetail.word || [])]
+      } : null,
+      lastQuotientLocalFailures: [...(chain.lastQuotientLocalFailures || [])]
     };
   }
 
@@ -19409,6 +19422,19 @@
       offset: { ...snapshot.expectedHolonomy.offset }
     };
     chain.discreteStateVersion = snapshot.discreteStateVersion;
+    chain.settled = snapshot.settled;
+    chain.stableMacroSteps = snapshot.stableMacroSteps;
+    chain.quotientFailureCount = snapshot.quotientFailureCount;
+    chain.lastQuotientInvariantFailure = snapshot.lastQuotientInvariantFailure;
+    chain.lastQuotientInvariantDetail = snapshot.lastQuotientInvariantDetail ? {
+      ...snapshot.lastQuotientInvariantDetail,
+      point: snapshot.lastQuotientInvariantDetail.point
+        ? { ...snapshot.lastQuotientInvariantDetail.point } : null,
+      next: snapshot.lastQuotientInvariantDetail.next
+        ? { ...snapshot.lastQuotientInvariantDetail.next } : null,
+      word: [...(snapshot.lastQuotientInvariantDetail.word || [])]
+    } : null;
+    chain.lastQuotientLocalFailures = [...(snapshot.lastQuotientLocalFailures || [])];
   }
 
   function snapshotPlanarElasticBand(chain) {
@@ -20017,6 +20043,47 @@
     }
   }
 
+  function closeQuotientElasticBand(chain) {
+    const logicalCount = Math.max(0, chain.points.length - 1);
+    if (!logicalCount) return;
+    chain.points[logicalCount] = {
+      x: chain.points[0].x,
+      y: chain.points[0].y,
+      tileIndex: chain.points[0].tileIndex,
+      optimizationDirection: { x: 0, y: 0 }
+    };
+  }
+
+  function rebuildQuotientElasticBandCarrier(chain) {
+    if (!chain || !chain.atlas || !Array.isArray(chain.springs)) return false;
+    for (const spring of chain.springs) {
+      if (!updateQuotientSpringTransform(spring, chain.atlas)) return false;
+    }
+    closeQuotientElasticBand(chain);
+    refreshQuotientSpringVertexEvents(chain);
+    return validateQuotientElasticBand(chain);
+  }
+
+  function applyQuotientElasticBandMotion(chain, index, motion, origin) {
+    const logicalCount = chain.points.length - 1;
+    const particle = chain.points[index];
+    if (!particle || !motion || !motion.valid
+      || !applyQuotientGaugeCrossings(chain, index, motion.crossings)) return false;
+    if (particle.tileIndex !== motion.point.tileIndex && !motion.crossings.length) {
+      chain.discreteStateVersion += 1;
+    }
+    particle.x = motion.point.x;
+    particle.y = motion.point.y;
+    particle.tileIndex = motion.point.tileIndex;
+    particle.optimizationDirection = {
+      x: motion.point.x - origin.x,
+      y: motion.point.y - origin.y
+    };
+    updateQuotientVertexEvent(chain, index, motion.vertexEvents);
+    if (index === 0) closeQuotientElasticBand(chain);
+    return logicalCount > 1;
+  }
+
   function stepQuotientElasticBandMacro(chain, options = {}) {
     const logicalCount = Math.max(0, (chain.points || []).length - 1);
     if (logicalCount < 2 || chain.fallbackToCellular) {
@@ -20031,6 +20098,18 @@
     }
     const rollback = snapshotQuotientElasticBand(chain);
     const oldLength = quotientElasticBandLength(chain);
+    if (!Number.isFinite(oldLength) || !validateQuotientElasticBand(chain)) {
+      restoreQuotientElasticBand(chain, rollback);
+      return {
+        resolved: false,
+        oldLength,
+        length: oldLength,
+        relativeLengthChange: 0,
+        maximumDisplacement: 0,
+        discreteChanged: false,
+        reason: 'invalid-start'
+      };
+    }
     const configured = Number(options.distanceContraction);
     const distanceContraction = Number.isFinite(configured) ? clamp(configured, 0, 0.8) : 0.05;
     const substeps = Math.max(1, Math.floor(options.substeps || HOMOLOGY_CORD_MACRO_SUBSTEPS));
@@ -20075,9 +20154,12 @@
       }
       [source, target] = [target, source];
     }
-    const motions = [];
+    const motionResolver = typeof options.traceMotion === 'function'
+      ? options.traceMotion : traceQuotientMotion;
+    const motions = new Array(logicalCount);
     let maximumDisplacement = 0;
     let activeParticles = 0;
+    let batchValid = true;
     for (let index = 0; index < logicalCount; index += 1) {
       const particle = chain.points[index];
       const active = quotientParticleInActiveZone(chain, particle)
@@ -20100,62 +20182,55 @@
           intrinsicDisplacement: Math.hypot(source[index].x - particle.x, source[index].y - particle.y),
           discreteChanged: false
         }
-        : traceQuotientMotion(chain, index, particle, source[index], options);
-      if (!motion.valid) {
-        restoreQuotientElasticBand(chain, rollback);
-        return {
-          resolved: false,
-          oldLength,
-          length: oldLength,
-          relativeLengthChange: 0,
-          maximumDisplacement: 0,
-          reason: motion.reason
-        };
-      }
-      motions.push(motion);
-      maximumDisplacement = Math.max(maximumDisplacement, motion.intrinsicDisplacement || 0);
+        : motionResolver(chain, index, particle, source[index], options);
+      motions[index] = motion;
+      if (!motion || !motion.valid) batchValid = false;
     }
     const oldDiscreteVersion = chain.discreteStateVersion;
-    for (let index = 0; index < logicalCount; index += 1) {
-      const old = chain.points[index];
-      const motion = motions[index];
-      if (!applyQuotientGaugeCrossings(chain, index, motion.crossings)) {
-        restoreQuotientElasticBand(chain, rollback);
-        return { resolved: false, oldLength, length: oldLength, relativeLengthChange: 0, maximumDisplacement: 0 };
+    let batchCommitted = batchValid;
+    if (batchCommitted) {
+      for (let index = 0; index < logicalCount; index += 1) {
+        if (!applyQuotientElasticBandMotion(chain, index, motions[index], rollback.points[index])) {
+          batchCommitted = false;
+          break;
+        }
       }
-      if (old.tileIndex !== motion.point.tileIndex && !motion.crossings.length) chain.discreteStateVersion += 1;
-      old.x = motion.point.x;
-      old.y = motion.point.y;
-      old.tileIndex = motion.point.tileIndex;
-      old.optimizationDirection = {
-        x: motion.point.x - rollback.points[index].x,
-        y: motion.point.y - rollback.points[index].y
-      };
-      updateQuotientVertexEvent(chain, index, motion.vertexEvents);
+      if (batchCommitted) batchCommitted = rebuildQuotientElasticBandCarrier(chain);
     }
-    chain.points[logicalCount] = {
-      x: chain.points[0].x,
-      y: chain.points[0].y,
-      tileIndex: chain.points[0].tileIndex,
-      optimizationDirection: { x: 0, y: 0 }
-    };
-    refreshQuotientSpringVertexEvents(chain);
-    if (!validateQuotientElasticBand(chain)) {
+    const failures = [];
+    const committedMotions = [];
+    if (!batchCommitted) {
       restoreQuotientElasticBand(chain, rollback);
-      return {
-        resolved: false,
-        oldLength,
-        length: oldLength,
-        relativeLengthChange: 0,
-        maximumDisplacement: 0,
-        reason: 'quotient-invariant'
-      };
+      for (let index = 0; index < logicalCount; index += 1) {
+        if (index === heldIndex) continue;
+        const before = snapshotQuotientElasticBand(chain);
+        const particle = chain.points[index];
+        const motion = motionResolver(chain, index, particle, source[index], options);
+        if (!motion || !motion.valid) {
+          failures.push({ index, reason: motion && motion.reason || 'invalid-motion' });
+          continue;
+        }
+        const applied = applyQuotientElasticBandMotion(chain, index, motion, before.points[index]);
+        if (!applied || !rebuildQuotientElasticBandCarrier(chain)) {
+          const reason = chain.lastQuotientInvariantFailure || 'carrier-rebuild';
+          restoreQuotientElasticBand(chain, before);
+          failures.push({ index, reason });
+          continue;
+        }
+        committedMotions.push(motion);
+      }
+    } else {
+      committedMotions.push(...motions);
     }
+    chain.lastQuotientLocalFailures = failures.map((failure) => failure.index);
+    committedMotions.forEach((motion) => {
+      maximumDisplacement = Math.max(maximumDisplacement, motion.intrinsicDisplacement || 0);
+    });
     const length = quotientElasticBandLength(chain);
     if (metrics) {
       metrics.quotientActiveParticles = (metrics.quotientActiveParticles || 0) + activeParticles;
       metrics.portalCrossings = (metrics.portalCrossings || 0)
-        + motions.reduce((sum, motion) => sum + motion.crossings.length, 0);
+        + committedMotions.reduce((sum, motion) => sum + (motion.crossings || []).length, 0);
     }
     return {
       resolved: Number.isFinite(length),
@@ -20165,7 +20240,10 @@
       length,
       relativeLengthChange: Math.abs(oldLength - length) / Math.max(1, oldLength),
       maximumDisplacement,
-      discreteChanged: chain.discreteStateVersion !== oldDiscreteVersion
+      discreteChanged: chain.discreteStateVersion !== oldDiscreteVersion,
+      partial: failures.length > 0,
+      failedIndices: failures.map((failure) => failure.index),
+      failures
     };
   }
 
@@ -20497,8 +20575,9 @@
       }
       if (chain.solverSpace === 'quotient') {
         chain.quotientFailureCount = quotientFrameFailed ? (chain.quotientFailureCount || 0) + 1 : 0;
-        if (chain.quotientFailureCount >= HOMOLOGY_CORD_QUOTIENT_FAILURE_LIMIT) {
-          chain.fallbackToCellular = true;
+        if (quotientFrameFailed) {
+          // A globally invalid carrier cannot be advanced safely. Keep the
+          // last valid quotient drawing instead of silently changing models.
           chain.settled = true;
           chain.stableMacroSteps = HOMOLOGY_CORD_STABLE_MACRO_STEPS;
         }
@@ -20549,6 +20628,19 @@
     return true;
   }
 
+  function attemptQuotientElasticBandPointMove(chain, part, projected) {
+    const before = snapshotQuotientElasticBand(chain);
+    const particle = chain.points[part];
+    const motion = traceQuotientMotion(chain, part, particle, projected);
+    if (!motion.valid
+      || !applyQuotientElasticBandMotion(chain, part, motion, before.points[part])
+      || !rebuildQuotientElasticBandCarrier(chain)) {
+      restoreQuotientElasticBand(chain, before);
+      return false;
+    }
+    return true;
+  }
+
   function movePlanarElasticBandPoint(chain, part, projected) {
     if (!chain || !chain.points[part]) return false;
     if (!Number.isFinite(projected.x) || !Number.isFinite(projected.y)) return false;
@@ -20557,32 +20649,39 @@
     if (canonicalPart < 0 || canonicalPart >= lastIndex) return false;
     if (chain.solverSpace === 'quotient') {
       const rollback = snapshotQuotientElasticBand(chain);
-      const particle = chain.points[canonicalPart];
-      const motion = traceQuotientMotion(chain, canonicalPart, particle, projected);
-      if (!motion.valid || !applyQuotientGaugeCrossings(chain, canonicalPart, motion.crossings)) {
+      let moved = attemptQuotientElasticBandPointMove(chain, canonicalPart, projected);
+      if (!moved) {
+        restoreQuotientElasticBand(chain, rollback);
+        const start = rollback.points[canonicalPart];
+        const distance = Math.hypot(projected.x - start.x, projected.y - start.y);
+        const stepLength = Math.max(1, geometry.radius * 0.35);
+        const steps = Math.min(24, Math.max(2, Math.ceil(distance / stepLength)));
+        moved = true;
+        for (let step = 1; step <= steps; step += 1) {
+          const ratio = step / steps;
+          const target = {
+            x: start.x + ((projected.x - start.x) * ratio),
+            y: start.y + ((projected.y - start.y) * ratio)
+          };
+          if (!attemptQuotientElasticBandPointMove(chain, canonicalPart, target)) {
+            moved = false;
+            break;
+          }
+        }
+      }
+      if (!moved) {
         restoreQuotientElasticBand(chain, rollback);
         return false;
       }
-      particle.x = motion.point.x;
-      particle.y = motion.point.y;
-      particle.tileIndex = motion.point.tileIndex;
-      particle.optimizationDirection = {
-        x: particle.x - rollback.points[canonicalPart].x,
-        y: particle.y - rollback.points[canonicalPart].y
+      chain.points[canonicalPart].optimizationDirection = {
+        x: chain.points[canonicalPart].x - rollback.points[canonicalPart].x,
+        y: chain.points[canonicalPart].y - rollback.points[canonicalPart].y
       };
-      updateQuotientVertexEvent(chain, canonicalPart, motion.vertexEvents);
-      chain.points[lastIndex] = {
-        x: chain.points[0].x,
-        y: chain.points[0].y,
-        tileIndex: chain.points[0].tileIndex,
-        optimizationDirection: { x: 0, y: 0 }
-      };
-      if (!validateQuotientElasticBand(chain)) {
-        restoreQuotientElasticBand(chain, rollback);
-        return false;
-      }
+      closeQuotientElasticBand(chain);
       chain.settled = false;
       chain.stableMacroSteps = 0;
+      chain.quotientFailureCount = 0;
+      chain.lastQuotientLocalFailures = [];
       return true;
     }
     const particle = chain.points[canonicalPart];

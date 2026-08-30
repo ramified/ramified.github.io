@@ -904,6 +904,37 @@ assert.strictEqual(elastic.canonicalHomologyCordCyclicWord(
 assert.strictEqual(elastic.validateQuotientElasticBand(gaugeBand), true);
 assert.notStrictEqual(gaugeBand.points[rightmostIndex].x, rightmost.x + 8);
 
+// A failed drag is one transaction: geometry, spring words, and runtime
+// state all return to the state before the pointer move.
+const rejectedDragBand = elastic.makeQuotientElasticBandChain(torusSurface, torusAnalysis);
+const rejectedDragIndex = rejectedDragBand.points.slice(0, -1).reduce((best, point, index, points) => (
+  point.x > points[best].x ? index : best
+), 0);
+const rejectedDragBefore = JSON.stringify({
+  points: rejectedDragBand.points,
+  springs: rejectedDragBand.springs,
+  expectedHolonomy: rejectedDragBand.expectedHolonomy,
+  discreteStateVersion: rejectedDragBand.discreteStateVersion,
+  settled: rejectedDragBand.settled,
+  stableMacroSteps: rejectedDragBand.stableMacroSteps
+});
+const rejectedDragSignature = rejectedDragBand.initialFreeHomotopySignature;
+rejectedDragBand.initialFreeHomotopySignature = 'forced-invalid-signature';
+assert.strictEqual(elastic.movePlanarElasticBandPoint(rejectedDragBand, rejectedDragIndex, {
+  x: rejectedDragBand.points[rejectedDragIndex].x + 2,
+  y: rejectedDragBand.points[rejectedDragIndex].y
+}), false);
+assert.strictEqual(JSON.stringify({
+  points: rejectedDragBand.points,
+  springs: rejectedDragBand.springs,
+  expectedHolonomy: rejectedDragBand.expectedHolonomy,
+  discreteStateVersion: rejectedDragBand.discreteStateVersion,
+  settled: rejectedDragBand.settled,
+  stableMacroSteps: rejectedDragBand.stableMacroSteps
+}), rejectedDragBefore);
+rejectedDragBand.initialFreeHomotopySignature = rejectedDragSignature;
+assert.strictEqual(elastic.validateQuotientElasticBand(rejectedDragBand), true);
+
 const heldQuotient = elastic.makeQuotientElasticBandChain(torusSurface, torusAnalysis);
 const heldQuotientBefore = { ...heldQuotient.points[3] };
 assert.strictEqual(elastic.stepQuotientElasticBandMacro(heldQuotient, {
@@ -1097,8 +1128,49 @@ assert.strictEqual(mixedBand.fallbackToCellular, false);
 assert.strictEqual(elastic.validateQuotientElasticBand(mixedBand), true);
 assert.ok(elastic.quotientElasticBandLength(mixedBand) < mixedInitialLength * 0.3);
 
-// Runtime invariant failures are counted once per frame, not once per macro;
-// only the third consecutive failed frame activates cellular fallback.
+// If one particle cannot be traced, the macro commits the other valid
+// particle transactions and leaves only the failed particle in place.
+const isolatedBand = elastic.makeQuotientElasticBandChain(elastic.makeHomologyCordChain(
+  mixedGenerator,
+  elastic.homologyChainDisplayEntries(vertexAnalysis, mixedGenerator),
+  vertexAnalysis
+), vertexAnalysis);
+const isolatedIndex = isolatedBand.springs.findIndex((spring) => spring.word.length > 0);
+assert.ok(isolatedIndex >= 0);
+const isolatedBefore = isolatedBand.points.map((point) => ({
+  x: point.x,
+  y: point.y,
+  tileIndex: point.tileIndex
+}));
+const isolatedResult = elastic.stepQuotientElasticBandMacro(isolatedBand, {
+  distanceContraction: 0.8,
+  substeps: 4,
+  traceMotion(chain, index, start, target, options) {
+    if (index === isolatedIndex) {
+      return { valid: false, point: { ...start }, crossings: [], vertexEvents: [], reason: 'test-local-failure' };
+    }
+    return elastic.traceQuotientMotion(chain, index, start, target, options);
+  }
+});
+assert.strictEqual(isolatedResult.resolved, true);
+assert.strictEqual(isolatedResult.partial, true);
+assert.ok(isolatedResult.failedIndices.includes(isolatedIndex));
+assert.deepStrictEqual({
+  x: isolatedBand.points[isolatedIndex].x,
+  y: isolatedBand.points[isolatedIndex].y,
+  tileIndex: isolatedBand.points[isolatedIndex].tileIndex
+}, isolatedBefore[isolatedIndex]);
+assert.ok(isolatedBand.points.slice(0, -1).some((point, index) => (
+  index !== isolatedIndex && (Math.hypot(
+    point.x - isolatedBefore[index].x,
+    point.y - isolatedBefore[index].y
+  ) > 1e-8 || point.tileIndex !== isolatedBefore[index].tileIndex)
+)), 'valid particles must continue when one local trace fails');
+assert.strictEqual(elastic.validateQuotientElasticBand(isolatedBand), true);
+assert.strictEqual(isolatedBand.fallbackToCellular, false);
+
+// A carrier that is already globally invalid is stopped in its last quotient
+// state. It is never replaced by the cellular drawing.
 const failingBand = elastic.makeQuotientElasticBandChain(elastic.makeHomologyCordChain(
   mixedGenerator,
   elastic.homologyChainDisplayEntries(vertexAnalysis, mixedGenerator),
@@ -1109,14 +1181,13 @@ failingBand.relaxationNotBefore = 0;
 elastic.state.homologyCordChains = { [failingBand.generatorId]: failingBand };
 elastic.state.homologyCordDrag = null;
 elastic.state.homologyCordRelaxSpeed = 10;
-assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands({ now: 1e9 }), true);
+assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands({ now: 1e9 }), false);
 assert.strictEqual(failingBand.quotientFailureCount, 1);
 assert.strictEqual(failingBand.fallbackToCellular, false);
-assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands({ now: 1e9 }), true);
-assert.strictEqual(failingBand.quotientFailureCount, 2);
-assert.strictEqual(failingBand.fallbackToCellular, false);
 assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands({ now: 1e9 }), false);
-assert.strictEqual(failingBand.fallbackToCellular, true);
+assert.strictEqual(failingBand.quotientFailureCount, 1);
+assert.strictEqual(failingBand.fallbackToCellular, false);
+assert.strictEqual(failingBand.settled, true);
 
 // An atlas containing a portal but failing its affine/inverse invariant must
 // reject the elastic runtime instead of silently using the planar fast path.
@@ -1189,7 +1260,7 @@ const sourceText = fs.readFileSync(path.join(__dirname, 'mosaic_calculator.js'),
 const htmlText = fs.readFileSync(path.join(__dirname, '..', 'mosaic_calculator.html'), 'utf8');
 assert.strictEqual(htmlText.includes('id="homology-cord-contraction-strength"'), false);
 assert.ok(htmlText.includes('id="homology-cord-relax-speed" min="0.1" max="10" step="0.1" value="10"'));
-assert.ok(htmlText.includes('js/mosaic_calculator.js?v=quotient-cord-vertex-star-15'));
+assert.ok(htmlText.includes('js/mosaic_calculator.js?v=quotient-cord-local-transactions-16'));
 const drawCordSource = sourceText.slice(
   sourceText.indexOf('function drawBackgroundHomologyCords'),
   sourceText.indexOf('function drawHomologyCordSeamMarkers')
