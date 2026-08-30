@@ -1617,21 +1617,33 @@
       display: none;
       width: 100%;
       min-width: 0;
+      overflow: hidden;
     }
 
     .sheaf-complex-les-pane.is-active {
       display: block;
     }
 
-    .sheaf-complex-snake-fast-display {
+    .sheaf-complex-snake-fast-viewport {
       position: relative;
       display: block;
-      width: min(100%, var(--les-fast-width));
-      max-width: 100%;
-      margin: 0 auto;
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .sheaf-complex-snake-fast-display {
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: block;
+      width: var(--les-fast-width);
+      max-width: none;
+      margin: 0;
       aspect-ratio: var(--les-fast-ratio);
       min-height: 120px;
       overflow: visible;
+      transform-origin: top left;
     }
 
     .sheaf-complex-snake-fast-svg {
@@ -1649,7 +1661,6 @@
       stroke-width: 1.7;
       stroke-linecap: round;
       stroke-linejoin: round;
-      vector-effect: non-scaling-stroke;
     }
 
     .sheaf-complex-snake-fast-arrow.is-selected {
@@ -4192,7 +4203,7 @@
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js"></script>
-<script src="js/sheaf_complex_calculator.js?v=complex-chart-33"></script>
+<script src="js/sheaf_complex_calculator.js?v=complex-chart-35"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

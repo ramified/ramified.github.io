@@ -926,6 +926,17 @@
       justify-content: space-between;
     }
 
+    .homology-local-chart-wide-toggle {
+      display: none;
+      margin-left: auto;
+    }
+
+    @media (min-width: 960px) {
+      .homology-local-chart-wide-toggle {
+        display: inline-flex;
+      }
+    }
+
     .homology-local-chart-toolbar .opt-row,
     .homology-local-chart-layers .opt-row {
       margin: 0;
@@ -1729,7 +1740,7 @@
     </section>
 
     <div id="homology-local-chart-side-host">
-      <section class="card collapsed" id="homology-local-chart-card" hidden data-card-wide="true" data-card-wide-host="#homology-local-chart-wide-host" data-card-side-host="#homology-local-chart-side-host">
+      <section class="card collapsed" id="homology-local-chart-card" hidden data-card-wide="true" data-card-wide-host="#homology-local-chart-wide-host" data-card-side-host="#homology-local-chart-side-host" data-card-wide-button="#homology-local-chart-wide">
         <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Local geometry debug</span><em class="toggle-icon">&#9662;</em></div>
         <div class="card-body">
           <div class="homology-local-chart-toolbar">
@@ -1738,6 +1749,7 @@
               <button class="slice-mode-btn active" id="homology-local-chart-radial" data-homology-local-chart-mode="radial" type="button" aria-pressed="true">Radial</button>
               <button class="slice-mode-btn" id="homology-local-chart-conformal" data-homology-local-chart-mode="conformal" type="button" aria-pressed="false">Conformal</button>
             </span>
+            <button class="btn btn-ghost homology-local-chart-wide-toggle" id="homology-local-chart-wide" type="button" aria-pressed="false">wide</button>
           </div>
           <div class="mosaic-inline-row">
             <span class="input-label">Local radius / R</span>
@@ -2051,7 +2063,7 @@
 <script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_native.js?v=20260825-1"></script>
-<script src="js/mosaic_calculator.js?v=homology-local-chart-3"></script>
+<script src="js/mosaic_calculator.js?v=homology-local-chart-5"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260826-1"></script>
 <script>

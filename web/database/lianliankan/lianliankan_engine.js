@@ -21,7 +21,12 @@
     ['ha', 'は'], ['hi', 'ひ'], ['fu', 'ふ'], ['he', 'へ'], ['ho', 'ほ'],
     ['ma', 'ま'], ['mi', 'み'], ['mu', 'む'], ['me', 'め'], ['mo', 'も'],
     ['ya', 'や'], ['yu', 'ゆ'], ['yo', 'よ'], ['ra', 'ら'], ['ri', 'り'],
-    ['ru', 'る'], ['re', 'れ'], ['ro', 'ろ'], ['wa', 'わ'], ['wo', 'を'], ['n', 'ん']
+    ['ru', 'る'], ['re', 'れ'], ['ro', 'ろ'], ['wa', 'わ'], ['wo', 'を'], ['n', 'ん'],
+    ['ga', 'が'], ['gi', 'ぎ'], ['gu', 'ぐ'], ['ge', 'げ'], ['go', 'ご'],
+    ['za', 'ざ'], ['ji', 'じ'], ['zu', 'ず'], ['ze', 'ぜ'], ['zo', 'ぞ'],
+    ['da', 'だ'], ['dji', 'ぢ'], ['dzu', 'づ'], ['de', 'で'], ['do', 'ど'],
+    ['ba', 'ば'], ['bi', 'び'], ['bu', 'ぶ'], ['be', 'べ'], ['bo', 'ぼ'],
+    ['pa', 'ぱ'], ['pi', 'ぴ'], ['pu', 'ぷ'], ['pe', 'ぺ'], ['po', 'ぽ']
   ].map(function(entry) {
     return Object.freeze({ id: 'hiragana_' + entry[0], glyph: entry[1] });
   }));
@@ -617,9 +622,10 @@
     };
   }
 
-  function createPairedTiles(count, symbols) {
+  function createPairedTiles(count, symbols, rng) {
     const total = Math.max(0, Math.floor(count / 2) * 2);
-    const pack = Array.isArray(symbols) && symbols.length ? symbols.map(normalizeTile) : HIRAGANA_SYMBOLS;
+    const pack = Array.isArray(symbols) && symbols.length ? symbols.map(normalizeTile) : HIRAGANA_SYMBOLS.slice();
+    if (pack.length > total / 2) shuffleArray(pack, rng);
     const tiles = [];
     for (let pair = 0; pair < total / 2; pair += 1) {
       const symbol = pack[pair % pack.length];
@@ -650,7 +656,7 @@
         positions = positions.filter(function(index) { return !empty.has(index); });
       }
       if (positions.length % 2) positions = positions.slice(0, -1);
-      const generated = shuffleArray(createPairedTiles(positions.length, config.symbols), config.rng);
+      const generated = shuffleArray(createPairedTiles(positions.length, config.symbols, config.rng), config.rng);
       assignTiles(board, positions, generated);
     }
 

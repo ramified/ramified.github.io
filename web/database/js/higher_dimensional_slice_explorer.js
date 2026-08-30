@@ -33,6 +33,7 @@
     { key: "formula-set", label: "formula set", color: "#4f7fbd", pointSize: 4, lineWidth: 2 },
     { key: "tropical-polynomial", label: "tropical polynomial", color: "#2f6fb0", pointSize: 4, lineWidth: 2 },
     { key: "weyl-chambers", label: "Weyl chambers", color: "#7b5cb8", pointSize: 4, lineWidth: 2 },
+    { key: "toric-cone", label: "rational cone", color: "#2c6f78", pointSize: 5, lineWidth: 2 },
   ];
   const TROPICAL_DISTRICT_COLORS = [
     "#d95f5f",
@@ -60,7 +61,7 @@
     "#8a66b5",
     "#b05835",
   ];
-  const EXACT_SLICE_TYPES = new Set(["regular-polytope", "cube", "simplex", "sphere", "formula-set", "tropical-polynomial", "weyl-chambers", "voronoi-diagram"]);
+  const EXACT_SLICE_TYPES = new Set(["regular-polytope", "cube", "simplex", "sphere", "formula-set", "tropical-polynomial", "weyl-chambers", "voronoi-diagram", "toric-cone"]);
   const VECTOR_INPUT_MODES = new Set(["manual", "import", "targets"]);
   const MATRIX_INPUT_MODES = new Set(["manual", "import", "targets"]);
   const MATRIX_PRESET_KINDS = new Set(["manual", "simple-roots", "fundamental-weights"]);
@@ -122,6 +123,8 @@
   };
   const MOTION_RAMP_MS = 180;
   const DEFAULT_CANVAS_LABEL_SIZE_REM = 1.05;
+  const TORIC_ANALYSIS_LIMITS = Object.freeze({ maxGenerators: 32, maxFaces: 4096, maxCandidates: 500000 });
+  const TORIC_PRESETS = new Set(["zero", "positive-orthant", "singular-simplicial", "square-cone"]);
   const regularGeometryCache = new Map();
   const regularHalfspaceCache = new Map();
   const weylRootSystemCache = new Map();
@@ -133,6 +136,14 @@
   const dynkinWeightCharacterCache = new Map();
   const matrixTargetDrafts = new Map();
   const lmfdbFieldSearchDrafts = new Map();
+  const toricAnalysisCache = new Map();
+  const toricAnalysisPending = new Map();
+  const toricSliceIssueByObject = new Map();
+  let toricAnalysisWorker = null;
+  let toricWorkerUnavailable = false;
+  let toricAnalysisRequestCounter = 1;
+  let toricGeneratorCounter = 1;
+  let toricRenderedEditorKey = "";
   let finiteWeylKlScheduledFrame = 0;
   let finiteWeylKlScheduledKey = "";
   let finiteWeylKlImmediateKey = "";
@@ -182,6 +193,7 @@
     addMatrixVariant: "manual",
     addLatticeVariant: "matrix-input",
     addVoronoiLatticeSourceId: "",
+    addToricPreset: "zero",
     objects: [],
     activeObjectId: null,
     selectedVertex: null,
@@ -192,6 +204,9 @@
     weylChamberPickCandidates: [],
     activeWeylChamber: null,
     weylKlTargetChamber: null,
+    activeToricFace: null,
+    toricTab: "build",
+    toricConePickCandidates: [],
     weightInfoDimensionMode: "none",
     lastWarning: "Projection and exact/numeric 2D slice layers are active.",
     lastWarningMath: null,
@@ -3474,6 +3489,7 @@
     if (typeKey === "formula-set") return "formula set";
     if (typeKey === "tropical-polynomial") return "tropical polynomial";
     if (typeKey === "weyl-chambers") return "Weyl chambers";
+    if (typeKey === "toric-cone") return "rational cone";
     if (typeKey === "cube") return "cube";
     return "regular polytope";
   }
@@ -3493,6 +3509,7 @@
     if (typeKey === "formula-set") return makeFormulaSetData(n);
     if (typeKey === "tropical-polynomial") return makeTropicalPolynomialData(n);
     if (typeKey === "weyl-chambers") return makeWeylChambersData(n, options);
+    if (typeKey === "toric-cone") return makeToricConeData(n, options.toricPreset || options.preset || "zero");
     return makeRegularPolytopeData(n, "hypercube");
   }
 
@@ -3751,6 +3768,29 @@
     };
   }
 
+  function normalizeToricPreset(value, n = state.ambientDim) {
+    const preset = TORIC_PRESETS.has(value) ? value : "zero";
+    return preset === "square-cone" && n < 3 ? "zero" : preset;
+  }
+
+  function toricPresetGenerators(preset, n = state.ambientDim) {
+    if (!window.ToricConeMath) return [];
+    return window.ToricConeMath.presetGenerators(normalizeToricPreset(preset, n), n);
+  }
+
+  function makeToricConeData(n, preset = "zero") {
+    const normalizedPreset = normalizeToricPreset(preset, n);
+    return {
+      name: currentTypeLabel("toric-cone", n),
+      kind: "toric",
+      objectType: "toric-cone",
+      ambientDimension: n,
+      generators: toricPresetGenerators(normalizedPreset, n),
+      preset: normalizedPreset,
+      description: `Strongly convex rational polyhedral cone in N_R of rank ${n}, with affine toric variety U_sigma.`,
+    };
+  }
+
   function isProjectionlessSourceType(typeKey) {
     return typeKey === "formula-set" || typeKey === "tropical-polynomial" || typeKey === "weyl-chambers" || typeKey === "dynkin-type";
   }
@@ -3783,6 +3823,7 @@
     if (state.addType === "matrix") return parseMatrixAddVariant(state.addMatrixVariant, state.ambientDim);
     if (state.addType === "lattice") return parseLatticeAddVariant(state.addLatticeVariant, state.ambientDim);
     if (state.addType === "voronoi-diagram") return parseVoronoiAddVariant(state.addVoronoiLatticeSourceId, state.ambientDim);
+    if (state.addType === "toric-cone") return { toricPreset: normalizeToricPreset(state.addToricPreset, state.ambientDim) };
     return {};
   }
 
@@ -3811,6 +3852,149 @@
     return state.objects.find((object) => object.id === state.activeObjectId) || state.objects[0];
   }
 
+  function toricConeRevision(object) {
+    if (objectTypeKey(object) !== "toric-cone") return "";
+    return JSON.stringify({
+      ambientDimension: state.ambientDim,
+      generators: (object.data?.generators || []).map((generator) => ({
+        id: generator.id,
+        label: generator.label,
+        coordinates: generator.coordinates,
+      })),
+    });
+  }
+
+  function toricAnalysisKey(object, revision = toricConeRevision(object)) {
+    return `${object?.id || "missing"}:${revision}`;
+  }
+
+  function invalidateToricAnalysis(object = null) {
+    const prefix = object ? `${object.id}:` : "";
+    for (const key of Array.from(toricAnalysisCache.keys())) {
+      if (!object || key.startsWith(prefix)) toricAnalysisCache.delete(key);
+    }
+    for (const key of Array.from(toricAnalysisPending.keys())) {
+      if (!object || key.startsWith(prefix)) toricAnalysisPending.delete(key);
+    }
+    if (object) toricSliceIssueByObject.delete(object.id);
+    else toricSliceIssueByObject.clear();
+    if (!object || state.activeToricFace?.objectId === object.id) state.activeToricFace = null;
+    if (!object) state.toricConePickCandidates = [];
+    else state.toricConePickCandidates = state.toricConePickCandidates.filter((candidate) => candidate.objectId !== object.id);
+    hideToricConePickMenu();
+    toricRenderedEditorKey = "";
+  }
+
+  function toricPendingAnalysis(object) {
+    return {
+      status: "pending",
+      valid: false,
+      ambientDimension: state.ambientDim,
+      generators: (object.data?.generators || []).map((generator) => ({
+        id: generator.id,
+        label: generator.label,
+        coordinates: generator.coordinates,
+        status: "pending",
+      })),
+      issues: ["Exact cone analysis is running."],
+      warnings: [],
+    };
+  }
+
+  function computeToricAnalysisSync(object, revision = toricConeRevision(object)) {
+    const key = toricAnalysisKey(object, revision);
+    try {
+      const analysis = window.ToricConeMath.analyzeCone({
+        ambientDimension: state.ambientDim,
+        generators: object.data?.generators || [],
+      }, TORIC_ANALYSIS_LIMITS);
+      toricAnalysisCache.set(key, analysis);
+      return analysis;
+    } catch (error) {
+      const analysis = {
+        status: "invalid",
+        valid: false,
+        ambientDimension: state.ambientDim,
+        generators: [],
+        issues: [`Exact cone analysis failed: ${error.message}`],
+        warnings: [],
+      };
+      toricAnalysisCache.set(key, analysis);
+      return analysis;
+    }
+  }
+
+  function toricConeAnalysis(object, options = {}) {
+    if (!object || objectTypeKey(object) !== "toric-cone") return null;
+    const revision = toricConeRevision(object);
+    const key = toricAnalysisKey(object, revision);
+    if (toricAnalysisCache.has(key)) return toricAnalysisCache.get(key);
+    if (!window.ToricConeMath) {
+      return { status: "invalid", valid: false, generators: [], issues: ["Toric cone math module is unavailable."], warnings: [] };
+    }
+    if (options.sync || String(object.id || "").startsWith("__") || toricWorkerUnavailable || !toricAnalysisWorker) return computeToricAnalysisSync(object, revision);
+    if (!toricAnalysisPending.has(key)) {
+      const requestId = toricAnalysisRequestCounter++;
+      toricAnalysisPending.set(key, { requestId, objectId: object.id, revision });
+      toricAnalysisWorker.postMessage({
+        type: "analyze-cone",
+        requestId,
+        objectId: object.id,
+        revision,
+        input: { ambientDimension: state.ambientDim, generators: object.data?.generators || [] },
+        limits: TORIC_ANALYSIS_LIMITS,
+      });
+    }
+    return toricPendingAnalysis(object);
+  }
+
+  function initToricAnalysisWorker() {
+    if (typeof Worker === "undefined") {
+      toricWorkerUnavailable = true;
+      return;
+    }
+    try {
+      toricAnalysisWorker = new Worker("js/toric_cone_worker.js?v=20260830-2");
+      toricAnalysisWorker.addEventListener("message", (event) => {
+        const message = event.data || {};
+        if (message.type !== "cone-analysis" && message.type !== "cone-analysis-error") return;
+        const key = `${message.objectId}:${message.revision}`;
+        const pending = toricAnalysisPending.get(key);
+        if (!pending || pending.requestId !== message.requestId) return;
+        toricAnalysisPending.delete(key);
+        const object = state.objects.find((candidate) => candidate.id === message.objectId);
+        if (!object || toricConeRevision(object) !== message.revision) return;
+        if (message.type === "cone-analysis") {
+          toricAnalysisCache.set(key, message.analysis);
+        } else {
+          toricAnalysisCache.set(key, {
+            status: "invalid",
+            valid: false,
+            generators: [],
+            issues: [`Exact cone analysis failed: ${message.error}`],
+            warnings: [],
+          });
+        }
+        renderAll();
+      });
+      toricAnalysisWorker.addEventListener("error", () => {
+        toricWorkerUnavailable = true;
+        if (toricAnalysisWorker) toricAnalysisWorker.terminate();
+        toricAnalysisWorker = null;
+        const pending = Array.from(toricAnalysisPending.values());
+        toricAnalysisPending.clear();
+        pending.forEach((entry) => {
+          const object = state.objects.find((candidate) => candidate.id === entry.objectId);
+          if (object && toricConeRevision(object) === entry.revision) computeToricAnalysisSync(object, entry.revision);
+        });
+        renderAll();
+      });
+    } catch {
+      toricWorkerUnavailable = true;
+      toricAnalysisWorker = null;
+    }
+  }
+
   function sourceLabel(object) {
     const labels = {
       cube: "cube",
@@ -3828,6 +4012,7 @@
       "formula-set": "formula",
       "tropical-polynomial": "tropical",
       "weyl-chambers": "Weyl chambers",
+      "toric-cone": "toric cone",
     };
     const type = object?.data?.objectType || object?.kind || "object";
     return labels[type] || type;
@@ -3948,6 +4133,23 @@
       select.disabled = !selected;
       select.setAttribute("aria-label", "Voronoi lattice source");
       select.title = "Voronoi lattice source";
+    } else if (state.addType === "toric-cone") {
+      const options = [
+        ["zero", "zero cone"],
+        ["positive-orthant", "positive orthant"],
+        ["singular-simplicial", "singular simplicial"],
+        ...(state.ambientDim >= 3 ? [["square-cone", "square cone"]] : []),
+      ];
+      state.addToricPreset = normalizeToricPreset(state.addToricPreset, state.ambientDim);
+      options.forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        select.appendChild(option);
+      });
+      select.value = state.addToricPreset;
+      select.setAttribute("aria-label", "Rational cone preset");
+      select.title = "Rational cone preset";
     } else {
       select.setAttribute("aria-label", "Source variant");
       select.title = "";
@@ -3983,7 +4185,7 @@
       state.addRegularFamily = normalizeRegularFamily(state.addRegularFamily, state.ambientDim);
       state.addWeylDynkinType = normalizeWeylDynkinType(state.addWeylDynkinType, state.ambientDim);
       fillAddVariantSelect();
-      variantSelect.hidden = !["regular-polytope", "dynkin-type", "root-set", "weyl-chambers", "matrix", "lattice", "voronoi-diagram"].includes(state.addType);
+      variantSelect.hidden = !["regular-polytope", "dynkin-type", "root-set", "weyl-chambers", "matrix", "lattice", "voronoi-diagram", "toric-cone"].includes(state.addType);
       variantSelect.disabled = variantSelect.hidden || (state.addType === "voronoi-diagram" && !defaultLatticeSourceId(state.ambientDim));
     }
     const addButton = $("source-add-object");
@@ -4058,7 +4260,7 @@
     const sliceEnabled = canDrawExact2DSlice(object);
     if (!sliceEnabled) object.visibleSlice = false;
     sliceButton.disabled = !sliceEnabled;
-    sliceButton.title = sliceEnabled ? "show exact/numeric 2D slice layer" : "2D slice is available only for regular polytopes, simplex, sphere, formula sets, tropical polynomials, Weyl chambers, and Voronoi diagrams in 2D frame mode";
+    sliceButton.title = sliceEnabled ? "show exact/numeric 2D slice layer" : "2D slice is available only for supported geometric, formula, chamber, Voronoi, and toric-cone sources in 2D frame mode";
     sliceButton.classList.toggle("active", !!object.visibleSlice);
     sliceButton.setAttribute("aria-pressed", object.visibleSlice ? "true" : "false");
   }
@@ -4125,7 +4327,391 @@
       buildWeylParams(container, object);
       return;
     }
+    if (type === "toric-cone") {
+      buildToricConeParams(container, object);
+      return;
+    }
     container.textContent = "no parameters";
+  }
+
+  function buildToricConeParams(container, object) {
+    const analysis = toricConeAnalysis(object);
+    const summary = document.createElement("span");
+    summary.className = "slice-card-note";
+    if (analysis?.status === "computed") {
+      summary.textContent = `${analysis.extremeRayCount} rays / dim ${analysis.dimension} / ${analysis.valid ? "valid" : analysis.status}`;
+    } else {
+      summary.textContent = `${object.data?.generators?.length || 0} generators / ${analysis?.status || "waiting"}`;
+    }
+    const button = document.createElement("button");
+    button.className = "slice-btn";
+    button.type = "button";
+    button.textContent = "edit cone";
+    button.addEventListener("click", () => {
+      state.toricTab = "build";
+      openCardByLabel("Toric Cone");
+      renderToricConeCard();
+    });
+    container.append(summary, button);
+  }
+
+  function setToricTab(tab) {
+    state.toricTab = ["build", "faces", "variety"].includes(tab) ? tab : "build";
+    const tabs = $("toric-cone-tabs");
+    tabs?.querySelectorAll("[data-toric-tab]").forEach((button) => {
+      const active = button.dataset.toricTab === state.toricTab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    document.querySelectorAll("[data-toric-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.toricPanel !== state.toricTab;
+    });
+  }
+
+  function toricBadge(text, status = "") {
+    const badge = document.createElement("span");
+    badge.className = `slice-toric-badge${status ? ` ${status}` : ""}`;
+    badge.textContent = text;
+    return badge;
+  }
+
+  function renderToricSummary(object, analysis) {
+    const output = $("toric-cone-summary");
+    if (!output) return;
+    output.innerHTML = "";
+    if (analysis?.status === "pending") {
+      output.append(toricBadge("analyzing"), toricBadge(`${object.data?.generators?.length || 0} entered`));
+      return;
+    }
+    const status = analysis?.valid ? "valid" : "invalid";
+    output.append(
+      toricBadge(analysis?.valid ? "valid cone" : analysis?.status || "invalid", status),
+      toricBadge(`rank ${state.ambientDim}`),
+      toricBadge(`dim ${analysis?.dimension ?? "?"}`),
+      toricBadge(`${analysis?.extremeRayCount ?? 0} rays`)
+    );
+    if (analysis?.valid) output.append(toricBadge(`${analysis.faceCount} faces`));
+  }
+
+  function toricGeneratorAnalysisMap(analysis) {
+    return new Map((analysis?.generators || []).map((generator) => [generator.id, generator]));
+  }
+
+  function commitToricGeneratorRow(object, generator, row) {
+    const coordinates = Array.from(row.querySelectorAll("[data-toric-coordinate]")).map((input) => input.value.trim());
+    generator.coordinates = coordinates;
+    try {
+      const primitive = window.ToricConeMath.primitiveVector(coordinates, state.ambientDim);
+      if (!primitive.zero) generator.coordinates = primitive.exact;
+    } catch {
+      // Invalid text remains part of the editable draft and is diagnosed by the exact analyzer.
+    }
+    object.data.preset = "zero";
+    invalidateToricAnalysis(object);
+    state.lastWarning = `${generator.label} updated; exact cone analysis restarted.`;
+    renderAll();
+  }
+
+  function deleteToricConeObject(object, message = "Toric cone deleted with its affine variety.") {
+    invalidateToricAnalysis(object);
+    state.objects = state.objects.filter((candidate) => candidate.id !== object.id);
+    if (!state.objects.length) state.objects = [makeObjectForType("cartesian-frame")];
+    state.activeObjectId = state.objects[0].id;
+    state.sourceMode = "modify";
+    state.selectedVertex = null;
+    clearVectorTargetSession();
+    state.activeTropicalDistrict = null;
+    clearWeylInteraction();
+    state.activeToricFace = null;
+    state.lastWarning = message;
+    syncObjectSelect();
+    syncObjectPanel();
+    renderAll();
+  }
+
+  function renderToricGeneratorEditor(object, analysis, force = false) {
+    const list = $("toric-cone-generators");
+    if (!list) return;
+    const analysisKey = (analysis?.generators || []).map((generator) => `${generator.id}:${generator.status}`).join("|");
+    const editorKey = `${object.id}:${toricConeRevision(object)}:${analysis?.status || "missing"}:${analysisKey}`;
+    if (!force && toricRenderedEditorKey === editorKey) return;
+    toricRenderedEditorKey = editorKey;
+    list.innerHTML = "";
+    const generators = object.data?.generators || [];
+    if (!generators.length) {
+      const note = document.createElement("span");
+      note.className = "slice-card-note";
+      note.textContent = `The zero cone has no generators and realizes the torus (G_m)^${state.ambientDim}.`;
+      list.append(note);
+    }
+    const analyzed = toricGeneratorAnalysisMap(analysis);
+    generators.forEach((generator, index) => {
+      const row = document.createElement("div");
+      row.className = "slice-toric-generator-row";
+      row.dataset.toricGeneratorId = generator.id;
+      const label = document.createElement("input");
+      label.className = "slice-input slice-toric-generator-label";
+      label.type = "text";
+      label.value = generator.label;
+      label.setAttribute("aria-label", `Generator ${index + 1} label`);
+      label.addEventListener("change", () => {
+        generator.label = label.value.trim() || `u_${index + 1}`;
+        invalidateToricAnalysis(object);
+        renderAll();
+      });
+      const coordinates = document.createElement("div");
+      coordinates.className = "slice-toric-coordinate-list";
+      coordinates.style.setProperty("--toric-coordinate-count", String(state.ambientDim));
+      resizeVector(generator.coordinates || [], state.ambientDim).forEach((value, coordinate) => {
+        const input = document.createElement("input");
+        input.className = "slice-input slice-toric-coordinate";
+        input.type = "text";
+        input.inputMode = "decimal";
+        input.value = String(value ?? "0");
+        input.dataset.toricCoordinate = String(coordinate);
+        input.setAttribute("aria-label", `${generator.label} coordinate ${coordinate + 1}`);
+        input.addEventListener("change", () => commitToricGeneratorRow(object, generator, row));
+        coordinates.append(input);
+      });
+      const remove = document.createElement("button");
+      remove.className = "slice-icon-btn";
+      remove.type = "button";
+      remove.textContent = "del";
+      remove.title = "delete this cone and its affine variety";
+      remove.setAttribute("aria-label", `Delete cone because ${generator.label} is being deleted`);
+      remove.addEventListener("click", () => {
+        const confirmed = typeof window.confirm !== "function" || window.confirm(`Deleting ${generator.label} deletes the entire cone ${object.name} and U_sigma. Continue?`);
+        if (confirmed) deleteToricConeObject(object, `${object.name} deleted because generator ${generator.label} was deleted.`);
+      });
+      const meta = document.createElement("div");
+      meta.className = "slice-toric-generator-meta";
+      const entry = analyzed.get(generator.id);
+      const status = entry?.status || analysis?.status || "pending";
+      const statusBadge = document.createElement("span");
+      statusBadge.className = `slice-toric-generator-status ${status}`;
+      statusBadge.textContent = status;
+      meta.append(statusBadge);
+      if (entry?.primitive) {
+        const primitive = document.createElement("span");
+        primitive.className = "slice-card-note";
+        primitive.textContent = `primitive (${entry.primitive.join(", ")})`;
+        meta.append(primitive);
+      }
+      if (entry?.redundancyWitness?.length) {
+        const witness = document.createElement("span");
+        witness.className = "slice-card-note";
+        witness.textContent = `in cone(${entry.redundancyWitness.join(", ")})`;
+        meta.append(witness);
+      }
+      if (entry?.error) {
+        const error = document.createElement("span");
+        error.className = "slice-card-note";
+        error.textContent = entry.error;
+        meta.append(error);
+      }
+      row.append(label, coordinates, remove, meta);
+      list.append(row);
+    });
+  }
+
+  function renderToricVectorSource() {
+    const select = $("toric-cone-vector-source");
+    const button = $("toric-cone-add-vector");
+    if (!select || !button) return;
+    const previous = select.value;
+    select.innerHTML = "";
+    const vectors = vectorObjectOptions();
+    if (!vectors.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "no vector objects";
+      select.append(option);
+      select.disabled = true;
+      button.disabled = true;
+      return;
+    }
+    vectors.forEach((vector) => {
+      const option = document.createElement("option");
+      option.value = vector.id;
+      option.textContent = `${vector.name} (${vectorToTupleText(vector.data?.vector, 2)})`;
+      select.append(option);
+    });
+    if (vectors.some((vector) => vector.id === previous)) select.value = previous;
+    select.disabled = false;
+    button.disabled = false;
+  }
+
+  function renderToricValidation(analysis, object) {
+    const output = $("toric-cone-validation");
+    if (!output) return;
+    output.innerHTML = "";
+    if (analysis?.status === "pending") {
+      const note = document.createElement("span");
+      note.className = "slice-card-note";
+      note.textContent = "Exact analysis is running in the cone worker.";
+      output.append(note);
+      return;
+    }
+    if (analysis?.valid) {
+      appendWeightInfoRow(output, "validation", analysis.dimension === 0 ? "zero cone; strongly convex" : "strongly convex rational cone");
+      appendWeightInfoRow(output, "canonical rays", String(analysis.extremeRayCount));
+      if (analysis.metrics?.candidateChecks != null) appendWeightInfoRow(output, "exact checks", analysis.metrics.candidateChecks.toLocaleString());
+    }
+    (analysis?.issues || []).forEach((message) => {
+      const warning = document.createElement("div");
+      warning.className = "slice-toric-warning";
+      warning.textContent = message;
+      output.append(warning);
+    });
+    (analysis?.warnings || []).forEach((message) => {
+      const warning = document.createElement("span");
+      warning.className = "slice-card-note";
+      warning.textContent = message;
+      output.append(warning);
+    });
+    const sliceIssue = object ? toricSliceIssueByObject.get(object.id) : "";
+    if (sliceIssue) {
+      const warning = document.createElement("div");
+      warning.className = "slice-toric-warning";
+      warning.textContent = sliceIssue;
+      output.append(warning);
+    }
+  }
+
+  function selectedToricFace(object, analysis) {
+    if (!analysis?.valid) return null;
+    const key = state.activeToricFace?.objectId === object.id
+      ? state.activeToricFace.faceKey
+      : analysis.selectedFaceDefault;
+    return analysis.faces.find((face) => face.key === key) || analysis.faces.find((face) => face.key === analysis.selectedFaceDefault) || analysis.faces[0];
+  }
+
+  function toricFaceLabel(face) {
+    if (!face || face.key === "0") return "0 cone";
+    return `cone(${face.rayLabels.join(", ")})`;
+  }
+
+  function renderToricFaceInfo(object, analysis, face) {
+    const output = $("toric-cone-face-info");
+    if (!output) return;
+    output.innerHTML = "";
+    if (!face) return;
+    appendWeightInfoRow(output, "selected", toricFaceLabel(face));
+    appendWeightInfoRow(output, "dimension", String(face.dimension));
+    appendWeightInfoRow(output, "orbit", `(G_m)^${face.orbitDimension}`);
+    appendWeightInfoRow(output, "orbit closure", `dimension ${face.orbitDimension}`);
+    appendWeightInfoRow(output, "closure contains", (face.orbitClosureFaceKeys || [face.key])
+      .map((key) => analysis.faces.find((item) => item.key === key))
+      .filter(Boolean)
+      .map((item) => `O(${toricFaceLabel(item)})`)
+      .join("; "));
+    appendWeightInfoRow(output, "simplicial", face.simplicial ? "yes" : "no");
+    appendWeightInfoRow(output, "smooth", face.smooth ? "yes" : "no");
+    appendWeightInfoRow(output, "multiplicity", face.multiplicity ?? "not defined for a nonsimplicial face");
+    appendWeightInfoRow(output, "facets", face.facets.length ? face.facets.map((key) => analysis.faces.find((item) => item.key === key)).filter(Boolean).map(toricFaceLabel).join("; ") : "none");
+    appendWeightInfoRow(output, "cofaces", face.cofaces.length ? face.cofaces.map((key) => analysis.faces.find((item) => item.key === key)).filter(Boolean).map(toricFaceLabel).join("; ") : "none");
+  }
+
+  function renderToricFaces(object, analysis) {
+    const list = $("toric-cone-face-list");
+    if (!list) return;
+    list.innerHTML = "";
+    if (!analysis?.valid) {
+      const note = document.createElement("div");
+      note.className = "slice-toric-warning";
+      note.textContent = analysis?.status === "pending" ? "Faces will appear after exact analysis." : "A face poset is available only after the draft defines a strongly convex cone.";
+      list.append(note);
+      $("toric-cone-face-info").innerHTML = "";
+      return;
+    }
+    const selected = selectedToricFace(object, analysis);
+    const dimensions = Array.from(new Set(analysis.faces.map((face) => face.dimension))).sort((a, b) => b - a);
+    dimensions.forEach((dimension) => {
+      const group = document.createElement("div");
+      group.className = "slice-toric-face-group";
+      const heading = document.createElement("span");
+      heading.className = "slice-toric-face-heading";
+      heading.textContent = `dimension ${dimension}`;
+      group.append(heading);
+      analysis.faces.filter((face) => face.dimension === dimension).forEach((face) => {
+        const button = document.createElement("button");
+        button.className = `slice-btn slice-toric-face-button${selected?.key === face.key ? " active" : ""}`;
+        button.type = "button";
+        button.dataset.toricFaceKey = face.key;
+        const name = document.createElement("span");
+        name.textContent = toricFaceLabel(face);
+        const orbit = document.createElement("span");
+        orbit.textContent = `O: ${face.orbitDimension}D`;
+        button.append(name, orbit);
+        button.addEventListener("click", () => {
+          state.activeToricFace = { objectId: object.id, faceKey: face.key };
+          state.toricTab = "faces";
+          renderAll();
+        });
+        group.append(button);
+      });
+      list.append(group);
+    });
+    renderToricFaceInfo(object, analysis, selected);
+  }
+
+  function renderToricVariety(object, analysis) {
+    const output = $("toric-cone-variety-info");
+    if (!output) return;
+    output.innerHTML = "";
+    if (!analysis?.valid) {
+      const warning = document.createElement("div");
+      warning.className = "slice-toric-warning";
+      warning.textContent = analysis?.status === "pending"
+        ? "Affine invariants will appear after exact analysis."
+        : "This draft does not define U_sigma until every generator is valid and the cone is strongly convex.";
+      output.append(warning);
+      return;
+    }
+    appendWeightInfoRow(output, "variety", `U_sigma = Spec ${analysis.semigroupRing}`);
+    appendWeightInfoRow(output, "dimension", String(state.ambientDim));
+    appendWeightInfoRow(output, "cone dimension", String(analysis.dimension));
+    appendWeightInfoRow(output, "cone codimension", String(analysis.codimension));
+    appendWeightInfoRow(output, "facets", String(analysis.facetCount));
+    appendWeightInfoRow(output, "torus factor", `(G_m)^${analysis.torusFactorRank}`);
+    appendWeightInfoRow(output, "coordinate ring", analysis.smoothCoordinateRing || analysis.semigroupRing);
+    appendWeightInfoRow(output, "dual cone", analysis.extremeRays.length
+      ? analysis.extremeRays.map((ray) => `<m, ${ray.label}> >= 0`).join("; ")
+      : "sigma^vee = M_R");
+    appendWeightInfoRow(output, "simplicial", analysis.simplicial ? "yes; U_sigma is Q-factorial" : "no; U_sigma is not Q-factorial");
+    appendWeightInfoRow(output, "smooth", analysis.smooth ? "yes; U_sigma is factorial" : "no; singular");
+    appendWeightInfoRow(output, "multiplicity", analysis.multiplicity ?? "not a single simplicial index");
+    appendWeightInfoRow(output, "Cl(U_sigma)", analysis.classGroup.display);
+    appendWeightInfoRow(output, "canonical divisor", analysis.canonical.divisor);
+    appendWeightInfoRow(output, "K Q-Cartier", analysis.canonical.qGorenstein ? "yes" : "no");
+    appendWeightInfoRow(output, "K Cartier / Gorenstein", analysis.canonical.gorenstein ? "yes" : analysis.canonical.qGorenstein ? `no; index ${analysis.canonical.index}` : "no");
+    appendWeightInfoRow(output, "singular locus", analysis.singularFaceKeys.length
+      ? analysis.singularFaceKeys.map((key) => toricFaceLabel(analysis.faces.find((face) => face.key === key))).join("; ")
+      : "empty");
+    if (analysis.quotientLattice) appendWeightInfoRow(output, "quotient lattice", analysis.quotientLattice.display);
+    appendWeightInfoRow(output, "normal / affine", "yes / yes");
+  }
+
+  function renderToricConeCard(options = {}) {
+    const card = $("slice-toric-cone-card");
+    if (!card) return;
+    const object = activeObject();
+    const visible = state.sourceMode === "modify" && objectTypeKey(object) === "toric-cone";
+    card.hidden = !visible;
+    if (!visible) {
+      toricRenderedEditorKey = "";
+      return;
+    }
+    const analysis = toricConeAnalysis(object);
+    setToricTab(state.toricTab);
+    renderToricSummary(object, analysis);
+    renderToricGeneratorEditor(object, analysis, options.forceEditor);
+    renderToricVectorSource();
+    renderToricValidation(analysis, object);
+    renderToricFaces(object, analysis);
+    renderToricVariety(object, analysis);
+    const squareOption = $("toric-cone-preset")?.querySelector('option[value="square-cone"]');
+    if (squareOption) squareOption.disabled = state.ambientDim < 3;
   }
 
   function buildRegularPolytopeParams(container, object) {
@@ -6513,6 +7099,27 @@
       $("ambient-dimension").value = String(next);
       return;
     }
+    if (next < state.ambientDim) {
+      for (const object of state.objects.filter((candidate) => objectTypeKey(candidate) === "toric-cone")) {
+        for (const generator of object.data?.generators || []) {
+          for (let coordinate = next; coordinate < (generator.coordinates?.length || 0); coordinate += 1) {
+            try {
+              if (!window.ToricConeMath.parseRational(generator.coordinates[coordinate] || "0").isZero()) {
+                $("ambient-dimension").value = String(state.ambientDim);
+                state.lastWarning = `Cannot reduce to R^${next}: ${object.name} / ${generator.label} uses coordinate ${coordinate + 1}.`;
+                renderAll();
+                return;
+              }
+            } catch {
+              $("ambient-dimension").value = String(state.ambientDim);
+              state.lastWarning = `Cannot reduce to R^${next}: ${object.name} / ${generator.label} has an invalid discarded coordinate.`;
+              renderAll();
+              return;
+            }
+          }
+        }
+      }
+    }
     state.ambientDim = next;
     state.p = resizeVector(state.p, next);
     resizeFrame(state.frame, next);
@@ -6529,6 +7136,8 @@
     clearVectorTargetSession();
     state.activeTropicalDistrict = null;
     clearWeylInteraction();
+    state.activeToricFace = null;
+    invalidateToricAnalysis();
     $("ambient-dimension").value = String(next);
     rebuildDynamicControls();
     refreshTypeLabels();
@@ -6918,6 +7527,13 @@
       object.data.name = object.name;
       const warning = refreshVoronoiFromLattice(object, { warn: true });
       if (warning) return warning;
+    } else if (type === "toric-cone") {
+      object.kind = "toric";
+      object.visibleProjection = true;
+      object.visibleSlice = true;
+      object.data = normalizeToricConeData(data, state.ambientDim);
+      object.data.name = object.name;
+      invalidateToricAnalysis(object);
     } else if (type === "cartesian-frame") {
       data.ambientDimension = state.ambientDim;
       data.origin = resizeVector(Array.isArray(data.origin) ? data.origin : [], state.ambientDim);
@@ -7133,6 +7749,43 @@
     };
   }
 
+  function nextToricGeneratorId(existingIds = new Set()) {
+    let id = `generator-${toricGeneratorCounter++}`;
+    while (existingIds.has(id)) id = `generator-${toricGeneratorCounter++}`;
+    return id;
+  }
+
+  function normalizeToricConeData(data, n = state.ambientDim) {
+    const existingIds = new Set();
+    const generators = (Array.isArray(data.generators) ? data.generators : []).map((raw, index) => {
+      let id = String(raw?.id || "").trim();
+      if (!id || existingIds.has(id)) id = nextToricGeneratorId(existingIds);
+      existingIds.add(id);
+      let coordinates = resizeVector(Array.isArray(raw?.coordinates) ? raw.coordinates.map((value) => String(value)) : [], n)
+        .map((value) => String(value ?? "0"));
+      try {
+        const primitive = window.ToricConeMath.primitiveVector(coordinates, n);
+        if (!primitive.zero) coordinates = primitive.exact;
+      } catch {
+        // Invalid imported coordinates stay editable and are diagnosed by exact analysis.
+      }
+      return {
+        id,
+        label: String(raw?.label || `u_${index + 1}`).trim() || `u_${index + 1}`,
+        coordinates,
+      };
+    });
+    return {
+      name: data.name || "rational cone",
+      kind: "toric",
+      objectType: "toric-cone",
+      ambientDimension: n,
+      generators,
+      preset: normalizeToricPreset(data.preset, n),
+      description: data.description || `Strongly convex rational polyhedral cone in N_R of rank ${n}, with affine toric variety U_sigma.`,
+    };
+  }
+
   function normalizeObjectData(data, fallbackKind) {
     const normalized = { ...data };
     normalized.kind = normalized.kind || fallbackKind || "geometry";
@@ -7211,6 +7864,9 @@
     if (normalized.objectType === "voronoi-diagram" || normalized.kind === "voronoi") {
       return normalizeVoronoiDiagramData(normalized, normalized.ambientDimension);
     }
+    if (normalized.objectType === "toric-cone" || normalized.kind === "toric") {
+      return normalizeToricConeData(normalized, normalized.ambientDimension);
+    }
     if (normalized.objectType === "cartesian-frame") {
       normalized.kind = "geometry";
       normalized.basis = normalized.basis === "moving" ? "moving" : "ambient";
@@ -7267,6 +7923,7 @@
     const isRootSet = data.objectType === "root-set";
     const isLattice = data.objectType === "lattice";
     const isVoronoi = data.objectType === "voronoi-diagram";
+    const isToric = data.objectType === "toric-cone";
     const isProjectionless = isProjectionlessSourceType(data.objectType);
     const sliceSupported = supportsExact2DSliceType(data.objectType);
     const visibleProjection = isProjectionless ? false : object.visibleProjection ?? object.projectionVisible ?? object.visible ?? true;
@@ -7276,7 +7933,7 @@
     const normalized = {
       id: object.id || `object-${objectCounter++}`,
       name: String(object.name || data.name || "object").trim(),
-      kind: isFormulaSet ? "formula" : isTropical ? "tropical" : isWeyl ? "weyl" : isDynkin ? "dynkin" : isRootSet ? "geometry" : isLattice ? "lattice" : isVoronoi ? "voronoi" : data.kind || object.kind || "geometry",
+      kind: isFormulaSet ? "formula" : isTropical ? "tropical" : isWeyl ? "weyl" : isDynkin ? "dynkin" : isRootSet ? "geometry" : isLattice ? "lattice" : isVoronoi ? "voronoi" : isToric ? "toric" : data.kind || object.kind || "geometry",
       visibleProjection: visibleProjection !== false,
       visibleSlice: !!visibleSlice,
       labels: isLattice ? false : !!(object.labels ?? object.showLabels),
@@ -7290,6 +7947,45 @@
       data,
     };
     normalized.data.name = normalized.name;
+    return normalized;
+  }
+
+  function normalizeImportedSourceObject(object, targetAmbientDimension = state.ambientDim) {
+    const envelope = object?.data ? object : {
+      id: object?.id,
+      name: object?.name,
+      kind: object?.kind,
+      visibleProjection: object?.visibleProjection,
+      visibleSlice: object?.visibleSlice,
+      labels: object?.labels,
+      style: object?.style,
+      data: object || {},
+    };
+    const rawData = envelope.data || {};
+    if (rawData.objectType === "toric-cone" || rawData.kind === "toric") {
+      for (const [generatorIndex, generator] of (rawData.generators || []).entries()) {
+        const coordinates = Array.isArray(generator?.coordinates) ? generator.coordinates : [];
+        for (let coordinate = targetAmbientDimension; coordinate < coordinates.length; coordinate += 1) {
+          let parsed;
+          try {
+            parsed = window.ToricConeMath.parseRational(coordinates[coordinate] ?? "0");
+          } catch {
+            throw new Error(`Cannot import ${generator?.label || `generator ${generatorIndex + 1}`} into R^${targetAmbientDimension}: discarded coordinate ${coordinate + 1} is invalid.`);
+          }
+          if (!parsed.isZero()) {
+            throw new Error(`Cannot import ${generator?.label || `generator ${generatorIndex + 1}`} into R^${targetAmbientDimension}: discarded coordinate ${coordinate + 1} is nonzero.`);
+          }
+        }
+      }
+    }
+    const normalized = normalizeSourceObject(envelope);
+    if (objectTypeKey(normalized) === "toric-cone") {
+      normalized.kind = "toric";
+      normalized.visibleProjection = envelope.visibleProjection !== false;
+      normalized.visibleSlice = envelope.visibleSlice !== false;
+      normalized.data = normalizeToricConeData(normalized.data, targetAmbientDimension);
+      normalized.data.name = normalized.name;
+    }
     return normalized;
   }
 
@@ -7313,7 +8009,7 @@
     if (!object || typeof object !== "object" || Array.isArray(object)) {
       throw new Error("Object JSON must contain an object payload.");
     }
-    return normalizeSourceObject(object);
+    return normalizeImportedSourceObject(object, state.ambientDim);
   }
 
   function syncScalarPair(sliderId, numberId, target, key, callback) {
@@ -7372,6 +8068,7 @@
   }
 
   function clearCanvasObjects() {
+    invalidateToricAnalysis();
     state.objects = [makeObjectForType("cartesian-frame")];
     state.activeObjectId = state.objects[0].id;
     state.sourceMode = "modify";
@@ -7390,6 +8087,58 @@
   function isTypingTarget(target) {
     const tag = target && target.tagName ? target.tagName.toLowerCase() : "";
     return tag === "input" || tag === "textarea" || tag === "select" || !!target?.isContentEditable;
+  }
+
+  function activeToricConeObject() {
+    const object = activeObject();
+    return objectTypeKey(object) === "toric-cone" ? object : null;
+  }
+
+  function replaceToricGenerators(object, generators, message) {
+    object.data.generators = generators;
+    object.data.preset = "zero";
+    invalidateToricAnalysis(object);
+    state.activeToricFace = null;
+    state.lastWarning = message;
+    renderAll();
+  }
+
+  function appendToricGenerator(object, coordinates, label = "") {
+    const existingIds = new Set((object.data?.generators || []).map((generator) => generator.id));
+    const id = nextToricGeneratorId(existingIds);
+    const index = object.data.generators.length;
+    const raw = resizeVector(Array.isArray(coordinates) ? coordinates : [], state.ambientDim).map((value) => String(value ?? "0"));
+    let normalized = raw;
+    try {
+      const primitive = window.ToricConeMath.primitiveVector(raw, state.ambientDim);
+      if (!primitive.zero) normalized = primitive.exact;
+    } catch {
+      // The editable draft keeps invalid coordinates for diagnosis.
+    }
+    object.data.generators.push({ id, label: String(label || `u_${index + 1}`), coordinates: normalized });
+    object.data.preset = "zero";
+    invalidateToricAnalysis(object);
+    state.lastWarning = `${object.data.generators[index].label} added to ${object.name}.`;
+    renderAll();
+  }
+
+  function parseToricGeneratorRows(raw, dimension = state.ambientDim) {
+    const rows = String(raw || "").split(/\n|;/).map(cleanMatrixRowText).filter(Boolean);
+    if (!rows.length) return [];
+    return rows.map((row, rowIndex) => {
+      const entries = splitMatrixRowEntries(row);
+      if (entries.length !== dimension) throw new Error(`Generator row ${rowIndex + 1} needs ${dimension} entries.`);
+      entries.forEach((entry, coordinate) => {
+        try {
+          window.ToricConeMath.parseRational(entry);
+        } catch (error) {
+          throw new Error(`Generator row ${rowIndex + 1}, coordinate ${coordinate + 1}: ${error.message}`);
+        }
+      });
+      const primitive = window.ToricConeMath.primitiveVector(entries, dimension);
+      const coordinates = primitive.zero ? entries : primitive.exact;
+      return { id: "", label: `u_${rowIndex + 1}`, coordinates };
+    });
   }
 
   function motionActionFromKey(event) {
@@ -7417,6 +8166,58 @@
       state.weightInfoDimensionMode = normalizeWeightInfoDimensionMode(button.dataset.weightInfoDimensionMode);
       renderAll();
     });
+    $("toric-cone-tabs")?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-toric-tab]");
+      if (!button) return;
+      setToricTab(button.dataset.toricTab);
+    });
+    $("toric-cone-apply-preset")?.addEventListener("click", () => {
+      const object = activeToricConeObject();
+      if (!object) return;
+      const preset = normalizeToricPreset($("toric-cone-preset").value, state.ambientDim);
+      const hasGenerators = (object.data?.generators || []).length > 0;
+      const confirmed = !hasGenerators || typeof window.confirm !== "function" || window.confirm(`Replace all generators of ${object.name} with the ${$("toric-cone-preset").selectedOptions[0]?.textContent || preset} preset?`);
+      if (!confirmed) return;
+      const generators = toricPresetGenerators(preset, state.ambientDim);
+      object.data.generators = generators;
+      object.data.preset = preset;
+      invalidateToricAnalysis(object);
+      state.lastWarning = `${object.name} reset to the ${$("toric-cone-preset").selectedOptions[0]?.textContent || preset} preset.`;
+      renderAll();
+    });
+    $("toric-cone-add-generator")?.addEventListener("click", () => {
+      const object = activeToricConeObject();
+      if (!object) return;
+      const index = object.data.generators.length % state.ambientDim;
+      appendToricGenerator(object, Array.from({ length: state.ambientDim }, (_, coordinate) => coordinate === index ? "1" : "0"));
+    });
+    $("toric-cone-add-vector")?.addEventListener("click", () => {
+      const object = activeToricConeObject();
+      const source = state.objects.find((candidate) => candidate.id === $("toric-cone-vector-source")?.value && objectTypeKey(candidate) === "vector");
+      if (!object || !source) return;
+      appendToricGenerator(object, source.data?.vector || [], source.data?.label || `u_${object.data.generators.length + 1}`);
+    });
+    $("toric-cone-apply-rows")?.addEventListener("click", () => {
+      const object = activeToricConeObject();
+      if (!object) return;
+      try {
+        const rows = parseToricGeneratorRows($("toric-cone-rows-import").value, state.ambientDim);
+        const existingIds = new Set();
+        rows.forEach((generator) => {
+          generator.id = nextToricGeneratorId(existingIds);
+          existingIds.add(generator.id);
+        });
+        replaceToricGenerators(object, rows, `${rows.length} generator rows imported into ${object.name}.`);
+      } catch (error) {
+        state.lastWarning = `Generator rows rejected: ${error.message}`;
+        renderAll();
+      }
+    });
+    document.addEventListener("pointerdown", (event) => {
+      const menu = $("toric-cone-pick-menu");
+      if (!menu || menu.hidden || menu.contains(event.target) || event.target === $("slice-viewport")) return;
+      hideToricConePickMenu();
+    });
 
     $("source-mode-controls").addEventListener("click", (event) => {
       const button = event.target.closest("[data-source-mode]");
@@ -7427,6 +8228,8 @@
         clearVectorTargetSession();
         state.activeTropicalDistrict = null;
         clearWeylInteraction();
+        state.activeToricFace = null;
+        hideToricConePickMenu();
       }
       syncSourceMode();
       renderAll();
@@ -7458,6 +8261,8 @@
         state.addLatticeVariant = value;
       } else if (state.addType === "voronoi-diagram") {
         state.addVoronoiLatticeSourceId = value;
+      } else if (state.addType === "toric-cone") {
+        state.addToricPreset = normalizeToricPreset(value, state.ambientDim);
       }
       renderAll();
     });
@@ -7478,6 +8283,8 @@
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
       clearWeylInteraction();
+      state.activeToricFace = null;
+      hideToricConePickMenu();
       const addedType = objectTypeKey(object);
       state.lastWarning = isProjectionlessSourceType(addedType) && supportsExact2DSliceType(addedType)
         ? `${object.name} added to the exact slice layer.`
@@ -7498,6 +8305,8 @@
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
       clearWeylInteraction();
+      state.activeToricFace = null;
+      hideToricConePickMenu();
       syncObjectPanel();
       renderAll();
     });
@@ -7510,12 +8319,16 @@
 
     $("object-delete").addEventListener("click", () => {
       if (state.objects.length <= 1) return;
+      const deletedObject = activeObject();
+      if (objectTypeKey(deletedObject) === "toric-cone") invalidateToricAnalysis(deletedObject);
       state.objects = state.objects.filter((object) => object.id !== state.activeObjectId);
       state.activeObjectId = state.objects[0].id;
       state.selectedVertex = null;
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
       clearWeylInteraction();
+      state.activeToricFace = null;
+      hideToricConePickMenu();
       const linkWarnings = refreshLinkedObjects({ warn: true });
       state.lastWarning = linkWarnings[0] ? `Active object deleted. ${linkWarnings[0]}` : "Active object deleted.";
       syncObjectSelect();
@@ -7545,6 +8358,8 @@
         if (state.activeVectorTarget?.objectId === object.id) clearVectorTargetSession();
         if (state.activeTropicalDistrict?.objectId === object.id) state.activeTropicalDistrict = null;
         clearWeylInteraction(object.id);
+        if (state.activeToricFace?.objectId === object.id) state.activeToricFace = null;
+        hideToricConePickMenu();
       }
       syncLayerButtons(object);
       renderAll();
@@ -7559,6 +8374,8 @@
         if (state.activeVectorTarget?.objectId === object.id) clearVectorTargetSession();
         if (state.activeTropicalDistrict?.objectId === object.id) state.activeTropicalDistrict = null;
         clearWeylInteraction(object.id);
+        if (state.activeToricFace?.objectId === object.id) state.activeToricFace = null;
+        hideToricConePickMenu();
       }
       syncLayerButtons(object);
       renderAll();
@@ -7782,6 +8599,7 @@
     syncObjectSelect();
     const object = activeObject();
     if (object) syncLayerButtons(object);
+    renderToricConeCard();
     $("toolbar-source").textContent = object ? sourceLabel(object) : "none";
     $("toolbar-slice").textContent = `${state.sliceDim}D`;
     syncCanvasLabelSize();
@@ -9197,6 +10015,7 @@
     state.pickCandidates = [];
     state.tropicalDistrictPickCandidates = [];
     state.weylChamberPickCandidates = [];
+    state.toricConePickCandidates = [];
 
     if (state.viewport.showGrid) drawGrid(ctx, view, width, height);
     if (state.viewport.showBox) drawViewportBound(ctx, view);
@@ -9302,6 +10121,10 @@
     const alpha = clamp(finiteNumber(style.opacity, 0.85), 0.05, 1);
     const pointSize = finiteNumber(style.pointSize, 4) * view.ratio;
     const lineWidth = finiteNumber(style.lineWidth, 2) * view.ratio;
+    if (rawData.objectType === "toric-cone") {
+      drawToricConeProjection(ctx, view, object, { ...options, color, alpha, pointSize, lineWidth });
+      return;
+    }
     if ((object.kind === "sphere" || rawData.objectType === "sphere") && state.sliceDim === 2) {
       drawAnalyticSphereObject(ctx, view, object, { ...options, color, alpha, pointSize, lineWidth });
       return;
@@ -9366,6 +10189,99 @@
     ctx.restore();
   }
 
+  function toricProjectionEntries(object, analysis) {
+    const analyzed = toricGeneratorAnalysisMap(analysis);
+    return (object.data?.generators || []).map((generator) => {
+      const result = analyzed.get(generator.id) || {};
+      let numeric = Array.isArray(result.numeric) ? result.numeric : null;
+      let primitive = Array.isArray(result.primitive) ? result.primitive : null;
+      if (!numeric) {
+        try {
+          const normalized = window.ToricConeMath.primitiveVector(generator.coordinates || [], state.ambientDim);
+          numeric = normalized.numeric;
+          primitive = normalized.exact;
+        } catch {
+          numeric = null;
+        }
+      }
+      return {
+        id: generator.id,
+        label: generator.label,
+        numeric,
+        primitive,
+        status: result.status || analysis?.status || "pending",
+      };
+    });
+  }
+
+  function drawToricConeProjection(ctx, view, object, options = {}) {
+    const analysis = toricConeAnalysis(object);
+    const entries = toricProjectionEntries(object, analysis);
+    const selectedFace = selectedToricFace(object, analysis);
+    const selectedRayIds = new Set(selectedFace?.rayIds || []);
+    const originAmbient = Array(state.ambientDim).fill(0);
+    const origin = projectAmbient(originAmbient, view);
+    const registerPick = options.registerPick !== false;
+    const baseColor = options.color || "#2c6f78";
+    const active = state.sourceMode === "modify" && object.id === state.activeObjectId;
+    const baseLineWidth = active ? Math.max(options.lineWidth * 1.35, options.lineWidth + 0.7 * view.ratio) : options.lineWidth;
+    const rayLength = Math.max(2, state.viewport.boxRadius * 1.35);
+    const statusColors = {
+      extremal: baseColor,
+      redundant: "#8a6242",
+      duplicate: "#77736d",
+      invalid: "#b05835",
+      zero: "#b05835",
+      pending: baseColor,
+      generator: baseColor,
+    };
+    ctx.save();
+    applyViewportCanvasClip(ctx, view);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    entries.forEach((entry, index) => {
+      if (!entry.numeric || entry.numeric.every((value) => Math.abs(value) < 1e-12)) return;
+      const direction = normalize(resizeVector(entry.numeric, state.ambientDim));
+      const tip = projectAmbient(scale(direction, rayLength), view);
+      const selected = selectedRayIds.has(entry.id);
+      ctx.save();
+      ctx.globalAlpha = options.alpha ?? 0.85;
+      ctx.strokeStyle = selected ? "#bd8518" : statusColors[entry.status] || baseColor;
+      ctx.fillStyle = selected ? "#bd8518" : statusColors[entry.status] || baseColor;
+      ctx.lineWidth = selected ? Math.max(baseLineWidth * 1.8, 3 * view.ratio) : baseLineWidth;
+      if (entry.status === "redundant" || entry.status === "duplicate") ctx.setLineDash([5 * view.ratio, 4 * view.ratio]);
+      line(ctx, origin.x, origin.y, tip.x, tip.y);
+      drawArrowHead(ctx, origin, tip, Math.max(7 * view.ratio, options.lineWidth * 2.6));
+      drawPoint(ctx, tip.x, tip.y, Math.max(options.pointSize, selected ? 6 * view.ratio : 4 * view.ratio));
+      ctx.restore();
+      if (registerPick) {
+        recordPickCandidate(object, tip, entry.label || `u_${index + 1}`, `toric-generator:${entry.id}`, Math.max(options.pointSize, 5 * view.ratio), {
+          toricGeneratorId: entry.id,
+          toricFaceKey: analysis?.faces?.some((face) => face.key === entry.id) ? entry.id : null,
+        });
+      }
+      if (shouldDrawObjectLabels(object)) {
+        addCanvasMathLabel(view, tip, entry.label, labelToTex(entry.label), { offsetX: 5, offsetY: -5, color: statusColors[entry.status] || baseColor });
+      }
+    });
+    ctx.globalAlpha = options.alpha ?? 0.85;
+    ctx.fillStyle = analysis?.valid ? baseColor : "#b05835";
+    drawPoint(ctx, origin.x, origin.y, Math.max(options.pointSize, 4 * view.ratio));
+    if (!analysis?.valid && analysis?.status !== "pending") {
+      ctx.strokeStyle = "#b05835";
+      ctx.lineWidth = 2 * view.ratio;
+      ctx.beginPath();
+      ctx.arc(origin.x, origin.y, Math.max(options.pointSize + 5 * view.ratio, 10 * view.ratio), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    if (registerPick) {
+      recordPickCandidate(object, origin, "0 cone", "toric-origin", Math.max(options.pointSize, 5 * view.ratio), {
+        toricFaceKey: "0",
+      });
+    }
+    ctx.restore();
+  }
+
   function drawAnalyticSphereObject(ctx, view, object, options = {}) {
     const data = object.data || {};
     const center = projectAmbient(resizeVector(data.center || [], state.ambientDim), view);
@@ -9396,7 +10312,8 @@
     const color = style.color || "#2f7d70";
     const alpha = clamp(finiteNumber(style.opacity, 0.85), 0.05, 1);
     const pointSize = Math.max(finiteNumber(style.pointSize, 4) * view.ratio + 1 * view.ratio, 4 * view.ratio);
-    const lineWidth = Math.max(finiteNumber(style.lineWidth, 2) * view.ratio + 0.8 * view.ratio, 2 * view.ratio);
+    const activeToric = objectTypeKey(object) === "toric-cone" && state.sourceMode === "modify" && object.id === state.activeObjectId;
+    const lineWidth = Math.max(finiteNumber(style.lineWidth, 2) * view.ratio + (activeToric ? 1.5 : 0.8) * view.ratio, 2 * view.ratio);
     const registerPick = options.registerPick !== false;
 
     ctx.save();
@@ -9418,6 +10335,7 @@
         ctx.fill();
         ctx.globalAlpha = alpha;
         ctx.stroke();
+        if (registerPick && slice.toricCone) recordToricConeCandidate(object, slice, projected, view);
       }
       projected.forEach((point, index) => {
         drawPoint(ctx, point.x, point.y, pointSize);
@@ -9430,6 +10348,7 @@
       const projected = slice.vertices.map((vertex) => projectFramePoint(vertex.y, view));
       ctx.globalAlpha = alpha;
       line(ctx, projected[0].x, projected[0].y, projected[1].x, projected[1].y);
+      if (registerPick && slice.toricCone) recordToricConeCandidate(object, slice, projected, view);
       projected.forEach((point, index) => {
         drawPoint(ctx, point.x, point.y, pointSize);
         if (registerPick) recordPickCandidate(object, point, `slice v_${index + 1}`, `slice-point:${index}`, pointSize);
@@ -9441,6 +10360,7 @@
       const point = projectFramePoint(slice.point.y, view);
       ctx.globalAlpha = alpha;
       drawPoint(ctx, point.x, point.y, pointSize + 1 * view.ratio);
+      if (registerPick && slice.toricCone) recordToricConeCandidate(object, slice, [point], view);
       if (registerPick) recordPickCandidate(object, point, slice.label || "slice point", "slice-point:0", pointSize + 1 * view.ratio);
       if (shouldDrawObjectLabels(object)) {
         const label = slice.label || "slice point";
@@ -9487,6 +10407,7 @@
     else if (type === "tropical-polynomial") result = exactTropicalSlice(object);
     else if (type === "weyl-chambers") result = exactWeylSlice(object);
     else if (type === "voronoi-diagram") result = exactVoronoiSlice(object);
+    else if (type === "toric-cone") result = exactToricConeSlice(object);
     if (options.profile) runtimeStats.exactSliceMs += nowMs() - start;
     return result;
   }
@@ -9508,6 +10429,171 @@
       return { kind: "segment", vertices: endpoints.map(sliceVertex) };
     }
     return { kind: "point", point: sliceVertex(endpoints[0] || polygon[0]) };
+  }
+
+  function toricSlicePointInside(analysis, y, tolerance = sliceTolerance()) {
+    if (!viewportPointInside(y, state.viewport.boxRadius)) return false;
+    const ambient = ambientFromFrameCoords(y);
+    for (const equation of analysis.hRepresentation?.spanEquations || []) {
+      if (Math.abs(dot(equation.numeric || [], ambient)) > tolerance * Math.max(1, norm(equation.numeric || []))) return false;
+    }
+    for (const inequality of analysis.hRepresentation?.inequalities || []) {
+      if (dot(inequality.normalNumeric || [], ambient) < -tolerance * Math.max(1, norm(inequality.normalNumeric || []))) return false;
+    }
+    return true;
+  }
+
+  function toricLineSlice(analysis, equationRows) {
+    const tolerance = sliceTolerance();
+    const row = equationRows.find((entry) => Math.hypot(entry.a, entry.b) > tolerance);
+    if (!row) return null;
+    const y0 = Math.abs(row.a) >= Math.abs(row.b) ? [-row.c / row.a, 0] : [0, -row.c / row.b];
+    const directionLength = Math.hypot(row.a, row.b);
+    const direction = [-row.b / directionLength, row.a / directionLength];
+    for (const equation of equationRows) {
+      const atBase = equation.a * y0[0] + equation.b * y0[1] + equation.c;
+      const along = equation.a * direction[0] + equation.b * direction[1];
+      if (Math.abs(atBase) > tolerance * 4 || Math.abs(along) > tolerance * 4) return { kind: "empty" };
+    }
+    let minT = -Infinity;
+    let maxT = Infinity;
+    const restrictLower = (value) => { minT = Math.max(minT, value); };
+    const restrictUpper = (value) => { maxT = Math.min(maxT, value); };
+    const radius = state.viewport.boxRadius;
+    if (normalizeViewportBoundShape(state.viewport.boundShape) === "disk") {
+      const projection = y0[0] * direction[0] + y0[1] * direction[1];
+      const constant = y0[0] ** 2 + y0[1] ** 2 - radius ** 2;
+      const discriminant = projection ** 2 - constant;
+      if (discriminant < -tolerance) return { kind: "empty" };
+      const root = Math.sqrt(Math.max(0, discriminant));
+      restrictLower(-projection - root);
+      restrictUpper(-projection + root);
+    } else {
+      for (let coordinate = 0; coordinate < 2; coordinate += 1) {
+        const slope = direction[coordinate];
+        if (Math.abs(slope) <= tolerance) {
+          if (Math.abs(y0[coordinate]) > radius + tolerance) return { kind: "empty" };
+          continue;
+        }
+        const left = (-radius - y0[coordinate]) / slope;
+        const right = (radius - y0[coordinate]) / slope;
+        restrictLower(Math.min(left, right));
+        restrictUpper(Math.max(left, right));
+      }
+    }
+    for (const inequality of analysis.hRepresentation?.inequalities || []) {
+      const normal = inequality.normalNumeric || [];
+      const baseAmbient = ambientFromFrameCoords(y0);
+      const directionAmbient = add(scale(state.frame[0], direction[0]), scale(state.frame[1], direction[1]));
+      const beta = dot(normal, baseAmbient);
+      const alpha = dot(normal, directionAmbient);
+      if (Math.abs(alpha) <= tolerance) {
+        if (beta < -tolerance) return { kind: "empty" };
+      } else {
+        const bound = -beta / alpha;
+        if (alpha > 0) restrictLower(bound);
+        else restrictUpper(bound);
+      }
+    }
+    if (minT > maxT + tolerance || !Number.isFinite(minT) || !Number.isFinite(maxT)) return { kind: "empty" };
+    const endpoints = [
+      [y0[0] + minT * direction[0], y0[1] + minT * direction[1]],
+      [y0[0] + maxT * direction[0], y0[1] + maxT * direction[1]],
+    ];
+    if (distanceSq2(endpoints[0], endpoints[1]) <= tolerance ** 2) {
+      return { kind: "point", point: sliceVertex(endpoints[0]), toricCone: true, analysis };
+    }
+    return { kind: "segment", vertices: endpoints.map(sliceVertex), toricCone: true, analysis };
+  }
+
+  function exactToricConeSlice(object) {
+    const analysis = toricConeAnalysis(object);
+    if (!analysis?.valid) return { kind: "empty", toricCone: true, analysis };
+    if (typeof window.ToricConeMath?.sliceCone === "function") {
+      try {
+        const exact = window.ToricConeMath.sliceCone(
+          analysis,
+          state.p.map(String),
+          state.frame.slice(0, 2).map((vector) => vector.map(String)),
+          { clipRadius: String(state.viewport.boxRadius), limits: TORIC_ANALYSIS_LIMITS }
+        );
+        const result = { kind: exact.kind, toricCone: true, analysis, exact: true, candidateChecks: exact.candidateChecks };
+        if (exact.vertices) {
+          result.exactVertices = exact.vertices.map((vertex) => vertex.exact);
+          result.vertices = exact.vertices.map((vertex) => sliceVertex(vertex.numeric));
+        }
+        if (exact.point) {
+          result.exactPoint = exact.point.exact;
+          result.point = sliceVertex(exact.point.numeric);
+        }
+        toricSliceIssueByObject.delete(object.id);
+        return result;
+      } catch (error) {
+        const issue = `Exact toric slice is uncomputed: ${error.message}`;
+        toricSliceIssueByObject.set(object.id, issue);
+        return {
+          kind: "empty",
+          toricCone: true,
+          analysis,
+          exact: true,
+          uncomputed: true,
+          issue,
+        };
+      }
+    }
+    const equations = (analysis.hRepresentation?.spanEquations || []).map((equation) => ({
+      a: dot(equation.numeric || [], state.frame[0]),
+      b: dot(equation.numeric || [], state.frame[1]),
+      c: dot(equation.numeric || [], state.p),
+    }));
+    const tolerance = sliceTolerance();
+    const activeEquations = equations.filter((equation) => Math.hypot(equation.a, equation.b) > tolerance);
+    for (const equation of equations) {
+      if (Math.hypot(equation.a, equation.b) <= tolerance && Math.abs(equation.c) > tolerance) {
+        return { kind: "empty", toricCone: true, analysis };
+      }
+    }
+    let independentPair = null;
+    for (let left = 0; left < activeEquations.length && !independentPair; left += 1) {
+      for (let right = left + 1; right < activeEquations.length; right += 1) {
+        const determinant = activeEquations[left].a * activeEquations[right].b - activeEquations[right].a * activeEquations[left].b;
+        if (Math.abs(determinant) > tolerance) {
+          independentPair = [activeEquations[left], activeEquations[right], determinant];
+          break;
+        }
+      }
+    }
+    if (independentPair) {
+      const [first, second, determinant] = independentPair;
+      const y = [
+        (-first.c * second.b + first.b * second.c) / determinant,
+        (-first.a * second.c + first.c * second.a) / determinant,
+      ];
+      return toricSlicePointInside(analysis, y, tolerance * 4)
+        ? { kind: "point", point: sliceVertex(y), toricCone: true, analysis }
+        : { kind: "empty", toricCone: true, analysis };
+    }
+    if (activeEquations.length) return toricLineSlice(analysis, equations);
+    let polygon = initialClipPolygon(state.viewport.boxRadius);
+    for (const inequality of analysis.hRepresentation?.inequalities || []) {
+      const normal = inequality.normalNumeric || [];
+      const a = dot(normal, state.frame[0]);
+      const b = dot(normal, state.frame[1]);
+      const c = dot(normal, state.p);
+      polygon = clipPolygonByHalfPlane(polygon, -a, -b, c);
+      if (!polygon.length) return { kind: "empty", toricCone: true, analysis };
+    }
+    polygon = cleanPolygon(polygon);
+    if (!polygon.length) return { kind: "empty", toricCone: true, analysis };
+    const area = Math.abs(polygonArea(polygon));
+    if (polygon.length >= 3 && area > tolerance) {
+      return { kind: "polygon", vertices: polygon.map(sliceVertex), toricCone: true, analysis };
+    }
+    const endpoints = farthestPair(uniquePoints(polygon));
+    if (endpoints.length === 2 && distanceSq2(endpoints[0], endpoints[1]) > tolerance ** 2) {
+      return { kind: "segment", vertices: endpoints.map(sliceVertex), toricCone: true, analysis };
+    }
+    return { kind: "point", point: sliceVertex(endpoints[0] || polygon[0]), toricCone: true, analysis };
   }
 
   function cubeSliceHalfPlanes(object) {
@@ -12334,6 +13420,20 @@
         voronoiProjection,
       };
     }
+    if (type === "toric-cone") {
+      const analysis = toricConeAnalysis(object);
+      const entries = toricProjectionEntries(object, analysis).filter((entry) => entry.numeric && entry.numeric.some((value) => Math.abs(value) > 1e-12));
+      return {
+        points: [],
+        edges: [],
+        rays: entries.map((entry) => ({
+          origin: Array(state.ambientDim).fill(0),
+          direction: entry.numeric,
+          length: state.viewport.boxRadius,
+          label: entry.label,
+        })),
+      };
+    }
     if (type === "cartesian-frame") {
       const origin = resizeVector(data.origin || [], state.ambientDim);
       const basis = data.basis === "moving" ? "moving" : "ambient";
@@ -12506,6 +13606,8 @@
       radius,
       latticePoint: pointMetadata?.lattice === true,
       latticeCoefficients: Array.isArray(pointMetadata?.coeffs) ? pointMetadata.coeffs.slice() : null,
+      toricGeneratorId: pointMetadata?.toricGeneratorId || null,
+      toricFaceKey: pointMetadata?.toricFaceKey || null,
     });
   }
 
@@ -12535,6 +13637,26 @@
       length: chamber.length,
       area: chamber.area,
       polygon: projectedPolygon.map((point) => [point.x, point.y]),
+    });
+  }
+
+  function recordToricConeCandidate(object, slice, projected, view) {
+    if (!projected.length) return;
+    const kind = slice.kind;
+    const frameVertices = kind === "point"
+      ? [slice.point?.y?.slice(0, 2) || [0, 0]]
+      : (slice.vertices || []).map((vertex) => vertex.y.slice(0, 2));
+    state.toricConePickCandidates.push({
+      objectId: object.id,
+      objectName: object.name,
+      kind,
+      polygon: projected.map((point) => [point.x, point.y]),
+      frameVertices,
+      area: kind === "polygon" ? Math.abs(polygonArea(frameVertices)) : 0,
+      view: { centerX: view.centerX, centerY: view.centerY, scale: view.scale },
+      boundShape: state.viewport.boundShape,
+      boundRadius: state.viewport.boxRadius,
+      analysis: slice.analysis,
     });
   }
 
@@ -12598,6 +13720,110 @@
     return nearestPolygonCandidate(state.tropicalDistrictPickCandidates, x, y);
   }
 
+  function pointSegmentDistanceSq(point, start, end) {
+    const dx = end[0] - start[0];
+    const dy = end[1] - start[1];
+    const lengthSq = dx * dx + dy * dy;
+    if (lengthSq <= 1e-12) return (point[0] - start[0]) ** 2 + (point[1] - start[1]) ** 2;
+    const t = clamp(((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSq, 0, 1);
+    const nearest = [start[0] + t * dx, start[1] + t * dy];
+    return (point[0] - nearest[0]) ** 2 + (point[1] - nearest[1]) ** 2;
+  }
+
+  function toricConeCandidatesAt(x, y) {
+    const tolerance = 9 * (window.devicePixelRatio || 1);
+    return state.toricConePickCandidates.filter((candidate) => {
+      const framePoint = [
+        (x - candidate.view.centerX) / candidate.view.scale,
+        (candidate.view.centerY - y) / candidate.view.scale,
+      ];
+      if (!viewportPointInside(framePoint, candidate.boundRadius, candidate.boundShape)) return false;
+      if (candidate.kind === "polygon") return pointInPolygon([x, y], candidate.polygon);
+      if (candidate.kind === "segment" && candidate.polygon.length >= 2) {
+        return pointSegmentDistanceSq([x, y], candidate.polygon[0], candidate.polygon[1]) <= tolerance ** 2;
+      }
+      if (candidate.kind === "point" && candidate.polygon[0]) {
+        return (x - candidate.polygon[0][0]) ** 2 + (y - candidate.polygon[0][1]) ** 2 <= tolerance ** 2;
+      }
+      return false;
+    }).sort((left, right) => left.area - right.area || left.objectName.localeCompare(right.objectName));
+  }
+
+  function toricFaceKeyAtPoint(candidate, x, y) {
+    const analysis = candidate.analysis;
+    if (!analysis?.valid) return null;
+    const view = candidate.view;
+    const framePoint = [(x - view.centerX) / view.scale, (view.centerY - y) / view.scale];
+    const ambient = ambientFromFrameCoords(framePoint);
+    const activeFacets = (analysis.facets || []).filter((facet) => {
+      const normal = facet.normalNumeric || [];
+      const threshold = (7 / Math.max(view.scale, 1)) * Math.max(1, norm(normal));
+      return Math.abs(dot(normal, ambient)) <= threshold;
+    });
+    if (!activeFacets.length) return analysis.selectedFaceDefault;
+    let rayIds = (analysis.extremeRays || []).map((ray) => ray.id);
+    activeFacets.forEach((facet) => { rayIds = rayIds.filter((id) => facet.rayIds.includes(id)); });
+    const key = rayIds.length ? rayIds.slice().sort().join("|") : "0";
+    return analysis.faces.some((face) => face.key === key) ? key : analysis.selectedFaceDefault;
+  }
+
+  function hideToricConePickMenu() {
+    const menu = $("toric-cone-pick-menu");
+    if (!menu) return;
+    menu.hidden = true;
+    menu.innerHTML = "";
+  }
+
+  function activateToricConeCandidate(candidate, point, explicitFaceKey = null) {
+    const object = state.objects.find((item) => item.id === candidate.objectId);
+    if (!object || objectTypeKey(object) !== "toric-cone") return;
+    const analysis = candidate.analysis || toricConeAnalysis(object);
+    const faceKey = explicitFaceKey || toricFaceKeyAtPoint(candidate, point.x, point.y) || analysis?.selectedFaceDefault || "0";
+    state.activeObjectId = object.id;
+    state.sourceMode = "modify";
+    state.selectedVertex = null;
+    state.activeTropicalDistrict = null;
+    clearWeylInteraction();
+    state.activeToricFace = { objectId: object.id, faceKey };
+    state.toricTab = faceKey === analysis?.selectedFaceDefault ? "variety" : "faces";
+    const face = analysis?.faces?.find((entry) => entry.key === faceKey);
+    state.lastWarning = face
+      ? `Picked ${object.name} / ${toricFaceLabel(face)}; orbit dimension ${face.orbitDimension}.`
+      : `Picked ${object.name}.`;
+    hideToricConePickMenu();
+    syncObjectSelect();
+    syncObjectPanel();
+    syncSourceMode();
+    openCardByLabel("Toric Cone");
+    renderAll();
+  }
+
+  function showToricConePickMenu(event, candidates, point) {
+    const menu = $("toric-cone-pick-menu");
+    const stage = menu?.parentElement;
+    if (!menu || !stage) return;
+    menu.innerHTML = "";
+    candidates.forEach((candidate) => {
+      const object = state.objects.find((item) => item.id === candidate.objectId);
+      if (!object) return;
+      const button = document.createElement("button");
+      button.className = "slice-btn";
+      button.type = "button";
+      button.role = "menuitem";
+      const faceKey = toricFaceKeyAtPoint(candidate, point.x, point.y);
+      const face = candidate.analysis?.faces?.find((entry) => entry.key === faceKey);
+      button.textContent = face ? `${object.name} / ${toricFaceLabel(face)}` : object.name;
+      button.addEventListener("click", () => activateToricConeCandidate(candidate, point, faceKey));
+      menu.append(button);
+    });
+    const rect = stage.getBoundingClientRect();
+    const left = clamp(event.clientX - rect.left + 8, 8, Math.max(8, rect.width - 260));
+    const top = clamp(event.clientY - rect.top + 8, 8, Math.max(8, rect.height - 180));
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+    menu.hidden = false;
+  }
+
   function nearestPolygonCandidate(candidates, x, y) {
     let best = null;
     let bestArea = Infinity;
@@ -12636,6 +13862,23 @@
       return;
     }
     if (candidate) {
+      const pickedObject = state.objects.find((object) => object.id === candidate.objectId);
+      if (objectTypeKey(pickedObject) === "toric-cone") {
+        const overlappingCones = toricConeCandidatesAt(point.x, point.y);
+        if (overlappingCones.length > 1) {
+          showToricConePickMenu(event, overlappingCones, point);
+          return;
+        }
+        const analysis = toricConeAnalysis(pickedObject);
+        const region = overlappingCones[0] || state.toricConePickCandidates.find((entry) => entry.objectId === pickedObject.id);
+        activateToricConeCandidate(region || {
+          objectId: pickedObject.id,
+          objectName: pickedObject.name,
+          analysis,
+          view: { centerX: point.x, centerY: point.y, scale: 1 },
+        }, point, candidate.toricFaceKey || analysis?.selectedFaceDefault || "0");
+        return;
+      }
       state.selectedVertex = {
         objectId: candidate.objectId,
         vertexKey: candidate.vertexKey,
@@ -12654,6 +13897,16 @@
       renderAll();
       return;
     }
+    const toricCandidates = toricConeCandidatesAt(point.x, point.y);
+    if (toricCandidates.length === 1) {
+      activateToricConeCandidate(toricCandidates[0], point);
+      return;
+    }
+    if (toricCandidates.length > 1) {
+      showToricConePickMenu(event, toricCandidates, point);
+      return;
+    }
+    hideToricConePickMenu();
     const district = nearestTropicalDistrictCandidate(point.x, point.y);
     if (district) {
       state.selectedVertex = null;
@@ -12719,8 +13972,9 @@
       return;
     }
     const district = vertex ? null : nearestTropicalDistrictCandidate(point.x, point.y);
-    const chamber = vertex || district ? null : nearestWeylChamberCandidate(point.x, point.y);
-    $("slice-viewport").style.cursor = vertex || district || chamber ? "pointer" : "default";
+    const toric = vertex || district ? [] : toricConeCandidatesAt(point.x, point.y);
+    const chamber = vertex || district || toric.length ? null : nearestWeylChamberCandidate(point.x, point.y);
+    $("slice-viewport").style.cursor = vertex || district || toric.length || chamber ? "pointer" : "default";
     const nextTropicalActive = district
       ? { objectId: district.objectId, districtKey: district.districtKey }
       : null;
@@ -12919,6 +14173,7 @@
       addMatrixVariant: state.addMatrixVariant,
       addLatticeVariant: state.addLatticeVariant,
       addVoronoiLatticeSourceId: state.addVoronoiLatticeSourceId,
+      addToricPreset: state.addToricPreset,
       activeObjectId: state.activeObjectId,
       objects: state.objects.map(serializableObject),
     };
@@ -13018,8 +14273,11 @@
       state.addMatrixVariant = String(imported.addMatrixVariant || "manual");
       state.addLatticeVariant = String(imported.addLatticeVariant || "matrix-input");
       state.addVoronoiLatticeSourceId = String(imported.addVoronoiLatticeSourceId || "");
+      state.addToricPreset = normalizeToricPreset(imported.addToricPreset || "zero", state.ambientDim);
       clampMotionState();
-      state.objects = Array.isArray(imported.objects) && imported.objects.length ? imported.objects.map(normalizeSourceObject) : [makeObjectForType("cartesian-frame")];
+      state.objects = Array.isArray(imported.objects) && imported.objects.length
+        ? imported.objects.map((object) => normalizeImportedSourceObject(object, state.ambientDim))
+        : [makeObjectForType("cartesian-frame")];
       refreshLinkedObjects();
       state.activeObjectId = imported.activeObjectId && state.objects.some((object) => object.id === imported.activeObjectId)
         ? imported.activeObjectId
@@ -13029,6 +14287,8 @@
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
       clearWeylInteraction();
+      state.activeToricFace = null;
+      invalidateToricAnalysis();
       state.lastWarning = "State JSON imported.";
       rebuildDynamicControls();
       refreshTypeLabels();
@@ -13056,6 +14316,8 @@
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
       clearWeylInteraction();
+      state.activeToricFace = null;
+      hideToricConePickMenu();
       state.lastWarning = "Object JSON imported as a new object.";
       syncObjectSelect();
       syncObjectPanel();
@@ -13071,9 +14333,11 @@
     try {
       const index = state.objects.findIndex((object) => object.id === state.activeObjectId);
       if (index < 0) throw new Error("No active object to replace.");
+      const replacedObject = state.objects[index];
       const imported = parseObjectPayload($("import-state").value);
       imported.id = state.objects[index].id;
       state.objects[index] = imported;
+      if (objectTypeKey(replacedObject) === "toric-cone" || objectTypeKey(imported) === "toric-cone") invalidateToricAnalysis();
       refreshLinkedObjects();
       state.activeObjectId = imported.id;
       state.sourceMode = "modify";
@@ -13081,6 +14345,8 @@
       clearVectorTargetSession();
       state.activeTropicalDistrict = null;
       clearWeylInteraction();
+      state.activeToricFace = null;
+      hideToricConePickMenu();
       state.lastWarning = "Active object replaced from object JSON.";
       syncObjectSelect();
       syncObjectPanel();
@@ -13136,10 +14402,15 @@
     state.addMatrixVariant = "manual";
     state.addLatticeVariant = "matrix-input";
     state.addVoronoiLatticeSourceId = "";
+    state.addToricPreset = "zero";
     state.selectedVertex = null;
     clearVectorTargetSession();
     state.activeTropicalDistrict = null;
     clearWeylInteraction();
+    state.activeToricFace = null;
+    state.toricTab = "build";
+    state.toricConePickCandidates = [];
+    invalidateToricAnalysis();
     state.pickCandidates = [];
     state.tropicalDistrictPickCandidates = [];
     state.weylChamberPickCandidates = [];
@@ -13156,12 +14427,14 @@
   }
 
   function init() {
+    initToricAnalysisWorker();
     state.addRegularFamily = normalizeRegularFamily(state.addRegularFamily, state.ambientDim);
     state.addWeylDynkinType = normalizeWeylDynkinType(state.addWeylDynkinType, state.ambientDim);
     state.addWeylDynkinSourceId = "";
     state.addMatrixVariant = "manual";
     state.addLatticeVariant = "matrix-input";
     state.addVoronoiLatticeSourceId = "";
+    state.addToricPreset = "zero";
     state.objects = [makeObjectForType("cartesian-frame")];
     state.activeObjectId = state.objects[0].id;
     fillTypeSelect();
@@ -13218,7 +14491,7 @@
       if (kind === "state") {
         if (data.kind === "slice-explorer-object") throw new Error("Choose an object import action for object JSON.");
         if (data.module && data.module !== "higher-dimensional-slice-explorer") throw new Error("This is not a slice calculator state.");
-      } else if (data.kind !== "slice-explorer-object" && !data.object) {
+      } else if (data.kind !== "slice-explorer-object" && !data.object && !data.objectType && !data.data?.objectType) {
         throw new Error("This is not a slice object export.");
       }
       return { text, data };

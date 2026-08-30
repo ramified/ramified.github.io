@@ -52,6 +52,20 @@ function counts(game) {
   return Object.entries(gameApi.symbolCounts(game.board)).sort();
 }
 
+function testHiraganaCatalog() {
+  const symbols = gameApi.HIRAGANA_SYMBOLS;
+  assert.strictEqual(symbols.length, 71, 'the common standalone hiragana catalog includes base, voiced, and semi-voiced kana');
+  assert.strictEqual(new Set(symbols.map((symbol) => symbol.id)).size, symbols.length, 'hiragana ids are unique');
+  assert.strictEqual(new Set(symbols.map((symbol) => symbol.glyph)).size, symbols.length, 'hiragana glyphs are unique');
+  ['じ', 'ぢ', 'ず', 'づ', 'ぱ'].forEach((glyph) => {
+    assert.ok(symbols.some((symbol) => symbol.glyph === glyph), `hiragana catalog includes ${glyph}`);
+  });
+
+  const sampled = gameApi.createPairedTiles(4, symbols, () => 0);
+  assert.strictEqual(new Set(sampled.map((tile) => tile.id)).size, 2, 'small boards sample distinct kana from the full catalog');
+  assert.ok(sampled.every((tile) => tile.id !== 'hiragana_a'), 'sampling is not fixed to the first catalog entries');
+}
+
 function testPathfinder() {
   let path = pathFor(['A..A'], 0, 3);
   assert.ok(path, 'P01 horizontal path should exist');
@@ -356,13 +370,14 @@ function testMosaicAdapter() {
 }
 
 function run() {
+  testHiraganaCatalog();
   testPathfinder();
   testBoundaryGlue();
   testMatchingAndSelection();
   testDeadlock();
   testRefresh();
   testMosaicAdapter();
-  console.log('Lianliankan engine tests passed (P01-P08, G01-G06, M01-M05, D01-D04, R01-R06).');
+  console.log('Lianliankan engine tests passed (hiragana catalog, P01-P08, G01-G06, M01-M05, D01-D04, R01-R06).');
 }
 
 run();

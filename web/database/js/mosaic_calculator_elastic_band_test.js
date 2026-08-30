@@ -840,11 +840,58 @@ const quotientCreatedBefore = elastic.homologyCordNow();
 const torusBand = elastic.makeHomologyCordRuntimeChain(torusSurface, torusAnalysis);
 const quotientCreatedAfter = elastic.homologyCordNow();
 assert.ok(torusBand && torusBand.solverSpace === 'quotient');
+assert.ok(torusSurface.initializationCertificate && torusSurface.initializationCertificate.valid);
+assert.strictEqual(
+  torusSurface.initializationCertificate.targetHomologySignature,
+  torusSurface.initializationCertificate.constructionHomologySignature,
+  'the sampled cellular circuit must have the requested generator H1 coordinates'
+);
+assert.ok(torusBand.initializationCertificate && torusBand.initializationCertificate.valid);
+assert.strictEqual(
+  torusBand.initializationCertificate.expectedPortalSignature,
+  torusBand.initialFreeHomotopySignature,
+  'the initial quotient word must come from the certified cellular construction'
+);
+const otherTorusGenerator = torusAnalysis.generators.find((generator) => generator.id !== torusGenerator.id);
+assert.ok(otherTorusGenerator);
+assert.strictEqual(elastic.makeHomologyCordChain(
+  torusGenerator,
+  elastic.homologyChainDisplayEntries(torusAnalysis, otherTorusGenerator),
+  torusAnalysis
+), null, 'entries from another generator must fail the H1 initialization certificate');
+const uncertifiedTorusSurface = {
+  ...torusSurface,
+  initializationCertificate: null
+};
+assert.strictEqual(
+  elastic.makeHomologyCordRuntimeChain(uncertifiedTorusSurface, torusAnalysis),
+  null,
+  'a complete homology analysis must not enter the runtime solver without its certificate'
+);
 assert.ok(torusBand.relaxationNotBefore >= quotientCreatedBefore + 300
   && torusBand.relaxationNotBefore <= quotientCreatedAfter + 300);
 assert.strictEqual(torusBand.springs.length, torusBand.points.length - 1);
 assert.strictEqual(torusBand.atlas.portals.size, 4);
 assert.strictEqual(elastic.validateQuotientElasticBand(torusBand), true);
+torusBand.points.slice(0, -1).forEach((point) => {
+  torusBand.atlas.portals.forEach((portal) => {
+    if (portal.fromTile !== point.tileIndex) return;
+    const cell = { x: 10, y: 10 };
+    const midpoint = {
+      x: (portal.source.start.x + portal.source.end.x) * 0.5,
+      y: (portal.source.start.y + portal.source.end.y) * 0.5
+    };
+    const inwardLength = Math.hypot(cell.x - midpoint.x, cell.y - midpoint.y);
+    const inward = {
+      x: (cell.x - midpoint.x) / inwardLength,
+      y: (cell.y - midpoint.y) / inwardLength
+    };
+    const gap = ((point.x - portal.source.start.x) * inward.x)
+      + ((point.y - portal.source.start.y) * inward.y);
+    assert.ok(gap >= 10 * 0.025 - 1e-9,
+      'every initial quotient particle must clear every glued side of its tile by 0.025R');
+  });
+});
 const torusStar = Array.from(torusBand.atlas.vertexStars.values())[0];
 assert.strictEqual(torusStar.manifold, true);
 assert.ok(Math.abs(torusStar.totalAngle - Math.PI * 2) < 1e-12);
@@ -1051,8 +1098,8 @@ assertPointNear(reflectedMotion.point, { x: 5, y: 14 });
 // The usual-strip generator changes charts at the endpoint of its bottom
 // portal.  That endpoint crossing must remain in the spring word; otherwise
 // the two distant display copies are mistaken for a disconnected segment.
-// Its following boundary-corner switch starts as a finite construction
-// bridge and detaches once an ordinary inset route is available.
+// Its following boundary-corner switch must remain directly traceable even
+// when the route crosses more than the motion transaction's portal cap.
 elastic.setTestBoard({
   rows: 4,
   cols: 5,
@@ -1088,7 +1135,6 @@ assert.ok(usualStripBand, 'usual strip must form one continuous quotient elastic
 assert.strictEqual(usualStripBand.solverSpace, 'quotient');
 assert.ok(usualStripBand.springs.some((spring) => spring.word.includes('15:3>19:0')),
   'a portal crossing at a glued endpoint remains part of the spring itinerary');
-assert.ok(usualStripBand.springs.some((spring) => spring.vertexEvent?.constructionBridge));
 usualStripBand.relaxationNotBefore = 0;
 for (let step = 0; step < 50; step += 1) {
   assert.strictEqual(
@@ -1150,11 +1196,12 @@ traversedStar.manifold = oldManifold;
 // Regression for portal-word intersection migrating through a normal vertex:
 // this reflected seam used to fail at macro step 65 and then fall back.
 const mixedGenerator = vertexAnalysis.generators[0];
-const mixedBand = elastic.makeQuotientElasticBandChain(elastic.makeHomologyCordChain(
+const mixedSurfaceChain = elastic.makeHomologyCordChain(
   mixedGenerator,
   elastic.homologyChainDisplayEntries(vertexAnalysis, mixedGenerator),
   vertexAnalysis
-), vertexAnalysis);
+);
+const mixedBand = elastic.makeQuotientElasticBandChain(mixedSurfaceChain, vertexAnalysis);
 assert.ok(mixedBand);
 const mixedInitialLength = elastic.quotientElasticBandLength(mixedBand);
 for (let index = 0; index < 120; index += 1) {
@@ -1165,7 +1212,16 @@ for (let index = 0; index < 120; index += 1) {
 }
 assert.strictEqual(mixedBand.fallbackToCellular, false);
 assert.strictEqual(elastic.validateQuotientElasticBand(mixedBand), true);
-assert.ok(elastic.quotientElasticBandLength(mixedBand) < mixedInitialLength * 0.3);
+assert.strictEqual(
+  mixedBand.initializationCertificate.expectedPortalSignature,
+  mixedBand.initialFreeHomotopySignature
+);
+assert.deepStrictEqual(
+  mixedBand.springs.flatMap((spring) => spring.word),
+  ['0:3>1:3'],
+  'near-boundary samples must not add geometrically inferred portals to the certified word'
+);
+assert.ok(elastic.quotientElasticBandLength(mixedBand) < mixedInitialLength * 0.6);
 
 // If one particle cannot be traced, the macro commits the other valid
 // particle transactions and leaves only the failed particle in place.
@@ -1294,6 +1350,54 @@ assert.strictEqual(removedBlocked.valid, true);
 assert.strictEqual(removedBlocked.blocked, true);
 assert.strictEqual(removedBlocked.point.tileIndex, 1);
 
+// Every H1 basis generator of the 15x15 genus-4 preset must survive the
+// certified cellular-to-quotient initialization. In particular, a1 ends at
+// a glued removed-region corner and a2 needs more than eight ordinary tile
+// chart transitions after its portal crossing.
+const genusFourEntry = require('../ramified_minigame_presets/presets.js').presets.find((entry) => (
+  entry.id === 'gomoku-m4-15x15'
+));
+const genusFourPayload = elastic.normalizeExportImportPayload(
+  elastic.materializeMinigamePresetForMosaic(
+    genusFourEntry,
+    require('../ramified_minigame_presets/gomoku_m4_15x15.preset.js'),
+    '2048'
+  )
+);
+elastic.setTestBoard(genusFourPayload);
+setSquareGeometry(15, 15);
+const genusFourAnalysis = calculator.analyzeBackgroundHomology();
+assert.strictEqual(genusFourAnalysis.group, 'Z^8');
+const genusFourBands = new Map();
+genusFourAnalysis.generators.forEach((generator) => {
+  const surfaceChain = elastic.makeHomologyCordChain(
+    generator,
+    elastic.homologyChainDisplayEntries(genusFourAnalysis, generator),
+    genusFourAnalysis
+  );
+  assert.ok(surfaceChain && surfaceChain.initializationCertificate.valid,
+    `${generator.id} must retain its cellular H1 certificate`);
+  const band = elastic.makeHomologyCordRuntimeChain(surfaceChain, genusFourAnalysis);
+  assert.ok(band, `${generator.id} must initialize on the genus-4 quotient`);
+  assert.strictEqual(surfaceChain.initializationFailureReason, '');
+  assert.strictEqual(band.initializationCertificate.expectedPortalSignature, band.initialFreeHomotopySignature);
+  assert.strictEqual(elastic.validateQuotientElasticBand(band), true);
+  genusFourBands.set(generator.id, band);
+});
+assert.strictEqual(genusFourBands.size, 8);
+assert.strictEqual(genusFourBands.get('a1').initialFreeHomotopySignature, '85:2>89:0');
+assert.strictEqual(genusFourBands.get('a2').initialFreeHomotopySignature, '150:2>164:0');
+['a1', 'a2'].forEach((generatorId) => {
+  const band = genusFourBands.get(generatorId);
+  for (let step = 0; step < 3; step += 1) {
+    assert.strictEqual(elastic.stepQuotientElasticBandMacro(band, {
+      distanceContraction: 0.08,
+      substeps: 4
+    }).resolved, true, `${generatorId} relaxation step ${step} remains valid`);
+    assert.strictEqual(elastic.validateQuotientElasticBand(band), true);
+  }
+});
+
 // The local-geometry debug chart unfolds only the clicked connected component.
 // Closed stars target 2pi, boundary stars target pi, and malformed branching
 // components are reported instead of being presented as a valid cone.
@@ -1371,8 +1475,14 @@ const sourceText = fs.readFileSync(path.join(__dirname, 'mosaic_calculator.js'),
 const htmlText = fs.readFileSync(path.join(__dirname, '..', 'mosaic_calculator.html'), 'utf8');
 assert.strictEqual(htmlText.includes('id="homology-cord-contraction-strength"'), false);
 assert.ok(htmlText.includes('id="homology-cord-relax-speed" min="0.1" max="10" step="0.1" value="10"'));
-assert.ok(htmlText.includes('js/mosaic_calculator.js?v=homology-local-chart-3'));
+assert.ok(htmlText.includes('js/mosaic_calculator.js?v=homology-local-chart-5'));
 assert.ok(htmlText.includes('id="homology-local-chart-card"'));
+assert.ok(htmlText.includes('id="homology-local-chart-wide"'));
+assert.ok(htmlText.includes('data-card-wide-button="#homology-local-chart-wide"'));
+assert.ok(htmlText.includes('data-card-wide-host="#homology-local-chart-wide-host"'));
+assert.ok(htmlText.includes('data-card-side-host="#homology-local-chart-side-host"'));
+assert.ok(sourceText.includes("refs.homologyLocalChartCard.dataset.cardWideState !== 'wide'"));
+assert.ok(sourceText.includes('window.CalculatorCards.syncWideCards(document)'));
 assert.ok(htmlText.includes('id="inspect-homology-local-vertex"'));
 const drawCordSource = sourceText.slice(
   sourceText.indexOf('function drawBackgroundHomologyCords'),

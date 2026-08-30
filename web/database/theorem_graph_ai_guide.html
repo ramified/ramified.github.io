@@ -395,7 +395,7 @@
 
         const arrowRules = unlabeled ? `Arrow policy:
 - Keep arrows visually minimal.
-- By default set "label": "" and "remark": "".
+- By default set "labels": [], "terms": [], and "remark": "".
 - Use an arrow only for a genuine mathematical dependency, proof dependency, specialization, example/test relation, or required prerequisite.
 - Add a label or remark only when the relation would otherwise be genuinely ambiguous.
 - Prefer fewer meaningful arrows to a densely connected graph.` : `Arrow policy:
@@ -420,7 +420,7 @@ ${topic}
 ${source ? `\nPrimary source:\n${source}\n` : ""}
 Output rules:
 - Return plain JSON only. Do not wrap it in markdown fences. Do not add commentary before or after the JSON.
-- Use schemaVersion 10.
+- Use schemaVersion 11.
 - Use at most ${maxNodes} nodes, ${maxArrows} arrows, and ${maxRefs} references.
 - The JSON must be suitable for Import / Export -> JSON text.
 - Use stable ASCII IDs for nodes and arrows, such as n1, n2, a1.
@@ -428,7 +428,7 @@ Output rules:
 - Include numeric x and y positions for every node.
 
 Calculator capabilities:
-- It supports references, MathJax, node colors, nested subgraphs, node types, and visible citation commands.
+- It supports references, MathJax, node colors, nested subgraphs, node types, repeatable arrow labels and terms, and visible citation commands.
 - Current node types: theorem, lemma, proposition, corollary, conjecture, definition, example, object, property, misc.
 - Use object nodes for mathematical objects and property nodes for properties; use theorem-style types when they fit better.
 - A node may include a small childGraph when that genuinely clarifies a local subproblem.
@@ -452,11 +452,13 @@ Color conventions:
 - Finished learning: color "#8b3a2a", fillColor "#fbefee".
 
 JSON fields to use:
-- schemaVersion: 10.
+- schemaVersion: 11.
 - title: graph title.
 - titleNode: id "__title__", type "title", label matching title.
 - nodes: each has id, type, label, details or theorem-style fields, citationKeys, color, fillColor, x, y. A node may include childGraph.
-- arrows: each has id, sourceId, targetId, label, remark, body, head, tail, level, endpointScale, curve, labelOffset, labelPosition, labelAlign, color.
+- arrows: each has id, sourceId, targetId, labels, terms, remark, body, head, tail, level, endpointScale, curve, and color.
+- arrow labels: labels is an array of {id, text, color, position, offset, align}; keep each text concise.
+- arrow terms: terms is an array of {id, label, type, text}; type is textbox, list, enumeration, or checkbox.
 - references: each has key, citeKey, title, author, year, rawBibtex or links when available.
 - view: include selectedId, layoutAvoidOverlap, layoutRunning, canvasHeight, canvasRatioLocked, and canvasAspectRatio.
 
@@ -464,7 +466,7 @@ ${backslashRules}
 
 Final validation checklist:
 - The response parses as JSON.
-- schemaVersion is 10.
+- schemaVersion is 11.
 - Node, arrow, and reference limits are respected.
 - Every node has x and y.
 - Every arrow endpoint references an existing node.

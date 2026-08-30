@@ -229,9 +229,13 @@
   }
 
   function relationForConversion(sourceFamily, target) {
+    if (sourceFamily === 'identity') return 'identity';
     if (target === 'symmetric') return sourceFamily === 'braid' ? 'braid-to-symmetric' : 'coxeter-multiplication';
     if (target === 'braid') return 'braid-free-cancellation';
-    if (target === 'hecke') return sourceFamily === 'kl' ? 'kl-generator-expansion' : 'braid-to-hecke';
+    if (target === 'hecke') {
+      if (sourceFamily === 'kl') return 'kl-generator-expansion';
+      return sourceFamily === 'hecke' ? 'hecke-multiplication' : 'braid-to-hecke';
+    }
     if (target === 'tl') return sourceFamily === 'kl' ? 'kl-through-hecke-to-tl' : `${sourceFamily}-to-tl`;
     if (target === 'burau') return sourceFamily === 'braid' ? 'burau-generator' : 'tl-to-burau';
     return 'basis-expansion';
@@ -239,6 +243,7 @@
 
   function annotationForRelation(relationId) {
     const annotations = {
+      identity: '\\text{identity}',
       'coxeter-multiplication': '\\text{Coxeter multiplication}',
       'braid-to-symmetric': '\\text{forget crossings}',
       'braid-free-cancellation': '\\sigma_i\\sigma_i^{-1}=1',
@@ -254,6 +259,7 @@
       'tl-to-burau': 'e_i=v^{-1}(I-\\rho(\\sigma_i))',
       'hecke-length-increase': 'H_wH_i=H_{ws_i}\\quad(\\ell(ws_i)>\\ell(w))',
       'hecke-length-decrease': 'H_wH_i=H_{ws_i}+(v^{-1}-v)H_w\\quad(\\ell(ws_i)<\\ell(w))',
+      'hecke-multiplication': '\\text{Hecke multiplication}',
       'hecke-to-tl': 'H_i=v^{-1}-e_i',
       'hecke-inverse': 'H_i^{-1}=H_i+v-v^{-1}',
       'tl-diagram-stacking': 'D_1D_2=\\delta^kD',
@@ -277,19 +283,51 @@
     return basis === 'vector' ? 'vector-basis' : 'matrix-unit-basis';
   }
 
+  function semanticWord(records, sourceFamily) {
+    return {
+      kind: 'word',
+      family: sourceFamily,
+      records: records.map((record) => ({ ...record }))
+    };
+  }
+
+  function semanticMappedProduct(records, sourceFamily, target) {
+    return {
+      kind: 'mapped-product',
+      sourceFamily,
+      target,
+      records: records.map((record) => ({ ...record }))
+    };
+  }
+
+  function semanticLinearCombination(combination, basis) {
+    return {
+      kind: 'linear-combination',
+      basis,
+      value: combination.toJSON()
+    };
+  }
+
   function createTrace(records, sourceFamily, target, basis, result, intermediate) {
     const relationId = relationForConversion(sourceFamily, target);
     const trace = [{
       lhsLatex: sourceWordLatex(records),
       rhsLatex: mappedWordLatex(records, sourceFamily, target),
       relationId,
-      annotationLatex: annotationForRelation(relationId)
+      annotationLatex: annotationForRelation(relationId),
+      semantic: {
+        lhs: semanticWord(records, sourceFamily),
+        rhs: semanticMappedProduct(records, sourceFamily, target)
+      }
     }];
     if (intermediate) {
       trace.push({
         rhsLatex: formatLinearCombinationLatex(intermediate, 'standard'),
         relationId: 'standard-basis-expansion',
-        annotationLatex: annotationForRelation('standard-basis-expansion')
+        annotationLatex: annotationForRelation('standard-basis-expansion'),
+        semantic: {
+          rhs: semanticLinearCombination(intermediate, 'standard')
+        }
       });
     }
     const lastRelation = finalRelation(target, basis);
@@ -297,7 +335,10 @@
       rhsLatex: formatLinearCombinationLatex(result, basis),
       relationId: lastRelation,
       annotationLatex: annotationForRelation(lastRelation),
-      final: true
+      final: true,
+      semantic: {
+        rhs: semanticLinearCombination(result, basis)
+      }
     });
     return trace;
   }

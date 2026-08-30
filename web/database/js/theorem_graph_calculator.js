@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const SCHEMA_VERSION = 10;
+  const SCHEMA_VERSION = 11;
   const DEFAULT_GRAPH_TITLE = '';
   const PRESET_FOLDER_URL = 'theorem_graph_presets/';
   const DEFAULT_PRESET_KEY = 'maintenance_tracker';
@@ -102,7 +102,7 @@
     'vy',
     'fixed'
   ]);
-  const KNOWN_ARROW_KEYS = new Set(['extra', 'id', 'sourceId', 'targetId', 'label', 'remark', 'style', 'body', 'head', 'tail', 'level', 'endpointScale', 'curve', 'labelOffset', 'labelPosition', 'labelAlign', 'color']);
+  const KNOWN_ARROW_KEYS = new Set(['extra', 'id', 'sourceId', 'targetId', 'label', 'labels', 'terms', 'remark', 'style', 'body', 'head', 'tail', 'level', 'endpointScale', 'curve', 'labelOffset', 'labelPosition', 'labelAlign', 'color']);
   const KNOWN_REFERENCE_KEYS = new Set(['extra', 'key', 'author', 'title', 'year', 'citeKey', 'details', 'url', 'source', 'rawBibtex', 'links']);
   const PAPER_DIAGRAM_NODE_KEYS = new Set(['id', 'kind', 'label', 'name', 'weight', 'color', 'statement', 'plain', 'section', 'external', 'ref']);
   const PAPER_DIAGRAM_EDGE_KEYS = new Set(['from', 'to', 'type']);
@@ -159,6 +159,7 @@
   const ARROW_ENDPOINT_SCALE_MAX = 2;
   const ARROW_LABEL_POSITION_DEFAULT = 0.5;
   const ARROW_LABEL_ALIGN_DEFAULT = 'left';
+  const ARROW_LABEL_COLOR_DEFAULT = '#1a1612';
   const ARROW_LABEL_ALIGNS = new Set(['left', 'center-clear', 'center-over', 'right']);
   const ARROW_BOUNDARY_GAP_DEFAULT = 10;
   const ARROW_BOUNDARY_GAP_MIN = 0;
@@ -240,6 +241,8 @@
     editingReferenceKey: null,
     selectedNodeId: null,
     selectedArrowId: null,
+    activeArrowLabelId: null,
+    expandedArrowLabelKeys: new Set(),
     connectMode: false,
     connectSourceId: null,
     layoutRunning: false,
@@ -391,7 +394,11 @@
     refs.arrowEditor = $('arrow-editor');
     refs.arrowSource = $('arrow-source');
     refs.arrowTarget = $('arrow-target');
-    refs.arrowLabel = $('arrow-label');
+    refs.arrowLabelList = $('arrow-label-list');
+    refs.arrowTermName = $('arrow-term-name');
+    refs.arrowTermType = $('arrow-term-type');
+    refs.addArrowTerm = $('add-arrow-term');
+    refs.arrowTermList = $('arrow-term-list');
     refs.arrowRemark = $('arrow-remark');
     refs.arrowCitationList = $('arrow-citation-list');
     refs.arrowBodyPicker = $('arrow-body-picker');
@@ -402,10 +409,6 @@
     refs.arrowEndpointScale = $('arrow-endpoint-scale');
     refs.arrowEndpointScaleValue = $('arrow-endpoint-scale-value');
     refs.arrowCurve = $('arrow-curve');
-    refs.arrowLabelOffset = $('arrow-label-offset');
-    refs.arrowLabelPosition = $('arrow-label-position');
-    refs.arrowLabelPositionValue = $('arrow-label-position-value');
-    refs.arrowLabelAlign = $('arrow-label-align');
     refs.arrowColor = $('arrow-color');
     refs.detailUpdate = $('detail-update');
     refs.detailCancel = $('detail-cancel');
@@ -635,6 +638,14 @@
 
     if (refs.detailUpdate) refs.detailUpdate.addEventListener('click', () => applyDetailUpdate({ manual: true }));
     if (refs.detailCancel) refs.detailCancel.addEventListener('click', cancelDetailEdit);
+    if (refs.addArrowTerm) refs.addArrowTerm.addEventListener('click', addArrowTermFromControls);
+    if (refs.arrowTermName) {
+      refs.arrowTermName.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        addArrowTermFromControls();
+      });
+    }
     window.addEventListener('beforeunload', handleBeforeUnload);
     bindLatexDetailPreviewEvents();
     bindAutoResizeTextareas();
@@ -645,13 +656,10 @@
       refs.nodeFillColor,
       refs.arrowSource,
       refs.arrowTarget,
-      refs.arrowLabel,
       refs.arrowRemark,
       refs.arrowLevel,
       refs.arrowEndpointScale,
       refs.arrowCurve,
-      refs.arrowLabelOffset,
-      refs.arrowLabelPosition,
       refs.arrowColor
     ].forEach((control) => {
       if (!control) return;
@@ -660,16 +668,6 @@
         control.addEventListener('change', autoApplyDetailUpdate);
       }
     });
-    if (refs.arrowLabelAlign) {
-      refs.arrowLabelAlign.querySelectorAll('[data-arrow-label-align]').forEach((button) => {
-        button.addEventListener('click', () => {
-          const align = normalizeArrowLabelAlign(button.dataset.arrowLabelAlign);
-          setArrowLabelAlignControl(align, false);
-          if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = String(defaultArrowLabelOffset(align));
-          autoApplyDetailUpdate();
-        });
-      });
-    }
     document.querySelectorAll('[data-color-target]').forEach((button) => {
       button.addEventListener('click', () => {
         const input = document.getElementById(button.dataset.colorTarget || '');
@@ -865,40 +863,6 @@
     refs.arrowEndpointScaleValue.textContent = `${normalizeArrowEndpointScale(value).toFixed(2)}x`;
   }
 
-  function setArrowLabelPositionControl(value, disabled = false) {
-    const position = normalizeArrowLabelPosition(value);
-    if (refs.arrowLabelPosition) {
-      refs.arrowLabelPosition.value = position.toFixed(2);
-      refs.arrowLabelPosition.disabled = !!disabled;
-    }
-    syncArrowLabelPositionValue(position);
-  }
-
-  function getArrowLabelPositionValue(fallback = ARROW_LABEL_POSITION_DEFAULT) {
-    return normalizeArrowLabelPosition(refs.arrowLabelPosition ? refs.arrowLabelPosition.value : fallback);
-  }
-
-  function syncArrowLabelPositionValue(value) {
-    if (!refs.arrowLabelPositionValue) return;
-    refs.arrowLabelPositionValue.textContent = `${Math.round(normalizeArrowLabelPosition(value) * 100)}%`;
-  }
-
-  function setArrowLabelAlignControl(value, disabled = false) {
-    const align = normalizeArrowLabelAlign(value);
-    if (!refs.arrowLabelAlign) return;
-    refs.arrowLabelAlign.dataset.value = align;
-    refs.arrowLabelAlign.querySelectorAll('[data-arrow-label-align]').forEach((button) => {
-      const selected = button.dataset.arrowLabelAlign === align;
-      button.classList.toggle('is-selected', selected);
-      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
-      button.disabled = !!disabled;
-    });
-  }
-
-  function getArrowLabelAlignValue(fallback = ARROW_LABEL_ALIGN_DEFAULT) {
-    return normalizeArrowLabelAlign(refs.arrowLabelAlign ? refs.arrowLabelAlign.dataset.value : fallback);
-  }
-
   function syncArrowPartPickers(arrow, disabled = false) {
     const style = arrowStyleFromArrow(arrow || {});
     setArrowPartPickerValue('body', style.body, disabled);
@@ -1004,6 +968,7 @@
     const textareas = [
       ...(refs.nodeTypeDetailList ? refs.nodeTypeDetailList.querySelectorAll('textarea.theorem-textarea') : []),
       ...(refs.nodeMiscDetailList ? refs.nodeMiscDetailList.querySelectorAll('textarea.theorem-textarea') : []),
+      ...(refs.arrowTermList ? refs.arrowTermList.querySelectorAll('textarea.theorem-textarea') : []),
       refs.arrowRemark,
       refs.referenceEditRaw,
       ...(refs.referenceEditDetailList ? refs.referenceEditDetailList.querySelectorAll('textarea.theorem-textarea') : [])
@@ -1337,6 +1302,7 @@
     state.titleEditorActive = true;
     state.selectedNodeId = TITLE_NODE_ID;
     state.selectedArrowId = null;
+    state.activeArrowLabelId = null;
     state.detailPreview = null;
     state.activeLatexDetailField = null;
     resetDetailEditBaseline();
@@ -1436,17 +1402,13 @@
     };
     const parts = arrowPartsFromSource(source);
     const hasExplicitLevel = Object.prototype.hasOwnProperty.call(source, 'level');
-    const hasExplicitLabelAlign = Object.prototype.hasOwnProperty.call(source, 'labelAlign');
-    const hasExplicitLabelOffset = Object.prototype.hasOwnProperty.call(source, 'labelOffset');
-    const labelAlign = normalizeArrowLabelAlign(source.labelAlign);
-    const legacyDefaultOffset = !hasExplicitLabelAlign && finiteNumber(source.labelOffset, 0) === 0;
-    const labelOffset = hasExplicitLabelOffset && !legacyDefaultOffset ? source.labelOffset : defaultArrowLabelOffset(labelAlign);
     return {
       extra,
       id: cleanId(source.id) || nextArrowId(),
       sourceId: cleanId(source.sourceId),
       targetId: cleanId(source.targetId),
-      label: cleanString(source.label),
+      labels: normalizeArrowLabels(source),
+      terms: normalizeArrowTerms(source),
       remark: cleanString(source.remark),
       body: parts.body,
       head: parts.head,
@@ -1454,9 +1416,6 @@
       level: normalizeArrowLevel(parts.migratedLevel || (hasExplicitLevel ? source.level : parts.level)),
       endpointScale: normalizeArrowEndpointScale(source.endpointScale),
       curve: clamp(finiteNumber(source.curve, 0), -160, 160),
-      labelOffset: arrowLabelAlignLocksOffset(labelAlign) ? 0 : clamp(finiteNumber(labelOffset, defaultArrowLabelOffset(labelAlign)), -120, 120),
-      labelPosition: normalizeArrowLabelPosition(source.labelPosition),
-      labelAlign,
       color: normalizeColor(source.color, '#5f574e')
     };
   }
@@ -1555,6 +1514,68 @@
       if (details.length) return details;
     }
     return normalizeType(type) === 'misc' ? legacyFieldsToMiscDetails(source) : [];
+  }
+
+  function normalizeArrowLabels(source = {}) {
+    const hasCanonicalLabels = Array.isArray(source.labels);
+    const rawLabels = hasCanonicalLabels
+      ? source.labels
+      : (cleanString(source.label) ? [{
+          id: 'label-1',
+          text: source.label,
+          color: normalizeColor(source.color, '#5f574e'),
+          position: source.labelPosition,
+          offset: source.labelOffset,
+          align: source.labelAlign,
+          legacy: true
+        }] : []);
+    const used = new Set();
+    return rawLabels.map((entry, index) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+      const align = normalizeArrowLabelAlign(entry.align ?? entry.labelAlign);
+      const hasExplicitAlign = Object.prototype.hasOwnProperty.call(entry, 'align')
+        || Object.prototype.hasOwnProperty.call(entry, 'labelAlign');
+      const hasExplicitOffset = Object.prototype.hasOwnProperty.call(entry, 'offset')
+        || Object.prototype.hasOwnProperty.call(entry, 'labelOffset');
+      const rawOffset = Object.prototype.hasOwnProperty.call(entry, 'offset') ? entry.offset : entry.labelOffset;
+      const legacyDefaultOffset = entry.legacy && !hasExplicitAlign && finiteNumber(rawOffset, 0) === 0;
+      const offset = hasExplicitOffset && !legacyDefaultOffset ? rawOffset : defaultArrowLabelOffset(align);
+      return {
+        id: uniqueDetailId(cleanDetailId(entry.id || `label-${index + 1}`), used),
+        text: cleanString(Object.prototype.hasOwnProperty.call(entry, 'text') ? entry.text : entry.label),
+        color: normalizeColor(entry.color, entry.legacy ? normalizeColor(source.color, '#5f574e') : ARROW_LABEL_COLOR_DEFAULT),
+        position: normalizeArrowLabelPosition(Object.prototype.hasOwnProperty.call(entry, 'position') ? entry.position : entry.labelPosition),
+        offset: arrowLabelAlignLocksOffset(align)
+          ? 0
+          : clamp(finiteNumber(offset, defaultArrowLabelOffset(align)), -120, 120),
+        align
+      };
+    }).filter(Boolean);
+  }
+
+  function normalizeArrowTerms(source = {}) {
+    return normalizeMiscDetails({ details: Array.isArray(source.terms) ? source.terms : [] }, 'theorem');
+  }
+
+  function cloneArrowLabels(labels) {
+    return normalizeArrowLabels({ labels: Array.isArray(labels) ? labels : [] });
+  }
+
+  function cleanArrowLabelsForExport(labels) {
+    return cloneArrowLabels(labels).filter((label) => label.text);
+  }
+
+  function firstArrowLabel(arrow) {
+    return (Array.isArray(arrow?.labels) ? arrow.labels : []).find((label) => cleanString(label.text)) || null;
+  }
+
+  function arrowHasVisibleLabels(arrow) {
+    return !!firstArrowLabel(arrow) || !!cleanString(arrow?.label);
+  }
+
+  function arrowLabelById(arrow, labelId) {
+    const id = cleanDetailId(labelId);
+    return Array.isArray(arrow?.labels) ? arrow.labels.find((label) => label.id === id) || null : null;
   }
 
   function nodeTypeRowsForType(type) {
@@ -1672,6 +1693,10 @@
 
   function miscDetailFieldKey(detailId) {
     return `misc:${cleanDetailId(detailId)}`;
+  }
+
+  function arrowTermFieldKey(termId) {
+    return `arrow-term:${cleanDetailId(termId)}`;
   }
 
   function uniqueDetailId(base, used) {
@@ -1948,6 +1973,8 @@
     state.selectedReferenceKeys = new Set(Array.isArray(snapshot.selectedReferenceKeys) ? snapshot.selectedReferenceKeys : []);
     state.selectedNodeId = cleanId(snapshot.selectedNodeId);
     state.selectedArrowId = cleanId(snapshot.selectedArrowId);
+    state.activeArrowLabelId = null;
+    state.expandedArrowLabelKeys.clear();
     state.titleEditorActive = snapshot.titleEditorActive === true;
     state.layoutAvoidOverlap = snapshot.layoutAvoidOverlap !== false;
     state.canvasHeight = normalizeCanvasHeight(snapshot.canvasHeight, state.canvasHeight);
@@ -2058,6 +2085,8 @@
     state.titleEditorActive = false;
     state.selectedNodeId = null;
     state.selectedArrowId = null;
+    state.activeArrowLabelId = null;
+    state.expandedArrowLabelKeys.clear();
     state.detailPreview = null;
     state.activeLatexDetailField = null;
     resetDetailEditBaseline();
@@ -2105,9 +2134,9 @@
       drawArrowBody(ctx, model, style, metrics);
       drawArrowEndpoint(ctx, style.tail, model.start, quadraticTangentAngle(model.start, model.control, model.end, 0) + Math.PI, metrics, 'tail');
       drawArrowEndpoint(ctx, style.head, model.end, quadraticTangentAngle(model.start, model.control, model.end, 1), metrics, 'head');
-      if (arrow.label) {
-        drawArrowLabelVacancy(ctx, preview, model);
-      }
+      (Array.isArray(preview.labels) ? preview.labels : []).forEach((label) => {
+        if (label.text) drawArrowLabelVacancy(ctx, arrow.id, label, model);
+      });
       ctx.restore();
     });
   }
@@ -2358,11 +2387,11 @@
     }
   }
 
-  function drawArrowLabelVacancy(ctx, arrow, model) {
-    if (normalizeArrowLabelAlign(arrow.labelAlign) !== 'center-clear') return;
-    const geometry = arrowLabelGeometry(ctx, arrow, model);
+  function drawArrowLabelVacancy(ctx, arrowId, label, model) {
+    if (normalizeArrowLabelAlign(label.align) !== 'center-clear') return;
+    const geometry = arrowLabelGeometry(ctx, label, model);
     if (!geometry) return;
-    const bounds = arrowLabelElementBounds(arrow.id, geometry);
+    const bounds = arrowLabelElementBounds(arrowId, label.id, geometry);
     const pad = 2;
     ctx.save();
     ctx.shadowBlur = 0;
@@ -2370,8 +2399,10 @@
     ctx.restore();
   }
 
-  function arrowLabelElementBounds(arrowId, fallback) {
-    const element = refs.arrowLabelLayer ? refs.arrowLabelLayer.querySelector(`[data-arrow-id="${cssEscape(arrowId)}"]`) : null;
+  function arrowLabelElementBounds(arrowId, labelId, fallback) {
+    const element = refs.arrowLabelLayer
+      ? refs.arrowLabelLayer.querySelector(`[data-arrow-id="${cssEscape(arrowId)}"][data-arrow-label-id="${cssEscape(labelId)}"]`)
+      : null;
     const rect = element ? element.getBoundingClientRect() : null;
     const layerRect = refs.arrowLabelLayer ? refs.arrowLabelLayer.getBoundingClientRect() : null;
     if (rect && layerRect && rect.width && rect.height) {
@@ -2385,9 +2416,9 @@
     return fallback.bounds;
   }
 
-  function arrowLabelGeometry(ctx, arrow, model) {
-    if (!arrow || !model || !arrow.label) return null;
-    const text = truncateText(arrow.label, 28);
+  function arrowLabelGeometry(ctx, label, model) {
+    if (!label || !model || !label.text) return null;
+    const text = truncateText(label.text, 28);
     if (!text) return null;
     ctx.save();
     ctx.font = arrowLabelFont();
@@ -2395,11 +2426,11 @@
     ctx.restore();
     const width = Math.max(1, metrics.width);
     const height = 16;
-    const align = normalizeArrowLabelAlign(arrow.labelAlign);
-    const t = normalizeArrowLabelPosition(arrow.labelPosition);
+    const align = normalizeArrowLabelAlign(label.align);
+    const t = normalizeArrowLabelPosition(label.position);
     const point = quadraticPoint(model.start, model.control, model.end, t);
     const normal = quadraticNormal(model.start, model.control, model.end, t);
-    const offset = -finiteNumber(arrow.labelOffset, 0);
+    const offset = -finiteNumber(label.offset, 0);
     const anchor = {
       x: point.x + normal.x * offset,
       y: point.y + normal.y * offset
@@ -2612,39 +2643,46 @@
 
   function renderArrowLabelLayer() {
     if (!refs.arrowLabelLayer || !refs.canvas) return;
-    const existing = new Map(Array.from(refs.arrowLabelLayer.querySelectorAll('[data-arrow-id]')).map((element) => [element.dataset.arrowId, element]));
+    const existing = new Map(Array.from(refs.arrowLabelLayer.querySelectorAll('[data-arrow-id][data-arrow-label-id]')).map((element) => [
+      arrowLabelEditorKey(element.dataset.arrowId, element.dataset.arrowLabelId),
+      element
+    ]));
     const rendered = [];
     const ctx = refs.canvas.getContext('2d');
     const groups = parallelArrowGroups();
     state.arrows.forEach((arrow) => {
-      if (!arrow.label) return;
       const model = arrowModelForPointer(arrow, groups);
       if (!model) return;
       const preview = state.selectedArrowId === arrow.id ? currentArrowPreview(arrow) : arrow;
-      const geometry = arrowLabelGeometry(ctx, preview, model);
-      if (!geometry) return;
-      let element = existing.get(arrow.id);
-      if (!element) {
-        element = document.createElement('button');
-        element.type = 'button';
-        element.className = 'theorem-arrow-label';
-        element.dataset.arrowId = arrow.id;
-        refs.arrowLabelLayer.appendChild(element);
-      }
-      element.classList.toggle('is-selected', state.selectedArrowId === arrow.id);
-      element.style.left = `${geometry.anchor.x}px`;
-      element.style.top = `${geometry.anchor.y}px`;
-      element.style.setProperty('--arrow-label-color', normalizeColor(preview.color, '#5f574e'));
-      element.setAttribute('aria-label', `Arrow label: ${plainLabel(arrow.label)}`);
-      if (element.dataset.sourceLabel !== arrow.label) {
-        element.textContent = arrow.label;
-        element.dataset.sourceLabel = arrow.label;
-        element.dataset.needsTypeset = 'true';
-      }
-      rendered.push(arrow.id);
+      (Array.isArray(preview.labels) ? preview.labels : []).forEach((label) => {
+        if (!label.text) return;
+        const geometry = arrowLabelGeometry(ctx, label, model);
+        if (!geometry) return;
+        const key = arrowLabelEditorKey(arrow.id, label.id);
+        let element = existing.get(key);
+        if (!element) {
+          element = document.createElement('button');
+          element.type = 'button';
+          element.className = 'theorem-arrow-label';
+          element.dataset.arrowId = arrow.id;
+          element.dataset.arrowLabelId = label.id;
+          refs.arrowLabelLayer.appendChild(element);
+        }
+        element.classList.toggle('is-selected', state.selectedArrowId === arrow.id && state.activeArrowLabelId === label.id);
+        element.style.left = `${geometry.anchor.x}px`;
+        element.style.top = `${geometry.anchor.y}px`;
+        element.style.setProperty('--arrow-label-color', normalizeColor(label.color, ARROW_LABEL_COLOR_DEFAULT));
+        element.setAttribute('aria-label', `Arrow label: ${plainLabel(label.text)}`);
+        if (element.dataset.sourceLabel !== label.text) {
+          element.textContent = label.text;
+          element.dataset.sourceLabel = label.text;
+          element.dataset.needsTypeset = 'true';
+        }
+        rendered.push(key);
+      });
     });
-    existing.forEach((element, id) => {
-      if (!rendered.includes(id)) element.remove();
+    existing.forEach((element, key) => {
+      if (!rendered.includes(key)) element.remove();
     });
     typesetNodeLabels();
   }
@@ -2910,10 +2948,11 @@
 
     const labelHit = hitArrowLabel(point);
     if (labelHit) {
-      selectArrow(labelHit.arrow.id);
+      selectArrow(labelHit.arrow.id, labelHit.label.id);
       state.drag = {
         kind: 'arrow-label',
-        arrowId: labelHit.arrow.id
+        arrowId: labelHit.arrow.id,
+        labelId: labelHit.label.id
       };
       try {
         refs.canvas.setPointerCapture(event.pointerId);
@@ -2956,11 +2995,13 @@
     event.preventDefault();
     event.stopPropagation();
     const arrow = findArrow(target.dataset.arrowId);
-    if (!arrow) return;
-    selectArrow(arrow.id);
+    const label = arrowLabelById(arrow, target.dataset.arrowLabelId);
+    if (!arrow || !label) return;
+    selectArrow(arrow.id, label.id);
     state.drag = {
       kind: 'arrow-label',
-      arrowId: arrow.id
+      arrowId: arrow.id,
+      labelId: label.id
     };
     try {
       target.setPointerCapture(event.pointerId);
@@ -3421,20 +3462,24 @@
     const groups = parallelArrowGroups();
     for (let i = state.arrows.length - 1; i >= 0; i -= 1) {
       const arrow = state.arrows[i];
-      if (!arrow.label) continue;
       const model = arrowModelForPointer(arrow, groups);
       if (!model) continue;
       const preview = state.selectedArrowId === arrow.id ? currentArrowPreview(arrow) : arrow;
-      const geometry = arrowLabelGeometry(ctx, preview, model);
-      if (!geometry) continue;
-      const bounds = arrowLabelElementBounds(arrow.id, geometry);
-      if (
-        point.x >= bounds.x
-        && point.x <= bounds.x + bounds.width
-        && point.y >= bounds.y
-        && point.y <= bounds.y + bounds.height
-      ) {
-        return { arrow, geometry, model };
+      const labels = Array.isArray(preview.labels) ? preview.labels : [];
+      for (let labelIndex = labels.length - 1; labelIndex >= 0; labelIndex -= 1) {
+        const label = labels[labelIndex];
+        if (!label.text) continue;
+        const geometry = arrowLabelGeometry(ctx, label, model);
+        if (!geometry) continue;
+        const bounds = arrowLabelElementBounds(arrow.id, label.id, geometry);
+        if (
+          point.x >= bounds.x
+          && point.x <= bounds.x + bounds.width
+          && point.y >= bounds.y
+          && point.y <= bounds.y + bounds.height
+        ) {
+          return { arrow, label, geometry, model };
+        }
       }
     }
     return null;
@@ -3453,7 +3498,8 @@
 
   function updateDraggedArrowLabel(point) {
     const arrow = findArrow(state.drag.arrowId);
-    if (!arrow || !refs.canvas) return;
+    const label = arrowLabelById(arrow, state.drag.labelId);
+    if (!arrow || !label || !refs.canvas) return;
     const model = arrowModelForPointer(arrow);
     if (!model) return;
     if (!state.drag.undoCaptured) {
@@ -3462,15 +3508,20 @@
     }
     const closest = closestPointOnQuadratic(point, model);
     const normal = quadraticNormal(model.start, model.control, model.end, closest.t);
-    const align = normalizeArrowLabelAlign(arrow.labelAlign);
+    const align = normalizeArrowLabelAlign(label.align);
     const dx = point.x - closest.point.x;
     const dy = point.y - closest.point.y;
-    arrow.labelPosition = normalizeArrowLabelPosition(closest.t);
-    arrow.labelOffset = arrowLabelAlignLocksOffset(align)
+    label.position = normalizeArrowLabelPosition(closest.t);
+    label.offset = arrowLabelAlignLocksOffset(align)
       ? 0
       : clamp(-(dx * normal.x + dy * normal.y), -120, 120);
-    setArrowLabelPositionControl(arrow.labelPosition, false);
-    if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = String(roundNumber(arrow.labelOffset));
+    const row = refs.arrowLabelList?.querySelector(`[data-arrow-label-id="${cssEscape(label.id)}"]`);
+    const position = row?.querySelector('[data-arrow-label-role="position"]');
+    const positionValue = row?.querySelector('[data-arrow-label-position-value]');
+    const offset = row?.querySelector('[data-arrow-label-role="offset"]');
+    if (position) position.value = label.position.toFixed(2);
+    if (positionValue) positionValue.textContent = `${Math.round(label.position * 100)}%`;
+    if (offset) offset.value = String(roundNumber(label.offset));
     markExportDirty();
     renderCanvas();
   }
@@ -3656,6 +3707,8 @@
     state.titleEditorActive = false;
     state.selectedNodeId = null;
     state.selectedArrowId = null;
+    state.activeArrowLabelId = null;
+    state.expandedArrowLabelKeys.clear();
     state.detailPreview = null;
     state.activeLatexDetailField = null;
     resetDetailEditBaseline();
@@ -3721,16 +3774,20 @@
     state.titleEditorActive = false;
     state.selectedNodeId = id;
     state.selectedArrowId = null;
+    state.activeArrowLabelId = null;
     state.detailPreview = null;
     state.activeLatexDetailField = null;
     resetDetailEditBaseline();
     openNodeArrowCard();
   }
 
-  function selectArrow(id) {
+  function selectArrow(id, labelId = '') {
     commitCurrentDetailBeforeSelectionChange('arrow', id);
+    if (state.selectedArrowId !== id) state.expandedArrowLabelKeys.clear();
     state.titleEditorActive = false;
     state.selectedArrowId = id;
+    state.activeArrowLabelId = cleanDetailId(labelId) || null;
+    if (state.activeArrowLabelId) state.expandedArrowLabelKeys.add(arrowLabelEditorKey(id, state.activeArrowLabelId));
     state.selectedNodeId = null;
     state.detailPreview = null;
     state.activeLatexDetailField = null;
@@ -3743,6 +3800,8 @@
     state.titleEditorActive = false;
     state.selectedNodeId = null;
     state.selectedArrowId = null;
+    state.activeArrowLabelId = null;
+    state.expandedArrowLabelKeys.clear();
     state.detailPreview = null;
     state.detailEditBaseline = null;
     state.activeLatexDetailField = null;
@@ -3798,6 +3857,8 @@
     state.titleEditorActive = false;
     state.selectedNodeId = null;
     state.selectedArrowId = null;
+    state.activeArrowLabelId = null;
+    state.expandedArrowLabelKeys.clear();
     state.detailEditBaseline = null;
     state.activeLatexDetailField = null;
     state.connectSourceId = null;
@@ -4015,7 +4076,7 @@
       : body === 'dotted'
         ? state.layoutDottedSpringScale
         : 100;
-    const labelScale = cleanString(arrow.label) ? state.layoutLabelSpringScale : 100;
+    const labelScale = arrowHasVisibleLabels(arrow) ? state.layoutLabelSpringScale : 100;
     return (normalizeLayoutSpringStrength(state.layoutSpringStrength) / 1000)
       * (normalizeLayoutSpringScale(bodyScale) / 100)
       * (normalizeLayoutSpringScale(labelScale) / 100);
@@ -4026,7 +4087,7 @@
     let ideal = normalizeLayoutIdealDistance(state.layoutIdealDistance);
     if (body === 'dashed') ideal += normalizeLayoutIdealBonus(state.layoutDashedIdealBonus);
     if (body === 'dotted') ideal += normalizeLayoutIdealBonus(state.layoutDottedIdealBonus);
-    if (cleanString(arrow.label)) ideal += normalizeLayoutIdealBonus(state.layoutLabelIdealBonus);
+    if (arrowHasVisibleLabels(arrow)) ideal += normalizeLayoutIdealBonus(state.layoutLabelIdealBonus);
     return normalizeLayoutIdealDistance(ideal);
   }
 
@@ -4258,18 +4319,17 @@
     [
       refs.arrowSource,
       refs.arrowTarget,
-      refs.arrowLabel,
       refs.arrowRemark,
       refs.arrowLevel,
       refs.arrowEndpointScale,
       refs.arrowCurve,
-      refs.arrowLabelOffset,
-      refs.arrowLabelPosition,
-      refs.arrowColor
+      refs.arrowColor,
+      refs.arrowTermName,
+      refs.arrowTermType,
+      refs.addArrowTerm
     ].forEach((control) => {
       if (control) control.disabled = !arrow;
     });
-    setArrowLabelAlignControl(arrow ? arrow.labelAlign : ARROW_LABEL_ALIGN_DEFAULT, !arrow);
     if (refs.detailUpdate) refs.detailUpdate.disabled = !(node || arrow);
     if (refs.detailCancel) refs.detailCancel.disabled = !(node || arrow);
     if (refs.nodeExport) {
@@ -4285,16 +4345,14 @@
       if (refs.nodeColor) refs.nodeColor.value = DEFAULT_NODE_STROKE;
       if (refs.nodeFillColor) refs.nodeFillColor.value = DEFAULT_NODE_FILL;
       populateArrowParentSelects(arrow);
-      if (refs.arrowLabel) refs.arrowLabel.value = arrow ? (arrow.label || '') : '';
+      renderArrowLabelFields(arrow);
+      renderArrowTermFields(arrow);
       if (refs.arrowRemark) refs.arrowRemark.value = arrow ? (arrow.remark || '') : '';
       renderArrowCitationRows(arrow);
       syncArrowPartPickers(arrow || null, !arrow);
       setArrowLevelControl(arrow ? arrow.level : ARROW_LEVEL_DEFAULT, !arrow);
       setArrowEndpointScaleControl(arrow ? arrow.endpointScale : ARROW_ENDPOINT_SCALE_DEFAULT, !arrow);
       if (refs.arrowCurve) refs.arrowCurve.value = arrow ? String(roundNumber(arrow.curve || 0)) : '0';
-      if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = arrow ? String(roundNumber(arrowLabelAlignLocksOffset(arrow.labelAlign) ? 0 : (arrow.labelOffset || 0))) : '0';
-      setArrowLabelPositionControl(arrow ? arrow.labelPosition : ARROW_LABEL_POSITION_DEFAULT, !arrow);
-      setArrowLabelAlignControl(arrow ? arrow.labelAlign : ARROW_LABEL_ALIGN_DEFAULT, !arrow);
       if (refs.arrowColor) refs.arrowColor.value = arrow ? normalizeColor(arrow.color, '#5f574e') : '#5f574e';
       autoResizeDetailTextareas();
       syncLatexDetailFields();
@@ -4308,19 +4366,506 @@
     if (refs.nodeColor) refs.nodeColor.value = normalizeColor(node.color, (NODE_TYPES[node.type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).stroke);
     if (refs.nodeFillColor) refs.nodeFillColor.value = normalizeNodeFillColor(node.fillColor, (NODE_TYPES[node.type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).fill);
     populateArrowParentSelects(null);
-    if (refs.arrowLabel) refs.arrowLabel.value = '';
+    renderArrowLabelFields(null);
+    renderArrowTermFields(null);
     if (refs.arrowRemark) refs.arrowRemark.value = '';
     renderArrowCitationRows(null);
     syncArrowPartPickers(null, true);
     setArrowLevelControl(ARROW_LEVEL_DEFAULT, true);
     setArrowEndpointScaleControl(ARROW_ENDPOINT_SCALE_DEFAULT, true);
     if (refs.arrowCurve) refs.arrowCurve.value = '0';
-    if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = '0';
-    setArrowLabelPositionControl(ARROW_LABEL_POSITION_DEFAULT, true);
-    setArrowLabelAlignControl(ARROW_LABEL_ALIGN_DEFAULT, true);
     if (refs.arrowColor) refs.arrowColor.value = '#5f574e';
     autoResizeDetailTextareas();
     syncLatexDetailFields();
+  }
+
+  function arrowLabelEditorKey(arrowId, labelId) {
+    return `${cleanId(arrowId)}:${cleanDetailId(labelId)}`;
+  }
+
+  function renderArrowLabelFields(arrow) {
+    if (!refs.arrowLabelList) return;
+    refs.arrowLabelList.replaceChildren();
+    if (!arrow) return;
+    if (!Array.isArray(arrow.labels)) arrow.labels = [];
+    if (!arrow.labels.length) {
+      const add = document.createElement('button');
+      add.className = 'theorem-arrow-label-empty';
+      add.type = 'button';
+      add.textContent = '+';
+      add.title = 'Add label';
+      add.setAttribute('aria-label', 'Add arrow label');
+      add.addEventListener('click', () => addArrowLabelFromControls());
+      refs.arrowLabelList.appendChild(add);
+      return;
+    }
+    arrow.labels.forEach((label) => refs.arrowLabelList.appendChild(createArrowLabelRow(arrow, label)));
+  }
+
+  function createArrowLabelRow(arrow, label) {
+    const row = document.createElement('div');
+    row.className = 'theorem-arrow-label-row';
+    row.dataset.arrowId = arrow.id;
+    row.dataset.arrowLabelId = label.id;
+    row.classList.toggle('is-active', state.activeArrowLabelId === label.id);
+
+    const summary = document.createElement('div');
+    summary.className = 'theorem-arrow-label-summary';
+
+    const toggle = document.createElement('button');
+    toggle.className = 'theorem-arrow-label-toggle';
+    toggle.type = 'button';
+    const key = arrowLabelEditorKey(arrow.id, label.id);
+    const expanded = state.expandedArrowLabelKeys.has(key);
+    const bodyId = `arrow-label-editor-${cleanId(arrow.id)}-${cleanDetailId(label.id)}`;
+    toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    toggle.setAttribute('aria-controls', bodyId);
+    toggle.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} arrow label ${plainLabel(label.text) || label.id}`);
+
+    const preview = document.createElement('span');
+    preview.className = 'theorem-arrow-label-preview';
+    preview.classList.toggle('is-empty', !label.text);
+    preview.textContent = label.text || 'empty label';
+    preview.dataset.arrowLabelPreview = 'true';
+
+    const swatch = document.createElement('span');
+    swatch.className = 'theorem-arrow-label-summary-swatch';
+    swatch.style.setProperty('--label-color', normalizeColor(label.color, ARROW_LABEL_COLOR_DEFAULT));
+    swatch.dataset.arrowLabelSwatch = 'true';
+    swatch.setAttribute('aria-hidden', 'true');
+    toggle.append(preview, swatch);
+
+    const add = document.createElement('button');
+    add.className = 'theorem-arrow-label-action';
+    add.type = 'button';
+    add.textContent = '+';
+    add.title = 'Add label after this label';
+    add.setAttribute('aria-label', `Add label after ${plainLabel(label.text) || label.id}`);
+    add.addEventListener('click', () => addArrowLabelFromControls(label.id));
+
+    const remove = document.createElement('button');
+    remove.className = 'theorem-arrow-label-action';
+    remove.type = 'button';
+    remove.textContent = 'x';
+    remove.title = 'Remove label';
+    remove.setAttribute('aria-label', `Remove label ${plainLabel(label.text) || label.id}`);
+    remove.addEventListener('click', () => removeArrowLabelFromControls(label.id));
+
+    const body = document.createElement('div');
+    body.className = 'theorem-arrow-label-body';
+    body.id = bodyId;
+    body.hidden = !expanded;
+
+    const textInput = document.createElement('input');
+    textInput.className = 'theorem-input';
+    textInput.type = 'text';
+    textInput.maxLength = 48;
+    textInput.spellcheck = false;
+    textInput.autocomplete = 'off';
+    textInput.value = label.text;
+    textInput.dataset.arrowLabelRole = 'text';
+    textInput.setAttribute('aria-label', 'Arrow label text');
+    textInput.addEventListener('input', (event) => {
+      syncArrowLabelRowSummary(row);
+      autoApplyDetailUpdate(event);
+    });
+
+    const position = document.createElement('input');
+    position.className = 'theorem-range-input';
+    position.type = 'range';
+    position.min = '0';
+    position.max = '1';
+    position.step = '0.05';
+    position.value = normalizeArrowLabelPosition(label.position).toFixed(2);
+    position.dataset.arrowLabelRole = 'position';
+    position.setAttribute('aria-label', 'Arrow label position');
+    const positionValue = document.createElement('output');
+    positionValue.className = 'theorem-range-value';
+    positionValue.textContent = `${Math.round(normalizeArrowLabelPosition(label.position) * 100)}%`;
+    positionValue.dataset.arrowLabelPositionValue = 'true';
+    position.addEventListener('input', (event) => {
+      positionValue.textContent = `${Math.round(normalizeArrowLabelPosition(position.value) * 100)}%`;
+      autoApplyDetailUpdate(event);
+    });
+    const positionWrap = document.createElement('div');
+    positionWrap.className = 'theorem-range-row';
+    positionWrap.append(position, positionValue);
+
+    const offset = document.createElement('input');
+    offset.className = 'theorem-input';
+    offset.type = 'number';
+    offset.min = '-120';
+    offset.max = '120';
+    offset.step = '5';
+    offset.value = String(roundNumber(label.offset || 0));
+    offset.dataset.arrowLabelRole = 'offset';
+    offset.setAttribute('aria-label', 'Arrow label offset');
+    offset.disabled = arrowLabelAlignLocksOffset(label.align);
+    offset.addEventListener('input', autoApplyDetailUpdate);
+    offset.addEventListener('change', autoApplyDetailUpdate);
+
+    const align = document.createElement('div');
+    align.className = 'theorem-segmented';
+    align.dataset.arrowLabelRole = 'align';
+    align.dataset.value = normalizeArrowLabelAlign(label.align);
+    align.setAttribute('role', 'group');
+    align.setAttribute('aria-label', 'Arrow label alignment');
+    [
+      ['left', 'left', 'Left align'],
+      ['center-clear', 'clear', 'Center align, clear of the arrow'],
+      ['center-over', 'over', 'Center align over the arrow'],
+      ['right', 'right', 'Right align']
+    ].forEach(([value, text, title]) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = text;
+      button.title = title;
+      button.dataset.arrowLabelAlign = value;
+      button.classList.toggle('is-selected', value === align.dataset.value);
+      button.setAttribute('aria-pressed', value === align.dataset.value ? 'true' : 'false');
+      button.addEventListener('click', () => {
+        align.dataset.value = value;
+        align.querySelectorAll('[data-arrow-label-align]').forEach((item) => {
+          const selected = item.dataset.arrowLabelAlign === value;
+          item.classList.toggle('is-selected', selected);
+          item.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        });
+        offset.disabled = arrowLabelAlignLocksOffset(value);
+        offset.value = String(defaultArrowLabelOffset(value));
+        autoApplyDetailUpdate({ target: button });
+      });
+      align.appendChild(button);
+    });
+
+    const color = document.createElement('input');
+    color.className = 'theorem-color-input';
+    color.type = 'color';
+    color.value = normalizeColor(label.color, ARROW_LABEL_COLOR_DEFAULT);
+    color.dataset.arrowLabelRole = 'color';
+    color.setAttribute('aria-label', 'Arrow label color');
+    color.addEventListener('input', (event) => {
+      syncArrowLabelRowSummary(row);
+      autoApplyDetailUpdate(event);
+    });
+    const swatches = document.createElement('div');
+    swatches.className = 'theorem-color-swatches';
+    swatches.setAttribute('aria-label', 'Arrow label color swatches');
+    [
+      ['#1a1612', 'black'],
+      ['#3d6b4f', 'green'],
+      ['#2f5f9f', 'blue'],
+      ['#8b3a2a', 'red'],
+      ['#7a4d9b', 'purple']
+    ].forEach(([value, name]) => {
+      const button = document.createElement('button');
+      button.className = 'theorem-color-swatch';
+      button.type = 'button';
+      button.style.setProperty('--swatch-color', value);
+      button.setAttribute('aria-label', name);
+      button.addEventListener('click', () => {
+        color.value = value;
+        color.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      swatches.appendChild(button);
+    });
+    const colorWrap = document.createElement('div');
+    colorWrap.className = 'theorem-color-row';
+    colorWrap.append(color, swatches);
+
+    body.append(
+      createArrowLabelControl('text', textInput),
+      createArrowLabelControl('position', positionWrap),
+      createArrowLabelControl('offset', offset),
+      createArrowLabelControl('align', align),
+      createArrowLabelControl('color', colorWrap)
+    );
+    toggle.addEventListener('click', () => {
+      const nextExpanded = toggle.getAttribute('aria-expanded') !== 'true';
+      toggle.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+      toggle.setAttribute('aria-label', `${nextExpanded ? 'Collapse' : 'Expand'} arrow label ${plainLabel(textInput.value) || label.id}`);
+      body.hidden = !nextExpanded;
+      if (nextExpanded) {
+        state.expandedArrowLabelKeys.add(key);
+        state.activeArrowLabelId = label.id;
+      } else {
+        state.expandedArrowLabelKeys.delete(key);
+        if (state.activeArrowLabelId === label.id) state.activeArrowLabelId = null;
+      }
+      row.classList.toggle('is-active', state.activeArrowLabelId === label.id);
+      if (nextExpanded) textInput.focus();
+    });
+    toggle.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      toggle.click();
+    });
+
+    summary.append(toggle, add, remove);
+    row.append(summary, body);
+    return row;
+  }
+
+  function createArrowLabelControl(labelText, control) {
+    const row = document.createElement('div');
+    row.className = 'theorem-arrow-label-control';
+    const label = document.createElement('span');
+    label.className = 'input-label';
+    label.textContent = labelText;
+    row.append(label, control);
+    return row;
+  }
+
+  function syncArrowLabelRowSummary(row) {
+    if (!row) return;
+    const textInput = row.querySelector('[data-arrow-label-role="text"]');
+    const colorInput = row.querySelector('[data-arrow-label-role="color"]');
+    const preview = row.querySelector('[data-arrow-label-preview]');
+    const swatch = row.querySelector('[data-arrow-label-swatch]');
+    const text = cleanString(textInput?.value);
+    const name = plainLabel(text) || row.dataset.arrowLabelId || 'label';
+    if (preview) {
+      preview.textContent = text || 'empty label';
+      preview.classList.toggle('is-empty', !text);
+    }
+    if (swatch) swatch.style.setProperty('--label-color', normalizeColor(colorInput?.value, ARROW_LABEL_COLOR_DEFAULT));
+    const toggle = row.querySelector('.theorem-arrow-label-toggle');
+    const actions = row.querySelectorAll('.theorem-arrow-label-action');
+    if (toggle) toggle.setAttribute('aria-label', `${toggle.getAttribute('aria-expanded') === 'true' ? 'Collapse' : 'Expand'} arrow label ${name}`);
+    if (actions[0]) actions[0].setAttribute('aria-label', `Add label after ${name}`);
+    if (actions[1]) actions[1].setAttribute('aria-label', `Remove label ${name}`);
+  }
+
+  function collectArrowLabelsFromControls(fallback = []) {
+    if (!refs.arrowLabelList) return cloneArrowLabels(fallback);
+    const fallbackById = new Map(cloneArrowLabels(fallback).map((label) => [label.id, label]));
+    const rows = Array.from(refs.arrowLabelList.querySelectorAll('[data-arrow-label-id]'))
+      .filter((row) => row.dataset.arrowId === state.selectedArrowId);
+    return normalizeArrowLabels({ labels: rows.map((row) => {
+      const id = cleanDetailId(row.dataset.arrowLabelId);
+      const previous = fallbackById.get(id) || {};
+      const text = row.querySelector('[data-arrow-label-role="text"]');
+      const color = row.querySelector('[data-arrow-label-role="color"]');
+      const position = row.querySelector('[data-arrow-label-role="position"]');
+      const offset = row.querySelector('[data-arrow-label-role="offset"]');
+      const align = row.querySelector('[data-arrow-label-role="align"]');
+      return {
+        ...previous,
+        id,
+        text: text ? text.value : previous.text,
+        color: color ? color.value : previous.color,
+        position: position ? position.value : previous.position,
+        offset: offset ? offset.value : previous.offset,
+        align: align ? align.dataset.value : previous.align
+      };
+    }) });
+  }
+
+  function nextArrowLabelPosition(labels) {
+    const positions = (Array.isArray(labels) ? labels : [])
+      .map((label) => normalizeArrowLabelPosition(label.position))
+      .filter((position) => position >= 0.1 && position <= 0.9)
+      .sort((left, right) => left - right);
+    if (!positions.length) return ARROW_LABEL_POSITION_DEFAULT;
+    const points = [0.1, ...positions, 0.9];
+    let best = { gap: -1, position: ARROW_LABEL_POSITION_DEFAULT };
+    for (let index = 1; index < points.length; index += 1) {
+      const gap = points[index] - points[index - 1];
+      if (gap > best.gap) best = { gap, position: (points[index] + points[index - 1]) / 2 };
+    }
+    return normalizeArrowLabelPosition(best.position);
+  }
+
+  function nextArrowLabelId(labels) {
+    const used = new Set((Array.isArray(labels) ? labels : []).map((label) => cleanDetailId(label.id)));
+    let index = 1;
+    while (used.has(`label-${index}`)) index += 1;
+    return `label-${index}`;
+  }
+
+  function addArrowLabelFromControls(afterLabelId = '') {
+    const arrow = findArrow(state.selectedArrowId);
+    if (!arrow) return;
+    captureDetailUndoBeforeChange('arrow', arrow.id);
+    applyArrowDetailFromControls(arrow);
+    const label = {
+      id: nextArrowLabelId(arrow.labels),
+      text: '',
+      color: ARROW_LABEL_COLOR_DEFAULT,
+      position: nextArrowLabelPosition(arrow.labels),
+      offset: defaultArrowLabelOffset(ARROW_LABEL_ALIGN_DEFAULT),
+      align: ARROW_LABEL_ALIGN_DEFAULT
+    };
+    const afterIndex = afterLabelId ? arrow.labels.findIndex((item) => item.id === afterLabelId) : -1;
+    const index = afterIndex >= 0 ? afterIndex + 1 : arrow.labels.length;
+    arrow.labels.splice(index, 0, label);
+    state.activeArrowLabelId = label.id;
+    state.expandedArrowLabelKeys.add(arrowLabelEditorKey(arrow.id, label.id));
+    markExportDirty();
+    renderAll();
+    const input = refs.arrowLabelList?.querySelector(`[data-arrow-label-id="${cssEscape(label.id)}"] [data-arrow-label-role="text"]`);
+    if (input) input.focus();
+  }
+
+  function removeArrowLabelFromControls(labelId) {
+    const arrow = findArrow(state.selectedArrowId);
+    if (!arrow) return;
+    captureDetailUndoBeforeChange('arrow', arrow.id);
+    applyArrowDetailFromControls(arrow);
+    const before = arrow.labels.length;
+    arrow.labels = arrow.labels.filter((label) => label.id !== labelId);
+    if (arrow.labels.length === before) return;
+    state.expandedArrowLabelKeys.delete(arrowLabelEditorKey(arrow.id, labelId));
+    if (state.activeArrowLabelId === labelId) state.activeArrowLabelId = null;
+    markExportDirty();
+    renderAll();
+  }
+
+  function renderArrowTermFields(arrow) {
+    if (!refs.arrowTermList) return;
+    refs.arrowTermList.replaceChildren();
+    if (!arrow) return;
+    if (!Array.isArray(arrow.terms)) arrow.terms = [];
+    arrow.terms.forEach((term) => refs.arrowTermList.appendChild(createArrowTermRow(arrow, term)));
+    autoResizeDetailTextareas();
+    syncLatexDetailFields();
+  }
+
+  function createArrowTermRow(arrow, term) {
+    const row = document.createElement('div');
+    row.className = 'theorem-field-row';
+    row.dataset.arrowId = arrow.id;
+    row.dataset.arrowTermId = term.id;
+    row.dataset.arrowTermType = normalizeMiscDetailType(term.type);
+
+    const labelSlot = document.createElement('div');
+    labelSlot.className = 'theorem-misc-detail-label-slot';
+    const label = document.createElement('input');
+    label.className = 'theorem-input theorem-misc-detail-name-input';
+    label.type = 'text';
+    label.maxLength = 48;
+    label.spellcheck = true;
+    label.autocomplete = 'off';
+    label.value = term.label;
+    label.dataset.arrowTermRole = 'label';
+    label.setAttribute('aria-label', `Arrow term name ${term.label}`);
+    label.addEventListener('input', autoApplyDetailUpdate);
+    labelSlot.appendChild(label);
+
+    const body = document.createElement('div');
+    body.className = 'theorem-misc-detail-body';
+    const textarea = document.createElement('textarea');
+    textarea.className = 'theorem-textarea';
+    textarea.spellcheck = true;
+    textarea.value = term.text;
+    textarea.dataset.arrowTermRole = 'text';
+    textarea.setAttribute('aria-label', `Arrow term ${term.label}`);
+    textarea.addEventListener('input', autoApplyDetailUpdate);
+    textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+    textarea.addEventListener('focus', () => {
+      state.activeLatexDetailField = arrowTermFieldKey(term.id);
+      syncLatexDetailFields();
+    });
+    textarea.addEventListener('blur', () => {
+      window.setTimeout(() => {
+        if (state.activeLatexDetailField === arrowTermFieldKey(term.id) && document.activeElement !== textarea) {
+          state.activeLatexDetailField = null;
+          syncLatexDetailFields();
+        }
+      }, 0);
+    });
+
+    const preview = document.createElement('div');
+    preview.className = 'theorem-misc-preview';
+    preview.tabIndex = 0;
+    preview.dataset.arrowTermPreview = 'true';
+    preview.hidden = true;
+    preview.addEventListener('click', (event) => {
+      if (isCheckboxDetailToggleTarget(event.target)) return;
+      state.activeLatexDetailField = arrowTermFieldKey(term.id);
+      syncLatexDetailFields();
+      textarea.focus();
+    });
+    preview.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      if (isCheckboxDetailToggleTarget(event.target)) return;
+      event.preventDefault();
+      state.activeLatexDetailField = arrowTermFieldKey(term.id);
+      syncLatexDetailFields();
+      textarea.focus();
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'theorem-detail-actions';
+    const remove = document.createElement('button');
+    remove.className = 'btn btn-ghost theorem-small-button';
+    remove.type = 'button';
+    remove.textContent = 'remove';
+    remove.setAttribute('aria-label', `Remove arrow term ${term.label}`);
+    remove.addEventListener('click', () => removeArrowTermFromControls(term.id));
+    actions.appendChild(remove);
+
+    body.append(textarea, preview, actions);
+    row.append(labelSlot, body);
+    return row;
+  }
+
+  function collectArrowTermsFromControls(fallback = []) {
+    if (!refs.arrowTermList) return cloneMiscDetails(fallback);
+    const fallbackById = new Map(cloneMiscDetails(fallback).map((term) => [term.id, term]));
+    const rows = Array.from(refs.arrowTermList.querySelectorAll('[data-arrow-term-id]'))
+      .filter((row) => row.dataset.arrowId === state.selectedArrowId);
+    return rows.map((row, index) => {
+      const id = cleanDetailId(row.dataset.arrowTermId) || `term-${index + 1}`;
+      const previous = fallbackById.get(id) || { id, label: `term ${index + 1}`, type: 'textbox', text: '' };
+      const label = cleanDetailLabel(row.querySelector('[data-arrow-term-role="label"]')?.value) || previous.label;
+      const text = cleanString(row.querySelector('[data-arrow-term-role="text"]')?.value);
+      return {
+        id,
+        label,
+        type: normalizeMiscDetailType(row.dataset.arrowTermType || previous.type),
+        text
+      };
+    });
+  }
+
+  function addArrowTermFromControls() {
+    const arrow = findArrow(state.selectedArrowId);
+    if (!arrow) return;
+    const label = cleanDetailLabel(refs.arrowTermName?.value);
+    if (!label) {
+      setStatus('Name the arrow term before adding it.');
+      refs.arrowTermName?.focus();
+      return;
+    }
+    captureDetailUndoBeforeChange('arrow', arrow.id);
+    applyArrowDetailFromControls(arrow);
+    const id = uniqueDetailId(label, new Set(arrow.terms.map((term) => term.id)));
+    arrow.terms.push({
+      id,
+      label,
+      type: normalizeMiscDetailType(refs.arrowTermType?.value),
+      text: ''
+    });
+    if (refs.arrowTermName) refs.arrowTermName.value = '';
+    if (refs.arrowTermType) refs.arrowTermType.value = 'textbox';
+    state.activeLatexDetailField = arrowTermFieldKey(id);
+    markExportDirty();
+    renderAll();
+    const textarea = refs.arrowTermList?.querySelector(`[data-arrow-term-id="${cssEscape(id)}"] [data-arrow-term-role="text"]`);
+    textarea?.focus();
+  }
+
+  function removeArrowTermFromControls(termId) {
+    const arrow = findArrow(state.selectedArrowId);
+    if (!arrow) return;
+    captureDetailUndoBeforeChange('arrow', arrow.id);
+    applyArrowDetailFromControls(arrow);
+    const before = arrow.terms.length;
+    arrow.terms = arrow.terms.filter((term) => term.id !== termId);
+    if (arrow.terms.length === before) return;
+    if (state.activeLatexDetailField === arrowTermFieldKey(termId)) state.activeLatexDetailField = null;
+    markExportDirty();
+    renderAll();
   }
 
   function renderNodeCitationRows(node) {
@@ -4384,7 +4929,8 @@
 
   function collectArrowCitationKeys(arrow) {
     return uniqueStrings([
-      ...parseCitationKeysFromText(arrow.label),
+      ...(Array.isArray(arrow.labels) ? arrow.labels.flatMap((label) => parseCitationKeysFromText(label.text)) : []),
+      ...(Array.isArray(arrow.terms) ? arrow.terms.flatMap((term) => parseCitationKeysFromText(term.text)) : []),
       ...parseCitationKeysFromText(arrow.remark)
     ].filter(Boolean));
   }
@@ -4466,10 +5012,22 @@
   function rewriteReferenceCitationsInArrow(arrow, aliases, nextKey) {
     if (!arrow) return false;
     let changed = false;
-    ['label', 'remark'].forEach((field) => {
-      const next = replaceCitationKeysInText(arrow[field], aliases, nextKey);
-      if (next !== arrow[field]) {
-        arrow[field] = next;
+    const nextRemark = replaceCitationKeysInText(arrow.remark, aliases, nextKey);
+    if (nextRemark !== arrow.remark) {
+      arrow.remark = nextRemark;
+      changed = true;
+    }
+    (Array.isArray(arrow.labels) ? arrow.labels : []).forEach((label) => {
+      const next = replaceCitationKeysInText(label.text, aliases, nextKey);
+      if (next !== label.text) {
+        label.text = next;
+        changed = true;
+      }
+    });
+    (Array.isArray(arrow.terms) ? arrow.terms : []).forEach((term) => {
+      const next = replaceCitationKeysInText(term.text, aliases, nextKey);
+      if (next !== term.text) {
+        term.text = next;
         changed = true;
       }
     });
@@ -4964,6 +5522,36 @@
         delete preview.dataset.detailType;
       }
     });
+
+    const arrow = findArrow(state.selectedArrowId);
+    const termRows = refs.arrowTermList ? refs.arrowTermList.querySelectorAll('[data-arrow-term-id]') : [];
+    termRows.forEach((row) => {
+      const termId = row.dataset.arrowTermId || '';
+      const key = arrowTermFieldKey(termId);
+      const input = row.querySelector('[data-arrow-term-role="text"]');
+      const preview = row.querySelector('[data-arrow-term-preview]');
+      if (!input || !preview) return;
+      const term = arrow && Array.isArray(arrow.terms) ? arrow.terms.find((item) => item.id === termId) : null;
+      const type = normalizeMiscDetailType(term ? term.type : row.dataset.arrowTermType);
+      const value = input.value;
+      const showPreview = !!arrow && state.activeLatexDetailField !== key && !!cleanString(value) && (type !== 'textbox' || hasDollarMath(value));
+      input.hidden = showPreview;
+      preview.hidden = !showPreview;
+      preview.setAttribute('aria-label', `Preview ${term ? term.label : 'term'}`);
+      if (showPreview) {
+        if (preview.dataset.sourceText !== value || preview.dataset.detailType !== type) {
+          if (window.MathJax && typeof window.MathJax.typesetClear === 'function') window.MathJax.typesetClear([preview]);
+          renderDetailPreviewContent(preview, value, type);
+          preview.dataset.sourceText = value;
+          preview.dataset.detailType = type;
+          preview.dataset.needsTypeset = 'true';
+        }
+      } else {
+        delete preview.dataset.needsTypeset;
+        delete preview.dataset.sourceText;
+        delete preview.dataset.detailType;
+      }
+    });
     typesetLatexDetailPreviews();
   }
 
@@ -5028,8 +5616,8 @@
   }
 
   function updateCheckboxDetailItem(preview, index, stateValue) {
-    const row = preview.closest('[data-misc-detail-id], [data-reference-detail-id]');
-    const textarea = row ? row.querySelector('[data-detail-role="text"], [data-reference-detail-role="text"]') : null;
+    const row = preview.closest('[data-misc-detail-id], [data-arrow-term-id], [data-reference-detail-id]');
+    const textarea = row ? row.querySelector('[data-detail-role="text"], [data-arrow-term-role="text"], [data-reference-detail-role="text"]') : null;
     if (!textarea) return;
     const items = detailCheckboxItems(textarea.value);
     if (!items[index]) return;
@@ -5038,7 +5626,7 @@
       state: normalizeCheckboxDetailState(stateValue, items[index].state)
     };
     textarea.value = checkboxItemsToText(items);
-    if (row.dataset.miscDetailId) {
+    if (row.dataset.miscDetailId || row.dataset.arrowTermId) {
       autoApplyDetailUpdate({ target: textarea });
     } else {
       autoResizeTextarea(textarea);
@@ -5124,7 +5712,10 @@
     const miscPending = refs.nodeMiscDetailList
       ? Array.from(refs.nodeMiscDetailList.querySelectorAll('[data-detail-preview][data-needs-typeset="true"]'))
       : [];
-    const pending = typePending.concat(miscPending);
+    const arrowTermPending = refs.arrowTermList
+      ? Array.from(refs.arrowTermList.querySelectorAll('[data-arrow-term-preview][data-needs-typeset="true"]'))
+      : [];
+    const pending = typePending.concat(miscPending, arrowTermPending);
     if (!pending.length) return;
     if (!window.MathJax || typeof window.MathJax.typesetPromise !== 'function') {
       scheduleMathTypesetRetry();
@@ -5181,9 +5772,6 @@
       level: state.detailPreview.level,
       endpointScale: state.detailPreview.endpointScale,
       curve: state.detailPreview.curve,
-      labelOffset: state.detailPreview.labelOffset,
-      labelPosition: state.detailPreview.labelPosition,
-      labelAlign: state.detailPreview.labelAlign,
       color: state.detailPreview.color
     };
   }
@@ -5233,7 +5821,8 @@
       state.detailPreview = null;
       if (manual) {
         resetDetailEditBaseline();
-        setStatus(arrow.label ? `Updated arrow ${arrow.label}.` : 'Updated arrow.');
+        const label = firstArrowLabel(arrow);
+        setStatus(label ? `Updated arrow ${label.text}.` : 'Updated arrow.');
         renderAll();
       } else {
         renderArrowCitationRows(arrow);
@@ -5340,7 +5929,8 @@
     if (sourceId === targetId) return { ok: false, reason: 'same-node' };
     arrow.sourceId = sourceId;
     arrow.targetId = targetId;
-    arrow.label = cleanString(refs.arrowLabel ? refs.arrowLabel.value : arrow.label);
+    arrow.labels = collectArrowLabelsFromControls(arrow.labels);
+    arrow.terms = collectArrowTermsFromControls(arrow.terms);
     arrow.remark = cleanString(refs.arrowRemark ? refs.arrowRemark.value : arrow.remark);
     arrow.body = getArrowPartValue('body', arrow.body);
     arrow.head = getArrowPartValue('head', arrow.head);
@@ -5348,17 +5938,9 @@
     arrow.level = getArrowLevelValue(arrow.level);
     arrow.endpointScale = getArrowEndpointScaleValue(arrow.endpointScale);
     arrow.curve = clamp(finiteNumber(refs.arrowCurve ? refs.arrowCurve.value : arrow.curve, arrow.curve), -160, 160);
-    arrow.labelPosition = getArrowLabelPositionValue(arrow.labelPosition);
-    arrow.labelAlign = getArrowLabelAlignValue(arrow.labelAlign);
-    arrow.labelOffset = arrowLabelAlignLocksOffset(arrow.labelAlign)
-      ? 0
-      : clamp(finiteNumber(refs.arrowLabelOffset ? refs.arrowLabelOffset.value : arrow.labelOffset, arrow.labelOffset), -120, 120);
     arrow.color = normalizeColor(refs.arrowColor ? refs.arrowColor.value : arrow.color, '#5f574e');
     syncArrowLevelValue(arrow.level);
     syncArrowEndpointScaleValue(arrow.endpointScale);
-    syncArrowLabelPositionValue(arrow.labelPosition);
-    setArrowLabelAlignControl(arrow.labelAlign, false);
-    if (refs.arrowLabelOffset) refs.arrowLabelOffset.value = String(roundNumber(arrow.labelOffset || 0));
     return { ok: true };
   }
 
@@ -5395,7 +5977,8 @@
       restoreArrowDetailSnapshot(arrow, baseline.values);
       state.detailPreview = null;
       resetDetailEditBaseline();
-      setStatus(arrow.label ? `Cancelled edits to arrow ${arrow.label}.` : 'Cancelled edits to arrow.');
+      const label = firstArrowLabel(arrow);
+      setStatus(label ? `Cancelled edits to arrow ${label.text}.` : 'Cancelled edits to arrow.');
       renderAll();
     }
   }
@@ -5442,7 +6025,8 @@
     return {
       sourceId: arrow.sourceId,
       targetId: arrow.targetId,
-      label: arrow.label,
+      labels: cloneArrowLabels(arrow.labels),
+      terms: cloneMiscDetails(arrow.terms),
       remark: arrow.remark,
       body: arrow.body,
       head: arrow.head,
@@ -5450,9 +6034,6 @@
       level: arrow.level,
       endpointScale: arrow.endpointScale,
       curve: arrow.curve,
-      labelOffset: arrow.labelOffset,
-      labelPosition: arrow.labelPosition,
-      labelAlign: arrow.labelAlign,
       color: arrow.color
     };
   }
@@ -5485,11 +6066,11 @@
   }
 
   function restoreArrowDetailSnapshot(arrow, values) {
-    const labelAlign = normalizeArrowLabelAlign(values.labelAlign);
     Object.assign(arrow, {
       sourceId: cleanId(values.sourceId),
       targetId: cleanId(values.targetId),
-      label: cleanString(values.label),
+      labels: normalizeArrowLabels(values),
+      terms: normalizeArrowTerms(values),
       remark: cleanString(values.remark),
       body: normalizeArrowPart('body', values.body),
       head: normalizeArrowPart('head', values.head),
@@ -5497,9 +6078,6 @@
       level: normalizeArrowLevel(values.level),
       endpointScale: normalizeArrowEndpointScale(values.endpointScale),
       curve: clamp(finiteNumber(values.curve, 0), -160, 160),
-      labelOffset: arrowLabelAlignLocksOffset(labelAlign) ? 0 : clamp(finiteNumber(values.labelOffset, 0), -120, 120),
-      labelPosition: normalizeArrowLabelPosition(values.labelPosition),
-      labelAlign,
       color: normalizeColor(values.color, '#5f574e')
     });
   }
@@ -6174,7 +6752,7 @@
     const target = graph.nodes.find((node) => node.id === arrow.targetId);
     const sourceLabel = source ? (source.label || source.id) : arrow.sourceId;
     const targetLabel = target ? (target.label || target.id) : arrow.targetId;
-    const arrowLabel = cleanString(arrow.label);
+    const arrowLabel = cleanString(firstArrowLabel(arrow)?.text);
     return `Arrow: ${sourceLabel} -> ${targetLabel}${arrowLabel ? ` (${arrowLabel})` : ''}`;
   }
 
@@ -6697,25 +7275,41 @@
       title: cleanGraphTitle(graph.title),
       ...(includeTitleNode ? { titleNode: exportNode(graph.titleNode, false) } : {}),
       nodes: graph.nodes.map((node) => exportNode(node, true)),
-      arrows: graph.arrows.map((arrow) => ({
-        ...arrow.extra,
-        id: arrow.id,
-        sourceId: arrow.sourceId,
-        targetId: arrow.targetId,
-        label: arrow.label,
-        remark: arrow.remark,
-        body: arrow.body,
-        head: arrow.head,
-        tail: arrow.tail,
-        level: normalizeArrowLevel(arrow.level),
-        endpointScale: roundScale(arrow.endpointScale),
-        curve: roundNumber(arrow.curve || 0),
-        labelOffset: roundNumber(arrow.labelOffset || 0),
-        labelPosition: roundRatio(arrow.labelPosition),
-        labelAlign: normalizeArrowLabelAlign(arrow.labelAlign),
-        color: arrow.color
-      })),
+      arrows: graph.arrows.map(exportArrow),
       view
+    };
+  }
+
+  function exportArrow(arrow) {
+    const labels = cleanArrowLabelsForExport(arrow.labels).map((label) => ({
+      id: label.id,
+      text: label.text,
+      color: label.color,
+      position: roundRatio(label.position),
+      offset: roundNumber(label.offset || 0),
+      align: normalizeArrowLabelAlign(label.align)
+    }));
+    const terms = cleanMiscDetailsForExport(arrow.terms);
+    const primary = labels[0] || null;
+    return {
+      ...arrow.extra,
+      id: arrow.id,
+      sourceId: arrow.sourceId,
+      targetId: arrow.targetId,
+      labels,
+      terms,
+      label: primary ? primary.text : '',
+      remark: arrow.remark,
+      body: arrow.body,
+      head: arrow.head,
+      tail: arrow.tail,
+      level: normalizeArrowLevel(arrow.level),
+      endpointScale: roundScale(arrow.endpointScale),
+      curve: roundNumber(arrow.curve || 0),
+      labelOffset: primary ? primary.offset : 0,
+      labelPosition: primary ? primary.position : ARROW_LABEL_POSITION_DEFAULT,
+      labelAlign: primary ? primary.align : ARROW_LABEL_ALIGN_DEFAULT,
+      color: arrow.color
     };
   }
 
@@ -6975,6 +7569,8 @@
     state.titleEditorActive = false;
     state.selectedNodeId = state.nodes.some((node) => node.id === next.selectedNodeId) ? next.selectedNodeId : null;
     state.selectedArrowId = null;
+    state.activeArrowLabelId = null;
+    state.expandedArrowLabelKeys.clear();
     state.layoutAvoidOverlap = next.layoutAvoidOverlap;
     state.layoutOverlapGroups = [];
     state.activeLatexDetailField = null;
@@ -7017,6 +7613,8 @@
     state.titleEditorActive = false;
     state.selectedNodeId = next.node.id;
     state.selectedArrowId = null;
+    state.activeArrowLabelId = null;
+    state.expandedArrowLabelKeys.clear();
     state.layoutOverlapGroups = [];
     state.activeLatexDetailField = null;
     resetDetailEditBaseline();

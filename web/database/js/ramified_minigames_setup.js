@@ -171,11 +171,16 @@
       [1, 1, 1], [2, 1, 1], [3, 1, 1], [2, 2, 1], [3, 2, 1], [3, 3, 1], [2, 2, 2], [3, 2, 2], [3, 3, 2], [3, 3, 3]
     ].map((rows) => Object.freeze({ id: `young_${rows.join('')}`, glyph: '' })))
   };
+  const LIANLIANKAN_HIRAGANA_AUDIO_FOLDER = 'assets/ramified_minigames/japanese_pronunciation/';
+  const lianliankanHiraganaIds = new Set();
+  let lianliankanPronunciationAudio = null;
 
   function refreshLianliankanTileSets() {
     LIANLIANKAN_TILE_SETS.japanese = (Lianliankan && Array.isArray(Lianliankan.HIRAGANA_SYMBOLS)
       ? Lianliankan.HIRAGANA_SYMBOLS
       : []).map((symbol) => Object.freeze({ ...symbol }));
+    lianliankanHiraganaIds.clear();
+    LIANLIANKAN_TILE_SETS.japanese.forEach((symbol) => lianliankanHiraganaIds.add(symbol.id));
   }
 
   refreshLianliankanTileSets();
@@ -374,7 +379,7 @@
       'js/billiards/topological_billiards_native.js?v=20260826-1'
     ]),
     [GAME_MODES.LIANLIANKAN]: Object.freeze([
-      'lianliankan/lianliankan_engine.js?v=20260826-1',
+      'lianliankan/lianliankan_engine.js?v=20260830-1',
       'lianliankan/mosaic_adapter.js?v=20260826-2'
     ])
   });
@@ -8222,6 +8227,7 @@
     const result = Lianliankan.handleSelection(game, target.index, { deferMatch: true });
     if (result.kind === 'match') {
       const pendingGame = game;
+      playLianliankanPronunciation(previousCell.tile);
       render();
       syncStatus('Tile Matching match', 'connected path found', 'moving');
       setTimeout(() => {
@@ -18109,6 +18115,37 @@
   function lianliankanSymbolsForTileSet(tileSet = selectedLianliankanTileSet()) {
     const symbols = LIANLIANKAN_TILE_SETS[tileSet] || LIANLIANKAN_TILE_SETS.chinese;
     return symbols.map((symbol) => ({ ...symbol }));
+  }
+
+  function lianliankanPronunciationPath(tile) {
+    const id = typeof tile === 'string' ? tile : String(tile && tile.id || '');
+    if (!lianliankanHiraganaIds.has(id)) return '';
+    return `${LIANLIANKAN_HIRAGANA_AUDIO_FOLDER}${id.slice('hiragana_'.length)}.ogg`;
+  }
+
+  function playLianliankanPronunciation(tile) {
+    const source = lianliankanPronunciationPath(tile);
+    if (!source || typeof Audio !== 'function') return false;
+    if (lianliankanPronunciationAudio) {
+      lianliankanPronunciationAudio.pause();
+      lianliankanPronunciationAudio.currentTime = 0;
+    }
+    try {
+      const audio = new Audio(source);
+      lianliankanPronunciationAudio = audio;
+      audio.preload = 'auto';
+      const release = () => {
+        if (lianliankanPronunciationAudio === audio) lianliankanPronunciationAudio = null;
+      };
+      audio.addEventListener('ended', release, { once: true });
+      audio.addEventListener('error', release, { once: true });
+      const playback = audio.play();
+      if (playback && typeof playback.catch === 'function') playback.catch(release);
+      return true;
+    } catch (_error) {
+      lianliankanPronunciationAudio = null;
+      return false;
+    }
   }
 
   function lianliankanBoundaryRingEmptyCells(preset) {
@@ -29002,6 +29039,7 @@
     createGameState,
     createLianliankanState,
     lianliankanSymbolsForTileSet,
+    lianliankanPronunciationPath,
     defaultBoardSizeForMode,
     createBilliardsState,
     createChineseCheckersState,
@@ -29110,6 +29148,7 @@
       billiardsCueCaptionLayout,
       billiardsCueGuidanceFlags,
       canvasStartPromptCopy,
+      playLianliankanPronunciation,
       redrawBilliardsBallPalette,
       setGame(state) { game = state; },
       getGame() { return game; }

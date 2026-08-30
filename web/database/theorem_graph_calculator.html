@@ -73,7 +73,6 @@
     .theorem-arrow-label:hover,
     .theorem-arrow-label:focus-visible,
     .theorem-arrow-label.is-selected {
-      color: var(--accent2);
       outline: none;
       text-decoration: underline;
       text-decoration-thickness: 1px;
@@ -705,6 +704,135 @@
       font-size: 0.72rem;
     }
 
+    .theorem-arrow-label-list {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .theorem-arrow-label-row {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+    }
+
+    .theorem-arrow-label-summary {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 28px 28px;
+      min-width: 0;
+    }
+
+    .theorem-arrow-label-toggle,
+    .theorem-arrow-label-action,
+    .theorem-arrow-label-empty {
+      min-width: 0;
+      min-height: 30px;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .theorem-arrow-label-toggle {
+      display: grid;
+      grid-template-columns: 12px minmax(0, 1fr) 16px;
+      gap: 6px;
+      align-items: center;
+      padding: 4px 7px;
+      text-align: left;
+    }
+
+    .theorem-arrow-label-toggle::before {
+      content: ">";
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+      transform-origin: center;
+      transition: transform 140ms ease;
+    }
+
+    .theorem-arrow-label-toggle[aria-expanded="true"]::before {
+      transform: rotate(90deg);
+    }
+
+    .theorem-arrow-label-preview {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+    }
+
+    .theorem-arrow-label-preview.is-empty {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .theorem-arrow-label-summary-swatch {
+      width: 14px;
+      height: 14px;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      background: var(--label-color, #1a1612);
+    }
+
+    .theorem-arrow-label-action {
+      display: inline-grid;
+      place-items: center;
+      border-left: 1px solid var(--border);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.76rem;
+    }
+
+    .theorem-arrow-label-toggle:hover,
+    .theorem-arrow-label-toggle:focus-visible,
+    .theorem-arrow-label-action:hover,
+    .theorem-arrow-label-action:focus-visible,
+    .theorem-arrow-label-empty:hover,
+    .theorem-arrow-label-empty:focus-visible {
+      color: var(--accent);
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+
+    .theorem-arrow-label-row.is-active {
+      border-color: var(--accent2);
+    }
+
+    .theorem-arrow-label-body {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+      padding: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    .theorem-arrow-label-body[hidden] {
+      display: none !important;
+    }
+
+    .theorem-arrow-label-control {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .theorem-arrow-label-control .input-label {
+      margin: 0;
+    }
+
+    .theorem-arrow-label-empty {
+      width: 100%;
+      border: 1px dashed var(--border);
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+    }
+
     .theorem-citation-list {
       display: grid;
       gap: 6px;
@@ -1332,9 +1460,23 @@
             <select id="arrow-target" class="theorem-select"></select>
           </div>
           <div class="theorem-field-row">
-            <label class="input-label" for="arrow-label">label</label>
-            <input id="arrow-label" class="theorem-input" type="text" maxlength="48" spellcheck="false" autocomplete="off" placeholder="optional label">
+            <span class="input-label">labels</span>
+            <div id="arrow-label-list" class="theorem-arrow-label-list" aria-label="Arrow labels"></div>
           </div>
+          <div class="theorem-field-row">
+            <label class="input-label" for="arrow-term-name">term</label>
+            <div class="theorem-misc-add-controls">
+              <input id="arrow-term-name" class="theorem-input" type="text" maxlength="48" spellcheck="true" autocomplete="off" placeholder="name">
+              <select id="arrow-term-type" class="theorem-select" aria-label="Arrow term type">
+                <option value="textbox">Textbox</option>
+                <option value="list">List</option>
+                <option value="enumeration">Enumeration</option>
+                <option value="checkbox">Checkbox</option>
+              </select>
+              <button class="btn btn-ghost theorem-small-button" id="add-arrow-term" type="button" aria-label="Add arrow term" title="Add arrow term">+</button>
+            </div>
+          </div>
+          <div id="arrow-term-list" class="theorem-misc-detail-list"></div>
           <div class="theorem-field-row">
             <label class="input-label" for="arrow-remark">remark</label>
             <textarea id="arrow-remark" class="theorem-textarea" spellcheck="true"></textarea>
@@ -1367,29 +1509,9 @@
             <input id="arrow-curve" class="theorem-input" type="number" min="-160" max="160" step="5" value="0">
           </div>
           <div class="theorem-field-row">
-            <label class="input-label" for="arrow-label-offset">label offset</label>
-            <input id="arrow-label-offset" class="theorem-input" type="number" min="-120" max="120" step="5" value="0">
-          </div>
-          <div class="theorem-field-row">
-            <label class="input-label" for="arrow-label-position">label pos</label>
-            <div class="theorem-range-row">
-              <input id="arrow-label-position" class="theorem-range-input" type="range" min="0" max="1" step="0.1" value="0.5" aria-label="Arrow label position">
-              <output id="arrow-label-position-value" class="theorem-range-value" for="arrow-label-position">50%</output>
-            </div>
-          </div>
-          <div class="theorem-field-row">
-            <span class="input-label">label align</span>
-            <div class="theorem-segmented" id="arrow-label-align" role="group" aria-label="Arrow label alignment">
-              <button type="button" data-arrow-label-align="left" title="Left align">left</button>
-              <button type="button" data-arrow-label-align="center-clear" title="Center align, clear of the arrow">clear</button>
-              <button type="button" data-arrow-label-align="center-over" title="Center align over the arrow">over</button>
-              <button type="button" data-arrow-label-align="right" title="Right align">right</button>
-            </div>
-          </div>
-          <div class="theorem-field-row">
-            <label class="input-label" for="arrow-color">color</label>
+            <label class="input-label" for="arrow-color">line color</label>
             <div class="theorem-color-row">
-              <input id="arrow-color" class="theorem-color-input" type="color" value="#5f574e" aria-label="Arrow color">
+              <input id="arrow-color" class="theorem-color-input" type="color" value="#5f574e" aria-label="Arrow line color">
               <div class="theorem-color-swatches" aria-label="Arrow color swatches">
                 <button class="theorem-color-swatch" type="button" data-color-target="arrow-color" data-color-value="#1a1612" style="--swatch-color: #1a1612" aria-label="black"></button>
                 <button class="theorem-color-swatch" type="button" data-color-target="arrow-color" data-color-value="#3d6b4f" style="--swatch-color: #3d6b4f" aria-label="green"></button>
@@ -1706,7 +1828,7 @@
 </script>
 <script id="theorem-preset-registry" src="theorem_graph_presets/presets.js"></script>
 <script src="js/calculator_cards.js"></script>
-<script src="js/theorem_graph_calculator.js?v=20260825-3"></script>
+<script src="js/theorem_graph_calculator.js?v=20260830-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260825-3"></script>
 </body>

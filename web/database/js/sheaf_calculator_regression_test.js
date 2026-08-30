@@ -194,6 +194,9 @@ function loadComplexCalculator() {
     complexChartEntryDisplayHtml,
     complexChartEntryDisplayPlain,
     complexChartEntryDisplayTikzcd,
+    complexChartSnakeLayout,
+    complexChartSnakeDisplayTikzPicture,
+    scaleComplexChartSnakeFastDisplay,
     complexChartEntryFromEditor,
     complexChartTruncationCandidates,
     complexChartKernelCokernelExtensionEntry,
@@ -293,7 +296,7 @@ function testSheafComplexCalculatorPageAndPrototypeLink() {
   assert(html.includes('id="complex-chart-operations-panel"'));
   assert(html.indexOf('id="complex-chart-add"') < html.indexOf('id="complex-chart-operations"'));
   assert(html.indexOf('id="complex-chart-operations"') < html.indexOf('id="complex-chart-export"'));
-  assert(html.includes('<script src="js/sheaf_complex_calculator.js?v=complex-chart-20"></script>'));
+  assert(html.includes('<script src="js/sheaf_complex_calculator.js?v=complex-chart-35"></script>'));
   assert(html.includes('id="complex-chart-length-label"'));
   assert(!html.includes('id="complex-chart-kind"'));
   assert(html.indexOf('id="complex-chart-saved"') < html.indexOf('id="complex-chart-add-panel"'));
@@ -312,6 +315,11 @@ function testSheafComplexCalculatorPageAndPrototypeLink() {
   assert(html.includes('.sheaf-complex-editor {'));
   assert(html.includes('border: 0;'));
   assert(html.includes('.sheaf-filtration-long-subset'));
+  const lesPaneCssStart = html.indexOf('.sheaf-complex-les-pane {');
+  const lesPaneCssEnd = html.indexOf('}', lesPaneCssStart);
+  const lesPaneCss = html.slice(lesPaneCssStart, lesPaneCssEnd);
+  assert(lesPaneCss.includes('overflow: hidden;'));
+  assert(!lesPaneCss.includes('overflow-x: auto;'));
   const stepCardIndex = html.indexOf('id="class-step-card"');
   const complexCardIndex = html.indexOf('id="sheaf-complex-card"');
   const asideIndex = html.indexOf('<aside class="side" id="cards">');
@@ -422,6 +430,70 @@ function testComplexChartTikzcdExport() {
   assert(presetTikz.includes('\\arrow["{\\times n}", from=1-2, to=1-3]'));
   assert(!presetTikz.includes('d_{0}'));
   assert(!presetTikz.includes('d_{3}'));
+}
+
+function testComplexChartLesLongMapLabelsExpandArrows() {
+  const api = loadComplexCalculator();
+  const base = {
+    kind: 'chain-complex',
+    length: 7,
+    objects: ['0', 'H^0(A)', 'H^0(B)', 'H^0(C)', 'H^1(A)', 'H^1(B)', 'H^1(C)'],
+    display: 'snake-les'
+  };
+  const short = api.normalizeComplexChartEntry({
+    ...base,
+    maps: ['', 'f', 'g', '\\delta', 'f', 'g']
+  }, { requireId: false });
+  const longLabel = '\\operatorname{restrictionToTheClosedSubspace}';
+  const long = api.normalizeComplexChartEntry({
+    ...base,
+    maps: ['', longLabel, 'g', '\\delta', 'f', 'g']
+  }, { requireId: false });
+
+  const shortLayout = api.complexChartSnakeLayout(short);
+  const longLayout = api.complexChartSnakeLayout(long);
+  assert(longLayout.columnStep > shortLayout.columnStep);
+  const from = longLayout.coordByIndex.get(1);
+  const to = longLayout.coordByIndex.get(2);
+  const arrowSpan = to.x - from.x
+    - longLayout.objectWidths.get(1) / 2
+    - longLayout.objectWidths.get(2) / 2
+    - 20;
+  assert(arrowSpan >= longLayout.labelWidths.get(1) + 24);
+
+  const html = api.complexChartEntryDisplayHtml(long);
+  assert(html.includes('sheaf-complex-snake-fast-viewport'));
+  assert(html.includes('data-sheaf-les-fast-entry='));
+  assert(html.includes('data-sheaf-les-layout-width='));
+  assert(html.includes('data-sheaf-les-layout-height='));
+  assert(html.includes('data-sheaf-les-map-index="1"'));
+  assert(html.includes('data-sheaf-les-label-index="1"'));
+
+  const viewport = { clientWidth: 400, style: {} };
+  const display = {
+    closest() { return viewport; },
+    dataset: { sheafLesLayoutWidth: '800', sheafLesLayoutHeight: '240' },
+    style: {}
+  };
+  api.scaleComplexChartSnakeFastDisplay(display);
+  assert.strictEqual(display.style.transform, 'scale(0.5)');
+  assert.strictEqual(viewport.style.height, '120px');
+  assert.strictEqual(display.style.left, '0px');
+
+  viewport.clientWidth = 1000;
+  api.scaleComplexChartSnakeFastDisplay(display);
+  assert.strictEqual(display.style.transform, 'scale(1)');
+  assert.strictEqual(viewport.style.height, '240px');
+  assert.strictEqual(display.style.left, '100px');
+
+  const shortPicture = api.complexChartSnakeDisplayTikzPicture(short);
+  const longPicture = api.complexChartSnakeDisplayTikzPicture(long);
+  const shortThirdObjectX = Number(shortPicture.match(/\(les2\) at \(([0-9.]+),/)?.[1]);
+  const longThirdObjectX = Number(longPicture.match(/\(les2\) at \(([0-9.]+),/)?.[1]);
+  assert(longThirdObjectX > shortThirdObjectX);
+  const tikzcd = api.complexChartEntryDisplayTikzcd(long);
+  const columnSep = Number(tikzcd.match(/column sep=([0-9.]+)em/)?.[1]);
+  assert(columnSep > 2.2);
 }
 
 function testComplexChartScreenshotSesPresets() {
@@ -7605,6 +7677,7 @@ testStepBuilderMarkupIsBelowCanvasAndClassChartHasNoStepButton();
 testSheafComplexCalculatorPageAndPrototypeLink();
 testComplexChartLengthDefaultsAndDisplays();
 testComplexChartTikzcdExport();
+testComplexChartLesLongMapLabelsExpandArrows();
 testComplexChartScreenshotSesPresets();
 testComplexChartEditablePresetsAndDeRhamPreset();
 testComplexChartSelectionEditDeleteModel();

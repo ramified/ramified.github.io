@@ -112,8 +112,10 @@ function testTileMatchingTileSets() {
   assert.ok(chinese.every((symbol) => symbol.id.startsWith('han_')));
 
   const japanese = minigames.lianliankanSymbolsForTileSet('japanese');
+  assert.strictEqual(japanese.length, 71);
   assert.strictEqual(japanese[0].glyph, 'あ');
   assert.ok(japanese.every((symbol) => symbol.id.startsWith('hiragana_')));
+  assert.ok(japanese.some((symbol) => symbol.glyph === 'ぽ'));
 
   const young = minigames.lianliankanSymbolsForTileSet('young-3x3');
   assert.strictEqual(young.length, 19);
@@ -135,6 +137,60 @@ function testTileMatchingTileSets() {
   assert.ok(html.includes('value="chinese" selected'));
   assert.ok(html.includes('value="japanese"'));
   assert.ok(html.includes('value="young-3x3"'));
+}
+
+function testJapanesePronunciationPlayback() {
+  assert.strictEqual(
+    minigames.lianliankanPronunciationPath({ id: 'hiragana_chi', glyph: 'ち' }),
+    'assets/ramified_minigames/japanese_pronunciation/chi.ogg'
+  );
+  assert.strictEqual(minigames.lianliankanPronunciationPath({ id: 'han_山', glyph: '山' }), '');
+
+  const created = [];
+  const OriginalAudio = global.Audio;
+  global.Audio = class FakeAudio {
+    constructor(source) {
+      this.source = source;
+      this.currentTime = 0;
+      this.preload = '';
+      this.listeners = {};
+      created.push(this);
+    }
+
+    addEventListener(type, listener) {
+      this.listeners[type] = listener;
+    }
+
+    pause() {}
+
+    play() {
+      this.played = true;
+      return Promise.resolve();
+    }
+  };
+  try {
+    assert.strictEqual(minigames.__test.playLianliankanPronunciation({ id: 'hiragana_po', glyph: 'ぽ' }), true);
+    assert.strictEqual(created.length, 1);
+    assert.strictEqual(created[0].source, 'assets/ramified_minigames/japanese_pronunciation/po.ogg');
+    assert.strictEqual(created[0].played, true);
+    assert.strictEqual(minigames.__test.playLianliankanPronunciation({ id: 'han_山', glyph: '山' }), false);
+  } finally {
+    if (OriginalAudio === undefined) delete global.Audio;
+    else global.Audio = OriginalAudio;
+  }
+}
+
+function testJapanesePronunciationAssets() {
+  const audioFolder = path.join(__dirname, '..', 'assets', 'ramified_minigames', 'japanese_pronunciation');
+  const sources = JSON.parse(fs.readFileSync(path.join(audioFolder, 'sources.json'), 'utf8'));
+  const expectedIds = lianliankan.HIRAGANA_SYMBOLS.map((symbol) => symbol.id.slice('hiragana_'.length));
+  assert.strictEqual(sources.license, 'Public domain');
+  assert.deepStrictEqual(sources.files.map((entry) => entry.id), expectedIds);
+  sources.files.forEach((entry) => {
+    const asset = path.join(audioFolder, entry.local);
+    assert.ok(fs.existsSync(asset), `missing local pronunciation asset: ${entry.local}`);
+    assert.ok(fs.statSync(asset).size > 1000, `pronunciation asset is unexpectedly small: ${entry.local}`);
+  });
 }
 
 function testHexTileMatchingUsesHexTopology() {
@@ -251,6 +307,8 @@ testSharedModeContract();
 testPresetEmptyCellsRemainPlayable();
 testExplicitCatalogEligibility();
 testTileMatchingTileSets();
+testJapanesePronunciationPlayback();
+testJapanesePronunciationAssets();
 testHexTileMatchingUsesHexTopology();
 testSharedLocaleContract();
 testLargeBoundaryBoardEmptyRing();

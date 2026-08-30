@@ -37,7 +37,15 @@ const {
   evaluateTlCombinationMatrix,
   calculateStrandWord,
   formatAlignedTrace,
-  serializeCalculation
+  serializeCalculation,
+  makeBraidDiagram,
+  makePermutationDiagram,
+  makeTlDiagram,
+  makeGridDiagram,
+  pathToSvgData,
+  diagramToTikz,
+  buildDiagrammaticTrace,
+  formatDiagrammaticTraceTikz
 } = math;
 
 function budget() {
@@ -263,6 +271,120 @@ function testAdvertisedRoutes() {
   }
 }
 
+function testSemanticTraceRoutes() {
+  const routes = [
+    [[{ family: 'coxeter', index: 1 }], 'symmetric', 'permutation'],
+    [[braid(1)], 'symmetric', 'permutation'],
+    [[braid(1, -1)], 'braid', 'freely-reduced-word'],
+    [[braid(1)], 'hecke', 'standard'],
+    [[braid(1)], 'tl', 'diagram'],
+    [[braid(1)], 'burau', 'matrix-unit'],
+    [[hecke(1)], 'hecke', 'standard'],
+    [[hecke(1)], 'tl', 'diagram'],
+    [[hecke(1)], 'burau', 'vector'],
+    [[kl(1)], 'hecke', 'standard'],
+    [[kl(1)], 'hecke', 'kl'],
+    [[kl(1)], 'tl', 'diagram'],
+    [[kl(1)], 'burau', 'matrix-unit'],
+    [[tl(1)], 'tl', 'diagram'],
+    [[tl(1)], 'burau', 'vector']
+  ];
+  for (const [word, target, basis] of routes) {
+    const calculation = calculateStrandWord(word, { rank: 3, target, basis, includeTrace: true });
+    assert.strictEqual(calculation.trace[0].semantic.lhs.kind, 'word');
+    assert.strictEqual(calculation.trace[0].semantic.rhs.kind, 'mapped-product');
+    assert.strictEqual(calculation.trace.at(-1).semantic.rhs.kind, 'linear-combination');
+    assert.doesNotThrow(() => JSON.stringify(serializeCalculation(calculation)));
+  }
+  for (const [target, basis] of [
+    ['symmetric', 'permutation'],
+    ['braid', 'freely-reduced-word'],
+    ['hecke', 'standard'],
+    ['hecke', 'kl'],
+    ['tl', 'diagram'],
+    ['burau', 'matrix-unit'],
+    ['burau', 'vector']
+  ]) {
+    const identity = calculateStrandWord([], { rank: 3, target, basis, includeTrace: true });
+    assert.deepStrictEqual(identity.trace[0].semantic.lhs.records, []);
+    assert.doesNotThrow(() => JSON.stringify(serializeCalculation(identity)));
+  }
+}
+
+function assertFiniteDiagram(diagram) {
+  assert.ok(diagram.width > 0 && diagram.height > 0);
+  for (const path of diagram.paths || []) {
+    assert.ok(!/NaN|undefined|Infinity/.test(pathToSvgData(path)));
+  }
+  assert.ok(!/NaN|undefined|Infinity/.test(diagramToTikz(diagram)));
+}
+
+function testDiagrammaticGeometryAndTikz() {
+  const permutation = makePermutationDiagram([2, 1, 3], 'up-down');
+  assert.strictEqual(permutation.paths.length, 3);
+  assert.strictEqual(permutation.overlays.length, 0);
+  assertFiniteDiagram(permutation);
+
+  const positive = makeBraidDiagram(3, [braid(1)], 'up-down', 'braid');
+  const inverse = makeBraidDiagram(3, [braid(1, -1)], 'up-down', 'braid');
+  assert.strictEqual(positive.overlays.length, 1);
+  assert.strictEqual(inverse.overlays.length, 1);
+  assert.notDeepStrictEqual(positive.overlays[0], inverse.overlays[0]);
+  for (const direction of ['up-down', 'down-up', 'left-right', 'right-left']) {
+    const oriented = makeBraidDiagram(4, [braid(1), braid(2, -1)], direction, 'braid');
+    assert.strictEqual(oriented.direction, direction);
+    assertFiniteDiagram(oriented);
+  }
+
+  const tlBasis = tlGeneratorDiagram(3, 1);
+  const matching = makeTlDiagram(3, tlBasis.pairs, 'right-left');
+  assert.strictEqual(matching.paths.length, 3);
+  assert.ok(matching.paths.every((path) => path.role === 'tl'));
+
+  const matrixUnit = makeGridDiagram(4, 2, 3, 'down-up', false);
+  const vectorUnit = makeGridDiagram(4, 3, 1, 'left-right', true);
+  assert.strictEqual(matrixUnit.cells.length, 16);
+  assert.strictEqual(matrixUnit.cells.filter((cell) => cell.selected).length, 1);
+  assert.strictEqual(vectorUnit.cells.length, 4);
+  assert.strictEqual(vectorUnit.cells.filter((cell) => cell.selected).length, 1);
+  assertFiniteDiagram(matrixUnit);
+  assertFiniteDiagram(vectorUnit);
+
+  const klCalculation = calculateStrandWord([kl(1), kl(2), kl(1)], {
+    rank: 3,
+    target: 'hecke',
+    basis: 'kl',
+    includeTrace: true
+  });
+  const klModel = buildDiagrammaticTrace(klCalculation, { scope: 'basis', direction: 'left-right' });
+  const exactStandard = klToStandard(klCalculation.result, 3, budget());
+  const klTerms = klModel.rows.at(-1).rhs.terms;
+  assert.strictEqual(klTerms.length, exactStandard.terms.size);
+  assert.ok(klTerms.every((term) => term.diagram?.kind === 'hecke'));
+
+  const identity = calculateStrandWord([], { rank: 3, target: 'tl', basis: 'diagram', includeTrace: true });
+  const identityModel = buildDiagrammaticTrace(identity, { scope: 'all', direction: 'up-down' });
+  assert.strictEqual(identityModel.rows[0].rhs.kind, 'diagram');
+
+  const latex = formatDiagrammaticTraceTikz(klCalculation, { scope: 'all', direction: 'right-left' });
+  assert.ok(latex.startsWith('% Requires \\usepackage{tikz}'));
+  assert.strictEqual((latex.match(/\\begin\{tikzpicture\}/g) || []).length, (latex.match(/\\end\{tikzpicture\}/g) || []).length);
+  assert.ok(!/NaN|undefined|Infinity/.test(latex));
+
+  const limited = buildDiagrammaticTrace(klCalculation, {
+    scope: 'all',
+    direction: 'up-down',
+    limits: { rank: 24, compositionLength: 160, atoms: 1 }
+  });
+  assert.ok(limited.warnings.some((message) => message.includes('first 1 diagram atoms')));
+  const limitedLatex = formatDiagrammaticTraceTikz(klCalculation, {
+    scope: 'all',
+    direction: 'up-down',
+    limits: { rank: 24, compositionLength: 160, atoms: 1 }
+  });
+  assert.ok(limitedLatex.includes('% Diagrammatic fallback:'));
+}
+
 testLaurentAndSparseCore();
 testPermutationAndBruhat();
 testHeckeRelations();
@@ -272,5 +394,7 @@ testBurau();
 testCrossPaths();
 testApiErrorsTraceAndSerialization();
 testAdvertisedRoutes();
+testSemanticTraceRoutes();
+testDiagrammaticGeometryAndTikz();
 
-console.log('strand_math_test: exact algebra, canonical bases, cross paths, trace, and limits pass');
+console.log('strand_math_test: exact algebra, semantic traces, diagram geometry, TikZ, and limits pass');

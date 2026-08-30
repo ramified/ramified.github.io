@@ -30083,6 +30083,100 @@
     return rows;
   }
 
+
+  function complexChartSnakeTextWidthEstimate(latex, kind = 'label') {
+    let displayLatex = String(latex || '');
+    for (let pass = 0; pass < 2; pass += 1) {
+      displayLatex = displayLatex.replace(/\\(?:operatorname|mathrm|mathbf|mathsf|mathtt|text)\{([^{}]*)\}/g, '$1');
+    }
+    const plain = latexToPlain(displayLatex).replace(/\s+/g, ' ').trim();
+    if (!plain) return kind === 'object' ? 24 : 0;
+    let units = 0;
+    for (const char of plain) {
+      if (/\s/.test(char)) units += 0.45;
+      else if (/[ilI1.,'|]/.test(char)) units += 0.48;
+      else if (/[MW@%]/.test(char)) units += 1.35;
+      else units += 0.9;
+    }
+    const padding = kind === 'object' ? 18 : 14;
+    const width = padding + units * (kind === 'object' ? 8.4 : 7.4);
+    return Math.max(kind === 'object' ? 24 : 0, width);
+  }
+
+  function complexChartSnakeLayout(entry) {
+    const rows = complexChartSnakeRows(entry);
+    const pointMeta = new Map();
+    const objectWidths = new Map();
+    const labelWidths = new Map();
+    rows.forEach((row) => {
+      for (let index = row.start; index <= row.end; index += 1) {
+        pointMeta.set(index, { row, column: complexChartSnakeColumn(row, index) });
+        objectWidths.set(index, complexChartSnakeTextWidthEstimate(entry.objects?.[index] || '', 'object'));
+      }
+    });
+    (entry.maps || []).forEach((mapLatex, index) => {
+      labelWidths.set(index, complexChartSnakeTextWidthEstimate(mapLatex, 'label'));
+    });
+    let columnStep = 110;
+    (entry.maps || []).forEach((mapLatex, index) => {
+      const from = pointMeta.get(index);
+      const to = pointMeta.get(index + 1);
+      if (!from || !to) return;
+      const labelWidth = labelWidths.get(index) || 0;
+      if (from.row === to.row) {
+        const requiredSpan = (objectWidths.get(index) || 0) / 2
+          + (objectWidths.get(index + 1) || 0) / 2
+          + Math.max(56, labelWidth + 24)
+          + 20;
+        columnStep = Math.max(columnStep, requiredSpan / Math.abs(to.column - from.column));
+      } else {
+        const routedColumns = Math.abs(from.column - to.column) + 2.1;
+        columnStep = Math.max(columnStep, (labelWidth + 30) / Math.max(1, routedColumns));
+      }
+    });
+    columnStep = Math.ceil(columnStep);
+    const sidePadding = Math.ceil(Math.max(58, Math.max(0, ...objectWidths.values()) / 2 + 24));
+    const maxColumn = Math.max(1, ...Array.from(pointMeta.values(), (point) => point.column));
+    const maxDegree = Math.max(0, ...rows.map((row) => row.degree));
+    const height = Math.max(150, maxDegree * 110 + 66);
+    const width = Math.ceil(sidePadding * 2 + (maxColumn - 1) * columnStep);
+    const coordByIndex = new Map();
+    pointMeta.forEach((point, index) => {
+      coordByIndex.set(index, {
+        x: sidePadding + (point.column - 1) * columnStep,
+        y: 28 + (maxDegree - point.row.degree) * 110,
+        row: point.row
+      });
+    });
+    return { rows, coordByIndex, objectWidths, labelWidths, columnStep, width, height };
+  }
+
+  function complexChartSnakeArrowGeometry(layout, index) {
+    const from = layout.coordByIndex.get(index);
+    const to = layout.coordByIndex.get(index + 1);
+    if (!from || !to) return null;
+    const startX = from.x + (layout.objectWidths.get(index) || 0) / 2 + 10;
+    const endX = to.x - (layout.objectWidths.get(index + 1) || 0) / 2 - 10;
+    if (from.row === to.row) {
+      return {
+        path: complexChartRoundedSvgPath([{ x: startX, y: from.y }, { x: endX, y: from.y }], 0),
+        labelX: (startX + endX) / 2,
+        labelY: from.y - 18
+      };
+    }
+    const rightX = Math.min(layout.width - 24, from.x + Math.max(100, layout.columnStep * 0.9));
+    const leftX = Math.max(24, to.x - Math.max(135, layout.columnStep * 1.2));
+    const midY = from.y + (to.y - from.y) * 0.52;
+    return {
+      path: complexChartRoundedSvgPath([
+        { x: startX, y: from.y }, { x: rightX, y: from.y }, { x: rightX, y: midY },
+        { x: leftX, y: midY }, { x: leftX, y: to.y }, { x: endX, y: to.y }
+      ], 14),
+      labelX: (rightX + leftX) / 2,
+      labelY: midY - 14
+    };
+  }
+
   function complexChartSnakeDisplayHtml(entry) {
     const tikzPicture = complexChartSnakeDisplayTikzPicture(entry);
     const displayId = `les-display-${hashString(tikzPicture)}`;
@@ -30163,71 +30257,27 @@
   }
 
   function complexChartSnakeDisplayFastHtml(entry, options = {}) {
-    const rows = complexChartSnakeRows(entry);
-    const maxDegree = Math.max(0, ...rows.map((row) => row.degree));
-    const coordByIndex = new Map();
+    const layout = complexChartSnakeLayout(entry);
     const selectedEndpoints = new Set((options.selectedLesRangeEndpoints || [])
       .map((endpoint) => complexChartLesRangeEndpointKey(endpoint))
       .filter(Boolean));
-    const width = 860;
-    const rowGap = 110;
-    const height = Math.max(150, maxDegree * rowGap + 66);
-    const columnStep = 110;
-    const left = 58;
-    const top = 28;
-    rows.forEach((row) => {
-      for (let index = row.start; index <= row.end; index += 1) {
-        const column = complexChartSnakeColumn(row, index);
-        coordByIndex.set(index, {
-          x: left + (column - 1) * columnStep,
-          y: top + (maxDegree - row.degree) * rowGap,
-          row
-        });
-      }
-    });
     const paths = [];
     const labels = [];
-    const markerId = `les-fast-arrow-${hashString(stableJson({
-      objects: entry.objects || [],
-      maps: entry.maps || []
-    }))}`;
+    const markerId = `les-fast-arrow-${hashString(stableJson({ objects: entry.objects || [], maps: entry.maps || [] }))}`;
     (entry.maps || []).forEach((mapLatex, index) => {
-      const from = coordByIndex.get(index);
-      const to = coordByIndex.get(index + 1);
-      if (!from || !to) return;
+      const geometry = complexChartSnakeArrowGeometry(layout, index);
+      if (!geometry) return;
       const selected = selectedEndpoints.has(complexChartLesRangeEndpointKey({ kind: 'map', index }));
       const mapAttrs = options.clickableMaps
         ? ` data-complex-chart-map-entry="${escapeHtml(options.entryId || '')}" data-complex-chart-map-index="${index}"`
         : '';
-      let pathD = '';
-      if (from.row === to.row) {
-        const startX = from.x + 38;
-        const endX = to.x - 38;
-        pathD = complexChartRoundedSvgPath([{ x: startX, y: from.y }, { x: endX, y: from.y }], 0);
-        paths.push(`<path class="sheaf-complex-snake-fast-arrow${selected ? ' is-selected' : ''}" marker-end="url(#${escapeHtml(markerId)})"${mapAttrs} d="${pathD}"></path>`);
-        if (options.clickableMaps) paths.push(`<path class="sheaf-complex-snake-fast-arrow-hit"${mapAttrs} d="${pathD}"></path>`);
-        if (mapLatex) labels.push(complexChartSnakeFastLabelHtml(mapLatex, (startX + endX) / 2, from.y - 18, width, height));
-        return;
-      }
-      const startX = from.x + 42;
-      const endX = to.x - 42;
-      const rightX = Math.min(width - 30, from.x + 100);
-      const leftX = Math.max(30, to.x - 135);
-      const midY = from.y + (to.y - from.y) * 0.52;
-      pathD = complexChartRoundedSvgPath([
-        { x: startX, y: from.y },
-        { x: rightX, y: from.y },
-        { x: rightX, y: midY },
-        { x: leftX, y: midY },
-        { x: leftX, y: to.y },
-        { x: endX, y: to.y }
-      ], 14);
-      paths.push(`<path class="sheaf-complex-snake-fast-arrow${selected ? ' is-selected' : ''}" marker-end="url(#${escapeHtml(markerId)})"${mapAttrs} d="${pathD}"></path>`);
-      if (options.clickableMaps) paths.push(`<path class="sheaf-complex-snake-fast-arrow-hit"${mapAttrs} d="${pathD}"></path>`);
-      if (mapLatex) labels.push(complexChartSnakeFastLabelHtml(mapLatex, (rightX + leftX) / 2, midY - 14, width, height));
+      const layoutAttrs = ` data-sheaf-les-map-index="${index}"`;
+      paths.push(`<path class="sheaf-complex-snake-fast-arrow${selected ? ' is-selected' : ''}" marker-end="url(#${escapeHtml(markerId)})"${layoutAttrs}${mapAttrs} d="${geometry.path}"></path>`);
+      if (options.clickableMaps) paths.push(`<path class="sheaf-complex-snake-fast-arrow-hit"${layoutAttrs}${mapAttrs} d="${geometry.path}"></path>`);
+      if (mapLatex) labels.push(complexChartSnakeFastLabelHtml(mapLatex, index, geometry.labelX, geometry.labelY, layout.width, layout.height));
     });
     const objects = (entry.objects || []).map((objectLatex, index) => {
-      const point = coordByIndex.get(index);
+      const point = layout.coordByIndex.get(index);
       if (!point) return '';
       const selected = selectedEndpoints.has(complexChartLesRangeEndpointKey({ kind: 'object', index }));
       const tag = options.clickableObjects ? 'button' : 'span';
@@ -30235,33 +30285,68 @@
         ? ` type="button" data-complex-chart-object-entry="${escapeHtml(options.entryId || '')}" data-complex-chart-object-kind="${escapeHtml(entry.kind)}" data-complex-chart-object-index="${index}"`
         : '';
       return `
-        <${tag} class="sheaf-complex-snake-fast-object${options.clickableObjects ? ' sheaf-complex-snake-fast-button' : ''}${selected ? ' is-selected' : ''}" style="left:${formatSvgNumber((point.x / width) * 100)}%;top:${formatSvgNumber((point.y / height) * 100)}%;"${attrs}>
+        <${tag} class="sheaf-complex-snake-fast-object${options.clickableObjects ? ' sheaf-complex-snake-fast-button' : ''}${selected ? ' is-selected' : ''}" data-sheaf-les-object-index="${index}" style="left:${formatSvgNumber((point.x / layout.width) * 100)}%;top:${formatSvgNumber((point.y / layout.height) * 100)}%;"${attrs}>
           \\(${escapeHtml(objectLatex)}\\)
         </${tag}>
       `;
     }).join('');
     return `
-      <span class="sheaf-complex-snake-fast-display" style="--les-fast-width:${width}px;--les-fast-ratio:${width} / ${height};">
-        <svg class="sheaf-complex-snake-fast-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-          <defs>
-            <marker id="${escapeHtml(markerId)}" markerWidth="10" markerHeight="10" refX="8.7" refY="5" orient="auto" markerUnits="strokeWidth">
-              <path class="sheaf-complex-snake-fast-marker" d="M 1.1 1.2 C 3.9 2.6 6.4 4.2 8.6 5 C 6.4 5.8 3.9 7.4 1.1 8.8"></path>
-            </marker>
-          </defs>
-          ${paths.join('')}
-        </svg>
-        ${objects}
-        ${labels.join('')}
+      <span class="sheaf-complex-snake-fast-viewport" style="height:${layout.height}px;">
+        <span class="sheaf-complex-snake-fast-display" data-sheaf-les-fast-entry="true" data-sheaf-les-layout-width="${layout.width}" data-sheaf-les-layout-height="${layout.height}" data-sheaf-les-scale="1" style="--les-fast-width:${layout.width}px;--les-fast-ratio:${layout.width} / ${layout.height};">
+          <svg class="sheaf-complex-snake-fast-svg" viewBox="0 0 ${layout.width} ${layout.height}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <defs>
+              <marker id="${escapeHtml(markerId)}" markerWidth="10" markerHeight="10" refX="8.7" refY="5" orient="auto" markerUnits="strokeWidth">
+                <path class="sheaf-complex-snake-fast-marker" d="M 1.1 1.2 C 3.9 2.6 6.4 4.2 8.6 5 C 6.4 5.8 3.9 7.4 1.1 8.8"></path>
+              </marker>
+            </defs>
+            ${paths.join('')}
+          </svg>
+          ${objects}
+          ${labels.join('')}
+        </span>
       </span>
     `;
   }
 
-  function complexChartSnakeFastLabelHtml(mapLatex, x, y, width, height) {
+  function complexChartSnakeFastLabelHtml(mapLatex, index, x, y, width, height) {
     return `
-      <span class="sheaf-complex-snake-fast-label" style="left:${formatSvgNumber((x / width) * 100)}%;top:${formatSvgNumber((y / height) * 100)}%;">
+      <span class="sheaf-complex-snake-fast-label" data-sheaf-les-label-index="${index}" style="left:${formatSvgNumber((x / width) * 100)}%;top:${formatSvgNumber((y / height) * 100)}%;">
         \\(${escapeHtml(mapLatex)}\\)
       </span>
     `;
+  }
+
+  let complexChartSnakeFastResizeObserver = null;
+
+  function scaleComplexChartSnakeFastDisplay(display) {
+    const viewport = display?.closest?.('.sheaf-complex-snake-fast-viewport');
+    if (!viewport) return;
+    const width = Number(display.dataset.sheafLesLayoutWidth);
+    const height = Number(display.dataset.sheafLesLayoutHeight);
+    const availableWidth = viewport.clientWidth;
+    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0 || availableWidth <= 0) return;
+    const scale = Math.min(1, availableWidth / width);
+    display.dataset.sheafLesScale = String(scale);
+    display.style.left = `${Math.max(0, (availableWidth - width * scale) / 2)}px`;
+    display.style.transform = `scale(${scale})`;
+    viewport.style.height = `${Math.ceil(height * scale)}px`;
+  }
+
+  function fitComplexChartSnakeFastDisplays(element) {
+    if (!element?.querySelectorAll) return;
+    const displays = [];
+    if (element.matches?.('[data-sheaf-les-fast-entry]')) displays.push(element);
+    displays.push(...element.querySelectorAll('[data-sheaf-les-fast-entry]'));
+    displays.forEach(scaleComplexChartSnakeFastDisplay);
+    if (!window.ResizeObserver || !element.getBoundingClientRect) return;
+    if (!complexChartSnakeFastResizeObserver) {
+      complexChartSnakeFastResizeObserver = new window.ResizeObserver((entries) => {
+        entries.forEach((entry) => {
+          entry.target.querySelectorAll?.('[data-sheaf-les-fast-entry]').forEach(scaleComplexChartSnakeFastDisplay);
+        });
+      });
+    }
+    complexChartSnakeFastResizeObserver.observe(element);
   }
 
   function complexChartRoundedSvgPath(points, radius = 12) {
@@ -30297,9 +30382,36 @@
     return commands.join(' ');
   }
 
+  function complexChartSnakeTikzColumnStep(entry, rows) {
+    const pointMeta = new Map();
+    rows.forEach((row) => {
+      for (let index = row.start; index <= row.end; index += 1) {
+        pointMeta.set(index, { row, column: complexChartSnakeColumn(row, index) });
+      }
+    });
+    let columnStep = 1.42;
+    (entry.maps || []).forEach((mapLatex, index) => {
+      const from = pointMeta.get(index);
+      const to = pointMeta.get(index + 1);
+      if (!from || !to) return;
+      const labelEm = complexChartSnakeTextWidthEstimate(mapLatex, 'label') / 16;
+      if (from.row === to.row) {
+        const fromObjectEm = complexChartSnakeTextWidthEstimate(entry.objects?.[index] || '', 'object') / 16;
+        const toObjectEm = complexChartSnakeTextWidthEstimate(entry.objects?.[index + 1] || '', 'object') / 16;
+        const requiredCenterEm = fromObjectEm / 2 + toObjectEm / 2 + Math.max(3.5, labelEm + 1.5) + 1.2;
+        columnStep = Math.max(columnStep, requiredCenterEm * 0.351 / Math.abs(to.column - from.column));
+      } else {
+        const routedColumns = Math.abs(from.column - to.column) + 2.1;
+        columnStep = Math.max(columnStep, (labelEm + 1.8) * 0.351 / Math.max(1, routedColumns));
+      }
+    });
+    return columnStep;
+  }
+
   function complexChartSnakeDisplayTikzPicture(entry) {
     const rows = complexChartSnakeRows(entry);
     const coordByIndex = new Map();
+    const columnStep = complexChartSnakeTikzColumnStep(entry, rows);
     const lines = [
       '\\begin{tikzpicture}[baseline=(current bounding box.center), >=latex, rounded corners=6pt, line cap=round, line join=round]',
       '\\tikzset{les object/.style={inner sep=1.5pt}, les arrow/.style={->, line width=0.48pt}, les label/.style={inner sep=1pt}}'
@@ -30307,7 +30419,7 @@
     rows.forEach((row) => {
       for (let index = row.start; index <= row.end; index += 1) {
         const column = complexChartSnakeColumn(row, index);
-        const x = (column - 1) * 1.42;
+        const x = (column - 1) * columnStep;
         const y = row.degree * 1.18;
         coordByIndex.set(index, { x, y, row });
         lines.push(`\\node[les object] (les${index}) at (${formatTikzCoord(x)},${formatTikzCoord(y)}) {$${entry.objects?.[index] || ''}$};`);
@@ -30322,8 +30434,8 @@
         lines.push(`\\draw[les arrow] (les${index}.east) --${label} (les${index + 1}.west);`);
         return;
       }
-      const rightX = from.x + 1.35;
-      const leftX = to.x - 1.35;
+      const rightX = from.x + Math.max(1.35, columnStep * 0.9);
+      const leftX = to.x - Math.max(1.35, columnStep * 1.2);
       const midY = from.y + (to.y - from.y) * 0.5;
       lines.push([
         `\\draw[les arrow] (les${index}.east)`,
@@ -30350,12 +30462,20 @@
     return Number(value).toFixed(3).replace(/\.?0+$/, '');
   }
 
+  function complexChartSnakeTikzcdColumnSep(entry) {
+    const widestLabel = Math.max(0, ...(entry.maps || []).map((mapLatex) => (
+      complexChartSnakeTextWidthEstimate(mapLatex, 'label')
+    )));
+    return `${Math.max(2.2, widestLabel / 16 + 1.2).toFixed(1)}em`;
+  }
+
   function complexChartSnakeDisplayTikzcd(entry) {
     const rows = complexChartSnakeRows(entry);
     const visualRows = [...rows].reverse();
     const columnCount = 4;
     const coordByIndex = new Map();
-    const lines = ['\\[', '\\begin{tikzcd}[ampersand replacement=\\&, row sep=2.4em, column sep=2.2em]'];
+    const columnSep = complexChartSnakeTikzcdColumnSep(entry);
+    const lines = ['\\[', `\\begin{tikzcd}[ampersand replacement=\\&, row sep=2.4em, column sep=${columnSep}]`];
     visualRows.forEach((row, visualIndex) => {
       const cells = Array.from({ length: columnCount }, () => '{}');
       for (let index = row.start; index <= row.end; index += 1) {
@@ -45393,6 +45513,7 @@
   function typeset(element) {
     if (!element) return;
     if (!window.MathJax) {
+      fitComplexChartSnakeFastDisplays(element);
       renderTikz(element);
       return;
     }
@@ -45404,8 +45525,14 @@
         polishDisplayLatexScripts(element);
         return window.MathJax.typesetPromise([element]);
       })
-      .then(() => renderTikz(element))
-      .catch(() => renderTikz(element));
+      .then(() => {
+        fitComplexChartSnakeFastDisplays(element);
+        renderTikz(element);
+      })
+      .catch(() => {
+        fitComplexChartSnakeFastDisplays(element);
+        renderTikz(element);
+      });
   }
 
   function handleComplexChartLesDisplayClick(event) {

@@ -28,6 +28,9 @@
   const BASIC_EXPRESSION_FORMATS = new Set(['composition', 'transpositions', 'cycle', 'one-line', 'two-line', 'matrix']);
   const BASIC_REDUCED_FORMATS = new Set(['composition', 'transpositions']);
   const CALCULATION_TARGETS = new Set(['symmetric', 'braid', 'hecke', 'tl', 'burau']);
+  const CALCULATION_PRESENTATION_MODES = new Set(['symbolic', 'diagrammatic']);
+  const CALCULATION_PRESENTATION_SCOPES = new Set(['all', 'basis']);
+  const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
   const CALCULATION_BASES = {
     symmetric: [{ value: 'permutation', label: 'Permutation basis' }],
     braid: [{ value: 'freely-reduced-word', label: 'Freely reduced word' }],
@@ -89,6 +92,8 @@
     calculationStale: false,
     calculationLatex: '',
     calculationPlain: '',
+    calculationPresentationMode: 'symbolic',
+    calculationPresentationScope: 'all',
     dragInput: null,
     canvasWidth: 0,
     canvasHeight: 0
@@ -160,7 +165,10 @@
     refs.calculate = $('strand-calculate');
     refs.copyCalculationLatex = $('strand-copy-calculation-latex');
     refs.copyCalculationResult = $('strand-copy-calculation-result');
+    refs.calculationModeControl = $('strand-calculation-mode-control');
+    refs.calculationScopeControl = $('strand-calculation-scope-control');
     refs.calculationMessage = $('strand-calculation-message');
+    refs.calculationRenderWarning = $('strand-calculation-render-warning');
     refs.calculationRelations = $('strand-calculation-relations');
     refs.calculationEquation = $('strand-calculation-equation');
     refs.calculationMatrixSection = $('strand-calculation-matrix-section');
@@ -183,6 +191,7 @@
       state.direction = DIRECTIONS.has(refs.direction.value) ? refs.direction.value : DEFAULT_DIRECTION;
       setStatus(`direction: ${DIRECTION_LABELS[state.direction]}`);
       renderAll({ preserveMessage: true });
+      if (state.calculationResult) renderCalculationResult();
     });
 
     refs.displayStyle.addEventListener('change', () => {
@@ -237,7 +246,15 @@
       refreshExport();
     });
     refs.calculate?.addEventListener('click', calculateCurrentWord);
-    refs.copyCalculationLatex?.addEventListener('click', () => copyCalculationText(state.calculationLatex, 'Calculation LaTeX copied.'));
+    refs.calculationModeControl?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-calculation-mode]');
+      if (button) setCalculationPresentation(button.dataset.calculationMode, state.calculationPresentationScope);
+    });
+    refs.calculationScopeControl?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-calculation-scope]');
+      if (button && !button.disabled) setCalculationPresentation(state.calculationPresentationMode, button.dataset.calculationScope);
+    });
+    refs.copyCalculationLatex?.addEventListener('click', () => copyCalculationText(calculationLatexForCopy(), 'Calculation LaTeX copied.'));
     refs.copyCalculationResult?.addEventListener('click', () => copyCalculationText(state.calculationPlain, 'Calculation result copied.'));
   }
 
@@ -413,7 +430,7 @@
       if (event) event.preventDefault();
       if (Number.isInteger(insertIndex)) insertGeneratorAt(generator, insertIndex);
       else {
-        setStatus(`drop ${generatorLabel(generator)} on the strand canvas to insert it`);
+        setStatus(`drop ${inlineMath(generatorLatex(generator))} on the strand canvas to insert it`);
         renderAll({ preserveMessage: true });
       }
       return;
@@ -460,17 +477,17 @@
     suppressInputChartClickUntil = Date.now() + 500;
     if (wasCancelled) {
       restoreDraggedCanvasGenerator(drag);
-      setStatus(`kept ${generatorLabel(generator)}`);
+      setStatus(`kept ${inlineMath(generatorLatex(generator))}`);
       renderAll({ preserveMessage: true });
       return;
     }
 
     if (Number.isInteger(insertIndex)) {
-      insertGeneratorAt(generator, insertIndex, `moved ${generatorLabel(generator)} to word position ${insertIndex + 1}`);
+      insertGeneratorAt(generator, insertIndex, `moved ${inlineMath(generatorLatex(generator))} to word position ${insertIndex + 1}`);
       return;
     }
 
-    setStatus(`deleted ${generatorLabel(generator)} from word position ${sourceIndex + 1}`);
+    setStatus(`deleted ${inlineMath(generatorLatex(generator))} from word position ${sourceIndex + 1}`);
     renderAll({ preserveMessage: true });
   }
 
@@ -495,8 +512,10 @@
   function createGeneratorGhost(generator) {
     const ghost = document.createElement('div');
     ghost.className = 'strand-generator-drag-ghost';
-    ghost.textContent = generatorLabel(generator);
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.textContent = inlineMath(generatorLatex(generator));
     document.body.appendChild(ghost);
+    typesetMathNodes([ghost]);
     return ghost;
   }
 
@@ -508,7 +527,14 @@
 
   function bindCards() {
     if (window.CalculatorCards) {
-      window.CalculatorCards.init({ side: '#cards' });
+      window.CalculatorCards.init({
+        side: '#cards',
+        manualWideButtons: true,
+        onWideChange(card) {
+          if (card?.id === 'strand-calculation-card' && state.calculationResult) renderCalculationResult();
+        }
+      });
+      window.addEventListener('resize', () => window.CalculatorCards.syncWideCards(document));
       return;
     }
     let suppressCardToggleUntil = 0;
@@ -687,7 +713,8 @@
     const fixedMode = state.strandSizeMode === 'fixed';
     refs.fixedGeneratorSize.disabled = !fixedMode;
     if (refs.fixedGeneratorSizeRow) refs.fixedGeneratorSizeRow.classList.toggle('is-disabled', !fixedMode);
-    refs.statusBadge.textContent = groupPlainLabel(state.groupType, state.strandCount);
+    clearMathTypesetTargets(refs.statusBadge, refs.inputChart, refs.calculationSource);
+    refs.statusBadge.textContent = inlineMath(groupLatex(state.groupType, state.strandCount));
     refs.clear.disabled = state.appliedSteps.length === 0;
     syncGeneratorBounds();
     syncBasicInfoControls();
@@ -699,7 +726,8 @@
     state.calculationTarget = calculationTargetValue(state.calculationTarget);
     if (refs.calculationTarget) refs.calculationTarget.value = state.calculationTarget;
     syncCalculationBasisOptions();
-    if (refs.calculationSource) refs.calculationSource.textContent = calculationSourceLabel();
+    syncCalculationPresentationControls();
+    if (refs.calculationSource) refs.calculationSource.textContent = calculationSourceTypesetLabel();
   }
 
   function syncCalculationBasisOptions() {
@@ -710,6 +738,39 @@
       .map((choice) => `<option value="${escapeHtml(choice.value)}">${escapeHtml(choice.label)}</option>`)
       .join('');
     refs.calculationBasis.value = state.calculationBasis;
+  }
+
+  function calculationPresentationModeValue(value) {
+    return CALCULATION_PRESENTATION_MODES.has(value) ? value : 'symbolic';
+  }
+
+  function calculationPresentationScopeValue(value) {
+    return CALCULATION_PRESENTATION_SCOPES.has(value) ? value : 'all';
+  }
+
+  function syncCalculationPresentationControls() {
+    state.calculationPresentationMode = calculationPresentationModeValue(state.calculationPresentationMode);
+    state.calculationPresentationScope = calculationPresentationScopeValue(state.calculationPresentationScope);
+    refs.calculationModeControl?.querySelectorAll('[data-calculation-mode]').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.calculationMode === state.calculationPresentationMode));
+    });
+    const diagrammatic = state.calculationPresentationMode === 'diagrammatic';
+    refs.calculationScopeControl?.classList.toggle('is-disabled', !diagrammatic);
+    refs.calculationScopeControl?.querySelectorAll('[data-calculation-scope]').forEach((button) => {
+      button.disabled = !diagrammatic;
+      button.setAttribute('aria-pressed', String(button.dataset.calculationScope === state.calculationPresentationScope));
+    });
+  }
+
+  function setCalculationPresentation(mode, scope) {
+    const nextMode = calculationPresentationModeValue(mode);
+    const nextScope = calculationPresentationScopeValue(scope);
+    const changed = nextMode !== state.calculationPresentationMode || nextScope !== state.calculationPresentationScope;
+    state.calculationPresentationMode = nextMode;
+    state.calculationPresentationScope = nextScope;
+    syncCalculationPresentationControls();
+    if (changed && state.calculationResult) renderCalculationResult();
+    if (changed) refreshExport();
   }
 
   function syncBasicInfoControls() {
@@ -748,7 +809,7 @@
 
   function addGenerator(generator) {
     const record = normalizeGeneratorRecord(generator);
-    insertGeneratorAt(record, state.appliedSteps.length, `added ${generatorLabel(record)}`);
+    insertGeneratorAt(record, state.appliedSteps.length, `added ${inlineMath(generatorLatex(record))}`);
   }
 
   function insertGeneratorAt(generator, index, message) {
@@ -760,14 +821,14 @@
     }
     const insertIndex = Math.max(0, Math.min(state.appliedSteps.length, Number.isInteger(index) ? index : state.appliedSteps.length));
     state.appliedSteps.splice(insertIndex, 0, record);
-    setStatus(message || `inserted ${generatorLabel(record)} at word position ${insertIndex + 1}`);
+    setStatus(message || `inserted ${inlineMath(generatorLatex(record))} at word position ${insertIndex + 1}`);
     renderAll({ preserveMessage: true });
   }
 
   function undoStep() {
     if (!state.appliedSteps.length) return;
     const removed = state.appliedSteps.pop();
-    setStatus(`removed ${generatorLabel(removed)}`);
+    setStatus(`removed ${inlineMath(generatorLatex(removed))}`);
     renderAll({ preserveMessage: true });
   }
 
@@ -782,7 +843,7 @@
     if (!refs.inputChart) return;
     const indices = generatorValuesForState();
     if (!indices.length) {
-      refs.inputChart.innerHTML = `<div class="strand-note">${escapeHtml(groupPlainLabel())} has no available generators.</div>`;
+      refs.inputChart.innerHTML = `<div class="strand-note">${escapeHtml(inlineMath(groupLatex()))} has no available generators.</div>`;
       return;
     }
     refs.inputChart.innerHTML = GENERATOR_FAMILY_SECTIONS
@@ -814,9 +875,10 @@
 
   function renderSummary(data) {
     const length = data.wordRecords.length;
+    clearMathTypesetTargets(refs.summary);
     refs.summary.textContent = length
-      ? `${length} generator${length === 1 ? '' : 's'}; ${data.coxeterOnly ? `w = ${data.oneLinePlain}` : `word = ${plainGeneratorWord(data.wordRecords)}`}`
-      : `identity in ${groupPlainLabel(data.groupType, data.n)}`;
+      ? `${length} generator${length === 1 ? '' : 's'}; ${data.coxeterOnly ? inlineMath(`w=${oneLineLatex(data)}`) : inlineMath(generatorWordLatex(data.wordRecords, true))}`
+      : `identity in ${inlineMath(groupLatex(data.groupType, data.n))}`;
   }
 
   function resizeCanvas() {
@@ -2320,7 +2382,7 @@
   function generatorChipMarkup(generator) {
     const record = normalizeGeneratorRecord(generator);
     const sign = record.family === 'braid' ? ` data-generator-sign="${record.sign}"` : '';
-    return `<button class="strand-generator-chip is-${record.family}" type="button" data-generator-family="${record.family}" data-generator-index="${record.index}"${sign} aria-label="${escapeHtml(generatorAriaLabel(record))}">${escapeHtml(generatorLabel(record))}</button>`;
+    return `<button class="strand-generator-chip is-${record.family}" type="button" data-generator-family="${record.family}" data-generator-index="${record.index}"${sign} aria-label="${escapeHtml(generatorAriaLabel(record))}">${escapeHtml(inlineMath(generatorLatex(record)))}</button>`;
   }
 
   function generatorRecordFromChip(chip) {
@@ -2558,7 +2620,7 @@
     return [...families][0];
   }
 
-  function calculationSourceLabel() {
+  function calculationSourceTypesetLabel() {
     const source = calculationSourceFamily();
     const labels = {
       identity: 'identity',
@@ -2568,7 +2630,9 @@
       kl: 'KL generators',
       tl: 'Temperley-Lieb generators'
     };
-    const suffix = state.groupType === 'symmetric' ? ` in type A (${groupPlainLabel()})` : ` in type ${state.groupType}`;
+    const suffix = state.groupType === 'symmetric'
+      ? ` in type ${inlineMath('A')} (${inlineMath(groupLatex())})`
+      : ` in type ${inlineMath(state.groupType)}`;
     return `${labels[source] || source}${suffix}`;
   }
 
@@ -2657,13 +2721,219 @@
     }
   }
 
+  function diagrammaticPresentationOptions() {
+    return {
+      scope: calculationPresentationScopeValue(state.calculationPresentationScope),
+      direction: DIRECTIONS.has(state.direction) ? state.direction : DEFAULT_DIRECTION
+    };
+  }
+
+  function calculationLatexForCopy() {
+    if (!state.calculationResult) return '';
+    if (state.calculationPresentationMode !== 'diagrammatic') return state.calculationLatex;
+    const formatter = window.StrandMath?.formatDiagrammaticTraceTikz;
+    if (!formatter) return state.calculationLatex;
+    try {
+      return formatter(state.calculationResult, diagrammaticPresentationOptions());
+    } catch (_) {
+      return state.calculationLatex;
+    }
+  }
+
+  function htmlElement(tagName, className) {
+    const element = document.createElement(tagName);
+    if (className) element.className = className;
+    return element;
+  }
+
+  function mathElement(latex, className) {
+    const element = htmlElement('span', className || 'strand-diagram-math');
+    element.textContent = inlineMath(latex || '0');
+    return element;
+  }
+
+  function svgElement(tagName, attributes = {}) {
+    const element = document.createElementNS(SVG_NAMESPACE, tagName);
+    Object.entries(attributes).forEach(([name, value]) => element.setAttribute(name, String(value)));
+    return element;
+  }
+
+  function appendDiagramEndpoint(svg, point) {
+    if (!point) return;
+    svg.appendChild(svgElement('circle', {
+      class: 'strand-diagram-endpoint',
+      cx: Number(point.x) * 100,
+      cy: Number(point.y) * 100,
+      r: 1.35
+    }));
+  }
+
+  function renderInlineDiagram(diagram) {
+    const svg = svgElement('svg', {
+      class: 'strand-inline-diagram',
+      viewBox: '0 0 100 100',
+      width: Math.max(32, Number(diagram?.width) || 72),
+      height: Math.max(32, Number(diagram?.height) || 72),
+      role: 'img',
+      'aria-label': diagram?.label || 'diagrammatic basis element',
+      preserveAspectRatio: 'none'
+    });
+    const title = svgElement('title');
+    title.textContent = diagram?.label || 'diagrammatic basis element';
+    svg.appendChild(title);
+
+    if (diagram?.kind === 'matrix-unit' || diagram?.kind === 'vector-unit') {
+      (diagram.cells || []).forEach((cell) => {
+        svg.appendChild(svgElement('rect', {
+          class: `strand-diagram-grid-cell${cell.selected ? ' is-selected' : ''}`,
+          x: Number(cell.x) * 100,
+          y: Number(cell.y) * 100,
+          width: Number(cell.width) * 100,
+          height: Number(cell.height) * 100
+        }));
+      });
+      return svg;
+    }
+
+    (diagram?.paths || []).forEach((path) => {
+      const role = path.role === 'tl' ? ' is-tl' : diagram.kind === 'hecke' ? ' is-hecke' : '';
+      svg.appendChild(svgElement('path', {
+        class: `strand-diagram-path${role}`,
+        d: window.StrandMath.pathToSvgData(path)
+      }));
+      appendDiagramEndpoint(svg, path.start);
+      appendDiagramEndpoint(svg, path.curves?.[path.curves.length - 1]?.end);
+    });
+    (diagram?.overlays || []).forEach((overlay) => {
+      const attributes = {
+        x1: Number(overlay.from.x) * 100,
+        y1: Number(overlay.from.y) * 100,
+        x2: Number(overlay.to.x) * 100,
+        y2: Number(overlay.to.y) * 100
+      };
+      svg.appendChild(svgElement('line', { ...attributes, class: 'strand-diagram-over-gap' }));
+      svg.appendChild(svgElement('line', { ...attributes, class: 'strand-diagram-over' }));
+    });
+    return svg;
+  }
+
+  function renderDiagramTerm(term, index) {
+    const node = htmlElement('span', 'strand-diagram-term');
+    const parts = term.parts || {};
+    const prefix = `${parts.prefix || (index ? '+' : '')}${parts.coefficientLatex || ''}`;
+    if (term.diagram) {
+      if (prefix) node.appendChild(mathElement(prefix, 'strand-diagram-term-prefix'));
+      node.appendChild(renderInlineDiagram(term.diagram));
+    } else {
+      node.appendChild(mathElement(`${prefix}${term.basisLatex || ''}`, 'strand-diagram-coefficient'));
+    }
+    return node;
+  }
+
+  function renderDiagramOperand(operand) {
+    const node = htmlElement('span', 'strand-diagram-operand');
+    if (!operand || operand.kind === 'symbolic') {
+      node.appendChild(mathElement(operand?.latex || '0'));
+      return node;
+    }
+    if (operand.kind === 'diagram') {
+      if (operand.badgeLatex) node.appendChild(mathElement(operand.badgeLatex, 'strand-diagram-representation-badge'));
+      node.appendChild(renderInlineDiagram(operand.diagram));
+      return node;
+    }
+    if (operand.kind === 'linear-combination') {
+      node.classList.add('strand-diagram-linear');
+      if (!operand.terms?.length) node.appendChild(mathElement('0'));
+      (operand.terms || []).forEach((term, index) => node.appendChild(renderDiagramTerm(term, index)));
+      return node;
+    }
+    if (operand.kind === 'factor-product') {
+      node.classList.add('strand-diagram-factor-product');
+      (operand.factors || []).forEach((factor) => {
+        const factorNode = htmlElement('span', 'strand-diagram-factor');
+        factorNode.appendChild(mathElement('(', 'strand-diagram-parenthesis'));
+        factorNode.appendChild(renderDiagramOperand(factor));
+        factorNode.appendChild(mathElement(')', 'strand-diagram-parenthesis'));
+        node.appendChild(factorNode);
+      });
+      return node;
+    }
+    if (operand.kind === 'representation') {
+      node.classList.add('strand-diagram-representation');
+      node.appendChild(mathElement(operand.badgeLatex || '\\rho', 'strand-diagram-representation-badge'));
+      node.appendChild(mathElement('(', 'strand-diagram-parenthesis'));
+      node.appendChild(renderDiagramOperand(operand.content));
+      node.appendChild(mathElement(')', 'strand-diagram-parenthesis'));
+      return node;
+    }
+    if (operand.kind === 'vector-system') {
+      const system = htmlElement('span', 'strand-diagram-vector-system');
+      (operand.rows || []).forEach((row) => {
+        const rowNode = htmlElement('span', 'strand-diagram-vector-row');
+        const lhs = htmlElement('span', 'strand-diagram-vector-lhs');
+        lhs.appendChild(mathElement(row.lhs?.rhoLatex || '\\rho(\\beta)'));
+        lhs.appendChild(row.lhs?.diagram ? renderInlineDiagram(row.lhs.diagram) : mathElement(row.lhs?.basisLatex || 'e'));
+        rowNode.appendChild(lhs);
+        rowNode.appendChild(mathElement('=', 'strand-diagram-trace-equals'));
+        const rhs = { kind: 'linear-combination', terms: row.terms || [] };
+        rowNode.appendChild(renderDiagramOperand(rhs));
+        system.appendChild(rowNode);
+      });
+      node.appendChild(system);
+      return node;
+    }
+    node.appendChild(mathElement(operand.latex || '0'));
+    return node;
+  }
+
+  function renderDiagrammaticTrace(model) {
+    const trace = htmlElement('div', 'strand-diagram-trace');
+    (model.rows || []).forEach((row) => {
+      const rowNode = htmlElement('div', 'strand-diagram-trace-row');
+      rowNode.dataset.relationId = row.relationId || '';
+      rowNode.appendChild(row.lhs ? renderDiagramOperand(row.lhs) : htmlElement('span'));
+      rowNode.appendChild(mathElement('=', 'strand-diagram-trace-equals'));
+      const rhs = renderDiagramOperand(row.rhs);
+      if (row.final) rhs.classList.add('strand-diagram-final');
+      rowNode.appendChild(rhs);
+      rowNode.appendChild(row.annotationLatex
+        ? mathElement(row.annotationLatex, 'strand-diagram-trace-annotation')
+        : htmlElement('span'));
+      trace.appendChild(rowNode);
+    });
+    return trace;
+  }
+
+  function setCalculationRenderWarning(messages) {
+    if (!refs.calculationRenderWarning) return;
+    const text = Array.isArray(messages) ? messages.filter(Boolean).join(' ') : String(messages || '');
+    refs.calculationRenderWarning.textContent = text;
+    refs.calculationRenderWarning.hidden = !text;
+  }
+
   function renderCalculationResult() {
     const calculation = state.calculationResult;
     if (!calculation) {
       clearCalculationResultDisplay();
       return;
     }
-    if (refs.calculationEquation) refs.calculationEquation.textContent = state.calculationLatex;
+    clearMathTypesetTargets(refs.calculationRelations, refs.calculationEquation, refs.calculationMatrix);
+    setCalculationRenderWarning([]);
+    if (refs.calculationEquation) {
+      refs.calculationEquation.replaceChildren();
+      if (state.calculationPresentationMode === 'diagrammatic' && window.StrandMath?.buildDiagrammaticTrace) {
+        try {
+          const model = window.StrandMath.buildDiagrammaticTrace(calculation, diagrammaticPresentationOptions());
+          refs.calculationEquation.appendChild(renderDiagrammaticTrace(model));
+          setCalculationRenderWarning(model.warnings);
+        } catch (error) {
+          refs.calculationEquation.textContent = state.calculationLatex;
+          setCalculationRenderWarning(`Diagrammatic rendering failed; symbolic notation is shown. ${error?.message || ''}`);
+        }
+      } else {
+        refs.calculationEquation.textContent = state.calculationLatex;
+      }
+    }
     if (refs.calculationRelations) {
       refs.calculationRelations.replaceChildren();
       const relations = calculation.relationsUsed.length ? calculation.relationsUsed : ['identity'];
@@ -2687,10 +2957,12 @@
   }
 
   function clearCalculationResultDisplay() {
+    clearMathTypesetTargets(refs.calculationRelations, refs.calculationEquation, refs.calculationMatrix);
     if (refs.calculationEquation) refs.calculationEquation.textContent = '';
     if (refs.calculationRelations) refs.calculationRelations.innerHTML = '';
     if (refs.calculationMatrixSection) refs.calculationMatrixSection.hidden = true;
     if (refs.calculationMatrix) refs.calculationMatrix.textContent = '';
+    setCalculationRenderWarning([]);
   }
 
   function setCalculationMessage(message, isError = false, isStale = false) {
@@ -2752,7 +3024,11 @@
       calculationSettings: {
         target: state.calculationTarget,
         basis: state.calculationBasis,
-        convention: 'burau-compatible-v'
+        convention: 'burau-compatible-v',
+        presentation: {
+          mode: calculationPresentationModeValue(state.calculationPresentationMode),
+          scope: calculationPresentationScopeValue(state.calculationPresentationScope)
+        }
       }
     };
     if (coxeterOnly) payload.appliedSteps = appliedGenerators.map((record) => record.index);
@@ -2917,6 +3193,8 @@
       calculationTarget,
       data.calculationSettings?.basis || data.calculation?.basis
     );
+    const calculationPresentationMode = calculationPresentationModeValue(data.calculationSettings?.presentation?.mode);
+    const calculationPresentationScope = calculationPresentationScopeValue(data.calculationSettings?.presentation?.scope);
     const rawSteps = Array.isArray(data.appliedGenerators)
       ? data.appliedGenerators
       : Array.isArray(data.appliedSteps)
@@ -2937,6 +3215,8 @@
     state.appliedSteps = valid;
     state.calculationTarget = calculationTarget;
     state.calculationBasis = calculationBasis;
+    state.calculationPresentationMode = calculationPresentationMode;
+    state.calculationPresentationScope = calculationPresentationScope;
     state.calculationResult = null;
     state.calculationKey = '';
     state.calculationStale = false;
@@ -2993,7 +3273,10 @@
   }
 
   function setStatus(message) {
-    if (refs.status) refs.status.textContent = message || 'ready';
+    if (!refs.status) return;
+    clearMathTypesetTargets(refs.status);
+    refs.status.textContent = message || 'ready';
+    queueMathTypeset();
   }
 
   function setExportMessage(message, isError = false) {
@@ -3027,11 +3310,33 @@
     const run = () => {
       mathTypesetQueued = false;
       if (!window.MathJax?.typesetPromise) return;
-      const targets = [refs.basicInfo].filter(Boolean);
+      const targets = [
+        refs.basicInfo,
+        refs.inputChart,
+        refs.statusBadge,
+        refs.status,
+        refs.summary,
+        refs.calculationSource
+      ].filter(Boolean);
       if (window.MathJax.typesetClear) window.MathJax.typesetClear(targets);
       window.MathJax.typesetPromise(targets).catch(() => {});
     };
     if (window.MathJax.startup?.promise) window.MathJax.startup.promise.then(run).catch(() => { mathTypesetQueued = false; });
+    else window.setTimeout(run, 0);
+  }
+
+  function clearMathTypesetTargets(...nodes) {
+    const targets = nodes.flat().filter(Boolean);
+    if (targets.length && window.MathJax?.typesetClear) window.MathJax.typesetClear(targets);
+  }
+
+  function typesetMathNodes(nodes) {
+    const targets = (nodes || []).filter(Boolean);
+    if (!targets.length || !window.MathJax) return;
+    const run = () => {
+      if (window.MathJax?.typesetPromise) window.MathJax.typesetPromise(targets).catch(() => {});
+    };
+    if (window.MathJax.startup?.promise) window.MathJax.startup.promise.then(run).catch(() => {});
     else window.setTimeout(run, 0);
   }
 })();

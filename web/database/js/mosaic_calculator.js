@@ -1189,6 +1189,7 @@
     refs.inspectHomologyCordOptimization = document.getElementById('inspect-homology-cord-optimization');
     refs.homologyCordOptimizationReadout = document.getElementById('homology-cord-optimization-readout');
     refs.homologyLocalChartCard = document.getElementById('homology-local-chart-card');
+    refs.homologyLocalChartWide = document.getElementById('homology-local-chart-wide');
     refs.inspectHomologyLocalVertex = document.getElementById('inspect-homology-local-vertex');
     refs.homologyLocalChartRadius = document.getElementById('homology-local-chart-radius');
     refs.homologyLocalChartRadiusValue = document.getElementById('homology-local-chart-radius-value');
@@ -1613,6 +1614,16 @@
         }
         syncMainCanvasCursor();
         draw(analyze());
+      });
+    }
+    if (refs.homologyLocalChartWide) {
+      refs.homologyLocalChartWide.addEventListener('click', () => {
+        if (!window.CalculatorCards || !refs.homologyLocalChartCard) return;
+        window.CalculatorCards.setWide(
+          refs.homologyLocalChartCard,
+          refs.homologyLocalChartCard.dataset.cardWideState !== 'wide'
+        );
+        renderHomologyLocalChart();
       });
     }
     (refs.homologyLocalChartModeButtons || []).forEach((button) => {
@@ -2148,6 +2159,7 @@
       normalizeViewOffset();
       syncDualGraphDegenerationWidePlacement();
       syncWanderPlacement();
+      if (window.CalculatorCards) window.CalculatorCards.syncWideCards(document);
       layoutTilePalette();
       layoutDecorationPalette();
       draw(analyze());
@@ -17835,6 +17847,8 @@
     const gluedPartner = gluedBoundaryPartner(entry.side.index, entry.side.dir);
     return {
       frame: homologyCordPortalFrame(analysis, entry, target),
+      fromSide: cloneBoundaryEdge(entry.side),
+      toSide: cloneBoundaryEdge(target.side),
       crossing: gluedPartner
         ? { fromTile: entry.side.index, fromDir: entry.side.dir, toTile: neighbor.index, toDir: neighbor.dir }
         : null
@@ -17848,9 +17862,62 @@
     // example around a hole). Traversing that edge does not cross a portal,
     // so initial polyline construction continues in the current chart.
     if (entry && entry.edge && entry.edge.kind === 'boundary') {
-      return { frame: homologyCordAffineIdentity(), crossing: null };
+      return {
+        frame: homologyCordAffineIdentity(),
+        crossing: null,
+        fromSide: cloneBoundaryEdge(entry.side),
+        toSide: null
+      };
     }
     return null;
+  }
+
+  function homologyCordCoordinateSignature(classification) {
+    if (!classification || !classification.valid || !Array.isArray(classification.coordinates)) return '';
+    return classification.coordinates.map((entry) => (
+      `${entry.id}:${BigInt(entry.coefficient || 0).toString()}`
+    )).join('|');
+  }
+
+  function homologyCordInitializationCertificate(generator, ordered, analysis) {
+    const homology = backgroundHomologyApi();
+    if (!generator || !Array.isArray(generator.edgeChain) || !analysis
+      || !analysis.graph || !analysis.snf || !homology || typeof homology.classifyChain !== 'function') return null;
+    const constructionChain = Array.from({ length: analysis.complex.edges.length }, () => 0n);
+    let constructionValid = true;
+    (ordered || []).forEach((record) => {
+      const edgeId = record && record.entry && record.entry.edge && record.entry.edge.id;
+      if (!Number.isInteger(edgeId) || edgeId < 0 || edgeId >= constructionChain.length) {
+        constructionValid = false;
+        return;
+      }
+      constructionChain[edgeId] += record.entry.coefficient > 0n ? 1n : -1n;
+    });
+    const target = homology.classifyChain(analysis, generator.edgeChain);
+    const construction = homology.classifyChain(analysis, constructionChain);
+    const targetHomologySignature = homologyCordCoordinateSignature(target);
+    const constructionHomologySignature = homologyCordCoordinateSignature(construction);
+    return {
+      valid: constructionValid && !!target.valid && !!construction.valid
+        && targetHomologySignature === constructionHomologySignature,
+      targetHomologySignature,
+      constructionHomologySignature,
+      constructionChain
+    };
+  }
+
+  function homologyCordInitializationCertificateValid(certificate) {
+    return !!certificate && certificate.valid
+      && certificate.targetHomologySignature === certificate.constructionHomologySignature;
+  }
+
+  function homologyCordRecordEndpointCorner(record, endpoint) {
+    const entry = record && record.entry;
+    if (!entry || !entry.side) return -1;
+    const corners = orientedBoundaryEdgeCorners(entry.side.index, entry.side.dir);
+    const reversed = !!entry.reverse;
+    if (endpoint === 'start') return reversed ? corners.end : corners.start;
+    return reversed ? corners.start : corners.end;
   }
 
   function homologyCordMaterialSegment(entry, insetRealBoundary = false) {
@@ -17889,6 +17956,10 @@
     const insetSingleBoundary = ordered.filter((record) => record.entry.edge.kind === 'boundary').length === 1;
     const points = [];
     const analysis = analysisOverride || currentBackgroundHomologyAnalysis();
+    const initializationCertificate = homologyCordInitializationCertificate(generator, ordered, analysis);
+    const certificationRequired = !!(analysis && analysis.graph && analysis.snf);
+    if ((certificationRequired || initializationCertificate)
+      && !homologyCordInitializationCertificateValid(initializationCertificate)) return null;
     const transitions = ordered.map((record) => homologyCordEntryTransition(analysis, record.entry));
     if (transitions.some((transition) => !transition)) return null;
     let frame = homologyCordAffineIdentity();
@@ -17918,7 +17989,9 @@
           // adapter instead of becoming another physical particle.
           portal: recordIndex > 0 && index === 0,
           tileIndex: entry.side.index,
-          chartVertex: -1
+          chartVertex: -1,
+          constructionRecordIndex: recordIndex,
+          constructionSampleIndex: index
         };
         point.chartVertex = nearestHomologyCordChartVertex(
           analysis,
@@ -17962,6 +18035,7 @@
     last.frame = { matrix: { ...frame.matrix }, offset: { ...frame.offset } };
     last.tileIndex = first.tileIndex;
     last.chartVertex = first.chartVertex;
+    last.constructionClosure = true;
     const deck = { x: closed.x - first.x, y: closed.y - first.y };
     const chain = {
       generatorId: generator.id,
@@ -17972,7 +18046,28 @@
         matrix: { ...frame.matrix },
         offset: { ...frame.offset }
       },
-      closurePortalItinerary: transitions.map((transition) => transition.crossing).filter(Boolean)
+      closurePortalItinerary: transitions.map((transition) => transition.crossing).filter(Boolean),
+      constructionTransitions: transitions.map((transition, index) => {
+        const record = ordered[index];
+        const nextRecord = ordered[(index + 1) % ordered.length];
+        return {
+          index,
+          fromSide: transition.fromSide ? { ...transition.fromSide } : null,
+          toSide: transition.toSide ? { ...transition.toSide } : null,
+          crossing: transition.crossing ? { ...transition.crossing } : null,
+          vertexId: record.endVertex,
+          fromTile: record.entry.side.index,
+          fromCorner: homologyCordRecordEndpointCorner(record, 'end'),
+          toTile: nextRecord.entry.side.index,
+          toCorner: homologyCordRecordEndpointCorner(nextRecord, 'start')
+        };
+      }),
+      initializationCertificate: initializationCertificate ? {
+        valid: initializationCertificate.valid,
+        targetHomologySignature: initializationCertificate.targetHomologySignature,
+        constructionHomologySignature: initializationCertificate.constructionHomologySignature,
+        constructionChain: [...initializationCertificate.constructionChain]
+      } : null
     };
     if (!homologyCordCandidateItinerary(chain, homologyCordMaterialSnapshot(chain), analysis)) return null;
     return chain;
@@ -19014,6 +19109,7 @@
         end: points[(edgeIndex + 1) % points.length]
       }));
       polygons.push({
+        tileIndex: index,
         center: { x: cell.x, y: cell.y },
         points,
         edges,
@@ -19433,7 +19529,17 @@
     // another on-screen chart copy must not push this particle out of its own
     // polygon merely because the two copies meet at a displayed corner.
     const localObstacles = {
-      polygons: (obstacles && obstacles.polygons) || [],
+      polygons: ((obstacles && obstacles.polygons) || []).filter((polygon) => {
+        if (!Number.isInteger(polygon.tileIndex)) return true;
+        const row = Math.floor(tileIndex / state.cols);
+        const col = tileIndex % state.cols;
+        for (let dir = 0; dir < getLattice().sides; dir += 1) {
+          if (!gluedBoundaryPartner(tileIndex, dir)) continue;
+          const adjacent = neighbor(row, col, dir, state.rows, state.cols, getLattice(), false);
+          if (adjacent && indexOf(adjacent.row, adjacent.col, state.cols) === polygon.tileIndex) return false;
+        }
+        return true;
+      }),
       barriers: ((obstacles && obstacles.barriers) || []).filter((barrier) => (
         barrier.tileIndex === tileIndex
       ))
@@ -19548,6 +19654,9 @@
     const vertexEvents = [];
     let current = { x: start.x, y: start.y };
     let currentTile = start.tileIndex;
+    const maxInternalTransitions = Number.isInteger(options.maxInternalTransitions)
+      ? Math.max(1, options.maxInternalTransitions)
+      : Math.max(HOMOLOGY_CORD_MAX_PORTAL_CROSSINGS, state.rows + state.cols + word.length);
     if (spring && spring.vertexEvent
       && (spring.vertexEvent.active || spring.vertexEvent.constructionBridge)) {
       const star = atlas.vertexStars.get(spring.vertexEvent.vertexId);
@@ -19589,7 +19698,7 @@
       return { valid: true, segments, crossings, vertexEvents, reason: '' };
     }
     const traceInternalToTile = (targetPoint, desiredTile) => {
-      for (let attempt = 0; attempt <= HOMOLOGY_CORD_MAX_PORTAL_CROSSINGS; attempt += 1) {
+      for (let attempt = 0; attempt <= maxInternalTransitions; attempt += 1) {
         if (currentTile === desiredTile) return true;
         // A cellular representative often changes tile labels while running
         // exactly along their common edge or through its endpoint. Standard
@@ -19798,9 +19907,175 @@
     return candidates.sort((left, right) => left.id.localeCompare(right.id))[0] || null;
   }
 
+  function homologyCordConstructionTransitionForSpring(surfaceChain, leftSource, rightSource) {
+    const transitions = surfaceChain && surfaceChain.constructionTransitions;
+    if (!Array.isArray(transitions) || !transitions.length || !leftSource || !rightSource) return null;
+    if (rightSource.constructionClosure) return transitions[transitions.length - 1] || null;
+    const leftRecord = Number(leftSource.constructionRecordIndex);
+    const rightRecord = Number(rightSource.constructionRecordIndex);
+    if (!Number.isInteger(leftRecord) || !Number.isInteger(rightRecord) || leftRecord === rightRecord) return null;
+    return transitions[leftRecord] || null;
+  }
+
+  function homologyCordConstructionSectors(atlas, transition) {
+    if (!atlas || !transition || !Number.isInteger(transition.vertexId)) return null;
+    const star = atlas.vertexStars.get(transition.vertexId);
+    if (!star || !star.manifold) return null;
+    const from = star.sectors.find((sector) => (
+      sector.tileIndex === transition.fromTile && sector.vertex === transition.fromCorner
+    ));
+    const to = star.sectors.find((sector) => (
+      sector.tileIndex === transition.toTile && sector.vertex === transition.toCorner
+    ));
+    return from && to ? { star, from, to } : null;
+  }
+
+  function homologyCordConstructionHasWordlessVertexPath(sectors) {
+    if (!sectors) return false;
+    const { star, from, to } = sectors;
+    const byId = new Map(star.sectors.map((sector) => [sector.id, sector]));
+    const visited = new Set([from.id]);
+    const queue = [from.id];
+    for (let index = 0; index < queue.length; index += 1) {
+      const sector = byId.get(queue[index]);
+      if (!sector) continue;
+      for (const link of sector.links || []) {
+        if (link.glued || visited.has(link.neighborId)) continue;
+        if (link.neighborId === to.id) return true;
+        visited.add(link.neighborId);
+        queue.push(link.neighborId);
+      }
+    }
+    return from.id === to.id;
+  }
+
+  function homologyCordConstructionLinkPortal(atlas, star, sector, link) {
+    if (!link || !link.glued) return null;
+    const neighborSector = star && star.sectors[link.neighborId];
+    if (!neighborSector) return null;
+    return Array.from(atlas.portals.values()).find((portal) => (
+      portal.fromTile === sector.tileIndex
+      && portal.fromDir === link.dir
+      && portal.toTile === neighborSector.tileIndex
+    )) || null;
+  }
+
+  function homologyCordConstructionRoute(atlas, transition) {
+    if (!atlas || !transition) return { valid: true, sectorIds: [], word: [] };
+    const sectors = homologyCordConstructionSectors(atlas, transition);
+    if (!sectors) return { valid: false, sectorIds: [], word: [], reason: 'sectors' };
+    const { star, from, to } = sectors;
+    if (transition.crossing) {
+      const link = (from.links || []).find((candidate) => {
+        const neighborSector = star.sectors[candidate.neighborId];
+        return candidate.dir === transition.fromSide.dir
+          && neighborSector && neighborSector.tileIndex === transition.toSide.index;
+      }) || null;
+      if (!link) return { valid: false, sectorIds: [from.id], word: [], reason: 'first-link' };
+      const portal = homologyCordConstructionLinkPortal(atlas, star, from, link);
+      if (!portal || portal.id !== homologyCordPortalId(
+        transition.crossing.fromTile,
+        transition.crossing.fromDir,
+        transition.crossing.toTile,
+        transition.crossing.toDir
+      )) return { valid: false, sectorIds: [from.id], word: [], reason: 'crossing' };
+      const sectorIds = [from.id];
+      if (link.neighborId !== from.id) sectorIds.push(link.neighborId);
+      if (to.id !== sectorIds[sectorIds.length - 1]) sectorIds.push(to.id);
+      return { valid: true, sectorIds, word: [portal.id] };
+    }
+    const best = new Map([[from.id, {
+      portalCount: 0,
+      hops: 0,
+      key: String(from.id).padStart(4, '0'),
+      sectorIds: [from.id],
+      word: []
+    }]]);
+    const queue = [from.id];
+    while (queue.length) {
+      queue.sort((leftId, rightId) => {
+        const left = best.get(leftId);
+        const right = best.get(rightId);
+        return left.portalCount - right.portalCount || left.hops - right.hops || left.key.localeCompare(right.key);
+      });
+      const sectorId = queue.shift();
+      const current = star.sectors[sectorId];
+      const route = best.get(sectorId);
+      if (sectorId === to.id) return { valid: true, sectorIds: route.sectorIds, word: route.word };
+      const links = (current.links || []).slice().sort((left, right) => (
+        Number(left.glued) - Number(right.glued)
+        || left.neighborId - right.neighborId
+        || left.dir - right.dir
+      ));
+      links.forEach((link) => {
+        const portal = homologyCordConstructionLinkPortal(atlas, star, current, link);
+        if (link.glued && !portal) return;
+        const next = {
+          portalCount: route.portalCount + Number(!!portal),
+          hops: route.hops + 1,
+          key: `${route.key}:${String(link.neighborId).padStart(4, '0')}`,
+          sectorIds: route.sectorIds.concat(link.neighborId),
+          word: portal ? route.word.concat(portal.id) : route.word.slice()
+        };
+        const previous = best.get(link.neighborId);
+        if (previous && (previous.portalCount < next.portalCount
+          || (previous.portalCount === next.portalCount && previous.hops < next.hops)
+          || (previous.portalCount === next.portalCount && previous.hops === next.hops
+            && previous.key <= next.key))) return;
+        best.set(link.neighborId, next);
+        if (!queue.includes(link.neighborId)) queue.push(link.neighborId);
+      });
+    }
+    return { valid: false, sectorIds: [from.id], word: [], reason: 'component' };
+  }
+
+  function homologyCordConstructionPortalForTransition(atlas, transition) {
+    const route = homologyCordConstructionRoute(atlas, transition);
+    return {
+      valid: route.valid,
+      portal: route.valid && route.word.length === 1 ? atlas.portals.get(route.word[0]) || null : null,
+      word: [...route.word],
+      sectorIds: [...route.sectorIds],
+      reason: route.reason || ''
+    };
+  }
+
+  function homologyCordConstructionVertexEvent(atlas, transition, routeOverride = null) {
+    if (!transition) return null;
+    const sectors = homologyCordConstructionSectors(atlas, transition);
+    const route = routeOverride && Array.isArray(routeOverride.sectorIds)
+      ? routeOverride
+      : homologyCordConstructionRoute(atlas, transition);
+    if (!sectors || !route.valid || route.sectorIds.length < 2) return null;
+    return {
+      vertexId: sectors.star.vertexId,
+      totalAngle: sectors.star.totalAngle,
+      sideAngle: sectors.star.totalAngle * 0.5,
+      active: false,
+      constructionBridge: true,
+      constructionSectorIds: [...route.sectorIds]
+    };
+  }
+
+  function homologyCordConstructionPortalSignature(surfaceChain, atlas) {
+    if (!surfaceChain || !Array.isArray(surfaceChain.constructionTransitions)) return null;
+    const word = [];
+    for (const transition of surfaceChain.constructionTransitions) {
+      const route = homologyCordConstructionRoute(atlas, transition);
+      if (!route.valid) return null;
+      word.push(...route.word);
+    }
+    return canonicalHomologyCordCyclicWord(reduceHomologyCordPortalWord(word, atlas));
+  }
+
   function makeQuotientElasticBandChain(surfaceChain, analysisOverride = null) {
     const analysis = analysisOverride || currentBackgroundHomologyAnalysis();
     if (!surfaceChain || !analysis || !geometry) return null;
+    const rejectInitialization = (reason) => {
+      surfaceChain.initializationFailureReason = reason;
+      return null;
+    };
+    surfaceChain.initializationFailureReason = '';
     const atlas = makeHomologyCordQuotientAtlas(analysis);
     if (!atlas || !atlas.valid || !atlas.hasPortals) return null;
     const material = homologyCordPhysicalIndices(surfaceChain);
@@ -19830,11 +20105,46 @@
       optimizationDirection: { x: 0, y: 0 }
     };
     const springs = [];
+    const hasConstructionTransitions = Array.isArray(surfaceChain.constructionTransitions);
     for (let index = 0; index < logicalCount; index += 1) {
       const leftSource = surfaceChain.points[material[index]];
       const rightSource = surfaceChain.points[material[index + 1]];
+      const constructionTransition = homologyCordConstructionTransitionForSpring(
+        surfaceChain,
+        leftSource,
+        rightSource
+      );
+      if (hasConstructionTransitions) {
+        if (!constructionTransition && leftSource.tileIndex !== rightSource.tileIndex) {
+          return rejectInitialization(`construction-record:${index}`);
+        }
+        const route = homologyCordConstructionRoute(atlas, constructionTransition);
+        if (!route.valid) {
+          return rejectInitialization(`construction-route:${index}:${route.reason || 'invalid'}`);
+        }
+        const word = reduceHomologyCordPortalWord(route.word, atlas);
+        const directTrace = traceQuotientSegment(
+          points[index],
+          points[(index + 1) % logicalCount],
+          { word, transform: null, vertexEvent: null },
+          { atlas }
+        );
+        const vertexEvent = directTrace.valid
+          ? null
+          : homologyCordConstructionVertexEvent(atlas, constructionTransition, route);
+        if (!directTrace.valid && !vertexEvent) {
+          return rejectInitialization(`construction-trace:${index}:${directTrace.reason || 'invalid'}`);
+        }
+        springs.push({
+          word,
+          transform: null,
+          vertexEvent,
+          constructionTransitionIndex: constructionTransition ? constructionTransition.index : null
+        });
+        continue;
+      }
       const trace = homologyCordSegmentTrace(leftSource, rightSource, analysis);
-      if (!trace) return null;
+      if (!trace) return rejectInitialization(`construction-segment:${index}`);
       const word = [];
       let vertexEvent = null;
       (trace.crossings || []).forEach((crossing) => {
@@ -19871,23 +20181,28 @@
         const portal = homologyCordPortalForCrossing(atlas, crossing);
         if (portal) word.push(portal.id);
       });
-      if (vertexEvent && vertexEvent.invalid) return null;
+      if (vertexEvent && vertexEvent.invalid) {
+        return rejectInitialization(`construction-topology:${index}`);
+      }
       springs.push({
         word: reduceHomologyCordPortalWord(word, atlas),
         transform: null,
-        vertexEvent
+        vertexEvent,
+        constructionTransitionIndex: constructionTransition ? constructionTransition.index : null
       });
     }
-    const closingWord = (surfaceChain.closurePortalItinerary || [])
-      .map((crossing) => homologyCordPortalForCrossing(atlas, crossing))
-      .filter(Boolean)
-      .map((portal) => portal.id);
-    if (closingWord.length && springs.length && !springs[springs.length - 1].word.length) {
-      springs[springs.length - 1].word = reduceHomologyCordPortalWord(closingWord, atlas);
+    if (!hasConstructionTransitions) {
+      const closingWord = (surfaceChain.closurePortalItinerary || [])
+        .map((crossing) => homologyCordPortalForCrossing(atlas, crossing))
+        .filter(Boolean)
+        .map((portal) => portal.id);
+      if (closingWord.length && springs.length && !springs[springs.length - 1].word.length) {
+        springs[springs.length - 1].word = reduceHomologyCordPortalWord(closingWord, atlas);
+      }
     }
     for (const spring of springs) {
       spring.transform = homologyCordPortalWordTransform(spring.word, atlas);
-      if (!spring.transform) return null;
+      if (!spring.transform) return rejectInitialization('construction-transform');
     }
     const chain = {
       generatorId: surfaceChain.generatorId,
@@ -19914,10 +20229,19 @@
     };
     chain.initialCyclicWord = homologyCordCyclicPortalWord(chain);
     chain.initialFreeHomotopySignature = canonicalHomologyCordCyclicWord(chain.initialCyclicWord);
+    const expectedPortalSignature = homologyCordConstructionPortalSignature(surfaceChain, atlas);
+    if (expectedPortalSignature != null && chain.initialFreeHomotopySignature !== expectedPortalSignature) {
+      return rejectInitialization('construction-portal-signature');
+    }
+    chain.initializationCertificate = surfaceChain.initializationCertificate ? {
+      ...surfaceChain.initializationCertificate,
+      constructionChain: [...surfaceChain.initializationCertificate.constructionChain],
+      expectedPortalSignature
+    } : null;
     chain.expectedHolonomy = homologyCordCyclicHolonomy(chain) || homologyCordAffineIdentity();
     for (let index = 0; index < logicalCount; index += 1) {
       const trace = traceQuotientSegment(points[index], points[(index + 1) % logicalCount], springs[index], chain);
-      if (!trace.valid) return null;
+      if (!trace.valid) return rejectInitialization(`construction-trace:${index}:${trace.reason || 'invalid'}`);
       if (!springs[index].vertexEvent?.constructionBridge
         && trace.vertexEvents.some((event) => !event.allowed && event.totalAngle < Math.PI * 2 - 1e-9)) {
         springs[index].vertexEvent = null;
@@ -19929,6 +20253,8 @@
   function makeHomologyCordRuntimeChain(surfaceChain, analysisOverride = null) {
     if (!surfaceChain) return null;
     const analysis = analysisOverride || currentBackgroundHomologyAnalysis();
+    if (analysis && analysis.graph && analysis.snf
+      && !homologyCordInitializationCertificateValid(surfaceChain.initializationCertificate)) return null;
     const atlas = makeHomologyCordQuotientAtlas(analysis);
     if (atlas && atlas.hasPortals) {
       return atlas.valid ? makeQuotientElasticBandChain(surfaceChain, analysis) : null;
@@ -20239,6 +20565,12 @@
     }
     const signature = canonicalHomologyCordCyclicWord(homologyCordCyclicPortalWord(chain));
     if (signature !== chain.initialFreeHomotopySignature) return fail('free-homotopy');
+    const certificate = chain.initializationCertificate;
+    if (certificate && !homologyCordInitializationCertificateValid(certificate)) {
+      return fail('initial-homology-certificate');
+    }
+    if (certificate && certificate.expectedPortalSignature != null
+      && signature !== certificate.expectedPortalSignature) return fail('initial-portal-certificate');
     const holonomy = homologyCordCyclicHolonomy(chain);
     if (!holonomy || !homologyCordAffineClose(holonomy, chain.expectedHolonomy)) return fail('holonomy');
     chain.lastQuotientInvariantFailure = '';
@@ -20259,7 +20591,9 @@
           matrix: { ...spring.transform.matrix },
           offset: { ...spring.transform.offset }
         },
-        vertexEvent: spring.vertexEvent ? { ...spring.vertexEvent } : null
+        vertexEvent: spring.vertexEvent ? { ...spring.vertexEvent } : null,
+        constructionTransitionIndex: spring.constructionTransitionIndex == null
+          ? null : spring.constructionTransitionIndex
       })),
       expectedHolonomy: {
         matrix: { ...chain.expectedHolonomy.matrix },
@@ -20293,7 +20627,9 @@
         matrix: { ...spring.transform.matrix },
         offset: { ...spring.transform.offset }
       },
-      vertexEvent: spring.vertexEvent ? { ...spring.vertexEvent } : null
+      vertexEvent: spring.vertexEvent ? { ...spring.vertexEvent } : null,
+      constructionTransitionIndex: spring.constructionTransitionIndex == null
+        ? null : spring.constructionTransitionIndex
     }));
     chain.expectedHolonomy = {
       matrix: { ...snapshot.expectedHolonomy.matrix },
@@ -20907,6 +21243,10 @@
     const logicalCount = Math.max(0, chain.points.length - 1);
     for (let index = 0; index < logicalCount; index += 1) {
       const spring = chain.springs[index];
+      if (spring.vertexEvent && spring.vertexEvent.constructionBridge) {
+        updateQuotientVertexEvent(chain, index, []);
+        continue;
+      }
       if (spring.vertexEvent && spring.vertexEvent.active) {
         updateQuotientVertexEvent(chain, index, []);
         continue;
@@ -30328,6 +30668,8 @@
       homologyCordPortalSameOrientation,
       homologyCordPortalFrame,
       homologyCordEntryTransition,
+      homologyCordInitializationCertificate,
+      homologyCordInitializationCertificateValid,
       makeHomologyCordChain,
       nearestHomologyCordChartVertex,
       homologyCordPhysicalIndices,
@@ -30346,6 +30688,12 @@
       mapHomologyLocalChartVector,
       clipHomologyLocalChartSegment,
       buildHomologyLocalChartModel,
+      homologyCordConstructionSectors,
+      homologyCordConstructionHasWordlessVertexPath,
+      homologyCordConstructionRoute,
+      homologyCordConstructionPortalForTransition,
+      homologyCordConstructionPortalSignature,
+      homologyCordConstructionVertexEvent,
       makeQuotientElasticBandChain,
       makeHomologyCordRuntimeChain,
       traceQuotientMotion,

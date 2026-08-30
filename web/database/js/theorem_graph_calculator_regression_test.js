@@ -15,6 +15,8 @@ function loadCalculator(options = {}) {
     makeArrow,
     makeNode,
     makeReference,
+    arrowDetailSnapshot,
+    restoreArrowDetailSnapshot,
     buildGraphExport,
     buildCurrentNodeExport,
     buildSelectedReferencesExport,
@@ -146,8 +148,162 @@ function testReferenceRenameRewritesNestedNodesTitleAndArrows() {
   assert.strictEqual(child.titleNode.details[0].text, 'Title source \\cite{newKey}.');
   assert.strictEqual(nestedA.setting, 'See \\cite{newKey, otherKey}.');
   assert.strictEqual(nestedB.proofSketch, 'Compare \\cite[Section 2]{newKey}.');
-  assert.strictEqual(arrow.label, 'uses \\cite[p. 3]{newKey, extraKey}');
+  assert.strictEqual(arrow.labels[0].text, 'uses \\cite[p. 3]{newKey, extraKey}');
   assert.strictEqual(arrow.remark, 'Remark cites \\cite{newKey}.');
+}
+
+function testLegacyArrowLabelMigratesAndExportsCompatibilityMirror() {
+  const api = loadCalculator();
+  const graph = api.createGraph('Legacy labels');
+  graph.nodes = [
+    api.makeNode({ id: 'a', label: 'A' }),
+    api.makeNode({ id: 'b', label: 'B' })
+  ];
+  graph.arrows = [api.makeArrow({
+    id: 'arr',
+    sourceId: 'a',
+    targetId: 'b',
+    label: 'legacy label',
+    labelPosition: 0.7,
+    labelOffset: -25,
+    labelAlign: 'right',
+    color: '#2f5f9f'
+  })];
+
+  const arrow = graph.arrows[0];
+  assert.strictEqual(arrow.labels.length, 1);
+  assert.strictEqual(arrow.labels[0].id, 'label-1');
+  assert.strictEqual(arrow.labels[0].text, 'legacy label');
+  assert.strictEqual(arrow.labels[0].color, '#2f5f9f');
+  assert.strictEqual(arrow.labels[0].position, 0.7);
+  assert.strictEqual(arrow.labels[0].offset, -25);
+  assert.strictEqual(arrow.labels[0].align, 'right');
+
+  const exported = api.buildGraphExport(graph, { includeTitleNode: true }).arrows[0];
+  assert.strictEqual(exported.labels[0].text, 'legacy label');
+  assert.strictEqual(exported.label, 'legacy label');
+  assert.strictEqual(exported.labelPosition, 0.7);
+  assert.strictEqual(exported.labelOffset, -25);
+  assert.strictEqual(exported.labelAlign, 'right');
+  assert.strictEqual(exported.color, '#2f5f9f');
+}
+
+function testMultipleArrowLabelsAndTermsRoundTrip() {
+  const api = loadCalculator();
+  const graph = api.createGraph('Multiple labels');
+  graph.nodes = [
+    api.makeNode({ id: 'a', label: 'A' }),
+    api.makeNode({ id: 'b', label: 'B' })
+  ];
+  graph.arrows = [api.makeArrow({
+    id: 'arr',
+    sourceId: 'a',
+    targetId: 'b',
+    color: '#5f574e',
+    labels: [
+      { id: 'primary', text: '$f$', color: '#1a1612', position: 0.3, offset: 15, align: 'left' },
+      { id: 'secondary', text: '$g$', color: '#8b3a2a', position: 0.75, offset: -20, align: 'right' }
+    ],
+    terms: [
+      { id: 'conditions', label: 'conditions', type: 'list', text: '- proper\n- smooth' },
+      { id: 'checks', label: 'checks', type: 'checkbox', text: '- [ ] verify' }
+    ]
+  })];
+
+  const exportedGraph = api.buildGraphExport(graph, { includeTitleNode: true });
+  const imported = api.normalizeGraphImport(exportedGraph);
+  const arrow = imported.arrows[0];
+
+  assert.deepStrictEqual(hostArray(arrow.labels.map((label) => label.id)), ['primary', 'secondary']);
+  assert.deepStrictEqual(hostArray(arrow.labels.map((label) => label.color)), ['#1a1612', '#8b3a2a']);
+  assert.deepStrictEqual(hostArray(arrow.labels.map((label) => label.position)), [0.3, 0.75]);
+  assert.deepStrictEqual(hostArray(arrow.terms.map((term) => term.type)), ['list', 'checkbox']);
+  assert.strictEqual(exportedGraph.arrows[0].label, '$f$');
+  assert.strictEqual(exportedGraph.arrows[0].labels.length, 2);
+  assert.strictEqual(exportedGraph.arrows[0].terms.length, 2);
+}
+
+function testArrowLabelDefaultsAndStableIds() {
+  const api = loadCalculator();
+  const arrow = api.makeArrow({
+    labels: [
+      { id: 'duplicate', text: 'one' },
+      { id: 'duplicate', text: 'two', color: 'invalid' }
+    ]
+  });
+
+  assert.deepStrictEqual(hostArray(arrow.labels.map((label) => label.id)), ['duplicate', 'duplicate-2']);
+  assert.deepStrictEqual(hostArray(arrow.labels.map((label) => label.color)), ['#1a1612', '#1a1612']);
+  assert.deepStrictEqual(hostArray(arrow.labels.map((label) => label.position)), [0.5, 0.5]);
+}
+
+function testArrowCitationsIncludeAllLabelsAndTerms() {
+  const api = loadCalculator();
+  const arrow = api.makeArrow({
+    labels: [
+      { id: 'one', text: 'Uses \\cite{labelRef}.' },
+      { id: 'two', text: 'Compare \\cite{otherRef}.' }
+    ],
+    terms: [
+      { id: 'sources', label: 'sources', type: 'textbox', text: 'See \\cite{termRef}.' }
+    ],
+    remark: 'Remark \\cite{remarkRef}.'
+  });
+
+  assert.deepStrictEqual(
+    hostArray(api.collectArrowCitationKeys(arrow)),
+    ['labelRef', 'otherRef', 'termRef', 'remarkRef']
+  );
+  assert.strictEqual(api.rewriteReferenceCitationsInGraph({
+    title: 'Root',
+    nodes: [],
+    arrows: [arrow]
+  }, ['labelRef', 'termRef'], 'nextRef'), true);
+  assert.strictEqual(arrow.labels[0].text, 'Uses \\cite{nextRef}.');
+  assert.strictEqual(arrow.terms[0].text, 'See \\cite{nextRef}.');
+}
+
+function testUndoRestoresArrowLabelsAndTerms() {
+  const api = loadCalculator();
+  const graph = api.createGraph('Undo arrow details');
+  graph.nodes = [api.makeNode({ id: 'a' }), api.makeNode({ id: 'b' })];
+  graph.arrows = [api.makeArrow({
+    id: 'arr',
+    sourceId: 'a',
+    targetId: 'b',
+    labels: [{ id: 'one', text: 'before', color: '#1a1612' }],
+    terms: [{ id: 'term', label: 'term', type: 'textbox', text: 'before' }]
+  })];
+  api.state.rootGraph = graph;
+  api.state.activePath = [];
+
+  api.pushUndoSnapshot('arrow edit');
+  graph.arrows[0].labels[0].text = 'after';
+  graph.arrows[0].terms[0].text = 'after';
+  api.performUndo({ render: false });
+
+  assert.strictEqual(api.state.rootGraph.arrows[0].labels[0].text, 'before');
+  assert.strictEqual(api.state.rootGraph.arrows[0].terms[0].text, 'before');
+}
+
+function testCancelSnapshotRestoresArrowLabelsAndTerms() {
+  const api = loadCalculator();
+  const arrow = api.makeArrow({
+    labels: [{ id: 'one', text: 'before', color: '#2f5f9f', position: 0.25 }],
+    terms: [{ id: 'term', label: 'term', type: 'enumeration', text: '1. before' }]
+  });
+  const snapshot = api.arrowDetailSnapshot(arrow);
+
+  arrow.labels[0].text = 'after';
+  arrow.labels[0].color = '#8b3a2a';
+  arrow.terms[0].text = '1. after';
+  api.restoreArrowDetailSnapshot(arrow, snapshot);
+
+  assert.strictEqual(arrow.labels[0].text, 'before');
+  assert.strictEqual(arrow.labels[0].color, '#2f5f9f');
+  assert.strictEqual(arrow.labels[0].position, 0.25);
+  assert.strictEqual(arrow.terms[0].type, 'enumeration');
+  assert.strictEqual(arrow.terms[0].text, '1. before');
 }
 
 function testMultiKeyReplacementPreservesUnrelatedKeys() {
@@ -254,12 +410,14 @@ function testLayoutArrowSpringWeightsRespectBodyStyle() {
   const dashed = api.layoutArrowSpringStrength({ body: 'dashed' });
   const dotted = api.layoutArrowSpringStrength({ body: 'dotted' });
   const labeled = api.layoutArrowSpringStrength({ body: 'solid', label: 'uses' });
+  const canonicalLabeled = api.layoutArrowSpringStrength({ body: 'solid', labels: [{ id: 'one', text: 'uses' }] });
   const none = api.layoutArrowSpringStrength({ body: 'none' });
 
   assert.strictEqual(wavy, solid);
   assert.ok(dashed > 0 && dashed < solid);
   assert.ok(dotted > 0 && dotted < dashed);
   assert.strictEqual(labeled, solid * 0.45);
+  assert.strictEqual(canonicalLabeled, labeled);
   assert.strictEqual(none, 0);
 }
 
@@ -270,12 +428,14 @@ function testLayoutArrowIdealDistanceRespectsBodyAndLabel() {
   const dotted = api.layoutArrowIdealDistance({ body: 'dotted' });
   const labeled = api.layoutArrowIdealDistance({ body: 'solid', label: 'uses' });
   const labeledDotted = api.layoutArrowIdealDistance({ body: 'dotted', label: 'maybe' });
+  const canonicalLabeled = api.layoutArrowIdealDistance({ body: 'solid', labels: [{ id: 'one', text: 'uses' }] });
 
   assert.strictEqual(solid, 220);
   assert.strictEqual(dashed, 290);
   assert.strictEqual(dotted, 360);
   assert.strictEqual(labeled, 420);
   assert.strictEqual(labeledDotted, 560);
+  assert.strictEqual(canonicalLabeled, labeled);
 
   api.state.layoutIdealDistance = 260;
   api.state.layoutDashedIdealBonus = 80;
@@ -736,6 +896,12 @@ function testReferenceRefreshPolicyMatchesImportCoverage() {
 testHiddenCitationKeysArePruned();
 testVisibleCitationKeysSurvive();
 testReferenceRenameRewritesNestedNodesTitleAndArrows();
+testLegacyArrowLabelMigratesAndExportsCompatibilityMirror();
+testMultipleArrowLabelsAndTermsRoundTrip();
+testArrowLabelDefaultsAndStableIds();
+testArrowCitationsIncludeAllLabelsAndTerms();
+testUndoRestoresArrowLabelsAndTerms();
+testCancelSnapshotRestoresArrowLabelsAndTerms();
 testMultiKeyReplacementPreservesUnrelatedKeys();
 testDeleteUsageReportIncludesNestedNodesAndArrows();
 testRawBibtexKeyIsRenameAlias();

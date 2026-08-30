@@ -180,6 +180,194 @@
       gap: 9px;
     }
 
+    .slice-toric-card[hidden],
+    .slice-toric-panel[hidden],
+    .slice-toric-pick-menu[hidden] {
+      display: none !important;
+    }
+
+    .slice-toric-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 4px;
+    }
+
+    .slice-toric-tabs .slice-segment {
+      min-width: 0;
+      padding-inline: 5px;
+      white-space: normal;
+    }
+
+    .slice-toric-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      min-width: 0;
+    }
+
+    .slice-toric-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .slice-toric-badge {
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #f6f3ed;
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.66rem;
+      line-height: 1.25;
+      padding: 3px 6px;
+    }
+
+    .slice-toric-badge.valid,
+    .slice-toric-generator-status.extremal {
+      border-color: rgba(47, 125, 112, 0.5);
+      background: rgba(47, 125, 112, 0.09);
+      color: #245f56;
+    }
+
+    .slice-toric-badge.invalid,
+    .slice-toric-generator-status.invalid,
+    .slice-toric-generator-status.zero {
+      border-color: rgba(176, 88, 53, 0.55);
+      background: rgba(176, 88, 53, 0.1);
+      color: #8a4228;
+    }
+
+    .slice-toric-generator-status.redundant {
+      border-color: rgba(138, 98, 66, 0.5);
+      background: rgba(138, 98, 66, 0.1);
+      color: #745138;
+    }
+
+    .slice-toric-generator-status.duplicate {
+      border-color: rgba(104, 108, 112, 0.48);
+      background: rgba(104, 108, 112, 0.09);
+      color: #555b60;
+    }
+
+    .slice-toric-generator-list,
+    .slice-toric-face-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .slice-toric-generator-row {
+      display: grid;
+      grid-template-columns: minmax(54px, 76px) minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .slice-toric-generator-label {
+      width: 100%;
+      min-width: 0;
+      padding: 3px 5px;
+    }
+
+    .slice-toric-coordinate-list {
+      display: grid;
+      grid-template-columns: repeat(var(--toric-coordinate-count, 2), minmax(24px, 1fr));
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .slice-toric-coordinate {
+      width: 100%;
+      min-width: 0;
+      padding: 3px 4px;
+      text-align: center;
+    }
+
+    .slice-toric-generator-meta {
+      grid-column: 2 / -1;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .slice-toric-generator-status {
+      border: 1px solid rgba(138, 98, 66, 0.38);
+      border-radius: 3px;
+      background: rgba(138, 98, 66, 0.08);
+      color: #745138;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.62rem;
+      padding: 2px 5px;
+    }
+
+    .slice-toric-face-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .slice-toric-face-heading {
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.66rem;
+      text-transform: uppercase;
+    }
+
+    .slice-toric-face-button {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 7px;
+      width: 100%;
+      text-align: left;
+    }
+
+    .slice-toric-face-button span:first-child {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .slice-toric-info {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .slice-toric-warning {
+      border-left: 3px solid #b05835;
+      background: rgba(176, 88, 53, 0.08);
+      color: #71412f;
+      font-size: 0.74rem;
+      line-height: 1.45;
+      padding: 6px 8px;
+      overflow-wrap: anywhere;
+    }
+
+    .slice-toric-pick-menu {
+      position: absolute;
+      z-index: 8;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      width: min(250px, calc(100% - 20px));
+      max-height: 220px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: rgba(255, 253, 248, 0.98);
+      box-shadow: 0 8px 24px rgba(35, 43, 48, 0.16);
+      padding: 5px;
+    }
+
+    .slice-toric-pick-menu button {
+      width: 100%;
+      text-align: left;
+    }
+
     .slice-row {
       display: grid;
       grid-template-columns: minmax(74px, max-content) minmax(0, 1fr);
@@ -695,6 +883,10 @@
       .slice-direct-frame-row {
         grid-template-columns: 1fr;
       }
+
+      .slice-toric-generator-row {
+        grid-template-columns: minmax(48px, 64px) minmax(0, 1fr) auto;
+      }
     }
   </style>
 </head>
@@ -720,6 +912,7 @@
       <div class="slice-stage-wrap">
         <canvas id="slice-viewport" width="980" height="680" aria-label="Higher-dimensional projection and exact or numeric 2D slice viewport"></canvas>
         <div class="slice-label-overlay" id="slice-label-overlay" aria-hidden="true"></div>
+        <div id="toric-cone-pick-menu" class="slice-toric-pick-menu" role="menu" aria-label="Overlapping toric cones" hidden></div>
         <div class="slice-canvas-corner-actions">
           <button id="clear-canvas" class="slice-btn slice-canvas-clear-button" type="button">clear</button>
         </div>
@@ -800,6 +993,63 @@
             <div class="slice-control-line">
               <span id="source-status" class="slice-warning" role="status">Projection and exact/numeric 2D slice layers are active.</span>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card slice-toric-card" id="slice-toric-cone-card" hidden>
+        <div class="card-head" tabindex="0" role="button" aria-expanded="true">
+          <span class="drag-handle" title="drag card">&#8942;&#8942;</span>
+          <span class="card-head-label">Toric Cone</span>
+          <i class="toggle-icon">&#9662;</i>
+        </div>
+        <div class="card-body slice-card-body">
+          <div id="toric-cone-summary" class="slice-toric-summary" aria-live="polite"></div>
+          <div id="toric-cone-tabs" class="slice-toric-tabs" role="tablist" aria-label="Toric cone views">
+            <button class="slice-segment active" type="button" role="tab" aria-selected="true" data-toric-tab="build">Build</button>
+            <button class="slice-segment" type="button" role="tab" aria-selected="false" data-toric-tab="faces">Faces / Orbits</button>
+            <button class="slice-segment" type="button" role="tab" aria-selected="false" data-toric-tab="variety">Affine Variety</button>
+          </div>
+
+          <div id="toric-cone-build-panel" class="slice-toric-panel" role="tabpanel" data-toric-panel="build">
+            <div class="slice-row">
+              <span class="slice-row-label">preset</span>
+              <div class="slice-control-line">
+                <select id="toric-cone-preset" class="slice-select" aria-label="Toric cone preset">
+                  <option value="zero">zero cone</option>
+                  <option value="positive-orthant">positive orthant</option>
+                  <option value="singular-simplicial">singular simplicial</option>
+                  <option value="square-cone">square cone</option>
+                </select>
+                <button id="toric-cone-apply-preset" class="slice-btn" type="button">apply</button>
+              </div>
+            </div>
+            <div class="slice-row stack">
+              <span class="slice-row-label">generators</span>
+              <div id="toric-cone-generators" class="slice-toric-generator-list"></div>
+            </div>
+            <div class="slice-button-line">
+              <button id="toric-cone-add-generator" class="slice-btn" type="button">add generator</button>
+              <select id="toric-cone-vector-source" class="slice-select" aria-label="Vector object source"></select>
+              <button id="toric-cone-add-vector" class="slice-btn" type="button">add vector</button>
+            </div>
+            <div class="slice-row stack">
+              <span class="slice-row-label">rows import</span>
+              <textarea id="toric-cone-rows-import" class="slice-textarea" spellcheck="false" aria-label="Generator rows import" placeholder="One generator per row, for example: 1, 0, 0"></textarea>
+              <div class="slice-button-line">
+                <button id="toric-cone-apply-rows" class="slice-btn" type="button">replace generators</button>
+              </div>
+            </div>
+            <div id="toric-cone-validation" class="slice-toric-info" role="status"></div>
+          </div>
+
+          <div id="toric-cone-faces-panel" class="slice-toric-panel" role="tabpanel" data-toric-panel="faces" hidden>
+            <div id="toric-cone-face-list" class="slice-toric-face-list"></div>
+            <div id="toric-cone-face-info" class="slice-toric-info"></div>
+          </div>
+
+          <div id="toric-cone-variety-panel" class="slice-toric-panel" role="tabpanel" data-toric-panel="variety" hidden>
+            <div id="toric-cone-variety-info" class="slice-toric-info"></div>
           </div>
         </div>
       </section>
@@ -1126,7 +1376,8 @@
   </script>
   <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
   <script src="js/calculator_cards.js"></script>
-  <script src="js/higher_dimensional_slice_explorer.js?v=20260821-1"></script>
+  <script src="js/toric_cone_math.js?v=20260830-2"></script>
+  <script src="js/higher_dimensional_slice_explorer.js?v=20260830-2"></script>
   <script src="js/import_export_panel.js?v=20260821-7"></script>
   <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

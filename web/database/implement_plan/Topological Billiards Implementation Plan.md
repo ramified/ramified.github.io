@@ -1,5 +1,142 @@
 # Ramified Minigames — Topological Billiards Implementation Plan
 
+## Implementation Status Record — 2026-08-30
+
+This section records the audited state of the implementation. It does not replace
+the requirements below. Update the audit date, status tables, verification results,
+and next priorities whenever billiards behavior changes.
+
+### Status Summary
+
+| Version | Status | Summary |
+| --- | --- | --- |
+| V0 — geometry and rotation | **Mostly complete** | The canonical state, local-cover images, finite-radius seam rendering, glue transport, quaternion orientation, and debug texture are implemented. Pixel-level seam continuity and closed-loop orientation holonomy are not yet covered by the required automated tests. |
+| V1 — playable billiards | **Playable, but technically incomplete** | Cue input, multiple balls, collisions through glued images, friction, pockets, scoring, turn lifecycle, restart, and deterministic simulation are implemented. The production engine does not yet have continuous collision detection. |
+| V2 — spin and 2.5D rendering | **Mostly implemented** | Contact-point spin, sliding/rolling behavior, persistent orientation, spherical textures, and three aim-assistance levels are present. Several required spin and split-rendering acceptance tests are still missing. |
+| V3 — optional advanced physics | **Mostly not implemented** | Online action synchronization and game records exist, but tangential collision friction, spin throw, detailed cushion physics, bank prediction, sound, and richer pool rules do not. |
+
+The current user-facing result is best described as a **playable V2-like beta**, not
+as a completed V2 under the strict definitions in Sections 40 and 41.
+
+### Production Architecture
+
+The browser page lazily loads:
+
+- `js/billiards/topological_billiards_math.js` for affine, vector, and quaternion math;
+- `js/billiards/topological_billiards_physics.js` as the reference surface/physics implementation and deterministic test harness;
+- `js/billiards/topological_billiards_renderer.js` for spherical textures and ball drawing;
+- `js/billiards/topological_billiards_native.js` for the production mosaic atlas, game state, physics, rendering coordination, rules, setup tools, and import/export;
+- `js/billiards/topological_billiards_simulation_worker.js` for off-main-thread shot simulation;
+- `js/ramified_minigames_setup.js` for DOM controls, pointer input, playback, status, records, and online integration.
+
+Important: `topological_billiards_physics.js` contains continuous collision detection,
+but the live page advances games through `topological_billiards_native.js`. The native
+engine currently integrates a complete `1 / 240` step and then resolves overlapping
+balls. Therefore the reference high-speed CCD test must not be treated as proof that
+the production game has CCD.
+
+`js/billiards/README.md` is currently stale. It names a nonexistent
+`topological_billiards_game.js` and says billiards does not add branches to
+`ramified_minigames_setup.js`. Use the module list above until that README is updated.
+
+### Implemented User-Facing Capabilities
+
+- Billiards is registered as a Ramified Minigames mode and uses the shared mosaic canvas.
+- Square and hexagonal presets, removed tiles, cut edges, ordinary adjacency, rotated glues, and orientation-reversing glues are supported.
+- Six catalog entries currently advertise Billiards: boundary glue board, twisted torus, genus 2, half-glued, Rubik's Cube 2x2x2, and usual strip.
+- Setup mode can place, move, and erase one cue ball and numbered target balls.
+- Setup mode can add or remove quotient-vertex pockets and place 6-, 10-, or 15-ball racks with a direction preview.
+- Placement validation rejects physical-boundary intersections, pocket intersections, ball overlaps, and short self-image overlaps.
+- The cue is aimed by dragging away from the intended direction; drag length controls power.
+- A cue-ball contact pad provides center, topspin, backspin/draw, sidespin, and combined-spin input.
+- Friction can be adjusted from 50% to 250%.
+- Beginner aim assistance follows glued transitions to the first ball, pocket, wall, or detected loop; Normal and Expert show progressively shorter guides.
+- Solo rules count pocketed targets and shots.
+- Competitive rules track two scores and turns, retain the turn after scoring, pass after a miss or scratch, provide ball in hand after a scratch, and resolve wins or draws.
+- Deterministic shots run at `1 / 240` seconds in a Web Worker, with a chunked main-thread fallback, then play from sampled trajectory frames.
+- Status, preset, and game-record import/export are supported.
+- Online billiards actions and competitive-turn snapshots are validated by the shared room worker.
+- Static and dynamic billiards UI text has non-empty English and Simplified Chinese entries.
+
+### V0 Acceptance-Test Status
+
+| Test | Status | Current evidence / remaining work |
+| --- | --- | --- |
+| V0.1 Ordinary Motion | **Verified** | Deterministic frictionless motion is covered by `testOrdinaryMotionAndDeterminism`. |
+| V0.2 Translation Seam | **Verified in logic** | Canonical transport and pre-crossing finite-radius images are tested. There is no browser pixel comparison. |
+| V0.3 Rotational Glue | **Verified in logic** | Position, velocity, angular velocity, and orientation transport are covered by rotation tests. |
+| V0.4 Orientation-Reversing Glue | **Verified in logic** | The `diag(A, det(A))` lift and normalized quaternion transport are tested. Mirrored output is not checked with a rendered-pixel test. |
+| V0.5 Seam Pixel Continuity | **Not fully verified** | The renderer clips complementary images to their tiles, and seam image counts are tested. Add a canvas-pixel test for gaps, overlap, opacity, and one-frame disappearance. |
+| V0.6 Repeated Seam Traversal | **Verified in reference engine** | A 12,000-step test checks speed, quaternion norm, crossing count, and the single physical-ball invariant. Add equivalent long-running native-engine coverage. |
+| V0.7 Closed Topological Loop | **Partial** | Aim tracing detects closed loops, but no test transports a moving ball around a known loop and verifies final position, velocity, and orientation holonomy. |
+
+### V1 Acceptance-Test Status
+
+| Test | Status | Current evidence / remaining work |
+| --- | --- | --- |
+| V1.1 Head-On Equal-Mass Collision | **Verified in reference engine; exercised natively** | The reference test checks velocity transfer, momentum, and energy. Native tests check basic collision transfer. |
+| V1.2 Glancing Collision | **Implemented but unverified** | The normal-impulse solver should handle glancing contact, but there is no dedicated no-sticking/no-energy-growth regression. |
+| V1.3 Seam Collision | **Verified** | Reference and native tests cover collisions through ordinary, reflected, and orientation-preserving glued images. |
+| V1.4 High-Speed Collision | **Missing in production** | Reference CCD passes, but native gameplay uses post-step overlap detection and can tunnel with imported extreme speed parameters. Implement native CCD or route production through the tested CCD solver. |
+| V1.5 No Self-Collision | **Verified in reference engine** | Collision pairs contain distinct canonical balls, and setup rejects ambiguous short self-image overlaps. Add a native moving-ball regression. |
+| V1.6 Collision Conservation | **Verified in reference engine only** | Add native frictionless restitution-1 momentum and energy assertions. |
+| V1.7 Image Independence | **Partial** | Transform round trips and collisions through several glue charts are tested, but the exact same collision has not been run through two equivalent chart choices and compared canonically. |
+
+### V2 Acceptance-Test Status
+
+| Test | Status | Current evidence / remaining work |
+| --- | --- | --- |
+| V2.1 Center Strike | **Implemented, partially tested** | Center contact uses the torque formula and should produce minimal immediate cue spin. Add an explicit assertion for that result. |
+| V2.2 Topspin | **Implemented and sign-tested** | Above-center contact produces forward-spin angular velocity. Follow behavior after collision is not tested. |
+| V2.3 Backspin | **Implemented and sign-tested** | Below-center contact produces draw angular velocity. Frictional decay and draw after a collision need a dedicated regression. |
+| V2.4 Sidespin | **Implemented and sign-tested** | Side contact produces vertical-axis spin without an ad hoc direction change. |
+| V2.5 Combined Spin | **Implemented but unverified** | Diagonal contact feeds both torque components, but there is no dedicated combined-spin/quaternion-rendering test. |
+| V2.6 Sliding-to-Rolling Transition | **Verified in reference engine** | Contact-point slip is tested to converge toward rolling. Add native continuity assertions around the transition. |
+| V2.7 Orientation Persists at Rest | **Verified in reference engine** | Orientation is not reset when velocity and angular velocity reach zero. |
+| V2.8 Spin Through Glue | **Verified in reference engine; shared math used natively** | Angular velocity and quaternion orientation use the lifted glue transform. Add a native extended-play regression. |
+| V2.9 Split Rendering During Spin | **Implemented in logic, not pixel-verified** | Both pieces are derived from one canonical orientation and clipped separately. Add a rendered-pixel or browser screenshot regression for marking alignment. |
+
+### Debugging and Architecture Gaps
+
+- The live Atlas debug option mainly displays quotient vertex/cone information.
+- The Orientation debug option supplies the asymmetric texture required by Section 7.
+- The live debug view does not yet expose all items requested in Section 26: image transform IDs, velocity and angular-velocity vectors, collision normal/time-of-impact history, seam intersections, orientation axes, contact-point slip, or sliding/rolling/stopped state.
+- `topological_billiards_native.js` combines atlas construction, game rules, physics, rendering helpers, setup editing, aiming, and serialization. This diverges from the module-boundary recommendation in Section 25.
+- The native atlas constructs its own affine glue maps from preset edge frames instead of using a shared neutral transformation module with the Mosaic Calculator. Behavior is tested, but the shared-code goal in Section 24 remains architectural debt.
+
+### Verification Snapshot — 2026-08-30
+
+The following commands passed:
+
+```text
+node js/billiards/topological_billiards_test.js
+node js/billiards/topological_billiards_worker_test.js
+node js/ramified_minigames_import_export_test.js
+node js/ramified_minigames_i18n_test.js
+```
+
+The broad command below currently fails at an unrelated Hex same-tile hover/dwell
+assertion in `js/ramified_minigames_setup_test.js:118`:
+
+```text
+node js/ramified_minigames_setup_test.js
+```
+
+Do not count that unrelated failure as a billiards regression, but rerun the broad
+suite after its Hex failure is fixed.
+
+### Next Priorities
+
+1. Add continuous ball-ball collision detection to the production native engine and a native high-speed tunneling regression.
+2. Add the missing V0.5 pixel-continuity and V0.7 closed-loop holonomy tests.
+3. Add native glancing-collision, conservation, self-image, and chart-independence regressions.
+4. Add center-hit, follow/draw, combined-spin, native sliding-transition, and split-rendering tests.
+5. Expand the live debug overlay enough to diagnose topology and physics failures from Section 39.
+6. Update `js/billiards/README.md`, then consider splitting `topological_billiards_native.js` along the boundaries in Section 25.
+7. Defer optional V3 physics until the production V0-V2 acceptance gaps above are closed.
+
+---
+
 ## 1. Project Goal
 
 Implement a billiards game for:
