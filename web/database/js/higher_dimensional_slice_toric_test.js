@@ -25,6 +25,14 @@ const worker = fs.readFileSync(path.join(__dirname, "toric_cone_worker.js"), "ut
   "toric-cone-vector-source",
   "toric-cone-rows-import",
   "toric-cone-pick-menu",
+  "slice-toric-fan-card",
+  "toric-fan-tabs",
+  "toric-fan-source-mode",
+  "toric-fan-preset",
+  "toric-fan-cone-options",
+  "toric-fan-apply-cones",
+  "toric-fan-character-lattice",
+  "slice-weight-info-out",
 ].forEach((id) => assert.match(html, new RegExp(`id=["']${id}["']`), `missing #${id}`));
 
 ["zero", "positive-orthant", "singular-simplicial", "square-cone"].forEach((preset) => {
@@ -51,6 +59,16 @@ assert.match(explorer, /function parseToricRayMatrix\(/);
 assert.match(explorer, /entriesByRow\.map\(\(row\) => row\[column\]\)/);
 assert.match(explorer, /target\.fieldKey === ["']generators["']/);
 assert.match(explorer, /primitive-normalized/);
+assert.match(explorer, /key:\s*["']toric-fan["'],\s*label:\s*["']toric variety \(fan\)["']/);
+assert.match(explorer, /objectType:\s*["']toric-fan["']/);
+assert.match(explorer, /ToricConeMath\.analyzeFan/);
+assert.match(explorer, /renderToricFanCard\(\)/);
+assert.match(explorer, /data-toric-fan-cone-source/);
+assert.match(explorer, /function toricCharacterInfoForCandidate\(/);
+assert.match(explorer, /div\(chi\^m\)/);
+assert.match(explorer, /underlying line bundle is trivial/);
+assert.match(explorer, /piecewise-linear support functions on the fan/);
+assert.match(html, /Lattice \/ Equivariant Bundles/);
 
 assert.match(explorer, /normalized\.objectType === ["']fan["'] \|\| normalized\.kind === ["']fan["']/);
 assert.match(explorer, /normalized\.objectType = ["']cartesian-frame["']/);

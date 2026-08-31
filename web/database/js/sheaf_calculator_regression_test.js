@@ -197,6 +197,10 @@ function loadComplexCalculator() {
     complexChartSnakeLayout,
     complexChartSnakeArrowGeometry,
     complexChartSnakeDisplayTikzPicture,
+    normalizeComplexChartLesSettings,
+    complexChartLesFromSesEntry,
+    complexChartDetectedSesSpace,
+    complexChartRegisteredPushforwardMapNames,
     scaleComplexChartSnakeFastDisplay,
     complexChartEntryFromEditor,
     complexChartTruncationCandidates,
@@ -212,6 +216,9 @@ function loadComplexCalculator() {
     toggleComplexChartOperationsPanel,
     setComplexChartOperationMode,
     setComplexChartOperationTarget,
+    setComplexChartOperationDerivedFunctor,
+    setComplexChartOperationLesEndDegree,
+    setComplexChartOperationLesParameter,
     toggleComplexChartOperationCut,
     toggleComplexChartOperationMapCut,
     setComplexChartOperationCandidateSelected,
@@ -298,7 +305,7 @@ function testSheafComplexCalculatorPageAndPrototypeLink() {
   assert(html.includes('id="complex-chart-operations-panel"'));
   assert(html.indexOf('id="complex-chart-add"') < html.indexOf('id="complex-chart-operations"'));
   assert(html.indexOf('id="complex-chart-operations"') < html.indexOf('id="complex-chart-export"'));
-  assert(html.includes('<script src="js/sheaf_complex_calculator.js?v=complex-chart-37"></script>'));
+  assert(html.includes('<script src="js/sheaf_complex_calculator.js?v=complex-chart-38"></script>'));
   assert(html.includes('id="complex-chart-length-label"'));
   assert(!html.includes('id="complex-chart-kind"'));
   assert(html.indexOf('id="complex-chart-saved"') < html.indexOf('id="complex-chart-add-panel"'));
@@ -859,6 +866,84 @@ function testComplexChartLesTruncationUsesClickableNoTikzEndpoints() {
   assert.strictEqual(api.state.complexChart.operations.candidates.length, 1);
   operationHtml = api.renderComplexChartOperationsPanelHtml();
   assert(operationHtml.includes('data-complex-chart-operation-candidate="les-range-object:1-map:3"'));
+}
+
+function testComplexChartLesFunctorCatalogAndPersistence() {
+  const api = loadComplexCalculator();
+  api.state.varieties = [
+    { id: 'les_base', type: 'abstract', dim: 2, name: 'X_0' },
+    { id: 'les_target', type: 'abstract', dim: 2, name: 'Y' }
+  ];
+  api.state.sheaves = ['F', 'G', 'H'].map((name, index) => ({
+    id: `les_sheaf_${index}`,
+    type: 'abstract',
+    name,
+    baseVarietyId: 'les_base'
+  }));
+  api.state.maps = [
+    { id: 'les_map_p', name: 'p', domainKind: 'variety', domainId: 'les_base', codomainKind: 'variety', codomainId: 'les_target' },
+    { id: 'les_map_p_duplicate', name: 'p', domainKind: 'variety', domainId: 'les_base', codomainKind: 'variety', codomainId: 'les_target' },
+    { id: 'les_sheaf_map', name: 'u', domainKind: 'sheaf', codomainKind: 'sheaf' }
+  ];
+  api.upsertComplexChartEntries([{
+    id: 'les_functor_source',
+    kind: 'chain-complex',
+    length: 5,
+    objects: ['0', 'F', 'G', 'H', '0'],
+    maps: ['', 'a', 'b', '']
+  }]);
+
+  assert.strictEqual(api.complexChartDetectedSesSpace(api.state.complexChart.entries[0]), 'X_0');
+  assert.deepStrictEqual(Array.from(api.complexChartRegisteredPushforwardMapNames()), ['p']);
+  api.openComplexChartOperations('les');
+  assert.strictEqual(api.state.complexChart.operations.lesSpace, 'X_0');
+  let generated = api.state.complexChart.operations.candidates[0].entry;
+  assert.strictEqual(generated.objects[1], 'H^{0}(X_0;F)');
+  assert.strictEqual(generated.maps[1], 'H^{0}(X_0;a)');
+
+  api.setComplexChartOperationLesParameter('lesSpace', 'Z');
+  assert.strictEqual(api.state.complexChart.operations.lesSpaceAuto, false);
+  assert.strictEqual(api.state.complexChart.operations.candidates[0].entry.objects[1], 'H^{0}(Z;F)');
+  api.setComplexChartOperationLesParameter('lesSpaceAuto', true);
+  assert.strictEqual(api.state.complexChart.operations.lesSpace, 'X_0');
+
+  api.setComplexChartOperationDerivedFunctor('ext-fixed-first');
+  api.setComplexChartOperationLesParameter('lesExtFirstArgument', 'E');
+  generated = api.state.complexChart.operations.candidates[0].entry;
+  assert.strictEqual(generated.objects[1], '\\operatorname{Hom}_{X_0}(E,F)');
+  assert.strictEqual(generated.objects[4], '\\operatorname{Ext}^{1}_{X_0}(E,F)');
+
+  api.setComplexChartOperationDerivedFunctor('derived-pushforward');
+  api.setComplexChartOperationLesParameter('lesPushforwardMap', 'p');
+  generated = api.state.complexChart.operations.candidates[0].entry;
+  assert.strictEqual(generated.objects[1], '{p}_{*}(F)');
+  assert.strictEqual(generated.objects[4], 'R^{1}{p}_{*}(F)');
+
+  api.setComplexChartOperationDerivedFunctor('custom');
+  api.setComplexChartOperationLesEndDegree(10);
+  api.setComplexChartOperationLesParameter('lesCustomFunctorTemplate', 'T^{{i}}({{arg}})');
+  api.setComplexChartOperationLesParameter('lesCustomConnectingTemplate', '\\partial^{{i}}');
+  generated = api.state.complexChart.operations.candidates[0].entry;
+  assert.strictEqual(generated.objects[31], 'T^{10}(F)');
+  assert.strictEqual(generated.maps[30], '\\partial^{9}');
+  let controls = api.renderComplexChartOperationsPanelHtml();
+  assert(controls.includes('data-complex-chart-les-custom-template'));
+  api.setComplexChartOperationLesParameter('lesCustomFunctorTemplate', 'T({{arg}})');
+  assert.strictEqual(api.state.complexChart.operations.candidates.length, 0);
+  assert(api.state.complexChart.operations.message.includes('{{i}} and {{arg}}'));
+
+  api.setComplexChartOperationDerivedFunctor('derived-pushforward');
+  const preset = api.buildPresetState();
+  assert.strictEqual(preset.complexChart.lesSettings.derivedFunctor, 'derived-pushforward');
+  assert.strictEqual(preset.complexChart.lesSettings.lesPushforwardMap, 'p');
+  const restored = loadComplexCalculator();
+  restored.applyPresetState(preset);
+  assert.strictEqual(restored.state.complexChart.lesSettings.derivedFunctor, 'derived-pushforward');
+  const legacyPreset = JSON.parse(JSON.stringify(preset));
+  delete legacyPreset.complexChart.lesSettings;
+  const legacy = loadComplexCalculator();
+  legacy.applyPresetState(legacyPreset);
+  assert.strictEqual(legacy.state.complexChart.lesSettings.derivedFunctor, 'cohomology');
 }
 
 function testComplexChartSeparateJsonImportExport() {
@@ -7742,6 +7827,7 @@ testComplexChartOperationTruncationModel();
 testComplexChartKernelCokernelExtensionModel();
 testComplexChartOperationUiAndAddSelectedModel();
 testComplexChartLesTruncationUsesClickableNoTikzEndpoints();
+testComplexChartLesFunctorCatalogAndPersistence();
 testComplexChartSeparateJsonImportExport();
 testComplexChartFullPresetRoundTripAndOldSchemaImport();
 testCurveToProjectivePullbackUsesCurvePoint();

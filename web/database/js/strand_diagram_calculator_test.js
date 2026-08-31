@@ -113,6 +113,17 @@ function testVersionThreeAndFourImports() {
     kind: 'strand-diagram-calculator',
     version: 4,
     groupType: 'symmetric',
+    strandCount: 4,
+    calculationSettings: { target: 'burau' }
+  }));
+  assert.strictEqual(api.state.calculationTarget, 'burau');
+  assert.strictEqual(api.state.calculationBasis, 'link-state', 'Burau presets without an explicit basis use link states');
+  assert.strictEqual(api.state.basisBasis, 'link-state');
+
+  api.importJson(JSON.stringify({
+    kind: 'strand-diagram-calculator',
+    version: 4,
+    groupType: 'symmetric',
     strandCount: 3,
     calculationSettings: { target: 'symmetric', basis: 'permutation' }
   }));
@@ -220,6 +231,9 @@ function testSymmetricCalculationChoices() {
   choices.forEach((basis) => assert.strictEqual(api.calculationBasisValue('symmetric', basis), basis));
   assert.strictEqual(api.calculationBasisValue('symmetric', 'permutation'), 'one-line');
   assert.strictEqual(api.calculationBasisValue('symmetric', 'unsupported'), 'composition');
+  assert.strictEqual(api.calculationBasisValue('burau', ''), 'link-state');
+  assert.strictEqual(api.calculationBasisValue('burau', 'matrix-unit'), 'matrix-unit');
+  assert.strictEqual(api.calculationBasisValue('burau', 'vector'), 'vector');
 }
 
 function testPresentationDoesNotStaleCalculation() {
@@ -307,6 +321,11 @@ function testHtmlIntegration() {
   assert.ok(html.includes('js/strand_math/diagrammatics.js'));
   assert.ok(html.includes('js/strand_math/basis_catalog.js'));
   assert.ok(html.includes('id="strand-copy-calculation-latex"'));
+  assert.ok(html.includes('id="strand-calculation-matrix-label"'));
+  assert.ok(html.includes('.strand-diagram-platform'));
+  assert.ok(source.includes("{ value: 'link-state', label: 'Link-state basis' }"));
+  assert.ok(source.includes("{ value: 'matrix-unit', label: 'Unreduced matrix-unit basis' }"));
+  assert.ok(source.includes('makeBurauLinkStateDiagram'));
   assert.ok(html.indexOf('js/strand_math/calculate.js') < html.indexOf('js/strand_diagram_calculator.js'));
 
   const api = loadCalculator();

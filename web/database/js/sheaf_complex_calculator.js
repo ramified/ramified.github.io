@@ -303,6 +303,16 @@
         lengthMode: 'objects',
         message: ''
       },
+      lesSettings: {
+        derivedFunctor: 'cohomology',
+        lesEndDegree: 3,
+        lesSpace: 'X',
+        lesSpaceAuto: true,
+        lesExtFirstArgument: '\\mathcal{E}',
+        lesPushforwardMap: 'f',
+        lesCustomFunctorTemplate: 'T^{{i}}({{arg}})',
+        lesCustomConnectingTemplate: '\\delta^{{i}}'
+      },
       operations: {
         open: false,
         targetId: null,
@@ -6835,7 +6845,29 @@
           return;
         }
         const lesEndInput = event.target.closest('[data-complex-chart-les-end-degree]');
-        if (lesEndInput) setComplexChartOperationLesEndDegree(lesEndInput.value);
+        if (lesEndInput) {
+          setComplexChartOperationLesEndDegree(lesEndInput.value);
+          return;
+        }
+        const spaceAuto = event.target.closest('[data-complex-chart-les-space-auto]');
+        if (spaceAuto) {
+          setComplexChartOperationLesParameter('lesSpaceAuto', spaceAuto.checked);
+          return;
+        }
+        const parameterInputs = [
+          ['[data-complex-chart-les-space]', 'lesSpace'],
+          ['[data-complex-chart-les-ext-first]', 'lesExtFirstArgument'],
+          ['[data-complex-chart-les-pushforward-map]', 'lesPushforwardMap'],
+          ['[data-complex-chart-les-custom-template]', 'lesCustomFunctorTemplate'],
+          ['[data-complex-chart-les-custom-connecting]', 'lesCustomConnectingTemplate']
+        ];
+        for (const [selector, name] of parameterInputs) {
+          const input = event.target.closest(selector);
+          if (input) {
+            setComplexChartOperationLesParameter(name, input.value);
+            return;
+          }
+        }
       });
       refs.complexChartOperationsPanel.addEventListener('change', (event) => {
         const fiberInput = event.target.closest('[data-complex-chart-map-fiber-name]');
@@ -29575,29 +29607,65 @@
     if (!state.complexChart.editor || typeof state.complexChart.editor !== 'object') {
       state.complexChart.editor = defaultComplexChartEditorState();
     }
+    state.complexChart.lesSettings = normalizeComplexChartLesSettings(state.complexChart.lesSettings);
     if (!state.complexChart.operations || typeof state.complexChart.operations !== 'object') {
-      state.complexChart.operations = defaultComplexChartOperationsState();
+      state.complexChart.operations = defaultComplexChartOperationsState(state.complexChart.lesSettings);
     } else {
       const previous = state.complexChart.operations;
       const previousMapCuts = Array.isArray(previous.mapCuts) && previous.mapCuts.length
         ? previous.mapCuts
         : previous.mapCut;
+      const operationLesSettings = normalizeComplexChartLesSettings({
+        ...state.complexChart.lesSettings,
+        ...previous
+      });
       state.complexChart.operations = {
-        ...defaultComplexChartOperationsState(),
+        ...defaultComplexChartOperationsState(state.complexChart.lesSettings),
         ...previous,
+        ...operationLesSettings,
         open: previous.open === true || !!previous.openEntryId,
         targetId: previous.targetId || previous.openEntryId || null,
         mode: normalizeComplexChartOperationMode(previous.mode),
         mapCut: normalizeComplexChartMapCut(previous.mapCut),
         mapCuts: normalizeComplexChartMapCuts(previousMapCuts),
         fiberNames: normalizeComplexChartFiberNames(previous.fiberNames),
-        derivedFunctor: normalizeComplexChartDerivedFunctor(previous.derivedFunctor),
-        lesEndDegree: normalizeComplexChartLesEndDegree(previous.lesEndDegree),
         lesRangeTruncation: previous.lesRangeTruncation === true,
         lesRangeEndpoints: normalizeComplexChartLesRangeEndpoints(previous.lesRangeEndpoints)
       };
     }
     return state.complexChart;
+  }
+
+  function defaultComplexChartLesSettings() {
+    return {
+      derivedFunctor: 'cohomology',
+      lesEndDegree: 3,
+      lesSpace: 'X',
+      lesSpaceAuto: true,
+      lesExtFirstArgument: '\\mathcal{E}',
+      lesPushforwardMap: 'f',
+      lesCustomFunctorTemplate: 'T^{{i}}({{arg}})',
+      lesCustomConnectingTemplate: '\\delta^{{i}}'
+    };
+  }
+
+  function normalizeComplexChartLesSettings(settings = {}) {
+    const input = settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {};
+    const defaults = defaultComplexChartLesSettings();
+    return {
+      derivedFunctor: normalizeComplexChartDerivedFunctor(input.derivedFunctor ?? input.functor),
+      lesEndDegree: normalizeComplexChartLesEndDegree(input.lesEndDegree ?? input.endDegree, defaults.lesEndDegree),
+      lesSpace: sanitizeComplexChartLatex(input.lesSpace ?? input.space) || defaults.lesSpace,
+      lesSpaceAuto: input.lesSpaceAuto !== false,
+      lesExtFirstArgument: sanitizeComplexChartLatex(input.lesExtFirstArgument) || defaults.lesExtFirstArgument,
+      lesPushforwardMap: sanitizeComplexChartLatex(input.lesPushforwardMap) || defaults.lesPushforwardMap,
+      lesCustomFunctorTemplate: Object.prototype.hasOwnProperty.call(input, 'lesCustomFunctorTemplate')
+        ? sanitizeComplexChartLesTemplate(input.lesCustomFunctorTemplate)
+        : defaults.lesCustomFunctorTemplate,
+      lesCustomConnectingTemplate: Object.prototype.hasOwnProperty.call(input, 'lesCustomConnectingTemplate')
+        ? sanitizeComplexChartLesTemplate(input.lesCustomConnectingTemplate)
+        : defaults.lesCustomConnectingTemplate
+    };
   }
 
   function defaultComplexChartEditorState(kind = 'chain-complex') {
@@ -29616,7 +29684,7 @@
     };
   }
 
-  function defaultComplexChartOperationsState() {
+  function defaultComplexChartOperationsState(lesSettings = {}) {
     return {
       open: false,
       targetId: null,
@@ -29625,8 +29693,7 @@
       mapCut: null,
       mapCuts: [],
       fiberNames: {},
-      derivedFunctor: 'cohomology',
-      lesEndDegree: 3,
+      ...normalizeComplexChartLesSettings(lesSettings),
       lesRangeTruncation: false,
       lesRangeEndpoints: [],
       candidates: [],
@@ -29893,7 +29960,7 @@
     const raw = String(value ?? '').trim().replace(/\s+/g, ' ');
     if (!raw) return '';
     if (raw.length > 180) return '';
-    if (!/^[A-Za-z0-9_{}\\^()\[\]+,\-'\s*!*\/]+$/.test(raw)) return '';
+    if (!/^[A-Za-z0-9_{}\\^()\[\]+,\-'\s*!*\/.;:|=]+$/.test(raw)) return '';
     return raw;
   }
 
@@ -30682,8 +30749,56 @@
     return out;
   }
 
+  function sanitizeComplexChartLesTemplate(value) {
+    const raw = String(value ?? '').trim().replace(/\s+/g, ' ');
+    if (!raw || raw.length > 180) return '';
+    if (!/^[A-Za-z0-9_{}\\^()\[\]+,\-'\s*!*\/.;:|=]+$/.test(raw)) return '';
+    return raw;
+  }
+
   function normalizeComplexChartDerivedFunctor(value) {
-    return value === 'cohomology' ? 'cohomology' : 'cohomology';
+    const normalized = String(value || '');
+    return ['cohomology', 'ext-fixed-first', 'derived-pushforward', 'custom'].includes(normalized) ? normalized : 'cohomology';
+  }
+
+  function complexChartLesSettingsValidation(settings) {
+    const normalized = normalizeComplexChartLesSettings(settings);
+    if (normalized.derivedFunctor !== 'custom') return '';
+    if (!normalized.lesCustomFunctorTemplate.includes('{{i}}') || !normalized.lesCustomFunctorTemplate.includes('{{arg}}')) return 'Custom functor template must contain {{i}} and {{arg}}.';
+    if (!normalized.lesCustomConnectingTemplate.includes('{{i}}')) return 'Custom connecting-map template must contain {{i}}.';
+    return '';
+  }
+
+  function applyComplexChartLesTemplate(template, degree, argument = '') {
+    return String(template || '').split('{{i}}').join(`{${degree}}`).split('{{arg}}').join(argument);
+  }
+
+  function complexChartDetectedSesSpace(entry) {
+    const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    if (!complexChartEntryIsSes(normalized)) return '';
+    const matches = normalized.objects.slice(1, 4).map((objectLatex) => {
+      const key = canonicalMathLabel(objectLatex);
+      return (state.sheaves || []).filter((sheaf) => canonicalMathLabel(sheaf?.name) === key);
+    });
+    if (matches.some((items) => items.length !== 1)) return '';
+    const baseIds = new Set(matches.map((items) => items[0]?.baseVarietyId).filter(Boolean));
+    if (baseIds.size !== 1) return '';
+    const variety = (state.varieties || []).find((item) => item.id === Array.from(baseIds)[0]);
+    return sanitizeComplexChartLatex(variety?.name) || '';
+  }
+
+  function complexChartRegisteredPushforwardMapNames() {
+    const names = [];
+    const seen = new Set();
+    (state.maps || []).forEach((map) => {
+      if (map?.domainKind !== 'variety' || map?.codomainKind !== 'variety') return;
+      const name = sanitizeComplexChartLatex(map.name);
+      const key = canonicalMathLabel(name);
+      if (!name || seen.has(key)) return;
+      seen.add(key);
+      names.push(name);
+    });
+    return names;
   }
 
   function normalizeComplexChartLesEndDegree(value, fallback = 3) {
@@ -30965,47 +31080,38 @@
   function complexChartLesFromSesEntry(entry, options = {}) {
     const normalized = normalizeComplexChartEntry(entry, { requireId: false });
     if (!complexChartEntryIsSes(normalized)) return null;
-    const endDegree = normalizeComplexChartLesEndDegree(options.endDegree);
-    const derivedFunctor = normalizeComplexChartDerivedFunctor(options.derivedFunctor);
+    const settings = normalizeComplexChartLesSettings(options);
+    if (complexChartLesSettingsValidation(settings)) return null;
     const sourceObjects = normalized.objects || [];
     const sourceMaps = normalized.maps || [];
-    const left = sourceObjects[1] || 'A';
-    const middle = sourceObjects[2] || 'B';
-    const right = sourceObjects[3] || 'C';
-    const leftMap = sourceMaps[1] || 'f';
-    const rightMap = sourceMaps[2] || 'g';
     const objects = ['0'];
     const maps = [];
-    const addTerm = (incomingMap, objectLatex) => {
-      maps.push(incomingMap || '');
-      objects.push(objectLatex);
-    };
-    for (let degree = 0; degree <= endDegree; degree += 1) {
-      addTerm(degree === 0 ? '' : complexChartConnectingMapLatex(degree - 1), complexChartDerivedFunctorObjectLatex(derivedFunctor, degree, left));
-      addTerm(complexChartDerivedFunctorMapLatex(derivedFunctor, degree, leftMap), complexChartDerivedFunctorObjectLatex(derivedFunctor, degree, middle));
-      addTerm(complexChartDerivedFunctorMapLatex(derivedFunctor, degree, rightMap), complexChartDerivedFunctorObjectLatex(derivedFunctor, degree, right));
+    const addTerm = (incomingMap, objectLatex) => { maps.push(incomingMap || ''); objects.push(objectLatex); };
+    for (let degree = 0; degree <= settings.lesEndDegree; degree += 1) {
+      addTerm(degree === 0 ? '' : complexChartConnectingMapLatex(settings, degree - 1), complexChartDerivedFunctorArgumentLatex(settings, degree, sourceObjects[1] || 'A'));
+      addTerm(complexChartDerivedFunctorArgumentLatex(settings, degree, sourceMaps[1] || 'f'), complexChartDerivedFunctorArgumentLatex(settings, degree, sourceObjects[2] || 'B'));
+      addTerm(complexChartDerivedFunctorArgumentLatex(settings, degree, sourceMaps[2] || 'g'), complexChartDerivedFunctorArgumentLatex(settings, degree, sourceObjects[3] || 'C'));
     }
-    return normalizeComplexChartEntry({
-      kind: 'chain-complex',
-      length: objects.length,
-      objects,
-      maps,
-      display: 'snake-les'
-    }, { requireId: false });
+    return normalizeComplexChartEntry({ kind: 'chain-complex', length: objects.length, objects, maps, display: 'snake-les' }, { requireId: false });
   }
 
-  function complexChartDerivedFunctorObjectLatex(functor, degree, objectLatex) {
-    if (normalizeComplexChartDerivedFunctor(functor) === 'cohomology') return `H^{${degree}}(${objectLatex})`;
-    return `H^{${degree}}(${objectLatex})`;
+  function complexChartDerivedFunctorArgumentLatex(settings, degree, argumentLatex) {
+    const normalized = normalizeComplexChartLesSettings(settings);
+    if (normalized.derivedFunctor === 'ext-fixed-first') {
+      const operator = degree === 0 ? '\\operatorname{Hom}' : `\\operatorname{Ext}^{${degree}}`;
+      return `${operator}_{${normalized.lesSpace}}(${normalized.lesExtFirstArgument},${argumentLatex})`;
+    }
+    if (normalized.derivedFunctor === 'derived-pushforward') {
+      const pushforward = `{${normalized.lesPushforwardMap}}_{*}`;
+      return degree === 0 ? `${pushforward}(${argumentLatex})` : `R^{${degree}}${pushforward}(${argumentLatex})`;
+    }
+    if (normalized.derivedFunctor === 'custom') return applyComplexChartLesTemplate(normalized.lesCustomFunctorTemplate, degree, argumentLatex);
+    return `H^{${degree}}(${normalized.lesSpace};${argumentLatex})`;
   }
 
-  function complexChartDerivedFunctorMapLatex(functor, degree, mapLatex) {
-    if (normalizeComplexChartDerivedFunctor(functor) === 'cohomology') return `H^{${degree}}(${mapLatex || 'f'})`;
-    return `H^{${degree}}(${mapLatex || 'f'})`;
-  }
-
-  function complexChartConnectingMapLatex(degree) {
-    return `\\delta^{${degree}}`;
+  function complexChartConnectingMapLatex(settings, degree) {
+    const normalized = normalizeComplexChartLesSettings(settings);
+    return normalized.derivedFunctor === 'custom' ? applyComplexChartLesTemplate(normalized.lesCustomConnectingTemplate, degree) : `\\delta^{${degree}}`;
   }
 
   function complexChartKernelCokernelExtensionEntry(entry) {
@@ -31150,18 +31256,14 @@
       operations.fiberNames = {};
       operations.lesRangeTruncation = false;
       operations.lesRangeEndpoints = [];
-      operations.derivedFunctor = normalizeComplexChartDerivedFunctor(operations.derivedFunctor);
-      operations.lesEndDegree = normalizeComplexChartLesEndDegree(operations.lesEndDegree);
-      const les = complexChartLesFromSesEntry(entry, {
-        derivedFunctor: operations.derivedFunctor,
-        endDegree: operations.lesEndDegree
-      });
-      operations.candidates = les
-        ? [{ key: `les-${entry.id}-${operations.derivedFunctor}-${operations.lesEndDegree}`, label: 'long exact sequence', entry: les, selected: true }]
-        : [];
-      operations.message = les
-        ? 'Long exact sequence ready.'
-        : 'Choose a five-term short exact sequence with zero endpoints.';
+      let lesSettings = normalizeComplexChartLesSettings(operations);
+      if (lesSettings.lesSpaceAuto && ['cohomology', 'ext-fixed-first'].includes(lesSettings.derivedFunctor)) lesSettings = { ...lesSettings, lesSpace: complexChartDetectedSesSpace(entry) || 'X' };
+      Object.assign(operations, lesSettings);
+      chart.lesSettings = { ...lesSettings };
+      const validation = complexChartLesSettingsValidation(lesSettings);
+      const les = validation ? null : complexChartLesFromSesEntry(entry, lesSettings);
+      operations.candidates = les ? [{ key: `les-${entry.id}-${operations.derivedFunctor}-${operations.lesEndDegree}`, label: 'long exact sequence', entry: les, selected: true }] : [];
+      operations.message = validation || (les ? 'Long exact sequence ready.' : 'Choose a five-term short exact sequence with zero endpoints.');
     } else if (operations.mode === 'flatten') {
       operations.cuts = [];
       operations.mapCut = null;
@@ -31214,7 +31316,7 @@
       ? normalizeComplexChartOperationMode(idOrMode)
       : normalizeComplexChartOperationMode(mode);
     chart.operations = {
-      ...defaultComplexChartOperationsState(),
+      ...defaultComplexChartOperationsState(chart.lesSettings),
       open: true,
       mode: nextMode,
       targetId: idOrMode && !idIsMode
@@ -31233,7 +31335,8 @@
   }
 
   function closeComplexChartOperations() {
-    ensureComplexChartState().operations = defaultComplexChartOperationsState();
+    const chart = ensureComplexChartState();
+    chart.operations = defaultComplexChartOperationsState(chart.lesSettings);
     renderComplexChartList();
     return true;
   }
@@ -31465,32 +31568,28 @@
     return true;
   }
 
-  function setComplexChartOperationDerivedFunctor(value) {
+  function updateComplexChartOperationLesSettings(patch = {}) {
     const chart = ensureComplexChartState();
-    const operations = chart.operations || defaultComplexChartOperationsState();
-    chart.operations = {
-      ...operations,
-      open: true,
-      mode: 'les',
-      derivedFunctor: normalizeComplexChartDerivedFunctor(value)
-    };
+    const settings = normalizeComplexChartLesSettings({ ...chart.lesSettings, ...(chart.operations || {}), ...patch });
+    chart.lesSettings = settings;
+    chart.operations = { ...(chart.operations || defaultComplexChartOperationsState(settings)), ...settings, open: true, mode: 'les' };
     refreshComplexChartOperationCandidates();
     renderComplexChartList();
     return true;
   }
 
+  function setComplexChartOperationDerivedFunctor(value) { return updateComplexChartOperationLesSettings({ derivedFunctor: value }); }
+
   function setComplexChartOperationLesEndDegree(value) {
-    const chart = ensureComplexChartState();
-    const operations = chart.operations || defaultComplexChartOperationsState();
-    chart.operations = {
-      ...operations,
-      open: true,
-      mode: 'les',
-      lesEndDegree: normalizeComplexChartLesEndDegree(value, operations.lesEndDegree ?? 3)
-    };
-    refreshComplexChartOperationCandidates();
-    renderComplexChartList();
-    return true;
+    const operations = ensureComplexChartState().operations || {};
+    return updateComplexChartOperationLesSettings({ lesEndDegree: normalizeComplexChartLesEndDegree(value, operations.lesEndDegree ?? 3) });
+  }
+
+  function setComplexChartOperationLesParameter(name, value) {
+    if (!['lesSpace', 'lesSpaceAuto', 'lesExtFirstArgument', 'lesPushforwardMap', 'lesCustomFunctorTemplate', 'lesCustomConnectingTemplate'].includes(name)) return false;
+    const patch = { [name]: name === 'lesSpaceAuto' ? value === true : value };
+    if (name === 'lesSpace') patch.lesSpaceAuto = false;
+    return updateComplexChartOperationLesSettings(patch);
   }
 
   function setComplexChartOperationCandidateSelected(key, selected) {
@@ -31705,21 +31804,40 @@
   }
 
   function renderComplexChartLesControls(operations) {
-    const derivedFunctor = normalizeComplexChartDerivedFunctor(operations?.derivedFunctor);
-    const endDegree = normalizeComplexChartLesEndDegree(operations?.lesEndDegree);
+    const settings = normalizeComplexChartLesSettings(operations);
+    const usesSpace = settings.derivedFunctor === 'cohomology' || settings.derivedFunctor === 'ext-fixed-first';
+    const spaceControls = usesSpace ? `
+      <label class="opt-row">space <input class="sheaf-input sheaf-complex-les-parameter-input" type="text" value="${escapeHtml(settings.lesSpace)}" data-complex-chart-les-space spellcheck="false" autocomplete="off"></label>
+      <label class="opt-row"><input type="checkbox" data-complex-chart-les-space-auto ${settings.lesSpaceAuto ? 'checked' : ''}>auto</label>
+    ` : '';
+    const extControls = settings.derivedFunctor === 'ext-fixed-first' ? `
+      <label class="opt-row">fixed E <input class="sheaf-input sheaf-complex-les-parameter-input" type="text" value="${escapeHtml(settings.lesExtFirstArgument)}" data-complex-chart-les-ext-first spellcheck="false" autocomplete="off"></label>
+    ` : '';
+    const pushforwardMaps = complexChartRegisteredPushforwardMapNames();
+    const pushforwardControls = settings.derivedFunctor === 'derived-pushforward' ? `
+      <label class="opt-row">map <input class="sheaf-input sheaf-complex-les-parameter-input" type="text" list="complex-chart-les-map-suggestions" value="${escapeHtml(settings.lesPushforwardMap)}" data-complex-chart-les-pushforward-map spellcheck="false" autocomplete="off"></label>
+      <datalist id="complex-chart-les-map-suggestions">${pushforwardMaps.map((name) => `<option value="${escapeHtml(name)}"></option>`).join('')}</datalist>
+    ` : '';
+    const customControls = settings.derivedFunctor === 'custom' ? `
+      <label class="opt-row">template <input class="sheaf-input sheaf-complex-les-template-input" type="text" value="${escapeHtml(settings.lesCustomFunctorTemplate)}" data-complex-chart-les-custom-template spellcheck="false" autocomplete="off"></label>
+      <label class="opt-row">connecting <input class="sheaf-input sheaf-complex-les-template-input" type="text" value="${escapeHtml(settings.lesCustomConnectingTemplate)}" data-complex-chart-les-custom-connecting spellcheck="false" autocomplete="off"></label>
+    ` : '';
+    const validation = complexChartLesSettingsValidation(settings);
     return `
       <div class="sheaf-complex-operation-controls">
         <label class="opt-row">
           functor
           <select class="sheaf-select" data-complex-chart-les-functor>
-            <option value="cohomology" ${derivedFunctor === 'cohomology' ? 'selected' : ''}>H^i(...)</option>
+            <option value="cohomology" ${settings.derivedFunctor === 'cohomology' ? 'selected' : ''}>H^i(X; -)</option>
+            <option value="ext-fixed-first" ${settings.derivedFunctor === 'ext-fixed-first' ? 'selected' : ''}>Ext_X^i(E, -)</option>
+            <option value="derived-pushforward" ${settings.derivedFunctor === 'derived-pushforward' ? 'selected' : ''}>R^i f_*(-)</option>
+            <option value="custom" ${settings.derivedFunctor === 'custom' ? 'selected' : ''}>custom T^i(-)</option>
           </select>
         </label>
-        <label class="opt-row">
-          end i
-          <input class="sheaf-input sheaf-complex-les-degree-input" type="number" min="0" max="${MAX_COMPLEX_CHART_LES_END_DEGREE}" value="${endDegree}" data-complex-chart-les-end-degree>
-        </label>
+        <label class="opt-row">end i <input class="sheaf-input sheaf-complex-les-degree-input" type="number" min="0" max="${MAX_COMPLEX_CHART_LES_END_DEGREE}" value="${settings.lesEndDegree}" data-complex-chart-les-end-degree></label>
+        ${spaceControls}${extControls}${pushforwardControls}${customControls}
       </div>
+      ${validation ? `<div class="hint">${escapeHtml(validation)}</div>` : ''}
     `;
   }
 
@@ -43905,7 +44023,8 @@
     const source = chart && typeof chart === 'object' && !Array.isArray(chart) ? chart : {};
     const entries = sanitizePresetComplexChartEntries(source.entries || source.complexes || source.items);
     const editor = sanitizePresetComplexChartEditor(source.editor);
-    return editor ? { entries, editor } : { entries };
+    const lesSettings = normalizeComplexChartLesSettings(source.lesSettings);
+    return editor ? { entries, editor, lesSettings } : { entries, lesSettings };
   }
 
   function sanitizePresetComplexChartEntries(items) {
@@ -44287,7 +44406,8 @@
     nextChart.editor = editor
       ? { ...defaultComplexChartEditorState(editor.kind), ...editor }
       : defaultComplexChartEditorState();
-    nextChart.operations = defaultComplexChartOperationsState();
+    nextChart.lesSettings = normalizeComplexChartLesSettings(source.lesSettings);
+    nextChart.operations = defaultComplexChartOperationsState(nextChart.lesSettings);
     renderComplexChartList();
     renderComplexChartEditor();
     typeset(refs.complexChartSaved);
@@ -44712,7 +44832,8 @@
     const chart = ensureComplexChartState();
     return compactSerializable({
       entries: (chart.entries || []).map(presetComplexChartEntry),
-      editor: presetComplexChartEditor(chart.editor)
+      editor: presetComplexChartEditor(chart.editor),
+      lesSettings: normalizeComplexChartLesSettings(chart.lesSettings)
     });
   }
 

@@ -33,8 +33,12 @@ const {
   matrixEquals,
   burauGeneratorMatrix,
   tlGeneratorMatrix,
+  linkStateTlGeneratorMatrix,
+  reducedBurauGeneratorMatrix,
   evaluateBurauWord,
+  evaluateReducedBurauWord,
   evaluateTlCombinationMatrix,
+  evaluateTlCombinationLinkStateMatrix,
   calculateStrandWord,
   formatLinearCombinationPlain,
   formatAlignedTrace,
@@ -44,6 +48,7 @@ const {
   makeTlDiagram,
   makeTlCompositionDiagram,
   makeGridDiagram,
+  makeBurauLinkStateDiagram,
   minimalRankForIndices,
   pathToSvgData,
   diagramToTikz,
@@ -188,6 +193,70 @@ function testBurau() {
   const identityMinusSigma = matrixSubtract(identityMatrix(3), sigma1);
   assert.ok(matrixEquals(matrixScale(identityMinusSigma, V_INVERSE), tlGeneratorMatrix(3, 1)));
   assert.ok(matrixEquals(matrixSubtract(identityMatrix(3), matrixScale(tlGeneratorMatrix(3, 1), V)), sigma1));
+}
+
+function testReducedBurauLinkStates() {
+  const e1 = linkStateTlGeneratorMatrix(4, 1);
+  const e2 = linkStateTlGeneratorMatrix(4, 2);
+  const e3 = linkStateTlGeneratorMatrix(4, 3);
+  assert.strictEqual(e1.length, 3);
+  assert.ok(e1[0][0].equals(DELTA));
+  assert.ok(e1[0][1].equals(LaurentPolynomial.one()));
+  assert.ok(e1[0][2].isZero());
+  assert.ok(matrixEquals(matrixMultiply(e1, e1, budget()), matrixScale(e1, DELTA)));
+  assert.ok(matrixEquals(
+    matrixMultiply(matrixMultiply(e1, e2, budget()), e1, budget()),
+    e1
+  ));
+  assert.ok(matrixEquals(matrixMultiply(e1, e3, budget()), matrixMultiply(e3, e1, budget())));
+
+  const sigma1 = reducedBurauGeneratorMatrix(4, 1, 1);
+  const inverse1 = reducedBurauGeneratorMatrix(4, 1, -1);
+  const sigma2 = reducedBurauGeneratorMatrix(4, 2, 1);
+  assert.ok(matrixEquals(matrixMultiply(sigma1, inverse1, budget()), identityMatrix(3)));
+  assert.ok(matrixEquals(
+    matrixMultiply(matrixMultiply(sigma1, sigma2, budget()), sigma1, budget()),
+    matrixMultiply(matrixMultiply(sigma2, sigma1, budget()), sigma2, budget())
+  ));
+
+  const word = [braid(1), braid(2, -1), braid(3), braid(1)];
+  const direct = evaluateReducedBurauWord(4, word, budget());
+  const tlResult = calculateStrandWord(word, { rank: 4, target: 'tl', basis: 'diagram' });
+  const throughTl = evaluateTlCombinationLinkStateMatrix(tlResult.result, 4, budget());
+  assert.ok(matrixEquals(direct, throughTl));
+
+  const defaultResult = calculateStrandWord([braid(1)], { rank: 4, target: 'burau' });
+  assert.strictEqual(defaultResult.basis, 'link-state');
+  assert.strictEqual(defaultResult.result.basisType, 'burau-link-state');
+  assert.strictEqual(defaultResult.metadata.matrix.length, 3);
+  assert.strictEqual(defaultResult.metadata.matrixRepresentation, 'reduced-link-state');
+  assert.ok(defaultResult.relationsUsed.includes('link-state-basis'));
+  assert.ok(defaultResult.relationsUsed.includes('reduced-burau-generator'));
+  const diagrammatic = buildDiagrammaticTrace(defaultResult);
+  assert.strictEqual(diagrammatic.rows.at(-1).rhs.kind, 'vector-system');
+  assert.ok(diagrammatic.rows.at(-1).rhs.rows.every((row) => row.lhs.diagram.kind === 'burau-link-state'));
+
+  for (const direction of ['up-down', 'down-up', 'left-right', 'right-left']) {
+    const diagram = makeBurauLinkStateDiagram(4, 2, direction);
+    assert.strictEqual(diagram.paths.length, 3);
+    assert.strictEqual(diagram.paths.filter((path) => path.endOnPlatform).length, 2);
+    assert.strictEqual(diagram.platforms.length, 1);
+    assert.strictEqual(diagram.platforms[0].points.length, 4);
+    assertFiniteDiagram(diagram);
+    assert.ok(diagramToTikz(diagram).includes('filldraw'));
+  }
+
+  const relationIds = buildDiagrammaticRelations(defaultResult).rows.map((row) => row.relationId);
+  assert.ok(relationIds.includes('link-state-action'));
+  assert.ok(relationIds.includes('reduced-burau-braid-check'));
+  assert.ok(relationIds.includes('link-state-basis'));
+  const unreduced = calculateStrandWord([braid(1)], { rank: 4, target: 'burau', basis: 'matrix-unit' });
+  assert.strictEqual(unreduced.metadata.matrix.length, 4);
+  assert.strictEqual(unreduced.metadata.matrixRepresentation, 'unreduced');
+  assert.throws(
+    () => calculateStrandWord([], { rank: 1, target: 'burau', basis: 'link-state' }),
+    (error) => error instanceof CalculationError && error.code === 'invalid-rank'
+  );
 }
 
 function testCrossPaths() {
@@ -714,6 +783,10 @@ function testBasisCatalogs() {
   const vectors = buildBasisCatalog({ rank: 3, target: 'burau', basis: 'vector' });
   assert.strictEqual(vectors.dimension, '3');
   assert.deepStrictEqual(vectors.page.items.map((item) => item.row), [1, 2, 3]);
+  const linkStates = buildBasisCatalog({ rank: 4, target: 'burau', basis: 'link-state' });
+  assert.strictEqual(linkStates.dimension, '3');
+  assert.deepStrictEqual(linkStates.page.items.map((item) => item.cupIndex), [1, 2, 3]);
+  assert.ok(linkStates.explanation.includes('platform'));
 
   const braidCatalog = buildBasisCatalog({ rank: 3, target: 'braid', basis: 'freely-reduced-word' });
   assert.strictEqual(braidCatalog.finite, false);
@@ -733,6 +806,7 @@ testHeckeRelations();
 testKlBasis();
 testTemperleyLieb();
 testBurau();
+testReducedBurauLinkStates();
 testCrossPaths();
 testApiErrorsTraceAndSerialization();
 testSymmetricPresentations();

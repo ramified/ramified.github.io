@@ -147,4 +147,38 @@ for (let rank = 2; rank <= 8; rank += 1) {
   );
 }
 
+{
+  const affine = Toric.analyzeFan({ ambientDimension: 3, cones: Toric.presetFan("affine-space", 3) });
+  assert.strictEqual(affine.valid, true);
+  assert.strictEqual(affine.complete, false);
+  assert.strictEqual(affine.smooth, true);
+  assert.strictEqual(affine.rayCount, 3);
+  assert.strictEqual(affine.classGroup.display, "0");
+
+  const projective = Toric.analyzeFan({ ambientDimension: 3, cones: Toric.presetFan("projective-space", 3) });
+  assert.strictEqual(projective.valid, true);
+  assert.strictEqual(projective.complete, true);
+  assert.strictEqual(projective.smooth, true);
+  assert.strictEqual(projective.maximalConeCount, 4);
+  assert.strictEqual(projective.classGroup.display, "Z");
+
+  const weighted = Toric.analyzeFan({ ambientDimension: 3, cones: Toric.presetFan("weighted-projective-space", 3) });
+  assert.strictEqual(weighted.valid, true);
+  assert.strictEqual(weighted.complete, true);
+  assert.strictEqual(weighted.smooth, false);
+  assert.strictEqual(weighted.simplicial, true);
+}
+
+{
+  const incompatible = Toric.analyzeFan({
+    ambientDimension: 2,
+    cones: [
+      { id: "sigma-1", generators: [generator("u1", [1, 0]), generator("u2", [0, 1])] },
+      { id: "sigma-2", generators: [generator("v1", [1, 0]), generator("v2", [-1, 1])] },
+    ],
+  });
+  assert.strictEqual(incompatible.valid, false);
+  assert.match(incompatible.issues.join(" "), /do not meet in a common face/i);
+}
+
 console.log("toric_cone_math_test: all tests passed");

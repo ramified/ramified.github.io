@@ -762,7 +762,11 @@
       const content = sourceFamily === 'braid'
         ? wordOperand(context, { kind: 'word', family: 'braid', records }, fallbackLatex)
         : buildFactorProduct(context, records, sourceFamily, 'tl', fallbackLatex);
-      return { kind: 'representation', badgeLatex: sourceFamily === 'braid' ? '\\rho' : '\\pi', content, latex: fallbackLatex };
+      const reduced = context.calculation?.basis === 'link-state';
+      const badgeLatex = sourceFamily === 'braid'
+        ? (reduced ? '\\bar\\rho' : '\\rho')
+        : (reduced ? '\\bar\\pi' : '\\pi');
+      return { kind: 'representation', badgeLatex, content, latex: fallbackLatex };
     }
     return symbolicOperand(fallbackLatex);
   }

@@ -423,10 +423,51 @@ All four rays lie on the height-one hyperplane `z = 1`, so the canonical
 divisor is Cartier and the cone is Gorenstein. This example also shows why
 non-simpliciality and Gorenstein status are independent questions.
 
+## Fans And Toric Varieties
+
+A toric variety is assembled from a rational fan `Sigma`: a finite collection
+of strongly convex rational polyhedral cones such that every face is included
+and the intersection of any two cones is a face of both. The `toric-fan`
+source object stores its selected maximal cones and recomputes the shared rays,
+faces, orbit data, divisor group, and compatibility checks. A cone-list fan
+keeps snapshots of its linked cone charts, so deleting a source cone produces
+an explicit stale-source warning instead of silently changing the variety.
+
+The global orbit-cone correspondence assigns one orbit to every cone:
+
+```text
+O(tau) = (G_m)^(n - dim(tau)).
+```
+
+The affine charts belonging to maximal cones glue along the charts of their
+common faces. A full-dimensional pure fan is reported complete when every
+codimension-one face is incident to exactly two maximal cones. The included
+presets are affine space, projective space, and weighted projective space
+`P(1,...,1,2)`.
+
+## Characters And Equivariant Line Bundles
+
+The ray generators `u_rho` lie in the one-parameter-subgroup lattice `N`,
+while a clicked integral lattice point `m` lies in the character lattice
+`M = Hom(N,Z)`. Their exact pairing gives the principal invariant divisor
+
+```text
+div(chi^m) = sum_rho <m,u_rho> D_rho.
+```
+
+This character supplies the same Cartier datum `m_sigma = m` on every affine
+chart. It therefore describes the trivial underlying line bundle with an
+`m`-linearization. This distinction matters: arbitrary `T`-equivariant line
+bundles are classified by integral piecewise-linear support functions on the
+fan, modulo global linear functions when one forgets the linearization. A
+lattice point alone must never be presented as a general nonequivariant line
+bundle class.
+
 ## Deferred Work
 
-This milestone does not compute Hilbert bases, binomial presentations, fan
-compatibility, chart gluing, completeness, properness, global divisor groups,
-projectivity, moment polytopes, or the topology and rendering of `X(C)`. Those
-features require a fan-level object and must not be inferred from a collection
-of independently created cone objects.
+This milestone does not compute Hilbert bases, binomial presentations,
+explicit gluing morphisms, projectivity, moment polytopes, arbitrary support
+function input, or the topology and rendering of `X(C)`. Fan compatibility,
+completeness, orbit data, global class groups, and character principal divisors
+are computed by the fan-level object; stronger global geometric claims are not
+inferred from a collection of independently created cone objects.

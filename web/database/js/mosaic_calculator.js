@@ -20052,7 +20052,13 @@
           ))) {
         return { valid: false, segments, crossings, vertexEvents, reason: 'invalid-apex-event' };
       }
-      const nearestSectorPoint = (particle) => {
+      const eventSectorPoint = (particle, role) => {
+        const carrier = spring.vertexEvent.carrier;
+        const sectorId = carrier && carrier.resolved
+          ? carrier[role === 'left' ? 'leftSectorId' : 'rightSectorId']
+          : -1;
+        const exact = Number.isInteger(sectorId) ? star.sectors[sectorId] : null;
+        if (exact && exact.tileIndex === particle.tileIndex && exact.point) return exact.point;
         const choices = star.sectors
           .filter((sector) => sector.tileIndex === particle.tileIndex && sector.point)
           .map((sector) => ({
@@ -20062,8 +20068,8 @@
           .sort((left, right) => left.distance - right.distance);
         return choices.length ? choices[0].point : null;
       };
-      const leftApex = nearestSectorPoint(start);
-      const rightApex = nearestSectorPoint(end);
+      const leftApex = eventSectorPoint(start, 'left');
+      const rightApex = eventSectorPoint(end, 'right');
       if (!leftApex || !rightApex) {
         return { valid: false, segments, crossings, vertexEvents, reason: 'missing-apex-sector' };
       }
@@ -20977,6 +20983,20 @@
     return true;
   }
 
+  function cloneQuotientVertexEvent(event) {
+    if (!event) return null;
+    return {
+      ...event,
+      constructionSectorIds: Array.isArray(event.constructionSectorIds)
+        ? [...event.constructionSectorIds] : event.constructionSectorIds,
+      carrier: event.carrier ? {
+        ...event.carrier,
+        sectorIds: Array.isArray(event.carrier.sectorIds)
+          ? [...event.carrier.sectorIds] : []
+      } : null
+    };
+  }
+
   function snapshotQuotientElasticBand(chain) {
     return {
       points: chain.points.map((point) => ({
@@ -20991,7 +21011,7 @@
           matrix: { ...spring.transform.matrix },
           offset: { ...spring.transform.offset }
         },
-        vertexEvent: spring.vertexEvent ? { ...spring.vertexEvent } : null,
+        vertexEvent: cloneQuotientVertexEvent(spring.vertexEvent),
         constructionTransitionIndex: spring.constructionTransitionIndex == null
           ? null : spring.constructionTransitionIndex
       })),
@@ -21028,7 +21048,7 @@
         matrix: { ...spring.transform.matrix },
         offset: { ...spring.transform.offset }
       },
-      vertexEvent: spring.vertexEvent ? { ...spring.vertexEvent } : null,
+      vertexEvent: cloneQuotientVertexEvent(spring.vertexEvent),
       constructionTransitionIndex: spring.constructionTransitionIndex == null
         ? null : spring.constructionTransitionIndex
     }));
@@ -21542,6 +21562,173 @@
     return chain.solverScratch;
   }
 
+  function buildQuotientVertexEventCarrier(chain, springIndex, event) {
+    const logicalCount = Math.max(0, chain && chain.points ? chain.points.length - 1 : 0);
+    const spring = logicalCount ? chain.springs[springIndex] : null;
+    const star = event && chain.atlas && chain.atlas.vertexStars.get(event.vertexId);
+    const left = logicalCount ? chain.points[springIndex] : null;
+    const right = logicalCount ? chain.points[(springIndex + 1) % logicalCount] : null;
+    if (!spring || !star || !left || !right || !star.manifold) {
+      return { resolved: false, reason: 'invalid vertex star' };
+    }
+    const componentIndex = (star.cyclicComponents || []).findIndex((ids) => ids.length
+      && ids.some((id) => star.sectors[id] && star.sectors[id].tileIndex === left.tileIndex)
+      && ids.some((id) => star.sectors[id] && star.sectors[id].tileIndex === right.tileIndex));
+    if (componentIndex < 0) return { resolved: false, reason: 'disconnected endpoint lifts' };
+    const component = homologyLocalChartComponent(star, star.cyclicComponents[componentIndex][0]);
+    if (!component || !component.valid) return { resolved: false, reason: 'invalid local component' };
+    const frames = component.frames.map(homologyLocalChartFrameGeometry).filter(Boolean);
+    if (frames.length !== component.frames.length) return { resolved: false, reason: 'missing local frame' };
+    const lifts = (point) => frames.filter((frame) => frame.sector.tileIndex === point.tileIndex)
+      .map((frame) => ({ frame, polar: homologyLocalChartFramePolar(frame, point, 'radial', 2) }))
+      .filter((entry) => entry.polar);
+    const leftLifts = lifts(left);
+    const rightLifts = lifts(right);
+    const matches = [];
+    leftLifts.forEach((leftLift) => rightLifts.forEach((rightLift) => {
+      [-1, 1].forEach((direction) => {
+        const path = homologyLocalPhysicsSectorPath(
+          component,
+          leftLift.frame.sectorId,
+          rightLift.frame.sectorId,
+          direction
+        );
+        if (!path) return;
+        const pathWord = homologyLocalPhysicsPathWord(chain.atlas, star, path);
+        if (pathWord == null || !homologyLocalPhysicsWordEqual(pathWord, spring.word, chain.atlas)) return;
+        const positiveAngle = modulo(
+          rightLift.polar.sourceTheta - leftLift.polar.sourceTheta,
+          component.totalAngle
+        );
+        const sideAngle = path.direction < 0
+          ? modulo(component.totalAngle - positiveAngle, component.totalAngle)
+          : positiveAngle;
+        const candidate = {
+          resolved: true,
+          componentIndex,
+          sectorIds: [...path.sectorIds],
+          direction: path.direction,
+          leftSectorId: leftLift.frame.sectorId,
+          rightSectorId: rightLift.frame.sectorId,
+          leftTileIndex: left.tileIndex,
+          rightTileIndex: right.tileIndex,
+          leftLocalAngle: leftLift.polar.localAngle,
+          rightLocalAngle: rightLift.polar.localAngle,
+          leftTheta: leftLift.polar.sourceTheta,
+          rightTheta: rightLift.polar.sourceTheta,
+          sideAngle
+        };
+        const key = JSON.stringify([
+          candidate.leftSectorId,
+          candidate.rightSectorId,
+          candidate.direction,
+          candidate.sectorIds
+        ]);
+        if (!matches.some((entry) => entry.key === key)) matches.push({ key, carrier: candidate });
+      });
+    }));
+    if (matches.length !== 1) {
+      return { resolved: false, reason: matches.length ? 'ambiguous local lift' : 'missing portal-equivalent lift' };
+    }
+    return matches[0].carrier;
+  }
+
+  function quotientVertexEventInvariant(chain) {
+    const certificate = chain.initializationCertificate;
+    return {
+      springWords: JSON.stringify(chain.springs.map((spring) => reduceHomologyCordPortalWord(
+        spring.word || [], chain.atlas
+      ))),
+      cyclicSignature: canonicalHomologyCordCyclicWord(homologyCordCyclicPortalWord(chain)),
+      targetHomologySignature: certificate && certificate.targetHomologySignature,
+      constructionHomologySignature: certificate && certificate.constructionHomologySignature,
+      expectedHolonomy: {
+        matrix: { ...chain.expectedHolonomy.matrix },
+        offset: { ...chain.expectedHolonomy.offset }
+      }
+    };
+  }
+
+  function quotientVertexEventInvariantEqual(chain, invariant) {
+    const current = quotientVertexEventInvariant(chain);
+    return current.springWords === invariant.springWords
+      && current.cyclicSignature === invariant.cyclicSignature
+      && current.targetHomologySignature === invariant.targetHomologySignature
+      && current.constructionHomologySignature === invariant.constructionHomologySignature
+      && homologyCordAffineClose(current.expectedHolonomy, invariant.expectedHolonomy);
+  }
+
+  function quotientTraceAvoidsVertex(trace, star) {
+    const clearance = geometry.radius * HOMOLOGY_CORD_VERTEX_ENTER_RATIO;
+    return !!trace && trace.valid && !trace.segments.some((segment) => star.sectors.some((sector) => (
+      sector.tileIndex === segment.tileIndex
+      && sector.point
+      && projectPointToSegment(sector.point, segment.start, segment.end).distance <= clearance
+    )));
+  }
+
+  function tryRemoveMigratedQuotientVertexEvent(chain, springIndex) {
+    const spring = chain.springs[springIndex];
+    const event = spring && spring.vertexEvent;
+    const carrier = event && event.carrier;
+    const star = event && chain.atlas.vertexStars.get(event.vertexId);
+    const component = carrier && carrier.resolved
+      ? homologyLocalChartComponent(star, carrier.leftSectorId) : null;
+    if (!event || !event.gaugeMigrated || !carrier || !carrier.resolved
+      || !star || !star.manifold || star.boundary
+      || Math.abs(star.totalAngle - (Math.PI * 2)) > 1e-7
+      || !component || !component.valid || !component.closed
+      || (star.cyclicComponents || []).length !== 1) return false;
+    const logicalCount = chain.points.length - 1;
+    const ordinary = traceQuotientSegment(
+      chain.points[springIndex],
+      chain.points[(springIndex + 1) % logicalCount],
+      { ...spring, vertexEvent: null },
+      chain
+    );
+    if (!ordinary.valid
+      || ordinary.vertexEvents.some((candidate) => candidate.vertexId === event.vertexId)
+      || !homologyLocalPhysicsWordEqual(
+        ordinary.crossings.map((crossing) => crossing.portalId),
+        spring.word,
+        chain.atlas
+      )
+      || !quotientTraceAvoidsVertex(ordinary, star)) return false;
+    const rollback = snapshotQuotientElasticBand(chain);
+    const invariant = quotientVertexEventInvariant(chain);
+    spring.vertexEvent = null;
+    chain.discreteStateVersion += 1;
+    if (!rebuildQuotientElasticBandCarrier(chain, { refreshVertexEvents: false })
+      || chain.springs[springIndex].vertexEvent
+      || !quotientVertexEventInvariantEqual(chain, invariant)) {
+      restoreQuotientElasticBand(chain, rollback);
+      return false;
+    }
+    return true;
+  }
+
+  function migrateAdjacentQuotientVertexEvents(chain, particleIndex, crossings, before) {
+    const logicalCount = chain.points.length - 1;
+    if (!logicalCount || !crossings || !crossings.length) return true;
+    const indices = [...new Set([
+      modulo(particleIndex - 1, logicalCount),
+      particleIndex % logicalCount
+    ])];
+    indices.forEach((springIndex) => {
+      const previousEvent = before.springs[springIndex].vertexEvent;
+      const event = chain.springs[springIndex].vertexEvent || previousEvent;
+      if (!event) return;
+      const carrier = buildQuotientVertexEventCarrier(chain, springIndex, event);
+      chain.springs[springIndex].vertexEvent = {
+        ...cloneQuotientVertexEvent(event),
+        sideAngle: carrier.resolved ? carrier.sideAngle : event.sideAngle,
+        gaugeMigrated: true,
+        carrier
+      };
+    });
+    return true;
+  }
+
   function updateQuotientVertexEvent(chain, springIndex, events) {
     const spring = chain.springs[springIndex];
     const allowed = (events || []).find((event) => event.allowed);
@@ -21563,6 +21750,10 @@
         exitImprovement: geometry.radius * HOMOLOGY_CORD_APEX_EXIT_IMPROVEMENT_RATIO
       };
       if (previousId !== allowed.vertexId) chain.discreteStateVersion += 1;
+      return;
+    }
+    if (spring.vertexEvent && spring.vertexEvent.gaugeMigrated) {
+      tryRemoveMigratedQuotientVertexEvent(chain, springIndex);
       return;
     }
     if (spring.vertexEvent && spring.vertexEvent.constructionBridge) {
@@ -21674,21 +21865,25 @@
     };
   }
 
-  function rebuildQuotientElasticBandCarrier(chain) {
+  function rebuildQuotientElasticBandCarrier(chain, options = {}) {
     if (!chain || !chain.atlas || !Array.isArray(chain.springs)) return false;
     for (const spring of chain.springs) {
       if (!updateQuotientSpringTransform(spring, chain.atlas)) return false;
     }
     closeQuotientElasticBand(chain);
-    refreshQuotientSpringVertexEvents(chain);
+    if (options.refreshVertexEvents !== false) refreshQuotientSpringVertexEvents(chain);
     return validateQuotientElasticBand(chain);
   }
 
   function applyQuotientElasticBandMotion(chain, index, motion, origin) {
+    const transaction = snapshotQuotientElasticBand(chain);
     const logicalCount = chain.points.length - 1;
     const particle = chain.points[index];
     if (!particle || !motion || !motion.valid
-      || !applyQuotientGaugeCrossings(chain, index, motion.crossings)) return false;
+      || !applyQuotientGaugeCrossings(chain, index, motion.crossings)) {
+      restoreQuotientElasticBand(chain, transaction);
+      return false;
+    }
     if (particle.tileIndex !== motion.point.tileIndex && !motion.crossings.length) {
       chain.discreteStateVersion += 1;
     }
@@ -21714,7 +21909,17 @@
       chain.localCarriers[index] = motion.localCarrier ? { ...motion.localCarrier } : null;
       if (carrierChanged && !(motion.crossings || []).length) chain.discreteStateVersion += 1;
     }
-    updateQuotientVertexEvent(chain, index, motion.vertexEvents);
+    if (motion.crossings && motion.crossings.length) {
+      if ((motion.vertexEvents || []).some((event) => event.allowed)) {
+        updateQuotientVertexEvent(chain, index, motion.vertexEvents);
+      }
+      if (!migrateAdjacentQuotientVertexEvents(chain, index, motion.crossings, transaction)) {
+        restoreQuotientElasticBand(chain, transaction);
+        return false;
+      }
+    } else {
+      updateQuotientVertexEvent(chain, index, motion.vertexEvents);
+    }
     if (index === 0) closeQuotientElasticBand(chain);
     return logicalCount > 1;
   }
@@ -31694,6 +31899,12 @@
       makeHomologyCordRuntimeChain,
       traceQuotientMotion,
       traceQuotientSegment,
+      snapshotQuotientElasticBand,
+      restoreQuotientElasticBand,
+      applyQuotientElasticBandMotion,
+      buildQuotientVertexEventCarrier,
+      migrateAdjacentQuotientVertexEvents,
+      tryRemoveMigratedQuotientVertexEvent,
       reduceHomologyCordPortalWord,
       homologyCordPortalWordTransform,
       homologyCordCyclicPortalWord,
