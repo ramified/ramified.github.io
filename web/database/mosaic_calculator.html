@@ -1774,6 +1774,16 @@
               <button class="slice-mode-btn active" data-homology-local-canvas-action="drag" type="button" aria-pressed="true">Drag cords</button>
             </span>
           </div>
+          <div class="homology-local-chart-drag-controls">
+            <div class="mosaic-inline-row">
+              <span class="input-label">Drag drive</span>
+              <span class="background-slider-controls"><input type="range" id="homology-cord-drag-drive" min="0.25" max="2.5" step="0.05" value="1"><output id="homology-cord-drag-drive-value">1.00</output></span>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label">Glide damping / s⁻¹</span>
+              <span class="background-slider-controls"><input type="range" id="homology-cord-glide-damping" min="2" max="20" step="0.5" value="8"><output id="homology-cord-glide-damping-value">8.0</output></span>
+            </div>
+          </div>
           <div class="homology-local-chart-radius-controls" id="homology-local-chart-radius-controls">
             <div class="mosaic-inline-row">
               <span class="input-label">Local radius / R</span>
@@ -2105,7 +2115,7 @@
 <script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_native.js?v=20260825-1"></script>
-<script src="js/mosaic_calculator.js?v=homology-local-carrier-5"></script>
+<script src="js/mosaic_calculator.js?v=homology-local-carrier-7"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260826-1"></script>
 <script>

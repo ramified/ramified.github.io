@@ -1418,6 +1418,27 @@ assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands({ now: 1e9 }), f
 assert.strictEqual(failingBand.quotientFailureCount, 1);
 assert.strictEqual(failingBand.fallbackToCellular, false);
 assert.strictEqual(failingBand.settled, true);
+const failingKineticStart = {
+  x: failingBand.points[0].x,
+  y: failingBand.points[0].y,
+  tileIndex: failingBand.points[0].tileIndex
+};
+failingBand.dragKinetics = {
+  part: 0,
+  velocity: { x: 20, y: 0 },
+  targetVelocity: { x: 0, y: 0 },
+  lastInputAt: 0,
+  lastAnimationAt: 0,
+  releasedAt: 0
+};
+elastic.advanceHomologyCordDragKinetics(failingBand, null, 50);
+assert.deepStrictEqual({
+  x: failingBand.points[0].x,
+  y: failingBand.points[0].y,
+  tileIndex: failingBand.points[0].tileIndex
+}, failingKineticStart, 'an invalid kinetic route rolls back to its last valid carrier position');
+assert.strictEqual(failingBand.dragKinetics, undefined,
+  'an invalid kinetic route consumes its velocity instead of repeatedly pushing the invalid carrier');
 
 // An atlas containing a portal but failing its affine/inverse invariant must
 // reject the elastic runtime instead of silently using the planar fast path.
@@ -1693,12 +1714,93 @@ let genusFourLocalCarrierPortalTransitions = 0;
 assert.ok(genusFourLocalCarrierPortalTransitions > 0,
   'local carrier performs paired portal gauge transitions at genus-4 cone vertices');
 
+// Dragging drives a bounded velocity in animation frames instead of assigning
+// the absolute cursor position.  During a drag the selected point remains
+// held while its neighbours still use the quasi-static relaxation pass.
+setSquareGeometry(1, 1);
+const kineticBand = closedChain([
+  { x: 4, y: 4 }, { x: 16, y: 4 }, { x: 10, y: 16 }
+], 'kinetic');
+kineticBand.settled = false;
+kineticBand.relaxationNotBefore = 0;
+kineticBand.dragKinetics = {
+  part: 0,
+  velocity: { x: 0, y: 0 },
+  cursorTarget: { x: 10000, y: 4 },
+  lastAnimationAt: 0,
+  releasedAt: null
+};
+elastic.state.homologyCordChains = { kinetic: kineticBand };
+elastic.state.homologyCordDrag = { generatorId: 'kinetic', part: 0, pointerId: 1 };
+elastic.state.homologyCordRelaxSpeed = 1;
+elastic.state.homologyCordDragDrive = 1;
+elastic.state.homologyCordGlideDamping = 8;
+const kineticBefore = coordinates(kineticBand);
+assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands({ now: 20 }), true);
+assert.ok(kineticBand.points[0].x > kineticBefore[0].x);
+assert.ok(kineticBand.points[0].x < kineticBefore[0].x + 2,
+  'a frame applies only a bounded velocity step, never an absolute cursor jump');
+assert.notDeepStrictEqual(coordinates(kineticBand).slice(1, -1), kineticBefore.slice(1, -1),
+  'unheld particles continue their quasi-static relaxation during a drag');
+assert.strictEqual(kineticBand.points.at(-1).x, kineticBand.points[0].x);
+const kineticAfterFirstFrame = kineticBand.points[0].x;
+assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands({ now: 40 }), true);
+assert.ok(kineticBand.points[0].x > kineticAfterFirstFrame,
+  'a stationary held cursor remains a soft target and continues to pull the particle');
+
+// Once released, the velocity decays while the selected point smoothly gains
+// its relaxation weight, then the temporary kinetic state is discarded.
+elastic.state.homologyCordDrag = null;
+kineticBand.dragKinetics.releasedAt = 40;
+assert.strictEqual(elastic.advanceBackgroundHomologyPlanarBands({ now: 100 }), true);
+assert.ok(kineticBand.dragKinetics, 'release begins a glide instead of immediately dropping momentum');
+assert.ok(elastic.homologyCordKineticRelaxationWeight(kineticBand.dragKinetics, 100) > 0);
+for (let now = 200; now <= 2000 && kineticBand.dragKinetics; now += 100) {
+  elastic.advanceBackgroundHomologyPlanarBands({ now });
+}
+assert.strictEqual(kineticBand.dragKinetics, undefined,
+  'a damped glide hands the particle back to normal relaxation');
+
+assert.strictEqual(elastic.normalizeHomologyCordDragDrive('99'), 2.5);
+assert.strictEqual(elastic.normalizeHomologyCordGlideDamping('-1'), 2);
+assert.deepStrictEqual(
+  elastic.mapHomologyCordVelocityAcrossPortals({
+    atlas: { portals: new Map([['quarter-turn', {
+      forward: { matrix: { a: 0, b: -1, c: 1, d: 0 }, offset: { x: 999, y: -999 } }
+    }]]) }
+  }, { x: 2, y: 3 }, [{ portalId: 'quarter-turn' }]),
+  { x: -3, y: 2 },
+  'portal velocity uses only the affine linear map, never the translation'
+);
+assert.deepStrictEqual(
+  elastic.mapHomologyCordPointAcrossPortals({
+    atlas: { portals: new Map([['quarter-turn', {
+      forward: { matrix: { a: 0, b: -1, c: 1, d: 0 }, offset: { x: 999, y: -999 } }
+    }]]) }
+  }, { x: 2, y: 3 }, [{ portalId: 'quarter-turn' }]),
+  { x: 996, y: -997 },
+  'the held cursor target follows the particle into the destination portal chart'
+);
+
+const weightedBand = closedChain([
+  { x: 0, y: 0 }, { x: 20, y: 0 }, { x: 10, y: 20 }
+], 'weighted');
+const weightedBefore = coordinates(weightedBand);
+elastic.stepPlanarElasticBandMacro(weightedBand, {
+  distanceContraction: 0.5,
+  substeps: 1,
+  relaxationWeights: { 0: 0 }
+});
+assert.deepStrictEqual(coordinates(weightedBand)[0], weightedBefore[0],
+  'a zero release weight leaves the gliding particle under kinetic control');
+assert.notDeepStrictEqual(coordinates(weightedBand)[1], weightedBefore[1]);
+
 // Removed solver entry points must not survive as functions or test exports.
 const sourceText = fs.readFileSync(path.join(__dirname, 'mosaic_calculator.js'), 'utf8');
 const htmlText = fs.readFileSync(path.join(__dirname, '..', 'mosaic_calculator.html'), 'utf8');
 assert.strictEqual(htmlText.includes('id="homology-cord-contraction-strength"'), false);
 assert.ok(htmlText.includes('id="homology-cord-relax-speed" min="0.1" max="10" step="0.1" value="10"'));
-assert.ok(htmlText.includes('js/mosaic_calculator.js?v=homology-local-carrier-5'));
+assert.ok(htmlText.includes('js/mosaic_calculator.js?v=homology-local-carrier-7'));
 assert.ok(htmlText.includes('id="homology-local-chart-card"'));
 assert.ok(htmlText.includes('id="homology-local-chart-radius-controls"'));
 assert.ok(htmlText.includes('id="homology-local-chart-wide"'));
@@ -1711,6 +1813,8 @@ assert.ok(sourceText.includes('window.CalculatorCards.syncWideCards(document)'))
 assert.ok(htmlText.includes('id="show-homology-local-vertex-selection"'));
 assert.ok(htmlText.includes('data-homology-local-canvas-action="pick"'));
 assert.ok(htmlText.includes('data-homology-local-canvas-action="drag"'));
+assert.ok(htmlText.includes('id="homology-cord-drag-drive" min="0.25" max="2.5" step="0.05" value="1"'));
+assert.ok(htmlText.includes('id="homology-cord-glide-damping" min="2" max="20" step="0.5" value="8"'));
 assert.strictEqual(elastic.normalizeHomologyLocalCanvasAction('pick'), 'pick');
 assert.strictEqual(elastic.normalizeHomologyLocalCanvasAction('none'), 'none');
 assert.strictEqual(elastic.normalizeHomologyLocalCanvasAction('other'), 'drag');

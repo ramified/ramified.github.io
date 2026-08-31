@@ -106,6 +106,11 @@
   const HOMOLOGY_CORD_QUOTIENT_INVARIANT_TOLERANCE = 1e-10;
   const HOMOLOGY_CORD_DEFAULT_RELAX_SPEED = 10;
   const HOMOLOGY_CORD_BASE_DISTANCE_CONTRACTION = 0.08;
+  const HOMOLOGY_CORD_DEFAULT_DRAG_DRIVE = 1;
+  const HOMOLOGY_CORD_DEFAULT_GLIDE_DAMPING = 8;
+  const HOMOLOGY_CORD_MAX_DRAG_SPEED_RADIUS_PER_SECOND = 6;
+  const HOMOLOGY_CORD_DRAG_TARGET_SPRING_RATE = 36;
+  const HOMOLOGY_CORD_GLIDE_STOP_SPEED_RADIUS_PER_SECOND = 0.03;
   const HOMOLOGY_LOCAL_PHYSICS_DEFAULT_CORE_RADIUS = 0.20;
   const HOMOLOGY_LOCAL_PHYSICS_DEFAULT_OUTER_RADIUS = 0.45;
   const HOMOLOGY_LOCAL_PHYSICS_MIN_RADIUS_GAP = 0.05;
@@ -894,6 +899,8 @@
     homologyCordQuotientAtlas: null,
     homologyCordRelaxSpeed: HOMOLOGY_CORD_DEFAULT_RELAX_SPEED,
     homologyCordPointSpacing: 0.12,
+    homologyCordDragDrive: HOMOLOGY_CORD_DEFAULT_DRAG_DRIVE,
+    homologyCordGlideDamping: HOMOLOGY_CORD_DEFAULT_GLIDE_DAMPING,
     homologyCordIterationsPerFrame: HOMOLOGY_CORD_DEFAULT_ITERATIONS_PER_FRAME,
     showHomologyCordParticles: false,
     inspectHomologyCordOptimization: false,
@@ -1194,6 +1201,10 @@
     refs.homologyCordRelaxSpeedValue = document.getElementById('homology-cord-relax-speed-value');
     refs.homologyCordPointSpacing = document.getElementById('homology-cord-point-spacing');
     refs.homologyCordPointSpacingValue = document.getElementById('homology-cord-point-spacing-value');
+    refs.homologyCordDragDrive = document.getElementById('homology-cord-drag-drive');
+    refs.homologyCordDragDriveValue = document.getElementById('homology-cord-drag-drive-value');
+    refs.homologyCordGlideDamping = document.getElementById('homology-cord-glide-damping');
+    refs.homologyCordGlideDampingValue = document.getElementById('homology-cord-glide-damping-value');
     refs.showHomologyCordParticles = document.getElementById('show-homology-cord-particles');
     refs.inspectHomologyCordOptimization = document.getElementById('inspect-homology-cord-optimization');
     refs.homologyCordOptimizationReadout = document.getElementById('homology-cord-optimization-readout');
@@ -1593,6 +1604,18 @@
         if (stateKey === 'homologyCordPointSpacing') resetBackgroundHomologyCords(false);
         else markBackgroundHomologyCordsUnsettled();
         draw(analyze());
+        scheduleBackgroundHomologyCordAnimation();
+      });
+    });
+    [
+      ['homologyCordDragDrive', 'homologyCordDragDriveValue', normalizeHomologyCordDragDrive, (value) => value.toFixed(2)],
+      ['homologyCordGlideDamping', 'homologyCordGlideDampingValue', normalizeHomologyCordGlideDamping, (value) => value.toFixed(1)]
+    ].forEach(([stateKey, outputKey, normalize, format]) => {
+      const input = refs[stateKey];
+      if (!input) return;
+      input.addEventListener('input', () => {
+        state[stateKey] = normalize(input.value);
+        if (refs[outputKey]) refs[outputKey].textContent = format(state[stateKey]);
         scheduleBackgroundHomologyCordAnimation();
       });
     });
@@ -2830,7 +2853,7 @@
     refs.canvas.addEventListener('pointerdown', handlePointerDown);
     refs.canvas.addEventListener('pointermove', handlePointerMove);
     refs.canvas.addEventListener('pointerup', handlePointerUp);
-    refs.canvas.addEventListener('pointercancel', clearPointerState);
+    refs.canvas.addEventListener('pointercancel', handlePointerCancel);
     refs.canvas.addEventListener('wheel', handleWheel, { passive: false });
     refs.canvas.addEventListener('dblclick', handleCanvasDoubleClick);
     if (refs.homologyLocalChartCanvas) {
@@ -9589,6 +9612,11 @@
     clearPointerState(event);
   }
 
+  function handlePointerCancel(event) {
+    if (finishBackgroundHomologyCordDrag(event)) return;
+    clearPointerState(event);
+  }
+
   function beginBackgroundGesture(event) {
     const isBilliard = isBackgroundBilliardAction();
     const isHomologyTrace = isBackgroundHomologyTraceAction();
@@ -11694,6 +11722,19 @@
         input.value = String(value);
       }
       if (refs[outputKey]) refs[outputKey].textContent = String(value);
+    });
+    [
+      ['homologyCordDragDrive', 'homologyCordDragDriveValue', normalizeHomologyCordDragDrive, (value) => value.toFixed(2)],
+      ['homologyCordGlideDamping', 'homologyCordGlideDampingValue', normalizeHomologyCordGlideDamping, (value) => value.toFixed(1)]
+    ].forEach(([stateKey, outputKey, normalize, format]) => {
+      const input = refs[stateKey];
+      const value = normalize(state[stateKey]);
+      state[stateKey] = value;
+      if (input) {
+        input.disabled = !cordAvailable;
+        input.value = String(value);
+      }
+      if (refs[outputKey]) refs[outputKey].textContent = format(value);
     });
     if (refs.pickHomologyKnot) {
       refs.pickHomologyKnot.disabled = !knotPickAvailable;
@@ -17875,6 +17916,7 @@
   function resetBackgroundHomologyCords(redraw = false, generatorId = '') {
     if (generatorId) {
       delete state.homologyCordChains[generatorId];
+      if (state.homologyCordDrag && state.homologyCordDrag.generatorId === generatorId) state.homologyCordDrag = null;
       if (state.homologyCordOptimizationSelection && state.homologyCordOptimizationSelection.generatorId === generatorId) state.homologyCordOptimizationSelection = null;
     } else {
       state.homologyCordChains = {};
@@ -21605,6 +21647,13 @@
     return kernel;
   }
 
+  function homologyCordRelaxationWeight(options, index) {
+    const weights = options && options.relaxationWeights;
+    if (!weights) return 1;
+    const value = weights[index];
+    return Number.isFinite(Number(value)) ? clamp(Number(value), 0, 1) : 1;
+  }
+
   function ensurePlanarElasticBandScratch(chain, logicalCount) {
     if (chain.solverScratch && chain.solverScratch.logicalCount === logicalCount) return chain.solverScratch;
     chain.solverScratch = {
@@ -21639,7 +21688,7 @@
       : -1;
     if (logicalCount < 2) return applyPlanarElasticBandCandidate(chain, snapshot, nextPositions, options);
 
-    if (heldIndex < 0) {
+    if (heldIndex < 0 && !options.relaxationWeights) {
       const kernel = planarElasticBandJacobiKernel(distanceContraction, substeps);
       const radius = substeps;
       for (let index = 0; index < logicalCount; index += 1) {
@@ -21707,8 +21756,9 @@
           }
           const previous = (index + logicalCount - 1) % logicalCount;
           const next = (index + 1) % logicalCount;
-          targetX[index] = sourceX[index] + ((((sourceX[previous] + sourceX[next]) * 0.5) - sourceX[index]) * distanceContraction);
-          targetY[index] = sourceY[index] + ((((sourceY[previous] + sourceY[next]) * 0.5) - sourceY[index]) * distanceContraction);
+          const contraction = distanceContraction * homologyCordRelaxationWeight(options, index);
+          targetX[index] = sourceX[index] + ((((sourceX[previous] + sourceX[next]) * 0.5) - sourceX[index]) * contraction);
+          targetY[index] = sourceY[index] + ((((sourceY[previous] + sourceY[next]) * 0.5) - sourceY[index]) * contraction);
         }
         [sourceX, targetX] = [targetX, sourceX];
         [sourceY, targetY] = [targetY, sourceY];
@@ -22694,7 +22744,12 @@
         const local = localPhysics.enabled
           ? homologyLocalPhysicsProposal(chain, index, source, baseDelta, distanceContraction, localPhysics)
           : null;
-        const delta = local ? local.delta : baseDelta;
+        const proposal = local ? local.delta : baseDelta;
+        const relaxationWeight = homologyCordRelaxationWeight(options, index);
+        const delta = {
+          x: proposal.x * relaxationWeight,
+          y: proposal.y * relaxationWeight
+        };
         target[index].x = current.x + delta.x;
         target[index].y = current.y + delta.y;
         if (local && local.diagnostic) {
@@ -23046,14 +23101,125 @@
       : Date.now();
   }
 
+  function homologyCordSpeed(vector) {
+    return Math.hypot(Number(vector && vector.x) || 0, Number(vector && vector.y) || 0);
+  }
+
+  function clampHomologyCordVelocity(vector) {
+    const velocity = {
+      x: Number(vector && vector.x) || 0,
+      y: Number(vector && vector.y) || 0
+    };
+    const maximum = Math.max(1, (geometry && geometry.radius || 1) * HOMOLOGY_CORD_MAX_DRAG_SPEED_RADIUS_PER_SECOND);
+    const speed = homologyCordSpeed(velocity);
+    if (speed <= maximum) return velocity;
+    const scale = maximum / speed;
+    return { x: velocity.x * scale, y: velocity.y * scale };
+  }
+
+  function mapHomologyCordVelocityAcrossPortals(chain, velocity, crossings) {
+    let mapped = { ...velocity };
+    (crossings || []).forEach((crossing) => {
+      const portal = crossing && chain && chain.atlas && chain.atlas.portals.get(crossing.portalId);
+      if (!portal || !portal.forward || !portal.forward.matrix) return;
+      const matrix = portal.forward.matrix;
+      mapped = {
+        x: (matrix.a * mapped.x) + (matrix.b * mapped.y),
+        y: (matrix.c * mapped.x) + (matrix.d * mapped.y)
+      };
+    });
+    return clampHomologyCordVelocity(mapped);
+  }
+
+  function mapHomologyCordPointAcrossPortals(chain, point, crossings) {
+    let mapped = { ...point };
+    (crossings || []).forEach((crossing) => {
+      const portal = crossing && chain && chain.atlas && chain.atlas.portals.get(crossing.portalId);
+      if (!portal || !portal.forward) return;
+      mapped = applyHomologyCordAffine(portal.forward, mapped);
+    });
+    return mapped;
+  }
+
+  function homologyCordKineticRelaxationWeight(kinetics, now) {
+    if (!kinetics || !Number.isFinite(kinetics.releasedAt)) return 0;
+    const damping = normalizeHomologyCordGlideDamping(state.homologyCordGlideDamping);
+    const elapsed = Math.max(0, (now - kinetics.releasedAt) / 1000);
+    return clamp(1 - Math.exp(-damping * elapsed), 0, 1);
+  }
+
+  function advanceHomologyCordDragKinetics(chain, drag, now) {
+    const kinetics = chain && chain.dragKinetics;
+    if (!kinetics || !chain.points[kinetics.part]) return null;
+    const rawElapsed = Number.isFinite(kinetics.lastAnimationAt)
+      ? clamp((now - kinetics.lastAnimationAt) / 1000, 0, 0.25)
+      : 1 / 60;
+    const elapsed = clamp(rawElapsed, 1 / 240, 1 / 20);
+    kinetics.lastAnimationAt = now;
+    const particle = chain.points[kinetics.part];
+    const damping = normalizeHomologyCordGlideDamping(state.homologyCordGlideDamping);
+    if (drag && kinetics.cursorTarget) {
+      const drive = normalizeHomologyCordDragDrive(state.homologyCordDragDrive);
+      const acceleration = HOMOLOGY_CORD_DRAG_TARGET_SPRING_RATE * drive;
+      kinetics.velocity.x += (kinetics.cursorTarget.x - particle.x) * acceleration * elapsed;
+      kinetics.velocity.y += (kinetics.cursorTarget.y - particle.y) * acceleration * elapsed;
+    }
+    const decay = Math.exp(-damping * rawElapsed);
+    kinetics.velocity.x *= decay;
+    kinetics.velocity.y *= decay;
+    kinetics.velocity = clampHomologyCordVelocity(kinetics.velocity);
+    let moved = false;
+    if (homologyCordSpeed(kinetics.velocity) > 0) {
+      const proposed = {
+        x: particle.x + (kinetics.velocity.x * elapsed),
+        y: particle.y + (kinetics.velocity.y * elapsed)
+      };
+      if (chain.solverSpace === 'quotient') {
+        const motion = attemptQuotientElasticBandPointMove(chain, kinetics.part, proposed, { details: true });
+        if (motion) {
+          kinetics.velocity = motion.blocked
+            ? { x: 0, y: 0 }
+            : mapHomologyCordVelocityAcrossPortals(chain, kinetics.velocity, motion.crossings);
+          if (kinetics.cursorTarget) {
+            kinetics.cursorTarget = mapHomologyCordPointAcrossPortals(
+              chain, kinetics.cursorTarget, motion.crossings
+            );
+          }
+          if (motion.blocked && drag) kinetics.cursorTarget = { x: motion.point.x, y: motion.point.y };
+          closeQuotientElasticBand(chain);
+          moved = true;
+        } else {
+          kinetics.velocity = { x: 0, y: 0 };
+        }
+      } else {
+        moved = movePlanarElasticBandPoint(chain, kinetics.part, proposed);
+        if (!moved) kinetics.velocity = { x: 0, y: 0 };
+      }
+    }
+    const released = !drag && Number.isFinite(kinetics.releasedAt);
+    const stopped = released
+      && homologyCordSpeed(kinetics.velocity) <= (geometry.radius * HOMOLOGY_CORD_GLIDE_STOP_SPEED_RADIUS_PER_SECOND);
+    if (stopped) {
+      delete chain.dragKinetics;
+      return { part: kinetics.part, active: false, moved, relaxationWeight: 1 };
+    }
+    return {
+      part: kinetics.part,
+      active: true,
+      moved,
+      relaxationWeight: released ? homologyCordKineticRelaxationWeight(kinetics, now) : 0
+    };
+  }
+
   function backgroundHomologyCordAnimationDelay(now = homologyCordNow()) {
     let minimumDelay = Infinity;
     let hasUnsettledChain = false;
     Object.values(state.homologyCordChains || {}).forEach((chain) => {
       const dragging = state.homologyCordDrag && state.homologyCordDrag.generatorId === chain.generatorId;
-      if (chain.settled && !dragging) return;
+      const kinetic = !!chain.dragKinetics;
+      if (chain.settled && !dragging && !kinetic) return;
       hasUnsettledChain = true;
-      if (dragging || !Number.isFinite(chain.relaxationNotBefore) || chain.relaxationNotBefore <= now) {
+      if (dragging || kinetic || !Number.isFinite(chain.relaxationNotBefore) || chain.relaxationNotBefore <= now) {
         minimumDelay = 0;
         return;
       }
@@ -23115,18 +23281,24 @@
       const drag = state.homologyCordDrag && state.homologyCordDrag.generatorId === chain.generatorId
         ? state.homologyCordDrag
         : null;
-      if (chain.settled && !drag) return;
-      if (!drag && Number.isFinite(chain.relaxationNotBefore) && now < chain.relaxationNotBefore) {
+      const kinetic = advanceHomologyCordDragKinetics(chain, drag, now);
+      if (chain.settled && !drag && !kinetic) return;
+      if (!drag && !kinetic && Number.isFinite(chain.relaxationNotBefore) && now < chain.relaxationNotBefore) {
         moving = true;
         return;
       }
+      const heldIndex = drag ? drag.part : -1;
+      const relaxationWeights = !drag && kinetic && kinetic.relaxationWeight < 1
+        ? { [kinetic.part]: kinetic.relaxationWeight }
+        : null;
       let quotientFrameFailed = false;
       const localChartFailures = [];
       for (let iteration = 0; iteration < iterations; iteration += 1) {
         const result = chain.solverSpace === 'quotient'
           ? stepQuotientElasticBandMacro(chain, {
             distanceContraction,
-            heldIndex: drag ? drag.part : -1,
+            heldIndex,
+            relaxationWeights,
             substeps: HOMOLOGY_CORD_MACRO_SUBSTEPS,
             metrics: options.metrics || null,
             localPhysics: {
@@ -23139,7 +23311,8 @@
           })
           : stepPlanarElasticBandMacro(chain, {
           distanceContraction,
-          heldIndex: drag ? drag.part : -1,
+          heldIndex,
+          relaxationWeights,
           substeps: HOMOLOGY_CORD_MACRO_SUBSTEPS,
           metrics: options.metrics || null
         });
@@ -23166,7 +23339,7 @@
           quotientFrameFailed = chain.solverSpace === 'quotient';
           break;
         }
-        if (drag) {
+        if (drag || (kinetic && kinetic.relaxationWeight < 1)) {
           chain.stableMacroSteps = 0;
           chain.settled = false;
           continue;
@@ -23190,7 +23363,7 @@
           chain.stableMacroSteps = HOMOLOGY_CORD_STABLE_MACRO_STEPS;
         }
       }
-      if (!chain.fallbackToCellular && (drag || !chain.settled)) moving = true;
+      if (!chain.fallbackToCellular && (drag || kinetic || !chain.settled)) moving = true;
     });
     return moving;
   }
@@ -23228,7 +23401,22 @@
   function beginBackgroundHomologyCordDrag(event) {
     const hit = homologyCordAtPoint(event.clientX, event.clientY);
     if (!hit) return false;
-    state.homologyCordDrag = { generatorId: hit.chain.generatorId, part: hit.part, pointerId: event.pointerId };
+    const now = homologyCordNow();
+    const pointer = clientPointToBoardPoint(event.clientX, event.clientY);
+    hit.chain.dragKinetics = {
+      part: hit.part,
+      velocity: { x: 0, y: 0 },
+      cursorTarget: { ...pointer },
+      lastAnimationAt: now,
+      releasedAt: null
+    };
+    state.homologyCordDrag = {
+      generatorId: hit.chain.generatorId,
+      part: hit.part,
+      pointerId: event.pointerId,
+      lastPointer: pointer,
+      lastPointerAt: now
+    };
     markBackgroundHomologyCordsUnsettled(hit.chain.generatorId);
     scheduleBackgroundHomologyCordAnimation();
     activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -23236,7 +23424,7 @@
     return true;
   }
 
-  function attemptQuotientElasticBandPointMove(chain, part, projected) {
+  function attemptQuotientElasticBandPointMove(chain, part, projected, options = {}) {
     const before = snapshotQuotientElasticBand(chain);
     const particle = chain.points[part];
     const localPhysics = normalizeHomologyLocalPhysicsConfig({
@@ -23259,9 +23447,9 @@
       || !applyQuotientElasticBandMotion(chain, part, motion, before.points[part])
       || !rebuildQuotientElasticBandCarrier(chain)) {
       restoreQuotientElasticBand(chain, before);
-      return false;
+      return options.details ? null : false;
     }
-    return true;
+    return options.details ? motion : true;
   }
 
   function movePlanarElasticBandPoint(chain, part, projected) {
@@ -23328,11 +23516,20 @@
     if (drag.generatorId) {
       const chain = state.homologyCordChains[drag.generatorId];
       if (!chain || !chain.points[drag.part]) return false;
+      const now = homologyCordNow();
       const projected = clientPointToBoardPoint(event.clientX, event.clientY);
-      const moved = movePlanarElasticBandPoint(chain, drag.part, projected);
-      state.homologyLocalChartFailures[chain.generatorId] = moved
-        ? []
-        : [{ index: drag.part, reason: 'drag motion rejected' }];
+      const kinetics = chain.dragKinetics;
+      if (kinetics && drag.lastPointer) {
+        kinetics.cursorTarget = kinetics.cursorTarget || { ...chain.points[drag.part] };
+        kinetics.cursorTarget.x += projected.x - drag.lastPointer.x;
+        kinetics.cursorTarget.y += projected.y - drag.lastPointer.y;
+        kinetics.releasedAt = null;
+      }
+      drag.lastPointer = projected;
+      drag.lastPointerAt = now;
+      state.homologyLocalChartFailures[chain.generatorId] = [];
+      markBackgroundHomologyCordsUnsettled(chain.generatorId);
+      scheduleBackgroundHomologyCordAnimation();
       draw(analyze());
       return true;
     }
@@ -23342,6 +23539,10 @@
   function finishBackgroundHomologyCordDrag(event) {
     const drag = state.homologyCordDrag;
     if (!drag || drag.pointerId !== event.pointerId) return false;
+    const chain = state.homologyCordChains[drag.generatorId];
+    if (chain && chain.dragKinetics) {
+      chain.dragKinetics.releasedAt = homologyCordNow();
+    }
     state.homologyCordDrag = null;
     markBackgroundHomologyCordsUnsettled(drag.generatorId);
     scheduleBackgroundHomologyCordAnimation();
@@ -31477,6 +31678,16 @@
     return Number.isFinite(parsed) ? clamp(parsed, 0.05, 0.3) : 0.12;
   }
 
+  function normalizeHomologyCordDragDrive(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? clamp(parsed, 0.25, 2.5) : HOMOLOGY_CORD_DEFAULT_DRAG_DRIVE;
+  }
+
+  function normalizeHomologyCordGlideDamping(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? clamp(parsed, 2, 20) : HOMOLOGY_CORD_DEFAULT_GLIDE_DAMPING;
+  }
+
   function normalizeHalfEdgeLabelStyle(style) {
     return ['number', 'letter', 'point', 'roman'].includes(style) ? style : 'number';
   }
@@ -32133,15 +32344,24 @@
       stepPlanarElasticBand,
       stepPlanarElasticBandMacro,
       planarElasticBandJacobiKernel,
+      homologyCordRelaxationWeight,
       homologyCordAffinePortalTransform,
       homologyCordSegmentTrace,
       homologyCordCandidateItinerary,
       advanceBackgroundHomologyPlanarBands,
+      advanceHomologyCordDragKinetics,
       homologyCordNow,
+      homologyCordSpeed,
+      clampHomologyCordVelocity,
+      mapHomologyCordVelocityAcrossPortals,
+      mapHomologyCordPointAcrossPortals,
+      homologyCordKineticRelaxationWeight,
       backgroundHomologyCordAnimationDelay,
       markBackgroundHomologyCordsUnsettled,
       homologyCordAtPoint,
       movePlanarElasticBandPoint,
+      normalizeHomologyCordDragDrive,
+      normalizeHomologyCordGlideDamping,
       hasVisibleHomologyGenerators,
       prepareBackgroundHomologyCordChains,
       resetBackgroundHomologyCords,
