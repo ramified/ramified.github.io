@@ -69,6 +69,9 @@ assert.match(explorer, /div\(chi\^m\)/);
 assert.match(explorer, /underlying line bundle is trivial/);
 assert.match(explorer, /piecewise-linear support functions on the fan/);
 assert.match(html, /Lattice \/ Equivariant Bundles/);
+assert.match(explorer, /const characterFan = candidate\.latticePoint \? toricCharacterFanForCandidate\(candidate\) : null/);
+assert.match(explorer, /const priority = characterFan \? 2 : candidate\.latticePoint \? 1 : 0/);
+assert.match(explorer, /Math\.sqrt\(distanceSq\) <= Math\.sqrt\(bestDistanceSq\) \+ 3 \* ratio/);
 
 assert.match(explorer, /normalized\.objectType === ["']fan["'] \|\| normalized\.kind === ["']fan["']/);
 assert.match(explorer, /normalized\.objectType = ["']cartesian-frame["']/);

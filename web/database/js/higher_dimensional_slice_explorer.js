@@ -14544,14 +14544,25 @@
     const ratio = window.devicePixelRatio || 1;
     let best = null;
     let bestDistanceSq = Infinity;
+    let bestPriority = -1;
     for (const candidate of state.pickCandidates) {
       const dx = candidate.x - x;
       const dy = candidate.y - y;
       const distanceSq = dx * dx + dy * dy;
       const tolerance = Math.max(10 * ratio, candidate.radius + 7 * ratio);
-      if (distanceSq <= tolerance * tolerance && distanceSq < bestDistanceSq) {
+      if (distanceSq > tolerance * tolerance) continue;
+      const characterFan = candidate.latticePoint ? toricCharacterFanForCandidate(candidate) : null;
+      const priority = characterFan ? 2 : candidate.latticePoint ? 1 : 0;
+      const isCloser = distanceSq < bestDistanceSq;
+      const isComparable = best && Math.sqrt(distanceSq) <= Math.sqrt(bestDistanceSq) + 3 * ratio;
+      if (isCloser && !(isComparable && priority > bestPriority)) {
         best = candidate;
         bestDistanceSq = distanceSq;
+        bestPriority = priority;
+      } else if (isComparable && priority > bestPriority) {
+        best = candidate;
+        bestDistanceSq = distanceSq;
+        bestPriority = priority;
       }
     }
     return best;

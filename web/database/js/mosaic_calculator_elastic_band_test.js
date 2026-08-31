@@ -1216,6 +1216,118 @@ assert.strictEqual(elastic.traceQuotientMotion(
 ).reason, 'non-manifold-vertex');
 traversedStar.manifold = oldManifold;
 
+// The local-geometry bridge toggle intentionally drops a same-tile apex
+// route only after both particles clear that vertex's core radius.  The new
+// direct carrier becomes the validated topology baseline until a particle
+// leaves the shared tile, at which point its saved portal route resumes.
+const straighteningPortalId = Array.from(vertexAtlas.portals.keys())[0];
+assert.ok(straighteningPortalId);
+const straighteningVertex = centralStar.sectors.find((sector) => sector.tileIndex === 0).point;
+const vertexToTileCenter = {
+  x: 10 - straighteningVertex.x,
+  y: 10 - straighteningVertex.y
+};
+const vertexToTileCenterLength = Math.hypot(vertexToTileCenter.x, vertexToTileCenter.y);
+assert.ok(vertexToTileCenterLength > 0);
+const pointFromStraighteningVertex = (distance) => ({
+  x: straighteningVertex.x + ((vertexToTileCenter.x / vertexToTileCenterLength) * distance),
+  y: straighteningVertex.y + ((vertexToTileCenter.y / vertexToTileCenterLength) * distance),
+  tileIndex: 0
+});
+function makeSameTileVertexBridge(left, right) {
+  const word = [straighteningPortalId];
+  const signature = elastic.canonicalHomologyCordCyclicWord(word);
+  return {
+    solverSpace: 'quotient',
+    atlas: vertexAtlas,
+    points: [
+      { ...left, optimizationDirection: { x: 0, y: 0 } },
+      { ...right, optimizationDirection: { x: 0, y: 0 } },
+      { ...left, optimizationDirection: { x: 0, y: 0 } }
+    ],
+    springs: [
+      {
+        word: [...word],
+        transform: elastic.homologyCordPortalWordTransform(word, vertexAtlas),
+        vertexEvent: {
+          vertexId: centralStar.vertexId,
+          totalAngle: centralStar.totalAngle,
+          sideAngle: centralStar.totalAngle * 0.5,
+          active: true,
+          virtual: true
+        },
+        constructionTransitionIndex: 7
+      },
+      {
+        word: [],
+        transform: elastic.homologyCordAffineIdentity(),
+        vertexEvent: null,
+        constructionTransitionIndex: null
+      }
+    ],
+    initialCyclicWord: [...word],
+    initialFreeHomotopySignature: signature,
+    expectedHolonomy: elastic.homologyCordPortalWordTransform(word, vertexAtlas),
+    initializationCertificate: {
+      valid: true,
+      targetHomologySignature: 'fixture',
+      constructionHomologySignature: 'fixture',
+      expectedPortalSignature: signature
+    },
+    localCarriers: [null, null],
+    discreteStateVersion: 0
+  };
+}
+const straightenedBridge = makeSameTileVertexBridge(
+  pointFromStraighteningVertex(5),
+  pointFromStraighteningVertex(7)
+);
+assert.deepStrictEqual(elastic.straightenSameTileVertexBridges(straightenedBridge, {
+  enabled: true,
+  coreRadius: 0.20
+}), { changed: true, valid: true });
+assert.deepStrictEqual(straightenedBridge.springs[0].word, []);
+assert.strictEqual(straightenedBridge.springs[0].vertexEvent, null);
+assert.strictEqual(straightenedBridge.springs[0].straightenedSameTileVertexBridge, true);
+assert.strictEqual(straightenedBridge.initialFreeHomotopySignature, '');
+assert.strictEqual(straightenedBridge.initializationCertificate.expectedPortalSignature, '');
+assert.strictEqual(elastic.traceQuotientSegment(
+  straightenedBridge.points[0], straightenedBridge.points[1], straightenedBridge.springs[0], straightenedBridge
+).segments.length, 1);
+assert.strictEqual(elastic.rebuildQuotientElasticBandCarrier(straightenedBridge), true);
+assert.strictEqual(straightenedBridge.springs[0].straightenedSameTileVertexBridge, true);
+assert.strictEqual(elastic.validateQuotientElasticBand(straightenedBridge), true);
+elastic.state.homologyLocalStraightenVertexBridges = false;
+assert.strictEqual(elastic.rebuildQuotientElasticBandCarrier(straightenedBridge), true);
+assert.strictEqual(straightenedBridge.springs[0].straightenedSameTileVertexBridge, true,
+  'turning off the toggle retains an already adopted direct spring');
+elastic.state.homologyLocalStraightenVertexBridges = true;
+straightenedBridge.points[1] = { x: 25, y: 12, tileIndex: 1, optimizationDirection: { x: 0, y: 0 } };
+assert.strictEqual(elastic.rebuildQuotientElasticBandCarrier(straightenedBridge), true);
+assert.strictEqual(straightenedBridge.springs[0].straightenedSameTileVertexBridge, undefined);
+assert.deepStrictEqual(straightenedBridge.springs[0].word, [straighteningPortalId]);
+assert.strictEqual(straightenedBridge.springs[0].vertexEvent, null,
+  'ordinary routing may replace the restored bridge once a direct route is available');
+assert.strictEqual(elastic.validateQuotientElasticBand(straightenedBridge), true);
+const coreBridge = makeSameTileVertexBridge(
+  pointFromStraighteningVertex(1),
+  pointFromStraighteningVertex(5)
+);
+assert.deepStrictEqual(elastic.straightenSameTileVertexBridges(coreBridge, {
+  enabled: true,
+  coreRadius: 0.20
+}), { changed: false, valid: true });
+assert.ok(coreBridge.springs[0].vertexEvent, 'a particle inside the core keeps the vertex bridge');
+const crossTileBridge = makeSameTileVertexBridge(
+  { x: 12, y: 12, tileIndex: 0 },
+  { x: 25, y: 12, tileIndex: 1 }
+);
+assert.deepStrictEqual(elastic.straightenSameTileVertexBridges(crossTileBridge, {
+  enabled: true,
+  coreRadius: 0.20
+}), { changed: false, valid: true });
+assert.ok(crossTileBridge.springs[0].vertexEvent, 'different tiles keep the topology-aware bridge');
+
 // Regression for portal-word intersection migrating through a normal vertex:
 // this reflected seam used to fail at macro step 65 and then fall back.
 const mixedGenerator = vertexAnalysis.generators[0];
@@ -1586,21 +1698,36 @@ const sourceText = fs.readFileSync(path.join(__dirname, 'mosaic_calculator.js'),
 const htmlText = fs.readFileSync(path.join(__dirname, '..', 'mosaic_calculator.html'), 'utf8');
 assert.strictEqual(htmlText.includes('id="homology-cord-contraction-strength"'), false);
 assert.ok(htmlText.includes('id="homology-cord-relax-speed" min="0.1" max="10" step="0.1" value="10"'));
-assert.ok(htmlText.includes('js/mosaic_calculator.js?v=homology-local-carrier-3'));
+assert.ok(htmlText.includes('js/mosaic_calculator.js?v=homology-local-carrier-5'));
 assert.ok(htmlText.includes('id="homology-local-chart-card"'));
 assert.ok(htmlText.includes('id="homology-local-chart-radius-controls"'));
 assert.ok(htmlText.includes('id="homology-local-chart-wide"'));
 assert.ok(htmlText.includes('data-card-wide-button="#homology-local-chart-wide"'));
 assert.ok(htmlText.includes('data-card-wide-host="#homology-local-chart-wide-host"'));
 assert.ok(htmlText.includes('data-card-side-host="#homology-local-chart-side-host"'));
+assert.ok(htmlText.includes('id="homology-local-chart-side-host" data-card-drag-item="true"'));
 assert.ok(sourceText.includes("refs.homologyLocalChartCard.dataset.cardWideState !== 'wide'"));
 assert.ok(sourceText.includes('window.CalculatorCards.syncWideCards(document)'));
-assert.ok(htmlText.includes('id="inspect-homology-local-vertex"'));
+assert.ok(htmlText.includes('id="show-homology-local-vertex-selection"'));
+assert.ok(htmlText.includes('data-homology-local-canvas-action="pick"'));
+assert.ok(htmlText.includes('data-homology-local-canvas-action="drag"'));
+assert.strictEqual(elastic.normalizeHomologyLocalCanvasAction('pick'), 'pick');
+assert.strictEqual(elastic.normalizeHomologyLocalCanvasAction('none'), 'none');
+assert.strictEqual(elastic.normalizeHomologyLocalCanvasAction('other'), 'drag');
+assert.strictEqual(elastic.homologyLocalCanvasPointerAction('pick', true), 'pick',
+  'the explicit vertex mode wins over optimization inspection');
+assert.strictEqual(elastic.homologyLocalCanvasPointerAction('drag', true), 'drag',
+  'the explicit drag mode wins over optimization inspection');
+assert.strictEqual(elastic.homologyLocalCanvasPointerAction('none', true), 'optimization',
+  'optimization inspection resumes after both local actions are deselected');
+assert.strictEqual(elastic.homologyLocalCanvasPointerAction('none', false), 'default');
 assert.ok(htmlText.includes('data-homology-local-physics-mode="intrinsic"'));
 assert.ok(htmlText.includes('data-homology-local-physics-mode="radial"'));
 assert.ok(htmlText.includes('data-homology-local-physics-mode="conformal"'));
 assert.ok(htmlText.includes('id="homology-local-physics-core-radius" min="0.05" max="0.40"'));
 assert.ok(htmlText.includes('id="homology-local-physics-outer-radius" min="0.10" max="0.49"'));
+assert.ok(htmlText.includes('id="homology-local-straighten-vertex-bridges" checked'));
+assert.ok(sourceText.includes('function straightenSameTileVertexBridges'));
 const drawCordSource = sourceText.slice(
   sourceText.indexOf('function drawBackgroundHomologyCords'),
   sourceText.indexOf('function drawHomologyCordSeamMarkers')

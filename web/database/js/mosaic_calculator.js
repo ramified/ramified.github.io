@@ -898,12 +898,14 @@
     showHomologyCordParticles: false,
     inspectHomologyCordOptimization: false,
     homologyCordOptimizationSelection: null,
-    inspectHomologyLocalVertex: false,
+    showHomologyLocalVertexSelection: false,
+    homologyLocalCanvasAction: 'drag',
     homologyLocalChartMode: 'radial',
     homologyLocalChartRadius: 1,
     homologyLocalPhysicsMode: 'radial',
     homologyLocalPhysicsCoreRadius: HOMOLOGY_LOCAL_PHYSICS_DEFAULT_CORE_RADIUS,
     homologyLocalPhysicsOuterRadius: HOMOLOGY_LOCAL_PHYSICS_DEFAULT_OUTER_RADIUS,
+    homologyLocalStraightenVertexBridges: true,
     homologyLocalChartLayers: {
       geometry: true,
       cords: true,
@@ -1197,7 +1199,8 @@
     refs.homologyCordOptimizationReadout = document.getElementById('homology-cord-optimization-readout');
     refs.homologyLocalChartCard = document.getElementById('homology-local-chart-card');
     refs.homologyLocalChartWide = document.getElementById('homology-local-chart-wide');
-    refs.inspectHomologyLocalVertex = document.getElementById('inspect-homology-local-vertex');
+    refs.showHomologyLocalVertexSelection = document.getElementById('show-homology-local-vertex-selection');
+    refs.homologyLocalCanvasActionButtons = Array.from(document.querySelectorAll('[data-homology-local-canvas-action]'));
     refs.homologyLocalChartRadius = document.getElementById('homology-local-chart-radius');
     refs.homologyLocalChartRadiusValue = document.getElementById('homology-local-chart-radius-value');
     refs.homologyLocalChartRadiusControls = document.getElementById('homology-local-chart-radius-controls');
@@ -1205,6 +1208,7 @@
     refs.homologyLocalPhysicsCoreRadiusValue = document.getElementById('homology-local-physics-core-radius-value');
     refs.homologyLocalPhysicsOuterRadius = document.getElementById('homology-local-physics-outer-radius');
     refs.homologyLocalPhysicsOuterRadiusValue = document.getElementById('homology-local-physics-outer-radius-value');
+    refs.homologyLocalStraightenVertexBridges = document.getElementById('homology-local-straighten-vertex-bridges');
     refs.homologyLocalChartCanvas = document.getElementById('homology-local-chart-canvas');
     refs.homologyLocalChartStatus = document.getElementById('homology-local-chart-status');
     refs.homologyLocalChartDetail = document.getElementById('homology-local-chart-detail');
@@ -1601,34 +1605,32 @@
     if (refs.inspectHomologyCordOptimization) {
       refs.inspectHomologyCordOptimization.addEventListener('change', () => {
         state.inspectHomologyCordOptimization = !!refs.inspectHomologyCordOptimization.checked;
-        if (state.inspectHomologyCordOptimization) {
-          state.inspectHomologyLocalVertex = false;
-          if (refs.inspectHomologyLocalVertex) refs.inspectHomologyLocalVertex.checked = false;
-        }
         if (!state.inspectHomologyCordOptimization) state.homologyCordOptimizationSelection = null;
         if (refs.homologyCordOptimizationReadout) {
           refs.homologyCordOptimizationReadout.textContent = state.inspectHomologyCordOptimization
             ? 'Click a material particle to inspect its optimization direction.'
             : 'Enable inspection, then click a particle.';
         }
-        draw(analyze());
-      });
-    }
-    if (refs.inspectHomologyLocalVertex) {
-      refs.inspectHomologyLocalVertex.addEventListener('change', () => {
-        state.inspectHomologyLocalVertex = !!refs.inspectHomologyLocalVertex.checked;
-        if (state.inspectHomologyLocalVertex) {
-          state.inspectHomologyCordOptimization = false;
-          state.homologyCordOptimizationSelection = null;
-          if (refs.inspectHomologyCordOptimization) refs.inspectHomologyCordOptimization.checked = false;
-        } else {
-          state.homologyLocalChartSelection = null;
-          state.homologyLocalChartParticleSelection = null;
-        }
         syncMainCanvasCursor();
         draw(analyze());
       });
     }
+    if (refs.showHomologyLocalVertexSelection) {
+      refs.showHomologyLocalVertexSelection.addEventListener('change', () => {
+        state.showHomologyLocalVertexSelection = !!refs.showHomologyLocalVertexSelection.checked;
+        syncMainCanvasCursor();
+        draw(analyze());
+      });
+    }
+    (refs.homologyLocalCanvasActionButtons || []).forEach((button) => {
+      button.addEventListener('click', () => {
+        const requested = normalizeHomologyLocalCanvasAction(button.dataset.homologyLocalCanvasAction);
+        state.homologyLocalCanvasAction = state.homologyLocalCanvasAction === requested ? 'none' : requested;
+        syncHomologyLocalChartViewControls();
+        syncMainCanvasCursor();
+        draw(analyze());
+      });
+    });
     if (refs.homologyLocalChartWide) {
       refs.homologyLocalChartWide.addEventListener('click', () => {
         if (!window.CalculatorCards || !refs.homologyLocalChartCard) return;
@@ -1658,6 +1660,15 @@
         scheduleBackgroundHomologyCordAnimation();
       });
     });
+    if (refs.homologyLocalStraightenVertexBridges) {
+      refs.homologyLocalStraightenVertexBridges.addEventListener('change', () => {
+        state.homologyLocalStraightenVertexBridges = !!refs.homologyLocalStraightenVertexBridges.checked;
+        straightenBackgroundHomologyVertexBridges();
+        markBackgroundHomologyCordsUnsettled();
+        draw(analyze());
+        scheduleBackgroundHomologyCordAnimation();
+      });
+    }
     if (refs.homologyLocalChartRadius) {
       refs.homologyLocalChartRadius.addEventListener('input', () => {
         state.homologyLocalChartRadius = clamp(Number(refs.homologyLocalChartRadius.value) || 1, 0.25, 2);
@@ -1674,6 +1685,7 @@
         }
         state.homologyLocalPhysicsCoreRadius = coreRadius;
         state.homologyLocalPhysicsOuterRadius = outerRadius;
+        straightenBackgroundHomologyVertexBridges();
         syncHomologyLocalChartViewControls();
         markBackgroundHomologyCordsUnsettled();
         draw(analyze());
@@ -5573,7 +5585,12 @@
       refs.canvas.style.cursor = 'copy';
       return;
     }
-    if (state.inspectHomologyLocalVertex && isGluedBoundaryMode()) {
+    const localCanvasAction = homologyLocalCanvasPointerAction();
+    if (localCanvasAction === 'pick' && isGluedBoundaryMode()) {
+      refs.canvas.style.cursor = 'crosshair';
+      return;
+    }
+    if (localCanvasAction === 'optimization' && state.homologyCordMode && state.showHomology) {
       refs.canvas.style.cursor = 'crosshair';
       return;
     }
@@ -9340,17 +9357,25 @@
 
   function handlePointerDown(event) {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    if (inspectBackgroundHomologyLocalVertex(event)) {
+    const localCanvasAction = homologyLocalCanvasPointerAction();
+    if (localCanvasAction === 'pick' && inspectBackgroundHomologyLocalVertex(event)) {
       event.preventDefault();
       return;
     }
-    if (inspectBackgroundHomologyCordOptimization(event)) {
-      event.preventDefault();
-      return;
-    }
-    if (beginBackgroundHomologyCordDrag(event)) {
-      event.preventDefault();
-      return;
+    if (localCanvasAction === 'drag') {
+      if (beginBackgroundHomologyCordDrag(event)) {
+        event.preventDefault();
+        return;
+      }
+    } else {
+      if (inspectBackgroundHomologyCordOptimization(event)) {
+        event.preventDefault();
+        return;
+      }
+      if (beginBackgroundHomologyCordDrag(event)) {
+        event.preventDefault();
+        return;
+      }
     }
     if (state.wanderSelectingStart) {
       handleWanderStartPointerDown(event);
@@ -11522,11 +11547,28 @@
     queueBackgroundHomologyMathTypeset(refs.homologyKnotResult);
   }
 
+  function normalizeHomologyLocalCanvasAction(value) {
+    return ['pick', 'drag', 'none'].includes(value) ? value : 'drag';
+  }
+
+  function homologyLocalCanvasPointerAction(action = state.homologyLocalCanvasAction,
+    inspectOptimization = state.inspectHomologyCordOptimization) {
+    const normalized = normalizeHomologyLocalCanvasAction(action);
+    if (normalized !== 'none') return normalized;
+    return inspectOptimization ? 'optimization' : 'default';
+  }
+
   function syncHomologyLocalChartViewControls() {
     if (refs.homologyLocalChartRadiusControls) refs.homologyLocalChartRadiusControls.hidden = false;
     const mode = state.homologyLocalChartMode === 'conformal' ? 'conformal' : 'radial';
     (refs.homologyLocalChartModeButtons || []).forEach((button) => {
       const active = button.dataset.homologyLocalChartMode === mode;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    state.homologyLocalCanvasAction = normalizeHomologyLocalCanvasAction(state.homologyLocalCanvasAction);
+    (refs.homologyLocalCanvasActionButtons || []).forEach((button) => {
+      const active = button.dataset.homologyLocalCanvasAction === state.homologyLocalCanvasAction;
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
     });
@@ -11569,7 +11611,7 @@
     const snapshotKey = backgroundHomologyTopologyKey();
     if (refs.homologyLocalChartCard) refs.homologyLocalChartCard.hidden = !visible;
     if (!visible) {
-      state.inspectHomologyLocalVertex = false;
+      state.showHomologyLocalVertexSelection = false;
       state.homologyLocalChartSelection = null;
       state.homologyLocalChartParticleSelection = null;
       if (state.homologyTopologyKey || state.homologyTrace.length || state.homologyComputing) invalidateBackgroundHomology();
@@ -11612,9 +11654,9 @@
       refs.inspectHomologyCordOptimization.checked = !!(cordAvailable && state.inspectHomologyCordOptimization);
       if (!cordAvailable) state.homologyCordOptimizationSelection = null;
     }
-    if (refs.inspectHomologyLocalVertex) {
-      refs.inspectHomologyLocalVertex.disabled = false;
-      refs.inspectHomologyLocalVertex.checked = !!state.inspectHomologyLocalVertex;
+    if (refs.showHomologyLocalVertexSelection) {
+      refs.showHomologyLocalVertexSelection.disabled = false;
+      refs.showHomologyLocalVertexSelection.checked = !!state.showHomologyLocalVertexSelection;
     }
     state.homologyLocalChartRadius = clamp(Number(state.homologyLocalChartRadius) || 1, 0.25, 2);
     if (refs.homologyLocalChartRadius) {
@@ -11627,11 +11669,18 @@
     (refs.homologyLocalChartModeButtons || []).forEach((button) => {
       button.disabled = false;
     });
+    (refs.homologyLocalCanvasActionButtons || []).forEach((button) => {
+      button.disabled = false;
+    });
     (refs.homologyLocalPhysicsModeButtons || []).forEach((button) => {
       button.disabled = false;
     });
     if (refs.homologyLocalPhysicsCoreRadius) refs.homologyLocalPhysicsCoreRadius.disabled = false;
     if (refs.homologyLocalPhysicsOuterRadius) refs.homologyLocalPhysicsOuterRadius.disabled = false;
+    if (refs.homologyLocalStraightenVertexBridges) {
+      refs.homologyLocalStraightenVertexBridges.disabled = false;
+      refs.homologyLocalStraightenVertexBridges.checked = !!state.homologyLocalStraightenVertexBridges;
+    }
     syncHomologyLocalChartViewControls();
     [
       ['homologyCordRelaxSpeed', 'homologyCordRelaxSpeedValue', normalizeHomologyCordRelaxSpeed],
@@ -17591,7 +17640,7 @@
 
   function drawHomologyLocalVertexSelection(ctx, offset = null) {
     const selection = state.homologyLocalChartSelection;
-    if (!selection || !state.inspectHomologyLocalVertex || !geometry) return;
+    if (!selection || !state.showHomologyLocalVertexSelection || !geometry) return;
     const cell = geometry.cells[selection.tileIndex];
     if (!cell) return;
     const corners = tilePoints(cell.x, cell.y, geometry.radius);
@@ -18873,7 +18922,7 @@
   }
 
   function inspectBackgroundHomologyLocalVertex(event) {
-    if (!state.inspectHomologyLocalVertex || !isGluedBoundaryMode()) return false;
+    if (state.homologyLocalCanvasAction !== 'pick' || !isGluedBoundaryMode()) return false;
     state.homologyLocalChartSelection = homologyLocalChartCornerHit(event.clientX, event.clientY);
     state.homologyLocalChartParticleSelection = null;
     draw(analyze());
@@ -19200,8 +19249,18 @@
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = '#fffdf8';
     ctx.fillRect(0, 0, width, height);
-    const model = buildHomologyLocalChartModel();
     state.homologyLocalChartHits = [];
+    if (!state.showHomologyLocalVertexSelection) {
+      if (refs.homologyLocalChartStatus) refs.homologyLocalChartStatus.textContent = 'Selected vertex display is hidden.';
+      setHomologyLocalChartDetail(null);
+      ctx.fillStyle = '#77736c';
+      ctx.font = '12px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Show selected vertex to display the local chart', width / 2, height / 2);
+      return;
+    }
+    const model = buildHomologyLocalChartModel();
     if (!model) {
       if (state.homologyLocalChartSelection) {
         state.homologyLocalChartSelection = null;
@@ -20052,24 +20111,8 @@
           ))) {
         return { valid: false, segments, crossings, vertexEvents, reason: 'invalid-apex-event' };
       }
-      const eventSectorPoint = (particle, role) => {
-        const carrier = spring.vertexEvent.carrier;
-        const sectorId = carrier && carrier.resolved
-          ? carrier[role === 'left' ? 'leftSectorId' : 'rightSectorId']
-          : -1;
-        const exact = Number.isInteger(sectorId) ? star.sectors[sectorId] : null;
-        if (exact && exact.tileIndex === particle.tileIndex && exact.point) return exact.point;
-        const choices = star.sectors
-          .filter((sector) => sector.tileIndex === particle.tileIndex && sector.point)
-          .map((sector) => ({
-            point: sector.point,
-            distance: Math.hypot(particle.x - sector.point.x, particle.y - sector.point.y)
-          }))
-          .sort((left, right) => left.distance - right.distance);
-        return choices.length ? choices[0].point : null;
-      };
-      const leftApex = eventSectorPoint(start, 'left');
-      const rightApex = eventSectorPoint(end, 'right');
+      const leftApex = quotientVertexEventPointForParticle(star, spring.vertexEvent, start, 'left');
+      const rightApex = quotientVertexEventPointForParticle(star, spring.vertexEvent, end, 'right');
       if (!leftApex || !rightApex) {
         return { valid: false, segments, crossings, vertexEvents, reason: 'missing-apex-sector' };
       }
@@ -20638,6 +20681,10 @@
         springs[index].vertexEvent = null;
       }
     }
+    const straightening = straightenSameTileVertexBridges(chain);
+    if (!straightening.valid || !validateQuotientElasticBand(chain)) {
+      return rejectInitialization('construction-straightening');
+    }
     return chain;
   }
 
@@ -20882,6 +20929,127 @@
     return !!spring.transform;
   }
 
+  function quotientVertexEventPointForParticle(star, event, particle, role) {
+    if (!star || !event || !particle) return null;
+    const carrier = event.carrier;
+    const sectorId = carrier && carrier.resolved
+      ? carrier[role === 'left' ? 'leftSectorId' : 'rightSectorId']
+      : -1;
+    const exact = Number.isInteger(sectorId) ? star.sectors[sectorId] : null;
+    if (exact && exact.tileIndex === particle.tileIndex && exact.point) return exact.point;
+    const choices = star.sectors
+      .filter((sector) => sector.tileIndex === particle.tileIndex && sector.point)
+      .map((sector) => ({
+        point: sector.point,
+        distance: Math.hypot(particle.x - sector.point.x, particle.y - sector.point.y)
+      }))
+      .sort((left, right) => left.distance - right.distance);
+    return choices.length ? choices[0].point : null;
+  }
+
+  function rebaseQuotientElasticBandTopology(chain) {
+    if (!chain || !chain.atlas) return false;
+    const cyclicWord = homologyCordCyclicPortalWord(chain);
+    const signature = canonicalHomologyCordCyclicWord(cyclicWord);
+    const holonomy = homologyCordPortalWordTransform(cyclicWord, chain.atlas);
+    if (!holonomy) return false;
+    chain.initialCyclicWord = [...cyclicWord];
+    chain.initialFreeHomotopySignature = signature;
+    chain.expectedHolonomy = holonomy;
+    if (chain.initializationCertificate && chain.initializationCertificate.expectedPortalSignature != null) {
+      chain.initializationCertificate.expectedPortalSignature = signature;
+    }
+    return true;
+  }
+
+  function cloneStraightenedSameTileVertexBridgeFallback(fallback) {
+    if (!fallback) return null;
+    return {
+      word: [...(fallback.word || [])],
+      vertexEvent: cloneQuotientVertexEvent(fallback.vertexEvent),
+      constructionTransitionIndex: fallback.constructionTransitionIndex == null
+        ? null : fallback.constructionTransitionIndex
+    };
+  }
+
+  function resumeStraightenedSameTileVertexBridge(chain, spring) {
+    if (!spring || !spring.straightenedSameTileVertexBridge) return true;
+    const fallback = cloneStraightenedSameTileVertexBridgeFallback(
+      spring.straightenedSameTileVertexBridgeFallback
+    );
+    if (fallback) {
+      spring.word = fallback.word;
+      spring.vertexEvent = fallback.vertexEvent;
+      spring.constructionTransitionIndex = fallback.constructionTransitionIndex;
+    }
+    delete spring.straightenedSameTileVertexBridge;
+    delete spring.straightenedSameTileVertexBridgeFallback;
+    return updateQuotientSpringTransform(spring, chain.atlas)
+      && rebaseQuotientElasticBandTopology(chain);
+  }
+
+  function straightenSameTileVertexBridges(chain, options = {}) {
+    const enabled = options.enabled == null
+      ? !!state.homologyLocalStraightenVertexBridges
+      : !!options.enabled;
+    if (!enabled || !chain || !chain.atlas || !geometry || !Array.isArray(chain.springs)) {
+      return { changed: false, valid: true };
+    }
+    const logicalCount = Math.max(0, chain.points.length - 1);
+    if (logicalCount !== chain.springs.length) return { changed: false, valid: false };
+    const coreRadius = clamp(
+      Number.isFinite(Number(options.coreRadius)) ? Number(options.coreRadius) : state.homologyLocalPhysicsCoreRadius,
+      0.05,
+      0.40
+    );
+    const coreDistance = geometry.radius * coreRadius;
+    let changed = false;
+    for (let index = 0; index < logicalCount; index += 1) {
+      const spring = chain.springs[index];
+      const event = spring && spring.vertexEvent;
+      const left = chain.points[index];
+      const right = chain.points[(index + 1) % logicalCount];
+      if (!event || !left || !right || left.tileIndex !== right.tileIndex) continue;
+      const star = chain.atlas.vertexStars.get(event.vertexId);
+      const leftVertex = quotientVertexEventPointForParticle(star, event, left, 'left');
+      const rightVertex = quotientVertexEventPointForParticle(star, event, right, 'right');
+      if (!star || !leftVertex || !rightVertex
+        || Math.hypot(leftVertex.x - rightVertex.x, leftVertex.y - rightVertex.y) > HOMOLOGY_CORD_EPSILON
+        || Math.hypot(left.x - leftVertex.x, left.y - leftVertex.y) <= coreDistance
+        || Math.hypot(right.x - rightVertex.x, right.y - rightVertex.y) <= coreDistance) continue;
+      spring.straightenedSameTileVertexBridgeFallback = {
+        word: [...spring.word],
+        vertexEvent: cloneQuotientVertexEvent(spring.vertexEvent),
+        constructionTransitionIndex: spring.constructionTransitionIndex == null
+          ? null : spring.constructionTransitionIndex
+      };
+      spring.word = [];
+      spring.vertexEvent = null;
+      spring.constructionTransitionIndex = null;
+      spring.straightenedSameTileVertexBridge = true;
+      if (!updateQuotientSpringTransform(spring, chain.atlas)) return { changed, valid: false };
+      changed = true;
+    }
+    if (!changed) return { changed: false, valid: true };
+    chain.discreteStateVersion += 1;
+    return { changed: true, valid: rebaseQuotientElasticBandTopology(chain) };
+  }
+
+  function straightenBackgroundHomologyVertexBridges() {
+    let changed = false;
+    Object.values(state.homologyCordChains || {}).forEach((chain) => {
+      if (!chain || chain.solverSpace !== 'quotient') return;
+      const snapshot = snapshotQuotientElasticBand(chain);
+      const result = straightenSameTileVertexBridges(chain);
+      if (!result.valid || (result.changed && !validateQuotientElasticBand(chain))) {
+        restoreQuotientElasticBand(chain, snapshot);
+        return;
+      }
+      changed = changed || result.changed;
+    });
+    return changed;
+  }
+
   function applyQuotientGaugeCrossings(chain, particleIndex, crossings) {
     const logicalCount = chain.points.length - 1;
     if (!logicalCount || !crossings || !crossings.length) return true;
@@ -21013,12 +21181,20 @@
         },
         vertexEvent: cloneQuotientVertexEvent(spring.vertexEvent),
         constructionTransitionIndex: spring.constructionTransitionIndex == null
-          ? null : spring.constructionTransitionIndex
+          ? null : spring.constructionTransitionIndex,
+        straightenedSameTileVertexBridge: spring.straightenedSameTileVertexBridge ? true : undefined,
+        straightenedSameTileVertexBridgeFallback: spring.straightenedSameTileVertexBridgeFallback
+          ? cloneStraightenedSameTileVertexBridgeFallback(spring.straightenedSameTileVertexBridgeFallback)
+          : undefined
       })),
       expectedHolonomy: {
         matrix: { ...chain.expectedHolonomy.matrix },
         offset: { ...chain.expectedHolonomy.offset }
       },
+      initialCyclicWord: [...(chain.initialCyclicWord || [])],
+      initialFreeHomotopySignature: chain.initialFreeHomotopySignature || '',
+      initializationCertificateExpectedPortalSignature: chain.initializationCertificate
+        ? chain.initializationCertificate.expectedPortalSignature : undefined,
       discreteStateVersion: chain.discreteStateVersion,
       settled: !!chain.settled,
       stableMacroSteps: chain.stableMacroSteps || 0,
@@ -21050,12 +21226,23 @@
       },
       vertexEvent: cloneQuotientVertexEvent(spring.vertexEvent),
       constructionTransitionIndex: spring.constructionTransitionIndex == null
-        ? null : spring.constructionTransitionIndex
+        ? null : spring.constructionTransitionIndex,
+      straightenedSameTileVertexBridge: spring.straightenedSameTileVertexBridge ? true : undefined,
+      straightenedSameTileVertexBridgeFallback: spring.straightenedSameTileVertexBridgeFallback
+        ? cloneStraightenedSameTileVertexBridgeFallback(spring.straightenedSameTileVertexBridgeFallback)
+        : undefined
     }));
     chain.expectedHolonomy = {
       matrix: { ...snapshot.expectedHolonomy.matrix },
       offset: { ...snapshot.expectedHolonomy.offset }
     };
+    chain.initialCyclicWord = [...(snapshot.initialCyclicWord || [])];
+    chain.initialFreeHomotopySignature = snapshot.initialFreeHomotopySignature || '';
+    if (chain.initializationCertificate && Object.prototype.hasOwnProperty.call(
+      snapshot, 'initializationCertificateExpectedPortalSignature'
+    )) {
+      chain.initializationCertificate.expectedPortalSignature = snapshot.initializationCertificateExpectedPortalSignature;
+    }
     chain.discreteStateVersion = snapshot.discreteStateVersion;
     chain.settled = snapshot.settled;
     chain.stableMacroSteps = snapshot.stableMacroSteps;
@@ -21731,6 +21918,13 @@
 
   function updateQuotientVertexEvent(chain, springIndex, events) {
     const spring = chain.springs[springIndex];
+    const logicalCount = Math.max(0, chain.points.length - 1);
+    if (spring && spring.straightenedSameTileVertexBridge) {
+      const left = chain.points[springIndex];
+      const right = chain.points[(springIndex + 1) % logicalCount];
+      if (left && right && left.tileIndex === right.tileIndex) return;
+      if (!resumeStraightenedSameTileVertexBridge(chain, spring)) return;
+    }
     const allowed = (events || []).find((event) => event.allowed);
     if (allowed) {
       const pathInfo = quotientVertexEventPathInfo(chain, springIndex, allowed.vertexId);
@@ -21836,6 +22030,12 @@
     const logicalCount = Math.max(0, chain.points.length - 1);
     for (let index = 0; index < logicalCount; index += 1) {
       const spring = chain.springs[index];
+      if (spring.straightenedSameTileVertexBridge) {
+        const left = chain.points[index];
+        const right = chain.points[(index + 1) % logicalCount];
+        if (left && right && left.tileIndex === right.tileIndex) continue;
+        if (!resumeStraightenedSameTileVertexBridge(chain, spring)) continue;
+      }
       if (spring.vertexEvent && spring.vertexEvent.constructionBridge) {
         updateQuotientVertexEvent(chain, index, []);
         continue;
@@ -21872,6 +22072,8 @@
     }
     closeQuotientElasticBand(chain);
     if (options.refreshVertexEvents !== false) refreshQuotientSpringVertexEvents(chain);
+    const straightening = straightenSameTileVertexBridges(chain);
+    if (!straightening.valid) return false;
     return validateQuotientElasticBand(chain);
   }
 
@@ -31877,6 +32079,8 @@
       normalizeHomologyLocalPhysicsMode,
       normalizeHomologyLocalPhysicsRadii,
       normalizeHomologyLocalPhysicsConfig,
+      normalizeHomologyLocalCanvasAction,
+      homologyLocalCanvasPointerAction,
       homologyLocalPhysicsSmootherstep,
       homologyLocalPhysicsWeight,
       mapHomologyLocalPhysicsPolar,
@@ -31902,9 +32106,13 @@
       snapshotQuotientElasticBand,
       restoreQuotientElasticBand,
       applyQuotientElasticBandMotion,
+      quotientVertexEventPointForParticle,
+      rebaseQuotientElasticBandTopology,
+      straightenSameTileVertexBridges,
       buildQuotientVertexEventCarrier,
       migrateAdjacentQuotientVertexEvents,
       tryRemoveMigratedQuotientVertexEvent,
+      rebuildQuotientElasticBandCarrier,
       reduceHomologyCordPortalWord,
       homologyCordPortalWordTransform,
       homologyCordCyclicPortalWord,
