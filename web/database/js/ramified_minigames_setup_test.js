@@ -7502,6 +7502,82 @@ function testSokobanBeamInteriorsCanCrossButStillBlockEnergyBridges() {
   }).sort(), ['1,3', '2,2', '4,3']);
 }
 
+function testFullscreenSettingsPreferencesAndMarkup() {
+  const defaults = {
+    soundEnabled: false,
+    soundVolume: 1,
+    showActionRow: true,
+    showGameTools: true
+  };
+  assert.deepStrictEqual(game.__test.fullscreenSettingsDefaults, defaults);
+  assert.deepStrictEqual(game.__test.normalizeFullscreenPreferences(null), defaults);
+  assert.deepStrictEqual(game.__test.normalizeFullscreenPreferences({
+    soundEnabled: true,
+    soundVolume: 1.7,
+    showActionRow: false,
+    showGameTools: true
+  }), {
+    soundEnabled: true,
+    soundVolume: 1,
+    showActionRow: false,
+    showGameTools: true
+  });
+  assert.deepStrictEqual(game.__test.normalizeFullscreenPreferences({
+    soundEnabled: 'yes',
+    soundVolume: null,
+    showActionRow: true,
+    showGameTools: false
+  }), {
+    soundEnabled: false,
+    soundVolume: 1,
+    showActionRow: true,
+    showGameTools: false
+  });
+
+  const storage = {
+    value: null,
+    getItem(key) {
+      assert.strictEqual(key, game.__test.fullscreenSettingsStorageKey);
+      return this.value;
+    },
+    setItem(key, value) {
+      assert.strictEqual(key, game.__test.fullscreenSettingsStorageKey);
+      this.value = value;
+    }
+  };
+  const previousPreferences = game.__test.getFullscreenPreferences();
+  try {
+    const expected = {
+      soundEnabled: true,
+      soundVolume: 0.42,
+      showActionRow: false,
+      showGameTools: true
+    };
+    game.__test.setFullscreenPreferences(expected);
+    assert.strictEqual(game.__test.persistFullscreenPreferences(storage), true);
+    assert.deepStrictEqual(game.__test.readFullscreenPreferences(storage), expected);
+    storage.value = '{broken json';
+    assert.deepStrictEqual(game.__test.readFullscreenPreferences(storage), defaults);
+    assert.deepStrictEqual(game.__test.readFullscreenPreferences({ getItem() { throw new Error('blocked'); } }), defaults);
+  } finally {
+    game.__test.setFullscreenPreferences(previousPreferences);
+  }
+
+  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  const setupSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
+  assert.ok(html.includes('id="fullscreen-settings-open"'));
+  assert.ok(html.includes('id="fullscreen-settings-dialog" role="dialog" aria-modal="true"'));
+  assert.ok(html.includes('id="fullscreen-sound-enabled"'));
+  assert.ok(html.includes('id="fullscreen-sound-volume"'));
+  assert.ok(html.includes('id="fullscreen-show-action-row"'));
+  assert.ok(html.includes('id="fullscreen-show-game-tools"'));
+  assert.ok(html.includes('id="fullscreen-settings-exit"'));
+  assert.ok(html.includes('data-i18n="fullscreen.soundEffects"'));
+  assert.ok(setupSource.includes('if (fullscreenSettingsOpen) {'));
+  assert.ok(setupSource.includes("if (key === 'Escape')"));
+  assert.ok(!setupSource.includes('FULLSCREEN_ACTION_AUTO_COLLAPSE_MS'));
+}
+
 function testReusableLocalizationWiring() {
   const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
   const setupSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
@@ -7642,6 +7718,7 @@ function testBilliardsReplayRestoresRoundSetup() {
 }
 
 async function run() {
+  testFullscreenSettingsPreferencesAndMarkup();
   testReusableLocalizationWiring();
   testRuntimeChineseLocaleCatalog();
   testBilliardsPaletteRepaintsAfterLazyLoad();

@@ -181,24 +181,29 @@
     }
 
     .slice-toric-card[hidden],
+    .slice-toric-fan-card[hidden],
     .slice-toric-panel[hidden],
+    .slice-toric-fan-panel[hidden],
     .slice-toric-pick-menu[hidden] {
       display: none !important;
     }
 
-    .slice-toric-tabs {
+    .slice-toric-tabs,
+    .slice-toric-fan-tabs {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 4px;
     }
 
-    .slice-toric-tabs .slice-segment {
+    .slice-toric-tabs .slice-segment,
+    .slice-toric-fan-tabs .slice-segment {
       min-width: 0;
       padding-inline: 5px;
       white-space: normal;
     }
 
-    .slice-toric-panel {
+    .slice-toric-panel,
+    .slice-toric-fan-panel {
       display: flex;
       flex-direction: column;
       gap: 9px;
@@ -249,7 +254,6 @@
       color: #555b60;
     }
 
-    .slice-toric-generator-list,
     .slice-toric-face-list {
       display: flex;
       flex-direction: column;
@@ -257,11 +261,65 @@
       min-width: 0;
     }
 
-    .slice-toric-generator-row {
+    .slice-toric-definition {
+      border-left: 2px solid color-mix(in srgb, var(--accent) 48%, var(--border));
+      color: var(--muted);
+      font-size: 0.72rem;
+      line-height: 1.45;
+      padding: 2px 0 2px 8px;
+    }
+
+    .slice-toric-definition code {
+      color: var(--text);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.7rem;
+    }
+
+    .slice-toric-input-modes {
       display: grid;
-      grid-template-columns: minmax(54px, 76px) minmax(0, 1fr) auto;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .slice-toric-mode-panel {
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .slice-toric-mode-panel[hidden] {
+      display: none !important;
+    }
+
+    .slice-toric-matrix-wrap {
+      min-width: 0;
+      overflow-x: auto;
+      padding: 1px 0 4px;
+    }
+
+    .slice-toric-ray-matrix {
+      align-items: stretch;
+      display: grid;
+      gap: 4px;
+      min-width: max-content;
+    }
+
+    .slice-toric-matrix-corner,
+    .slice-toric-matrix-row-label {
       align-items: center;
-      gap: 5px;
+      color: var(--muted);
+      display: flex;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.65rem;
+      justify-content: center;
+      min-height: 28px;
+      white-space: nowrap;
+    }
+
+    .slice-toric-ray-head {
+      display: grid;
+      gap: 3px;
+      grid-template-columns: minmax(0, 1fr) 26px;
       min-width: 0;
     }
 
@@ -269,13 +327,7 @@
       width: 100%;
       min-width: 0;
       padding: 3px 5px;
-    }
-
-    .slice-toric-coordinate-list {
-      display: grid;
-      grid-template-columns: repeat(var(--toric-coordinate-count, 2), minmax(24px, 1fr));
-      gap: 3px;
-      min-width: 0;
+      text-align: center;
     }
 
     .slice-toric-coordinate {
@@ -285,13 +337,19 @@
       text-align: center;
     }
 
-    .slice-toric-generator-meta {
-      grid-column: 2 / -1;
-      display: flex;
+    .slice-toric-generator-cell-invalid {
+      border-color: rgba(176, 88, 53, 0.65);
+      background: rgba(176, 88, 53, 0.05);
+    }
+
+    .slice-toric-column-meta {
       align-items: center;
-      flex-wrap: wrap;
+      display: flex;
+      flex-direction: column;
       gap: 5px;
+      justify-content: flex-start;
       min-width: 0;
+      padding-top: 2px;
     }
 
     .slice-toric-generator-status {
@@ -301,7 +359,78 @@
       color: #745138;
       font-family: "JetBrains Mono", Consolas, monospace;
       font-size: 0.62rem;
+      max-width: 100%;
+      overflow-wrap: anywhere;
       padding: 2px 5px;
+      text-align: center;
+    }
+
+    .slice-toric-primitive {
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 0.6rem;
+      line-height: 1.25;
+      max-width: 92px;
+      overflow-wrap: anywhere;
+      text-align: center;
+    }
+
+    .slice-toric-import-orientation {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .slice-toric-import-orientation .slice-select {
+      flex: 1 1 180px;
+    }
+
+    .slice-toric-target-display {
+      display: block;
+      margin-top: 2px;
+      overflow-wrap: anywhere;
+    }
+
+    .slice-toric-fan-cone-options {
+      display: grid;
+      gap: 4px;
+      max-height: 210px;
+      min-width: 0;
+      overflow-y: auto;
+    }
+
+    .slice-toric-fan-cone-option {
+      align-items: center;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+      display: grid;
+      gap: 6px;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      padding: 4px 1px;
+    }
+
+    .slice-toric-fan-cone-option span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .slice-toric-fan-ray-list {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .slice-toric-fan-ray {
+      align-items: baseline;
+      display: grid;
+      gap: 6px;
+      grid-template-columns: 42px minmax(0, 1fr) auto;
+      min-width: 0;
+    }
+
+    .slice-toric-fan-ray code {
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     .slice-toric-face-group {
@@ -884,8 +1013,12 @@
         grid-template-columns: 1fr;
       }
 
-      .slice-toric-generator-row {
-        grid-template-columns: minmax(48px, 64px) minmax(0, 1fr) auto;
+      .slice-toric-definition {
+        font-size: 0.69rem;
+      }
+
+      .slice-toric-ray-matrix {
+        gap: 3px;
       }
     }
   </style>
@@ -1012,6 +1145,10 @@
           </div>
 
           <div id="toric-cone-build-panel" class="slice-toric-panel" role="tabpanel" data-toric-panel="build">
+            <div class="slice-toric-definition">
+              <code>sigma = cone(columns U), U = [u_1 ... u_r] in Z^(n x r)</code><br>
+              Rational columns are stored as primitive integral directions. The ray matrix is not unique: columns may be reordered, duplicated, or redundant.
+            </div>
             <div class="slice-row">
               <span class="slice-row-label">preset</span>
               <div class="slice-control-line">
@@ -1024,20 +1161,52 @@
                 <button id="toric-cone-apply-preset" class="slice-btn" type="button">apply</button>
               </div>
             </div>
-            <div class="slice-row stack">
-              <span class="slice-row-label">generators</span>
-              <div id="toric-cone-generators" class="slice-toric-generator-list"></div>
-            </div>
-            <div class="slice-button-line">
-              <button id="toric-cone-add-generator" class="slice-btn" type="button">add generator</button>
-              <select id="toric-cone-vector-source" class="slice-select" aria-label="Vector object source"></select>
-              <button id="toric-cone-add-vector" class="slice-btn" type="button">add vector</button>
-            </div>
-            <div class="slice-row stack">
-              <span class="slice-row-label">rows import</span>
-              <textarea id="toric-cone-rows-import" class="slice-textarea" spellcheck="false" aria-label="Generator rows import" placeholder="One generator per row, for example: 1, 0, 0"></textarea>
-              <div class="slice-button-line">
-                <button id="toric-cone-apply-rows" class="slice-btn" type="button">replace generators</button>
+            <div class="slice-toric-input-modes">
+              <div id="toric-cone-input-mode-controls" class="slice-segmented" aria-label="Ray matrix input mode">
+                <button class="slice-segment active" type="button" data-toric-input-mode="manual">manual input</button>
+                <button class="slice-segment" type="button" data-toric-input-mode="import">import</button>
+                <button class="slice-segment" type="button" data-toric-input-mode="targets">targets</button>
+              </div>
+
+              <div id="toric-cone-manual-panel" class="slice-toric-mode-panel" data-toric-input-panel="manual">
+                <div class="slice-row stack">
+                  <span class="slice-row-label">ray matrix U</span>
+                  <div class="slice-toric-matrix-wrap">
+                    <div id="toric-cone-generators" class="slice-toric-ray-matrix" role="group" aria-label="Manual ray matrix with generator columns"></div>
+                  </div>
+                </div>
+                <div class="slice-button-line">
+                  <button id="toric-cone-apply-manual" class="slice-btn" type="button">apply manual</button>
+                  <button id="toric-cone-add-generator" class="slice-btn" type="button">add ray column</button>
+                </div>
+              </div>
+
+              <div id="toric-cone-import-panel" class="slice-toric-mode-panel" data-toric-input-panel="import" hidden>
+                <div class="slice-row stack">
+                  <span class="slice-row-label">matrix import</span>
+                  <div class="slice-toric-import-orientation">
+                    <select id="toric-cone-import-orientation" class="slice-select" aria-label="Ray matrix import orientation">
+                      <option value="columns">n rows; rays are columns</option>
+                      <option value="legacy-rows">legacy: one ray per row</option>
+                    </select>
+                  </div>
+                  <textarea id="toric-cone-rows-import" class="slice-textarea slice-vector-textarea" spellcheck="false" aria-label="Ray matrix import" placeholder="1, 0, 1&#10;0, 1, 1"></textarea>
+                </div>
+                <div class="slice-button-line">
+                  <button id="toric-cone-apply-rows" class="slice-btn" type="button">apply import</button>
+                </div>
+              </div>
+
+              <div id="toric-cone-targets-panel" class="slice-toric-mode-panel" data-toric-input-panel="targets" hidden>
+                <div class="slice-row stack">
+                  <span class="slice-row-label">ray target</span>
+                  <div id="toric-cone-target-slots" class="slice-target-slots" aria-label="Ray target columns"></div>
+                </div>
+                <div class="slice-button-line">
+                  <select id="toric-cone-vector-source" class="slice-select slice-target-source-select" aria-label="Vector object source"></select>
+                  <button id="toric-cone-add-vector" class="slice-btn" type="button">fill selected ray</button>
+                </div>
+                <span id="toric-cone-target-note" class="slice-target-note">Select a ray column, then click a visible point or fill from a vector object.</span>
               </div>
             </div>
             <div id="toric-cone-validation" class="slice-toric-info" role="status"></div>
@@ -1050,6 +1219,72 @@
 
           <div id="toric-cone-variety-panel" class="slice-toric-panel" role="tabpanel" data-toric-panel="variety" hidden>
             <div id="toric-cone-variety-info" class="slice-toric-info"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card slice-toric-fan-card" id="slice-toric-fan-card" hidden>
+        <div class="card-head" tabindex="0" role="button" aria-expanded="true">
+          <span class="drag-handle" title="drag card">&#8942;&#8942;</span>
+          <span class="card-head-label">Toric Variety</span>
+          <i class="toggle-icon">&#9662;</i>
+        </div>
+        <div class="card-body slice-card-body">
+          <div id="toric-fan-summary" class="slice-toric-summary" aria-live="polite"></div>
+          <div id="toric-fan-tabs" class="slice-toric-fan-tabs" role="tablist" aria-label="Toric variety views">
+            <button class="slice-segment active" type="button" role="tab" aria-selected="true" data-toric-fan-tab="build">Build</button>
+            <button class="slice-segment" type="button" role="tab" aria-selected="false" data-toric-fan-tab="fan">Fan / Orbits</button>
+            <button class="slice-segment" type="button" role="tab" aria-selected="false" data-toric-fan-tab="divisors">Divisors / Bundles</button>
+          </div>
+
+          <div id="toric-fan-build-panel" class="slice-toric-fan-panel" role="tabpanel" data-toric-fan-panel="build">
+            <div class="slice-toric-definition">
+              <code>X_Sigma = union U_sigma, sigma in Sigma</code><br>
+              Selected cones are maximal charts. Their faces are derived, and pairwise intersections are checked exactly.
+            </div>
+            <div id="toric-fan-source-mode" class="slice-segmented" aria-label="Fan construction mode">
+              <button class="slice-segment active" type="button" data-toric-fan-source="preset">presets</button>
+              <button class="slice-segment" type="button" data-toric-fan-source="cone-list">cone list</button>
+            </div>
+            <div id="toric-fan-preset-panel" class="slice-toric-fan-panel" data-toric-fan-source-panel="preset">
+              <div class="slice-row">
+                <span class="slice-row-label">fan preset</span>
+                <div class="slice-control-line">
+                  <select id="toric-fan-preset" class="slice-select" aria-label="Toric variety fan preset">
+                    <option value="projective-space">projective space P^n</option>
+                    <option value="affine-space">affine space A^n</option>
+                    <option value="weighted-projective-space">weighted P(1,...,1,2)</option>
+                  </select>
+                  <button id="toric-fan-apply-preset" class="slice-btn" type="button">apply</button>
+                </div>
+              </div>
+            </div>
+            <div id="toric-fan-cone-list-panel" class="slice-toric-fan-panel" data-toric-fan-source-panel="cone-list" hidden>
+              <div class="slice-row stack">
+                <span class="slice-row-label">maximal cones</span>
+                <div id="toric-fan-cone-options" class="slice-toric-fan-cone-options"></div>
+              </div>
+              <div class="slice-button-line">
+                <button id="toric-fan-apply-cones" class="slice-btn" type="button">use selected cones</button>
+              </div>
+            </div>
+            <div class="slice-row">
+              <span class="slice-row-label">character lattice</span>
+              <div class="slice-control-line">
+                <select id="toric-fan-character-lattice" class="slice-select" aria-label="Character lattice for toric line-bundle information"></select>
+              </div>
+            </div>
+            <div id="toric-fan-validation" class="slice-toric-info" role="status"></div>
+          </div>
+
+          <div id="toric-fan-fan-panel" class="slice-toric-fan-panel" role="tabpanel" data-toric-fan-panel="fan" hidden>
+            <div id="toric-fan-info" class="slice-toric-info"></div>
+            <div id="toric-fan-cone-list" class="slice-toric-face-list"></div>
+          </div>
+
+          <div id="toric-fan-divisors-panel" class="slice-toric-fan-panel" role="tabpanel" data-toric-fan-panel="divisors" hidden>
+            <div id="toric-fan-divisor-info" class="slice-toric-info"></div>
+            <div id="toric-fan-ray-list" class="slice-toric-fan-ray-list"></div>
           </div>
         </div>
       </section>
@@ -1275,12 +1510,12 @@
       <section class="card collapsed" id="slice-weight-info-card">
         <div class="card-head" tabindex="0" role="button" aria-expanded="false">
           <span class="drag-handle" title="drag card">&#8942;&#8942;</span>
-          <span class="card-head-label">weight info in 2d slice</span>
+          <span class="card-head-label">Lattice / Equivariant Bundles</span>
           <i class="toggle-icon">&#9662;</i>
         </div>
         <div class="card-body slice-card-body">
           <div id="slice-weight-info-out">
-            <span class="slice-card-note">Click a Dynkin root or weight lattice point in the projection canvas.</span>
+            <span class="slice-card-note">Click an integral lattice point to inspect its character, representation data, or toric equivariant bundle.</span>
           </div>
         </div>
       </section>

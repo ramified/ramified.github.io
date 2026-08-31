@@ -7,6 +7,7 @@
 
   const DEFAULT_LIMITS = Object.freeze({
     maxGenerators: 32,
+    maxCones: 128,
     maxFaces: 4096,
     maxCandidates: 500000,
   });
@@ -1081,14 +1082,250 @@
     return [];
   }
 
+  function primitiveKey(vector) {
+    return vector.map((entry) => String(entry)).join(",");
+  }
+
+  function sameSet(left, right) {
+    if (left.size !== right.size) return false;
+    for (const entry of left) if (!right.has(entry)) return false;
+    return true;
+  }
+
+  function subsetSet(left, right) {
+    for (const entry of left) if (!right.has(entry)) return false;
+    return true;
+  }
+
+  function faceRayKeySet(analysis, face) {
+    return new Set((face?.rayIndices || []).map((index) => primitiveKey(analysis.extremeRays[index].primitive)));
+  }
+
+  function analysisHasFace(analysis, rayKeys) {
+    return (analysis.faces || []).some((face) => sameSet(faceRayKeySet(analysis, face), rayKeys));
+  }
+
+  function quotientVector(vector, annihilator) {
+    return annihilator.map((functional) => dotRational(functional, vector));
+  }
+
+  function conesMeetInSharedFace(left, right, ambientDimension, budget) {
+    const leftRays = left.extremeRays.map((ray) => ({ key: primitiveKey(ray.primitive), vector: ray.primitive.map(BigInt) }));
+    const rightRays = right.extremeRays.map((ray) => ({ key: primitiveKey(ray.primitive), vector: ray.primitive.map(BigInt) }));
+    const rightKeys = new Set(rightRays.map((ray) => ray.key));
+    const sharedKeys = new Set(leftRays.filter((ray) => rightKeys.has(ray.key)).map((ray) => ray.key));
+    if (!analysisHasFace(left, sharedKeys) || !analysisHasFace(right, sharedKeys)) {
+      return { compatible: false, sharedKeys: Array.from(sharedKeys), reason: "shared rays do not form a face of both cones" };
+    }
+    const sharedVectors = leftRays.filter((ray) => sharedKeys.has(ray.key)).map((ray) => ray.vector);
+    const annihilator = nullspace(sharedVectors, ambientDimension);
+    const combined = [];
+    leftRays.filter((ray) => !sharedKeys.has(ray.key)).forEach((ray) => {
+      const quotient = quotientVector(ray.vector, annihilator);
+      if (quotient.some((entry) => !entry.isZero())) combined.push(quotient);
+    });
+    rightRays.filter((ray) => !sharedKeys.has(ray.key)).forEach((ray) => {
+      const quotient = quotientVector(ray.vector, annihilator).map((entry) => entry.neg());
+      if (quotient.some((entry) => !entry.isZero())) combined.push(quotient);
+    });
+    if (!combined.length) return { compatible: true, sharedKeys: Array.from(sharedKeys) };
+    const quotientDimension = annihilator.length;
+    const basis = selectIndependentBasis(combined, quotientDimension);
+    const relative = combined.map((vector) => coordinatesInBasis(vector, basis, quotientDimension));
+    const dependence = findPositiveDependence(relative, basis.length, budget);
+    return dependence
+      ? { compatible: false, sharedKeys: Array.from(sharedKeys), reason: "the cone intersection is larger than their shared face" }
+      : { compatible: true, sharedKeys: Array.from(sharedKeys) };
+  }
+
+  function fanConeFromRays(id, label, rays, indices) {
+    return {
+      id,
+      label,
+      generators: indices.map((rayIndex, index) => ({
+        id: `${id}-generator-${index + 1}`,
+        label: rays[rayIndex].label,
+        coordinates: rays[rayIndex].coordinates.slice(),
+      })),
+    };
+  }
+
+  function presetFan(kind, ambientDimension) {
+    const dimension = Math.max(2, Math.min(8, Math.round(Number(ambientDimension) || 2)));
+    const coordinateRay = (index) => Array.from({ length: dimension }, (_, coordinate) => coordinate === index ? 1 : 0);
+    if (kind === "affine-space") {
+      const rays = Array.from({ length: dimension }, (_, index) => ({ label: `rho_${index + 1}`, coordinates: coordinateRay(index).map(String) }));
+      return [fanConeFromRays("cone-1", "sigma_1", rays, rays.map((_, index) => index))];
+    }
+    const lastCoordinates = Array.from({ length: dimension }, (_, index) => (
+      kind === "weighted-projective-space" && index === dimension - 1 ? -2 : -1
+    ));
+    const rays = [
+      ...Array.from({ length: dimension }, (_, index) => ({ label: `rho_${index + 1}`, coordinates: coordinateRay(index).map(String) })),
+      { label: `rho_${dimension + 1}`, coordinates: lastCoordinates.map(String) },
+    ];
+    return rays.map((_, omitted) => fanConeFromRays(
+      `cone-${omitted + 1}`,
+      `sigma_${omitted + 1}`,
+      rays,
+      rays.map((entry, index) => index).filter((index) => index !== omitted)
+    ));
+  }
+
+  function analyzeFan(input = {}, requestedLimits = {}) {
+    const ambientDimension = Math.max(2, Math.min(8, Math.round(Number(input.ambientDimension) || 2)));
+    const limits = { ...DEFAULT_LIMITS, ...(requestedLimits || {}) };
+    const rawCones = Array.isArray(input.cones) ? input.cones : [];
+    if (rawCones.length > limits.maxCones) {
+      return {
+        status: "capped",
+        valid: false,
+        ambientDimension,
+        issues: [`Fan has ${rawCones.length} entered cones; the exact browser limit is ${limits.maxCones}.`],
+        warnings: [],
+      };
+    }
+    const coneAnalyses = rawCones.map((cone, index) => ({
+      id: String(cone?.id || `cone-${index + 1}`),
+      label: String(cone?.label || `sigma_${index + 1}`),
+      sourceId: String(cone?.sourceId || ""),
+      analysis: analyzeCone({ ambientDimension, generators: cone?.generators || [] }, limits),
+    }));
+    const issues = [];
+    const warnings = [];
+    coneAnalyses.forEach((cone) => {
+      if (!cone.analysis.valid) issues.push(`${cone.label}: ${(cone.analysis.issues || [cone.analysis.status]).join(" ")}`);
+    });
+    if (issues.length) {
+      return { status: "invalid", valid: false, ambientDimension, coneCount: rawCones.length, cones: coneAnalyses, issues, warnings };
+    }
+
+    const budget = makeBudget(limits);
+    try {
+      for (let left = 0; left < coneAnalyses.length; left += 1) {
+        for (let right = left + 1; right < coneAnalyses.length; right += 1) {
+          budget.tick();
+          const intersection = conesMeetInSharedFace(coneAnalyses[left].analysis, coneAnalyses[right].analysis, ambientDimension, budget);
+          if (!intersection.compatible) {
+            issues.push(`${coneAnalyses[left].label} and ${coneAnalyses[right].label} do not meet in a common face: ${intersection.reason}.`);
+          }
+        }
+      }
+
+      const globalRayMap = new Map();
+      coneAnalyses.forEach((cone) => cone.analysis.extremeRays.forEach((ray) => {
+        const key = primitiveKey(ray.primitive);
+        if (!globalRayMap.has(key)) {
+          globalRayMap.set(key, {
+            key,
+            label: ray.label,
+            primitive: ray.primitive.slice(),
+            numeric: ray.numeric.slice(),
+            coneIds: [],
+          });
+        }
+        globalRayMap.get(key).coneIds.push(cone.id);
+      }));
+      const rays = Array.from(globalRayMap.values()).map((ray, index) => ({ ...ray, rayIndex: index, divisorLabel: `D_${index + 1}` }));
+      const rayIndexByKey = new Map(rays.map((ray) => [ray.key, ray.rayIndex]));
+      const faceMap = new Map();
+      const ensureFace = (rayKeys, dimension, coneId) => {
+        const key = rayKeys.slice().sort().join("|") || "0";
+        if (!faceMap.has(key)) faceMap.set(key, { key, dimension, rayKeys: rayKeys.slice().sort(), coneIds: [] });
+        const face = faceMap.get(key);
+        if (coneId && !face.coneIds.includes(coneId)) face.coneIds.push(coneId);
+      };
+      ensureFace([], 0, "");
+      coneAnalyses.forEach((cone) => cone.analysis.faces.forEach((face) => {
+        ensureFace(Array.from(faceRayKeySet(cone.analysis, face)), face.dimension, cone.id);
+      }));
+      if (faceMap.size > limits.maxFaces) throw new ComplexityError(`Fan face lattice exceeded ${limits.maxFaces.toLocaleString()} faces.`);
+      const faces = Array.from(faceMap.values()).map((face) => ({
+        ...face,
+        rayIndices: face.rayKeys.map((key) => rayIndexByKey.get(key)),
+        rayLabels: face.rayKeys.map((key) => rays[rayIndexByKey.get(key)]?.label || key),
+        orbitDimension: ambientDimension - face.dimension,
+      })).sort((left, right) => left.dimension - right.dimension || left.key.localeCompare(right.key));
+
+      const distinctCones = [];
+      const seenConeKeys = new Set();
+      coneAnalyses.forEach((cone) => {
+        const rayKeys = new Set(cone.analysis.extremeRays.map((ray) => primitiveKey(ray.primitive)));
+        const key = Array.from(rayKeys).sort().join("|") || "0";
+        if (seenConeKeys.has(key)) {
+          warnings.push(`${cone.label} duplicates an already selected cone and is ignored in fan counts.`);
+          return;
+        }
+        seenConeKeys.add(key);
+        distinctCones.push({ ...cone, key, rayKeys, dimension: cone.analysis.dimension });
+      });
+      const maximalCones = distinctCones.filter((cone) => !distinctCones.some((candidate) => (
+        candidate !== cone && cone.rayKeys.size < candidate.rayKeys.size && subsetSet(cone.rayKeys, candidate.rayKeys)
+      )));
+      const fanDimension = maximalCones.reduce((maximum, cone) => Math.max(maximum, cone.dimension), 0);
+      const pure = maximalCones.every((cone) => cone.dimension === fanDimension);
+      const fullDimensional = fanDimension === ambientDimension;
+      const facetAdjacencies = faces.filter((face) => face.dimension === ambientDimension - 1).map((face) => ({
+        faceKey: face.key,
+        count: maximalCones.filter((cone) => face.rayKeys.every((key) => cone.rayKeys.has(key))).length,
+      }));
+      const complete = issues.length === 0 && fullDimensional && pure && maximalCones.length > 0 && facetAdjacencies.every((entry) => entry.count === 2);
+      const smooth = coneAnalyses.every((cone) => cone.analysis.smooth);
+      const simplicial = coneAnalyses.every((cone) => cone.analysis.simplicial);
+      const classGroupValue = classGroup(rays.map((ray) => ray.primitive.map(BigInt)), ambientDimension);
+      return {
+        status: issues.length ? "invalid" : "computed",
+        valid: issues.length === 0,
+        compatible: issues.length === 0,
+        ambientDimension,
+        dimension: fanDimension,
+        coneCount: distinctCones.length,
+        maximalConeCount: maximalCones.length,
+        rayCount: rays.length,
+        faceCount: faces.length,
+        orbitCount: faces.length,
+        cones: coneAnalyses,
+        maximalConeIds: maximalCones.map((cone) => cone.id),
+        rays,
+        faces,
+        pure,
+        fullDimensional,
+        complete,
+        smooth,
+        simplicial,
+        qFactorial: simplicial,
+        locallyFactorial: smooth,
+        classGroup: classGroupValue,
+        canonicalDivisor: rays.length ? `-${rays.map((ray) => ray.divisorLabel).join(" - ")}` : "0",
+        issues,
+        warnings,
+        metrics: { candidateChecks: budget.candidates },
+      };
+    } catch (error) {
+      if (!(error instanceof ComplexityError)) throw error;
+      return {
+        status: "capped",
+        valid: false,
+        ambientDimension,
+        coneCount: rawCones.length,
+        cones: coneAnalyses,
+        issues: [error.message],
+        warnings,
+        metrics: { candidateChecks: budget.candidates },
+      };
+    }
+  }
+
   return {
     DEFAULT_LIMITS,
     Rational,
     parseRational,
     primitiveVector,
     analyzeCone,
+    analyzeFan,
     sliceCone,
     presetGenerators,
+    presetFan,
     _internal: {
       determinantBigInt,
       matrixRank,

@@ -34,6 +34,7 @@
     { key: "tropical-polynomial", label: "tropical polynomial", color: "#2f6fb0", pointSize: 4, lineWidth: 2 },
     { key: "weyl-chambers", label: "Weyl chambers", color: "#7b5cb8", pointSize: 4, lineWidth: 2 },
     { key: "toric-cone", label: "rational cone", color: "#2c6f78", pointSize: 5, lineWidth: 2 },
+    { key: "toric-fan", label: "toric variety (fan)", color: "#7f5b3b", pointSize: 5, lineWidth: 2 },
   ];
   const TROPICAL_DISTRICT_COLORS = [
     "#d95f5f",
@@ -125,6 +126,7 @@
   const DEFAULT_CANVAS_LABEL_SIZE_REM = 1.05;
   const TORIC_ANALYSIS_LIMITS = Object.freeze({ maxGenerators: 32, maxFaces: 4096, maxCandidates: 500000 });
   const TORIC_PRESETS = new Set(["zero", "positive-orthant", "singular-simplicial", "square-cone"]);
+  const TORIC_FAN_PRESETS = new Set(["affine-space", "projective-space", "weighted-projective-space"]);
   const regularGeometryCache = new Map();
   const regularHalfspaceCache = new Map();
   const weylRootSystemCache = new Map();
@@ -138,6 +140,7 @@
   const lmfdbFieldSearchDrafts = new Map();
   const toricAnalysisCache = new Map();
   const toricAnalysisPending = new Map();
+  const toricFanAnalysisCache = new Map();
   const toricSliceIssueByObject = new Map();
   let toricAnalysisWorker = null;
   let toricWorkerUnavailable = false;
@@ -194,6 +197,7 @@
     addLatticeVariant: "matrix-input",
     addVoronoiLatticeSourceId: "",
     addToricPreset: "zero",
+    addToricFanPreset: "projective-space",
     objects: [],
     activeObjectId: null,
     selectedVertex: null,
@@ -206,6 +210,7 @@
     weylKlTargetChamber: null,
     activeToricFace: null,
     toricTab: "build",
+    toricFanTab: "build",
     toricConePickCandidates: [],
     weightInfoDimensionMode: "none",
     lastWarning: "Projection and exact/numeric 2D slice layers are active.",
@@ -301,6 +306,10 @@
   function normalizeMatrixInputMode(mode) {
     if (mode === "manual input") return "manual";
     return MATRIX_INPUT_MODES.has(mode) ? mode : "manual";
+  }
+
+  function normalizeToricImportOrientation(value) {
+    return value === "legacy-rows" ? "legacy-rows" : "columns";
   }
 
   function normalizeMatrixPresetKind(kind) {
@@ -3490,6 +3499,7 @@
     if (typeKey === "tropical-polynomial") return "tropical polynomial";
     if (typeKey === "weyl-chambers") return "Weyl chambers";
     if (typeKey === "toric-cone") return "rational cone";
+    if (typeKey === "toric-fan") return "toric variety";
     if (typeKey === "cube") return "cube";
     return "regular polytope";
   }
@@ -3510,6 +3520,7 @@
     if (typeKey === "tropical-polynomial") return makeTropicalPolynomialData(n);
     if (typeKey === "weyl-chambers") return makeWeylChambersData(n, options);
     if (typeKey === "toric-cone") return makeToricConeData(n, options.toricPreset || options.preset || "zero");
+    if (typeKey === "toric-fan") return makeToricFanData(n, options.toricFanPreset || options.preset || "projective-space");
     return makeRegularPolytopeData(n, "hypercube");
   }
 
@@ -3787,7 +3798,50 @@
       ambientDimension: n,
       generators: toricPresetGenerators(normalizedPreset, n),
       preset: normalizedPreset,
+      generatorInputMode: "manual",
+      generatorImportOrientation: "columns",
       description: `Strongly convex rational polyhedral cone in N_R of rank ${n}, with affine toric variety U_sigma.`,
+    };
+  }
+
+  function normalizeToricFanPreset(value) {
+    return TORIC_FAN_PRESETS.has(value) ? value : "projective-space";
+  }
+
+  function normalizeToricFanSourceMode(value) {
+    return value === "cone-list" ? "cone-list" : "preset";
+  }
+
+  function toricFanPresetCones(preset, n = state.ambientDim) {
+    return window.ToricConeMath?.presetFan(normalizeToricFanPreset(preset), n) || [];
+  }
+
+  function cloneToricFanCone(cone, n = state.ambientDim) {
+    return {
+      id: String(cone?.id || ""),
+      label: String(cone?.label || "cone"),
+      sourceId: String(cone?.sourceId || ""),
+      generators: (Array.isArray(cone?.generators) ? cone.generators : []).map((generator, index) => ({
+        id: String(generator?.id || `generator-${index + 1}`),
+        label: String(generator?.label || `u_${index + 1}`),
+        coordinates: resizeVector(Array.isArray(generator?.coordinates) ? generator.coordinates : [], n).map((value) => String(value ?? "0")),
+      })),
+    };
+  }
+
+  function makeToricFanData(n, preset = "projective-space") {
+    const normalizedPreset = normalizeToricFanPreset(preset);
+    return {
+      name: currentTypeLabel("toric-fan", n),
+      kind: "toric",
+      objectType: "toric-fan",
+      ambientDimension: n,
+      constructionMode: "preset",
+      preset: normalizedPreset,
+      coneSourceIds: [],
+      cones: toricFanPresetCones(normalizedPreset, n).map((cone) => cloneToricFanCone(cone, n)),
+      characterLatticeSourceId: "",
+      description: `Normal toric variety X_Sigma assembled from a rational fan Sigma in N_R of rank ${n}.`,
     };
   }
 
@@ -3824,6 +3878,7 @@
     if (state.addType === "lattice") return parseLatticeAddVariant(state.addLatticeVariant, state.ambientDim);
     if (state.addType === "voronoi-diagram") return parseVoronoiAddVariant(state.addVoronoiLatticeSourceId, state.ambientDim);
     if (state.addType === "toric-cone") return { toricPreset: normalizeToricPreset(state.addToricPreset, state.ambientDim) };
+    if (state.addType === "toric-fan") return { toricFanPreset: normalizeToricFanPreset(state.addToricFanPreset) };
     return {};
   }
 
@@ -3975,6 +4030,7 @@
             warnings: [],
           });
         }
+        if (state.activeObjectId === object.id && state.sourceMode === "modify") syncObjectPanel();
         renderAll();
       });
       toricAnalysisWorker.addEventListener("error", () => {
@@ -3987,6 +4043,7 @@
           const object = state.objects.find((candidate) => candidate.id === entry.objectId);
           if (object && toricConeRevision(object) === entry.revision) computeToricAnalysisSync(object, entry.revision);
         });
+        if (objectTypeKey(activeObject()) === "toric-cone" && state.sourceMode === "modify") syncObjectPanel();
         renderAll();
       });
     } catch {
@@ -4013,6 +4070,7 @@
       "tropical-polynomial": "tropical",
       "weyl-chambers": "Weyl chambers",
       "toric-cone": "toric cone",
+      "toric-fan": "toric variety",
     };
     const type = object?.data?.objectType || object?.kind || "object";
     return labels[type] || type;
@@ -4150,6 +4208,22 @@
       select.value = state.addToricPreset;
       select.setAttribute("aria-label", "Rational cone preset");
       select.title = "Rational cone preset";
+    } else if (state.addType === "toric-fan") {
+      const options = [
+        ["projective-space", "projective space P^n"],
+        ["affine-space", "affine space A^n"],
+        ["weighted-projective-space", "weighted P(1,...,1,2)"],
+      ];
+      state.addToricFanPreset = normalizeToricFanPreset(state.addToricFanPreset);
+      options.forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        select.appendChild(option);
+      });
+      select.value = state.addToricFanPreset;
+      select.setAttribute("aria-label", "Toric variety fan preset");
+      select.title = "Toric variety fan preset";
     } else {
       select.setAttribute("aria-label", "Source variant");
       select.title = "";
@@ -4185,7 +4259,7 @@
       state.addRegularFamily = normalizeRegularFamily(state.addRegularFamily, state.ambientDim);
       state.addWeylDynkinType = normalizeWeylDynkinType(state.addWeylDynkinType, state.ambientDim);
       fillAddVariantSelect();
-      variantSelect.hidden = !["regular-polytope", "dynkin-type", "root-set", "weyl-chambers", "matrix", "lattice", "voronoi-diagram", "toric-cone"].includes(state.addType);
+      variantSelect.hidden = !["regular-polytope", "dynkin-type", "root-set", "weyl-chambers", "matrix", "lattice", "voronoi-diagram", "toric-cone", "toric-fan"].includes(state.addType);
       variantSelect.disabled = variantSelect.hidden || (state.addType === "voronoi-diagram" && !defaultLatticeSourceId(state.ambientDim));
     }
     const addButton = $("source-add-object");
@@ -4397,19 +4471,44 @@
     return new Map((analysis?.generators || []).map((generator) => [generator.id, generator]));
   }
 
-  function commitToricGeneratorRow(object, generator, row) {
-    const coordinates = Array.from(row.querySelectorAll("[data-toric-coordinate]")).map((input) => input.value.trim());
-    generator.coordinates = coordinates;
-    try {
-      const primitive = window.ToricConeMath.primitiveVector(coordinates, state.ambientDim);
-      if (!primitive.zero) generator.coordinates = primitive.exact;
-    } catch {
-      // Invalid text remains part of the editable draft and is diagnosed by the exact analyzer.
-    }
+  function applyToricManualMatrix(object) {
+    const grid = $("toric-cone-generators");
+    if (!grid) return;
+    (object.data?.generators || []).forEach((generator, index) => {
+      const labelInput = Array.from(grid.querySelectorAll("[data-toric-generator-label-id]"))
+        .find((input) => input.dataset.toricGeneratorLabelId === generator.id);
+      const coordinates = Array.from(grid.querySelectorAll("[data-toric-coordinate]"))
+        .filter((input) => input.dataset.toricGeneratorId === generator.id)
+        .sort((left, right) => Number(left.dataset.toricCoordinate) - Number(right.dataset.toricCoordinate))
+        .map((input) => input.value.trim());
+      generator.label = labelInput?.value.trim() || generator.label || `u_${index + 1}`;
+      generator.coordinates = coordinates;
+      try {
+        const primitive = window.ToricConeMath.primitiveVector(coordinates, state.ambientDim);
+        if (!primitive.zero) generator.coordinates = primitive.exact;
+      } catch {
+        // Invalid text remains part of the editable draft and is diagnosed by the exact analyzer.
+      }
+    });
     object.data.preset = "zero";
     invalidateToricAnalysis(object);
-    state.lastWarning = `${generator.label} updated; exact cone analysis restarted.`;
+    state.activeToricFace = null;
+    state.lastWarning = `Manual ray matrix applied; columns were primitive-normalized where valid.`;
+    syncObjectPanel();
     renderAll();
+  }
+
+  function toricGeneratorMatrixRows(object, dimension = state.ambientDim) {
+    const generators = object?.data?.generators || [];
+    return Array.from({ length: dimension }, (_, row) => generators.map((generator) => (
+      String(resizeVector(generator.coordinates || [], dimension)[row] ?? "0")
+    )));
+  }
+
+  function toricGeneratorMatrixText(object, dimension = state.ambientDim) {
+    const generators = object?.data?.generators || [];
+    if (!generators.length) return "";
+    return toricGeneratorMatrixRows(object, dimension).map((row) => row.join(", ")).join("\n");
   }
 
   function deleteToricConeObject(object, message = "Toric cone deleted with its affine variety.") {
@@ -4430,88 +4529,180 @@
   }
 
   function renderToricGeneratorEditor(object, analysis, force = false) {
-    const list = $("toric-cone-generators");
-    if (!list) return;
+    const grid = $("toric-cone-generators");
+    if (!grid) return;
     const analysisKey = (analysis?.generators || []).map((generator) => `${generator.id}:${generator.status}`).join("|");
     const editorKey = `${object.id}:${toricConeRevision(object)}:${analysis?.status || "missing"}:${analysisKey}`;
     if (!force && toricRenderedEditorKey === editorKey) return;
     toricRenderedEditorKey = editorKey;
-    list.innerHTML = "";
+    grid.innerHTML = "";
     const generators = object.data?.generators || [];
     if (!generators.length) {
       const note = document.createElement("span");
       note.className = "slice-card-note";
       note.textContent = `The zero cone has no generators and realizes the torus (G_m)^${state.ambientDim}.`;
-      list.append(note);
+      grid.style.gridTemplateColumns = "minmax(0, 1fr)";
+      grid.append(note);
+      return;
     }
+    grid.style.gridTemplateColumns = `44px repeat(${generators.length}, 78px)`;
     const analyzed = toricGeneratorAnalysisMap(analysis);
+
+    const corner = document.createElement("span");
+    corner.className = "slice-toric-matrix-corner";
+    corner.textContent = "U";
+    grid.append(corner);
+
     generators.forEach((generator, index) => {
-      const row = document.createElement("div");
-      row.className = "slice-toric-generator-row";
-      row.dataset.toricGeneratorId = generator.id;
+      const head = document.createElement("div");
+      head.className = "slice-toric-ray-head";
       const label = document.createElement("input");
       label.className = "slice-input slice-toric-generator-label";
       label.type = "text";
       label.value = generator.label;
+      label.dataset.toricGeneratorLabelId = generator.id;
       label.setAttribute("aria-label", `Generator ${index + 1} label`);
-      label.addEventListener("change", () => {
-        generator.label = label.value.trim() || `u_${index + 1}`;
-        invalidateToricAnalysis(object);
-        renderAll();
-      });
-      const coordinates = document.createElement("div");
-      coordinates.className = "slice-toric-coordinate-list";
-      coordinates.style.setProperty("--toric-coordinate-count", String(state.ambientDim));
-      resizeVector(generator.coordinates || [], state.ambientDim).forEach((value, coordinate) => {
-        const input = document.createElement("input");
-        input.className = "slice-input slice-toric-coordinate";
-        input.type = "text";
-        input.inputMode = "decimal";
-        input.value = String(value ?? "0");
-        input.dataset.toricCoordinate = String(coordinate);
-        input.setAttribute("aria-label", `${generator.label} coordinate ${coordinate + 1}`);
-        input.addEventListener("change", () => commitToricGeneratorRow(object, generator, row));
-        coordinates.append(input);
-      });
       const remove = document.createElement("button");
       remove.className = "slice-icon-btn";
       remove.type = "button";
-      remove.textContent = "del";
+      remove.textContent = "x";
       remove.title = "delete this cone and its affine variety";
       remove.setAttribute("aria-label", `Delete cone because ${generator.label} is being deleted`);
       remove.addEventListener("click", () => {
         const confirmed = typeof window.confirm !== "function" || window.confirm(`Deleting ${generator.label} deletes the entire cone ${object.name} and U_sigma. Continue?`);
         if (confirmed) deleteToricConeObject(object, `${object.name} deleted because generator ${generator.label} was deleted.`);
       });
+      head.append(label, remove);
+      grid.append(head);
+    });
+
+    for (let coordinate = 0; coordinate < state.ambientDim; coordinate += 1) {
+      const rowLabel = document.createElement("span");
+      rowLabel.className = "slice-toric-matrix-row-label";
+      rowLabel.textContent = `e_${coordinate + 1}`;
+      grid.append(rowLabel);
+      generators.forEach((generator) => {
+        const entry = analyzed.get(generator.id);
+        const input = document.createElement("input");
+        input.className = "slice-input slice-toric-coordinate";
+        if (["invalid", "zero"].includes(entry?.status)) input.classList.add("slice-toric-generator-cell-invalid");
+        input.type = "text";
+        input.inputMode = "decimal";
+        input.value = String(resizeVector(generator.coordinates || [], state.ambientDim)[coordinate] ?? "0");
+        input.dataset.toricGeneratorId = generator.id;
+        input.dataset.toricCoordinate = String(coordinate);
+        input.setAttribute("aria-label", `${generator.label} coordinate ${coordinate + 1}`);
+        grid.append(input);
+      });
+    }
+
+    const statusLabel = document.createElement("span");
+    statusLabel.className = "slice-toric-matrix-row-label";
+    statusLabel.textContent = "status";
+    grid.append(statusLabel);
+    generators.forEach((generator) => {
       const meta = document.createElement("div");
-      meta.className = "slice-toric-generator-meta";
+      meta.className = "slice-toric-column-meta";
       const entry = analyzed.get(generator.id);
       const status = entry?.status || analysis?.status || "pending";
       const statusBadge = document.createElement("span");
       statusBadge.className = `slice-toric-generator-status ${status}`;
       statusBadge.textContent = status;
+      if (entry?.error) statusBadge.title = entry.error;
       meta.append(statusBadge);
       if (entry?.primitive) {
         const primitive = document.createElement("span");
-        primitive.className = "slice-card-note";
-        primitive.textContent = `primitive (${entry.primitive.join(", ")})`;
+        primitive.className = "slice-toric-primitive";
+        primitive.textContent = `(${entry.primitive.join(", ")})`;
         meta.append(primitive);
       }
       if (entry?.redundancyWitness?.length) {
         const witness = document.createElement("span");
-        witness.className = "slice-card-note";
+        witness.className = "slice-toric-primitive";
         witness.textContent = `in cone(${entry.redundancyWitness.join(", ")})`;
         meta.append(witness);
       }
       if (entry?.error) {
         const error = document.createElement("span");
-        error.className = "slice-card-note";
+        error.className = "slice-toric-primitive";
         error.textContent = entry.error;
         meta.append(error);
       }
-      row.append(label, coordinates, remove, meta);
-      list.append(row);
+      grid.append(meta);
     });
+  }
+
+  function renderToricInputMode(object) {
+    const mode = normalizeMatrixInputMode(object.data?.generatorInputMode);
+    object.data.generatorInputMode = mode;
+    $("toric-cone-input-mode-controls")?.querySelectorAll("[data-toric-input-mode]").forEach((button) => {
+      const active = button.dataset.toricInputMode === mode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+    document.querySelectorAll("[data-toric-input-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.toricInputPanel !== mode;
+    });
+  }
+
+  function renderToricImportEditor(object) {
+    const orientation = normalizeToricImportOrientation(object.data?.generatorImportOrientation);
+    object.data.generatorImportOrientation = orientation;
+    const select = $("toric-cone-import-orientation");
+    const textarea = $("toric-cone-rows-import");
+    if (select) select.value = orientation;
+    if (!textarea) return;
+    const sourceKey = `${toricConeRevision(object)}:${orientation}`;
+    if (textarea.dataset.toricSourceKey !== sourceKey) {
+      textarea.value = orientation === "legacy-rows"
+        ? (object.data?.generators || []).map((generator) => resizeVector(generator.coordinates || [], state.ambientDim).join(", ")).join("\n")
+        : toricGeneratorMatrixText(object);
+      textarea.dataset.toricSourceKey = sourceKey;
+    }
+  }
+
+  function renderToricTargetEditor(object) {
+    const slots = $("toric-cone-target-slots");
+    const note = $("toric-cone-target-note");
+    if (!slots || !note) return;
+    slots.innerHTML = "";
+    const generators = object.data?.generators || [];
+    if (!generators.length) {
+      const empty = document.createElement("span");
+      empty.className = "slice-card-note";
+      empty.textContent = "The zero cone has no ray columns. Add a ray column before choosing a target.";
+      slots.append(empty);
+      note.textContent = "Targets fill existing ray columns; the zero cone remains unchanged.";
+      return;
+    }
+    generators.forEach((generator, index) => {
+      const button = document.createElement("button");
+      const active = targetSessionMatches(object, "generators", index);
+      button.className = `slice-target-slot-button${active ? " active" : ""}`;
+      button.type = "button";
+      button.dataset.toricTargetSlot = String(index);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+      button.title = `Activate ${generator.label} ray target`;
+      button.textContent = generator.label;
+      const tuple = document.createElement("span");
+      tuple.className = "slice-toric-target-display";
+      tuple.textContent = `(${resizeVector(generator.coordinates || [], state.ambientDim).join(", ")})`;
+      button.append(tuple);
+      button.addEventListener("click", () => {
+        if (active) {
+          clearVectorTargetSession();
+          state.lastWarning = `${object.name} ray target cleared.`;
+        } else {
+          activateVectorTargetSlot(object, "generators", index, generator.label);
+        }
+        renderAll();
+      });
+      slots.append(button);
+    });
+    const activeIndex = activeTargetSlotIndex(object, "generators", generators.length);
+    note.textContent = activeIndex == null
+      ? "Select a ray column, then click a visible point or fill from a vector object."
+      : `Active ray: ${generators[activeIndex].label}. Click a visible point or fill from a vector object.`;
   }
 
   function renderToricVectorSource() {
@@ -4538,7 +4729,8 @@
     });
     if (vectors.some((vector) => vector.id === previous)) select.value = previous;
     select.disabled = false;
-    button.disabled = false;
+    const object = activeToricConeObject();
+    button.disabled = !object?.data?.generators?.length;
   }
 
   function renderToricValidation(analysis, object) {
@@ -4705,7 +4897,10 @@
     const analysis = toricConeAnalysis(object);
     setToricTab(state.toricTab);
     renderToricSummary(object, analysis);
+    renderToricInputMode(object);
     renderToricGeneratorEditor(object, analysis, options.forceEditor);
+    renderToricImportEditor(object);
+    renderToricTargetEditor(object);
     renderToricVectorSource();
     renderToricValidation(analysis, object);
     renderToricFaces(object, analysis);
@@ -4907,9 +5102,46 @@
     return true;
   }
 
+  function commitToricGeneratorTargetValue(target, rawVector, sourceLabel = "vector", targetDisplayLabel = "") {
+    const object = state.objects.find((candidate) => candidate.id === target.objectId && objectTypeKey(candidate) === "toric-cone");
+    const generator = object?.data?.generators?.[target.slotIndex];
+    if (!object || !generator) {
+      clearVectorTargetSession();
+      state.lastWarning = "The selected ray target is no longer available.";
+      renderAll();
+      return false;
+    }
+    const raw = resizeVector(Array.isArray(rawVector) ? rawVector : [], state.ambientDim).map((value) => String(value ?? "0"));
+    let coordinates = raw;
+    try {
+      const primitive = window.ToricConeMath.primitiveVector(raw, state.ambientDim);
+      if (!primitive.zero) coordinates = primitive.exact;
+    } catch (error) {
+      state.lastWarning = `Ray target rejected: ${error.message}`;
+      renderAll();
+      return false;
+    }
+    generator.coordinates = coordinates;
+    if (targetDisplayLabel && (!generator.label || /^u_\d+$/.test(generator.label))) generator.label = String(targetDisplayLabel);
+    object.data.preset = "zero";
+    invalidateToricAnalysis(object);
+    state.activeObjectId = object.id;
+    state.sourceMode = "modify";
+    state.selectedVertex = null;
+    state.activeTropicalDistrict = null;
+    clearWeylInteraction();
+    state.lastWarning = `${generator.label} filled from ${sourceLabel} and primitive-normalized.`;
+    syncObjectSelect();
+    syncObjectPanel();
+    syncSourceMode();
+    renderAll();
+    return true;
+  }
+
   function commitVectorTargetValue(target, rawVector, sourceLabel = "vector", targetDisplayLabel = "") {
     if (!target) return false;
     if (target.targetDraftKey) return commitMatrixTargetDraftValue(target, rawVector, sourceLabel, targetDisplayLabel);
+    if (target.fieldKey === "generators") return commitToricGeneratorTargetValue(target, rawVector, sourceLabel, targetDisplayLabel);
     const object = state.objects.find((candidate) => candidate.id === target.objectId);
     if (!object) {
       clearVectorTargetSession();
@@ -7782,6 +8014,8 @@
       ambientDimension: n,
       generators,
       preset: normalizeToricPreset(data.preset, n),
+      generatorInputMode: normalizeMatrixInputMode(data.generatorInputMode),
+      generatorImportOrientation: normalizeToricImportOrientation(data.generatorImportOrientation),
       description: data.description || `Strongly convex rational polyhedral cone in N_R of rank ${n}, with affine toric variety U_sigma.`,
     };
   }
@@ -8097,13 +8331,22 @@
   function replaceToricGenerators(object, generators, message) {
     object.data.generators = generators;
     object.data.preset = "zero";
+    if (state.activeVectorTarget?.objectId === object.id && state.activeVectorTarget.fieldKey === "generators") {
+      clearVectorTargetSession();
+    }
     invalidateToricAnalysis(object);
     state.activeToricFace = null;
     state.lastWarning = message;
+    syncObjectPanel();
     renderAll();
   }
 
   function appendToricGenerator(object, coordinates, label = "") {
+    if ((object.data?.generators || []).length >= TORIC_ANALYSIS_LIMITS.maxGenerators) {
+      state.lastWarning = `A toric cone accepts at most ${TORIC_ANALYSIS_LIMITS.maxGenerators} entered ray columns.`;
+      renderAll();
+      return false;
+    }
     const existingIds = new Set((object.data?.generators || []).map((generator) => generator.id));
     const id = nextToricGeneratorId(existingIds);
     const index = object.data.generators.length;
@@ -8119,12 +8362,17 @@
     object.data.preset = "zero";
     invalidateToricAnalysis(object);
     state.lastWarning = `${object.data.generators[index].label} added to ${object.name}.`;
+    syncObjectPanel();
     renderAll();
+    return true;
   }
 
   function parseToricGeneratorRows(raw, dimension = state.ambientDim) {
     const rows = String(raw || "").split(/\n|;/).map(cleanMatrixRowText).filter(Boolean);
     if (!rows.length) return [];
+    if (rows.length > TORIC_ANALYSIS_LIMITS.maxGenerators) {
+      throw new Error(`Generator import has ${rows.length} rows; the limit is ${TORIC_ANALYSIS_LIMITS.maxGenerators}.`);
+    }
     return rows.map((row, rowIndex) => {
       const entries = splitMatrixRowEntries(row);
       if (entries.length !== dimension) throw new Error(`Generator row ${rowIndex + 1} needs ${dimension} entries.`);
@@ -8138,6 +8386,56 @@
       const primitive = window.ToricConeMath.primitiveVector(entries, dimension);
       const coordinates = primitive.zero ? entries : primitive.exact;
       return { id: "", label: `u_${rowIndex + 1}`, coordinates };
+    });
+  }
+
+  function parseToricRayMatrix(raw, dimension = state.ambientDim, orientation = "columns") {
+    if (normalizeToricImportOrientation(orientation) === "legacy-rows") {
+      return parseToricGeneratorRows(raw, dimension);
+    }
+    const rows = String(raw || "").split(/\n|;/).map(cleanMatrixRowText).filter(Boolean);
+    if (!rows.length) return [];
+    if (rows.length !== dimension) throw new Error(`Ray matrix U needs ${dimension} rows, one for each ambient coordinate.`);
+    const entriesByRow = rows.map((row) => splitMatrixRowEntries(row));
+    const rayCount = entriesByRow[0].length;
+    if (!rayCount) return [];
+    if (rayCount > TORIC_ANALYSIS_LIMITS.maxGenerators) {
+      throw new Error(`Ray matrix U has ${rayCount} columns; the limit is ${TORIC_ANALYSIS_LIMITS.maxGenerators}.`);
+    }
+    entriesByRow.forEach((entries, row) => {
+      if (entries.length !== rayCount) throw new Error(`Ray matrix row ${row + 1} needs ${rayCount} entries.`);
+      entries.forEach((entry, column) => {
+        try {
+          window.ToricConeMath.parseRational(entry);
+        } catch (error) {
+          throw new Error(`Ray matrix entry ${row + 1}, ${column + 1}: ${error.message}`);
+        }
+      });
+    });
+    return Array.from({ length: rayCount }, (_, column) => {
+      const entries = entriesByRow.map((row) => row[column]);
+      const primitive = window.ToricConeMath.primitiveVector(entries, dimension);
+      return {
+        id: "",
+        label: `u_${column + 1}`,
+        coordinates: primitive.zero ? entries : primitive.exact,
+      };
+    });
+  }
+
+  function preserveToricGeneratorIdentity(object, generators) {
+    const previous = object.data?.generators || [];
+    const usedIds = new Set();
+    return generators.map((generator, index) => {
+      const prior = previous[index];
+      let id = String(prior?.id || "").trim();
+      if (!id || usedIds.has(id)) id = nextToricGeneratorId(usedIds);
+      usedIds.add(id);
+      return {
+        ...generator,
+        id,
+        label: String(prior?.label || generator.label || `u_${index + 1}`).trim() || `u_${index + 1}`,
+      };
     });
   }
 
@@ -8171,6 +8469,40 @@
       if (!button) return;
       setToricTab(button.dataset.toricTab);
     });
+    $("toric-cone-input-mode-controls")?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-toric-input-mode]");
+      const object = activeToricConeObject();
+      if (!button || !object) return;
+      const mode = normalizeMatrixInputMode(button.dataset.toricInputMode);
+      object.data.generatorInputMode = mode;
+      clearVectorTargetSession();
+      if (mode === "targets" && object.data.generators.length) {
+        activateVectorTargetSlot(object, "generators", 0, object.data.generators[0].label);
+      } else {
+        state.lastWarning = `Ray matrix ${mode === "manual" ? "manual input" : mode} is active.`;
+      }
+      renderAll();
+    });
+    $("toric-cone-import-orientation")?.addEventListener("change", () => {
+      const object = activeToricConeObject();
+      if (!object) return;
+      object.data.generatorImportOrientation = normalizeToricImportOrientation($("toric-cone-import-orientation").value);
+      state.lastWarning = object.data.generatorImportOrientation === "columns"
+        ? "Import expects n matrix rows with rays as columns."
+        : "Legacy import expects one complete ray vector per row.";
+      renderAll();
+    });
+    $("toric-cone-apply-manual")?.addEventListener("click", () => {
+      const object = activeToricConeObject();
+      if (object) applyToricManualMatrix(object);
+    });
+    $("toric-cone-generators")?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey)) return;
+      const object = activeToricConeObject();
+      if (!object) return;
+      event.preventDefault();
+      applyToricManualMatrix(object);
+    });
     $("toric-cone-apply-preset")?.addEventListener("click", () => {
       const object = activeToricConeObject();
       if (!object) return;
@@ -8181,8 +8513,12 @@
       const generators = toricPresetGenerators(preset, state.ambientDim);
       object.data.generators = generators;
       object.data.preset = preset;
+      if (state.activeVectorTarget?.objectId === object.id && state.activeVectorTarget.fieldKey === "generators") {
+        clearVectorTargetSession();
+      }
       invalidateToricAnalysis(object);
       state.lastWarning = `${object.name} reset to the ${$("toric-cone-preset").selectedOptions[0]?.textContent || preset} preset.`;
+      syncObjectPanel();
       renderAll();
     });
     $("toric-cone-add-generator")?.addEventListener("click", () => {
@@ -8195,21 +8531,30 @@
       const object = activeToricConeObject();
       const source = state.objects.find((candidate) => candidate.id === $("toric-cone-vector-source")?.value && objectTypeKey(candidate) === "vector");
       if (!object || !source) return;
-      appendToricGenerator(object, source.data?.vector || [], source.data?.label || `u_${object.data.generators.length + 1}`);
+      const slotIndex = activeTargetSlotIndex(object, "generators", object.data.generators.length);
+      if (slotIndex == null) {
+        state.lastWarning = "Choose a ray target before filling from a vector object.";
+        renderAll();
+        return;
+      }
+      commitVectorTargetValue({
+        objectId: object.id,
+        objectName: object.name,
+        fieldKey: "generators",
+        slotIndex,
+        slotLabel: object.data.generators[slotIndex].label,
+      }, source.data?.vector || [], `vector object ${source.name}`, source.data?.label || object.data.generators[slotIndex].label);
     });
     $("toric-cone-apply-rows")?.addEventListener("click", () => {
       const object = activeToricConeObject();
       if (!object) return;
       try {
-        const rows = parseToricGeneratorRows($("toric-cone-rows-import").value, state.ambientDim);
-        const existingIds = new Set();
-        rows.forEach((generator) => {
-          generator.id = nextToricGeneratorId(existingIds);
-          existingIds.add(generator.id);
-        });
-        replaceToricGenerators(object, rows, `${rows.length} generator rows imported into ${object.name}.`);
+        const orientation = normalizeToricImportOrientation(object.data.generatorImportOrientation);
+        const parsed = parseToricRayMatrix($("toric-cone-rows-import").value, state.ambientDim, orientation);
+        const generators = preserveToricGeneratorIdentity(object, parsed);
+        replaceToricGenerators(object, generators, `${generators.length} ray columns imported into ${object.name}.`);
       } catch (error) {
-        state.lastWarning = `Generator rows rejected: ${error.message}`;
+        state.lastWarning = `Ray matrix import rejected: ${error.message}`;
         renderAll();
       }
     });
@@ -8263,6 +8608,8 @@
         state.addVoronoiLatticeSourceId = value;
       } else if (state.addType === "toric-cone") {
         state.addToricPreset = normalizeToricPreset(value, state.ambientDim);
+      } else if (state.addType === "toric-fan") {
+        state.addToricFanPreset = normalizeToricFanPreset(value);
       }
       renderAll();
     });

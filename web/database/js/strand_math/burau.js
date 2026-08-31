@@ -88,11 +88,42 @@
     return out;
   }
 
+  function linkStateTlGeneratorMatrix(rank, generator) {
+    if (!Number.isInteger(rank) || rank < 2) throw new RangeError('The link-state Burau representation requires rank at least 2.');
+    if (!Number.isInteger(generator) || generator < 1 || generator >= rank) {
+      throw new RangeError(`Generator index ${generator} is outside 1,...,${rank - 1}.`);
+    }
+    const dimension = rank - 1;
+    const out = zeroMatrix(dimension);
+    const targetRow = generator - 1;
+    for (let source = 1; source < rank; source += 1) {
+      if (source === generator) out[targetRow][source - 1] = V.add(V_INVERSE);
+      else if (Math.abs(source - generator) === 1) out[targetRow][source - 1] = LaurentPolynomial.one();
+    }
+    return out;
+  }
+
+  function reducedBurauGeneratorMatrix(rank, generator, sign) {
+    const action = linkStateTlGeneratorMatrix(rank, generator);
+    const scalar = sign === -1 ? V_INVERSE : V;
+    return matrixAdd(identityMatrix(rank - 1), matrixScale(action, scalar.neg()));
+  }
+
   function evaluateBurauWord(rank, records, budget, relationsUsed) {
     let out = identityMatrix(rank);
     for (const record of records) {
       out = matrixMultiply(out, burauGeneratorMatrix(rank, record.index, record.sign), budget);
       relationsUsed?.add(record.sign === -1 ? 'burau-inverse-generator' : 'burau-generator');
+    }
+    return out;
+  }
+
+  function evaluateReducedBurauWord(rank, records, budget, relationsUsed) {
+    if (!Number.isInteger(rank) || rank < 2) throw new RangeError('The link-state Burau representation requires rank at least 2.');
+    let out = identityMatrix(rank - 1);
+    for (const record of records) {
+      out = matrixMultiply(out, reducedBurauGeneratorMatrix(rank, record.index, record.sign), budget);
+      relationsUsed?.add(record.sign === -1 ? 'reduced-burau-inverse-generator' : 'reduced-burau-generator');
     }
     return out;
   }
@@ -113,16 +144,39 @@
     return out;
   }
 
+  function evaluateTlDiagramLinkStateMatrix(diagram, budget) {
+    if (diagram.rank < 2) throw new RangeError('The link-state Burau representation requires rank at least 2.');
+    let out = identityMatrix(diagram.rank - 1);
+    for (const generator of diagram.word) {
+      out = matrixMultiply(out, linkStateTlGeneratorMatrix(diagram.rank, generator), budget);
+    }
+    return out;
+  }
+
+  function evaluateTlCombinationLinkStateMatrix(combination, rank, budget, relationsUsed) {
+    if (!Number.isInteger(rank) || rank < 2) throw new RangeError('The link-state Burau representation requires rank at least 2.');
+    let out = zeroMatrix(rank - 1);
+    for (const term of combination.terms.values()) {
+      const matrix = evaluateTlDiagramLinkStateMatrix(term.basis, budget);
+      out = matrixAdd(out, matrixScale(matrix, term.coefficient, budget));
+    }
+    relationsUsed?.add('tl-to-reduced-burau');
+    return out;
+  }
+
   function matrixToLinearCombination(matrix, basis) {
-    const basisType = basis === 'vector' ? 'burau-vector' : 'matrix-unit';
+    const basisType = basis === 'link-state'
+      ? 'burau-link-state'
+      : basis === 'vector' ? 'burau-vector' : 'matrix-unit';
     const out = new LinearCombination(basisType);
     for (let row = 0; row < matrix.length; row++) {
       for (let column = 0; column < matrix.length; column++) {
         if (matrix[row][column].isZero()) continue;
         out.addTerm({
-          key: basis === 'vector' ? `${column + 1}:${row + 1}` : `${row + 1}:${column + 1}`,
+          key: basis === 'matrix-unit' ? `${row + 1}:${column + 1}` : `${column + 1}:${row + 1}`,
           row: row + 1,
-          column: column + 1
+          column: column + 1,
+          ...(basis === 'link-state' ? { cupIndex: row + 1 } : {})
         }, matrix[row][column]);
       }
     }
@@ -143,9 +197,14 @@
     matrixEquals,
     burauGeneratorMatrix,
     tlGeneratorMatrix,
+    linkStateTlGeneratorMatrix,
+    reducedBurauGeneratorMatrix,
     evaluateBurauWord,
+    evaluateReducedBurauWord,
     evaluateTlDiagramMatrix,
     evaluateTlCombinationMatrix,
+    evaluateTlDiagramLinkStateMatrix,
+    evaluateTlCombinationLinkStateMatrix,
     matrixToLinearCombination,
     matrixToJSON
   };

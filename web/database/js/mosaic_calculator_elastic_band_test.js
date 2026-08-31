@@ -914,6 +914,29 @@ torusTrace.crossings.forEach((crossing) => {
   )), false, 'drawing trace must not connect paired edge copies with a canvas-spanning shortcut');
 });
 
+// Alpha=1 is an exact solver identity, not merely an equivalent drawing.
+const ordinaryBaselineBand = elastic.makeQuotientElasticBandChain(torusSurface, torusAnalysis);
+assert.strictEqual(elastic.stepQuotientElasticBandMacro(ordinaryBaselineBand, {
+  distanceContraction: 0.08,
+  substeps: 4
+}).resolved, true);
+['intrinsic', 'radial', 'conformal'].forEach((mode) => {
+  const ordinaryLocalBand = elastic.makeQuotientElasticBandChain(torusSurface, torusAnalysis);
+  assert.strictEqual(elastic.stepQuotientElasticBandMacro(ordinaryLocalBand, {
+    distanceContraction: 0.08,
+    substeps: 4,
+    localPhysics: {
+      enabled: true,
+      mode,
+      coreRadius: 0.20,
+      outerRadius: 0.45,
+      apexRadius: 0.01
+    }
+  }).resolved, true);
+  assert.deepStrictEqual(ordinaryLocalBand.points, ordinaryBaselineBand.points,
+    `${mode} local physics is exactly neutral at a 2pi vertex`);
+});
+
 // The runtime chart model reads the current quotient chain without changing it.
 const torusChartSector = torusStar.sectors[0];
 elastic.state.homologyAnalysis = torusAnalysis;
@@ -1464,19 +1487,108 @@ assert.ok(Math.abs(radialMap.radius - 0.5) < 1e-12);
 assert.ok(Math.abs(conformalMap.radius - Math.sqrt(0.5)) < 1e-12);
 assert.strictEqual(elastic.mapHomologyLocalChartVector(0, 0, 1, 0, 0.5, 'conformal', 1).valid, false);
 assert.strictEqual(elastic.mapHomologyLocalChartVector(0.5, 0, 1, 0, 0.5, 'radial', 1).valid, true);
+assert.deepStrictEqual(elastic.normalizeHomologyLocalPhysicsRadii(0.40, 0.30), {
+  coreRadius: 0.25,
+  outerRadius: 0.30
+});
+assert.strictEqual(elastic.homologyLocalPhysicsSmootherstep(0), 0);
+assert.strictEqual(elastic.homologyLocalPhysicsSmootherstep(1), 1);
+assert.strictEqual(elastic.homologyLocalPhysicsWeight(0, 0.20, 0.45, 0.01), 0);
+assert.strictEqual(elastic.homologyLocalPhysicsWeight(0.01, 0.20, 0.45, 0.01), 1);
+assert.strictEqual(elastic.homologyLocalPhysicsWeight(0.20, 0.20, 0.45, 0.01), 1);
+assert.strictEqual(elastic.homologyLocalPhysicsWeight(0.45, 0.20, 0.45, 0.01), 0);
+const numericFirstDerivative = (fn, x, h = 1e-5) => (fn(x + h) - fn(x - h)) / (2 * h);
+const numericSecondDerivative = (fn, x, h = 1e-5) => (fn(x + h) - (2 * fn(x)) + fn(x - h)) / (h * h);
+const transitionWeight = (radius) => elastic.homologyLocalPhysicsWeight(radius, 0.20, 0.45, 0.01);
+[0.01, 0.20, 0.45].forEach((radius) => {
+  const coarseFirst = Math.abs(numericFirstDerivative(transitionWeight, radius, 1e-4));
+  const fineFirst = Math.abs(numericFirstDerivative(transitionWeight, radius, 5e-5));
+  const coarseSecond = Math.abs(numericSecondDerivative(transitionWeight, radius, 1e-4));
+  const fineSecond = Math.abs(numericSecondDerivative(transitionWeight, radius, 5e-5));
+  assert.ok(fineFirst <= (coarseFirst * 0.30) + 1e-8,
+    `local physics first derivative converges to zero at ${radius}R`);
+  assert.ok(fineSecond <= (coarseSecond * 0.60) + 1e-5,
+    `local physics second derivative converges to zero at ${radius}R`);
+});
+['intrinsic', 'radial', 'conformal'].forEach((mode) => {
+  const identityMap = elastic.mapHomologyLocalPhysicsPolar(0.42, 0.73, 1, mode);
+  assertPointNear(identityMap, {
+    x: 0.42 * Math.cos(0.73),
+    y: -0.42 * Math.sin(0.73)
+  });
+});
+const radialForward = elastic.mapHomologyLocalChartVector(0.5, 0.3, 0.2, 0.4, 0.5, 'radial', 1);
+const radialInverse = elastic.invertHomologyLocalPhysicsVector(
+  0.5, 0.3, radialForward, 0.5, 'radial', 0.01
+);
+assert.ok(radialInverse.valid);
+assert.ok(Math.abs(radialInverse.radial - 0.2) < 1e-12);
+assert.ok(Math.abs(radialInverse.tangential - 0.4) < 1e-12);
+const conformalApexInverse = elastic.invertHomologyLocalPhysicsVector(
+  0, 0, { x: 1, y: 0 }, 0.5, 'conformal', 0.01
+);
+assert.ok(conformalApexInverse.valid);
+assert.ok(Number.isFinite(conformalApexInverse.radial));
 const clippedLocalSegment = elastic.clipHomologyLocalChartSegment(
   { x: -2, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 0 }, 1
 );
 assertPointNear(clippedLocalSegment.start, { x: -1, y: 0 });
 assertPointNear(clippedLocalSegment.end, { x: 1, y: 0 });
 
+// All three local metrics run on every genus-4 basis cord without changing
+// its certified free-homotopy carrier.
+let genusFourLocalCarrierPortalTransitions = 0;
+['intrinsic', 'radial', 'conformal'].forEach((mode) => {
+  let activeDiagnostics = 0;
+  let activeLocalCarriers = 0;
+  let localCarrierTransitions = 0;
+  let localCarrierPortalTransitions = 0;
+  genusFourBands.forEach((band, generatorId) => {
+    const signature = elastic.canonicalHomologyCordCyclicWord(
+      elastic.homologyCordCyclicPortalWord(band)
+    );
+    const result = elastic.stepQuotientElasticBandMacro(band, {
+      distanceContraction: 0.08,
+      substeps: 4,
+      localPhysics: {
+        enabled: true,
+        mode,
+        coreRadius: 0.20,
+        outerRadius: 0.45,
+        apexRadius: 0.01
+      }
+    });
+    assert.strictEqual(result.resolved, true, `${generatorId} resolves with ${mode} local physics`);
+    assert.strictEqual(elastic.validateQuotientElasticBand(band), true);
+    assert.strictEqual(elastic.canonicalHomologyCordCyclicWord(
+      elastic.homologyCordCyclicPortalWord(band)
+    ), signature, `${generatorId} preserves its carrier in ${mode} mode`);
+    assert.ok(Array.isArray(band.lastHomologyLocalPhysicsDiagnostics));
+    activeDiagnostics += band.lastHomologyLocalPhysicsDiagnostics.filter((diagnostic) => (
+      diagnostic && !diagnostic.fallback && diagnostic.weight > 0
+    )).length;
+    activeLocalCarriers += (band.localCarriers || []).filter(Boolean).length;
+    localCarrierTransitions += (result.localCarrierTransitions || []).length;
+    localCarrierPortalTransitions += (result.localCarrierTransitions || []).filter((transition) => (
+      transition.portalWord && transition.portalWord.length > 0
+    )).length;
+  });
+  assert.ok(activeDiagnostics > 0, `${mode} local physics produces active genus-4 proposals`);
+  assert.ok(activeLocalCarriers + localCarrierTransitions > 0,
+    `${mode} local physics uses the manifold vertex local carrier`);
+  genusFourLocalCarrierPortalTransitions += localCarrierPortalTransitions;
+});
+assert.ok(genusFourLocalCarrierPortalTransitions > 0,
+  'local carrier performs paired portal gauge transitions at genus-4 cone vertices');
+
 // Removed solver entry points must not survive as functions or test exports.
 const sourceText = fs.readFileSync(path.join(__dirname, 'mosaic_calculator.js'), 'utf8');
 const htmlText = fs.readFileSync(path.join(__dirname, '..', 'mosaic_calculator.html'), 'utf8');
 assert.strictEqual(htmlText.includes('id="homology-cord-contraction-strength"'), false);
 assert.ok(htmlText.includes('id="homology-cord-relax-speed" min="0.1" max="10" step="0.1" value="10"'));
-assert.ok(htmlText.includes('js/mosaic_calculator.js?v=homology-local-chart-5'));
+assert.ok(htmlText.includes('js/mosaic_calculator.js?v=homology-local-carrier-2'));
 assert.ok(htmlText.includes('id="homology-local-chart-card"'));
+assert.ok(htmlText.includes('id="homology-local-chart-radius-controls"'));
 assert.ok(htmlText.includes('id="homology-local-chart-wide"'));
 assert.ok(htmlText.includes('data-card-wide-button="#homology-local-chart-wide"'));
 assert.ok(htmlText.includes('data-card-wide-host="#homology-local-chart-wide-host"'));
@@ -1484,6 +1596,11 @@ assert.ok(htmlText.includes('data-card-side-host="#homology-local-chart-side-hos
 assert.ok(sourceText.includes("refs.homologyLocalChartCard.dataset.cardWideState !== 'wide'"));
 assert.ok(sourceText.includes('window.CalculatorCards.syncWideCards(document)'));
 assert.ok(htmlText.includes('id="inspect-homology-local-vertex"'));
+assert.ok(htmlText.includes('data-homology-local-physics-mode="intrinsic"'));
+assert.ok(htmlText.includes('data-homology-local-physics-mode="radial"'));
+assert.ok(htmlText.includes('data-homology-local-physics-mode="conformal"'));
+assert.ok(htmlText.includes('id="homology-local-physics-core-radius" min="0.05" max="0.40"'));
+assert.ok(htmlText.includes('id="homology-local-physics-outer-radius" min="0.10" max="0.49"'));
 const drawCordSource = sourceText.slice(
   sourceText.indexOf('function drawBackgroundHomologyCords'),
   sourceText.indexOf('function drawHomologyCordSeamMarkers')

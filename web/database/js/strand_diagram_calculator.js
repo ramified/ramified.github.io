@@ -28,11 +28,19 @@
   const BASIC_EXPRESSION_FORMATS = new Set(['composition', 'transpositions', 'cycle', 'one-line', 'two-line', 'matrix']);
   const BASIC_REDUCED_FORMATS = new Set(['composition', 'transpositions']);
   const CALCULATION_TARGETS = new Set(['symmetric', 'braid', 'hecke', 'tl', 'burau']);
+  const CALCULATION_TASKS = new Set(['strand', 'relations', 'basis']);
   const CALCULATION_PRESENTATION_MODES = new Set(['symbolic', 'diagrammatic']);
   const CALCULATION_PRESENTATION_SCOPES = new Set(['all', 'basis']);
   const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
   const CALCULATION_BASES = {
-    symmetric: [{ value: 'permutation', label: 'Permutation basis' }],
+    symmetric: [
+      { value: 'composition', label: 'Composition word' },
+      { value: 'transpositions', label: 'Transpositions' },
+      { value: 'cycle', label: 'Cycle notation' },
+      { value: 'one-line', label: 'One-line' },
+      { value: 'two-line', label: 'Two-line' },
+      { value: 'matrix', label: 'Matrix' }
+    ],
     braid: [{ value: 'freely-reduced-word', label: 'Freely reduced word' }],
     hecke: [
       { value: 'standard', label: 'Standard basis' },
@@ -40,8 +48,9 @@
     ],
     tl: [{ value: 'diagram', label: 'Diagram basis' }],
     burau: [
-      { value: 'matrix-unit', label: 'Matrix-unit basis' },
-      { value: 'vector', label: 'Vector basis' }
+      { value: 'link-state', label: 'Link-state basis' },
+      { value: 'matrix-unit', label: 'Unreduced matrix-unit basis' },
+      { value: 'vector', label: 'Unreduced vector basis' }
     ]
   };
   const DIRECTION_LABELS = {
@@ -85,7 +94,12 @@
     generatorGapEnabled: DEFAULT_GENERATOR_GAP_ENABLED,
     strandSizeMode: DEFAULT_STRAND_SIZE_MODE,
     fixedGeneratorSize: DEFAULT_FIXED_GENERATOR_SIZE,
+    calculationTask: 'strand',
     calculationTarget: 'tl',
+    relationTarget: 'tl',
+    basisTarget: 'tl',
+    basisBasis: 'diagram',
+    basisPageStart: '0',
     calculationBasis: 'diagram',
     calculationResult: null,
     calculationKey: '',
@@ -159,19 +173,36 @@
     refs.clearImport = $('strand-clear-import');
     refs.exportMessage = $('strand-export-message');
     refs.calculationCard = $('strand-calculation-card');
+    refs.calculationTask = $('strand-calculation-task');
+    refs.calculationSourceRow = $('strand-calculation-source-row');
     refs.calculationSource = $('strand-calculation-source');
     refs.calculationTarget = $('strand-calculation-target');
+    refs.calculationBasisRow = $('strand-calculation-basis-row');
     refs.calculationBasis = $('strand-calculation-basis');
     refs.calculate = $('strand-calculate');
     refs.copyCalculationLatex = $('strand-copy-calculation-latex');
     refs.copyCalculationResult = $('strand-copy-calculation-result');
+    refs.calculationActions = $('strand-calculation-actions');
     refs.calculationModeControl = $('strand-calculation-mode-control');
     refs.calculationScopeControl = $('strand-calculation-scope-control');
+    refs.calculationPresentation = $('strand-calculation-presentation');
     refs.calculationMessage = $('strand-calculation-message');
     refs.calculationRenderWarning = $('strand-calculation-render-warning');
     refs.calculationRelations = $('strand-calculation-relations');
+    refs.calculationRelationsSurface = $('strand-calculation-relations-surface');
+    refs.calculationBasisSurface = $('strand-calculation-basis-surface');
+    refs.calculationBasisSummary = $('strand-calculation-basis-summary');
+    refs.calculationBasisList = $('strand-calculation-basis-list');
+    refs.calculationBasisPagination = $('strand-calculation-basis-pagination');
+    refs.calculationBasisPrevious = $('strand-calculation-basis-previous');
+    refs.calculationBasisPage = $('strand-calculation-basis-page');
+    refs.calculationBasisGo = $('strand-calculation-basis-go');
+    refs.calculationBasisPageStatus = $('strand-calculation-basis-page-status');
+    refs.calculationBasisNext = $('strand-calculation-basis-next');
+    refs.calculationSurface = $('strand-calculation-surface');
     refs.calculationEquation = $('strand-calculation-equation');
     refs.calculationMatrixSection = $('strand-calculation-matrix-section');
+    refs.calculationMatrixLabel = $('strand-calculation-matrix-label');
     refs.calculationMatrix = $('strand-calculation-matrix');
   }
 
@@ -191,7 +222,8 @@
       state.direction = DIRECTIONS.has(refs.direction.value) ? refs.direction.value : DEFAULT_DIRECTION;
       setStatus(`direction: ${DIRECTION_LABELS[state.direction]}`);
       renderAll({ preserveMessage: true });
-      if (state.calculationResult) renderCalculationResult();
+      if (relationTaskActive()) renderRelationReference();
+      else if (!basisTaskActive() && state.calculationResult) renderCalculationResult();
     });
 
     refs.displayStyle.addEventListener('change', () => {
@@ -234,16 +266,45 @@
       refs.importInput.value = '';
       setExportMessage('Import input cleared.');
     });
+    refs.calculationTask?.addEventListener('change', () => {
+      setCalculationTask(refs.calculationTask.value);
+    });
     refs.calculationTarget?.addEventListener('change', () => {
-      state.calculationTarget = calculationTargetValue(refs.calculationTarget.value);
-      syncCalculationBasisOptions();
-      markCalculationStale();
+      if (relationTaskActive()) {
+        state.relationTarget = calculationTargetValue(refs.calculationTarget.value);
+        renderRelationReference();
+      } else if (basisTaskActive()) {
+        state.basisTarget = calculationTargetValue(refs.calculationTarget.value);
+        state.basisBasis = calculationBasisValue(state.basisTarget, state.basisBasis);
+        state.basisPageStart = '0';
+        syncCalculationBasisOptions();
+        renderBasisReference();
+      } else {
+        state.calculationTarget = calculationTargetValue(refs.calculationTarget.value);
+        syncCalculationBasisOptions();
+        markCalculationStale();
+      }
       refreshExport();
     });
     refs.calculationBasis?.addEventListener('change', () => {
-      state.calculationBasis = calculationBasisValue(state.calculationTarget, refs.calculationBasis.value);
-      markCalculationStale();
+      if (basisTaskActive()) {
+        state.basisBasis = calculationBasisValue(state.basisTarget, refs.calculationBasis.value);
+        state.basisPageStart = '0';
+        renderBasisReference();
+      } else {
+        state.calculationBasis = calculationBasisValue(state.calculationTarget, refs.calculationBasis.value);
+        markCalculationStale();
+      }
       refreshExport();
+    });
+    refs.calculationBasisPrevious?.addEventListener('click', () => setBasisPageStart(refs.calculationBasisPrevious.dataset.pageStart));
+    refs.calculationBasisNext?.addEventListener('click', () => setBasisPageStart(refs.calculationBasisNext.dataset.pageStart));
+    refs.calculationBasisGo?.addEventListener('click', goToBasisPage);
+    refs.calculationBasisPage?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        goToBasisPage();
+      }
     });
     refs.calculate?.addEventListener('click', calculateCurrentWord);
     refs.calculationModeControl?.addEventListener('click', (event) => {
@@ -531,9 +592,14 @@
         side: '#cards',
         manualWideButtons: true,
         onWideChange(card) {
-          if (card?.id === 'strand-calculation-card' && state.calculationResult) renderCalculationResult();
+          if (card?.id !== 'strand-calculation-card') return;
+          if (relationTaskActive()) renderRelationReference();
+          else if (basisTaskActive()) renderBasisReference();
+          else if (state.calculationResult) renderCalculationResult();
         }
       });
+      window.CalculatorCards.setWide(refs.calculationCard, true, { notify: false });
+      window.CalculatorCards.setCardCollapsed(refs.calculationCard, false, { refreshOnOpen: false });
       window.addEventListener('resize', () => window.CalculatorCards.syncWideCards(document));
       return;
     }
@@ -722,22 +788,84 @@
     renderInputChart();
   }
 
+  function calculationTaskValue(value) {
+    return CALCULATION_TASKS.has(value) ? value : 'strand';
+  }
+
+  function relationTaskActive() {
+    return calculationTaskValue(state.calculationTask) === 'relations';
+  }
+
+  function basisTaskActive() {
+    return calculationTaskValue(state.calculationTask) === 'basis';
+  }
+
+  function syncCalculationTaskControls() {
+    state.calculationTask = calculationTaskValue(state.calculationTask);
+    const relations = relationTaskActive();
+    const basis = basisTaskActive();
+    const reference = relations || basis;
+    if (refs.calculationTask) refs.calculationTask.value = state.calculationTask;
+    if (refs.calculationSourceRow) refs.calculationSourceRow.hidden = reference;
+    if (refs.calculationBasisRow) refs.calculationBasisRow.hidden = relations;
+    if (refs.calculationScopeControl) refs.calculationScopeControl.hidden = reference;
+    if (refs.calculate) refs.calculate.hidden = reference;
+    if (refs.copyCalculationLatex) refs.copyCalculationLatex.hidden = reference;
+    if (refs.copyCalculationResult) refs.copyCalculationResult.hidden = reference;
+    if (refs.calculationMessage) refs.calculationMessage.hidden = reference;
+    if (refs.calculationRelationsSurface) refs.calculationRelationsSurface.hidden = !relations;
+    if (refs.calculationBasisSurface) refs.calculationBasisSurface.hidden = !basis;
+    if (refs.calculationSurface) refs.calculationSurface.hidden = reference;
+    if (refs.calculationPresentation) refs.calculationPresentation.classList.toggle('is-reference', reference);
+    if (refs.calculationActions) refs.calculationActions.classList.toggle('is-reference', reference);
+  }
+
+  function setCalculationTask(value) {
+    const next = calculationTaskValue(value);
+    state.calculationTask = next;
+    syncCalculationControls();
+    if (next === 'relations') {
+      renderRelationReference();
+    } else if (next === 'basis') {
+      state.basisPageStart = '0';
+      renderBasisReference();
+    } else {
+      if (state.calculationResult) renderCalculationResult();
+      else clearCalculationResultDisplay();
+    }
+    refreshExport();
+  }
+
   function syncCalculationControls() {
+    state.calculationTask = calculationTaskValue(state.calculationTask);
     state.calculationTarget = calculationTargetValue(state.calculationTarget);
-    if (refs.calculationTarget) refs.calculationTarget.value = state.calculationTarget;
+    state.relationTarget = calculationTargetValue(state.relationTarget);
+    state.basisTarget = calculationTargetValue(state.basisTarget);
+    state.basisBasis = calculationBasisValue(state.basisTarget, state.basisBasis);
+    if (refs.calculationTarget) {
+      refs.calculationTarget.value = relationTaskActive()
+        ? state.relationTarget
+        : basisTaskActive() ? state.basisTarget : state.calculationTarget;
+    }
     syncCalculationBasisOptions();
     syncCalculationPresentationControls();
+    syncCalculationTaskControls();
     if (refs.calculationSource) refs.calculationSource.textContent = calculationSourceTypesetLabel();
   }
 
   function syncCalculationBasisOptions() {
     if (!refs.calculationBasis) return;
-    const choices = CALCULATION_BASES[state.calculationTarget] || CALCULATION_BASES.tl;
-    state.calculationBasis = calculationBasisValue(state.calculationTarget, state.calculationBasis);
+    const target = basisTaskActive() ? state.basisTarget : state.calculationTarget;
+    const choices = CALCULATION_BASES[target] || CALCULATION_BASES.tl;
+    const selected = basisTaskActive()
+      ? calculationBasisValue(target, state.basisBasis)
+      : calculationBasisValue(target, state.calculationBasis);
+    if (basisTaskActive()) state.basisBasis = selected;
+    else state.calculationBasis = selected;
     refs.calculationBasis.innerHTML = choices
       .map((choice) => `<option value="${escapeHtml(choice.value)}">${escapeHtml(choice.label)}</option>`)
       .join('');
-    refs.calculationBasis.value = state.calculationBasis;
+    refs.calculationBasis.value = selected;
   }
 
   function calculationPresentationModeValue(value) {
@@ -769,7 +897,9 @@
     state.calculationPresentationMode = nextMode;
     state.calculationPresentationScope = nextScope;
     syncCalculationPresentationControls();
-    if (changed && state.calculationResult) renderCalculationResult();
+    if (changed && relationTaskActive()) renderRelationReference();
+    else if (changed && basisTaskActive()) renderBasisReference();
+    else if (changed && state.calculationResult) renderCalculationResult();
     if (changed) refreshExport();
   }
 
@@ -871,6 +1001,7 @@
     renderSummary(data);
     if (!options.preserveMessage && refs.exportMessage) refs.exportMessage.textContent = '';
     queueMathTypeset();
+    if (basisTaskActive()) renderBasisReference();
   }
 
   function renderSummary(data) {
@@ -2609,7 +2740,9 @@
   }
 
   function calculationBasisValue(target, value) {
-    const choices = CALCULATION_BASES[calculationTargetValue(target)] || CALCULATION_BASES.tl;
+    const normalizedTarget = calculationTargetValue(target);
+    const choices = CALCULATION_BASES[normalizedTarget] || CALCULATION_BASES.tl;
+    if (normalizedTarget === 'symmetric' && value === 'permutation') return 'one-line';
     return choices.some((choice) => choice.value === value) ? value : choices[0].value;
   }
 
@@ -2680,6 +2813,14 @@
   }
 
   function calculateCurrentWord() {
+    if (relationTaskActive()) {
+      renderRelationReference();
+      return;
+    }
+    if (basisTaskActive()) {
+      renderBasisReference();
+      return;
+    }
     const engine = window.StrandMath;
     if (!engine?.calculateStrandWord) {
       setCalculationMessage('The calculation engine did not load.', true);
@@ -2795,14 +2936,28 @@
       return svg;
     }
 
+    (diagram?.platforms || []).forEach((platform) => {
+      const points = (platform.points || [])
+        .map((point) => `${Number(point.x) * 100},${Number(point.y) * 100}`)
+        .join(' ');
+      if (points) svg.appendChild(svgElement('polygon', {
+        class: 'strand-diagram-platform',
+        points
+      }));
+    });
+
     (diagram?.paths || []).forEach((path) => {
-      const role = path.role === 'tl' ? ' is-tl' : diagram.kind === 'hecke' ? ' is-hecke' : '';
+      const role = path.role === 'tl'
+        ? ' is-tl'
+        : path.role === 'link-state' ? ' is-link-state' : diagram.kind === 'hecke' ? ' is-hecke' : '';
       svg.appendChild(svgElement('path', {
         class: `strand-diagram-path${role}`,
         d: window.StrandMath.pathToSvgData(path)
       }));
-      appendDiagramEndpoint(svg, path.start);
-      appendDiagramEndpoint(svg, path.curves?.[path.curves.length - 1]?.end);
+      if (!path.closed) {
+        appendDiagramEndpoint(svg, path.start);
+        if (!path.endOnPlatform) appendDiagramEndpoint(svg, path.curves?.[path.curves.length - 1]?.end);
+      }
     });
     (diagram?.overlays || []).forEach((overlay) => {
       const attributes = {
@@ -2894,7 +3049,6 @@
       rowNode.appendChild(row.lhs ? renderDiagramOperand(row.lhs) : htmlElement('span'));
       rowNode.appendChild(mathElement('=', 'strand-diagram-trace-equals'));
       const rhs = renderDiagramOperand(row.rhs);
-      if (row.final) rhs.classList.add('strand-diagram-final');
       rowNode.appendChild(rhs);
       rowNode.appendChild(row.annotationLatex
         ? mathElement(row.annotationLatex, 'strand-diagram-trace-annotation')
@@ -2902,6 +3056,340 @@
       trace.appendChild(rowNode);
     });
     return trace;
+  }
+
+  function renderDiagrammaticRelations(model, presentationMode) {
+    const sheet = htmlElement(
+      'div',
+      'strand-diagram-relation-sheet is-' + (presentationMode === 'diagrammatic' ? 'diagrammatic' : 'symbolic')
+    );
+    const groups = model.groups?.length
+      ? model.groups
+      : [{ id: 'relations', label: 'Relations', rows: model.rows || [] }];
+    groups.forEach((group) => {
+      const section = htmlElement('section', 'strand-diagram-relation-group');
+      section.dataset.relationGroup = group.id || '';
+      const heading = htmlElement('div', 'strand-diagram-relation-group-title');
+      heading.setAttribute('role', 'heading');
+      heading.setAttribute('aria-level', '4');
+      heading.textContent = group.label || '';
+      section.appendChild(heading);
+      const list = htmlElement('ul', 'strand-diagram-relation-list');
+      (group.rows || []).forEach((row) => {
+        const item = htmlElement('li', 'strand-diagram-relation-item');
+        item.dataset.relationId = row.relationId || '';
+        item.setAttribute('aria-label', row.label || row.relationId || 'relation');
+        const equations = htmlElement('div', 'strand-diagram-relation-equations');
+        if (row.hint) {
+          equations.classList.add('has-hint');
+          equations.title = row.hint;
+          equations.setAttribute('aria-description', row.hint);
+          equations.tabIndex = 0;
+        }
+        (row.equations || []).forEach((equation) => {
+          const equationNode = htmlElement('div', 'strand-diagram-relation-equation');
+          if (equation.lhs) equationNode.appendChild(renderDiagramOperand(equation.lhs));
+          if (equation.operator) equationNode.appendChild(mathElement(equation.operator, 'strand-diagram-relation-operator'));
+          equationNode.appendChild(renderDiagramOperand(equation.rhs));
+          equations.appendChild(equationNode);
+        });
+        item.appendChild(equations);
+        list.appendChild(item);
+      });
+      section.appendChild(list);
+      sheet.appendChild(section);
+    });
+    return sheet;
+  }
+
+  function relationReferenceCalculation() {
+    const engine = window.StrandMath;
+    if (!engine?.calculateStrandWord) throw new Error('The calculation engine did not load.');
+    const target = calculationTargetValue(state.relationTarget);
+    const basis = calculationBasisValue(target, '');
+    return engine.calculateStrandWord([], {
+      rank: 2,
+      type: 'A',
+      target,
+      basis,
+      convention: 'burau-compatible-v',
+      includeTrace: true
+    });
+  }
+
+  function renderRelationReference() {
+    if (!relationTaskActive()) return;
+    clearMathTypesetTargets(
+      refs.calculationRelations,
+      refs.calculationBasisSummary,
+      refs.calculationBasisList,
+      refs.calculationEquation,
+      refs.calculationMatrix
+    );
+    if (refs.calculationEquation) refs.calculationEquation.textContent = '';
+    if (refs.calculationMatrixSection) refs.calculationMatrixSection.hidden = true;
+    if (refs.calculationMatrix) refs.calculationMatrix.textContent = '';
+    if (refs.calculationRelations) refs.calculationRelations.replaceChildren();
+    setCalculationRenderWarning([]);
+    try {
+      const calculation = relationReferenceCalculation();
+      const diagrammatic = state.calculationPresentationMode === 'diagrammatic';
+      const model = diagrammatic && window.StrandMath?.buildDiagrammaticRelations
+        ? window.StrandMath.buildDiagrammaticRelations(calculation, diagrammaticPresentationOptions())
+        : window.StrandMath.buildSymbolicRelations(calculation);
+      if (refs.calculationRelations) {
+        refs.calculationRelations.appendChild(renderDiagrammaticRelations(
+          model,
+          diagrammatic ? 'diagrammatic' : 'symbolic'
+        ));
+      }
+      setCalculationRenderWarning(model.warnings || []);
+    } catch (error) {
+      if (refs.calculationRelations) refs.calculationRelations.textContent = error?.message || 'Unable to build the relation reference.';
+    }
+    queueCalculationMathTypeset();
+  }
+
+  function basisReferenceWarnings() {
+    return { messages: [], codes: new Set(), atoms: 0 };
+  }
+
+  function addBasisReferenceWarning(context, code, message) {
+    if (context.codes.has(code)) return;
+    context.codes.add(code);
+    context.messages.push(message);
+  }
+
+  function basisSymbolicOperand(item) {
+    return { kind: 'symbolic', latex: item?.labelLatex || '?' };
+  }
+
+  function claimBasisDiagram(context, cost) {
+    const amount = Math.max(1, Number(cost) || 1);
+    if (context.atoms + amount > context.limits.atoms) {
+      addBasisReferenceWarning(
+        context,
+        'atoms',
+        `Only the first ${context.limits.atoms} basis diagram atoms are rendered; the remaining labels stay symbolic.`
+      );
+      return false;
+    }
+    context.atoms += amount;
+    return true;
+  }
+
+  function basisDiagramOperand(item, model, context) {
+    const math = window.StrandMath;
+    const symbolic = basisSymbolicOperand(item);
+    if (!math?.makePermutationDiagram || model.rank > context.limits.rank) {
+      if (model.rank > context.limits.rank) {
+        addBasisReferenceWarning(
+          context,
+          'rank',
+          `Basis diagrams are limited to rank ${context.limits.rank}; these basis labels stay symbolic.`
+        );
+      }
+      return symbolic;
+    }
+    const direction = DIRECTIONS.has(state.direction) ? state.direction : DEFAULT_DIRECTION;
+    if (item.kind === 'permutation') {
+      if (!claimBasisDiagram(context, 1)) return symbolic;
+      return { kind: 'diagram', diagram: math.makePermutationDiagram(item.values, direction), latex: item.labelLatex };
+    }
+    if (item.kind === 'hecke-standard') {
+      if (item.word.length > context.limits.compositionLength) {
+        addBasisReferenceWarning(context, 'length', 'A Hecke basis diagram exceeded the composition-length display limit.');
+        return symbolic;
+      }
+      if (!claimBasisDiagram(context, 1)) return symbolic;
+      const records = item.word.map((index) => ({ family: 'hecke', index, sign: 1 }));
+      return {
+        kind: 'diagram',
+        diagram: math.makeBraidDiagram(model.rank, records, direction, 'hecke', `standard Hecke basis element ${item.labelPlain}`),
+        latex: item.labelLatex
+      };
+    }
+    if (item.kind === 'tl-diagram') {
+      if (!claimBasisDiagram(context, 1)) return symbolic;
+      return {
+        kind: 'diagram',
+        diagram: math.makeTlDiagram(model.rank, item.pairs, direction, `Temperley-Lieb basis diagram ${item.labelPlain}`),
+        latex: item.labelLatex
+      };
+    }
+    if (item.kind === 'matrix-unit' || item.kind === 'vector-unit') {
+      if (!claimBasisDiagram(context, 1)) return symbolic;
+      return {
+        kind: 'diagram',
+        diagram: math.makeGridDiagram(
+          model.rank,
+          item.row,
+          item.column,
+          direction,
+          item.kind === 'vector-unit'
+        ),
+        latex: item.labelLatex
+      };
+    }
+    if (item.kind === 'burau-link-state') {
+      if (!claimBasisDiagram(context, 1)) return symbolic;
+      return {
+        kind: 'diagram',
+        diagram: math.makeBurauLinkStateDiagram(
+          model.rank,
+          item.cupIndex,
+          direction,
+          `Burau link state ${item.labelPlain}`
+        ),
+        latex: item.labelLatex
+      };
+    }
+    if (item.kind !== 'hecke-kl') return symbolic;
+    if (model.rank > 7 || !math.canonicalBasis || !math.OperationBudget) {
+      addBasisReferenceWarning(context, 'kl-rank', 'Exact diagrammatic KL expansion is available only through rank 7.');
+      return symbolic;
+    }
+    try {
+      const budget = new math.OperationBudget({ operations: 750000, terms: 12000, timeoutMs: 2200 });
+      const expansion = math.canonicalBasis(model.rank, item.values, budget);
+      const terms = expansion.sortedTerms(math.comparePermutationBasis);
+      if (!claimBasisDiagram(context, terms.length)) return symbolic;
+      return {
+        kind: 'linear-combination',
+        latex: item.labelLatex,
+        terms: terms.map((term, index) => {
+          const word = math.reducedWord(term.basis.values, budget);
+          const records = word.map((generator) => ({ family: 'hecke', index: generator, sign: 1 }));
+          const basisLatex = `H_{[${term.basis.values.join(',')}]}`;
+          return {
+            coefficient: term.coefficient.toJSON(),
+            diagram: math.makeBraidDiagram(
+              model.rank,
+              records,
+              direction,
+              'hecke',
+              `standard Hecke term ${term.basis.values.join(', ')}`
+            ),
+            basisLatex,
+            parts: math.termParts(term.coefficient, index)
+          };
+        })
+      };
+    } catch (error) {
+      addBasisReferenceWarning(
+        context,
+        'kl-computation',
+        `A KL basis expansion stayed symbolic because it exceeded the display work limit. ${error?.message || ''}`
+      );
+      return symbolic;
+    }
+  }
+
+  function renderBasisSummary(model) {
+    const summary = refs.calculationBasisSummary;
+    if (!summary) return;
+    summary.replaceChildren();
+    summary.appendChild(mathElement(model.countLatex, 'strand-basis-count'));
+    summary.appendChild(mathElement(model.definitionLatex, 'strand-basis-definition'));
+    summary.appendChild(mathElement(model.resultFormLatex, 'strand-basis-result-form'));
+    const explanation = htmlElement('p', 'strand-basis-explanation');
+    explanation.textContent = model.explanation || '';
+    summary.appendChild(explanation);
+    const algorithm = htmlElement('p', 'strand-basis-algorithm');
+    algorithm.textContent = model.algorithm || '';
+    summary.appendChild(algorithm);
+    if (model.page) {
+      const range = htmlElement('p', 'strand-basis-algorithm');
+      range.textContent = `Showing ${model.page.firstItem}-${model.page.lastItem} of ${model.dimension}.`;
+      summary.appendChild(range);
+    }
+  }
+
+  function renderBasisPagination(page) {
+    if (!refs.calculationBasisPagination) return;
+    refs.calculationBasisPagination.hidden = !page || page.count === '1';
+    if (!page) return;
+    refs.calculationBasisPrevious.disabled = !page.hasPrevious;
+    refs.calculationBasisPrevious.dataset.pageStart = page.previousStart;
+    refs.calculationBasisNext.disabled = !page.hasNext;
+    refs.calculationBasisNext.dataset.pageStart = page.nextStart;
+    refs.calculationBasisPage.value = page.index;
+    refs.calculationBasisPage.dataset.pageCount = page.count;
+    refs.calculationBasisPageStatus.textContent = `of ${page.count}`;
+  }
+
+  function renderBasisReference() {
+    if (!basisTaskActive()) return;
+    clearMathTypesetTargets(
+      refs.calculationRelations,
+      refs.calculationBasisSummary,
+      refs.calculationBasisList,
+      refs.calculationEquation,
+      refs.calculationMatrix
+    );
+    if (refs.calculationBasisSummary) refs.calculationBasisSummary.replaceChildren();
+    if (refs.calculationBasisList) refs.calculationBasisList.replaceChildren();
+    renderBasisPagination(null);
+    setCalculationRenderWarning([]);
+    const engine = window.StrandMath;
+    if (!engine?.buildBasisCatalog) {
+      if (refs.calculationBasisSummary) refs.calculationBasisSummary.textContent = 'The basis catalog did not load.';
+      return;
+    }
+    try {
+      const model = engine.buildBasisCatalog({
+        rank: state.strandCount,
+        type: state.groupType === 'symmetric' ? 'A' : state.groupType,
+        target: state.basisTarget,
+        basis: state.basisBasis,
+        offset: state.basisPageStart,
+        pageSize: engine.DEFAULT_BASIS_PAGE_SIZE
+      });
+      renderBasisSummary(model);
+      const warningContext = basisReferenceWarnings();
+      warningContext.limits = { ...(engine.DEFAULT_DIAGRAM_LIMITS || { rank: 24, compositionLength: 160, atoms: 240 }) };
+      const diagrammatic = state.calculationPresentationMode === 'diagrammatic';
+      if (refs.calculationBasisList) {
+        (model.page?.items || []).forEach((item) => {
+          const node = htmlElement('div', `strand-basis-item${diagrammatic ? ' is-diagrammatic' : ''}`);
+          node.setAttribute('role', 'listitem');
+          node.setAttribute('aria-label', item.labelPlain || 'basis element');
+          node.appendChild(diagrammatic
+            ? renderDiagramOperand(basisDiagramOperand(item, model, warningContext))
+            : mathElement(item.labelLatex));
+          refs.calculationBasisList.appendChild(node);
+        });
+      }
+      if (model.page) state.basisPageStart = model.page.start;
+      renderBasisPagination(model.page);
+      setCalculationRenderWarning([...(model.warnings || []), ...warningContext.messages]);
+    } catch (error) {
+      if (refs.calculationBasisSummary) {
+        refs.calculationBasisSummary.textContent = error?.message || 'Unable to build this basis catalog.';
+      }
+    }
+    queueCalculationMathTypeset();
+  }
+
+  function setBasisPageStart(value) {
+    if (!basisTaskActive()) return;
+    const text = String(value ?? '').trim();
+    state.basisPageStart = /^\d+$/.test(text) ? text : '0';
+    renderBasisReference();
+  }
+
+  function goToBasisPage() {
+    if (!basisTaskActive() || !refs.calculationBasisPage) return;
+    const text = refs.calculationBasisPage.value.trim();
+    if (!/^\d+$/.test(text) || BigInt(text) < 1n) {
+      setCalculationRenderWarning('Enter a positive whole page number.');
+      return;
+    }
+    const pageCount = BigInt(refs.calculationBasisPage.dataset.pageCount || '1');
+    const page = BigInt(text) > pageCount ? pageCount : BigInt(text);
+    const size = BigInt(window.StrandMath?.DEFAULT_BASIS_PAGE_SIZE || 24);
+    state.basisPageStart = ((page - 1n) * size).toString();
+    renderBasisReference();
   }
 
   function setCalculationRenderWarning(messages) {
@@ -2912,6 +3400,14 @@
   }
 
   function renderCalculationResult() {
+    if (relationTaskActive()) {
+      renderRelationReference();
+      return;
+    }
+    if (basisTaskActive()) {
+      renderBasisReference();
+      return;
+    }
     const calculation = state.calculationResult;
     if (!calculation) {
       clearCalculationResultDisplay();
@@ -2919,38 +3415,35 @@
     }
     clearMathTypesetTargets(refs.calculationRelations, refs.calculationEquation, refs.calculationMatrix);
     setCalculationRenderWarning([]);
+    let diagrammaticModel = null;
+    let diagrammaticError = null;
+    if (state.calculationPresentationMode === 'diagrammatic' && window.StrandMath?.buildDiagrammaticTrace) {
+      try {
+        diagrammaticModel = window.StrandMath.buildDiagrammaticTrace(calculation, diagrammaticPresentationOptions());
+      } catch (error) {
+        diagrammaticError = error;
+      }
+    }
     if (refs.calculationEquation) {
       refs.calculationEquation.replaceChildren();
-      if (state.calculationPresentationMode === 'diagrammatic' && window.StrandMath?.buildDiagrammaticTrace) {
-        try {
-          const model = window.StrandMath.buildDiagrammaticTrace(calculation, diagrammaticPresentationOptions());
-          refs.calculationEquation.appendChild(renderDiagrammaticTrace(model));
-          setCalculationRenderWarning(model.warnings);
-        } catch (error) {
-          refs.calculationEquation.textContent = state.calculationLatex;
-          setCalculationRenderWarning(`Diagrammatic rendering failed; symbolic notation is shown. ${error?.message || ''}`);
-        }
+      if (diagrammaticModel) {
+        refs.calculationEquation.appendChild(renderDiagrammaticTrace(diagrammaticModel));
       } else {
         refs.calculationEquation.textContent = state.calculationLatex;
       }
     }
-    if (refs.calculationRelations) {
-      refs.calculationRelations.replaceChildren();
-      const relations = calculation.relationsUsed.length ? calculation.relationsUsed : ['identity'];
-      relations.forEach((relation) => {
-        const item = document.createElement('li');
-        item.dataset.relationId = relation;
-        item.textContent = relation === 'identity'
-          ? 'identity'
-          : `\\(${window.StrandMath.relationLatex(relation)}\\)`;
-        refs.calculationRelations.appendChild(item);
-      });
-    }
+    if (diagrammaticModel) setCalculationRenderWarning(diagrammaticModel.warnings);
+    else if (diagrammaticError) setCalculationRenderWarning(`Diagrammatic rendering failed; symbolic notation is shown. ${diagrammaticError?.message || ''}`);
     const matrix = calculation.metadata?.matrix;
     if (refs.calculationMatrixSection) refs.calculationMatrixSection.hidden = !matrix;
+    if (refs.calculationMatrixLabel) {
+      refs.calculationMatrixLabel.textContent = calculation.basis === 'link-state'
+        ? 'reduced matrix in the link-state basis'
+        : 'unreduced matrix';
+    }
     if (refs.calculationMatrix) {
       refs.calculationMatrix.textContent = matrix
-        ? `\\[\\rho(\\beta)=${window.StrandMath.formatMatrixLatex(matrix)}\\]`
+        ? `\\[${calculation.basis === 'link-state' ? '\\bar\\rho' : '\\rho'}(\\beta)=${window.StrandMath.formatMatrixLatex(matrix)}\\]`
         : '';
     }
     queueCalculationMathTypeset();
@@ -3022,7 +3515,11 @@
       fixedGeneratorSize: state.fixedGeneratorSize,
       appliedGenerators,
       calculationSettings: {
+        task: calculationTaskValue(state.calculationTask),
         target: state.calculationTarget,
+        relationTarget: calculationTargetValue(state.relationTarget),
+        basisTarget: calculationTargetValue(state.basisTarget),
+        basisBasis: calculationBasisValue(state.basisTarget, state.basisBasis),
         basis: state.calculationBasis,
         convention: 'burau-compatible-v',
         presentation: {
@@ -3170,8 +3667,11 @@
         : 'JSON imported.');
       setStatus('imported JSON preset');
       renderAll({ preserveMessage: true });
-      clearCalculationResultDisplay();
-      setCalculationMessage('Calculation settings imported. Calculate to verify the result locally.');
+      if (relationTaskActive()) renderRelationReference();
+      else if (!basisTaskActive()) {
+        clearCalculationResultDisplay();
+        setCalculationMessage('Calculation settings imported. Calculate to verify the result locally.');
+      }
     } catch (error) {
       setExportMessage(error?.message || 'Unable to import JSON.', true);
     }
@@ -3188,10 +3688,17 @@
     const generatorGapEnabled = data.generatorGapEnabled === true;
     const strandSizeMode = strandSizeModeValue(data.strandSizeMode);
     const fixedGeneratorSize = fixedGeneratorSizeValue(data.fixedGeneratorSize);
+    const calculationTask = calculationTaskValue(data.calculationSettings?.task);
     const calculationTarget = calculationTargetValue(data.calculationSettings?.target || data.calculation?.target || 'tl');
+    const relationTarget = calculationTargetValue(data.calculationSettings?.relationTarget || calculationTarget);
+    const basisTarget = calculationTargetValue(data.calculationSettings?.basisTarget || calculationTarget);
     const calculationBasis = calculationBasisValue(
       calculationTarget,
       data.calculationSettings?.basis || data.calculation?.basis
+    );
+    const basisBasis = calculationBasisValue(
+      basisTarget,
+      data.calculationSettings?.basisBasis || calculationBasis
     );
     const calculationPresentationMode = calculationPresentationModeValue(data.calculationSettings?.presentation?.mode);
     const calculationPresentationScope = calculationPresentationScopeValue(data.calculationSettings?.presentation?.scope);
@@ -3213,7 +3720,12 @@
     state.strandSizeMode = strandSizeMode;
     state.fixedGeneratorSize = fixedGeneratorSize;
     state.appliedSteps = valid;
+    state.calculationTask = calculationTask;
     state.calculationTarget = calculationTarget;
+    state.relationTarget = relationTarget;
+    state.basisTarget = basisTarget;
+    state.basisBasis = basisBasis;
+    state.basisPageStart = '0';
     state.calculationBasis = calculationBasis;
     state.calculationPresentationMode = calculationPresentationMode;
     state.calculationPresentationScope = calculationPresentationScope;
@@ -3292,7 +3804,13 @@
     const run = () => {
       calculationMathTypesetQueued = false;
       if (!window.MathJax?.typesetPromise) return;
-      const targets = [refs.calculationRelations, refs.calculationEquation, refs.calculationMatrix].filter(Boolean);
+      const targets = [
+        refs.calculationRelations,
+        refs.calculationBasisSummary,
+        refs.calculationBasisList,
+        refs.calculationEquation,
+        refs.calculationMatrix
+      ].filter(Boolean);
       if (window.MathJax.typesetClear) window.MathJax.typesetClear(targets);
       window.MathJax.typesetPromise(targets).catch(() => {});
     };

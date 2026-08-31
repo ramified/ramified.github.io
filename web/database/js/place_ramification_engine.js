@@ -1,7 +1,7 @@
 (function (scope) {
   'use strict';
 
-  const ENGINE_VERSION = '1.0.0';
+  const ENGINE_VERSION = '1.1.0';
 
   class EngineError extends Error {
     constructor(code, message) {
@@ -604,6 +604,43 @@
     return factors;
   }
 
+  function functionPlaceDegreeBound(selection, field) {
+    const explicitValue = selection?.functionPlaceDegreeBound;
+    const explicitBound = Number(explicitValue);
+    if (explicitValue != null && Number.isFinite(explicitBound)) return Math.max(0, Math.floor(explicitBound));
+    const legacyCardinality = Number(selection?.residueCardinalityBound);
+    if (!Number.isFinite(legacyCardinality) || legacyCardinality < Number(field.size)) return 0;
+    const cardinalityBound = BigInt(Math.floor(legacyCardinality));
+    let degree = 0;
+    for (let residueCardinality = field.size; residueCardinality <= cardinalityBound; residueCardinality *= field.size) degree++;
+    return degree;
+  }
+
+  function monicIrreduciblesThroughDegree(field, degreeBound, budget) {
+    const polynomials = [];
+    for (let degree = 1; degree <= degreeBound; degree++) {
+      const candidateCount = field.size ** BigInt(degree);
+      budget.enumeration(candidateCount);
+      for (let code = 0n; code < candidateCount; code++) {
+        budget.tick();
+        let value = code;
+        const candidate = [];
+        for (let index = 0; index < degree; index++) {
+          candidate.push(field.elementFromIndex(value % field.size));
+          value /= field.size;
+        }
+        candidate.push(field.one);
+        if (degree > 1) {
+          if (!fieldPolySquarefree(candidate, field)) continue;
+          const factors = factorMonicPolynomial(candidate, field, budget);
+          if (factors.length !== 1 || fieldPolyDegree(factors[0], field) !== degree) continue;
+        }
+        polynomials.push(candidate);
+      }
+    }
+    return polynomials;
+  }
+
   function modPow(base, exponent, modulus, budget) {
     let result = 1n;
     let value = modBigint(base, modulus);
@@ -1024,8 +1061,9 @@
     const terms = [];
     for (let degree = monic.length - 1; degree >= 0; degree--) {
       if (field.isZero(monic[degree])) continue;
-      const coefficient = field.display(monic[degree]);
-      const term = degree === 0 ? coefficient : `${coefficient === '1' ? '' : `${coefficient}*`}${variable}${degree === 1 ? '' : `^${degree}`}`;
+      const coefficient = field.display(monic[degree]).replace(/\*/g, '');
+      const factor = coefficient === '1' ? '' : /[+-]/.test(coefficient.slice(1)) ? `(${coefficient})` : coefficient;
+      const term = degree === 0 ? coefficient : `${factor}${variable}${degree === 1 ? '' : `^${degree}`}`;
       terms.push(term);
     }
     return terms.length ? terms.join('+').replace(/\+\-/g, '-') : '0';
@@ -1120,6 +1158,12 @@
       if (fieldPolyDegree(monic, constantField) < 1) return;
       candidates.set(polynomialKey(monic, constantField), { polynomial: monic, label: label || polynomialText(monic, constantField, 't'), source });
     }
+
+    monicIrreduciblesThroughDegree(
+      constantField,
+      functionPlaceDegreeBound(request.selection, constantField),
+      budget
+    ).forEach((polynomial) => addCandidate(polynomial, null, 'place-degree bound'));
 
     (request.selection?.functionPlaces || []).forEach((source) => {
       const parsedPlace = parseFunctionPlace(String(source), constantField, budget);

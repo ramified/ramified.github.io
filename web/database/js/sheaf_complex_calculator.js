@@ -30135,11 +30135,14 @@
       }
     });
     columnStep = Math.ceil(columnStep);
-    const sidePadding = Math.ceil(Math.max(58, Math.max(0, ...objectWidths.values()) / 2 + 24));
+    const maxObjectHalfWidth = Math.max(0, ...objectWidths.values()) / 2;
+    const sidePadding = Math.ceil(Math.max(58, maxObjectHalfWidth + 24));
+    const turnLaneWidth = Math.ceil(Math.max(72, columnStep * 0.65));
+    const rightPadding = Math.ceil(Math.max(sidePadding, maxObjectHalfWidth + 10 + turnLaneWidth + 24));
     const maxColumn = Math.max(1, ...Array.from(pointMeta.values(), (point) => point.column));
     const maxDegree = Math.max(0, ...rows.map((row) => row.degree));
     const height = Math.max(150, maxDegree * 110 + 66);
-    const width = Math.ceil(sidePadding * 2 + (maxColumn - 1) * columnStep);
+    const width = Math.ceil(sidePadding + rightPadding + (maxColumn - 1) * columnStep);
     const coordByIndex = new Map();
     pointMeta.forEach((point, index) => {
       coordByIndex.set(index, {
@@ -30148,7 +30151,17 @@
         row: point.row
       });
     });
-    return { rows, coordByIndex, objectWidths, labelWidths, columnStep, width, height };
+    return {
+      rows,
+      coordByIndex,
+      objectWidths,
+      labelWidths,
+      columnStep,
+      turnLaneWidth,
+      rightPadding,
+      width,
+      height
+    };
   }
 
   function complexChartSnakeArrowGeometry(layout, index) {
@@ -30164,7 +30177,7 @@
         labelY: from.y - 18
       };
     }
-    const rightX = Math.min(layout.width - 24, from.x + Math.max(100, layout.columnStep * 0.9));
+    const rightX = startX + (layout.turnLaneWidth || Math.max(72, layout.columnStep * 0.65));
     const leftX = Math.max(24, to.x - Math.max(135, layout.columnStep * 1.2));
     const midY = from.y + (to.y - from.y) * 0.52;
     return {
@@ -30173,7 +30186,8 @@
         { x: leftX, y: midY }, { x: leftX, y: to.y }, { x: endX, y: to.y }
       ], 14),
       labelX: (rightX + leftX) / 2,
-      labelY: midY - 14
+      labelY: midY - 14,
+      turnX: rightX
     };
   }
 
@@ -31109,7 +31123,8 @@
       operations.mapCut = null;
       operations.mapCuts = [];
       operations.fiberNames = {};
-      operations.lesRangeTruncation = false;
+      operations.lesRangeTruncation = operations.mode === 'truncate'
+        && normalizeComplexChartEntry(entry, { requireId: false }).display === 'snake-les';
       operations.lesRangeEndpoints = [];
     }
     if (operations.mode === 'extend') {
@@ -31554,6 +31569,23 @@
     if (refs.complexChartOperations) refs.complexChartOperations.setAttribute('aria-expanded', html ? 'true' : 'false');
   }
 
+  function renderComplexChartTruncationWarning(entry, operations) {
+    if (!entry || operations?.mode !== 'truncate') return '';
+    const normalized = normalizeComplexChartEntry(entry, { requireId: false });
+    let warning = '';
+    if (normalized.display === 'snake-les' && operations.lesRangeTruncation === true) {
+      warning = 'Only the no-TikZ diagram below is interactive; target rows, previews, and TikZ rendering are display-only. Pick one or two objects or arrows. After two endpoints are selected, deselect one before choosing another.';
+    } else if (normalized.kind === 'filtration') {
+      warning = 'Only the large expression below is interactive. Click interior objects. The first and last objects are already boundaries, and filtration relation symbols cannot be used as arrow cuts.';
+    } else {
+      warning = 'Only the large expression below is interactive. Endpoint objects are already boundaries. After selecting arrows, an object after the first selected arrow cannot change the preview.';
+      if (normalized.display === 'snake-les') {
+        warning += ' Enable pick part of LES to select node or arrow endpoints on the no-TikZ diagram.';
+      }
+    }
+    return `<div class="sheaf-complex-operation-warning" role="note"><strong>Interaction limits:</strong> ${escapeHtml(warning)}</div>`;
+  }
+
   function renderComplexChartOperationsPanelHtml() {
     const chart = ensureComplexChartState();
     const operations = chart.operations || defaultComplexChartOperationsState();
@@ -31612,6 +31644,7 @@
         selectedLesRangeEndpoints
       })}</div>`
       : '';
+    const truncationWarning = renderComplexChartTruncationWarning(entry, operations);
     const lesControls = operations.mode === 'les' ? renderComplexChartLesControls(operations) : '';
     const lesRangeControls = isLesRangeTarget ? renderComplexChartLesRangeControls(operations) : '';
     const selectedFiberMapCuts = lesRangeEnabled
@@ -31644,6 +31677,7 @@
       ${lesControls}
       ${lesRangeControls}
       ${targetList}
+      ${truncationWarning}
       ${expression}
       ${fiberControls}
       <div class="hint">${escapeHtml(message)}</div>

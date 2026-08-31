@@ -153,6 +153,7 @@ function testJapanesePronunciationPlayback() {
       this.source = source;
       this.currentTime = 0;
       this.preload = '';
+      this.volume = 1;
       this.listeners = {};
       created.push(this);
     }
@@ -161,20 +162,73 @@ function testJapanesePronunciationPlayback() {
       this.listeners[type] = listener;
     }
 
-    pause() {}
+    pause() {
+      this.paused = true;
+    }
+
+    removeAttribute(name) {
+      if (name === 'src') this.sourceReleased = true;
+    }
+
+    load() {
+      this.reloaded = true;
+    }
 
     play() {
       this.played = true;
       return Promise.resolve();
     }
   };
+  const previousGame = minigames.__test.getGame();
+  const previousPreferences = minigames.__test.getFullscreenPreferences();
   try {
+    const activeGame = minigames.createLianliankanState(sharedPreset(), {
+      rng: minigames.createRng([0.1, 0.7, 0.3, 0.9]),
+      maxShuffleAttempts: 0
+    });
+    minigames.__test.setGame(activeGame);
+    minigames.__test.setFullscreenPreferences(minigames.__test.fullscreenSettingsDefaults);
+    assert.strictEqual(minigames.__test.playLianliankanPronunciation({ id: 'hiragana_po', glyph: 'ぽ' }), false);
+    assert.strictEqual(created.length, 0, 'sound defaults to off without creating an Audio object');
+
+    minigames.__test.setFullscreenPreferences({
+      soundEnabled: true,
+      soundVolume: 0.35,
+      showActionRow: true,
+      showGameTools: true
+    });
     assert.strictEqual(minigames.__test.playLianliankanPronunciation({ id: 'hiragana_po', glyph: 'ぽ' }), true);
     assert.strictEqual(created.length, 1);
     assert.strictEqual(created[0].source, 'assets/ramified_minigames/japanese_pronunciation/po.ogg');
+    assert.strictEqual(created[0].volume, 0.35);
     assert.strictEqual(created[0].played, true);
     assert.strictEqual(minigames.__test.playLianliankanPronunciation({ id: 'han_山', glyph: '山' }), false);
+
+    minigames.__test.setFullscreenPreferences({
+      soundEnabled: true,
+      soundVolume: 0,
+      showActionRow: true,
+      showGameTools: true
+    });
+    assert.strictEqual(created[0].paused, true, 'zero volume stops active pronunciation');
+    assert.strictEqual(created[0].sourceReleased, true, 'stopped pronunciation releases its local source');
+    assert.strictEqual(minigames.__test.playLianliankanPronunciation({ id: 'hiragana_chi', glyph: 'ち' }), false);
+    assert.strictEqual(created.length, 1, 'zero volume does not create another Audio object');
+
+    minigames.__test.setFullscreenPreferences({
+      soundEnabled: true,
+      soundVolume: 1,
+      showActionRow: true,
+      showGameTools: true
+    });
+    assert.strictEqual(minigames.__test.playLianliankanPronunciation({ id: 'hiragana_chi', glyph: 'ち' }), true);
+    minigames.__test.setGame(null);
+    assert.strictEqual(created[1].paused, true, 'switching away from Tile Matching stops active pronunciation');
+    assert.strictEqual(minigames.__test.playLianliankanPronunciation({ id: 'hiragana_chi', glyph: 'ち' }), false);
   } finally {
+    minigames.__test.stopLianliankanPronunciation();
+    minigames.__test.setGame(previousGame);
+    minigames.__test.setFullscreenPreferences(previousPreferences);
     if (OriginalAudio === undefined) delete global.Audio;
     else global.Audio = OriginalAudio;
   }
@@ -191,6 +245,55 @@ function testJapanesePronunciationAssets() {
     assert.ok(fs.existsSync(asset), `missing local pronunciation asset: ${entry.local}`);
     assert.ok(fs.statSync(asset).size > 1000, `pronunciation asset is unexpectedly small: ${entry.local}`);
   });
+}
+
+function testRapidConsecutiveTileMatches() {
+  const state = minigames.createLianliankanState(sharedPreset(), {
+    rng: minigames.createRng([0.1, 0.7, 0.3, 0.9]),
+    maxShuffleAttempts: 0
+  });
+  state.board.cells.forEach((cell) => {
+    cell.tile = null;
+  });
+  state.board.cells[0].tile = { id: 'fast_a', glyph: 'A' };
+  state.board.cells[1].tile = { id: 'fast_a', glyph: 'A' };
+  state.board.cells[2].tile = { id: 'fast_b', glyph: 'B' };
+  state.board.cells[3].tile = { id: 'fast_b', glyph: 'B' };
+  state.matches = 0;
+  state.selectedIndex = null;
+  state.pendingMatch = null;
+  lianliankan.updateGameStatus(state);
+
+  const previousGame = minigames.__test.getGame();
+  try {
+    minigames.__test.setGame(state);
+    minigames.__test.selectLianliankanTile(state, 0);
+    const firstMatch = minigames.__test.selectLianliankanTile(state, 1);
+    assert.strictEqual(firstMatch.result.kind, 'removed');
+    assert.strictEqual(state.board.cells[0].tile, null);
+    assert.strictEqual(state.board.cells[1].tile, null);
+    assert.strictEqual(state.phase, 'ready', 'the board is ready before the first match effect expires');
+    assert.deepStrictEqual(
+      firstMatch.effect.tiles.map((entry) => entry.tile.glyph),
+      ['A', 'A'],
+      'removed tiles remain captured for the temporary visual effect'
+    );
+
+    const nextSelection = minigames.__test.selectLianliankanTile(state, 2);
+    assert.strictEqual(nextSelection.result.kind, 'selected', 'another tile can be selected during the first effect');
+    assert.strictEqual(state.selectedIndex, 2);
+    const secondMatch = minigames.__test.selectLianliankanTile(state, 3);
+    assert.strictEqual(secondMatch.result.kind, 'removed');
+    assert.strictEqual(state.phase, 'complete');
+    assert.strictEqual(state.matches, 2);
+    assert.strictEqual(minigames.__test.activeLianliankanMatchEffects(state).length, 2, 'rapid match effects coexist');
+
+    minigames.__test.clearLianliankanMatchEffects(state);
+    assert.strictEqual(minigames.__test.activeLianliankanMatchEffects(state).length, 0);
+  } finally {
+    minigames.__test.clearLianliankanMatchEffects();
+    minigames.__test.setGame(previousGame);
+  }
 }
 
 function testHexTileMatchingUsesHexTopology() {
@@ -309,6 +412,7 @@ testExplicitCatalogEligibility();
 testTileMatchingTileSets();
 testJapanesePronunciationPlayback();
 testJapanesePronunciationAssets();
+testRapidConsecutiveTileMatches();
 testHexTileMatchingUsesHexTopology();
 testSharedLocaleContract();
 testLargeBoundaryBoardEmptyRing();

@@ -20,8 +20,14 @@
     tlIdentityDiagram,
     tlGeneratorDiagram,
     stackTlDiagrams,
+    identityMatrix,
+    matrixAdd,
+    matrixScale,
+    matrixMultiply,
     burauGeneratorMatrix,
     tlGeneratorMatrix,
+    linkStateTlGeneratorMatrix,
+    reducedBurauGeneratorMatrix,
     matrixToLinearCombination
   } = math;
 
@@ -76,7 +82,11 @@
   }
 
   function basisSymbolLatex(basis, basisType) {
-    if (basisType === 'permutation') return `[${basis.values.join(',')}]`;
+    if (basisType === 'permutation' || math.SYMMETRIC_PRESENTATIONS?.includes(basisType)) {
+      return math.formatPermutationBasisLatex
+        ? math.formatPermutationBasisLatex(basis, basisType)
+        : `[${basis.values.join(',')}]`;
+    }
     if (basisType === 'standard' || basisType === 'hecke-standard') return `H_{[${basis.values.join(',')}]}`;
     if (basisType === 'kl') return `\\underline{H}_{[${basis.values.join(',')}]}`;
     if (basisType === 'diagram' || basisType === 'tl-diagram') {
@@ -85,6 +95,7 @@
     }
     if (basisType === 'matrix-unit' || basisType === 'burau-matrix-unit') return `E_{${basis.row}${basis.column}}`;
     if (basisType === 'vector' || basisType === 'burau-vector') return `e_{${basis.row}}`;
+    if (basisType === 'link-state' || basisType === 'burau-link-state') return `L_{${basis.row || basis.cupIndex}}`;
     if (basisType === 'braid-word') return math.sourceWordLatex(basis.word || []);
     return String(basis.key || '?');
   }
@@ -124,6 +135,13 @@
         c2: orientPoint(curve.c2, direction),
         end: orientPoint(curve.end, direction)
       }))
+    };
+  }
+
+  function orientPolygon(polygon, direction) {
+    return {
+      ...polygon,
+      points: (polygon.points || []).map((point) => orientPoint(point, direction))
     };
   }
 
@@ -299,6 +317,120 @@
     };
   }
 
+  function makeTlCompositionDiagram(rank, factors, direction, label) {
+    const diagrams = (factors || []).map((factor) => factor?.pairs ? factor : tlGeneratorDiagram(rank, Number(factor)));
+    if (!diagrams.length) {
+      return makeTlDiagram(rank, tlIdentityDiagram(rank).pairs, direction, label || `identity Temperley-Lieb diagram on ${rank} strands`);
+    }
+    if (diagrams.some((diagram) => diagram.rank !== rank)) throw new TypeError('TL composition ranks differ.');
+
+    const layers = diagrams.length;
+    const nodeKey = (boundary, track) => `${boundary}:${track}`;
+    const nodePoint = (boundary, track) => ({
+      x: trackCoordinate(track, rank),
+      y: layerCoordinate(boundary, layers)
+    });
+    const edges = [];
+    const adjacency = new Map();
+    const connect = (a, b, curve) => {
+      const edgeIndex = edges.length;
+      edges.push({ a, b, curve });
+      [a, b].forEach((node) => {
+        if (!adjacency.has(node)) adjacency.set(node, []);
+        adjacency.get(node).push(edgeIndex);
+      });
+    };
+
+    diagrams.forEach((diagram, layer) => {
+      const y0 = layerCoordinate(layer, layers);
+      const y1 = layerCoordinate(layer + 1, layers);
+      const span = y1 - y0;
+      diagram.pairs.forEach(([leftValue, rightValue]) => {
+        let left = Number(leftValue);
+        let right = Number(rightValue);
+        if (left > right) [left, right] = [right, left];
+        const leftTop = left < rank;
+        const rightTop = right < rank;
+        const leftTrack = leftTop ? left : left - rank;
+        const rightTrack = rightTop ? right : right - rank;
+        const aBoundary = leftTop ? layer : layer + 1;
+        const bBoundary = rightTop ? layer : layer + 1;
+        const a = nodeKey(aBoundary, leftTrack);
+        const b = nodeKey(bBoundary, rightTrack);
+        const start = nodePoint(aBoundary, leftTrack);
+        const end = nodePoint(bBoundary, rightTrack);
+        let curve;
+        if (leftTop && rightTop) {
+          const depth = y0 + span * Math.min(0.48, 0.3 + Math.abs(rightTrack - leftTrack) * 0.04);
+          curve = { c1: { x: start.x, y: depth }, c2: { x: end.x, y: depth }, end };
+        } else if (!leftTop && !rightTop) {
+          const depth = y1 - span * Math.min(0.48, 0.3 + Math.abs(rightTrack - leftTrack) * 0.04);
+          curve = { c1: { x: start.x, y: depth }, c2: { x: end.x, y: depth }, end };
+        } else {
+          const mid = (start.y + end.y) / 2;
+          curve = { c1: { x: start.x, y: mid }, c2: { x: end.x, y: mid }, end };
+        }
+        connect(a, b, { start, ...curve });
+      });
+    });
+
+    const visited = new Set();
+    const orientedCurve = (edge, from) => {
+      if (edge.a === from) return {
+        next: edge.b,
+        curve: { c1: edge.curve.c1, c2: edge.curve.c2, end: edge.curve.end }
+      };
+      return {
+        next: edge.a,
+        curve: { c1: edge.curve.c2, c2: edge.curve.c1, end: edge.curve.start }
+      };
+    };
+    const trace = (startNode, firstEdge, closed) => {
+      const curves = [];
+      let node = startNode;
+      let edgeIndex = firstEdge;
+      do {
+        visited.add(edgeIndex);
+        const oriented = orientedCurve(edges[edgeIndex], node);
+        curves.push(oriented.curve);
+        node = oriented.next;
+        const nextEdges = (adjacency.get(node) || []).filter((candidate) => !visited.has(candidate));
+        edgeIndex = nextEdges.length ? Math.min(...nextEdges) : -1;
+      } while (edgeIndex >= 0 && (!closed || node !== startNode));
+      return { role: 'tl', closed, start: nodePoint(...startNode.split(':').map(Number)), curves };
+    };
+
+    const exteriorNodes = [...adjacency.keys()].filter((key) => {
+      const boundary = Number(key.split(':')[0]);
+      return boundary === 0 || boundary === layers;
+    }).sort((left, right) => {
+      const [leftBoundary, leftTrack] = left.split(':').map(Number);
+      const [rightBoundary, rightTrack] = right.split(':').map(Number);
+      return leftBoundary - rightBoundary || leftTrack - rightTrack;
+    });
+    const paths = [];
+    exteriorNodes.forEach((node) => {
+      const first = (adjacency.get(node) || []).find((edgeIndex) => !visited.has(edgeIndex));
+      if (first != null) paths.push(trace(node, first, false));
+    });
+    edges.forEach((edge, edgeIndex) => {
+      if (!visited.has(edgeIndex)) paths.push(trace(edge.a, edgeIndex, true));
+    });
+
+    const dimensions = diagramDimensions(rank, layers, direction, false);
+    return {
+      kind: 'tl-composition',
+      rank,
+      layers,
+      direction,
+      label: label || `glued Temperley-Lieb composition with ${layers} factors on ${rank} strands`,
+      width: dimensions.width,
+      height: dimensions.height,
+      paths: paths.map((path) => orientPath(path, direction)),
+      overlays: []
+    };
+  }
+
   function makeLoopDiagram(direction, label) {
     const path = orientPath({
       role: 'tl',
@@ -359,6 +491,65 @@
       height: vector ? (horizontal ? Math.max(38, dimensions.height * 0.42) : dimensions.height) : dimensions.height,
       cells,
       paths: [],
+      overlays: []
+    };
+  }
+
+  function makeBurauLinkStateDiagram(rank, cupIndex, direction, label) {
+    const count = Number(rank);
+    const cup = Number(cupIndex);
+    if (!Number.isInteger(count) || count < 2) throw new RangeError('A Burau link state requires at least two strands.');
+    if (!Number.isInteger(cup) || cup < 1 || cup >= count) {
+      throw new RangeError(`Cup index ${cup} is outside 1,...,${count - 1}.`);
+    }
+    const leftTrack = cup - 1;
+    const rightTrack = cup;
+    const paths = [];
+    const cupStart = { x: trackCoordinate(leftTrack, count), y: 0.08 };
+    const cupEnd = { x: trackCoordinate(rightTrack, count), y: 0.08 };
+    paths.push(orientPath({
+      role: 'link-state',
+      start: cupStart,
+      curves: [{
+        c1: { x: cupStart.x, y: 0.43 },
+        c2: { x: cupEnd.x, y: 0.43 },
+        end: cupEnd
+      }]
+    }, direction));
+    for (let track = 0; track < count; track += 1) {
+      if (track === leftTrack || track === rightTrack) continue;
+      const x = trackCoordinate(track, count);
+      paths.push(orientPath({
+        role: 'link-state',
+        endOnPlatform: true,
+        start: { x, y: 0.08 },
+        curves: [{
+          c1: { x, y: 0.34 },
+          c2: { x, y: 0.58 },
+          end: { x, y: 0.76 }
+        }]
+      }, direction));
+    }
+    const platforms = [orientPolygon({
+      role: 'platform',
+      points: [
+        { x: 0.06, y: 0.76 },
+        { x: 0.94, y: 0.76 },
+        { x: 0.94, y: 0.92 },
+        { x: 0.06, y: 0.92 }
+      ]
+    }, direction)];
+    const dimensions = diagramDimensions(count, 1, direction, true);
+    return {
+      kind: 'burau-link-state',
+      rank: count,
+      cupIndex: cup,
+      direction,
+      label: label || `Burau link state L ${cup}: cup at positions ${cup} and ${cup + 1}, with ${count - 2} strands ending on the platform`,
+      width: dimensions.width,
+      height: dimensions.height,
+      paths,
+      platforms,
       overlays: []
     };
   }
@@ -425,19 +616,21 @@
     return null;
   }
 
-  function factorTerm(context, coefficient, atom, index) {
+  function factorTerm(context, coefficient, atom, index, coefficientLatex) {
     const diagram = atomDiagram(context, atom);
     const basisLatex = atom.kind === 'identity'
       ? '1'
       : atom.kind === 'hecke-generator'
         ? `H_{${atom.index}}`
         : `e_{${atom.index}}`;
+    const parts = termParts(coefficient, index);
+    if (coefficientLatex) parts.coefficientLatex = coefficientLatex;
     return {
       coefficient: coefficient.toJSON(),
       diagram,
       basisLatex,
       symbolicLatex: polynomialTimesBasisLatex(coefficient, basisLatex),
-      parts: termParts(coefficient, index)
+      parts
     };
   }
 
@@ -575,7 +768,7 @@
   }
 
   function basisDiagram(context, basis, basisType) {
-    if (basisType === 'permutation') {
+    if (basisType === 'permutation' || math.SYMMETRIC_PRESENTATIONS?.includes(basisType)) {
       if (!claimDiagram(context, context.rank, 0)) return null;
       return makePermutationDiagram(basis.values || identityPermutation(context.rank), context.options.direction);
     }
@@ -602,6 +795,14 @@
       if (!claimDiagram(context, context.rank, 0)) return null;
       return makeGridDiagram(context.rank, basis.row, basis.column, context.options.direction, true);
     }
+    if (basisType === 'link-state' || basisType === 'burau-link-state') {
+      if (!claimDiagram(context, context.rank, 0)) return null;
+      return makeBurauLinkStateDiagram(
+        context.rank,
+        basis.row || basis.cupIndex,
+        context.options.direction
+      );
+    }
     if (basisType === 'braid-word') {
       const word = copyRecords(basis.word);
       if (!claimDiagram(context, context.rank, word.length)) return null;
@@ -624,7 +825,9 @@
     };
   }
 
-  function vectorOperand(context, combination, fallbackLatex) {
+  function vectorOperand(context, combination, fallbackLatex, requestedBasisType) {
+    const linkState = requestedBasisType === 'link-state' || combination.basisType === 'burau-link-state';
+    const diagramBasis = linkState ? 'link-state' : 'vector';
     const columns = new Map();
     combination.terms.forEach((term) => {
       const column = term.basis.column;
@@ -637,11 +840,11 @@
       return {
         column,
         lhs: {
-          rhoLatex: '\\rho(\\beta)',
-          diagram: basisDiagram(context, inputBasis, 'vector'),
-          basisLatex: `e_{${column}}`
+          rhoLatex: linkState ? '\\bar\\rho(\\beta)' : '\\rho(\\beta)',
+          diagram: basisDiagram(context, inputBasis, diagramBasis),
+          basisLatex: linkState ? `L_{${column}}` : `e_{${column}}`
         },
-        terms: terms.map((term, index) => diagramTerm(context, term, 'vector', index))
+        terms: terms.map((term, index) => diagramTerm(context, term, diagramBasis, index))
       };
     });
     return { kind: 'vector-system', rows, latex: fallbackLatex };
@@ -660,8 +863,8 @@
         return symbolicOperand(fallbackLatex);
       }
     }
-    if (basisType === 'vector' || combination.basisType === 'burau-vector') {
-      return vectorOperand(context, combination, fallbackLatex);
+    if (basisType === 'vector' || basisType === 'link-state' || combination.basisType === 'burau-vector' || combination.basisType === 'burau-link-state') {
+      return vectorOperand(context, combination, fallbackLatex, basisType);
     }
     if (combination.basisType === 'braid-word') basisType = 'braid-word';
     const terms = combination.sortedTerms().map((term, index) => diagramTerm(context, term, basisType, index));
@@ -676,10 +879,8 @@
     return symbolicOperand(fallbackLatex);
   }
 
-  function buildDiagrammaticTrace(calculation, options) {
-    if (!calculation || !Array.isArray(calculation.trace)) throw new TypeError('A calculation with trace rows is required.');
-    const normalized = normalizeDiagramOptions(options);
-    const context = {
+  function createDiagramContext(calculation, normalized) {
+    return {
       calculation,
       rank: positiveInteger(calculation.metadata?.rank, 1),
       options: normalized,
@@ -687,7 +888,23 @@
       warnings: [],
       warningCodes: new Set()
     };
-    const rows = calculation.trace.map((step) => {
+  }
+
+  function diagramModel(context, rows, extra) {
+    return {
+      rows,
+      warnings: context.warnings.slice(),
+      limits: { ...context.options.limits },
+      direction: context.options.direction,
+      scope: context.options.scope,
+      diagramAtoms: context.options.limits.atoms - context.remainingAtoms,
+      ...(extra || {})
+    };
+  }
+
+  function buildDiagrammaticTraceRows(context) {
+    const normalized = context.options;
+    return context.calculation.trace.map((step) => {
       const diagramThisRow = normalized.scope === 'all' || !!step.final;
       return {
         relationId: step.relationId,
@@ -703,13 +920,905 @@
           : symbolicOperand(step.rhsLatex)
       };
     });
+  }
+
+  function minimalRankForIndices(indices, minimum) {
+    const largest = (indices || []).reduce((value, index) => Math.max(value, Number(index) || 0), 0);
+    return Math.max(Number(minimum) || 0, largest ? largest + 1 : 0);
+  }
+
+  const RELATION_REFERENCE = Object.freeze({
+    identity: { label: 'Identity interpretation', rank: 1, formulas: ['1'] },
+    'coxeter-multiplication': { label: 'Coxeter involution relation', rank: 2, formulas: ['s_i^2=1'] },
+    'coxeter-braid': { label: 'Adjacent Coxeter braid relation', rank: 3, formulas: ['s_is_{i+1}s_i=s_{i+1}s_is_{i+1}'] },
+    'coxeter-commutation': { label: 'Distant Coxeter commutation relation', rank: 4, formulas: ['s_is_j=s_js_i\\quad(|i-j|>1)'] },
+    'braid-free-cancellation': { label: 'Braid inverse relations', rank: 2, formulas: ['\\sigma_i\\sigma_i^{-1}=1', '\\sigma_i^{-1}\\sigma_i=1'] },
+    'braid-relation': { label: 'Adjacent braid relation', rank: 3, formulas: ['\\sigma_i\\sigma_{i+1}\\sigma_i=\\sigma_{i+1}\\sigma_i\\sigma_{i+1}'] },
+    'braid-commutation': { label: 'Distant braid commutation relation', rank: 4, formulas: ['\\sigma_i\\sigma_j=\\sigma_j\\sigma_i\\quad(|i-j|>1)'] },
+    'hecke-multiplication': { label: 'Hecke quadratic relation', rank: 2, formulas: ['H_i^2=1+(v^{-1}-v)H_i'] },
+    'hecke-braid': { label: 'Adjacent Hecke braid relation', rank: 3, formulas: ['H_iH_{i+1}H_i=H_{i+1}H_iH_{i+1}'] },
+    'hecke-commutation': { label: 'Distant Hecke commutation relation', rank: 4, formulas: ['H_iH_j=H_jH_i\\quad(|i-j|>1)'] },
+    'hecke-inverse': { label: 'Inverse Hecke generator expansion', rank: 2, formulas: ['H_i^{-1}=H_i+v-v^{-1}'] },
+    'hecke-length-increase': { label: 'Hecke multiplication with increasing Coxeter length', rank: 2, formulas: ['H_wH_i=H_{ws_i}\\quad(\\ell(ws_i)>\\ell(w))'] },
+    'hecke-length-decrease': { label: 'Hecke multiplication with decreasing Coxeter length', rank: 2, formulas: ['H_wH_i=H_{ws_i}+(v^{-1}-v)H_w\\quad(\\ell(ws_i)<\\ell(w))'] },
+    'tl-quadratic': { label: 'Temperley-Lieb quadratic relation', rank: 2, formulas: ['e_i^2=\\delta e_i'] },
+    'tl-adjacent': { label: 'Adjacent Temperley-Lieb triple relations', rank: 3, formulas: ['e_ie_{i+1}e_i=e_i', 'e_{i+1}e_ie_{i+1}=e_{i+1}'] },
+    'tl-commutation': { label: 'Distant Temperley-Lieb commutation relation', rank: 4, formulas: ['e_ie_j=e_je_i\\quad(|i-j|>1)'] },
+    'tl-loop-removal': { label: 'Isolated Temperley-Lieb loop removal', rank: 0, formulas: ['\\bigcirc=\\delta=v+v^{-1}'] },
+    'tl-diagram-stacking': {
+      label: 'Canonical Temperley-Lieb diagram stacking',
+      rank: 3,
+      formulas: ['D_P D_Q=\\delta^{k(P,Q)}D_{P\\star Q}'],
+      hint: 'Glue the canonical diagrams D_P and D_Q: each of the k(P,Q) closed circles formed in the middle is removed and replaced by delta = v + v^-1, leaving D_(P star Q) on the outer boundary.'
+    },
+    'burau-generator': { label: 'Unreduced Burau positive generator', rank: 2, formulas: ['\\rho(\\sigma_i)=\\begin{pmatrix}1-v^2&v^2\\\\1&0\\end{pmatrix}'] },
+    'burau-inverse-generator': { label: 'Unreduced Burau inverse generator', rank: 2, formulas: ['\\rho(\\sigma_i^{-1})=\\begin{pmatrix}0&1\\\\v^{-2}&1-v^{-2}\\end{pmatrix}'] },
+    'burau-inverse-check': { label: 'Burau inverse verification', rank: 2, formulas: ['\\rho(\\sigma_i\\sigma_i^{-1})=I', '\\rho(\\sigma_i^{-1}\\sigma_i)=I'] },
+    'burau-braid-check': { label: 'Burau braid-relation verification', rank: 3, formulas: ['\\rho(\\sigma_i\\sigma_{i+1}\\sigma_i)=\\rho(\\sigma_{i+1}\\sigma_i\\sigma_{i+1})'] },
+    'burau-commutation-check': { label: 'Burau distant-commutation verification', rank: 4, formulas: ['\\rho(\\sigma_i\\sigma_j)=\\rho(\\sigma_j\\sigma_i)\\quad(|i-j|>1)'] },
+    'link-state-action': { label: 'Temperley-Lieb action on the link-state basis', rank: 4, formulas: ['\\pi(e_i)L_j=\\begin{cases}\\delta L_i,&j=i,\\\\L_i,&|i-j|=1,\\\\0,&|i-j|>1.\\end{cases}'] },
+    'reduced-burau-generator': { label: 'Reduced Burau positive generator on link states', rank: 2, formulas: ['\\bar\\rho(\\sigma_i)=I-v\\pi(e_i)'] },
+    'reduced-burau-inverse-generator': { label: 'Reduced Burau inverse generator on link states', rank: 2, formulas: ['\\bar\\rho(\\sigma_i^{-1})=I-v^{-1}\\pi(e_i)'] },
+    'reduced-burau-inverse-check': { label: 'Reduced Burau inverse verification', rank: 2, formulas: ['\\bar\\rho(\\sigma_i\\sigma_i^{-1})=I', '\\bar\\rho(\\sigma_i^{-1}\\sigma_i)=I'] },
+    'reduced-burau-braid-check': { label: 'Reduced Burau braid-relation verification', rank: 3, formulas: ['\\bar\\rho(\\sigma_i\\sigma_{i+1}\\sigma_i)=\\bar\\rho(\\sigma_{i+1}\\sigma_i\\sigma_{i+1})'] },
+    'reduced-burau-commutation-check': { label: 'Reduced Burau distant-commutation verification', rank: 4, formulas: ['\\bar\\rho(\\sigma_i\\sigma_j)=\\bar\\rho(\\sigma_j\\sigma_i)\\quad(|i-j|>1)'] },
+    'braid-to-burau': { label: 'Braid generators interpreted by the Burau representation', rank: 2, formulas: ['\\sigma_i\\mapsto\\rho(\\sigma_i)', '\\sigma_i^{-1}\\mapsto\\rho(\\sigma_i^{-1})'] },
+    'braid-to-symmetric': { label: 'Braid generator interpreted as a transposition', rank: 2, formulas: ['\\sigma_i\\mapsto s_i'] },
+    'braid-to-hecke': { label: 'Positive braid generator interpreted in Hecke', rank: 2, formulas: ['\\sigma_i=vH_i'] },
+    'braid-inverse-to-hecke': { label: 'Inverse braid generator interpreted in Hecke', rank: 2, formulas: ['\\sigma_i^{-1}=v^{-1}H_i+1-v^{-2}'] },
+    'kl-generator-expansion': { label: 'KL generator in the standard Hecke basis', rank: 2, formulas: ['b_i=H_i+v'] },
+    'braid-to-tl': { label: 'Braid generators interpreted in Temperley-Lieb', rank: 2, formulas: ['\\sigma_i=1-ve_i', '\\sigma_i^{-1}=1-v^{-1}e_i'] },
+    'braid-inverse-to-tl': { label: 'Inverse braid generator interpreted in Temperley-Lieb', rank: 2, formulas: ['\\sigma_i^{-1}=1-v^{-1}e_i'] },
+    'hecke-to-tl': { label: 'Hecke generators interpreted in Temperley-Lieb', rank: 2, formulas: ['H_i=v^{-1}-e_i', 'H_i^{-1}=v-e_i'] },
+    'kl-through-hecke-to-tl': { label: 'KL generator interpreted in Temperley-Lieb', rank: 2, formulas: ['b_i=\\delta-e_i'] },
+    'tl-to-burau': { label: 'Temperley-Lieb generator action in Burau', rank: 2, formulas: ['\\pi(e_i)=v^{-1}(I-\\rho(\\sigma_i))'] },
+    'braid-to-reduced-burau': { label: 'Braid generators acting on Burau link states', rank: 2, formulas: ['\\sigma_i\\mapsto I-v\\pi(e_i)', '\\sigma_i^{-1}\\mapsto I-v^{-1}\\pi(e_i)'] },
+    'tl-to-reduced-burau': { label: 'Temperley-Lieb generator action on Burau link states', rank: 2, formulas: ['\\pi(e_i)L_j=\\delta L_i\\ (j=i),\\quad L_i\\ (|i-j|=1),\\quad0\\ (|i-j|>1)'] },
+    'hecke-to-burau': { label: 'Hecke generator action in Burau', rank: 2, formulas: ['\\pi(H_i)=v^{-1}I-\\pi(e_i)', '\\pi(H_i^{-1})=vI-\\pi(e_i)'] },
+    'hecke-to-reduced-burau': { label: 'Hecke generator action on Burau link states', rank: 2, formulas: ['\\bar\\pi(H_i)=v^{-1}I-\\pi(e_i)', '\\bar\\pi(H_i^{-1})=vI-\\pi(e_i)'] },
+    'kl-to-burau': { label: 'KL generator action in Burau', rank: 2, formulas: ['\\pi(b_i)=\\delta I-\\pi(e_i)'] },
+    'kl-to-reduced-burau': { label: 'KL generator action on Burau link states', rank: 2, formulas: ['\\bar\\pi(b_i)=\\delta I-\\pi(e_i)'] },
+    'permutation-basis': { label: 'Permutation basis convention', rank: 2, formulas: ['\\{[w]:w\\in S_n\\}'] },
+    'permutation-composition': { label: 'Deterministic reduced composition-word convention', rank: 2, formulas: ['w=s_{i_1}\\cdots s_{i_{\\ell}}\\quad(\\ell\\text{ minimal})'] },
+    'permutation-transpositions': { label: 'Adjacent-transposition expression convention', rank: 2, formulas: ['w=(i_1\\ i_1{+}1)\\cdots(i_{\\ell}\\ i_{\\ell}{+}1)'] },
+    'permutation-cycle': { label: 'Disjoint-cycle notation convention', rank: 2, formulas: ['w=(a_1\\cdots a_r)(b_1\\cdots b_s)\\cdots'] },
+    'permutation-one-line': { label: 'One-line notation convention', rank: 2, formulas: ['w=(w(1),\\ldots,w(n))'] },
+    'permutation-two-line': { label: 'Two-line notation convention', rank: 2, formulas: ['w=\\begin{pmatrix}1&\\cdots&n\\\\w(1)&\\cdots&w(n)\\end{pmatrix}'] },
+    'permutation-matrix': { label: 'Permutation-matrix convention', rank: 2, formulas: ['(P_w)_{ij}=\\mathbf{1}_{\\{i=w(j)\\}}'] },
+    'braid-word-result': { label: 'Freely reduced braid-word convention', rank: 2, formulas: ['\\text{adjacent inverse cancellation; noncanonical}'] },
+    'standard-basis-expansion': { label: 'Standard Hecke basis convention', rank: 2, formulas: ['\\{H_w:w\\in S_n\\}'] },
+    'kl-basis-change': { label: 'KL canonical basis convention', rank: 2, formulas: ['\\{\\underline H_w:w\\in S_n\\}'] },
+    'tl-diagram-basis': { label: 'Canonical Temperley-Lieb diagram basis', rank: 2, formulas: ['\\{D_{\\{\\mathrm{pairing}\\}}\\}'] },
+    'matrix-unit-basis': { label: 'Matrix-unit output basis', rank: 2, formulas: ['\\{E_{ij}\\}'] },
+    'vector-basis': { label: 'Column-wise vector output basis', rank: 2, formulas: ['\\rho(\\beta)e_j=\\sum_i a_{ij}e_i'] },
+    'link-state-basis': { label: 'Burau link-state basis', rank: 2, formulas: ['W_{n,n-2}=\\bigoplus_{j=1}^{n-1}\\mathbb Z[v,v^{-1}]L_j'] }
+  });
+
+  const TARGET_RELATION_CATALOGS = Object.freeze({
+    symmetric: {
+      defining: ['coxeter-multiplication', 'coxeter-braid', 'coxeter-commutation'],
+      consequences: []
+    },
+    braid: {
+      defining: ['braid-free-cancellation', 'braid-relation', 'braid-commutation'],
+      consequences: []
+    },
+    hecke: {
+      defining: ['hecke-multiplication', 'hecke-braid', 'hecke-commutation'],
+      consequences: ['hecke-inverse', 'hecke-length-increase', 'hecke-length-decrease']
+    },
+    tl: {
+      defining: ['tl-quadratic', 'tl-adjacent', 'tl-commutation', 'tl-loop-removal'],
+      consequences: ['tl-diagram-stacking']
+    },
+    burau: {
+      defining: ['link-state-action', 'reduced-burau-generator', 'reduced-burau-inverse-generator'],
+      consequences: ['reduced-burau-inverse-check', 'reduced-burau-braid-check', 'reduced-burau-commutation-check']
+    }
+  });
+  const UNREDUCED_BURAU_RELATION_CATALOG = Object.freeze({
+    defining: ['burau-generator', 'burau-inverse-generator'],
+    consequences: ['burau-inverse-check', 'burau-braid-check', 'burau-commutation-check']
+  });
+
+  function withRelationRank(context, rank, callback) {
+    const previous = context.rank;
+    context.rank = rank;
+    try {
+      return callback();
+    } finally {
+      context.rank = previous;
+    }
+  }
+
+  function relationDiagramOperand(context, rank, compositionLength, fallbackLatex, factory) {
+    if (!claimDiagram(context, rank, compositionLength)) return symbolicOperand(fallbackLatex);
+    return singleDiagramOperand(factory(), fallbackLatex);
+  }
+
+  function relationIdentityOperand(context, rank, tone, label) {
+    return relationDiagramOperand(context, rank, 0, '1', () => makeBraidDiagram(
+      rank,
+      [],
+      context.options.direction,
+      tone || 'symmetric',
+      label || `identity on ${rank} strand${rank === 1 ? '' : 's'}`
+    ));
+  }
+
+  function relationCrossingOperand(context, rank, sign, style, label, fallbackLatex) {
+    return relationDiagramOperand(context, rank, 1, fallbackLatex, () => makeBraidDiagram(
+      rank,
+      [{ family: style === 'hecke' ? 'hecke' : style === 'braid' ? 'braid' : 'coxeter', index: 1, sign }],
+      context.options.direction,
+      style,
+      label
+    ));
+  }
+
+  function relationTlOperand(context, rank, label) {
+    return relationDiagramOperand(context, rank, 1, 'e_{1}', () => {
+      const basis = tlGeneratorDiagram(rank, 1);
+      return makeTlDiagram(rank, basis.pairs, context.options.direction, label || 'Temperley-Lieb generator e 1 on two strands');
+    });
+  }
+
+  function relationLoopOperand(context) {
+    return relationDiagramOperand(context, 0, 0, '\\bigcirc', () => makeLoopDiagram(
+      context.options.direction,
+      'isolated Temperley-Lieb loop with no boundary strands'
+    ));
+  }
+
+  function relationGridOperand(context, rank, row, column, vector, label) {
+    const fallback = vector ? `e_{${row}}` : `E_{${row}${column}}`;
+    return relationDiagramOperand(context, rank, 0, fallback, () => {
+      const diagram = makeGridDiagram(rank, row, column, context.options.direction, vector);
+      diagram.label = label || diagram.label;
+      return diagram;
+    });
+  }
+
+  function relationLinkStateOperand(context, rank, cupIndex, label) {
+    return relationDiagramOperand(context, rank, 0, `L_{${cupIndex}}`, () => makeBurauLinkStateDiagram(
+      rank,
+      cupIndex,
+      context.options.direction,
+      label
+    ));
+  }
+
+  function relationLinkStateMatrixOperand(context, rank, matrix, fallbackLatex) {
+    return withRelationRank(context, rank, () => vectorOperand(
+      context,
+      matrixToLinearCombination(matrix, 'link-state'),
+      fallbackLatex,
+      'link-state'
+    ));
+  }
+
+  function relationLinkStateLinearOperand(context, rank, specs, fallbackLatex) {
+    return withRelationRank(context, rank, () => ({
+      kind: 'linear-combination',
+      terms: (specs || []).map((spec, index) => diagramTerm(context, {
+        basis: { key: String(spec.cupIndex), row: spec.cupIndex, cupIndex: spec.cupIndex },
+        coefficient: spec.coefficient
+      }, 'link-state', index)),
+      latex: fallbackLatex
+    }));
+  }
+
+  function relationLinearOperand(context, rank, specs, fallbackLatex) {
+    return withRelationRank(context, rank, () => ({
+      kind: 'linear-combination',
+      terms: specs.map((spec, index) => factorTerm(context, spec.coefficient, spec.atom, index, spec.coefficientLatex)),
+      latex: fallbackLatex
+    }));
+  }
+
+  function relationMatrixOperand(context, rank, matrix, fallbackLatex) {
+    return withRelationRank(context, rank, () => {
+      const combination = matrixToLinearCombination(matrix, 'matrix-unit');
+      return {
+        kind: 'linear-combination',
+        terms: combination.sortedTerms().map((term, index) => diagramTerm(context, term, 'matrix-unit', index)),
+        latex: fallbackLatex
+      };
+    });
+  }
+
+  function relationProduct(operands, fallbackLatex) {
+    return { kind: 'factor-product', factors: operands, latex: fallbackLatex || '' };
+  }
+
+  function relationEquation(lhs, operator, rhs) {
+    return { lhs: lhs || null, operator: operator || '', rhs };
+  }
+
+  function buildMinimalRelationRow(context, relationId) {
+    const one = LaurentPolynomial.one();
+    const minusOne = LaurentPolynomial.monomial(0, -1n);
+    const v = LaurentPolynomial.monomial(1, 1n);
+    const vInverse = LaurentPolynomial.monomial(-1, 1n);
+    const vInverseSquared = LaurentPolynomial.monomial(-2, 1n);
+    const rank = minimalRankForIndices([1], 2);
+    const I = (tone, label) => relationIdentityOperand(context, rank, tone, label);
+    const B = (sign, label) => relationCrossingOperand(context, rank, sign, 'braid', label, sign === -1 ? '\\sigma_1^{-1}' : '\\sigma_1');
+    const S = (label) => relationCrossingOperand(context, rank, 1, 'symmetric', label, 's_1');
+    const H = (sign, label) => relationCrossingOperand(context, rank, sign, 'hecke', label, sign === -1 ? 'H_1^{-1}' : 'H_1');
+    const E = (label) => relationTlOperand(context, rank, label);
+    const heckeExpansion = () => relationLinearOperand(context, rank, [
+      { coefficient: one, atom: { kind: 'hecke-generator', index: 1 } },
+      { coefficient: v, atom: { kind: 'identity', tone: 'hecke' } }
+    ], 'H_1+v');
+    const tlPositiveExpansion = () => relationLinearOperand(context, rank, [
+      { coefficient: one, atom: { kind: 'identity', tone: 'tl' } },
+      { coefficient: v.neg(), atom: { kind: 'tl-generator', index: 1 } }
+    ], '1-ve_1');
+    const tlInverseExpansion = () => relationLinearOperand(context, rank, [
+      { coefficient: one, atom: { kind: 'identity', tone: 'tl' } },
+      { coefficient: vInverse.neg(), atom: { kind: 'tl-generator', index: 1 } }
+    ], '1-v^{-1}e_1');
+    const row = (label, equations, rowRank = rank) => ({ relationId, label, rank: rowRank, equations });
+
+    switch (relationId) {
+      case 'identity':
+        return row('Identity on one strand', [relationEquation(null, '', relationIdentityOperand(context, 1, 'symmetric', 'identity on one strand'))], 1);
+      case 'coxeter-multiplication':
+        return row('Coxeter multiplication, minimal example s 1 squared equals the identity', [
+          relationEquation(relationProduct([S('first Coxeter generator s 1'), S('second Coxeter generator s 1')], 's_1s_1'), '=', I('symmetric', 'identity permutation on two strands'))
+        ]);
+      case 'braid-to-symmetric':
+        return row('Forget the overcrossing of braid generator sigma 1 on two strands', [
+          relationEquation(B(1, 'positive braid generator sigma 1'), '\\mapsto', S('symmetric-group transposition s 1'))
+        ]);
+      case 'braid-free-cancellation':
+        return row('Positive and inverse braid generators cancel on two strands', [
+          relationEquation(relationProduct([B(1, 'positive braid generator sigma 1'), B(-1, 'inverse braid generator sigma 1')], '\\sigma_1\\sigma_1^{-1}'), '=', I('braid', 'identity braid on two strands'))
+        ]);
+      case 'braid-to-hecke':
+        return row('Positive braid generator mapped to the Hecke algebra at i equals 1', [
+          relationEquation(B(1, 'positive braid generator sigma 1'), '=', relationLinearOperand(context, rank, [
+            { coefficient: v, atom: { kind: 'hecke-generator', index: 1 } }
+          ], 'vH_1'))
+        ]);
+      case 'braid-inverse-to-hecke':
+        return row('Inverse braid generator mapped to the Hecke algebra at i equals 1', [
+          relationEquation(B(-1, 'inverse braid generator sigma 1'), '=', relationLinearOperand(context, rank, [
+            { coefficient: vInverse, atom: { kind: 'hecke-generator', index: 1 } },
+            { coefficient: one.sub(vInverseSquared), atom: { kind: 'identity', tone: 'hecke' } }
+          ], 'v^{-1}H_1+1-v^{-2}'))
+        ]);
+      case 'hecke-inverse':
+        return row('Inverse Hecke generator expansion at i equals 1', [
+          relationEquation(H(-1, 'inverse Hecke generator H 1'), '=', relationLinearOperand(context, rank, [
+            { coefficient: one, atom: { kind: 'hecke-generator', index: 1 } },
+            { coefficient: v.sub(vInverse), atom: { kind: 'identity', tone: 'hecke' } }
+          ], 'H_1+v-v^{-1}'))
+        ]);
+      case 'hecke-length-increase':
+        return row('Hecke multiplication with increasing Coxeter length, minimal example', [
+          relationEquation(relationProduct([I('hecke', 'identity Hecke diagram'), H(1, 'Hecke generator H 1')], 'H_eH_1'), '=', H(1, 'standard Hecke diagram H 1'))
+        ]);
+      case 'hecke-length-decrease':
+      case 'hecke-multiplication':
+        return row('Hecke quadratic multiplication on two strands', [
+          relationEquation(relationProduct([H(1, 'first Hecke generator H 1'), H(1, 'second Hecke generator H 1')], 'H_1H_1'), '=', relationLinearOperand(context, rank, [
+            { coefficient: one, atom: { kind: 'identity', tone: 'hecke' } },
+            { coefficient: vInverse.sub(v), atom: { kind: 'hecke-generator', index: 1 } }
+          ], '1+(v^{-1}-v)H_1'))
+        ]);
+      case 'kl-generator-expansion':
+      case 'kl-basis-change':
+        return row('Exact standard-Hecke expansion of the minimal KL basis generator', [relationEquation(null, '', heckeExpansion())]);
+      case 'braid-to-tl':
+        return row('Positive and inverse braid generators mapped to Temperley-Lieb diagrams at i equals 1', [
+          relationEquation(B(1, 'positive braid generator sigma 1'), '=', tlPositiveExpansion()),
+          relationEquation(B(-1, 'inverse braid generator sigma 1'), '=', tlInverseExpansion())
+        ]);
+      case 'braid-inverse-to-tl':
+        return row('Inverse braid generator mapped to Temperley-Lieb diagrams at i equals 1', [
+          relationEquation(B(-1, 'inverse braid generator sigma 1'), '=', tlInverseExpansion())
+        ]);
+      case 'hecke-to-tl':
+        return row('Hecke generator mapped to Temperley-Lieb diagrams at i equals 1', [
+          relationEquation(H(1, 'Hecke generator H 1'), '=', relationLinearOperand(context, rank, [
+            { coefficient: vInverse, atom: { kind: 'identity', tone: 'tl' } },
+            { coefficient: minusOne, atom: { kind: 'tl-generator', index: 1 } }
+          ], 'v^{-1}-e_1'))
+        ]);
+      case 'kl-through-hecke-to-tl':
+        return row('Minimal KL basis generator mapped through Hecke to Temperley-Lieb diagrams', [
+          relationEquation(heckeExpansion(), '\\mapsto', relationLinearOperand(context, rank, [
+            { coefficient: DELTA, coefficientLatex: '\\delta', atom: { kind: 'identity', tone: 'tl' } },
+            { coefficient: minusOne, atom: { kind: 'tl-generator', index: 1 } }
+          ], '\\delta-e_1'))
+        ]);
+      case 'tl-to-tl':
+        return row('Temperley-Lieb stacking on two strands', [
+          relationEquation(relationProduct([E('first Temperley-Lieb generator e 1'), E('second Temperley-Lieb generator e 1')], 'e_1e_1'), '=', relationLinearOperand(context, rank, [
+            { coefficient: DELTA, coefficientLatex: '\\delta', atom: { kind: 'tl-generator', index: 1 } }
+          ], '\\delta e_1'))
+        ]);
+      case 'tl-diagram-stacking':
+        return row('Canonical Temperley-Lieb diagram stacking', [
+          relationEquation(null, '', symbolicOperand('D_P D_Q=\\delta^{k(P,Q)}D_{P\\star Q}'))
+        ]);
+      case 'tl-loop-removal':
+        return row('An isolated Temperley-Lieb loop contributes delta', [
+          relationEquation(relationLoopOperand(context), '=', symbolicOperand('\\delta'))
+        ], 0);
+      case 'burau-generator':
+        return row('Unreduced Burau image of the positive braid generator sigma 1 on two strands', [
+          relationEquation(B(1, 'positive braid generator sigma 1'), '\\mapsto', relationMatrixOperand(context, rank, burauGeneratorMatrix(rank, 1, 1), '\\rho(\\sigma_1)'))
+        ]);
+      case 'burau-inverse-generator':
+        return row('Unreduced Burau image of the inverse braid generator sigma 1 on two strands', [
+          relationEquation(B(-1, 'inverse braid generator sigma 1'), '\\mapsto', relationMatrixOperand(context, rank, burauGeneratorMatrix(rank, 1, -1), '\\rho(\\sigma_1^{-1})'))
+        ]);
+      case 'tl-to-burau':
+        return row('Burau matrix-unit image of Temperley-Lieb generator e 1 on two strands', [
+          relationEquation(E('Temperley-Lieb generator e 1'), '\\mapsto', relationMatrixOperand(context, rank, tlGeneratorMatrix(rank, 1), '\\pi(e_1)'))
+        ]);
+      case 'permutation-basis':
+      case 'permutation-composition':
+      case 'permutation-transpositions':
+      case 'permutation-cycle':
+      case 'permutation-one-line':
+      case 'permutation-two-line':
+      case 'permutation-matrix':
+        return row('Minimal nontrivial permutation basis diagram', [relationEquation(null, '', S('permutation basis transposition on two strands'))]);
+      case 'braid-word-result':
+        return row('Minimal freely reduced braid-word representative', [relationEquation(null, '', B(1, 'freely reduced positive braid word on two strands'))]);
+      case 'standard-basis-expansion':
+        return row('Minimal standard Hecke basis diagram', [relationEquation(null, '', H(1, 'standard Hecke basis diagram on two strands'))]);
+      case 'tl-diagram-basis':
+        return row('Minimal nontrivial canonical Temperley-Lieb basis diagram', [relationEquation(null, '', E('canonical Temperley-Lieb basis diagram on two strands'))]);
+      case 'matrix-unit-basis':
+        return row('Minimal nontrivial matrix-unit basis diagram', [relationEquation(null, '', relationGridOperand(context, rank, 1, 2, false, 'matrix unit E 1 2 in a two by two grid'))]);
+      case 'vector-basis':
+        return row('Minimal nontrivial standard-vector basis diagram', [relationEquation(null, '', relationGridOperand(context, rank, 1, 1, true, 'first standard basis vector in a two-cell strip'))]);
+      case 'link-state-basis':
+        return row('Minimal Burau link state: one cup and no propagating platform strands', [
+          relationEquation(null, '', relationLinkStateOperand(context, rank, 1, 'Burau link state L 1 on two strands'))
+        ]);
+      default:
+        warning(context, 'relation-model', 'Some relation references have no diagrammatic model and remain symbolic.');
+        return {
+          relationId,
+          label: `Symbolic fallback for ${relationId.replace(/-/g, ' ')}`,
+          rank: null,
+          fallback: true,
+          equations: [relationEquation(null, '', symbolicOperand(math.relationLatex(relationId)))]
+        };
+    }
+  }
+
+  function referenceDefinition(relationId) {
+    return RELATION_REFERENCE[relationId] || {
+      label: 'Symbolic fallback for ' + relationId.replace(/-/g, ' '),
+      rank: null,
+      formulas: [math.relationLatex(relationId)]
+    };
+  }
+
+  function referenceRow(relationId, equations, fallback) {
+    const definition = referenceDefinition(relationId);
     return {
-      rows,
-      warnings: context.warnings,
-      limits: { ...normalized.limits },
-      direction: normalized.direction,
-      scope: normalized.scope,
-      diagramAtoms: normalized.limits.atoms - context.remainingAtoms
+      relationId,
+      label: definition.label,
+      hint: definition.hint || '',
+      rank: definition.rank,
+      fallback: !!fallback,
+      equations
+    };
+  }
+
+  function symbolicReferenceRow(relationId) {
+    const definition = referenceDefinition(relationId);
+    return referenceRow(
+      relationId,
+      definition.formulas.map((formula) => relationEquation(null, '', symbolicOperand(formula))),
+      !RELATION_REFERENCE[relationId]
+    );
+  }
+
+  function targetWordOperand(context, rank, style, records, label, fallbackLatex) {
+    const family = style === 'hecke' ? 'hecke' : style === 'braid' ? 'braid' : 'coxeter';
+    const word = (records || []).map((record) => typeof record === 'number'
+      ? { family, index: Math.abs(record), sign: record < 0 ? -1 : 1 }
+      : { family, index: record.index, sign: record.sign === -1 ? -1 : 1 });
+    return relationDiagramOperand(context, rank, word.length, fallbackLatex, () => makeBraidDiagram(
+      rank,
+      word,
+      context.options.direction,
+      style,
+      label
+    ));
+  }
+
+  function targetTlAtomOperand(context, rank, index, label) {
+    return relationDiagramOperand(context, rank, 1, 'e_' + index, () => {
+      const basis = tlGeneratorDiagram(rank, index);
+      return makeTlDiagram(rank, basis.pairs, context.options.direction, label || 'Temperley-Lieb generator e ' + index + ' on ' + rank + ' strands');
+    });
+  }
+
+  function tlBasisForWord(rank, word) {
+    const budget = new OperationBudget({ operations: 100000, terms: 1000, timeoutMs: 750 });
+    let diagram = tlIdentityDiagram(rank);
+    (word || []).forEach((index) => {
+      diagram = stackTlDiagrams(diagram, tlGeneratorDiagram(rank, index), budget).diagram;
+    });
+    return diagram;
+  }
+
+  function targetTlCompositionOperand(context, rank, factorWords, label, fallbackLatex) {
+    const compositionLength = (factorWords || []).reduce((total, word) => total + word.length, 0);
+    return relationDiagramOperand(context, rank, compositionLength, fallbackLatex, () => makeTlCompositionDiagram(
+      rank,
+      factorWords.map((word) => tlBasisForWord(rank, word)),
+      context.options.direction,
+      label
+    ));
+  }
+
+  function burauWordMatrix(rank, records) {
+    const budget = new OperationBudget({ operations: 250000, terms: 5000, timeoutMs: 1000 });
+    let matrix = identityMatrix(rank);
+    (records || []).forEach((record) => {
+      matrix = matrixMultiply(matrix, burauGeneratorMatrix(rank, record.index, record.sign === -1 ? -1 : 1), budget);
+    });
+    return matrix;
+  }
+
+  function reducedBurauWordMatrix(rank, records) {
+    const budget = new OperationBudget({ operations: 250000, terms: 5000, timeoutMs: 1000 });
+    let matrix = identityMatrix(rank - 1);
+    (records || []).forEach((record) => {
+      matrix = matrixMultiply(matrix, reducedBurauGeneratorMatrix(rank, record.index, record.sign === -1 ? -1 : 1), budget);
+    });
+    return matrix;
+  }
+
+  function rhoOperand(content, fallbackLatex, reduced) {
+    return { kind: 'representation', badgeLatex: reduced ? '\\bar\\rho' : '\\rho', content, latex: fallbackLatex || '' };
+  }
+
+  function buildTargetRelationRow(context, relationId) {
+    const one = LaurentPolynomial.one();
+    const minusOne = LaurentPolynomial.monomial(0, -1n);
+    const v = LaurentPolynomial.monomial(1, 1n);
+    const vInverse = LaurentPolynomial.monomial(-1, 1n);
+    const W = (style, rank, records, label, fallback) => targetWordOperand(context, rank, style, records, label, fallback);
+    const T = (rank, factors, label, fallback) => targetTlCompositionOperand(context, rank, factors, label, fallback);
+    const E = (rank, index, label) => targetTlAtomOperand(context, rank, index, label);
+    const I = (rank, tone, label) => relationIdentityOperand(context, rank, tone, label);
+    const matrix = (rank, value, fallback) => relationMatrixOperand(context, rank, value, fallback);
+    const row = (equations) => referenceRow(relationId, equations);
+
+    switch (relationId) {
+      case 'coxeter-multiplication':
+        return row([relationEquation(
+          W('symmetric', 2, [1, 1], 'glued Coxeter word s 1 s 1', 's_1s_1'),
+          '=',
+          I(2, 'symmetric', 'identity permutation on two strands')
+        )]);
+      case 'coxeter-braid':
+        return row([relationEquation(
+          W('symmetric', 3, [1, 2, 1], 'glued Coxeter word s 1 s 2 s 1', 's_1s_2s_1'),
+          '=',
+          W('symmetric', 3, [2, 1, 2], 'glued Coxeter word s 2 s 1 s 2', 's_2s_1s_2')
+        )]);
+      case 'coxeter-commutation':
+        return row([relationEquation(
+          W('symmetric', 4, [1, 3], 'glued Coxeter word s 1 s 3', 's_1s_3'),
+          '=',
+          W('symmetric', 4, [3, 1], 'glued Coxeter word s 3 s 1', 's_3s_1')
+        )]);
+      case 'braid-free-cancellation':
+        return row([
+          relationEquation(
+            W('braid', 2, [{ index: 1, sign: 1 }, { index: 1, sign: -1 }], 'glued braid word sigma 1 sigma 1 inverse', '\\sigma_1\\sigma_1^{-1}'),
+            '=',
+            I(2, 'braid', 'identity braid on two strands')
+          ),
+          relationEquation(
+            W('braid', 2, [{ index: 1, sign: -1 }, { index: 1, sign: 1 }], 'glued braid word sigma 1 inverse sigma 1', '\\sigma_1^{-1}\\sigma_1'),
+            '=',
+            I(2, 'braid', 'identity braid on two strands')
+          )
+        ]);
+      case 'braid-relation':
+        return row([relationEquation(
+          W('braid', 3, [1, 2, 1], 'glued braid word sigma 1 sigma 2 sigma 1', '\\sigma_1\\sigma_2\\sigma_1'),
+          '=',
+          W('braid', 3, [2, 1, 2], 'glued braid word sigma 2 sigma 1 sigma 2', '\\sigma_2\\sigma_1\\sigma_2')
+        )]);
+      case 'braid-commutation':
+        return row([relationEquation(
+          W('braid', 4, [1, 3], 'glued braid word sigma 1 sigma 3', '\\sigma_1\\sigma_3'),
+          '=',
+          W('braid', 4, [3, 1], 'glued braid word sigma 3 sigma 1', '\\sigma_3\\sigma_1')
+        )]);
+      case 'hecke-multiplication':
+      case 'hecke-length-decrease':
+        return row([relationEquation(
+          W('hecke', 2, [1, 1], 'glued Hecke word H 1 squared', 'H_1H_1'),
+          '=',
+          relationLinearOperand(context, 2, [
+            { coefficient: one, atom: { kind: 'identity', tone: 'hecke' } },
+            { coefficient: vInverse.sub(v), atom: { kind: 'hecke-generator', index: 1 } }
+          ], '1+(v^{-1}-v)H_1')
+        )]);
+      case 'hecke-braid':
+        return row([relationEquation(
+          W('hecke', 3, [1, 2, 1], 'glued Hecke word H 1 H 2 H 1', 'H_1H_2H_1'),
+          '=',
+          W('hecke', 3, [2, 1, 2], 'glued Hecke word H 2 H 1 H 2', 'H_2H_1H_2')
+        )]);
+      case 'hecke-commutation':
+        return row([relationEquation(
+          W('hecke', 4, [1, 3], 'glued Hecke word H 1 H 3', 'H_1H_3'),
+          '=',
+          W('hecke', 4, [3, 1], 'glued Hecke word H 3 H 1', 'H_3H_1')
+        )]);
+      case 'hecke-length-increase':
+        return row([relationEquation(
+          W('hecke', 2, [1], 'minimal increasing-length Hecke product', 'H_eH_1'),
+          '=',
+          W('hecke', 2, [1], 'standard Hecke diagram H 1', 'H_1')
+        )]);
+      case 'tl-quadratic':
+        return row([relationEquation(
+          T(2, [[1], [1]], 'glued Temperley-Lieb product e 1 e 1 with an internal loop', 'e_1e_1'),
+          '=',
+          relationLinearOperand(context, 2, [{ coefficient: DELTA, coefficientLatex: '\\delta', atom: { kind: 'tl-generator', index: 1 } }], '\\delta e_1')
+        )]);
+      case 'tl-adjacent':
+        return row([
+          relationEquation(
+            T(3, [[1], [2], [1]], 'glued Temperley-Lieb product e 1 e 2 e 1', 'e_1e_2e_1'),
+            '=',
+            E(3, 1, 'Temperley-Lieb generator e 1 on three strands')
+          ),
+          relationEquation(
+            T(3, [[2], [1], [2]], 'glued Temperley-Lieb product e 2 e 1 e 2', 'e_2e_1e_2'),
+            '=',
+            E(3, 2, 'Temperley-Lieb generator e 2 on three strands')
+          )
+        ]);
+      case 'tl-commutation':
+        return row([relationEquation(
+          T(4, [[1], [3]], 'glued Temperley-Lieb product e 1 e 3', 'e_1e_3'),
+          '=',
+          T(4, [[3], [1]], 'glued Temperley-Lieb product e 3 e 1', 'e_3e_1')
+        )]);
+      case 'tl-diagram-stacking':
+        return row([relationEquation(
+          null,
+          '',
+          symbolicOperand('D_P D_Q=\\delta^{k(P,Q)}D_{P\\star Q}')
+        )]);
+      case 'link-state-action': {
+        const action = (rankValue, cupIndex, coefficient, outputCup, fallback) => relationEquation(
+          {
+            kind: 'representation',
+            badgeLatex: '\\pi(e_1)',
+            content: relationLinkStateOperand(context, rankValue, cupIndex),
+            latex: fallback
+          },
+          '=',
+          outputCup == null
+            ? symbolicOperand('0')
+            : relationLinkStateLinearOperand(context, rankValue, [{ coefficient, cupIndex: outputCup }], fallback)
+        );
+        return row([
+          action(2, 1, DELTA, 1, '\\pi(e_1)L_1=\\delta L_1'),
+          action(3, 2, one, 1, '\\pi(e_1)L_2=L_1'),
+          action(4, 3, one, null, '\\pi(e_1)L_3=0')
+        ]);
+      }
+      case 'reduced-burau-generator':
+        return row([relationEquation(
+          W('braid', 2, [1], 'positive braid generator sigma 1', '\\sigma_1'),
+          '\\mapsto',
+          relationLinkStateMatrixOperand(context, 2, reducedBurauGeneratorMatrix(2, 1, 1), '\\bar\\rho(\\sigma_1)')
+        )]);
+      case 'reduced-burau-inverse-generator':
+        return row([relationEquation(
+          W('braid', 2, [{ index: 1, sign: -1 }], 'inverse braid generator sigma 1', '\\sigma_1^{-1}'),
+          '\\mapsto',
+          relationLinkStateMatrixOperand(context, 2, reducedBurauGeneratorMatrix(2, 1, -1), '\\bar\\rho(\\sigma_1^{-1})')
+        )]);
+      case 'reduced-burau-inverse-check':
+        return row([
+          relationEquation(
+            rhoOperand(W('braid', 2, [{ index: 1, sign: 1 }, { index: 1, sign: -1 }], 'glued braid word sigma 1 sigma 1 inverse', '\\sigma_1\\sigma_1^{-1}'), '', true),
+            '=',
+            relationLinkStateMatrixOperand(context, 2, identityMatrix(1), 'I')
+          ),
+          relationEquation(
+            rhoOperand(W('braid', 2, [{ index: 1, sign: -1 }, { index: 1, sign: 1 }], 'glued braid word sigma 1 inverse sigma 1', '\\sigma_1^{-1}\\sigma_1'), '', true),
+            '=',
+            relationLinkStateMatrixOperand(context, 2, identityMatrix(1), 'I')
+          )
+        ]);
+      case 'reduced-burau-braid-check': {
+        const leftWord = [{ index: 1, sign: 1 }, { index: 2, sign: 1 }, { index: 1, sign: 1 }];
+        const rightWord = [{ index: 2, sign: 1 }, { index: 1, sign: 1 }, { index: 2, sign: 1 }];
+        const value = reducedBurauWordMatrix(3, leftWord);
+        return row([
+          relationEquation(
+            rhoOperand(W('braid', 3, leftWord, 'glued braid word sigma 1 sigma 2 sigma 1', '\\sigma_1\\sigma_2\\sigma_1'), '', true),
+            '=',
+            relationLinkStateMatrixOperand(context, 3, value, '\\bar\\rho(\\sigma_1\\sigma_2\\sigma_1)')
+          ),
+          relationEquation(
+            rhoOperand(W('braid', 3, rightWord, 'glued braid word sigma 2 sigma 1 sigma 2', '\\sigma_2\\sigma_1\\sigma_2'), '', true),
+            '=',
+            relationLinkStateMatrixOperand(context, 3, value, '\\bar\\rho(\\sigma_2\\sigma_1\\sigma_2)')
+          )
+        ]);
+      }
+      case 'reduced-burau-commutation-check': {
+        const leftWord = [{ index: 1, sign: 1 }, { index: 3, sign: 1 }];
+        const rightWord = [{ index: 3, sign: 1 }, { index: 1, sign: 1 }];
+        const value = reducedBurauWordMatrix(4, leftWord);
+        return row([
+          relationEquation(
+            rhoOperand(W('braid', 4, leftWord, 'glued braid word sigma 1 sigma 3', '\\sigma_1\\sigma_3'), '', true),
+            '=',
+            relationLinkStateMatrixOperand(context, 4, value, '\\bar\\rho(\\sigma_1\\sigma_3)')
+          ),
+          relationEquation(
+            rhoOperand(W('braid', 4, rightWord, 'glued braid word sigma 3 sigma 1', '\\sigma_3\\sigma_1'), '', true),
+            '=',
+            relationLinkStateMatrixOperand(context, 4, value, '\\bar\\rho(\\sigma_3\\sigma_1)')
+          )
+        ]);
+      }
+      case 'burau-inverse-check':
+        return row([
+          relationEquation(
+            rhoOperand(W('braid', 2, [{ index: 1, sign: 1 }, { index: 1, sign: -1 }], 'glued braid word sigma 1 sigma 1 inverse', '\\sigma_1\\sigma_1^{-1}')),
+            '=',
+            matrix(2, identityMatrix(2), 'I')
+          ),
+          relationEquation(
+            rhoOperand(W('braid', 2, [{ index: 1, sign: -1 }, { index: 1, sign: 1 }], 'glued braid word sigma 1 inverse sigma 1', '\\sigma_1^{-1}\\sigma_1')),
+            '=',
+            matrix(2, identityMatrix(2), 'I')
+          )
+        ]);
+      case 'braid-to-burau':
+        return row([
+          relationEquation(
+            W('braid', 2, [1], 'positive braid generator sigma 1', '\\sigma_1'),
+            '\\mapsto',
+            matrix(2, burauGeneratorMatrix(2, 1, 1), '\\rho(\\sigma_1)')
+          ),
+          relationEquation(
+            W('braid', 2, [{ index: 1, sign: -1 }], 'inverse braid generator sigma 1', '\\sigma_1^{-1}'),
+            '\\mapsto',
+            matrix(2, burauGeneratorMatrix(2, 1, -1), '\\rho(\\sigma_1^{-1})')
+          )
+        ]);
+      case 'braid-to-reduced-burau':
+        return row([
+          relationEquation(
+            W('braid', 2, [1], 'positive braid generator sigma 1', '\\sigma_1'),
+            '\\mapsto',
+            relationLinkStateMatrixOperand(context, 2, reducedBurauGeneratorMatrix(2, 1, 1), '\\bar\\rho(\\sigma_1)')
+          ),
+          relationEquation(
+            W('braid', 2, [{ index: 1, sign: -1 }], 'inverse braid generator sigma 1', '\\sigma_1^{-1}'),
+            '\\mapsto',
+            relationLinkStateMatrixOperand(context, 2, reducedBurauGeneratorMatrix(2, 1, -1), '\\bar\\rho(\\sigma_1^{-1})')
+          )
+        ]);
+      case 'burau-braid-check': {
+        const leftWord = [{ index: 1, sign: 1 }, { index: 2, sign: 1 }, { index: 1, sign: 1 }];
+        const rightWord = [{ index: 2, sign: 1 }, { index: 1, sign: 1 }, { index: 2, sign: 1 }];
+        const value = burauWordMatrix(3, leftWord);
+        return row([
+          relationEquation(
+            rhoOperand(W('braid', 3, leftWord, 'glued braid word sigma 1 sigma 2 sigma 1', '\\sigma_1\\sigma_2\\sigma_1')),
+            '=',
+            matrix(3, value, '\\rho(\\sigma_1\\sigma_2\\sigma_1)')
+          ),
+          relationEquation(
+            rhoOperand(W('braid', 3, rightWord, 'glued braid word sigma 2 sigma 1 sigma 2', '\\sigma_2\\sigma_1\\sigma_2')),
+            '=',
+            matrix(3, value, '\\rho(\\sigma_2\\sigma_1\\sigma_2)')
+          )
+        ]);
+      }
+      case 'burau-commutation-check': {
+        const leftWord = [{ index: 1, sign: 1 }, { index: 3, sign: 1 }];
+        const rightWord = [{ index: 3, sign: 1 }, { index: 1, sign: 1 }];
+        const value = burauWordMatrix(4, leftWord);
+        return row([
+          relationEquation(
+            rhoOperand(W('braid', 4, leftWord, 'glued braid word sigma 1 sigma 3', '\\sigma_1\\sigma_3')),
+            '=',
+            matrix(4, value, '\\rho(\\sigma_1\\sigma_3)')
+          ),
+          relationEquation(
+            rhoOperand(W('braid', 4, rightWord, 'glued braid word sigma 3 sigma 1', '\\sigma_3\\sigma_1')),
+            '=',
+            matrix(4, value, '\\rho(\\sigma_3\\sigma_1)')
+          )
+        ]);
+      }
+      case 'hecke-to-tl':
+        return row([
+          relationEquation(
+            W('hecke', 2, [1], 'Hecke generator H 1', 'H_1'),
+            '=',
+            relationLinearOperand(context, 2, [
+              { coefficient: vInverse, atom: { kind: 'identity', tone: 'tl' } },
+              { coefficient: minusOne, atom: { kind: 'tl-generator', index: 1 } }
+            ], 'v^{-1}-e_1')
+          ),
+          relationEquation(
+            W('hecke', 2, [{ index: 1, sign: -1 }], 'inverse Hecke generator H 1', 'H_1^{-1}'),
+            '=',
+            relationLinearOperand(context, 2, [
+              { coefficient: v, atom: { kind: 'identity', tone: 'tl' } },
+              { coefficient: minusOne, atom: { kind: 'tl-generator', index: 1 } }
+            ], 'v-e_1')
+          )
+        ]);
+      case 'hecke-to-burau': {
+        const eMatrix = tlGeneratorMatrix(2, 1);
+        const positive = matrixAdd(matrixScale(identityMatrix(2), vInverse), matrixScale(eMatrix, minusOne));
+        const inverse = matrixAdd(matrixScale(identityMatrix(2), v), matrixScale(eMatrix, minusOne));
+        return row([
+          relationEquation(W('hecke', 2, [1], 'Hecke generator H 1', 'H_1'), '\\mapsto', matrix(2, positive, '\\pi(H_1)')),
+          relationEquation(W('hecke', 2, [{ index: 1, sign: -1 }], 'inverse Hecke generator H 1', 'H_1^{-1}'), '\\mapsto', matrix(2, inverse, '\\pi(H_1^{-1})'))
+        ]);
+      }
+      case 'tl-to-reduced-burau':
+        return row([relationEquation(
+          E(2, 1, 'Temperley-Lieb generator e 1'),
+          '\\mapsto',
+          relationLinkStateMatrixOperand(context, 2, linkStateTlGeneratorMatrix(2, 1), '\\bar\\pi(e_1)')
+        )]);
+      case 'hecke-to-reduced-burau': {
+        const eMatrix = linkStateTlGeneratorMatrix(2, 1);
+        const positive = matrixAdd(matrixScale(identityMatrix(1), vInverse), matrixScale(eMatrix, minusOne));
+        const inverse = matrixAdd(matrixScale(identityMatrix(1), v), matrixScale(eMatrix, minusOne));
+        return row([
+          relationEquation(W('hecke', 2, [1], 'Hecke generator H 1', 'H_1'), '\\mapsto', relationLinkStateMatrixOperand(context, 2, positive, '\\bar\\pi(H_1)')),
+          relationEquation(W('hecke', 2, [{ index: 1, sign: -1 }], 'inverse Hecke generator H 1', 'H_1^{-1}'), '\\mapsto', relationLinkStateMatrixOperand(context, 2, inverse, '\\bar\\pi(H_1^{-1})'))
+        ]);
+      }
+      case 'kl-to-burau': {
+        const value = matrixAdd(matrixScale(identityMatrix(2), DELTA), matrixScale(tlGeneratorMatrix(2, 1), minusOne));
+        const source = relationLinearOperand(context, 2, [
+          { coefficient: one, atom: { kind: 'hecke-generator', index: 1 } },
+          { coefficient: v, atom: { kind: 'identity', tone: 'hecke' } }
+        ], 'H_1+v');
+        return row([relationEquation(source, '\\mapsto', matrix(2, value, '\\pi(b_1)'))]);
+      }
+      case 'kl-to-reduced-burau': {
+        const value = matrixAdd(matrixScale(identityMatrix(1), DELTA), matrixScale(linkStateTlGeneratorMatrix(2, 1), minusOne));
+        const source = relationLinearOperand(context, 2, [
+          { coefficient: one, atom: { kind: 'hecke-generator', index: 1 } },
+          { coefficient: v, atom: { kind: 'identity', tone: 'hecke' } }
+        ], 'H_1+v');
+        return row([relationEquation(source, '\\mapsto', relationLinkStateMatrixOperand(context, 2, value, '\\bar\\pi(b_1)'))]);
+      }
+      default: {
+        const legacy = buildMinimalRelationRow(context, relationId);
+        const definition = RELATION_REFERENCE[relationId];
+        if (!definition) return legacy;
+        return {
+          ...legacy,
+          label: definition.label,
+          rank: definition.rank
+        };
+      }
+    }
+  }
+
+  function basisRelationId(calculation) {
+    if (calculation.target === 'symmetric') {
+      return math.SYMMETRIC_PRESENTATIONS?.includes(calculation.basis)
+        ? `permutation-${calculation.basis}`
+        : 'permutation-basis';
+    }
+    if (calculation.target === 'braid') return 'braid-word-result';
+    if (calculation.target === 'hecke') return calculation.basis === 'kl' ? 'kl-basis-change' : 'standard-basis-expansion';
+    if (calculation.target === 'tl') return 'tl-diagram-basis';
+    if (calculation.basis === 'link-state') return 'link-state-basis';
+    return calculation.basis === 'vector' ? 'vector-basis' : 'matrix-unit-basis';
+  }
+
+  function interpretationRelationIds(calculation) {
+    const ids = [];
+    if (calculation.sourceFamily === 'identity') ids.push('identity');
+    else if (calculation.target === 'symmetric' && calculation.sourceFamily === 'braid') ids.push('braid-to-symmetric');
+    else if (calculation.target === 'hecke' && calculation.sourceFamily === 'braid') ids.push('braid-to-hecke', 'braid-inverse-to-hecke');
+    else if (calculation.target === 'hecke' && calculation.sourceFamily === 'kl') ids.push('kl-generator-expansion');
+    else if (calculation.target === 'tl' && calculation.sourceFamily === 'braid') ids.push('braid-to-tl');
+    else if (calculation.target === 'tl' && calculation.sourceFamily === 'hecke') ids.push('hecke-to-tl');
+    else if (calculation.target === 'tl' && calculation.sourceFamily === 'kl') ids.push('kl-through-hecke-to-tl');
+    else if (calculation.target === 'burau' && calculation.sourceFamily === 'braid') ids.push(calculation.basis === 'link-state' ? 'braid-to-reduced-burau' : 'braid-to-burau');
+    else if (calculation.target === 'burau' && calculation.sourceFamily === 'tl') ids.push(calculation.basis === 'link-state' ? 'tl-to-reduced-burau' : 'tl-to-burau');
+    else if (calculation.target === 'burau' && calculation.sourceFamily === 'hecke') ids.push(calculation.basis === 'link-state' ? 'hecke-to-reduced-burau' : 'hecke-to-burau');
+    else if (calculation.target === 'burau' && calculation.sourceFamily === 'kl') ids.push(calculation.basis === 'link-state' ? 'kl-to-reduced-burau' : 'kl-to-burau');
+    ids.push(basisRelationId(calculation));
+    return [...new Set(ids)];
+  }
+
+  function relationGroupIds(calculation) {
+    const catalog = calculation.target === 'burau' && calculation.basis !== 'link-state'
+      ? UNREDUCED_BURAU_RELATION_CATALOG
+      : TARGET_RELATION_CATALOGS[calculation.target];
+    if (!catalog) throw new TypeError('No relation catalog is available for target ' + calculation.target + '.');
+    return [
+      { id: 'defining', label: 'Defining relations', relationIds: catalog.defining.slice() },
+      { id: 'consequences', label: 'Useful consequences', relationIds: catalog.consequences.slice() },
+      { id: 'interpretation', label: 'Interpretation', relationIds: interpretationRelationIds(calculation) }
+    ].filter((group) => group.relationIds.length);
+  }
+
+  function buildRelationGroups(calculation, rowBuilder) {
+    const groups = relationGroupIds(calculation).map((group) => ({
+      id: group.id,
+      label: group.label,
+      rows: group.relationIds.map(rowBuilder)
+    }));
+    return { groups, rows: groups.flatMap((group) => group.rows) };
+  }
+
+  function buildDiagrammaticRelationRows(context) {
+    return buildRelationGroups(context.calculation, (relationId) => buildTargetRelationRow(context, relationId));
+  }
+
+  function buildDiagrammaticTrace(calculation, options) {
+    if (!calculation || !Array.isArray(calculation.trace)) throw new TypeError('A calculation with trace rows is required.');
+    const normalized = normalizeDiagramOptions(options);
+    const context = createDiagramContext(calculation, normalized);
+    return diagramModel(context, buildDiagrammaticTraceRows(context));
+  }
+
+  function buildDiagrammaticRelations(calculation, options) {
+    if (!calculation || !calculation.target) throw new TypeError('A calculation target is required.');
+    const normalized = normalizeDiagramOptions(options);
+    const context = createDiagramContext(calculation, normalized);
+    const relationModel = buildDiagrammaticRelationRows(context);
+    return diagramModel(context, relationModel.rows, { groups: relationModel.groups });
+  }
+
+  function buildSymbolicRelations(calculation) {
+    if (!calculation || !calculation.target) throw new TypeError('A calculation target is required.');
+    const relationModel = buildRelationGroups(calculation, symbolicReferenceRow);
+    return {
+      ...relationModel,
+      warnings: [],
+      diagramAtoms: 0
+    };
+  }
+
+  function buildDiagrammaticPresentation(calculation, options) {
+    if (!calculation || !Array.isArray(calculation.trace) || !Array.isArray(calculation.relationsUsed)) {
+      throw new TypeError('A calculation with trace rows and relation IDs is required.');
+    }
+    const normalized = normalizeDiagramOptions(options);
+    const context = createDiagramContext(calculation, normalized);
+    const traceRows = buildDiagrammaticTraceRows(context);
+    const relationModel = buildDiagrammaticRelationRows(context);
+    const model = diagramModel(context, traceRows);
+    return {
+      ...model,
+      trace: { rows: traceRows },
+      relations: {
+        rows: relationModel.rows,
+        groups: relationModel.groups
+      }
     };
   }
 
@@ -740,6 +1849,10 @@
         lines.push(`\\draw[${cell.selected ? 'fill=black!22,' : ''}line width=.35pt] (${formatNumber(cell.x)},${formatNumber(cell.y)}) rectangle (${formatNumber(cell.x + cell.width)},${formatNumber(cell.y + cell.height)});`);
       });
     } else {
+      (diagram.platforms || []).forEach((platform) => {
+        const points = (platform.points || []).map(tikzPoint);
+        if (points.length >= 3) lines.push(`\\filldraw[fill=black!12,line width=.45pt] ${points.join(' -- ')} -- cycle;`);
+      });
       (diagram.paths || []).forEach((path) => lines.push(pathToTikz(path, 'line width=.55pt')));
       (diagram.overlays || []).forEach((overlay) => {
         lines.push(`\\draw[white,line width=2.2pt] ${tikzPoint(overlay.from)} -- ${tikzPoint(overlay.to)};`);
@@ -747,9 +1860,10 @@
       });
       const endpoints = [];
       (diagram.paths || []).forEach((path) => {
+        if (path.closed) return;
         endpoints.push(path.start);
         const last = path.curves?.[path.curves.length - 1]?.end;
-        if (last) endpoints.push(last);
+        if (last && !path.endOnPlatform) endpoints.push(last);
       });
       endpoints.forEach((point) => lines.push(`\\fill ${tikzPoint(point)} circle (0.8pt);`));
     }
@@ -789,7 +1903,7 @@
     const rows = model.rows.map((row) => {
       const lhs = row.lhs ? operandToTikz(row.lhs) : '';
       const rhs = operandToTikz(row.rhs);
-      return `${lhs} &=${row.final ? `\\boxed{${rhs}}` : rhs} &&${row.annotationLatex || ''}`;
+      return `${lhs} &=${rhs} &&${row.annotationLatex || ''}`;
     });
     const comments = ['% Requires \\usepackage{tikz}'];
     model.warnings.forEach((message) => comments.push(`% Diagrammatic fallback: ${message}`));
@@ -802,14 +1916,21 @@
     polynomialFromJSON,
     combinationFromJSON,
     termParts,
+    minimalRankForIndices,
     orientPoint,
     makeBraidDiagram,
     makePermutationDiagram,
     makeTlDiagram,
+    makeTlCompositionDiagram,
+    makeLoopDiagram,
     makeGridDiagram,
+    makeBurauLinkStateDiagram,
     pathToSvgData,
     diagramToTikz,
     buildDiagrammaticTrace,
+    buildDiagrammaticRelations,
+    buildSymbolicRelations,
+    buildDiagrammaticPresentation,
     formatDiagrammaticTraceTikz
   };
 });

@@ -1,6 +1,6 @@
 'use strict';
 
-importScripts('place_ramification_engine.js?v=20260823-1');
+importScripts('place_ramification_engine.js?v=20260830-2');
 
 self.addEventListener('message', (event) => {
   const message = event.data || {};

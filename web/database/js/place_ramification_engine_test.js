@@ -58,6 +58,30 @@ const autoCandidate = compute(
 );
 assert.ok(autoCandidate.places.some((item) => item.label === 't'), 'discriminant factor t must be added automatically');
 
+const degreeBoundPlaces = compute(
+  { kind: 'Fqt', q: '3' },
+  'x^3-x-1',
+  { functionPlaces: [], functionPlaceDegreeBound: 2, includeInfinite: false }
+);
+assert.strictEqual(degreeBoundPlaces.places.length, 6, 'degree bound 2 must enumerate all degree-one and degree-two places');
+assert.deepStrictEqual(
+  degreeBoundPlaces.places.map((item) => item.label),
+  ['t', 't+1', 't+2', 't^2+1', 't^2+t+2', 't^2+2t+2']
+);
+assert.ok(degreeBoundPlaces.places.every((item) => item.behavior === 'inert'));
+assert.ok(degreeBoundPlaces.places.every((item) => item.components[0].f === 3));
+
+const legacyCardinalityBound = compute(
+  { kind: 'Fqt', q: '3' },
+  'x^3-x-1',
+  { functionPlaces: [], residueCardinalityBound: 11, includeInfinite: false }
+);
+assert.deepStrictEqual(
+  legacyCardinalityBound.places.map((item) => item.label),
+  degreeBoundPlaces.places.map((item) => item.label),
+  'the legacy cardinality bound must convert to the equivalent degree bound'
+);
+
 const inseparable = compute(
   { kind: 'Fqt', q: '2' },
   'x^2-t',

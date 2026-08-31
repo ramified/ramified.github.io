@@ -149,7 +149,6 @@
   const SWIPE_MIN_DISTANCE = 10;
   const FIDE_CHESS_DRAG_MIN_DISTANCE = 4;
   const FULLSCREEN_ACTION_PAD = 10;
-  const FULLSCREEN_ACTION_AUTO_COLLAPSE_MS = 5000;
   const FULLSCREEN_RESTART_CONFIRM_MS = 4200;
   const LIANLIANKAN_PATH_DISPLAY_MS = 500;
   const PLACEMENT_ASSIST_DWELL_MS = 500;
@@ -346,6 +345,13 @@
   };
   const ONLINE_CLIENT_ID_KEY = 'ramified-minigames-online-client-id';
   const ONLINE_PLAYER_NAME_KEY = 'ramified-minigames-online-player-name';
+  const FULLSCREEN_SETTINGS_STORAGE_KEY = 'ramified-minigames-fullscreen-settings-v1';
+  const FULLSCREEN_SETTINGS_DEFAULTS = Object.freeze({
+    soundEnabled: false,
+    soundVolume: 1,
+    showActionRow: true,
+    showGameTools: true
+  });
   const ONLINE_MAX_SNAPSHOT_BYTES = 760 * 1024;
   const ONLINE_JOIN_RETRY_ATTEMPTS = 4;
 
@@ -592,13 +598,16 @@
   let chineseCheckersSelectedPlayersPresetKey = '';
   let canvasDisplayMode = 'normal';
   let fullscreenReturnMode = 'normal';
-  let fullscreenActionExpanded = false;
-  let fullscreenActionAutoCollapseTimer = null;
+  let fullscreenPreferences = { ...FULLSCREEN_SETTINGS_DEFAULTS };
+  let fullscreenSettingsOpen = false;
+  let fullscreenSettingsReturnFocus = null;
   let fullscreenActionPlacementFrame = null;
   let fullscreenRestartPending = false;
   let fullscreenRestartConfirmTimer = null;
   let lianliankanHint = null;
   let lianliankanHintTimer = null;
+  let lianliankanMatchEffects = [];
+  let lianliankanPronunciationGame = null;
   let onlineState = null;
   const bombImageCache = new Map();
 
@@ -608,7 +617,7 @@
     refs.canvasWrap = document.getElementById('canvas-wrap');
     refs.canvasViewButtons = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-canvas-display-mode]')) : [];
     refs.fullscreenActionShell = document.getElementById('fullscreen-action-shell');
-    refs.fullscreenActionToggle = document.getElementById('fullscreen-action-toggle');
+    refs.fullscreenSettingsOpen = document.getElementById('fullscreen-settings-open');
     refs.fullscreenActionBar = document.getElementById('fullscreen-action-bar');
     refs.fullscreenUndo = document.getElementById('fullscreen-undo-step');
     refs.fullscreenRedo = document.getElementById('fullscreen-redo-step');
@@ -618,6 +627,15 @@
     refs.fullscreenLianliankanActions = document.getElementById('fullscreen-lianliankan-actions');
     refs.fullscreenLianliankanHint = document.getElementById('fullscreen-lianliankan-hint');
     refs.fullscreenLianliankanReset = document.getElementById('fullscreen-lianliankan-reset');
+    refs.fullscreenSettingsOverlay = document.getElementById('fullscreen-settings-overlay');
+    refs.fullscreenSettingsDialog = document.getElementById('fullscreen-settings-dialog');
+    refs.fullscreenSettingsClose = document.getElementById('fullscreen-settings-close');
+    refs.fullscreenSettingsExit = document.getElementById('fullscreen-settings-exit');
+    refs.fullscreenSoundEnabled = document.getElementById('fullscreen-sound-enabled');
+    refs.fullscreenSoundVolume = document.getElementById('fullscreen-sound-volume');
+    refs.fullscreenSoundVolumeValue = document.getElementById('fullscreen-sound-volume-value');
+    refs.fullscreenShowActionRow = document.getElementById('fullscreen-show-action-row');
+    refs.fullscreenShowGameTools = document.getElementById('fullscreen-show-game-tools');
     refs.gameMode = document.getElementById('game-mode-select');
     refs.select = document.getElementById('surface-preset-select');
     refs.importExportRoot = document.getElementById('ramified-import-export-panel');
@@ -790,6 +808,8 @@
     refs.existing = document.getElementById('existing-tile-value');
     refs.removed = document.getElementById('removed-tile-value');
     refs.round = document.getElementById('round-value');
+    fullscreenPreferences = readFullscreenPreferences();
+    syncFullscreenSettingsUi();
     moveVisualControlsToDisplayCard();
     bindCards();
     if (!refs.canvas || !refs.ctx || !refs.select) return;
@@ -941,17 +961,20 @@
     refs.canvasViewButtons.forEach((button) => {
       button.addEventListener('click', () => handleCanvasDisplayModeButton(button));
     });
-    if (refs.fullscreenActionToggle) refs.fullscreenActionToggle.addEventListener('click', toggleFullscreenActionBar);
+    if (refs.fullscreenSettingsOpen) refs.fullscreenSettingsOpen.addEventListener('click', openFullscreenSettings);
+    if (refs.fullscreenSettingsClose) refs.fullscreenSettingsClose.addEventListener('click', () => closeFullscreenSettings());
+    if (refs.fullscreenSettingsExit) refs.fullscreenSettingsExit.addEventListener('click', exitFromFullscreenSettings);
+    if (refs.fullscreenSettingsOverlay) refs.fullscreenSettingsOverlay.addEventListener('pointerdown', handleFullscreenSettingsBackdrop);
+    if (refs.fullscreenSoundEnabled) refs.fullscreenSoundEnabled.addEventListener('change', handleFullscreenSoundEnabledChange);
+    if (refs.fullscreenSoundVolume) refs.fullscreenSoundVolume.addEventListener('input', handleFullscreenSoundVolumeInput);
+    if (refs.fullscreenShowActionRow) refs.fullscreenShowActionRow.addEventListener('change', handleFullscreenActionRowChange);
+    if (refs.fullscreenShowGameTools) refs.fullscreenShowGameTools.addEventListener('change', handleFullscreenGameToolsChange);
     if (refs.fullscreenUndo) refs.fullscreenUndo.addEventListener('click', undoFromFullscreenAction);
     if (refs.fullscreenRedo) refs.fullscreenRedo.addEventListener('click', redoFromFullscreenAction);
     if (refs.fullscreenExit) refs.fullscreenExit.addEventListener('click', exitFromFullscreenAction);
     if (refs.fullscreenRestart) refs.fullscreenRestart.addEventListener('click', restartFromFullscreenAction);
     if (refs.fullscreenLianliankanHint) refs.fullscreenLianliankanHint.addEventListener('click', showLianliankanHintFromFullscreenAction);
     if (refs.fullscreenLianliankanReset) refs.fullscreenLianliankanReset.addEventListener('click', resetLianliankanFromFullscreenAction);
-    if (refs.fullscreenActionShell) {
-      refs.fullscreenActionShell.addEventListener('pointerdown', scheduleFullscreenActionAutoCollapse);
-      refs.fullscreenActionShell.addEventListener('focusin', scheduleFullscreenActionAutoCollapse);
-    }
     if (refs.canvas) {
       refs.canvas.addEventListener('click', handleCanvasClick);
       refs.canvas.addEventListener('mousemove', handleCanvasHover);
@@ -3107,6 +3130,7 @@
     clearCanvasStartPromptTimer();
     resetLocalResultPromptDismissal();
     clearLianliankanHint();
+    clearLianliankanMatchEffects();
     clearPlacementReachAssist();
     resetBilliardsCueGuidance();
     if (!presetCatalogReady || !PRESETS.length) {
@@ -4066,6 +4090,7 @@
     hideCanvasStartPrompt();
     clearCanvasStartPromptTimer();
     resetLocalResultPromptDismissal();
+    clearLianliankanMatchEffects();
     if (game && game.phase !== 'setup') {
       if (isLianliankanGame(game) && game.phase === 'deadlock') {
         refreshLianliankanFromUi();
@@ -4251,6 +4276,7 @@
     }
     const previous = game;
     clearLianliankanHint();
+    clearLianliankanMatchEffects();
     clearPlacementReachAssist();
     if (previous.phase === 'setup') {
       resetToPreview();
@@ -4880,6 +4906,7 @@
 
   function applyPreparedImport(prepared) {
     clearLianliankanHint();
+    clearLianliankanMatchEffects();
     clearPlacementReachAssist();
     if (prepared.kind === 'status') {
       applyImportedDebugState(prepared.imported);
@@ -5061,7 +5088,16 @@
 
   function handleKeydown(event) {
     const key = normalizeKeyboardKey(event.code || event.key);
-    if (key === 'Escape' && fullscreenActionExpanded) collapseFullscreenActionBar({ focusCanvas: false });
+    if (fullscreenSettingsOpen) {
+      if (key === 'Escape') {
+        if (event.preventDefault) event.preventDefault();
+        if (event.stopPropagation) event.stopPropagation();
+        closeFullscreenSettings();
+      } else if (key === 'Tab') {
+        trapFullscreenSettingsFocus(event);
+      }
+      return;
+    }
     if (handleGameShortcutKey(event, key)) return;
     if (!game || !isDirectionalMoveGame(game)) return;
     if (!keyboardKeyHandledByPreset(key, game.preset)) return;
@@ -5084,6 +5120,7 @@
   }
 
   function handleKeyup(event) {
+    if (fullscreenSettingsOpen) return;
     forgetKeyboardKey(normalizeKeyboardKey(event.code || event.key));
   }
 
@@ -7522,15 +7559,171 @@
     return typeof document !== 'undefined' ? document.fullscreenElement : null;
   }
 
+  function normalizeFullscreenPreferences(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const parsedVolume = source.soundVolume;
+    return {
+      soundEnabled: typeof source.soundEnabled === 'boolean'
+        ? source.soundEnabled
+        : FULLSCREEN_SETTINGS_DEFAULTS.soundEnabled,
+      soundVolume: typeof parsedVolume === 'number' && Number.isFinite(parsedVolume)
+        ? Math.max(0, Math.min(1, parsedVolume))
+        : FULLSCREEN_SETTINGS_DEFAULTS.soundVolume,
+      showActionRow: typeof source.showActionRow === 'boolean'
+        ? source.showActionRow
+        : FULLSCREEN_SETTINGS_DEFAULTS.showActionRow,
+      showGameTools: typeof source.showGameTools === 'boolean'
+        ? source.showGameTools
+        : FULLSCREEN_SETTINGS_DEFAULTS.showGameTools
+    };
+  }
+
+  function fullscreenSettingsStorage() {
+    try {
+      return typeof window !== 'undefined' && window.localStorage ? window.localStorage : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function readFullscreenPreferences(storage = fullscreenSettingsStorage()) {
+    if (!storage || typeof storage.getItem !== 'function') return normalizeFullscreenPreferences(null);
+    try {
+      const stored = storage.getItem(FULLSCREEN_SETTINGS_STORAGE_KEY);
+      return normalizeFullscreenPreferences(stored ? JSON.parse(stored) : null);
+    } catch (_error) {
+      return normalizeFullscreenPreferences(null);
+    }
+  }
+
+  function persistFullscreenPreferences(storage = fullscreenSettingsStorage()) {
+    if (!storage || typeof storage.setItem !== 'function') return false;
+    try {
+      storage.setItem(FULLSCREEN_SETTINGS_STORAGE_KEY, JSON.stringify(fullscreenPreferences));
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function updateFullscreenPreferences(changes, options = {}) {
+    fullscreenPreferences = normalizeFullscreenPreferences({
+      ...fullscreenPreferences,
+      ...(changes && typeof changes === 'object' ? changes : {})
+    });
+    if (!fullscreenPreferences.soundEnabled || fullscreenPreferences.soundVolume <= 0) {
+      stopLianliankanPronunciation();
+    } else if (lianliankanPronunciationAudio) {
+      lianliankanPronunciationAudio.volume = fullscreenPreferences.soundVolume;
+    }
+    syncFullscreenSettingsUi();
+    syncCanvasDisplayModeUi();
+    if (options.persist !== false) persistFullscreenPreferences(options.storage);
+    return { ...fullscreenPreferences };
+  }
+
+  function syncFullscreenSettingsUi() {
+    if (refs.fullscreenSoundEnabled) refs.fullscreenSoundEnabled.checked = fullscreenPreferences.soundEnabled;
+    if (refs.fullscreenSoundVolume) {
+      refs.fullscreenSoundVolume.value = String(Math.round(fullscreenPreferences.soundVolume * 100));
+      refs.fullscreenSoundVolume.disabled = !fullscreenPreferences.soundEnabled;
+    }
+    if (refs.fullscreenSoundVolumeValue) {
+      refs.fullscreenSoundVolumeValue.textContent = `${Math.round(fullscreenPreferences.soundVolume * 100)}%`;
+    }
+    if (refs.fullscreenShowActionRow) refs.fullscreenShowActionRow.checked = fullscreenPreferences.showActionRow;
+    if (refs.fullscreenShowGameTools) refs.fullscreenShowGameTools.checked = fullscreenPreferences.showGameTools;
+  }
+
+  function handleFullscreenSoundEnabledChange() {
+    updateFullscreenPreferences({ soundEnabled: !!(refs.fullscreenSoundEnabled && refs.fullscreenSoundEnabled.checked) });
+  }
+
+  function handleFullscreenSoundVolumeInput() {
+    const value = refs.fullscreenSoundVolume ? Number(refs.fullscreenSoundVolume.value) / 100 : 1;
+    updateFullscreenPreferences({ soundVolume: value });
+  }
+
+  function handleFullscreenActionRowChange() {
+    updateFullscreenPreferences({ showActionRow: !!(refs.fullscreenShowActionRow && refs.fullscreenShowActionRow.checked) });
+  }
+
+  function handleFullscreenGameToolsChange() {
+    updateFullscreenPreferences({ showGameTools: !!(refs.fullscreenShowGameTools && refs.fullscreenShowGameTools.checked) });
+  }
+
+  function openFullscreenSettings() {
+    if (!currentFullscreenElement() || !refs.fullscreenSettingsOverlay) return;
+    fullscreenSettingsReturnFocus = typeof document !== 'undefined' ? document.activeElement : null;
+    fullscreenSettingsOpen = true;
+    refs.fullscreenSettingsOverlay.hidden = false;
+    if (refs.fullscreenSettingsOpen) refs.fullscreenSettingsOpen.setAttribute('aria-expanded', 'true');
+    clearKeyboardState();
+    syncFullscreenSettingsUi();
+    const focusTarget = refs.fullscreenSettingsClose || refs.fullscreenSoundEnabled;
+    if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
+  }
+
+  function closeFullscreenSettings(options = {}) {
+    const wasOpen = fullscreenSettingsOpen;
+    fullscreenSettingsOpen = false;
+    if (refs.fullscreenSettingsOverlay) refs.fullscreenSettingsOverlay.hidden = true;
+    if (refs.fullscreenSettingsOpen) refs.fullscreenSettingsOpen.setAttribute('aria-expanded', 'false');
+    if (!wasOpen || options.restoreFocus === false) {
+      fullscreenSettingsReturnFocus = null;
+      return;
+    }
+    const returnFocus = fullscreenSettingsReturnFocus && fullscreenSettingsReturnFocus.isConnected !== false
+      ? fullscreenSettingsReturnFocus
+      : (currentFullscreenElement() ? refs.fullscreenSettingsOpen : refs.canvas);
+    fullscreenSettingsReturnFocus = null;
+    if (returnFocus && typeof returnFocus.focus === 'function') returnFocus.focus();
+  }
+
+  function handleFullscreenSettingsBackdrop(event) {
+    if (event && event.target === refs.fullscreenSettingsOverlay) closeFullscreenSettings();
+  }
+
+  function fullscreenSettingsFocusableElements() {
+    if (!refs.fullscreenSettingsDialog || typeof refs.fullscreenSettingsDialog.querySelectorAll !== 'function') return [];
+    return Array.from(refs.fullscreenSettingsDialog.querySelectorAll(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )).filter((element) => !element.hidden);
+  }
+
+  function trapFullscreenSettingsFocus(event) {
+    const focusable = fullscreenSettingsFocusableElements();
+    if (!focusable.length) {
+      if (event && event.preventDefault) event.preventDefault();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    if (event.shiftKey && (active === first || !focusable.includes(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !focusable.includes(active))) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function exitFromFullscreenSettings() {
+    closeFullscreenSettings({ restoreFocus: false });
+    if (currentFullscreenElement()) toggleCanvasFullscreen();
+  }
+
   function handleFullscreenChange() {
     if (currentFullscreenElement()) {
       canvasDisplayMode = 'fullscreen';
     } else if (canvasDisplayMode === 'fullscreen') {
       canvasDisplayMode = fullscreenReturnMode || 'normal';
+      closeFullscreenSettings({ restoreFocus: false });
     }
     syncCanvasDisplayModeUi();
     renderAfterCanvasLayoutChange();
-    if (refs.canvas) refs.canvas.focus();
+    if (!fullscreenSettingsOpen && refs.canvas) refs.canvas.focus();
   }
 
   function syncCanvasDisplayModeUi() {
@@ -7551,92 +7744,21 @@
     if (refs.fullscreenLianliankanActions) {
       refs.fullscreenLianliankanActions.hidden = !(
         fullscreenActive
+        && fullscreenPreferences.showGameTools
         && isLianliankanGame(game)
         && game.phase !== 'setup'
       );
     }
-    if (!fullscreenActive) {
-      collapseFullscreenActionBar({ focusCanvas: false, skipPlacement: true });
+    if (refs.fullscreenActionBar) {
+      refs.fullscreenActionBar.hidden = !fullscreenActive || !fullscreenPreferences.showActionRow;
     }
+    if (!fullscreenActive && fullscreenSettingsOpen) closeFullscreenSettings({ restoreFocus: false });
     requestFullscreenActionPlacement();
-  }
-
-  function toggleFullscreenActionBar() {
-    setFullscreenActionExpanded(!fullscreenActionExpanded);
-    if (fullscreenActionExpanded) focusFirstFullscreenActionButton();
-  }
-
-  function collapseFullscreenActionBar(options = {}) {
-    setFullscreenActionExpanded(false, options);
-  }
-
-  function setFullscreenActionExpanded(expanded, options = {}) {
-    const nextExpanded = !!expanded && !!currentFullscreenElement();
-    fullscreenActionExpanded = nextExpanded;
-    if (refs.fullscreenActionShell) refs.fullscreenActionShell.classList.toggle('is-expanded', nextExpanded);
-    if (refs.fullscreenActionBar) refs.fullscreenActionBar.hidden = !nextExpanded;
-    if (refs.fullscreenActionToggle) {
-      refs.fullscreenActionToggle.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
-      refs.fullscreenActionToggle.setAttribute(
-        'aria-label',
-        nextExpanded ? 'Close fullscreen action bar' : 'Open fullscreen action bar'
-      );
-    }
-    if (nextExpanded) scheduleFullscreenActionAutoCollapse();
-    else {
-      clearFullscreenActionAutoCollapse();
-      clearFullscreenRestartConfirmation();
-      clearFullscreenActionGutter();
-    }
-    if (!options.skipPlacement) requestFullscreenActionPlacement();
-    if (options.focusCanvas && refs.canvas) refs.canvas.focus();
-  }
-
-  function focusFirstFullscreenActionButton() {
-    const buttons = [
-      refs.fullscreenUndo,
-      refs.fullscreenRedo,
-      refs.fullscreenExit,
-      refs.fullscreenRestart
-    ];
-    const target = buttons.find((button) => button && !button.disabled && typeof button.focus === 'function');
-    if (target) target.focus();
-  }
-
-  function scheduleFullscreenActionAutoCollapse() {
-    clearFullscreenActionAutoCollapse();
-    if (!fullscreenActionExpanded || typeof window === 'undefined' || typeof window.setTimeout !== 'function') return;
-    fullscreenActionAutoCollapseTimer = window.setTimeout(() => {
-      collapseFullscreenActionBar({ focusCanvas: false });
-    }, FULLSCREEN_ACTION_AUTO_COLLAPSE_MS);
-  }
-
-  function clearFullscreenActionAutoCollapse() {
-    if (!fullscreenActionAutoCollapseTimer || typeof window === 'undefined' || typeof window.clearTimeout !== 'function') {
-      fullscreenActionAutoCollapseTimer = null;
-      return;
-    }
-    window.clearTimeout(fullscreenActionAutoCollapseTimer);
-    fullscreenActionAutoCollapseTimer = null;
   }
 
   function setFullscreenRestartConfirmation(active) {
     fullscreenRestartPending = !!active;
-    if (refs.fullscreenRestart) {
-      refs.fullscreenRestart.classList.toggle('is-confirming', fullscreenRestartPending);
-      refs.fullscreenRestart.setAttribute(
-        'aria-label',
-        fullscreenRestartPending ? 'Confirm restart game' : 'Restart game'
-      );
-      refs.fullscreenRestart.setAttribute(
-        'title',
-        fullscreenRestartPending ? 'Confirm restart' : 'Restart'
-      );
-    }
-    if (refs.fullscreenActionStatus) {
-      refs.fullscreenActionStatus.textContent = fullscreenRestartPending ? 'Restart this game?' : '';
-      refs.fullscreenActionStatus.hidden = !fullscreenRestartPending;
-    }
+    syncFullscreenActionText();
     requestFullscreenActionPlacement();
     if (!fullscreenRestartPending) {
       clearFullscreenRestartConfirmTimer();
@@ -7645,6 +7767,30 @@
     clearFullscreenRestartConfirmTimer();
     if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
       fullscreenRestartConfirmTimer = window.setTimeout(clearFullscreenRestartConfirmation, FULLSCREEN_RESTART_CONFIRM_MS);
+    }
+  }
+
+  function syncFullscreenActionText() {
+    if (refs.fullscreenRestart) {
+      refs.fullscreenRestart.classList.toggle('is-confirming', fullscreenRestartPending);
+      refs.fullscreenRestart.setAttribute(
+        'aria-label',
+        fullscreenRestartPending
+          ? tk('access.confirmRestartGame', 'Confirm restart game')
+          : tk('access.restartGame', 'Restart game')
+      );
+      refs.fullscreenRestart.setAttribute(
+        'title',
+        fullscreenRestartPending
+          ? tk('fullscreen.confirmRestart', 'Confirm restart')
+          : tk('fullscreen.restart', 'Restart')
+      );
+    }
+    if (refs.fullscreenActionStatus) {
+      refs.fullscreenActionStatus.textContent = fullscreenRestartPending
+        ? tk('common.restartQuestion', 'Restart this game?')
+        : '';
+      refs.fullscreenActionStatus.hidden = !fullscreenRestartPending;
     }
   }
 
@@ -7667,7 +7813,7 @@
       return;
     }
     undoPreviousStep();
-    collapseFullscreenActionBar({ focusCanvas: true });
+    if (refs.canvas) refs.canvas.focus();
   }
 
   function redoFromFullscreenAction() {
@@ -7676,11 +7822,10 @@
       return;
     }
     redoPreviousUndo();
-    collapseFullscreenActionBar({ focusCanvas: true });
+    if (refs.canvas) refs.canvas.focus();
   }
 
   function exitFromFullscreenAction() {
-    collapseFullscreenActionBar({ focusCanvas: false });
     if (currentFullscreenElement()) toggleCanvasFullscreen();
   }
 
@@ -7689,14 +7834,13 @@
       syncControls();
       return;
     }
-    scheduleFullscreenActionAutoCollapse();
     if (!fullscreenRestartPending) {
       setFullscreenRestartConfirmation(true);
       return;
     }
     clearFullscreenRestartConfirmation();
     const restarted = restartCurrentGameFromFullscreenAction();
-    if (restarted) collapseFullscreenActionBar({ focusCanvas: true });
+    if (restarted && refs.canvas) refs.canvas.focus();
   }
 
   function restartCurrentGameFromFullscreenAction() {
@@ -7712,6 +7856,77 @@
     if (lianliankanHintTimer) clearTimeout(lianliankanHintTimer);
     lianliankanHintTimer = null;
     lianliankanHint = null;
+  }
+
+  function activeLianliankanMatchEffects(state = game) {
+    return lianliankanMatchEffects.filter((effect) => effect.game === state);
+  }
+
+  function clearLianliankanMatchEffects(targetGame) {
+    const clearAll = arguments.length === 0;
+    const retained = [];
+    lianliankanMatchEffects.forEach((effect) => {
+      if (!clearAll && effect.game !== targetGame) {
+        retained.push(effect);
+        return;
+      }
+      if (effect.timer) clearTimeout(effect.timer);
+      effect.timer = null;
+    });
+    lianliankanMatchEffects = retained;
+  }
+
+  function trackLianliankanMatchEffect(state, result, firstTile, secondTile, onExpire) {
+    const effect = {
+      game: state,
+      a: result.a,
+      b: result.b,
+      path: clonePlain(result.path),
+      tiles: [
+        { index: result.a, tile: { ...firstTile } },
+        { index: result.b, tile: { ...secondTile } }
+      ],
+      timer: null
+    };
+    lianliankanMatchEffects.push(effect);
+    effect.timer = setTimeout(() => {
+      effect.timer = null;
+      const index = lianliankanMatchEffects.indexOf(effect);
+      if (index >= 0) lianliankanMatchEffects.splice(index, 1);
+      if (typeof onExpire === 'function') onExpire(effect);
+    }, LIANLIANKAN_PATH_DISPLAY_MS);
+    return effect;
+  }
+
+  function selectLianliankanTile(state, targetIndex, options = {}) {
+    if (!state || !Lianliankan || !state.board || !Number.isInteger(targetIndex)) {
+      return { result: { kind: 'ignored', reason: 'unavailable' }, effect: null, matchedTile: null };
+    }
+    const targetCell = state.board.cells[targetIndex];
+    if (!targetCell || !targetCell.playable || !targetCell.tile) {
+      return { result: { kind: 'ignored', reason: 'empty' }, effect: null, matchedTile: null };
+    }
+    const previous = Number.isInteger(state.selectedIndex) ? state.selectedIndex : null;
+    const previousCell = previous == null ? null : state.board.cells[previous];
+    const firstTile = previousCell && previousCell.tile ? { ...previousCell.tile } : null;
+    const secondTile = { ...targetCell.tile };
+    const matchingPath = firstTile
+      && previous !== targetIndex
+      && firstTile.id === secondTile.id
+      ? Lianliankan.findConnection(state.board, state.topology, previous, targetIndex)
+      : null;
+    if (matchingPath && typeof options.beforeMatch === 'function') {
+      options.beforeMatch({ a: previous, b: targetIndex, path: matchingPath, firstTile, secondTile });
+    }
+
+    const result = Lianliankan.handleSelection(state, targetIndex);
+    if (!result || result.kind !== 'removed' || !firstTile) {
+      return { result, effect: null, matchedTile: null };
+    }
+    const effect = options.trackEffect === false
+      ? null
+      : trackLianliankanMatchEffect(state, result, firstTile, secondTile, options.onEffectExpired);
+    return { result, effect, matchedTile: firstTile };
   }
 
   function showLianliankanHintFromFullscreenAction() {
@@ -7752,7 +7967,7 @@
   function requestFullscreenActionPlacement() {
     if (!refs.fullscreenActionShell) return;
     if (!currentFullscreenElement()) {
-      if (!refs.fullscreenActionShell.hidden || fullscreenActionExpanded) positionFullscreenActionBar();
+      if (!refs.fullscreenActionShell.hidden) positionFullscreenActionBar();
       return;
     }
     if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
@@ -7773,25 +7988,23 @@
     if (!fullscreenActive || !refs.canvasWrap || !refs.canvas) {
       shell.hidden = true;
       clearFullscreenActionGutter();
-      if (fullscreenActionExpanded) collapseFullscreenActionBar({ focusCanvas: false, skipPlacement: true });
       return;
     }
     shell.hidden = false;
-    shell.classList.toggle('is-expanded', fullscreenActionExpanded);
-    if (refs.fullscreenActionBar) refs.fullscreenActionBar.hidden = !fullscreenActionExpanded;
+    if (refs.fullscreenActionBar) refs.fullscreenActionBar.hidden = !fullscreenPreferences.showActionRow;
     clearFullscreenActionGutter();
 
     const wrapRect = refs.canvasWrap.getBoundingClientRect ? refs.canvasWrap.getBoundingClientRect() : null;
     const canvasRect = refs.canvas.getBoundingClientRect ? refs.canvas.getBoundingClientRect() : null;
-    const placement = chooseFullscreenActionPlacement(wrapRect, canvasRect, fullscreenActionExpanded);
+    const placement = chooseFullscreenActionPlacement(wrapRect, canvasRect, fullscreenPreferences.showActionRow);
     shell.dataset.placement = placement.edge;
     shell.classList.toggle('is-fallback', !!placement.fallback);
     shell.style.setProperty('--fullscreen-action-left', `${Math.round(placement.left)}px`);
     shell.style.setProperty('--fullscreen-action-top', `${Math.round(placement.top)}px`);
-    if (placement.fallback && fullscreenActionExpanded) applyFullscreenActionGutter();
+    if (placement.fallback && fullscreenPreferences.showActionRow) applyFullscreenActionGutter();
   }
 
-  function chooseFullscreenActionPlacement(wrapRect, canvasRect, expanded) {
+  function chooseFullscreenActionPlacement(wrapRect, canvasRect, actionsVisible) {
     const fallback = { edge: 'top', left: FULLSCREEN_ACTION_PAD, top: FULLSCREEN_ACTION_PAD, fallback: true };
     if (!wrapRect || !canvasRect || !wrapRect.width || !wrapRect.height) return fallback;
     const wrapWidth = Math.max(1, wrapRect.width);
@@ -7813,25 +8026,25 @@
         spaceWidth: canvasLeft,
         spaceHeight: wrapHeight,
         left: FULLSCREEN_ACTION_PAD,
-        top: clampFullscreenActionPosition(canvasTop, wrapHeight, fullscreenActionSize('left', expanded).height)
+        top: clampFullscreenActionPosition(canvasTop, wrapHeight, fullscreenActionSize('left', actionsVisible).height)
       },
       {
         edge: 'right',
         spaceWidth: Math.max(0, wrapWidth - canvasRight),
         spaceHeight: wrapHeight,
-        left: wrapWidth - fullscreenActionSize('right', expanded).width - FULLSCREEN_ACTION_PAD,
-        top: clampFullscreenActionPosition(canvasTop, wrapHeight, fullscreenActionSize('right', expanded).height)
+        left: wrapWidth - fullscreenActionSize('right', actionsVisible).width - FULLSCREEN_ACTION_PAD,
+        top: clampFullscreenActionPosition(canvasTop, wrapHeight, fullscreenActionSize('right', actionsVisible).height)
       },
       {
         edge: 'bottom',
         spaceWidth: wrapWidth,
         spaceHeight: Math.max(0, wrapHeight - canvasBottom),
         left: FULLSCREEN_ACTION_PAD,
-        top: wrapHeight - fullscreenActionSize('bottom', expanded).height - FULLSCREEN_ACTION_PAD
+        top: wrapHeight - fullscreenActionSize('bottom', actionsVisible).height - FULLSCREEN_ACTION_PAD
       }
     ];
     for (const candidate of candidates) {
-      const size = fullscreenActionSize(candidate.edge, expanded);
+      const size = fullscreenActionSize(candidate.edge, actionsVisible);
       if (candidate.spaceWidth >= size.width + (FULLSCREEN_ACTION_PAD * 2)
         && candidate.spaceHeight >= size.height + (FULLSCREEN_ACTION_PAD * 2)) {
         return {
@@ -7845,16 +8058,15 @@
     return fallback;
   }
 
-  function fullscreenActionSize(edge, expanded) {
-    if (!expanded) return { width: 42, height: 42 };
+  function fullscreenActionSize(edge, actionsVisible) {
+    if (!actionsVisible) return { width: 42, height: 42 };
     const currentEdge = refs.fullscreenActionShell && refs.fullscreenActionShell.dataset
       ? refs.fullscreenActionShell.dataset.placement
       : '';
     if (currentEdge === edge
-      && refs.fullscreenActionBar
-      && !refs.fullscreenActionBar.hidden
-      && refs.fullscreenActionBar.getBoundingClientRect) {
-      const rect = refs.fullscreenActionBar.getBoundingClientRect();
+      && refs.fullscreenActionShell
+      && refs.fullscreenActionShell.getBoundingClientRect) {
+      const rect = refs.fullscreenActionShell.getBoundingClientRect();
       if (rect.width && rect.height) {
         return {
           width: Math.ceil(rect.width),
@@ -7863,8 +8075,8 @@
       }
     }
     return edge === 'left' || edge === 'right'
-      ? { width: fullscreenRestartPending ? 96 : 54, height: fullscreenRestartPending ? 306 : 226 }
-      : { width: fullscreenRestartPending ? 360 : 226, height: 54 };
+      ? { width: fullscreenRestartPending ? 96 : 54, height: fullscreenRestartPending ? 354 : 274 }
+      : { width: fullscreenRestartPending ? 408 : 274, height: 54 };
   }
 
   function clampFullscreenActionPosition(value, total, size) {
@@ -8211,34 +8423,26 @@
     if (!['ready', 'deadlock'].includes(game.phase)) return;
     const target = tileFromCanvasEvent(event);
     if (!target) return;
-    const targetCell = game.board.cells[target.index];
-    if (!targetCell || !targetCell.playable || !targetCell.tile) return;
-
-    const previous = Number.isInteger(game.selectedIndex) ? game.selectedIndex : null;
-    const previousCell = previous == null ? null : game.board.cells[previous];
-    const matchingPath = previousCell
-      && previous !== target.index
-      && previousCell.tile
-      && previousCell.tile.id === targetCell.tile.id
-      ? Lianliankan.findConnection(game.board, game.topology, previous, target.index)
-      : null;
-    if (matchingPath) pushUndoSnapshot(`match ${previousCell.tile.glyph}`);
-
-    const result = Lianliankan.handleSelection(game, target.index, { deferMatch: true });
-    if (result.kind === 'match') {
-      const pendingGame = game;
-      playLianliankanPronunciation(previousCell.tile);
-      render();
-      syncStatus('Tile Matching match', 'connected path found', 'moving');
-      setTimeout(() => {
-        if (game !== pendingGame || !isLianliankanGame(game) || !game.pendingMatch) return;
-        Lianliankan.commitPendingMatch(game);
-        LianliankanMosaicAdapter.syncSharedState(game);
-        syncStatusForCurrentGame();
+    const selectedGame = game;
+    const outcome = selectLianliankanTile(selectedGame, target.index, {
+      beforeMatch(match) {
+        pushUndoSnapshot(`match ${match.firstTile.glyph}`);
+      },
+      onEffectExpired() {
+        if (game !== selectedGame) return;
+        if (selectedGame.phase === 'complete' && !activeLianliankanMatchEffects(selectedGame).length) {
+          syncStatusForCurrentGame();
+        }
         render();
-        syncControls();
-        refreshDebugExportIfNeeded();
-      }, LIANLIANKAN_PATH_DISPLAY_MS);
+      }
+    });
+    if (outcome.result && outcome.result.kind === 'removed') {
+      LianliankanMosaicAdapter.syncSharedState(selectedGame);
+      playLianliankanPronunciation(outcome.matchedTile);
+      syncStatusForCurrentGame({ deferResultPrompt: selectedGame.phase === 'complete' });
+      render();
+      syncControls();
+      refreshDebugExportIfNeeded();
       return;
     }
     syncStatusForCurrentGame();
@@ -8249,6 +8453,7 @@
   function refreshLianliankanFromUi() {
     if (!isLianliankanGame(game) || !Lianliankan || game.phase === 'animating' || game.phase === 'complete') return false;
     clearLianliankanHint();
+    clearLianliankanMatchEffects(game);
     pushUndoSnapshot('refresh Tile Matching tiles');
     const result = Lianliankan.refreshGame(game, { rng: Math.random, maxAttempts: 50 });
     LianliankanMosaicAdapter.syncSharedState(game);
@@ -9576,6 +9781,7 @@
     stopPlayback();
     resetLocalResultPromptDismissal();
     clearLianliankanHint();
+    clearLianliankanMatchEffects();
     clearFideChessPendingPromotion({ render: false });
     game = cloneGameState(snapshot.game);
     eventQueue = clonePlain(snapshot.eventQueue || []);
@@ -12135,7 +12341,7 @@
     return Number.isInteger(number) && number > 0 ? number : 0;
   }
 
-  function syncStatusForCurrentGame() {
+  function syncStatusForCurrentGame(options = {}) {
     if (!game) return;
     if (isLianliankanGame(game) && Lianliankan) {
       const remaining = Lianliankan.remainingTileCount(game);
@@ -12144,7 +12350,11 @@
         return;
       }
       if (game.phase === 'complete') {
-        syncStatus('Tile Matching complete', `${game.matches || 0} matches cleared the board`, 'over');
+        syncStatus(
+          'Tile Matching complete',
+          `${game.matches || 0} matches cleared the board`,
+          options.deferResultPrompt ? 'moving' : 'over'
+        );
         return;
       }
       if (game.phase === 'deadlock') {
@@ -12633,12 +12843,17 @@
 
   function drawLianliankanGame(ctx, geom, state) {
     if (!state || !state.board || !LianliankanMosaicAdapter) return;
-    const pendingPath = state.pendingMatch && state.pendingMatch.path;
-    if (pendingPath) drawLianliankanPath(ctx, geom, pendingPath);
+    const matchEffects = activeLianliankanMatchEffects(state);
+    matchEffects.forEach((effect) => drawLianliankanPath(ctx, geom, effect.path));
     if (lianliankanHint && lianliankanHint.path) drawLianliankanPath(ctx, geom, lianliankanHint.path, { hint: true });
     state.board.cells.forEach((boardCell, index) => {
       if (!boardCell.playable || !boardCell.tile || !geom.cells[index]) return;
       drawLianliankanTile(ctx, geom, index, boardCell.tile, state.selectedIndex === index);
+    });
+    matchEffects.forEach((effect) => {
+      effect.tiles.forEach((entry) => {
+        if (geom.cells[entry.index]) drawLianliankanTile(ctx, geom, entry.index, entry.tile, false);
+      });
     });
   }
 
@@ -18123,19 +18338,53 @@
     return `${LIANLIANKAN_HIRAGANA_AUDIO_FOLDER}${id.slice('hiragana_'.length)}.ogg`;
   }
 
+  function stopLianliankanPronunciation() {
+    const audio = lianliankanPronunciationAudio;
+    lianliankanPronunciationAudio = null;
+    lianliankanPronunciationGame = null;
+    if (!audio) return false;
+    try {
+      if (typeof audio.pause === 'function') audio.pause();
+      audio.currentTime = 0;
+      if (typeof audio.removeAttribute === 'function') audio.removeAttribute('src');
+      if (typeof audio.load === 'function') audio.load();
+    } catch (_error) {
+      // Releasing optional audio must not interrupt the game.
+    }
+    return true;
+  }
+
+  function syncLianliankanPronunciationContext() {
+    if (!lianliankanPronunciationAudio) return;
+    if (!fullscreenPreferences.soundEnabled
+      || fullscreenPreferences.soundVolume <= 0
+      || game !== lianliankanPronunciationGame
+      || !isLianliankanGame(game)) {
+      stopLianliankanPronunciation();
+      return;
+    }
+    lianliankanPronunciationAudio.volume = fullscreenPreferences.soundVolume;
+  }
+
   function playLianliankanPronunciation(tile) {
     const source = lianliankanPronunciationPath(tile);
-    if (!source || typeof Audio !== 'function') return false;
-    if (lianliankanPronunciationAudio) {
-      lianliankanPronunciationAudio.pause();
-      lianliankanPronunciationAudio.currentTime = 0;
-    }
+    if (!source
+      || !fullscreenPreferences.soundEnabled
+      || fullscreenPreferences.soundVolume <= 0
+      || !isLianliankanGame(game)
+      || typeof Audio !== 'function') return false;
+    stopLianliankanPronunciation();
     try {
       const audio = new Audio(source);
       lianliankanPronunciationAudio = audio;
+      lianliankanPronunciationGame = game;
       audio.preload = 'auto';
+      audio.volume = fullscreenPreferences.soundVolume;
       const release = () => {
-        if (lianliankanPronunciationAudio === audio) lianliankanPronunciationAudio = null;
+        if (lianliankanPronunciationAudio === audio) {
+          lianliankanPronunciationAudio = null;
+          lianliankanPronunciationGame = null;
+        }
       };
       audio.addEventListener('ended', release, { once: true });
       audio.addEventListener('error', release, { once: true });
@@ -18144,6 +18393,7 @@
       return true;
     } catch (_error) {
       lianliankanPronunciationAudio = null;
+      lianliankanPronunciationGame = null;
       return false;
     }
   }
@@ -27825,6 +28075,7 @@
   }
 
   function syncControls() {
+    syncLianliankanPronunciationContext();
     const catalogAvailable = presetCatalogReady && PRESETS.length > 0;
     const mode2048 = catalogAvailable && is2048Game(game) && selectedGameMode() === GAME_MODES.NUMBER_2048;
     const modeHex = catalogAvailable && (isHexGame(game) || selectedGameMode() === GAME_MODES.HEX);
@@ -27963,7 +28214,11 @@
     if (refs.fullscreenUndo) refs.fullscreenUndo.disabled = onlineHistoryBlocked || !undoStack.length;
     if (refs.fullscreenRedo) refs.fullscreenRedo.disabled = onlineHistoryBlocked || !redoStack.length;
     if (refs.fullscreenRestart) refs.fullscreenRestart.disabled = onlineRoomActive || !game;
-    const lianliankanFullscreenActions = isLianliankanGame(game) && game.phase !== 'setup';
+    syncFullscreenActionText();
+    const lianliankanFullscreenActions = !!currentFullscreenElement()
+      && fullscreenPreferences.showGameTools
+      && isLianliankanGame(game)
+      && game.phase !== 'setup';
     if (refs.fullscreenLianliankanActions) refs.fullscreenLianliankanActions.hidden = !lianliankanFullscreenActions;
     if (refs.fullscreenLianliankanHint) {
       refs.fullscreenLianliankanHint.disabled = !lianliankanFullscreenActions
@@ -27971,16 +28226,15 @@
         || game.phase !== 'ready'
         || !game.availableMatch
         || !!lianliankanHint;
-      refs.fullscreenLianliankanHint.setAttribute('aria-label', tr('Show hint'));
-      refs.fullscreenLianliankanHint.setAttribute('title', tr('Hint'));
+      refs.fullscreenLianliankanHint.setAttribute('aria-label', tk('common.showHint', 'Show hint'));
+      refs.fullscreenLianliankanHint.setAttribute('title', tk('common.hint', 'Hint'));
     }
     if (refs.fullscreenLianliankanReset) {
       refs.fullscreenLianliankanReset.disabled = !lianliankanFullscreenActions
         || onlineRoomActive
-        || game.phase === 'complete'
-        || !!game.pendingMatch;
-      refs.fullscreenLianliankanReset.setAttribute('aria-label', tr('Refresh remaining tiles'));
-      refs.fullscreenLianliankanReset.setAttribute('title', tr('Refresh remaining tiles'));
+        || game.phase === 'complete';
+      refs.fullscreenLianliankanReset.setAttribute('aria-label', tk('common.refreshRemainingTiles', 'Refresh remaining tiles'));
+      refs.fullscreenLianliankanReset.setAttribute('title', tk('common.refreshRemainingTiles', 'Refresh remaining tiles'));
     }
     if (refs.exportState) refs.exportState.disabled = !game;
     if (refs.refreshState) refs.refreshState.disabled = !game;
@@ -29148,9 +29402,29 @@
       billiardsCueCaptionLayout,
       billiardsCueGuidanceFlags,
       canvasStartPromptCopy,
+      fullscreenSettingsStorageKey: FULLSCREEN_SETTINGS_STORAGE_KEY,
+      fullscreenSettingsDefaults: { ...FULLSCREEN_SETTINGS_DEFAULTS },
+      normalizeFullscreenPreferences,
+      readFullscreenPreferences,
+      persistFullscreenPreferences,
+      setFullscreenPreferences(value) {
+        fullscreenPreferences = normalizeFullscreenPreferences(value);
+        syncLianliankanPronunciationContext();
+        syncFullscreenSettingsUi();
+        return { ...fullscreenPreferences };
+      },
+      getFullscreenPreferences() { return { ...fullscreenPreferences }; },
       playLianliankanPronunciation,
+      stopLianliankanPronunciation,
+      selectLianliankanTile,
+      activeLianliankanMatchEffects,
+      clearLianliankanMatchEffects,
       redrawBilliardsBallPalette,
-      setGame(state) { game = state; },
+      setGame(state) {
+        clearLianliankanMatchEffects();
+        game = state;
+        syncLianliankanPronunciationContext();
+      },
       getGame() { return game; }
     }
   };

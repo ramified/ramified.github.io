@@ -36,16 +36,23 @@ const {
   evaluateBurauWord,
   evaluateTlCombinationMatrix,
   calculateStrandWord,
+  formatLinearCombinationPlain,
   formatAlignedTrace,
   serializeCalculation,
   makeBraidDiagram,
   makePermutationDiagram,
   makeTlDiagram,
+  makeTlCompositionDiagram,
   makeGridDiagram,
+  minimalRankForIndices,
   pathToSvgData,
   diagramToTikz,
   buildDiagrammaticTrace,
-  formatDiagrammaticTraceTikz
+  buildDiagrammaticRelations,
+  buildSymbolicRelations,
+  buildDiagrammaticPresentation,
+  formatDiagrammaticTraceTikz,
+  buildBasisCatalog
 } = math;
 
 function budget() {
@@ -233,11 +240,41 @@ function testApiErrorsTraceAndSerialization() {
   const calculation = result([braid(1), braid(2), braid(1, -1)], { target: 'tl', basis: 'diagram' });
   assert.ok(calculation.trace.every((step) => step.relationId));
   assert.ok(formatAlignedTrace(calculation.trace).includes('\\begin{aligned}'));
-  assert.ok(formatAlignedTrace(calculation.trace).includes('\\boxed{'));
+  assert.ok(!formatAlignedTrace(calculation.trace).includes('\\boxed{'));
   const serialized = serializeCalculation(calculation);
   assert.strictEqual(serialized.convention, 'burau-compatible-v');
   assert.strictEqual(serialized.parameter, 'v');
   assert.strictEqual(serialized.wordOrder, 'left-to-right-product');
+}
+
+function testSymmetricPresentations() {
+  const word = [{ family: 'coxeter', index: 1 }, { family: 'coxeter', index: 2 }];
+  const expected = {
+    composition: ['s_{1}\\,s_{2}', 's_1 s_2'],
+    transpositions: ['(12)(23)', '(12)(23)'],
+    cycle: ['(123)', '(123)'],
+    'one-line': ['(2,3,1)', '(2,3,1)'],
+    'two-line': ['\\begin{pmatrix}1&2&3\\\\2&3&1\\end{pmatrix}', '(1 2 3 / 2 3 1)'],
+    matrix: ['\\begin{pmatrix}&&1\\\\1&&\\\\&1&\\end{pmatrix}', '[0 0 1; 1 0 0; 0 1 0]']
+  };
+
+  Object.entries(expected).forEach(([basis, [latex, plain]]) => {
+    const calculation = calculateStrandWord(word, { rank: 3, target: 'symmetric', basis, includeTrace: true });
+    assert.strictEqual(calculation.trace.at(-1).rhsLatex, latex);
+    assert.strictEqual(formatLinearCombinationPlain(calculation.result, basis), plain);
+    assert.strictEqual(calculation.trace.at(-1).relationId, `permutation-${basis}`);
+    assert.strictEqual(
+      buildSymbolicRelations(calculation).groups.at(-1).rows.at(-1).relationId,
+      `permutation-${basis}`
+    );
+    const diagrammatic = buildDiagrammaticTrace(calculation, { scope: 'basis', direction: 'up-down' });
+    assert.strictEqual(diagrammatic.rows.at(-1).rhs.terms[0].diagram.kind, 'permutation');
+    assert.ok(!formatDiagrammaticTraceTikz(calculation).includes('\\boxed{'));
+  });
+
+  const legacy = calculateStrandWord(word, { rank: 3, target: 'symmetric', basis: 'permutation' });
+  assert.strictEqual(legacy.trace.at(-1).rhsLatex, '[2,3,1]');
+  assert.strictEqual(legacy.trace.at(-1).relationId, 'permutation-basis');
 }
 
 function testAdvertisedRoutes() {
@@ -385,6 +422,311 @@ function testDiagrammaticGeometryAndTikz() {
   assert.ok(limitedLatex.includes('% Diagrammatic fallback:'));
 }
 
+function operandDiagrams(operand, out = []) {
+  if (!operand) return out;
+  if (operand.diagram) out.push(operand.diagram);
+  for (const term of operand.terms || []) if (term.diagram) out.push(term.diagram);
+  for (const factor of operand.factors || []) operandDiagrams(factor, out);
+  if (operand.content) operandDiagrams(operand.content, out);
+  for (const row of operand.rows || []) {
+    if (row.lhs?.diagram) out.push(row.lhs.diagram);
+    for (const term of row.terms || []) if (term.diagram) out.push(term.diagram);
+  }
+  return out;
+}
+
+function relationRowDiagrams(row) {
+  return (row.equations || []).flatMap((equation) => [
+    ...operandDiagrams(equation.lhs),
+    ...operandDiagrams(equation.rhs)
+  ]);
+}
+
+function matrixTermSignature(terms) {
+  return terms.map((term) => ({
+    row: term.basis?.row ?? term.diagram?.row,
+    column: term.basis?.column ?? term.diagram?.column,
+    coefficient: term.coefficient instanceof LaurentPolynomial ? term.coefficient.toJSON() : term.coefficient
+  })).sort((left, right) => left.row - right.row || left.column - right.column);
+}
+
+function testDiagrammaticRelations() {
+  assert.strictEqual(minimalRankForIndices([], 1), 1);
+  assert.strictEqual(minimalRankForIndices([1], 2), 2);
+  assert.strictEqual(minimalRankForIndices([1, 2], 2), 3);
+  const expectedCatalogs = {
+    symmetric: {
+      basis: 'permutation',
+      groups: [
+        ['defining', ['coxeter-multiplication', 'coxeter-braid', 'coxeter-commutation']],
+        ['interpretation', ['identity', 'permutation-basis']]
+      ]
+    },
+    braid: {
+      basis: 'freely-reduced-word',
+      groups: [
+        ['defining', ['braid-free-cancellation', 'braid-relation', 'braid-commutation']],
+        ['interpretation', ['identity', 'braid-word-result']]
+      ]
+    },
+    hecke: {
+      basis: 'standard',
+      groups: [
+        ['defining', ['hecke-multiplication', 'hecke-braid', 'hecke-commutation']],
+        ['consequences', ['hecke-inverse', 'hecke-length-increase', 'hecke-length-decrease']],
+        ['interpretation', ['identity', 'standard-basis-expansion']]
+      ]
+    },
+    tl: {
+      basis: 'diagram',
+      groups: [
+        ['defining', ['tl-quadratic', 'tl-adjacent', 'tl-commutation', 'tl-loop-removal']],
+        ['consequences', ['tl-diagram-stacking']],
+        ['interpretation', ['identity', 'tl-diagram-basis']]
+      ]
+    },
+    burau: {
+      basis: 'matrix-unit',
+      groups: [
+        ['defining', ['burau-generator', 'burau-inverse-generator']],
+        ['consequences', ['burau-inverse-check', 'burau-braid-check', 'burau-commutation-check']],
+        ['interpretation', ['identity', 'matrix-unit-basis']]
+      ]
+    }
+  };
+
+  Object.entries(expectedCatalogs).forEach(([target, expected]) => {
+    const calculation = calculateStrandWord([], { rank: 2, target, basis: expected.basis, includeTrace: true });
+    const symbolic = buildSymbolicRelations(calculation);
+    const diagrammatic = buildDiagrammaticRelations(calculation, { direction: 'up-down' });
+    const signature = (model) => model.groups.map((group) => [group.id, group.rows.map((row) => row.relationId)]);
+    assert.deepStrictEqual(signature(symbolic), expected.groups);
+    assert.deepStrictEqual(signature(diagrammatic), expected.groups);
+    assert.deepStrictEqual(diagrammatic.rows, diagrammatic.groups.flatMap((group) => group.rows));
+    assert.ok(diagrammatic.rows.every((row) => !row.fallback && row.label && row.equations.length));
+  });
+
+  const symmetric = calculateStrandWord([], { rank: 1, target: 'symmetric', basis: 'permutation' });
+  const symmetricModel = buildDiagrammaticRelations(symmetric, { direction: 'up-down' });
+  assert.deepStrictEqual(
+    symmetricModel.groups[0].rows.map((row) => row.rank),
+    [2, 3, 4],
+    'generic relations use their minimal illustrative ranks even for rank-one calculations'
+  );
+  const square = symmetricModel.rows.find((row) => row.relationId === 'coxeter-multiplication');
+  assert.strictEqual(square.equations[0].lhs.kind, 'diagram');
+  assert.strictEqual(square.equations[0].lhs.diagram.paths[0].curves.length, 2);
+
+  const braidCalculation = calculateStrandWord([braid(1)], { rank: 2, target: 'braid', basis: 'freely-reduced-word' });
+  const braidModel = buildDiagrammaticRelations(braidCalculation, { direction: 'up-down' });
+  const cancellation = braidModel.rows.find((row) => row.relationId === 'braid-free-cancellation');
+  assert.strictEqual(cancellation.equations.length, 2);
+  assert.ok(cancellation.equations.every((equation) => equation.lhs.kind === 'diagram'));
+  assert.ok(cancellation.equations.every((equation) => equation.lhs.diagram.paths[0].curves.length === 2));
+  const adjacentBraid = braidModel.rows.find((row) => row.relationId === 'braid-relation');
+  assert.strictEqual(adjacentBraid.rank, 3);
+  assert.strictEqual(adjacentBraid.equations[0].lhs.diagram.overlays.length, 3);
+  assert.strictEqual(adjacentBraid.equations[0].rhs.diagram.overlays.length, 3);
+
+  const tlCalculation = calculateStrandWord([tl(1)], { rank: 2, target: 'tl', basis: 'diagram' });
+  const model = buildDiagrammaticRelations(tlCalculation, { direction: 'up-down' });
+  const quadratic = model.rows.find((row) => row.relationId === 'tl-quadratic');
+  assert.strictEqual(quadratic.rank, 2);
+  assert.strictEqual(quadratic.equations[0].lhs.diagram.kind, 'tl-composition');
+  assert.strictEqual(quadratic.equations[0].rhs.terms[0].parts.coefficientLatex, '\\delta');
+  assert.strictEqual(quadratic.equations[0].lhs.diagram.layers, 2);
+  assert.strictEqual(quadratic.equations[0].lhs.diagram.paths.filter((path) => path.closed).length, 1);
+  assert.strictEqual(quadratic.equations[0].lhs.diagram.paths.filter((path) => !path.closed).length, 2);
+  const adjacentTl = model.rows.find((row) => row.relationId === 'tl-adjacent');
+  assert.strictEqual(adjacentTl.rank, 3);
+  assert.strictEqual(adjacentTl.equations.length, 2);
+  assert.ok(adjacentTl.equations.every((equation) => equation.lhs.diagram.layers === 3));
+  assert.strictEqual(model.rows.find((row) => row.relationId === 'tl-commutation').rank, 4);
+
+  const stackingSymbolic = buildSymbolicRelations(tlCalculation).rows
+    .find((row) => row.relationId === 'tl-diagram-stacking');
+  assert.strictEqual(stackingSymbolic.equations[0].rhs.latex, 'D_P D_Q=\\delta^{k(P,Q)}D_{P\\star Q}');
+  assert.ok(stackingSymbolic.hint.includes('each of the k(P,Q) closed circles'));
+  const stackingDiagrammatic = model.rows.find((row) => row.relationId === 'tl-diagram-stacking');
+  assert.strictEqual(stackingDiagrammatic.equations[0].lhs, null);
+  assert.strictEqual(stackingDiagrammatic.equations[0].rhs.kind, 'symbolic');
+  assert.strictEqual(stackingDiagrammatic.equations[0].rhs.latex, 'D_P D_Q=\\delta^{k(P,Q)}D_{P\\star Q}');
+  assert.strictEqual(stackingDiagrammatic.hint, stackingSymbolic.hint);
+
+  const loopRow = model.rows.find((row) => row.relationId === 'tl-loop-removal');
+  const loop = relationRowDiagrams(loopRow)[0];
+  assert.strictEqual(loop.kind, 'loop');
+  assert.strictEqual(loop.rank, 0);
+  assert.strictEqual(loop.paths[0].closed, true);
+  assertFiniteDiagram(loop);
+
+  const braidToTlCalculation = calculateStrandWord([braid(1)], { rank: 2, target: 'tl', basis: 'diagram' });
+  const braidToTlModel = buildDiagrammaticRelations(braidToTlCalculation);
+  const braidToTl = braidToTlModel.groups.find((group) => group.id === 'interpretation').rows
+    .find((row) => row.relationId === 'braid-to-tl');
+  assert.strictEqual(braidToTl.equations.length, 2);
+  const positive = relationRowDiagrams({ equations: [braidToTl.equations[0]] })[0];
+  const inverse = relationRowDiagrams({ equations: [braidToTl.equations[1]] })[0];
+  assert.strictEqual(positive.overlays.length, 1);
+  assert.strictEqual(inverse.overlays.length, 1);
+  assert.notDeepStrictEqual(positive.overlays[0], inverse.overlays[0]);
+
+  const klCalculation = calculateStrandWord([kl(1)], { rank: 2, target: 'hecke', basis: 'kl' });
+  const klModel = buildDiagrammaticRelations(klCalculation);
+  const klRow = klModel.rows.find((row) => row.relationId === 'kl-generator-expansion');
+  const klTerms = klRow.equations[0].rhs.terms;
+  assert.deepStrictEqual(klTerms.map((term) => term.coefficient), [LaurentPolynomial.one().toJSON(), V.toJSON()]);
+  assert.ok(klTerms.every((term) => term.diagram?.kind === 'hecke'));
+
+  const burauCalculation = calculateStrandWord([braid(1)], { rank: 2, target: 'burau', basis: 'matrix-unit' });
+  const burauModel = buildDiagrammaticRelations(burauCalculation);
+  assert.deepStrictEqual(
+    burauModel.groups.at(-1).rows.map((row) => row.relationId),
+    ['braid-to-burau', 'matrix-unit-basis']
+  );
+  const burauRow = burauModel.rows.find((row) => row.relationId === 'burau-generator');
+  const expectedBurau = math.matrixToLinearCombination(burauGeneratorMatrix(2, 1, 1), 'matrix-unit').sortedTerms();
+  assert.deepStrictEqual(matrixTermSignature(burauRow.equations[0].rhs.terms), matrixTermSignature(expectedBurau));
+  const tlBurauCalculation = calculateStrandWord([tl(1)], { rank: 2, target: 'burau', basis: 'matrix-unit' });
+  const tlBurauRow = buildDiagrammaticRelations(tlBurauCalculation).rows.find((row) => row.relationId === 'tl-to-burau');
+  const expectedTl = math.matrixToLinearCombination(tlGeneratorMatrix(2, 1), 'matrix-unit').sortedTerms();
+  assert.deepStrictEqual(matrixTermSignature(tlBurauRow.equations[0].rhs.terms), matrixTermSignature(expectedTl));
+
+  for (const direction of ['up-down', 'down-up', 'left-right', 'right-left']) {
+    const oriented = buildDiagrammaticRelations(tlCalculation, { direction });
+    assert.strictEqual(oriented.direction, direction);
+    oriented.rows.flatMap(relationRowDiagrams).forEach(assertFiniteDiagram);
+  }
+
+  const directComposition = makeTlCompositionDiagram(
+    2,
+    [tlGeneratorDiagram(2, 1), tlGeneratorDiagram(2, 1)],
+    'left-right'
+  );
+  assert.strictEqual(directComposition.paths.filter((path) => path.closed).length, 1);
+  assertFiniteDiagram(directComposition);
+
+  const heckeToTl = calculateStrandWord([hecke(1)], { rank: 2, target: 'tl', basis: 'diagram' });
+  assert.deepStrictEqual(
+    buildSymbolicRelations(heckeToTl).groups.at(-1).rows.map((row) => row.relationId),
+    ['hecke-to-tl', 'tl-diagram-basis']
+  );
+  const routeCases = [
+    [[braid(1)], 'symmetric', 'permutation', ['braid-to-symmetric', 'permutation-basis']],
+    [[braid(1)], 'hecke', 'standard', ['braid-to-hecke', 'braid-inverse-to-hecke', 'standard-basis-expansion']],
+    [[kl(1)], 'hecke', 'kl', ['kl-generator-expansion', 'kl-basis-change']],
+    [[braid(1)], 'tl', 'diagram', ['braid-to-tl', 'tl-diagram-basis']],
+    [[hecke(1)], 'tl', 'diagram', ['hecke-to-tl', 'tl-diagram-basis']],
+    [[kl(1)], 'tl', 'diagram', ['kl-through-hecke-to-tl', 'tl-diagram-basis']],
+    [[braid(1)], 'burau', 'matrix-unit', ['braid-to-burau', 'matrix-unit-basis']],
+    [[tl(1)], 'burau', 'matrix-unit', ['tl-to-burau', 'matrix-unit-basis']],
+    [[hecke(1)], 'burau', 'matrix-unit', ['hecke-to-burau', 'matrix-unit-basis']],
+    [[kl(1)], 'burau', 'vector', ['kl-to-burau', 'vector-basis']]
+  ];
+  routeCases.forEach(([word, target, basis, expected]) => {
+    const calculation = calculateStrandWord(word, { rank: 2, target, basis });
+    assert.deepStrictEqual(
+      buildSymbolicRelations(calculation).groups.at(-1).rows.map((row) => row.relationId),
+      expected
+    );
+  });
+}
+
+function testRelationProvenanceAndSharedBudget() {
+  for (const [target, basis] of [
+    ['symmetric', 'permutation'],
+    ['braid', 'freely-reduced-word'],
+    ['hecke', 'standard'],
+    ['hecke', 'kl'],
+    ['tl', 'diagram'],
+    ['burau', 'matrix-unit'],
+    ['burau', 'vector']
+  ]) {
+    const identity = calculateStrandWord([], { rank: 3, target, basis, includeTrace: true });
+    assert.strictEqual(identity.trace[0].relationId, 'identity');
+    assert.ok(identity.relationsUsed.includes('identity'));
+  }
+
+  const heckeCalculation = calculateStrandWord([hecke(1)], {
+    rank: 3,
+    target: 'hecke',
+    basis: 'standard',
+    includeTrace: true
+  });
+  assert.strictEqual(heckeCalculation.trace[0].relationId, 'hecke-multiplication');
+  assert.ok(heckeCalculation.relationsUsed.includes('hecke-multiplication'));
+  assert.ok(!heckeCalculation.relationsUsed.includes('braid-to-hecke'));
+
+  const presentation = buildDiagrammaticPresentation(heckeCalculation, {
+    scope: 'all',
+    direction: 'up-down',
+    limits: { rank: 24, compositionLength: 160, atoms: 2 }
+  });
+  assert.ok(presentation.diagramAtoms <= 2);
+  assert.ok(presentation.warnings.some((message) => message.includes('first 2 diagram atoms')));
+  assert.strictEqual(presentation.trace.rows.length, heckeCalculation.trace.length);
+  assert.ok(presentation.relations.rows.length > heckeCalculation.relationsUsed.length);
+  assert.deepStrictEqual(
+    presentation.relations.groups.map((group) => group.id),
+    ['defining', 'consequences', 'interpretation']
+  );
+  assert.deepStrictEqual(
+    buildDiagrammaticRelations(heckeCalculation, { scope: 'basis' }).rows.map((row) => row.relationId),
+    buildDiagrammaticRelations(heckeCalculation, { scope: 'all' }).rows.map((row) => row.relationId)
+  );
+
+  const copyOptions = { scope: 'all', direction: 'up-down' };
+  const copied = formatDiagrammaticTraceTikz(heckeCalculation, copyOptions);
+  const copiedDiagramCount = (copied.match(/\\begin\{tikzpicture\}/g) || []).length;
+  assert.strictEqual(copiedDiagramCount, buildDiagrammaticTrace(heckeCalculation, copyOptions).diagramAtoms);
+  assert.ok(!copied.includes('Hecke quadratic multiplication'));
+}
+
+function testBasisCatalogs() {
+  const symmetric = buildBasisCatalog({ rank: 3, target: 'symmetric', basis: 'one-line', pageSize: 2 });
+  assert.strictEqual(symmetric.finite, true);
+  assert.strictEqual(symmetric.dimension, '6');
+  assert.strictEqual(symmetric.page.count, '3');
+  assert.deepStrictEqual(symmetric.page.items.map((item) => item.values), [[1, 2, 3], [1, 3, 2]]);
+  const symmetricLast = buildBasisCatalog({ rank: 3, target: 'symmetric', basis: 'cycle', pageSize: 2, offset: '4' });
+  assert.deepStrictEqual(symmetricLast.page.items.at(-1).values, [3, 2, 1]);
+
+  for (const basis of ['standard', 'kl']) {
+    const heckeCatalog = buildBasisCatalog({ rank: 3, target: 'hecke', basis });
+    assert.strictEqual(heckeCatalog.dimension, '6');
+    assert.strictEqual(heckeCatalog.page.items.length, 6);
+    assert.ok(heckeCatalog.page.items.every((item) => item.kind === `hecke-${basis}`));
+  }
+
+  const tlCatalog = buildBasisCatalog({ rank: 3, target: 'tl', basis: 'diagram' });
+  assert.strictEqual(tlCatalog.dimension, '5');
+  assert.deepStrictEqual(
+    tlCatalog.page.items.map((item) => item.key).sort(),
+    enumerateTlBasis(3, budget()).map((diagram) => diagram.key).sort()
+  );
+
+  const matrixUnits = buildBasisCatalog({ rank: 3, target: 'burau', basis: 'matrix-unit' });
+  assert.strictEqual(matrixUnits.dimension, '9');
+  assert.deepStrictEqual(
+    matrixUnits.page.items.map((item) => [item.row, item.column]),
+    [[1, 1], [1, 2], [1, 3], [2, 1], [2, 2], [2, 3], [3, 1], [3, 2], [3, 3]]
+  );
+  const vectors = buildBasisCatalog({ rank: 3, target: 'burau', basis: 'vector' });
+  assert.strictEqual(vectors.dimension, '3');
+  assert.deepStrictEqual(vectors.page.items.map((item) => item.row), [1, 2, 3]);
+
+  const braidCatalog = buildBasisCatalog({ rank: 3, target: 'braid', basis: 'freely-reduced-word' });
+  assert.strictEqual(braidCatalog.finite, false);
+  assert.strictEqual(braidCatalog.page, null);
+  assert.ok(braidCatalog.algorithm.includes('stack'));
+  assert.ok(braidCatalog.algorithm.includes('noncanonical'));
+
+  assert.throws(
+    () => buildBasisCatalog({ rank: 3, type: 'B', target: 'tl', basis: 'diagram' }),
+    (error) => error instanceof CalculationError && error.code === 'type-a-only'
+  );
+}
+
 testLaurentAndSparseCore();
 testPermutationAndBruhat();
 testHeckeRelations();
@@ -393,8 +735,12 @@ testTemperleyLieb();
 testBurau();
 testCrossPaths();
 testApiErrorsTraceAndSerialization();
+testSymmetricPresentations();
 testAdvertisedRoutes();
 testSemanticTraceRoutes();
 testDiagrammaticGeometryAndTikz();
+testDiagrammaticRelations();
+testRelationProvenanceAndSharedBudget();
+testBasisCatalogs();
 
-console.log('strand_math_test: exact algebra, semantic traces, diagram geometry, TikZ, and limits pass');
+console.log('strand_math_test: exact algebra, basis catalogs, diagram relations, TikZ, and limits pass');

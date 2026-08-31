@@ -10,8 +10,9 @@ const script = fs.readFileSync(path.join(__dirname, 'place_ramification_calculat
 
 [
   'Extension \\(E/F\\)', 'id="base-field-kind"', 'id="base-lmfdb-selector"',
-  'id="extension-input-kind"', 'id="extension-lmfdb-selector"', 'id="polynomial-extension"',
-  'id="generic-q-control"', '<span>\\(q\\)</span>', 'id="show-infinite"',
+  'id="base-lmfdb-description"',
+  'id="extension-input-kind"', 'id="extension-lmfdb-selector"', 'id="lmfdb-description"', 'id="polynomial-extension"',
+  'id="generic-q-control"', '<span>\\(q\\)</span>', 'id="show-infinite"', 'id="extension-update"',
   'id="base-lmfdb-root-shortcut"', 'id="lmfdb-root-shortcut"',
   'place_ramification_engine.js', 'Places of \\(E\\) above places of \\(F\\)'
 ].forEach((needle) => assert.ok(html.includes(needle), 'missing extension workflow UI: ' + needle));
@@ -125,6 +126,12 @@ async function verifyRuntimeBehavior() {
   assert.strictEqual(exported.base.kind, 'Q');
   assert.strictEqual(exported.extension.kind, 'lmfdb');
   assert.strictEqual(exported.extension.label, '2.2.5.1');
+  assert.match(elements.get('lmfdb-description').innerHTML, /LMFDB 2\.2\.5\.1/);
+  assert.ok(elements.get('lmfdb-description').innerHTML.includes('E=\\mathbb{Q}(a)'));
+  assert.ok(elements.get('lmfdb-description').innerHTML.includes('a^{2}-a-1=0'));
+  assert.ok(elements.get('field-invariants').innerHTML.includes('Extension field E'));
+  assert.ok(elements.get('field-invariants').innerHTML.includes('\\mathbb{Q}(a)'));
+  assert.ok(elements.get('field-invariants').innerHTML.includes('a^{2}-a-1=0'));
 
   const extensionQuery = elements.get('lmfdb-query');
   const extensionPanel = elements.get('lmfdb-shortcut-panel');
@@ -188,6 +195,9 @@ async function verifyRuntimeBehavior() {
   await elements.get('base-lmfdb-search').listeners.click();
   await settleAsyncWork();
   assert.match(elements.get('base-lmfdb-status').textContent, /Loaded 2\.2\.5\.1/);
+  assert.match(elements.get('base-lmfdb-description').innerHTML, /LMFDB 2\.2\.5\.1/);
+  assert.ok(elements.get('base-lmfdb-description').innerHTML.includes('F=\\mathbb{Q}(a)'));
+  assert.ok(elements.get('base-lmfdb-description').innerHTML.includes('a^{2}-a-1=0'));
 
   const committedBeforeBaseFailure = elements.get('ramification-export-out').value;
   setInput(elements, 'base-lmfdb-query', 'base-bad');
@@ -206,28 +216,66 @@ async function verifyRuntimeBehavior() {
   assert.ok(Array.isArray(exported.base.zk));
   assert.strictEqual(exported.extension.kind, 'polynomial');
   assert.strictEqual(exported.engine.arithmetic, 'browser-local');
+  assert.ok(elements.get('field-invariants').innerHTML.includes('Base LMFDB label'));
+  assert.ok(elements.get('field-invariants').innerHTML.includes('2.2.5.1'));
+  assert.ok(elements.get('field-invariants').innerHTML.includes('\\mathbb{Q}(a)'));
+  assert.ok(elements.get('field-invariants').innerHTML.includes('a^{2}-a-1=0'));
   assert.ok(exported.places.every((place) =>
     place.status === 'resolved' || place.components.every((component) => component.e == null && component.f == null)
   ));
 
+  setInput(elements, 'generic-polynomial', 'x^2-a');
+  await elements.get('generic-compute').listeners.click();
+  await settleAsyncWork();
+  exported = parseExport(elements);
+  const unresolvedAboveTwo = exported.places.find((place) => place.id === 'nf:2:1');
+  assert.strictEqual(unresolvedAboveTwo.status, 'unresolved');
+  assert.strictEqual(unresolvedAboveTwo.components[0].label, '?');
+  assert.ok(elements.get('decomposition-table').innerHTML.includes('<strong>?</strong> means unresolved'));
+  assert.match(elements.get('decomposition-table').innerHTML, /The reduction has repeated factors/);
+  assert.match(elements.get('ramification-labels').innerHTML, /title="The reduction has repeated factors/);
+
   baseKind.value = 'Fqt';
   baseKind.listeners.change({ target: baseKind });
   assert.strictEqual(elements.get('generic-q-control').hidden, false);
-  assert.strictEqual(elements.get('prime-bound-control').hidden, true);
+  assert.strictEqual(elements.get('prime-bound-control').hidden, false);
+  assert.ok(elements.get('place-bound-label').innerHTML.includes('log_q'));
+  assert.strictEqual(elements.get('prime-bound').value, '2');
+  assert.strictEqual(elements.get('prime-bound').min, '1');
+  assert.strictEqual(elements.get('prime-bound').max, '4');
   assert.strictEqual(lmfdbOption.disabled, true);
   setInput(elements, 'generic-q', '3');
   setInput(elements, 'generic-polynomial', 'x^2-t');
-  await elements.get('generic-compute').listeners.click();
+  await elements.get('extension-update').listeners.click();
   await settleAsyncWork();
   exported = parseExport(elements);
   assert.strictEqual(exported.base.kind, 'Fqt');
   assert.strictEqual(exported.selection.rationalPrimeBound, null);
+  assert.strictEqual(exported.selection.functionPlaceDegreeBound, 2);
+  assert.strictEqual(exported.extension.generator, 'alpha', 'exports must retain the raw generator name');
+  assert.strictEqual(exported.places.filter((place) => place.scope === 'finite').length, 6);
+  assert.ok(exported.places.some((place) => place.place === 't^2+2t+2'));
   assert.ok(exported.places.some((place) => place.place === 't'), 'function-field discriminant places must be added automatically');
+  assert.strictEqual(elements.get('generic-status').textContent, 'Computed locally with certificates at every displayed place.');
+  ['ramification-status', 'ramification-relation-title', 'ramification-input-note', 'field-invariants'].forEach((id) => {
+    assert.ok(elements.get(id).innerHTML.includes('\\alpha'), `${id} must render alpha as a Greek generator`);
+    assert.ok(!elements.get(id).innerHTML.includes('F(alpha)'), `${id} must not render alpha as ordinary letters`);
+  });
+
+  setInput(elements, 'generic-q', '5');
+  exampleButtons.find((button) => button.dataset.genericExample === 'number').listeners.click();
+  assert.strictEqual(elements.get('base-field-kind').value, 'Fqt', 'the constant-polynomial preset must preserve the base field');
+  assert.strictEqual(elements.get('generic-q').value, '5', 'the constant-polynomial preset must preserve q');
+  assert.strictEqual(elements.get('generic-polynomial').value, 'x^3-x-1');
 
   baseKind.value = 'Q';
   baseKind.listeners.change({ target: baseKind });
   assert.strictEqual(elements.get('generic-q-control').hidden, true);
   assert.strictEqual(elements.get('prime-bound-control').hidden, false);
+  assert.ok(elements.get('place-bound-label').innerHTML.includes('p'));
+  assert.strictEqual(elements.get('prime-bound').value, '11');
+  assert.strictEqual(elements.get('prime-bound').min, '2');
+  assert.strictEqual(elements.get('prime-bound').max, '31');
   assert.strictEqual(lmfdbOption.disabled, false);
   setInput(elements, 'generic-polynomial', 'x^2+1');
   elements.get('prime-bound').value = '2';
@@ -257,9 +305,13 @@ async function verifyRuntimeBehavior() {
   const pendingComputation = elements.get('generic-compute').listeners.click();
   await settleAsyncWork();
   assert.strictEqual(elements.get('generic-compute').textContent, 'cancel');
+  assert.strictEqual(elements.get('extension-update').disabled, true);
+  assert.strictEqual(elements.get('extension-update').textContent, 'updating...');
   await elements.get('generic-compute').listeners.click();
   await pendingComputation;
   assert.strictEqual(workerInstance.terminated, true, 'cancelling must terminate the active worker');
+  assert.strictEqual(elements.get('extension-update').disabled, false);
+  assert.strictEqual(elements.get('extension-update').textContent, 'update');
   delete window.Worker;
 
   const adapter = window.SiteImportExportPageAdapter;

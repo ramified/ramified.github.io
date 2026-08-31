@@ -19,6 +19,8 @@
     Object.assign(scope.StrandMath, api);
     Object.assign(api, require('./diagrammatics.js'));
     Object.assign(scope.StrandMath, api);
+    Object.assign(api, require('./basis_catalog.js'));
+    Object.assign(scope.StrandMath, api);
     module.exports = api;
   }
 })(typeof globalThis !== 'undefined' ? globalThis : this);

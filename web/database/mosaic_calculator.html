@@ -926,6 +926,22 @@
       justify-content: space-between;
     }
 
+    .homology-local-chart-physics-row {
+      align-items: center;
+      gap: 8px;
+    }
+
+    .homology-local-chart-physics-row .slice-mode-row {
+      flex-wrap: wrap;
+    }
+
+    .homology-local-chart-radius-controls {
+      display: grid !important;
+      gap: 0;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+
     .homology-local-chart-wide-toggle {
       display: none;
       margin-left: auto;
@@ -1751,9 +1767,27 @@
             </span>
             <button class="btn btn-ghost homology-local-chart-wide-toggle" id="homology-local-chart-wide" type="button" aria-pressed="false">wide</button>
           </div>
-          <div class="mosaic-inline-row">
-            <span class="input-label">Local radius / R</span>
-            <span class="background-slider-controls"><input type="range" id="homology-local-chart-radius" min="0.25" max="2" step="0.05" value="1"><output id="homology-local-chart-radius-value">1.00</output></span>
+          <div class="homology-local-chart-radius-controls" id="homology-local-chart-radius-controls">
+            <div class="mosaic-inline-row">
+              <span class="input-label">Local radius / R</span>
+              <span class="background-slider-controls"><input type="range" id="homology-local-chart-radius" min="0.25" max="2" step="0.05" value="1"><output id="homology-local-chart-radius-value">1.00</output></span>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label">Core radius / R</span>
+              <span class="background-slider-controls"><input type="range" id="homology-local-physics-core-radius" min="0.05" max="0.40" step="0.01" value="0.20"><output id="homology-local-physics-core-radius-value">0.20</output></span>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label">Outer radius / R</span>
+              <span class="background-slider-controls"><input type="range" id="homology-local-physics-outer-radius" min="0.10" max="0.49" step="0.01" value="0.45"><output id="homology-local-physics-outer-radius-value">0.45</output></span>
+            </div>
+          </div>
+          <div class="mosaic-inline-row homology-local-chart-physics-row">
+            <span class="input-label">Physics</span>
+            <span class="slice-mode-row" aria-label="Local chart physics">
+              <button class="slice-mode-btn" data-homology-local-physics-mode="intrinsic" type="button" aria-pressed="false">Intrinsic</button>
+              <button class="slice-mode-btn active" data-homology-local-physics-mode="radial" type="button" aria-pressed="true">Radial</button>
+              <button class="slice-mode-btn" data-homology-local-physics-mode="conformal" type="button" aria-pressed="false">Conformal</button>
+            </span>
           </div>
           <div class="homology-local-chart-layers" aria-label="Local chart layers">
             <label class="opt-row"><input type="checkbox" data-homology-local-chart-layer="geometry" checked> geometry / IDs</label>
@@ -2063,7 +2097,7 @@
 <script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_native.js?v=20260825-1"></script>
-<script src="js/mosaic_calculator.js?v=homology-local-chart-5"></script>
+<script src="js/mosaic_calculator.js?v=homology-local-carrier-2"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260826-1"></script>
 <script>

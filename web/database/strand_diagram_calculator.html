@@ -534,6 +534,10 @@
       min-width: 0;
     }
 
+    .strand-calculation-controls [hidden] {
+      display: none !important;
+    }
+
     .strand-calculation-source {
       display: grid;
       grid-template-columns: 104px minmax(0, 1fr);
@@ -566,6 +570,10 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
       min-width: 0;
+    }
+
+    .strand-calculation-presentation.is-reference {
+      grid-template-columns: minmax(0, 1fr);
     }
 
     .strand-segmented-control {
@@ -643,6 +651,12 @@
       }
     }
 
+    @media (max-width: 959px) {
+      .strand-calculation-actions.is-reference {
+        display: none;
+      }
+    }
+
     .strand-calculation-message {
       min-height: 1.25em;
       margin-top: 2px;
@@ -674,34 +688,217 @@
       display: none !important;
     }
 
-    .strand-calculation-details {
+    .strand-calculation-surface {
       width: 100%;
       max-width: 100%;
       min-width: 0;
       overflow: hidden;
       box-sizing: border-box;
-      border-top: 1px dotted var(--border);
-      padding-top: 7px;
-    }
-
-    .strand-calculation-details summary {
-      color: var(--muted);
-      cursor: pointer;
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.72rem;
-      user-select: none;
     }
 
     .strand-calculation-relations {
       display: grid;
-      gap: 4px;
       margin: 8px 0 0;
       padding: 0;
-      list-style: none;
       color: var(--text);
       font-family: 'JetBrains Mono', Consolas, monospace;
       font-size: 0.7rem;
       overflow-wrap: anywhere;
+    }
+
+    .strand-basis-summary {
+      display: grid;
+      gap: 6px;
+      margin-top: 8px;
+      min-width: 0;
+    }
+
+    .strand-basis-count,
+    .strand-basis-definition,
+    .strand-basis-result-form {
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 2px 0;
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 1rem;
+      white-space: nowrap;
+    }
+
+    .strand-basis-count {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .strand-basis-explanation,
+    .strand-basis-algorithm {
+      margin: 0;
+      color: var(--text);
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+    .strand-basis-algorithm {
+      color: var(--muted);
+    }
+
+    .strand-basis-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 6px;
+      margin-top: 10px;
+      min-width: 0;
+    }
+
+    .strand-basis-item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      min-height: 52px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 7px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.42);
+      box-sizing: border-box;
+    }
+
+    .strand-basis-item.is-diagrammatic {
+      min-height: 86px;
+    }
+
+    .strand-basis-item .strand-diagram-linear {
+      flex-wrap: nowrap;
+    }
+
+    .strand-basis-pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 9px;
+    }
+
+    .strand-basis-page-button {
+      width: 34px;
+      min-width: 34px;
+      padding: 5px;
+      font-size: 1rem;
+    }
+
+    .strand-basis-page-input {
+      width: 76px;
+      min-width: 0;
+      padding: 5px 7px;
+      text-align: center;
+    }
+
+    .strand-basis-page-status {
+      min-width: 76px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .strand-diagram-relation-sheet {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .strand-diagram-relation-group {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .strand-diagram-relation-group-title {
+      color: var(--muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .strand-diagram-relation-list {
+      display: grid;
+      gap: 4px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .strand-diagram-relation-item {
+      width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 3px 0 7px;
+      border-bottom: 1px dotted rgba(216, 208, 196, 0.72);
+      scrollbar-gutter: stable;
+    }
+
+    .strand-diagram-relation-item:last-child {
+      border-bottom: 0;
+    }
+
+    .strand-diagram-relation-equations {
+      display: grid;
+      gap: 7px;
+      width: max-content;
+      min-width: 100%;
+    }
+
+    .strand-diagram-relation-equations.has-hint {
+      cursor: help;
+    }
+
+    .strand-diagram-relation-equations.has-hint:focus-visible {
+      outline: 1px dotted var(--accent);
+      outline-offset: 2px;
+    }
+
+    .strand-diagram-relation-equation {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: max-content;
+      min-height: 66px;
+    }
+
+    .strand-diagram-relation-operator {
+      min-width: 18px;
+      color: var(--text);
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 1.08rem;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .strand-diagram-relation-sheet.is-symbolic {
+      gap: 7px;
+    }
+
+    .strand-diagram-relation-sheet.is-symbolic .strand-diagram-relation-group {
+      gap: 2px;
+    }
+
+    .strand-diagram-relation-sheet.is-symbolic .strand-diagram-relation-list,
+    .strand-diagram-relation-sheet.is-symbolic .strand-diagram-relation-equations {
+      gap: 0;
+    }
+
+    .strand-diagram-relation-sheet.is-symbolic .strand-diagram-relation-item {
+      padding: 1px 0 3px;
+    }
+
+    .strand-diagram-relation-sheet.is-symbolic .strand-diagram-relation-equation {
+      gap: 4px;
+      min-height: 0;
+      padding: 2px 0;
     }
 
     .strand-calculation-equation,
@@ -730,19 +927,17 @@
 
     .strand-diagram-trace {
       display: grid;
-      gap: 12px;
+      grid-template-columns: max-content 18px max-content max-content;
+      column-gap: 8px;
+      row-gap: 12px;
+      align-items: center;
       width: max-content;
       min-width: 100%;
       padding: 4px 0;
     }
 
     .strand-diagram-trace-row {
-      display: grid;
-      grid-template-columns: max-content 18px max-content max-content;
-      gap: 8px;
-      align-items: center;
-      width: max-content;
-      min-width: 100%;
+      display: contents;
     }
 
     .strand-diagram-trace-equals {
@@ -823,6 +1018,17 @@
       stroke: #286775;
     }
 
+    .strand-inline-diagram .strand-diagram-path.is-link-state {
+      stroke: #286775;
+    }
+
+    .strand-inline-diagram .strand-diagram-platform {
+      fill: #d9d6cf;
+      stroke: #4f4b45;
+      stroke-width: 1.15;
+      stroke-linejoin: round;
+    }
+
     .strand-inline-diagram .strand-diagram-over-gap {
       stroke: #fffdf8;
       stroke-width: 5;
@@ -849,12 +1055,6 @@
       fill: rgba(40, 112, 123, 0.28);
       stroke: #286775;
       stroke-width: 1.25;
-    }
-
-    .strand-diagram-final {
-      padding: 5px 7px;
-      border: 1px solid var(--border);
-      border-radius: 3px;
     }
 
     .strand-diagram-vector-system {
@@ -1058,15 +1258,23 @@
     </section>
 
     <span id="strand-calculation-side-anchor" hidden></span>
-    <section class="card collapsed" id="strand-calculation-card" draggable="true" data-card-wide="true" data-card-wide-host="#strand-calculation-wide-host" data-card-side-anchor="#strand-calculation-side-anchor" data-card-wide-button="#strand-calculation-wide">
+    <section class="card" id="strand-calculation-card" draggable="true" data-card-wide="true" data-card-wide-host="#strand-calculation-wide-host" data-card-side-anchor="#strand-calculation-side-anchor" data-card-wide-button="#strand-calculation-wide">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Calculation</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="strand-calculation-controls">
-          <div class="strand-calculation-source">
+          <div class="strand-field-row" id="strand-calculation-task-row">
+            <label class="input-label" for="strand-calculation-task">compute</label>
+            <select id="strand-calculation-task" aria-label="What to compute">
+              <option value="strand" selected>Current strand</option>
+              <option value="relations">Relations</option>
+              <option value="basis">Check basis</option>
+            </select>
+          </div>
+          <div class="strand-calculation-source" id="strand-calculation-source-row">
             <span class="input-label">source</span>
             <output class="strand-calculation-source-output" id="strand-calculation-source">identity</output>
           </div>
-          <div class="strand-field-row">
+          <div class="strand-field-row" id="strand-calculation-target-row">
             <label class="input-label" for="strand-calculation-target">target</label>
             <select id="strand-calculation-target">
               <option value="symmetric">Symmetric group</option>
@@ -1076,13 +1284,13 @@
               <option value="burau">Burau representation</option>
             </select>
           </div>
-          <div class="strand-field-row">
+          <div class="strand-field-row" id="strand-calculation-basis-row">
             <label class="input-label" for="strand-calculation-basis">basis</label>
             <select id="strand-calculation-basis">
               <option value="diagram" selected>Diagram basis</option>
             </select>
           </div>
-          <div class="strand-calculation-presentation">
+          <div class="strand-calculation-presentation" id="strand-calculation-presentation">
             <div class="strand-segmented-control" id="strand-calculation-mode-control" role="group" aria-label="Calculation presentation">
               <button class="strand-segmented-button" id="strand-calculation-mode-symbolic" type="button" data-calculation-mode="symbolic" aria-pressed="true">Symbolic</button>
               <button class="strand-segmented-button" id="strand-calculation-mode-diagrammatic" type="button" data-calculation-mode="diagrammatic" aria-pressed="false">Diagrammatic</button>
@@ -1092,7 +1300,7 @@
               <button class="strand-segmented-button" id="strand-calculation-scope-basis" type="button" data-calculation-scope="basis" aria-pressed="false" disabled>Basis terms</button>
             </div>
           </div>
-          <div class="strand-calculation-actions">
+          <div class="strand-calculation-actions" id="strand-calculation-actions">
             <button class="btn" id="strand-calculate" type="button">calculate</button>
             <button class="btn btn-ghost strand-small-button" id="strand-copy-calculation-latex" type="button" disabled>copy LaTeX</button>
             <button class="btn btn-ghost strand-small-button" id="strand-copy-calculation-result" type="button" disabled>copy result</button>
@@ -1100,18 +1308,27 @@
           </div>
           <div class="strand-calculation-message" id="strand-calculation-message" aria-live="polite">Choose a target and calculate.</div>
           <div class="strand-calculation-render-warning" id="strand-calculation-render-warning" role="status" hidden></div>
-          <details class="strand-calculation-details" id="strand-calculation-relations-details">
-            <summary>relations</summary>
-            <ul class="strand-calculation-relations" id="strand-calculation-relations"></ul>
-          </details>
-          <details class="strand-calculation-details" id="strand-calculation-details" open>
-            <summary>calculation</summary>
+          <div class="strand-calculation-surface" id="strand-calculation-relations-surface" hidden>
+            <div class="strand-calculation-relations" id="strand-calculation-relations"></div>
+          </div>
+          <div class="strand-calculation-surface" id="strand-calculation-basis-surface" hidden>
+            <div class="strand-basis-summary" id="strand-calculation-basis-summary"></div>
+            <div class="strand-basis-list" id="strand-calculation-basis-list" role="list"></div>
+            <div class="strand-basis-pagination" id="strand-calculation-basis-pagination" hidden>
+              <button class="btn btn-ghost strand-basis-page-button" id="strand-calculation-basis-previous" type="button" title="previous basis page" aria-label="Previous basis page">&#8249;</button>
+              <input class="strand-basis-page-input" id="strand-calculation-basis-page" type="text" inputmode="numeric" aria-label="Basis page number">
+              <button class="btn btn-ghost strand-small-button" id="strand-calculation-basis-go" type="button">go</button>
+              <span class="strand-basis-page-status" id="strand-calculation-basis-page-status"></span>
+              <button class="btn btn-ghost strand-basis-page-button" id="strand-calculation-basis-next" type="button" title="next basis page" aria-label="Next basis page">&#8250;</button>
+            </div>
+          </div>
+          <div class="strand-calculation-surface" id="strand-calculation-surface">
             <div class="strand-calculation-equation" id="strand-calculation-equation"></div>
             <div id="strand-calculation-matrix-section" hidden>
-              <div class="strand-calculation-matrix-label">ordinary matrix</div>
+              <div class="strand-calculation-matrix-label" id="strand-calculation-matrix-label">matrix</div>
               <div class="strand-calculation-matrix" id="strand-calculation-matrix"></div>
             </div>
-          </details>
+          </div>
         </div>
       </div>
     </section>
@@ -1171,9 +1388,10 @@
   <script src="js/strand_math/kl.js"></script>
   <script src="js/strand_math/temperley_lieb.js"></script>
   <script src="js/strand_math/burau.js"></script>
-  <script src="js/strand_math/calculate.js"></script>
-  <script src="js/strand_math/diagrammatics.js"></script>
-  <script src="js/strand_diagram_calculator.js"></script>
+  <script src="js/strand_math/calculate.js?v=20260831-1"></script>
+  <script src="js/strand_math/diagrammatics.js?v=20260831-1"></script>
+  <script src="js/strand_math/basis_catalog.js?v=20260831-2"></script>
+  <script src="js/strand_diagram_calculator.js?v=20260831-2"></script>
   <script src="js/import_export_panel.js?v=20260821-7"></script>
   <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

@@ -340,7 +340,8 @@
       top: var(--fullscreen-action-top, 10px);
       left: var(--fullscreen-action-left, 10px);
       display: none;
-      align-items: flex-start;
+      align-items: center;
+      gap: 6px;
       pointer-events: none;
     }
 
@@ -371,7 +372,7 @@
       display: none !important;
     }
 
-    .fullscreen-action-toggle,
+    .fullscreen-settings-button,
     .fullscreen-action-button,
     .fullscreen-lianliankan-button {
       width: 42px;
@@ -391,7 +392,7 @@
       touch-action: manipulation;
     }
 
-    .fullscreen-action-toggle:hover,
+    .fullscreen-settings-button:hover,
     .fullscreen-action-button:hover,
     .fullscreen-lianliankan-button:hover {
       border-color: var(--accent);
@@ -399,7 +400,7 @@
     }
 
     .fullscreen-action-button:active,
-    .fullscreen-action-toggle:active,
+    .fullscreen-settings-button:active,
     .fullscreen-lianliankan-button:active {
       transform: scale(0.96);
     }
@@ -442,6 +443,8 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      max-width: calc(100vw - 70px);
+      box-sizing: border-box;
       padding: 5px;
       border: 1px solid rgba(26, 22, 18, 0.16);
       border-radius: 7px;
@@ -453,10 +456,12 @@
     }
 
     .fullscreen-action-bar[hidden],
-    .fullscreen-action-shell.is-expanded .fullscreen-action-toggle {
+    .fullscreen-settings-overlay[hidden] {
       display: none !important;
     }
 
+    .fullscreen-action-shell[data-placement="left"],
+    .fullscreen-action-shell[data-placement="right"],
     .fullscreen-action-shell[data-placement="left"] .fullscreen-action-bar,
     .fullscreen-action-shell[data-placement="right"] .fullscreen-action-bar {
       flex-direction: column;
@@ -470,6 +475,7 @@
     }
 
     .fullscreen-action-status {
+      min-width: 0;
       max-width: min(190px, 45vw);
       color: var(--accent2);
       font-family: 'JetBrains Mono', monospace;
@@ -477,6 +483,7 @@
       line-height: 1.2;
       padding: 0 3px;
       white-space: normal;
+      overflow-wrap: anywhere;
     }
 
     .fullscreen-action-status[hidden] {
@@ -516,6 +523,226 @@
 
     #canvas-wrap.fullscreen-action-gutter:fullscreen {
       padding-top: 56px;
+    }
+
+    .fullscreen-settings-overlay {
+      position: absolute;
+      z-index: 20;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      padding: 16px;
+      background: rgba(10, 10, 10, 0.68);
+      pointer-events: auto;
+    }
+
+    body.canvas-fullscreen-active .fullscreen-settings-overlay:not([hidden]) {
+      display: flex;
+    }
+
+    .fullscreen-settings-dialog {
+      width: min(420px, 100%);
+      max-height: calc(100vh - 32px);
+      overflow: auto;
+      box-sizing: border-box;
+      border: 1px solid rgba(26, 22, 18, 0.2);
+      border-radius: 7px;
+      background: rgba(255, 253, 248, 0.98);
+      color: var(--text);
+      box-shadow: 0 18px 52px rgba(0, 0, 0, 0.34);
+    }
+
+    .fullscreen-settings-header {
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 8px 6px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .fullscreen-settings-title {
+      margin: 0;
+      font-family: 'EB Garamond', serif;
+      font-size: 1.2rem;
+      line-height: 1.2;
+    }
+
+    .fullscreen-settings-close {
+      width: 40px;
+      height: 40px;
+      min-width: 40px;
+      padding: 0;
+      border: 1px solid transparent;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .fullscreen-settings-close:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .fullscreen-settings-close svg,
+    .fullscreen-settings-exit svg {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .fullscreen-settings-options {
+      display: grid;
+      padding: 4px 16px;
+    }
+
+    .fullscreen-setting-row {
+      min-height: 58px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.94rem;
+    }
+
+    .fullscreen-setting-row:last-child {
+      border-bottom: none;
+    }
+
+    .fullscreen-setting-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex: 0 0 auto;
+    }
+
+    .fullscreen-setting-switch input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+    }
+
+    .fullscreen-setting-switch-track {
+      position: absolute;
+      inset: 0;
+      border: 1px solid rgba(26, 22, 18, 0.24);
+      border-radius: 12px;
+      background: #d6d2ca;
+      cursor: pointer;
+      transition: background 140ms ease, border-color 140ms ease;
+    }
+
+    .fullscreen-setting-switch-track::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+      transition: transform 140ms ease;
+    }
+
+    .fullscreen-setting-switch input:checked + .fullscreen-setting-switch-track {
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .fullscreen-setting-switch input:checked + .fullscreen-setting-switch-track::after {
+      transform: translateX(20px);
+    }
+
+    .fullscreen-setting-switch input:focus-visible + .fullscreen-setting-switch-track {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .fullscreen-volume-control {
+      width: min(190px, 48vw);
+      display: grid;
+      grid-template-columns: minmax(90px, 1fr) 4ch;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .fullscreen-volume-control input {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .fullscreen-volume-control input:disabled,
+    .fullscreen-volume-control input:disabled + output {
+      opacity: 0.46;
+    }
+
+    .fullscreen-volume-control output {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      text-align: right;
+    }
+
+    .fullscreen-settings-footer {
+      padding: 12px 16px 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .fullscreen-settings-exit {
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    @media (max-width: 520px), (max-height: 520px) {
+      .fullscreen-settings-overlay {
+        padding: 10px;
+      }
+
+      .fullscreen-lianliankan-actions {
+        top: auto;
+        bottom: 10px;
+        flex-direction: column;
+      }
+
+      .fullscreen-settings-dialog {
+        max-height: calc(100vh - 20px);
+      }
+
+      .fullscreen-setting-row {
+        min-height: 54px;
+      }
+
+      .fullscreen-volume-control {
+        width: min(164px, 48vw);
+        grid-template-columns: minmax(72px, 1fr) 4ch;
+        gap: 8px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .fullscreen-setting-switch-track,
+      .fullscreen-setting-switch-track::after {
+        transition: none;
+      }
     }
 
     .mosaic-toolbar-group {
@@ -1702,15 +1929,15 @@
     </header>
     <div id="canvas-wrap">
       <canvas id="mosaic-canvas" tabindex="0" aria-label="Ramified minigame mosaic canvas"></canvas>
-      <div class="fullscreen-lianliankan-actions" id="fullscreen-lianliankan-actions" aria-label="Tile Matching fullscreen controls" hidden>
-        <button class="fullscreen-lianliankan-button" id="fullscreen-lianliankan-hint" type="button" aria-label="Show hint" title="Hint">
+      <div class="fullscreen-lianliankan-actions" id="fullscreen-lianliankan-actions" data-i18n-aria-label="access.fullscreenGameTools" aria-label="Fullscreen game tools" hidden>
+        <button class="fullscreen-lianliankan-button" id="fullscreen-lianliankan-hint" type="button" data-i18n-aria-label="common.showHint" aria-label="Show hint" data-i18n-title="common.hint" title="Hint">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path d="M9 18h6"></path>
             <path d="M10 22h4"></path>
             <path d="M8.3 14.5A7 7 0 1 1 15.7 14.5c-.9.7-1.4 1.5-1.5 2.5h-4.4c-.1-1-.6-1.8-1.5-2.5z"></path>
           </svg>
         </button>
-        <button class="fullscreen-lianliankan-button fullscreen-lianliankan-reset" id="fullscreen-lianliankan-reset" type="button" aria-label="Refresh remaining tiles" title="Refresh remaining tiles">
+        <button class="fullscreen-lianliankan-button fullscreen-lianliankan-reset" id="fullscreen-lianliankan-reset" type="button" data-i18n-aria-label="common.refreshRemainingTiles" aria-label="Refresh remaining tiles" data-i18n-title="common.refreshRemainingTiles" title="Refresh remaining tiles">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path d="M3 12a9 9 0 1 0 3-6.7"></path>
             <path d="M3 4v6h6"></path>
@@ -1721,27 +1948,27 @@
         <canvas id="fullscreen-billiards-spin-pad" width="84" height="84" data-i18n-aria-label="access.billiardsCueContact" aria-label="Cue ball contact point"></canvas>
         <output id="fullscreen-billiards-spin-label" data-i18n="setup.billiardsCenter">center</output>
       </div>
-      <div class="fullscreen-action-shell" id="fullscreen-action-shell" data-placement="top" aria-label="Fullscreen action controls" hidden>
-        <button class="fullscreen-action-toggle" id="fullscreen-action-toggle" type="button" aria-label="Open fullscreen action bar" aria-expanded="false" aria-controls="fullscreen-action-bar" title="Actions">
+      <div class="fullscreen-action-shell" id="fullscreen-action-shell" data-placement="top" data-i18n-aria-label="access.fullscreenControls" aria-label="Fullscreen action controls" hidden>
+        <button class="fullscreen-settings-button" id="fullscreen-settings-open" type="button" data-i18n-aria-label="access.openFullscreenSettings" aria-label="Open fullscreen settings" aria-haspopup="dialog" aria-controls="fullscreen-settings-overlay" aria-expanded="false" data-i18n-title="fullscreen.settings" title="Settings">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="3"></circle>
             <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7A2 2 0 1 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1z"></path>
           </svg>
         </button>
-        <div class="fullscreen-action-bar" id="fullscreen-action-bar" role="toolbar" aria-label="Fullscreen action bar" hidden>
-          <button class="fullscreen-action-button" id="fullscreen-undo-step" type="button" aria-label="Undo move" title="Undo" disabled>
+        <div class="fullscreen-action-bar" id="fullscreen-action-bar" role="toolbar" data-i18n-aria-label="access.fullscreenBar" aria-label="Fullscreen action bar">
+          <button class="fullscreen-action-button" id="fullscreen-undo-step" type="button" data-i18n-aria-label="access.undoMove" aria-label="Undo move" data-i18n-title="common.undo" title="Undo" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M3 7v6h6"></path>
               <path d="M21 17a9 9 0 0 0-15-6.7L3 13"></path>
             </svg>
           </button>
-          <button class="fullscreen-action-button" id="fullscreen-redo-step" type="button" aria-label="Redo move" title="Redo" disabled>
+          <button class="fullscreen-action-button" id="fullscreen-redo-step" type="button" data-i18n-aria-label="access.redoMove" aria-label="Redo move" data-i18n-title="common.redo" title="Redo" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M21 7v6h-6"></path>
               <path d="M3 17a9 9 0 0 1 15-6.7l3 2.7"></path>
             </svg>
           </button>
-          <button class="fullscreen-action-button" id="fullscreen-exit" type="button" aria-label="Exit fullscreen" title="Exit fullscreen">
+          <button class="fullscreen-action-button" id="fullscreen-exit" type="button" data-i18n-aria-label="access.exitFullscreen" aria-label="Exit fullscreen" data-i18n-title="fullscreen.exit" title="Exit fullscreen">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M9 3v6H3"></path>
               <path d="M15 3v6h6"></path>
@@ -1751,12 +1978,66 @@
           </button>
           <span class="fullscreen-action-divider" aria-hidden="true"></span>
           <span class="fullscreen-action-status" id="fullscreen-action-status" role="status" aria-live="polite" hidden></span>
-          <button class="fullscreen-action-button fullscreen-action-danger" id="fullscreen-restart" type="button" aria-label="Restart game" title="Restart">
+          <button class="fullscreen-action-button fullscreen-action-danger" id="fullscreen-restart" type="button" data-i18n-aria-label="access.restartGame" aria-label="Restart game" data-i18n-title="fullscreen.restart" title="Restart">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M3 12a9 9 0 1 0 3-6.7"></path>
               <path d="M3 4v6h6"></path>
             </svg>
           </button>
+        </div>
+      </div>
+      <div class="fullscreen-settings-overlay" id="fullscreen-settings-overlay" hidden>
+        <div class="fullscreen-settings-dialog" id="fullscreen-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="fullscreen-settings-title">
+          <header class="fullscreen-settings-header">
+            <h2 class="fullscreen-settings-title" id="fullscreen-settings-title" data-i18n="fullscreen.settings">Settings</h2>
+            <button class="fullscreen-settings-close" id="fullscreen-settings-close" type="button" data-i18n-aria-label="access.closeFullscreenSettings" aria-label="Close fullscreen settings" data-i18n-title="common.close" title="Close">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M18 6 6 18"></path>
+                <path d="m6 6 12 12"></path>
+              </svg>
+            </button>
+          </header>
+          <div class="fullscreen-settings-options">
+            <label class="fullscreen-setting-row" for="fullscreen-sound-enabled">
+              <span data-i18n="fullscreen.soundEffects">Sound effects</span>
+              <span class="fullscreen-setting-switch">
+                <input id="fullscreen-sound-enabled" type="checkbox">
+                <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
+              </span>
+            </label>
+            <div class="fullscreen-setting-row">
+              <label for="fullscreen-sound-volume" data-i18n="fullscreen.volume">Volume</label>
+              <span class="fullscreen-volume-control">
+                <input id="fullscreen-sound-volume" type="range" min="0" max="100" step="1" value="100" data-i18n-aria-label="access.soundVolume" aria-label="Sound volume" disabled>
+                <output id="fullscreen-sound-volume-value" for="fullscreen-sound-volume">100%</output>
+              </span>
+            </div>
+            <label class="fullscreen-setting-row" for="fullscreen-show-action-row">
+              <span data-i18n="fullscreen.showActionRow">Show action row</span>
+              <span class="fullscreen-setting-switch">
+                <input id="fullscreen-show-action-row" type="checkbox" checked>
+                <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
+              </span>
+            </label>
+            <label class="fullscreen-setting-row" for="fullscreen-show-game-tools">
+              <span data-i18n="fullscreen.showGameTools">Show game tools</span>
+              <span class="fullscreen-setting-switch">
+                <input id="fullscreen-show-game-tools" type="checkbox" checked>
+                <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
+              </span>
+            </label>
+          </div>
+          <footer class="fullscreen-settings-footer">
+            <button class="btn fullscreen-settings-exit" id="fullscreen-settings-exit" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M9 3v6H3"></path>
+                <path d="M15 3v6h6"></path>
+                <path d="M9 21v-6H3"></path>
+                <path d="M15 21v-6h6"></path>
+              </svg>
+              <span data-i18n="fullscreen.exit">Exit fullscreen</span>
+            </button>
+          </footer>
         </div>
       </div>
       <div class="canvas-start-overlay" id="canvas-start-overlay" role="region" aria-live="polite" aria-label="Canvas action prompt" hidden>
@@ -2381,11 +2662,11 @@
 <script src="js/calculator_cards.js"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260826-6"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260830-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
-<script src="js/ramified_minigames_setup.js?v=20260830-1"></script>
+<script src="js/ramified_minigames_setup.js?v=20260830-3"></script>
 </body>
 </html>

@@ -14,7 +14,14 @@ const worker = fs.readFileSync(path.join(__dirname, "toric_cone_worker.js"), "ut
   "toric-cone-build-panel",
   "toric-cone-faces-panel",
   "toric-cone-variety-panel",
+  "toric-cone-input-mode-controls",
+  "toric-cone-manual-panel",
+  "toric-cone-import-panel",
+  "toric-cone-targets-panel",
   "toric-cone-generators",
+  "toric-cone-apply-manual",
+  "toric-cone-import-orientation",
+  "toric-cone-target-slots",
   "toric-cone-vector-source",
   "toric-cone-rows-import",
   "toric-cone-pick-menu",
@@ -34,6 +41,16 @@ assert.match(explorer, /kind:\s*["']toric["']/);
 assert.match(explorer, /new Worker\(["']js\/toric_cone_worker\.js/);
 assert.match(worker, /ToricConeMath\.analyzeCone/);
 assert.match(explorer, /ToricConeMath\.sliceCone/);
+assert.match(html, /sigma = cone\(columns U\).*U = \[u_1 \.\.\. u_r\] in Z\^\(n x r\)/);
+assert.match(html, /data-toric-input-mode=["']manual["']/);
+assert.match(html, /data-toric-input-mode=["']import["']/);
+assert.match(html, /data-toric-input-mode=["']targets["']/);
+assert.match(html, /value=["']columns["']>n rows; rays are columns/);
+assert.match(html, /value=["']legacy-rows["']>legacy: one ray per row/);
+assert.match(explorer, /function parseToricRayMatrix\(/);
+assert.match(explorer, /entriesByRow\.map\(\(row\) => row\[column\]\)/);
+assert.match(explorer, /target\.fieldKey === ["']generators["']/);
+assert.match(explorer, /primitive-normalized/);
 
 assert.match(explorer, /normalized\.objectType === ["']fan["'] \|\| normalized\.kind === ["']fan["']/);
 assert.match(explorer, /normalized\.objectType = ["']cartesian-frame["']/);

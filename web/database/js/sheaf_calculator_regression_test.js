@@ -195,6 +195,7 @@ function loadComplexCalculator() {
     complexChartEntryDisplayPlain,
     complexChartEntryDisplayTikzcd,
     complexChartSnakeLayout,
+    complexChartSnakeArrowGeometry,
     complexChartSnakeDisplayTikzPicture,
     scaleComplexChartSnakeFastDisplay,
     complexChartEntryFromEditor,
@@ -212,6 +213,7 @@ function loadComplexCalculator() {
     setComplexChartOperationMode,
     setComplexChartOperationTarget,
     toggleComplexChartOperationCut,
+    toggleComplexChartOperationMapCut,
     setComplexChartOperationCandidateSelected,
     addSelectedComplexChartOperationCandidates,
     updateComplexChartEditorFromControls,
@@ -296,7 +298,7 @@ function testSheafComplexCalculatorPageAndPrototypeLink() {
   assert(html.includes('id="complex-chart-operations-panel"'));
   assert(html.indexOf('id="complex-chart-add"') < html.indexOf('id="complex-chart-operations"'));
   assert(html.indexOf('id="complex-chart-operations"') < html.indexOf('id="complex-chart-export"'));
-  assert(html.includes('<script src="js/sheaf_complex_calculator.js?v=complex-chart-35"></script>'));
+  assert(html.includes('<script src="js/sheaf_complex_calculator.js?v=complex-chart-37"></script>'));
   assert(html.includes('id="complex-chart-length-label"'));
   assert(!html.includes('id="complex-chart-kind"'));
   assert(html.indexOf('id="complex-chart-saved"') < html.indexOf('id="complex-chart-add-panel"'));
@@ -460,6 +462,13 @@ function testComplexChartLesLongMapLabelsExpandArrows() {
     - longLayout.objectWidths.get(2) / 2
     - 20;
   assert(arrowSpan >= longLayout.labelWidths.get(1) + 24);
+
+  const rowTurn = api.complexChartSnakeArrowGeometry(shortLayout, 3);
+  const rowTurnSource = shortLayout.coordByIndex.get(3);
+  const rowTurnStartX = rowTurnSource.x + shortLayout.objectWidths.get(3) / 2 + 10;
+  assert.strictEqual(rowTurn.turnX - rowTurnStartX, shortLayout.turnLaneWidth);
+  assert(rowTurn.turnX + 24 <= shortLayout.width);
+  assert(shortLayout.turnLaneWidth >= 72);
 
   const html = api.complexChartEntryDisplayHtml(long);
   assert(html.includes('sheaf-complex-snake-fast-viewport'));
@@ -782,6 +791,13 @@ function testComplexChartOperationUiAndAddSelectedModel() {
   assert(operationHtml.includes('data-complex-chart-object-entry="op_source"'));
   assert(operationHtml.includes('data-complex-chart-object-kind="chain-complex"'));
   assert(operationHtml.includes('data-complex-chart-object-index="1"'));
+  assert(operationHtml.includes('Endpoint objects are already boundaries.'));
+  assert(operationHtml.includes('an object after the first selected arrow cannot change the preview.'));
+
+  assert.strictEqual(api.setComplexChartOperationTarget('op_filtration'), true);
+  operationHtml = api.renderComplexChartOperationsPanelHtml();
+  assert(operationHtml.includes('Click interior objects.'));
+  assert(operationHtml.includes('filtration relation symbols cannot be used as arrow cuts.'));
 
   assert.strictEqual(api.setComplexChartOperationMode('extend'), true);
   operationHtml = api.renderComplexChartOperationsPanelHtml();
@@ -802,6 +818,47 @@ function testComplexChartOperationUiAndAddSelectedModel() {
   const generated = api.state.complexChart.entries.find((entry) => entry.id !== 'op_source' && entry.id !== 'op_filtration');
   assert.deepStrictEqual(Array.from(generated.objects), ['C_0', 'C_1']);
   assert.deepStrictEqual(Array.from(generated.maps), ['d_0']);
+}
+
+function testComplexChartLesTruncationUsesClickableNoTikzEndpoints() {
+  const api = loadComplexCalculator();
+  api.upsertComplexChartEntries([{
+    id: 'les_source',
+    kind: 'chain-complex',
+    length: 7,
+    objects: ['0', 'H^0(A)', 'H^0(B)', 'H^0(C)', 'H^1(A)', 'H^1(B)', 'H^1(C)'],
+    maps: ['', 'H^0(f)', 'H^0(g)', '\\delta^0', 'H^1(f)', 'H^1(g)'],
+    display: 'snake-les'
+  }]);
+
+  assert.strictEqual(api.openComplexChartOperations('truncate'), true);
+  assert.strictEqual(api.state.complexChart.operations.lesRangeTruncation, true);
+  let operationHtml = api.renderComplexChartOperationsPanelHtml();
+  assert(operationHtml.includes('Only the no-TikZ diagram below is interactive'));
+  assert(operationHtml.includes('After two endpoints are selected, deselect one before choosing another.'));
+  assert(operationHtml.includes('sheaf-complex-snake-fast-display'));
+  assert(operationHtml.includes('data-complex-chart-object-entry="les_source"'));
+  assert(operationHtml.includes('data-complex-chart-map-entry="les_source"'));
+
+  assert.strictEqual(api.toggleComplexChartOperationCut('les_source', 1), true);
+  assert.deepStrictEqual(Array.from(api.state.complexChart.operations.lesRangeEndpoints, (endpoint) => ({
+    kind: endpoint.kind,
+    index: endpoint.index
+  })), [{ kind: 'object', index: 1 }]);
+  assert.strictEqual(api.state.complexChart.operations.candidates.length, 1);
+  assert.deepStrictEqual(Array.from(api.state.complexChart.operations.candidates[0].entry.objects), ['0', 'H^0(A)']);
+
+  assert.strictEqual(api.toggleComplexChartOperationMapCut('les_source', 3), true);
+  assert.deepStrictEqual(Array.from(api.state.complexChart.operations.lesRangeEndpoints, (endpoint) => ({
+    kind: endpoint.kind,
+    index: endpoint.index
+  })), [
+    { kind: 'object', index: 1 },
+    { kind: 'map', index: 3 }
+  ]);
+  assert.strictEqual(api.state.complexChart.operations.candidates.length, 1);
+  operationHtml = api.renderComplexChartOperationsPanelHtml();
+  assert(operationHtml.includes('data-complex-chart-operation-candidate="les-range-object:1-map:3"'));
 }
 
 function testComplexChartSeparateJsonImportExport() {
@@ -7684,6 +7741,7 @@ testComplexChartSelectionEditDeleteModel();
 testComplexChartOperationTruncationModel();
 testComplexChartKernelCokernelExtensionModel();
 testComplexChartOperationUiAndAddSelectedModel();
+testComplexChartLesTruncationUsesClickableNoTikzEndpoints();
 testComplexChartSeparateJsonImportExport();
 testComplexChartFullPresetRoundTripAndOldSchemaImport();
 testCurveToProjectivePullbackUsesCurvePoint();

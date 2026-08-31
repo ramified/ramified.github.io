@@ -309,6 +309,16 @@
       color: var(--accent);
     }
 
+    .ramification-field-description {
+      min-height: 0;
+      margin-top: 2px;
+      color: var(--text);
+    }
+
+    .ramification-field-description:empty {
+      display: none;
+    }
+
     .ramification-details {
       margin-top: 12px;
       padding-top: 10px;
@@ -333,6 +343,12 @@
     .ramification-preset-row .btn {
       min-width: 54px;
       padding: 4px 9px;
+    }
+
+    .ramification-update-row {
+      justify-content: flex-end;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
     }
 
     .ramification-place-editor {
@@ -498,7 +514,7 @@
       <div class="canvas-toolbar" aria-label="Ramification controls">
         <span class="shape-indicator"><span id="ramification-status" class="ramification-badge">loading LMFDB...</span></span>
         <span id="prime-bound-control" class="ramification-toolbar-group ramification-prime-bound">
-          <label class="stat-label" for="prime-bound">\(p \le B\)</label>
+          <label id="place-bound-label" class="stat-label" for="prime-bound">\(p \le B\)</label>
           <input id="prime-bound" type="range" min="2" max="31" value="11">
           <output id="prime-bound-output" class="ramification-badge">11</output>
         </span>
@@ -557,6 +573,7 @@
             </form>
           </div>
           <div class="result-meta ramification-status-line" id="base-lmfdb-status"></div>
+          <div class="result-meta ramification-field-description" id="base-lmfdb-description"></div>
         </div>
 
         <div class="ramification-inline-row ramification-extension-divider">
@@ -589,6 +606,7 @@
             </form>
           </div>
           <div class="result-meta ramification-status-line" id="lmfdb-search-status"></div>
+          <div class="result-meta ramification-field-description" id="lmfdb-description"></div>
         </div>
 
         <div id="polynomial-extension" class="ramification-field-selector ramification-polynomial-editor" hidden>
@@ -625,6 +643,9 @@
           <div id="place-chip-list" class="ramification-chip-list"></div>
         </div>
         <div class="result-meta" id="ramification-input-note">Loading \(E/\mathbb{Q}\) from LMFDB...</div>
+        <div class="ramification-preset-row ramification-update-row">
+          <button id="extension-update" class="btn" type="button">update</button>
+        </div>
       </div>
     </section>
 
@@ -678,8 +699,8 @@
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js"></script>
-<script src="js/place_ramification_engine.js?v=20260823-1"></script>
-<script src="js/place_ramification_calculator.js?v=20260823-3"></script>
+<script src="js/place_ramification_engine.js?v=20260830-2"></script>
+<script src="js/place_ramification_calculator.js?v=20260831-3"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

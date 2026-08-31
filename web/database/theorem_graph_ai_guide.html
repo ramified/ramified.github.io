@@ -242,8 +242,9 @@
     </div>
     <p class="lede">
       Describe the article, book, concept, or topic, choose how closely the roadmap should follow the source,
-      adjust the limits, then copy the generated prompt into an AI chat. The intended output is plain JSON for
-      <strong>Import / Export → JSON text</strong> in the calculator.
+      adjust the limits, then copy the generated prompt into an AI chat. The AI will first ask about your
+      background, then use your reply to produce plain JSON for <strong>Import / Export → JSON text</strong> in
+      the calculator.
     </p>
 
     <section class="panel" aria-labelledby="build-heading">
@@ -413,12 +414,22 @@
 - Escape every backslash correctly for JSON strings, including MathJax and citation commands.
 - Before returning, verify there are no invalid JSON backslash escapes.`;
 
-        return `Please create import-ready JSON for Theorem Graph Calculator.
+        return `Please help me create import-ready JSON for Theorem Graph Calculator.
 
 Topic:
 ${topic}
 ${source ? `\nPrimary source:\n${source}\n` : ""}
-Output rules:
+Conversation protocol:
+- Do not create the roadmap or return JSON in your first response.
+- First inspect the topic and primary source, when provided, and identify a concise set of likely prerequisite definitions, examples, facts, and results. Do not ask about every possible concept.
+- Ask me to classify those items into three groups: (1) know well, (2) learned but not confident about, and (3) do not know or find unfamiliar.
+- Also ask briefly about my current goal and desired depth if those are not already clear from the request.
+- Make the diagnostic short and organized. Accept a brief or free-form reply, and offer sensible defaults if I am unsure how to classify something.
+- End the first response after the diagnostic questions and wait for my reply. Do not infer my answers or continue into the roadmap in the same response.
+- After I reply, tailor the roadmap to my background: omit or compress material I know well; add recall or checkpoint nodes for material I have learned but am not confident about; and add prerequisite plus concrete-example nodes for unfamiliar material.
+- Reflect those choices with the learning-status color conventions below. Do not exceed the requested graph limits while adapting the roadmap.
+
+Final roadmap output rules (apply only after I answer the diagnostic):
 - Return plain JSON only. Do not wrap it in markdown fences. Do not add commentary before or after the JSON.
 - Use schemaVersion 11.
 - Use at most ${maxNodes} nodes, ${maxArrows} arrows, and ${maxRefs} references.
@@ -464,8 +475,8 @@ JSON fields to use:
 
 ${backslashRules}
 
-Final validation checklist:
-- The response parses as JSON.
+Final roadmap validation checklist:
+- The final roadmap response parses as JSON.
 - schemaVersion is 11.
 - Node, arrow, and reference limits are respected.
 - Every node has x and y.
