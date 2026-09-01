@@ -47,8 +47,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 478.6,
-      "y": 100.4
+      "x": 477,
+      "y": 54
     },
     {
       "id": "n2",
@@ -78,8 +78,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 102.7,
-      "y": 82.6
+      "x": 126.5,
+      "y": 54
     },
     {
       "id": "n3",
@@ -109,8 +109,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 145.1,
-      "y": 458.2
+      "x": 89,
+      "y": 410.7
     },
     {
       "id": "n4",
@@ -140,8 +140,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 540.2,
-      "y": 233
+      "x": 649.1,
+      "y": 313.4
     },
     {
       "id": "n5",
@@ -171,8 +171,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 203.4,
-      "y": 310.4
+      "x": 198.4,
+      "y": 344.8
     },
     {
       "id": "n6",
@@ -202,8 +202,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 574.1,
-      "y": 323.3
+      "x": 545.7,
+      "y": 379.7
     },
     {
       "id": "n7",
@@ -233,8 +233,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 125,
-      "y": 580.1
+      "x": 222.9,
+      "y": 481.8
     },
     {
       "id": "n8",
@@ -264,8 +264,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 536.3,
-      "y": 507
+      "x": 697.4,
+      "y": 454.5
     },
     {
       "id": "n9",
@@ -296,8 +296,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 593.8,
-      "y": 646.9
+      "x": 345.6,
+      "y": 546.6
     },
     {
       "id": "n10",
@@ -327,8 +327,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 92.4,
-      "y": 734.6
+      "x": 48,
+      "y": 708.1
     },
     {
       "id": "n11",
@@ -358,8 +358,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 389.3,
-      "y": 757.4
+      "x": 378.9,
+      "y": 693.4
     },
     {
       "id": "n12",
@@ -390,8 +390,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 400.1,
-      "y": 920.2
+      "x": 477.2,
+      "y": 855.8
     },
     {
       "id": "n13",
@@ -420,8 +420,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 697.1,
-      "y": 742.5
+      "x": 616.1,
+      "y": 535
     },
     {
       "id": "n14",
@@ -451,8 +451,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 144.8,
-      "y": 898
+      "x": 233.8,
+      "y": 814.3
     },
     {
       "id": "n15",
@@ -482,8 +482,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 606.9,
-      "y": 849.3
+      "x": 618.2,
+      "y": 690.9
     },
     {
       "id": "n17",
@@ -504,25 +504,11 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 351.3,
-      "y": 490.2,
+      "x": 331,
+      "y": 287.2,
       "childGraph": {
         "title": "my graph",
         "nodes": [
-          {
-            "id": "n16",
-            "type": "theorem",
-            "label": "Jordan--Zassenhaus",
-            "setting": "",
-            "condition": "",
-            "result": "",
-            "proofSketch": "",
-            "citationKeys": [],
-            "color": "#7a4d9b",
-            "fillColor": "#f4f1f8",
-            "x": 580.7,
-            "y": 308.4
-          },
           {
             "id": "n17",
             "type": "definition",
@@ -536,42 +522,9 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
             "fillColor": "#f7f5f1",
             "x": 301.7,
             "y": 348.1
-          },
-          {
-            "id": "n18",
-            "type": "misc",
-            "label": "maximal order",
-            "details": [],
-            "setting": "",
-            "condition": "",
-            "result": "",
-            "proofSketch": "",
-            "citationKeys": [],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
-            "x": 570.2,
-            "y": 187.4
           }
         ],
-        "arrows": [
-          {
-            "id": "a1",
-            "sourceId": "n18",
-            "targetId": "n16",
-            "label": "",
-            "remark": "",
-            "body": "solid",
-            "head": "arrow",
-            "tail": "hook",
-            "level": 1,
-            "endpointScale": 1,
-            "curve": 0,
-            "labelOffset": 15,
-            "labelPosition": 0.5,
-            "labelAlign": "left",
-            "color": "#5f574e"
-          }
-        ],
+        "arrows": [],
         "view": {
           "selectedId": "",
           "layoutAvoidOverlap": true,
@@ -594,8 +547,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 348.1,
-      "y": 588.8,
+      "x": 456.8,
+      "y": 212.6,
       "childGraph": {
         "title": "Curtis–Reiner",
         "nodes": [
@@ -608,36 +561,50 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
                 "id": "concepts",
                 "label": "concepts",
                 "type": "list",
-                "text": "$R$-lattice, p522\nprojective is required for $R$-lattice\nproj->torsion free\nDedekind domain + f.g., get reverse\n$R->\\operatorname{End}_R(M)$ helps understand a $\\Lambda$-module $M$, where $\\Lambda$ is an $R$-algebra, p523\n$\\operatorname{End}_R(M)$ is an $R$-lattice\n$R$-order: $R$-algebra + $R$-lattice, p523\n$R$-order in f.g. $K(R)$-algebra\n$\\Lambda$-lattice, p524\n$R$-pure $\\Lambda$-sublattice, p526"
+                "text": "$R$-lattice, p522\nprojective is required for $R$-lattice\nproj->torsion free\nDedekind domain + f.g., get reverse\n$R->\\operatorname{End}_R(M)$ helps understand a $\\Lambda$-module $M$, where $\\Lambda$ is an $R$-algebra, p523\n$\\operatorname{End}_R(M)$ is an $R$-lattice\n$R$-order: $R$-algebra + $R$-lattice, p523\n$R$-order in f.g. $K(R)$-algebra\n$\\Lambda$-lattice, p524\n$R$-pure $\\Lambda$-sublattice, p526\nsaturated, p527"
+              },
+              {
+                "id": "results",
+                "label": "results",
+                "type": "checkbox",
+                "text": "- [x] pure integral ~ rational  \\cite[(23.7)]{CR81}\n- [x] saturated ~ $S^{-1}R$ localized \\cite[(23.12)]{CR81}\n- [x] pure = specially saturated \\cite[before (23.14)]{CR81}\n- [x] When will a rational rep find its integral model: PID, (h,dim)=1 or field extension remedy"
               }
             ],
             "setting": "Specialize the book's order-and-lattice language to the integral group ring $\\Lambda=\\mathbb{Z}S_n$.",
             "condition": "Write the definitions of an $R$-order and a $\\Lambda$-lattice. Then check explicitly that a free integral representation $\\rho:S_n\\to\\mathrm{GL}_r(\\mathbb{Z})$ gives a $\\mathbb{Z}S_n$-lattice, and conversely.",
-            "result": "Checkpoint: translate without hesitation between integral matrix representations and $\\mathbb{Z}S_n$-lattices. \\cite[§23, p. 491]{CR81}",
+            "result": "Checkpoint: translate without hesitation between integral matrix representations and $\\mathbb{Z}S_n$-lattices. \\cite[§23, p. 525]{CR81}",
             "proofSketch": "Quick recall: the classification problem is classification of $\\mathbb{Z}S_n$-lattices up to $\\mathbb{Z}S_n$-isomorphism, with indecomposable lattices as the basic building blocks.",
             "citationKeys": [
               "CR81"
             ],
-            "color": "#46786e",
-            "fillColor": "#eef7f4",
-            "x": 144.5,
-            "y": 203.5
+            "color": "#8b3a2a",
+            "fillColor": "#f7f5f1",
+            "x": 238.8,
+            "y": 127.3
           },
           {
             "id": "n2",
             "type": "theorem",
             "label": "§24 — Jordan–Zassenhaus finiteness",
+            "details": [
+              {
+                "id": "concepts",
+                "label": "concepts",
+                "type": "list",
+                "text": "left order/left multiplier ring $O_l(M)$"
+              }
+            ],
             "setting": "Fix the order $\\Lambda=\\mathbb{Z}S_n$ and a rank $r$.",
-            "condition": "Read the Jordan–Zassenhaus theorem and rewrite its hypotheses specifically for $\\mathbb{Z}S_n$-lattices.",
-            "result": "Checkpoint: state precisely why there are only finitely many isomorphism classes of $\\mathbb{Z}S_n$-lattices of a fixed $\\mathbb{Z}$-rank. Also explain why this does not imply finite representation type when rank varies. \\cite[§24, p. 503]{CR81}",
+            "condition": "Read the Jordan–Zassenhaus (not proved) theorem and rewrite its hypotheses specifically for $\\mathbb{Z}S_n$-lattices.",
+            "result": "Checkpoint: state precisely why there are only finitely many isomorphism classes of $\\mathbb{Z}S_n$-lattices of a fixed $\\mathbb{Z}$-rank. Also explain why this does not imply finite representation type when rank varies. \\cite[(24.2)]{CR81}\nlocal version:\\cite[(24.7)]{CR81}",
             "proofSketch": "Use this as the finiteness guarantee for bounded-rank classification projects.",
             "citationKeys": [
               "CR81"
             ],
-            "color": "#7a6f65",
+            "color": "#8b3a2a",
             "fillColor": "#f7f5f1",
-            "x": 182.1,
-            "y": 321.2
+            "x": 125.4,
+            "y": 303
           },
           {
             "id": "n3",
@@ -676,10 +643,10 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
             "citationKeys": [
               "CR81"
             ],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
-            "x": 463.1,
-            "y": 64.3
+            "color": "#46786e",
+            "fillColor": "#eef7f4",
+            "x": 443,
+            "y": 61.6
           },
           {
             "id": "n4",
@@ -690,7 +657,7 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
                 "id": "setting",
                 "label": "setting",
                 "type": "textbox",
-                "text": "For each prime $p$, pass from $L$ to the local lattice $L_p=\\mathbb{Z}*p\\otimes*{\\mathbb{Z}}L$ over $\\mathbb{Z}_pS_n$."
+                "text": "For each prime $p$, pass from $L$ to the local lattice $L_p=\\mathbb{Z}_p\\otimes_{\\mathbb{Z}}L$ over $\\mathbb{Z}_pS_n$."
               },
               {
                 "id": "condition",
@@ -720,8 +687,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
             ],
             "color": "#7a6f65",
             "fillColor": "#f7f5f1",
-            "x": 430.2,
-            "y": 253.6
+            "x": 402.6,
+            "y": 274.6
           },
           {
             "id": "n5",
@@ -736,8 +703,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
             ],
             "color": "#7a6f65",
             "fillColor": "#f7f5f1",
-            "x": 624.6,
-            "y": 309.4
+            "x": 612.3,
+            "y": 215.1
           },
           {
             "id": "n6",
@@ -778,8 +745,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
             ],
             "color": "#7a6f65",
             "fillColor": "#f7f5f1",
-            "x": 656.3,
-            "y": 485.7
+            "x": 564.4,
+            "y": 422.9
           },
           {
             "id": "n7",
@@ -794,8 +761,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
             ],
             "color": "#3d6b4f",
             "fillColor": "#f4f7ed",
-            "x": 338.5,
-            "y": 447.8
+            "x": 267.5,
+            "y": 440.6
           },
           {
             "id": "n8",
@@ -810,8 +777,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
             ],
             "color": "#2f5f9f",
             "fillColor": "#eef4fb",
-            "x": 485.8,
-            "y": 566
+            "x": 417.3,
+            "y": 570.9
           }
         ],
         "arrows": [
@@ -974,8 +941,8 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
           "layoutAvoidOverlap": true,
           "layoutRunning": false,
           "canvasHeight": 620,
-          "canvasRatioLocked": false,
-          "canvasAspectRatio": 1.8
+          "canvasRatioLocked": true,
+          "canvasAspectRatio": 1.2129
         }
       }
     }
@@ -1391,12 +1358,82 @@ window.THEOREM_GRAPH_PRESET_DATA.integral_s_n_forms = {
     }
   ],
   "view": {
-    "selectedId": "n1",
+    "selectedId": "n18",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 1191,
-    "canvasRatioLocked": false,
-    "canvasAspectRatio": 0.6935,
+    "canvasHeight": 921,
+    "canvasRatioLocked": true,
+    "canvasAspectRatio": 0.8165,
+    "relativeNodePositions": {
+      "n1": {
+        "x": 0.6343,
+        "y": 0.0586
+      },
+      "n2": {
+        "x": 0.1682,
+        "y": 0.0586
+      },
+      "n3": {
+        "x": 0.1184,
+        "y": 0.4459
+      },
+      "n4": {
+        "x": 0.8632,
+        "y": 0.3403
+      },
+      "n5": {
+        "x": 0.2638,
+        "y": 0.3744
+      },
+      "n6": {
+        "x": 0.7256,
+        "y": 0.4123
+      },
+      "n7": {
+        "x": 0.2964,
+        "y": 0.5231
+      },
+      "n8": {
+        "x": 0.9274,
+        "y": 0.4935
+      },
+      "n9": {
+        "x": 0.4595,
+        "y": 0.5935
+      },
+      "n10": {
+        "x": 0.0638,
+        "y": 0.7688
+      },
+      "n11": {
+        "x": 0.5038,
+        "y": 0.7529
+      },
+      "n12": {
+        "x": 0.6346,
+        "y": 0.9292
+      },
+      "n13": {
+        "x": 0.8193,
+        "y": 0.5808
+      },
+      "n14": {
+        "x": 0.3109,
+        "y": 0.8841
+      },
+      "n15": {
+        "x": 0.8221,
+        "y": 0.7502
+      },
+      "n17": {
+        "x": 0.4401,
+        "y": 0.3119
+      },
+      "n18": {
+        "x": 0.6075,
+        "y": 0.2308
+      }
+    },
     "selectedReferenceKeys": []
   },
   "references": [

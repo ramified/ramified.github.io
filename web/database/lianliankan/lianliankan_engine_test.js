@@ -66,6 +66,28 @@ function testHiraganaCatalog() {
   assert.ok(sampled.every((tile) => tile.id !== 'hiragana_a'), 'sampling is not fixed to the first catalog entries');
 }
 
+function testKanaCatalogAndMatchKeys() {
+  const hiragana = gameApi.HIRAGANA_SYMBOLS;
+  const katakana = gameApi.KATAKANA_SYMBOLS;
+  const mixed = gameApi.MIXED_KANA_SYMBOLS;
+  assert.strictEqual(katakana.length, hiragana.length, 'Katakana catalog mirrors the Hiragana catalog');
+  assert.strictEqual(mixed.length, hiragana.length, 'mixed Kana catalog supplies one pair descriptor per sound');
+  assert.deepStrictEqual(katakana[0], { id: 'katakana_a', glyph: 'ア' });
+
+  const pair = gameApi.createPairedTiles(2, [mixed[0]], () => 0);
+  assert.deepStrictEqual(pair.map((tile) => tile.glyph).sort(), ['あ', 'ア']);
+  assert.notStrictEqual(pair[0].id, pair[1].id, 'mixed Kana pairs use distinct script-specific ids');
+  assert.strictEqual(pair[0].matchKey, 'kana_a');
+  assert.strictEqual(pair[1].matchKey, 'kana_a');
+
+  const board = gameApi.createBoard({ rows: 1, cols: 2, tiles: pair });
+  const topology = gameApi.createSquareTopology(board);
+  assert.ok(gameApi.findConnection(board, topology, 0, 1), 'corresponding Hiragana and Katakana match through their shared key');
+  const sameScriptBoard = gameApi.createBoard({ rows: 1, cols: 2, tiles: [pair[0], pair[0]] });
+  assert.strictEqual(gameApi.findConnection(sameScriptBoard, gameApi.createSquareTopology(sameScriptBoard), 0, 1), null, 'mixed Kana never matches two tiles from the same script');
+  assert.deepStrictEqual(gameApi.symbolCounts(board), { kana_a: 2 }, 'match-key counts keep cross-script pairs together');
+}
+
 function testPathfinder() {
   let path = pathFor(['A..A'], 0, 3);
   assert.ok(path, 'P01 horizontal path should exist');
@@ -301,6 +323,18 @@ function testMosaicAdapter() {
 
   const restored = mosaicAdapter.stateFromSnapshot(preset, mosaicAdapter.snapshot(shared));
   assert.deepStrictEqual(mosaicAdapter.snapshot(restored), mosaicAdapter.snapshot(shared), 'shared status snapshots round-trip exactly');
+
+  const mixedPair = gameApi.createPairedTiles(2, [gameApi.MIXED_KANA_SYMBOLS[0]], () => 0);
+  const mixedShared = mosaicAdapter.createSharedState(preset, {
+    tiles: [mixedPair[0], mixedPair[1], null, null, null, null],
+    generateTiles: false,
+    ensureInitialMatch: false
+  });
+  const mixedSnapshot = mosaicAdapter.snapshot(mixedShared);
+  assert.strictEqual(mixedSnapshot.tiles[0].matchKey, 'kana_a', 'snapshots retain non-default matching keys');
+  const mixedRestored = mosaicAdapter.stateFromSnapshot(preset, mixedSnapshot);
+  assert.ok(gameApi.findConnection(mixedRestored.board, mixedRestored.topology, 0, 1), 'restored snapshots retain cross-script matching');
+  assert.strictEqual(mosaicAdapter.cloneSharedState(mixedShared).board.cells[0].tile.matchKey, 'kana_a', 'shared-state clones retain matching keys');
   assert.throws(() => mosaicAdapter.stateFromSnapshot(preset, {
     tiles: [{ row: 1, col: 4, id: 'outside', glyph: 'X' }]
   }), /outside the board/);
@@ -371,6 +405,7 @@ function testMosaicAdapter() {
 
 function run() {
   testHiraganaCatalog();
+  testKanaCatalogAndMatchKeys();
   testPathfinder();
   testBoundaryGlue();
   testMatchingAndSelection();

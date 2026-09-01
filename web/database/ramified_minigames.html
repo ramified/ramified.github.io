@@ -37,6 +37,13 @@
       display: none !important;
     }
 
+    .lianliankan-ipa-audio-link {
+      align-self: center;
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.2;
+    }
+
     .billiards-spin-control {
       display: grid;
       grid-template-columns: 104px minmax(0, 1fr);
@@ -2117,12 +2124,40 @@
           </span>
         </div>
         <div class="mosaic-inline-row" id="lianliankan-tile-set-row" data-mode-control="lianliankan" hidden>
-          <span class="input-label" data-i18n="setup.tileSet">Tile set</span>
-          <select id="lianliankan-tile-set" data-i18n-aria-label="access.tileSet" aria-label="Tile Matching tile set">
+          <span class="input-label" data-i18n="setup.tileFamily">Characters</span>
+          <select id="lianliankan-tile-set" data-i18n-aria-label="access.tileFamily" aria-label="Tile Matching character family">
             <option value="chinese" selected data-i18n="setup.chineseCharacters">Chinese characters</option>
             <option value="japanese" data-i18n="setup.japaneseCharacters">Japanese characters</option>
+            <option value="korean" data-i18n="setup.koreanCharacters">Korean characters</option>
+            <option value="ipa" data-i18n="setup.ipaCharacters">IPA symbols</option>
             <option value="young-3x3" data-i18n="setup.youngDiagrams3x3">Young diagrams (3×3)</option>
           </select>
+        </div>
+        <div class="mosaic-inline-row" id="lianliankan-tile-level-row" data-mode-control="lianliankan" hidden>
+          <span class="input-label" data-i18n="setup.level">Level</span>
+          <select id="lianliankan-tile-level" data-i18n-aria-label="access.tileLevel" aria-label="Tile Matching character level">
+            <option value="japanese" data-tile-family="japanese" data-i18n="setup.japaneseHiragana">Japanese Hiragana</option>
+            <option value="japanese-katakana" data-tile-family="japanese" data-i18n="setup.japaneseKatakana">Japanese Katakana</option>
+            <option value="japanese-mixed" data-tile-family="japanese" data-i18n="setup.japaneseMixedKana">Japanese mixed Kana</option>
+            <option value="korean-jamo-consonants" data-tile-family="korean" data-i18n="setup.koreanJamoConsonants">Korean jamo: basic consonants</option>
+            <option value="korean-jamo-vowels" data-tile-family="korean" data-i18n="setup.koreanJamoVowels">Korean jamo: basic vowels</option>
+            <option value="korean-jamo-basic" data-tile-family="korean" data-i18n="setup.koreanJamoBasic">Korean jamo: basic combined</option>
+            <option value="korean-jamo-modern" data-tile-family="korean" data-i18n="setup.koreanJamoModern">Korean jamo: modern extensions</option>
+            <option value="korean-jamo-combined" data-tile-family="korean" data-i18n="setup.koreanJamoCombined">Korean jamo: final exam</option>
+            <option value="korean-spelling-a" data-tile-family="korean" data-i18n="setup.koreanSpellingA">Korean spelling 1: ㅏ syllables</option>
+            <option value="korean-spelling-vowels" data-tile-family="korean" data-i18n="setup.koreanSpellingVowels">Korean spelling 2: vowel sounds</option>
+            <option value="korean-spelling-cv" data-tile-family="korean" data-i18n="setup.koreanSpellingCv">Korean spelling 3: basic CV</option>
+            <option value="korean-spelling-cvc" data-tile-family="korean" data-i18n="setup.koreanSpellingCvc">Korean spelling 4: basic CVC</option>
+            <option value="ipa-vowels" data-tile-family="ipa" data-i18n="setup.ipaVowels">IPA vowels</option>
+            <option value="ipa-pulmonic-consonants" data-tile-family="ipa" data-i18n="setup.ipaPulmonicConsonants">IPA pulmonic consonants</option>
+            <option value="ipa-non-pulmonic-consonants" data-tile-family="ipa" data-i18n="setup.ipaNonPulmonicConsonants">IPA non-pulmonic consonants</option>
+            <option value="ipa-other-symbols" data-tile-family="ipa" data-i18n="setup.ipaOtherSymbols">IPA other symbols</option>
+            <option value="ipa-affricates" data-tile-family="ipa" data-i18n="setup.ipaAffricates">IPA affricates</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="lianliankan-ipa-audio-note" data-mode-control="lianliankan" hidden>
+          <span class="input-label" data-i18n="setup.ipaAudio">IPA audio</span>
+          <a class="lianliankan-ipa-audio-link" href="https://www.ipachart.com/" target="_blank" rel="noopener" data-i18n="setup.ipaAudioSource" data-i18n-title="setup.ipaAudioAttribution" title="Audio from IPA Chart; see its clip licences and attribution.">IPA Chart audio</a>
         </div>
         <div class="mosaic-inline-row" id="billiards-rules-row" data-mode-control="billiards" hidden>
           <span class="input-label" data-i18n="setup.rules">Rules</span>
@@ -2662,11 +2697,12 @@
 <script src="js/calculator_cards.js"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260830-1"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260901-4"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
-<script src="js/ramified_minigames_setup.js?v=20260830-3"></script>
+<script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
+<script src="js/ramified_minigames_setup.js?v=20260901-9"></script>
 </body>
 </html>

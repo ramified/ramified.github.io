@@ -81,19 +81,24 @@
 
   function tileArray(game) {
     return game.board.cells.map(function(cell) {
-      return cell.tile ? { id: cell.tile.id, glyph: cell.tile.glyph } : null;
+      if (!cell.tile) return null;
+      const tile = { id: cell.tile.id, glyph: cell.tile.glyph };
+      if (cell.tile.matchKey != null && cell.tile.matchKey !== cell.tile.id) tile.matchKey = cell.tile.matchKey;
+      return tile;
     });
   }
 
   function tileEntries(game) {
     return game.board.cells.filter(function(cell) { return !!cell.tile; }).map(function(cell) {
-      return {
+      const entry = {
         index: cell.index,
         row: cell.row,
         col: cell.col,
         id: cell.tile.id,
         glyph: cell.tile.glyph
       };
+      if (cell.tile.matchKey != null && cell.tile.matchKey !== cell.tile.id) entry.matchKey = cell.tile.matchKey;
+      return entry;
     });
   }
 
@@ -177,6 +182,7 @@
       const id = String(entry && entry.id || '');
       const glyph = entry && entry.glyph != null ? entry.glyph : id;
       tiles[index] = { id: id, glyph: String(glyph) };
+      if (entry && entry.matchKey != null && String(entry.matchKey)) tiles[index].matchKey = String(entry.matchKey);
       if (!tiles[index].id) throw new TypeError('Lianliankan tiles require a non-empty id');
     });
     const state = createSharedState(preset, {

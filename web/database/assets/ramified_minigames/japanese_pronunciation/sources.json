@@ -3,6 +3,10 @@
   "sourceSetUrl": "https://commons.wikimedia.org/wiki/Category:Audio_files_of_hiragana_(set_by_Hakatanoshio117117)",
   "author": "Hakatanoshio117117",
   "license": "Public domain",
+  "derivedAudio": {
+    "format": "MP3",
+    "source": "Transcoded locally from the listed public-domain files for broader browser playback support."
+  },
   "files": [
     { "id": "a", "local": "a.ogg", "commonsFile": "Ja-A.oga" },
     { "id": "i", "local": "i.ogg", "commonsFile": "Japanese_I.ogg" },

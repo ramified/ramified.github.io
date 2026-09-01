@@ -3,7 +3,7 @@
 // { label: "Maintenance Tracker", key: "maintenance_tracker", file: "maintenance_tracker.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
-  "schemaVersion": 10,
+  "schemaVersion": 11,
   "title": "Maintenance Tracker",
   "titleNode": {
     "id": "__title__",
@@ -38,8 +38,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 76.3,
-      "y": 81.2,
+      "x": 76.4,
+      "y": 81.4,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -73,8 +73,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 116.4,
-      "y": 309
+      "x": 116.6,
+      "y": 309.7
     },
     {
       "id": "n39",
@@ -85,7 +85,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goal",
           "label": "goal",
           "type": "checkbox",
-          "text": "- [x] Similar to Sheaf Calculator, I need to make a calculator with category and functors\n- [x] The main terms are \"Ob(C)\" and morphisms, user can assign a typical symbol for objects in this category\n- [x] User can pick opposite category, and set functors to be covariant/contravariant\n- [ ] Add natural transformation\n- [ ] Add a large presets of categories and functors"
+          "text": "- [x] Similar to Sheaf Calculator, I need to make a calculator with category and functors\n- [x] The main terms are \"Ob(C)\" and morphisms, user can assign a typical symbol for objects in this category\n- [x] User can pick opposite category, and set functors to be covariant/contravariant\n- [ ] Add natural transformation\n- [x] Add a large presets of categories and functors"
         }
       ],
       "setting": "",
@@ -95,8 +95,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 291.8,
-      "y": 369.8
+      "x": 292.2,
+      "y": 370.6
     },
     {
       "id": "n58",
@@ -110,8 +110,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 268.8,
-      "y": 81.2
+      "x": 269.1,
+      "y": 81.4
     },
     {
       "id": "n63",
@@ -132,8 +132,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 468.4,
-      "y": 369.8,
+      "x": 469.7,
+      "y": 370.6,
       "childGraph": {
         "title": "double click",
         "nodes": [
@@ -176,7 +176,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
                 "id": "goal",
                 "label": "goal",
                 "type": "checkbox",
-                "text": "pair of pants decomposition\nspanning tree: detect and creation\nhomology class"
+                "text": "- [ ] pair of pants decomposition\n- [ ] spanning tree: detect and creation\n- [x] homology class"
               }
             ],
             "setting": "",
@@ -232,8 +232,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 657.2,
-      "y": 342.9
+      "x": 658.1,
+      "y": 343.7
     },
     {
       "id": "n66",
@@ -244,7 +244,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goal",
           "label": "goal",
           "type": "checkbox",
-          "text": "- [ ] change the field extension to two different field, with a single primitive generator\n- [x] Try to identify number field with labels in LMFDB\n- [x] for a number field gives the lattice"
+          "text": "- [x] change the field extension to two different field, with a single primitive generator\n- [x] Try to identify number field with labels in LMFDB\n- [x] for a number field gives the lattice"
         }
       ],
       "setting": "",
@@ -252,10 +252,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 358.6,
-      "y": 144.2
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 359.7,
+      "y": 145.2
     },
     {
       "id": "n68",
@@ -276,8 +276,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 536.8,
-      "y": 220.9
+      "x": 537.5,
+      "y": 221.4
     },
     {
       "id": "n71",
@@ -288,13 +288,13 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goals-2",
           "label": "Billiard",
           "type": "checkbox",
-          "text": "- [ ] \"Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.\" should appear in the main canvas, like the caption. For the caption I mean on the bottom of the main canvas,not on the right up side of the cue ball\nThe yellow circle emphasize and the sentence should also appear when user click something which is not the cue ball.\n- [ ] the rule is not the billiard rule, that describes the rule of 2048 instead. Please give a correct billiard rule."
+          "text": "- [x] \"Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.\" should appear in the main canvas, like the caption. For the caption I mean on the bottom of the main canvas,not on the right up side of the cue ball\n- [x] The yellow circle emphasize and the sentence should also appear when user click something which is not the cue ball.\n- [x] the rule is not the billiard rule, that describes the rule of 2048 instead. Please give a correct billiard rule."
         },
         {
           "id": "hex",
           "label": "hex",
           "type": "checkbox",
-          "text": "For hex, the green hex/square just disappear when user's cursor move, even when the cursor is still inside the same tile. Please only disappear when user's cursor moves out of the tile"
+          "text": "- [x] For hex, the green hex/square just disappear when user's cursor move, even when the cursor is still inside the same tile. Please only disappear when user's cursor moves out of the tile"
         }
       ],
       "setting": "",
@@ -302,10 +302,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#6b7f3d",
-      "fillColor": "#f4f7ed",
-      "x": 634.2,
-      "y": 130.5
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 635.1,
+      "y": 130.8
     }
   ],
   "arrows": [
@@ -313,6 +313,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "id": "a28",
       "sourceId": "n37",
       "targetId": "n4",
+      "labels": [],
+      "terms": [],
       "label": "",
       "remark": "",
       "body": "solid",
@@ -321,7 +323,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 15,
+      "labelOffset": 0,
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
@@ -330,6 +332,17 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "id": "a37",
       "sourceId": "n4",
       "targetId": "n39",
+      "labels": [
+        {
+          "id": "label-1",
+          "text": "same UI",
+          "color": "#5f574e",
+          "position": 0.5,
+          "offset": 0,
+          "align": "center-clear"
+        }
+      ],
+      "terms": [],
       "label": "same UI",
       "remark": "",
       "body": "solid",
@@ -347,6 +360,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "id": "a48",
       "sourceId": "n58",
       "targetId": "n4",
+      "labels": [],
+      "terms": [],
       "label": "",
       "remark": "",
       "body": "solid",
@@ -355,7 +370,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 15,
+      "labelOffset": 0,
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
@@ -364,6 +379,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "id": "a49",
       "sourceId": "n71",
       "targetId": "n68",
+      "labels": [],
+      "terms": [],
       "label": "",
       "remark": "",
       "body": "solid",
@@ -372,7 +389,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 15,
+      "labelOffset": 0,
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
@@ -382,7 +399,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     "selectedId": "",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 451,
+    "canvasHeight": 452,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 1.6674,
     "relativeNodePositions": {
@@ -403,7 +420,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
         "y": 0.18
       },
       "n63": {
-        "x": 0.6229,
+        "x": 0.6238,
         "y": 0.82
       },
       "n65": {
@@ -411,8 +428,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
         "y": 0.7603
       },
       "n66": {
-        "x": 0.4768,
-        "y": 0.3197
+        "x": 0.4777,
+        "y": 0.3212
       },
       "n68": {
         "x": 0.7138,

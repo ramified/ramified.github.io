@@ -3,7 +3,7 @@
 // { label: "property hierarchy", key: "property_hierarchy", file: "property_hierarchy.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.property_hierarchy = {
-  "schemaVersion": 9,
+  "schemaVersion": 10,
   "title": "property hierarchy",
   "titleNode": {
     "id": "__title__",
@@ -38,10 +38,10 @@ window.THEOREM_GRAPH_PRESET_DATA.property_hierarchy = {
       "citationKeys": [
         "CR81"
       ],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 444.4,
-      "y": 190,
+      "color": "#8b5f2a",
+      "fillColor": "#fff7df",
+      "x": 310.5,
+      "y": 139.2,
       "childGraph": {
         "title": "group",
         "nodes": [
@@ -292,6 +292,143 @@ window.THEOREM_GRAPH_PRESET_DATA.property_hierarchy = {
           "canvasAspectRatio": 1.501
         }
       }
+    },
+    {
+      "id": "n71",
+      "type": "misc",
+      "label": "ring",
+      "details": [],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#8b5f2a",
+      "fillColor": "#fff7df",
+      "x": 336.2,
+      "y": 186.5,
+      "childGraph": {
+        "title": "ring",
+        "nodes": [
+          {
+            "id": "n1",
+            "type": "object",
+            "label": "maximal order",
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 557,
+            "y": 247.4
+          },
+          {
+            "id": "n2",
+            "type": "property",
+            "label": "hereditary",
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 263.3,
+            "y": 453.8
+          },
+          {
+            "id": "n3",
+            "type": "property",
+            "label": "Dedekind domain",
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 164,
+            "y": 263.8
+          },
+          {
+            "id": "n4",
+            "type": "property",
+            "label": "DVR",
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 442.4,
+            "y": 52.7
+          }
+        ],
+        "arrows": [
+          {
+            "id": "a1",
+            "sourceId": "n4",
+            "targetId": "n3",
+            "label": "$\\textcolor{blue}{\\text{local}}$",
+            "remark": "",
+            "body": "solid",
+            "head": "harpoon-down",
+            "tail": "harpoon-up",
+            "level": 2,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 25,
+            "labelPosition": 0.5,
+            "labelAlign": "left",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a2",
+            "sourceId": "n3",
+            "targetId": "n2",
+            "label": "",
+            "remark": "",
+            "body": "solid",
+            "head": "arrow",
+            "tail": "none",
+            "level": 2,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 15,
+            "labelPosition": 0.5,
+            "labelAlign": "left",
+            "color": "#5f574e"
+          },
+          {
+            "id": "a3",
+            "sourceId": "n1",
+            "targetId": "n2",
+            "label": "$\\textcolor{blue}{\\text{comm}}$",
+            "remark": "",
+            "body": "solid",
+            "head": "harpoon-down",
+            "tail": "harpoon-up",
+            "level": 2,
+            "endpointScale": 1,
+            "curve": 0,
+            "labelOffset": 25,
+            "labelPosition": 0.5,
+            "labelAlign": "left",
+            "color": "#5f574e"
+          }
+        ],
+        "view": {
+          "selectedId": "",
+          "layoutAvoidOverlap": true,
+          "layoutRunning": false,
+          "canvasHeight": 560,
+          "canvasRatioLocked": false,
+          "canvasAspectRatio": 1.7143
+        }
+      }
     }
   ],
   "arrows": [],
@@ -306,4 +443,3 @@ window.THEOREM_GRAPH_PRESET_DATA.property_hierarchy = {
   },
   "references": []
 };
-

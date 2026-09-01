@@ -336,6 +336,37 @@
   margin-top: 0;
 }
 
+.inspiration-links {
+  align-items: stretch;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inspiration-group {
+  border-left: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding-left: 10px;
+}
+
+.inspiration-dimension {
+  color: var(--muted);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 620px) {
+  .inspiration-links {
+    grid-template-columns: 1fr;
+  }
+}
+
 .atlas-card {
   background: #fbf8f2;
 }

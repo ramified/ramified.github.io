@@ -10,6 +10,9 @@
   let LianliankanMosaicAdapter = typeof window !== 'undefined' && window.LianliankanMosaicAdapter
     ? window.LianliankanMosaicAdapter
     : (typeof require === 'function' ? require('../lianliankan/mosaic_adapter.js') : null);
+  let KoreanPronunciationAudio = typeof window !== 'undefined' && window.RamifiedKoreanPronunciationAudio
+    ? window.RamifiedKoreanPronunciationAudio
+    : (typeof require === 'function' ? require('./ramified_minigames_korean_audio.js') : null);
   let TopologicalHex = typeof window !== 'undefined' && window.TopologicalHex
     ? window.TopologicalHex
     : (typeof require === 'function' ? require('./hex_homology_game.js') : null);
@@ -161,16 +164,119 @@
   const GO_LIBERTY_DOT_SCALE_REFERENCE = 500;
   const GO_LIBERTY_DOT_BORDER_SCALE = 300;
   const GO_LIBERTY_DOT_BORDER_SCALE_REFERENCE = 100;
+  const HANGUL_BASIC_CONSONANTS = Object.freeze([
+    ['g', 'ㄱ', 0], ['n', 'ㄴ', 2], ['d', 'ㄷ', 3], ['r', 'ㄹ', 5], ['m', 'ㅁ', 6], ['b', 'ㅂ', 7], ['s', 'ㅅ', 9],
+    ['ng', 'ㅇ', 11], ['j', 'ㅈ', 12], ['ch', 'ㅊ', 14], ['k', 'ㅋ', 15], ['t', 'ㅌ', 16], ['p', 'ㅍ', 17], ['h', 'ㅎ', 18]
+  ]);
+  const HANGUL_BASIC_VOWELS = Object.freeze([
+    ['a', 'ㅏ', 0], ['ya', 'ㅑ', 2], ['eo', 'ㅓ', 4], ['yeo', 'ㅕ', 6], ['o', 'ㅗ', 8],
+    ['yo', 'ㅛ', 12], ['u', 'ㅜ', 13], ['yu', 'ㅠ', 17], ['eu', 'ㅡ', 18], ['i', 'ㅣ', 20]
+  ]);
+  const HANGUL_MODERN_JAMO = Object.freeze([
+    ['kk', 'ㄲ'], ['tt', 'ㄸ'], ['pp', 'ㅃ'], ['ss', 'ㅆ'], ['jj', 'ㅉ'],
+    ['ae', 'ㅐ'], ['yae', 'ㅒ'], ['e', 'ㅔ'], ['ye', 'ㅖ'], ['wa', 'ㅘ'], ['wae', 'ㅙ'], ['oe', 'ㅚ'],
+    ['wo', 'ㅝ'], ['we', 'ㅞ'], ['wi', 'ㅟ'], ['ui', 'ㅢ']
+  ]);
+  const HANGUL_COMMON_FINALS = Object.freeze([
+    ['g', 'ㄱ', 1], ['n', 'ㄴ', 4], ['d', 'ㄷ', 7], ['r', 'ㄹ', 8],
+    ['m', 'ㅁ', 16], ['b', 'ㅂ', 17], ['s', 'ㅅ', 19], ['ng', 'ㅇ', 21]
+  ]);
+  const IPA_AUDIO_BASE_URL = 'https://www.ipachart.com/ogg/';
+  const IPA_VOWELS = Object.freeze([
+    ['Close_front_unrounded_vowel', 'i'], ['Close_front_rounded_vowel', 'y'], ['Close_central_unrounded_vowel', 'ɨ'], ['Close_central_rounded_vowel', 'ʉ'], ['Close_back_unrounded_vowel', 'ɯ'], ['Close_back_rounded_vowel', 'u'],
+    ['Near-close_near-front_unrounded_vowel', 'ɪ'], ['Near-close_near-front_rounded_vowel', 'ʏ'], ['Near-close_near-back_rounded_vowel', 'ʊ'], ['Close-mid_front_unrounded_vowel', 'e'], ['Close-mid_front_rounded_vowel', 'ø'], ['Close-mid_central_unrounded_vowel', 'ɘ'], ['Close-mid_central_rounded_vowel', 'ɵ'], ['Close-mid_back_unrounded_vowel', 'ɤ'], ['Close-mid_back_rounded_vowel', 'o'], ['Mid-central_vowel', 'ə'],
+    ['Open-mid_front_unrounded_vowel', 'ɛ'], ['Open-mid_front_rounded_vowel', 'œ'], ['Open-mid_central_unrounded_vowel', 'ɜ'], ['Open-mid_central_rounded_vowel', 'ɞ'], ['Open-mid_back_unrounded_vowel', 'ʌ'], ['Open-mid_back_rounded_vowel', 'ɔ'], ['Near-open_front_unrounded_vowel', 'æ'], ['Near-open_central_unrounded_vowel', 'ɐ'], ['Open_front_unrounded_vowel', 'a'], ['Open_front_rounded_vowel', 'ɶ'], ['Open_back_unrounded_vowel', 'ɑ'], ['Open_back_rounded_vowel', 'ɒ']
+  ]);
+  const IPA_PULMONIC_CONSONANTS = Object.freeze([
+    ['Voiceless_bilabial_plosive', 'p'], ['Voiced_bilabial_plosive', 'b'], ['Voiceless_alveolar_plosive', 't'], ['Voiced_alveolar_plosive', 'd'], ['Voiceless_retroflex_plosive', 'ʈ'], ['Voiced_retroflex_plosive', 'ɖ'], ['Voiceless_palatal_plosive', 'c'], ['Voiced_palatal_plosive', 'ɟ'], ['Voiceless_velar_plosive', 'k'], ['Voiced_velar_plosive', 'g'], ['Voiceless_uvular_plosive', 'q'], ['Voiced_uvular_plosive', 'ɢ'], ['Glottal_stop', 'ʔ'],
+    ['Bilabial_nasal', 'm'], ['Labiodental_nasal', 'ɱ'], ['Alveolar_nasal', 'n'], ['Retroflex_nasal', 'ɳ'], ['Palatal_nasal', 'ɲ'], ['Velar_nasal', 'ŋ'], ['Uvular_nasal', 'ɴ'], ['Bilabial_trill', 'ʙ'], ['Alveolar_trill', 'r'], ['Uvular_trill', 'ʀ'], ['Labiodental_flap', 'ⱱ'], ['Alveolar_tap', 'ɾ'], ['Retroflex_flap', 'ɽ'],
+    ['Voiceless_bilabial_fricative', 'ɸ'], ['Voiced_bilabial_fricative', 'β'], ['Voiceless_labiodental_fricative', 'f'], ['Voiced_labiodental_fricative', 'v'], ['Voiceless_dental_fricative', 'θ'], ['Voiced_dental_fricative', 'ð'], ['Voiceless_alveolar_fricative', 's'], ['Voiced_alveolar_fricative', 'z'], ['Voiceless_postalveolar_fricative', 'ʃ'], ['Voiced_postalveolar_fricative', 'ʒ'], ['Voiceless_retroflex_fricative', 'ʂ'], ['Voiced_retroflex_fricative', 'ʐ'], ['Voiceless_palatal_fricative', 'ç'], ['Voiced_palatal_fricative', 'ʝ'], ['Voiceless_velar_fricative', 'x'], ['Voiced_velar_fricative', 'ɣ'], ['Voiceless_uvular_fricative', 'χ'], ['Voiced_uvular_fricative', 'ʁ'], ['Voiceless_pharyngeal_fricative', 'ħ'], ['Voiced_pharyngeal_fricative', 'ʕ'], ['Voiceless_glottal_fricative', 'h'], ['Voiced_glottal_fricative', 'ɦ'],
+    ['Voiceless_alveolar_lateral_fricative', 'ɬ'], ['Voiced_alveolar_lateral_fricative', 'ɮ'], ['Labiodental_approximant', 'ʋ'], ['Alveolar_approximant', 'ɹ'], ['Retroflex_approximant', 'ɻ'], ['Palatal_approximant', 'j'], ['Voiced_velar_approximant', 'ɰ'], ['Alveolar_lateral_approximant', 'l'], ['Retroflex_lateral_approximant', 'ɭ'], ['Palatal_lateral_approximant', 'ʎ'], ['Velar_lateral_approximant', 'ʟ']
+  ]);
+  const IPA_NON_PULMONIC_CONSONANTS = Object.freeze([
+    ['Bilabial_click', 'ʘ'], ['Voiced_bilabial_implosive', 'ɓ'], ['Bilabial_ejective_plosive', 'pʼ'], ['Dental_click', 'ǀ'], ['Voiced_alveolar_implosive', 'ɗ'], ['Alveolar_ejective_plosive', 'tʼ'], ['Postalveolar_click', 'ǃ'], ['Voiced_palatal_implosive', 'ʄ'], ['Velar_ejective_plosive', 'kʼ'], ['Palatoalveolar_click', 'ǂ'], ['Voiced_velar_implosive', 'ɠ'], ['Alveolar_ejective_fricative', 'sʼ'], ['Alveolar_lateral_click', 'ǁ'], ['Voiced_uvular_implosive', 'ʛ']
+  ]);
+  const IPA_OTHER_ENTRIES = Object.freeze([
+    ['Voiceless_labio-velar_fricative', 'ʍ'], ['Voiced_labio-velar_approximant', 'w'], ['Labial-palatal_approximant', 'ɥ'], ['Voiceless_epiglottal_fricative', 'ʜ'], ['Voiced_epiglottal_fricative', 'ʢ'], ['Voiceless_epiglottal_plosive', 'ʡ'], ['Voiceless_alveolo-palatal_fricative', 'ɕ'], ['Voiced_alveolo-palatal_fricative', 'ʑ'], ['Alveolar_lateral_flap', 'ɺ'], ['Voiceless_dorso-palatal_velar_fricative', 'ɧ']
+  ]);
+  const IPA_AFFRICATES = Object.freeze([
+    ['Voiceless_alveolar_affricate', 't͡s'], ['Voiceless_palato-alveolar_affricate', 't͡ʃ'], ['Voiceless_alveolo-palatal_affricate', 't͡ɕ'], ['Voiceless_retroflex_affricate', 'ʈ͡ʂ'], ['Voiced_alveolar_affricate', 'd͡z'], ['Voiced_postalveolar_affricate', 'd͡ʒ'], ['Voiced_alveolo-palatal_affricate', 'd͡ʑ'], ['Voiced_retroflex_affricate', 'ɖ͡ʐ']
+  ]);
+
+  function lianliankanGlyphSymbols(prefix, entries) {
+    return Object.freeze(entries.map((entry) => Object.freeze({ id: `${prefix}_${entry[0]}`, glyph: entry[1] })));
+  }
+
+  function ipaSymbols(entries) {
+    return lianliankanGlyphSymbols('ipa', entries);
+  }
+
+  function hangulSyllable(initialIndex, vowelIndex, finalIndex = 0) {
+    return String.fromCodePoint(0xAC00 + (((initialIndex * 21) + vowelIndex) * 28) + finalIndex);
+  }
+
+  const KOREAN_BASIC_CONSONANT_SYMBOLS = lianliankanGlyphSymbols('hangul_consonant', HANGUL_BASIC_CONSONANTS);
+  const KOREAN_BASIC_VOWEL_SYMBOLS = lianliankanGlyphSymbols('hangul_vowel', HANGUL_BASIC_VOWELS);
+  const KOREAN_BASIC_JAMO_SYMBOLS = Object.freeze(KOREAN_BASIC_CONSONANT_SYMBOLS.concat(KOREAN_BASIC_VOWEL_SYMBOLS));
+  const KOREAN_MODERN_JAMO_SYMBOLS = lianliankanGlyphSymbols('hangul_modern', HANGUL_MODERN_JAMO);
+  const KOREAN_COMBINED_JAMO_SYMBOLS = Object.freeze(KOREAN_BASIC_JAMO_SYMBOLS.concat(KOREAN_MODERN_JAMO_SYMBOLS));
+  const KOREAN_SPELLING_A_SYMBOLS = Object.freeze(HANGUL_BASIC_CONSONANTS.map((initial) => Object.freeze({
+    id: `hangul_spelling_a_${initial[0]}`,
+    glyph: hangulSyllable(initial[2], HANGUL_BASIC_VOWELS[0][2])
+  })));
+  const KOREAN_SPELLING_VOWEL_SYMBOLS = Object.freeze(HANGUL_BASIC_VOWELS.map((vowel) => Object.freeze({
+    id: `hangul_spelling_vowel_${vowel[0]}`,
+    glyph: hangulSyllable(11, vowel[2])
+  })));
+  const KOREAN_SPELLING_CV_SYMBOLS = Object.freeze(HANGUL_BASIC_CONSONANTS.flatMap((initial) => HANGUL_BASIC_VOWELS.map((vowel) => Object.freeze({
+    id: `hangul_spelling_cv_${initial[0]}_${vowel[0]}`,
+    glyph: hangulSyllable(initial[2], vowel[2])
+  }))));
+  const KOREAN_SPELLING_CVC_SYMBOLS = Object.freeze(HANGUL_BASIC_CONSONANTS.flatMap((initial) => HANGUL_BASIC_VOWELS.flatMap((vowel) => HANGUL_COMMON_FINALS.map((final) => Object.freeze({
+    id: `hangul_spelling_cvc_${initial[0]}_${vowel[0]}_${final[0]}`,
+    glyph: hangulSyllable(initial[2], vowel[2], final[2])
+  })))));
+  const IPA_VOWEL_SYMBOLS = ipaSymbols(IPA_VOWELS);
+  const IPA_PULMONIC_CONSONANT_SYMBOLS = ipaSymbols(IPA_PULMONIC_CONSONANTS);
+  const IPA_NON_PULMONIC_CONSONANT_SYMBOLS = ipaSymbols(IPA_NON_PULMONIC_CONSONANTS);
+  const IPA_OTHER_SYMBOLS = ipaSymbols(IPA_OTHER_ENTRIES);
+  const IPA_AFFRICATE_SYMBOLS = ipaSymbols(IPA_AFFRICATES);
+
   const LIANLIANKAN_TILE_SETS = {
     japanese: [],
+    'japanese-katakana': [],
+    'japanese-mixed': [],
     chinese: Object.freeze(['山', '水', '云', '月', '风', '花', '雪', '雨', '星', '日', '春', '夏', '秋', '冬', '梅', '兰', '竹', '菊']
       .map((glyph) => Object.freeze({ id: `han_${glyph}`, glyph: glyph }))),
     'young-3x3': Object.freeze([
       [1, 0, 0], [2, 0, 0], [3, 0, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0], [2, 2, 0], [3, 2, 0], [3, 3, 0],
       [1, 1, 1], [2, 1, 1], [3, 1, 1], [2, 2, 1], [3, 2, 1], [3, 3, 1], [2, 2, 2], [3, 2, 2], [3, 3, 2], [3, 3, 3]
-    ].map((rows) => Object.freeze({ id: `young_${rows.join('')}`, glyph: '' })))
+    ].map((rows) => Object.freeze({ id: `young_${rows.join('')}`, glyph: '' }))),
+    'korean-jamo-consonants': KOREAN_BASIC_CONSONANT_SYMBOLS,
+    'korean-jamo-vowels': KOREAN_BASIC_VOWEL_SYMBOLS,
+    'korean-jamo-basic': KOREAN_BASIC_JAMO_SYMBOLS,
+    'korean-jamo-modern': KOREAN_MODERN_JAMO_SYMBOLS,
+    'korean-jamo-combined': KOREAN_COMBINED_JAMO_SYMBOLS,
+    'korean-spelling-a': KOREAN_SPELLING_A_SYMBOLS,
+    'korean-spelling-vowels': KOREAN_SPELLING_VOWEL_SYMBOLS,
+    'korean-spelling-cv': KOREAN_SPELLING_CV_SYMBOLS,
+    'korean-spelling-cvc': KOREAN_SPELLING_CVC_SYMBOLS,
+    'ipa-vowels': IPA_VOWEL_SYMBOLS,
+    'ipa-pulmonic-consonants': IPA_PULMONIC_CONSONANT_SYMBOLS,
+    'ipa-non-pulmonic-consonants': IPA_NON_PULMONIC_CONSONANT_SYMBOLS,
+    'ipa-other-symbols': IPA_OTHER_SYMBOLS,
+    'ipa-affricates': IPA_AFFRICATE_SYMBOLS
   };
+  const LIANLIANKAN_TILE_LEVELS = Object.freeze({
+    japanese: Object.freeze(['japanese', 'japanese-katakana', 'japanese-mixed']),
+    korean: Object.freeze([
+      'korean-jamo-consonants', 'korean-jamo-vowels', 'korean-jamo-basic', 'korean-jamo-modern', 'korean-jamo-combined',
+      'korean-spelling-a', 'korean-spelling-vowels', 'korean-spelling-cv', 'korean-spelling-cvc'
+    ]),
+    ipa: Object.freeze(['ipa-vowels', 'ipa-pulmonic-consonants', 'ipa-non-pulmonic-consonants', 'ipa-other-symbols', 'ipa-affricates'])
+  });
   const LIANLIANKAN_HIRAGANA_AUDIO_FOLDER = 'assets/ramified_minigames/japanese_pronunciation/';
+  const LIANLIANKAN_KOREAN_AUDIO_FOLDER = 'assets/ramified_minigames/korean_pronunciation/';
   const lianliankanHiraganaIds = new Set();
   let lianliankanPronunciationAudio = null;
 
@@ -178,8 +284,15 @@
     LIANLIANKAN_TILE_SETS.japanese = (Lianliankan && Array.isArray(Lianliankan.HIRAGANA_SYMBOLS)
       ? Lianliankan.HIRAGANA_SYMBOLS
       : []).map((symbol) => Object.freeze({ ...symbol }));
+    LIANLIANKAN_TILE_SETS['japanese-katakana'] = (Lianliankan && Array.isArray(Lianliankan.KATAKANA_SYMBOLS)
+      ? Lianliankan.KATAKANA_SYMBOLS
+      : []).map((symbol) => Object.freeze({ ...symbol }));
+    LIANLIANKAN_TILE_SETS['japanese-mixed'] = (Lianliankan && Array.isArray(Lianliankan.MIXED_KANA_SYMBOLS)
+      ? Lianliankan.MIXED_KANA_SYMBOLS
+      : []).map((symbol) => Object.freeze({ ...symbol, counterpart: symbol.counterpart ? { ...symbol.counterpart } : undefined }));
     lianliankanHiraganaIds.clear();
     LIANLIANKAN_TILE_SETS.japanese.forEach((symbol) => lianliankanHiraganaIds.add(symbol.id));
+    LIANLIANKAN_TILE_SETS['japanese-katakana'].forEach((symbol) => lianliankanHiraganaIds.add(symbol.id));
   }
 
   refreshLianliankanTileSets();
@@ -711,6 +824,9 @@
     refs.chineseCheckersEndJump = document.getElementById('chinese-checkers-end-jump');
     refs.fideChessPieceDisplay = document.getElementById('fide-chess-piece-display');
     refs.lianliankanTileSet = document.getElementById('lianliankan-tile-set');
+    refs.lianliankanTileLevelRow = document.getElementById('lianliankan-tile-level-row');
+    refs.lianliankanTileLevel = document.getElementById('lianliankan-tile-level');
+    refs.lianliankanIpaAudioNote = document.getElementById('lianliankan-ipa-audio-note');
     refs.fideChessPuzzleThreatRow = document.getElementById('fide-chess-puzzle-threat-row');
     refs.fideChessPuzzleAttackBorders = document.getElementById('fide-chess-puzzle-attack-borders');
     refs.boxStyle = document.getElementById('number-box-style');
@@ -863,6 +979,7 @@
     }
     if (refs.fideChessPieceDisplay) refs.fideChessPieceDisplay.addEventListener('change', handleFideChessPieceDisplayChange);
     if (refs.lianliankanTileSet) refs.lianliankanTileSet.addEventListener('change', handleLianliankanTileSetChange);
+    if (refs.lianliankanTileLevel) refs.lianliankanTileLevel.addEventListener('change', handleLianliankanTileSetChange);
     if (refs.fideChessPuzzleAttackBorders) refs.fideChessPuzzleAttackBorders.addEventListener('change', handleFideChessPuzzleAttackBordersChange);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('change', handleGomokuSizeChange);
     if (refs.gomokuSize) refs.gomokuSize.addEventListener('input', handleGomokuSizeChange);
@@ -4707,6 +4824,7 @@
   }
 
   function handleLianliankanTileSetChange() {
+    syncLianliankanTileLevelControl();
     if (selectedGameMode() !== GAME_MODES.LIANLIANKAN || !game || game.phase !== 'setup' || onlineIsInRoom()) {
       syncControls();
       return;
@@ -7722,6 +7840,7 @@
       closeFullscreenSettings({ restoreFocus: false });
     }
     syncCanvasDisplayModeUi();
+    syncControls();
     renderAfterCanvasLayoutChange();
     if (!fullscreenSettingsOpen && refs.canvas) refs.canvas.focus();
   }
@@ -7746,7 +7865,6 @@
         fullscreenActive
         && fullscreenPreferences.showGameTools
         && isLianliankanGame(game)
-        && game.phase !== 'setup'
       );
     }
     if (refs.fullscreenActionBar) {
@@ -7912,7 +8030,6 @@
     const secondTile = { ...targetCell.tile };
     const matchingPath = firstTile
       && previous !== targetIndex
-      && firstTile.id === secondTile.id
       ? Lianliankan.findConnection(state.board, state.topology, previous, targetIndex)
       : null;
     if (matchingPath && typeof options.beforeMatch === 'function') {
@@ -7930,7 +8047,7 @@
   }
 
   function showLianliankanHintFromFullscreenAction() {
-    if (!isLianliankanGame(game) || !Lianliankan || game.phase !== 'ready' || lianliankanHint) {
+    if (!isLianliankanGame(game) || !Lianliankan || (game.phase !== 'setup' && game.phase !== 'ready') || lianliankanHint) {
       syncControls();
       return;
     }
@@ -18323,8 +18440,28 @@
   }
 
   function selectedLianliankanTileSet() {
-    const value = refs.lianliankanTileSet ? refs.lianliankanTileSet.value : 'chinese';
-    return Object.prototype.hasOwnProperty.call(LIANLIANKAN_TILE_SETS, value) ? value : 'chinese';
+    const family = refs.lianliankanTileSet ? refs.lianliankanTileSet.value : 'chinese';
+    const levels = LIANLIANKAN_TILE_LEVELS[family];
+    if (levels) {
+      const level = refs.lianliankanTileLevel ? refs.lianliankanTileLevel.value : levels[0];
+      return levels.includes(level) ? level : levels[0];
+    }
+    return Object.prototype.hasOwnProperty.call(LIANLIANKAN_TILE_SETS, family) ? family : 'chinese';
+  }
+
+  function syncLianliankanTileLevelControl(modeActive = selectedGameMode() === GAME_MODES.LIANLIANKAN) {
+    const family = refs.lianliankanTileSet ? refs.lianliankanTileSet.value : 'chinese';
+    const levels = LIANLIANKAN_TILE_LEVELS[family] || [];
+    if (refs.lianliankanTileLevel && refs.lianliankanTileLevel.options) {
+      Array.from(refs.lianliankanTileLevel.options).forEach((option) => {
+        const available = levels.includes(option.value);
+        option.hidden = !available;
+        option.disabled = !available;
+      });
+      if (levels.length && !levels.includes(refs.lianliankanTileLevel.value)) refs.lianliankanTileLevel.value = levels[0];
+    }
+    if (refs.lianliankanTileLevelRow) refs.lianliankanTileLevelRow.hidden = !modeActive || !levels.length;
+    return levels.length > 0;
   }
 
   function lianliankanSymbolsForTileSet(tileSet = selectedLianliankanTileSet()) {
@@ -18334,8 +18471,17 @@
 
   function lianliankanPronunciationPath(tile) {
     const id = typeof tile === 'string' ? tile : String(tile && tile.id || '');
-    if (!lianliankanHiraganaIds.has(id)) return '';
-    return `${LIANLIANKAN_HIRAGANA_AUDIO_FOLDER}${id.slice('hiragana_'.length)}.ogg`;
+    if (id.startsWith('ipa_')) return `${IPA_AUDIO_BASE_URL}${id.slice('ipa_'.length)}.ogg`;
+    if (id.startsWith('hangul_') && KoreanPronunciationAudio && typeof KoreanPronunciationAudio.pathForGlyph === 'function') {
+      const relativePath = KoreanPronunciationAudio.pathForGlyph(typeof tile === 'string' ? '' : tile && tile.glyph);
+      return relativePath ? `${LIANLIANKAN_KOREAN_AUDIO_FOLDER}${relativePath}?v=20260901-1` : '';
+    }
+    const matchKey = typeof tile === 'string' ? '' : String(tile && tile.matchKey || '');
+    let syllable = '';
+    if (id.startsWith('hiragana_') || id.startsWith('katakana_')) syllable = id.slice(id.indexOf('_') + 1);
+    else if (matchKey.startsWith('kana_')) syllable = matchKey.slice('kana_'.length);
+    if (!syllable || (!lianliankanHiraganaIds.has(`hiragana_${syllable}`) && !lianliankanHiraganaIds.has(`katakana_${syllable}`))) return '';
+    return `${LIANLIANKAN_HIRAGANA_AUDIO_FOLDER}${syllable}.mp3?v=20260901-2`;
   }
 
   function stopLianliankanPronunciation() {
@@ -28183,6 +28329,9 @@
     }
     if (refs.billiardsRules) refs.billiardsRules.disabled = !modeBilliards || !!(game && game.phase !== 'setup') || onlineRoomActive || !!billiardsShotPending;
     if (refs.lianliankanTileSet) refs.lianliankanTileSet.disabled = !modeLianliankan || !game || game.phase !== 'setup' || onlineRoomActive;
+    syncLianliankanTileLevelControl(modeLianliankan);
+    if (refs.lianliankanTileLevel) refs.lianliankanTileLevel.disabled = !modeLianliankan || !game || game.phase !== 'setup' || onlineRoomActive;
+    if (refs.lianliankanIpaAudioNote) refs.lianliankanIpaAudioNote.hidden = !modeLianliankan || !refs.lianliankanTileSet || refs.lianliankanTileSet.value !== 'ipa';
     if (refs.billiardsBallPaletteRow) refs.billiardsBallPaletteRow.hidden = !modeBilliards || !game || game.phase !== 'setup';
     syncBilliardsBallPalette();
     if (refs.billiardsAssistance) refs.billiardsAssistance.disabled = !modeBilliards || !!billiardsShotPending;
@@ -28217,14 +28366,16 @@
     syncFullscreenActionText();
     const lianliankanFullscreenActions = !!currentFullscreenElement()
       && fullscreenPreferences.showGameTools
-      && isLianliankanGame(game)
-      && game.phase !== 'setup';
+      && isLianliankanGame(game);
+    const lianliankanFullscreenMatch = lianliankanFullscreenActions && Lianliankan
+      ? (game.availableMatch || Lianliankan.findAnyLegalMatch(game))
+      : null;
     if (refs.fullscreenLianliankanActions) refs.fullscreenLianliankanActions.hidden = !lianliankanFullscreenActions;
     if (refs.fullscreenLianliankanHint) {
       refs.fullscreenLianliankanHint.disabled = !lianliankanFullscreenActions
         || onlineRoomActive
-        || game.phase !== 'ready'
-        || !game.availableMatch
+        || (game.phase !== 'setup' && game.phase !== 'ready')
+        || !lianliankanFullscreenMatch
         || !!lianliankanHint;
       refs.fullscreenLianliankanHint.setAttribute('aria-label', tk('common.showHint', 'Show hint'));
       refs.fullscreenLianliankanHint.setAttribute('title', tk('common.hint', 'Hint'));

@@ -30,6 +30,26 @@
   ].map(function(entry) {
     return Object.freeze({ id: 'hiragana_' + entry[0], glyph: entry[1] });
   }));
+  const KATAKANA_SYMBOLS = Object.freeze(HIRAGANA_SYMBOLS.map(function(symbol) {
+    const syllable = symbol.id.slice('hiragana_'.length);
+    return Object.freeze({
+      id: 'katakana_' + syllable,
+      glyph: Array.from(symbol.glyph).map(function(glyph) {
+        return String.fromCodePoint(glyph.codePointAt(0) + 0x60);
+      }).join('')
+    });
+  }));
+  const MIXED_KANA_SYMBOLS = Object.freeze(HIRAGANA_SYMBOLS.map(function(symbol, index) {
+    const katakana = KATAKANA_SYMBOLS[index];
+    const syllable = symbol.id.slice('hiragana_'.length);
+    const matchKey = 'kana_' + syllable;
+    return Object.freeze({
+      id: symbol.id,
+      glyph: symbol.glyph,
+      matchKey: matchKey,
+      counterpart: Object.freeze({ id: katakana.id, glyph: katakana.glyph, matchKey: matchKey })
+    });
+  }));
 
   function positiveInteger(value, label) {
     const normalized = Number(value);
@@ -89,14 +109,28 @@
     if (!tile || typeof tile.id !== 'string' || !tile.id) {
       throw new TypeError('A tile requires a non-empty string id');
     }
-    return {
+    const normalized = {
       id: tile.id,
       glyph: String(tile.glyph == null ? tile.id : tile.glyph)
     };
+    if (tile.matchKey != null && String(tile.matchKey)) normalized.matchKey = String(tile.matchKey);
+    return normalized;
   }
 
   function cloneTile(tile) {
-    return tile ? { id: tile.id, glyph: tile.glyph } : null;
+    if (!tile) return null;
+    const cloned = { id: tile.id, glyph: tile.glyph };
+    if (tile.matchKey != null && tile.matchKey !== tile.id) cloned.matchKey = tile.matchKey;
+    return cloned;
+  }
+
+  function tileMatchKey(tile) {
+    return String(tile && (tile.matchKey || tile.id) || '');
+  }
+
+  function tilesMatch(firstTile, secondTile) {
+    if (!firstTile || !secondTile || tileMatchKey(firstTile) !== tileMatchKey(secondTile)) return false;
+    return (firstTile.matchKey == null && secondTile.matchKey == null) || firstTile.id !== secondTile.id;
   }
 
   function createBoard(options) {
@@ -402,7 +436,7 @@
     const second = normalizeIndex(secondRef, board.cols, board.cells.length);
     const firstTile = board.cells[first].tile;
     const secondTile = board.cells[second].tile;
-    if (!firstTile || !secondTile || firstTile.id !== secondTile.id) return null;
+    if (!tilesMatch(firstTile, secondTile)) return null;
     return findPath(board, topology, first, second, options);
   }
 
@@ -412,8 +446,8 @@
 
   function symbolCounts(board) {
     return occupiedIndices(board).reduce(function(counts, index) {
-      const id = board.cells[index].tile.id;
-      counts[id] = (counts[id] || 0) + 1;
+      const matchKey = tileMatchKey(board.cells[index].tile);
+      counts[matchKey] = (counts[matchKey] || 0) + 1;
       return counts;
     }, {});
   }
@@ -430,15 +464,15 @@
   function findAnyLegalMatch(game) {
     const groups = new Map();
     occupiedIndices(game.board).forEach(function(index) {
-      const id = game.board.cells[index].tile.id;
-      if (!groups.has(id)) groups.set(id, []);
-      groups.get(id).push(index);
+      const matchKey = tileMatchKey(game.board.cells[index].tile);
+      if (!groups.has(matchKey)) groups.set(matchKey, []);
+      groups.get(matchKey).push(index);
     });
     for (const indices of groups.values()) {
       if (indices.length < 2) continue;
       for (let first = 0; first < indices.length - 1; first += 1) {
         for (let second = first + 1; second < indices.length; second += 1) {
-          const path = findPath(game.board, game.topology, indices[first], indices[second]);
+          const path = findConnection(game.board, game.topology, indices[first], indices[second]);
           if (path) return { a: indices[first], b: indices[second], path: path };
         }
       }
@@ -494,7 +528,7 @@
 
     const previous = game.selectedIndex;
     const previousTile = game.board.cells[previous].tile;
-    if (!previousTile || previousTile.id !== cell.tile.id) {
+    if (!tilesMatch(previousTile, cell.tile)) {
       game.selectedIndex = index;
       return { kind: 'selected', index: index, replaced: previous };
     }
@@ -553,28 +587,28 @@
     if (!connectable) return null;
 
     const tiles = indices.map(function(index) { return cloneTile(game.board.cells[index].tile); });
-    const pairById = new Map();
+    const pairByMatchKey = new Map();
     tiles.forEach(function(tile) {
-      if (!pairById.has(tile.id)) pairById.set(tile.id, []);
-      pairById.get(tile.id).push(tile);
+      const matchKey = tileMatchKey(tile);
+      if (!pairByMatchKey.has(matchKey)) pairByMatchKey.set(matchKey, []);
+      pairByMatchKey.get(matchKey).push(tile);
     });
     let matchingTiles = null;
-    for (const candidates of pairById.values()) {
-      if (candidates.length >= 2) {
-        matchingTiles = candidates.slice(0, 2);
-        break;
+    for (const candidates of pairByMatchKey.values()) {
+      for (let first = 0; first < candidates.length - 1 && !matchingTiles; first += 1) {
+        for (let second = first + 1; second < candidates.length; second += 1) {
+          if (tilesMatch(candidates[first], candidates[second])) {
+            matchingTiles = [candidates[first], candidates[second]];
+            break;
+          }
+        }
       }
+      if (matchingTiles) break;
     }
     if (!matchingTiles) return null;
 
-    let needed = 2;
-    const remainingTiles = tiles.filter(function(tile) {
-      if (needed > 0 && tile.id === matchingTiles[0].id) {
-        needed -= 1;
-        return false;
-      }
-      return true;
-    });
+    const matchingTileSet = new Set(matchingTiles);
+    const remainingTiles = tiles.filter(function(tile) { return !matchingTileSet.has(tile); });
     const otherIndices = indices.filter(function(index) {
       return index !== connectable.a && index !== connectable.b;
     });
@@ -624,12 +658,15 @@
 
   function createPairedTiles(count, symbols, rng) {
     const total = Math.max(0, Math.floor(count / 2) * 2);
-    const pack = Array.isArray(symbols) && symbols.length ? symbols.map(normalizeTile) : HIRAGANA_SYMBOLS.slice();
+    const pack = Array.isArray(symbols) && symbols.length ? symbols.slice() : HIRAGANA_SYMBOLS.slice();
     if (pack.length > total / 2) shuffleArray(pack, rng);
     const tiles = [];
     for (let pair = 0; pair < total / 2; pair += 1) {
-      const symbol = pack[pair % pack.length];
-      tiles.push(cloneTile(symbol), cloneTile(symbol));
+      const symbol = normalizeTile(pack[pair % pack.length]);
+      const rawCounterpart = pack[pair % pack.length] && pack[pair % pack.length].counterpart;
+      const counterpart = rawCounterpart ? normalizeTile(rawCounterpart) : cloneTile(symbol);
+      if (rawCounterpart && counterpart.matchKey == null && symbol.matchKey != null) counterpart.matchKey = symbol.matchKey;
+      tiles.push(cloneTile(symbol), counterpart);
     }
     return tiles;
   }
@@ -726,6 +763,8 @@
     DIR_NAMES: DIR_NAMES,
     DIRECTION_ORDER: DIRECTION_ORDER,
     HIRAGANA_SYMBOLS: HIRAGANA_SYMBOLS,
+    KATAKANA_SYMBOLS: KATAKANA_SYMBOLS,
+    MIXED_KANA_SYMBOLS: MIXED_KANA_SYMBOLS,
     DEFAULT_MAX_SHUFFLE_ATTEMPTS: DEFAULT_MAX_SHUFFLE_ATTEMPTS,
     cloneBoard: cloneBoard,
     commitPendingMatch: commitPendingMatch,
