@@ -3363,6 +3363,7 @@ function testExtraBackgroundPresets() {
   assert.strictEqual(hexGood.preset.rows, 7);
   assert.strictEqual(hexGood.preset.cols, 7);
   assert.strictEqual(hexGood.preset.gluedEdges.length, 13);
+  assert.deepStrictEqual(hexGood.preset.wrappedView, wrappedProfiles['connect-four-hex-good-mobius-strip']);
 
   [
     'connect-four-6x7',
@@ -4516,6 +4517,11 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('debug-tile-value', { value: '128' }),
     makeElement('debug-bomb-tool', { value: 'number' }),
     makeElement('bomb-art-style', { value: 'png-1' }),
+    makeElement('hex-cover-offset-row', { hidden: true }),
+    makeElement('hex-cover-offset-x', { value: '0' }),
+    makeElement('hex-cover-offset-x-value'),
+    makeElement('hex-cover-offset-y', { value: '0' }),
+    makeElement('hex-cover-offset-y-value'),
     makeElement('undo-step'),
     makeElement('redo-step'),
     makeElement('export-state'),
@@ -5264,10 +5270,140 @@ function testPlacementHoverGuidanceRules() {
   assert.strictEqual(game.__test.lianliankanTilesMatch({ id: 'A', matchKey: 'pair-a' }, { id: 'B', matchKey: 'pair-a' }), true);
 }
 
+function testHexCoverOffsetDiagnosticsAndConnectFourWrappedView() {
+  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  assert.ok(html.includes('id="hex-cover-offset-row"'));
+  assert.ok(html.includes('id="hex-cover-offset-x" min="-2" max="2" step="0.05" value="0"'));
+  assert.ok(html.includes('id="hex-cover-offset-y" min="-2" max="2" step="0.05" value="0"'));
+  assert.ok(html.includes('data-i18n="debug.hexCoverOffset"'));
+  assert.ok(html.includes('data-i18n-aria-label="access.hexCoverOffsetX"'));
+  assert.ok(html.includes('data-i18n-aria-label="access.hexCoverOffsetY"'));
+
+  const { elements } = createHeadlessDomHarness();
+  elements.get('game-mode-select').value = 'connect-four';
+  elements.get('game-mode-select').listeners.change();
+  elements.get('surface-preset-select').value = 'connect-four-hex-good-mobius-strip';
+  elements.get('surface-preset-select').listeners.change();
+  assert.ok(elements.get('display-card-body').children.includes(elements.get('boundary-glue-wrapped-view-row')));
+  assert.strictEqual(elements.get('boundary-glue-wrapped-view-row').hidden, false, 'the good hex Möbius preset exposes Board view');
+  assert.strictEqual(elements.get('boundary-glue-wrapped-view-mode').value, 'usual');
+
+  elements.get('boundary-glue-wrapped-view-mode').value = 'wrapped';
+  elements.get('boundary-glue-wrapped-view-mode').listeners.change({ target: elements.get('boundary-glue-wrapped-view-mode') });
+  assert.strictEqual(elements.get('hex-cover-offset-row').hidden, true, 'the diagnostic remains debug-only');
+  enableHeadlessDebug(elements);
+  assert.strictEqual(elements.get('hex-cover-offset-row').hidden, false);
+  assert.strictEqual(elements.get('hex-cover-offset-x').disabled, false);
+  assert.strictEqual(elements.get('hex-cover-offset-y').disabled, false);
+  elements.get('hex-cover-offset-x').value = '0.5';
+  elements.get('hex-cover-offset-x').listeners.input();
+  elements.get('hex-cover-offset-y').value = '-0.25';
+  elements.get('hex-cover-offset-y').listeners.change();
+  assert.strictEqual(elements.get('hex-cover-offset-x-value').textContent, '0.50 r');
+  assert.strictEqual(elements.get('hex-cover-offset-y-value').textContent, '-0.25 r');
+  elements.get('export-state').listeners.click();
+  assert.ok(!elements.get('debug-export-output').value.includes('hexCoverOffset'), 'the diagnostic is not exported');
+
+  elements.get('game-mode-select').value = 'go';
+  elements.get('game-mode-select').listeners.change();
+  elements.get('surface-preset-select').value = game.BOUNDARY_GLUE_BOARD_PRESET_ID;
+  elements.get('surface-preset-select').listeners.change();
+  elements.get('boundary-glue-mode').value = game.BOUNDARY_GLUE_MODES.TORUS;
+  elements.get('boundary-glue-mode').listeners.change();
+  assert.strictEqual(elements.get('boundary-glue-wrapped-view-row').hidden, false, 'Go exposes Board view on the Boundary Glue Board');
+  elements.get('boundary-glue-mode').value = game.BOUNDARY_GLUE_MODES.RP2;
+  elements.get('boundary-glue-mode').listeners.change();
+  assert.strictEqual(elements.get('boundary-glue-wrapped-view-row').hidden, false, 'RP² exposes the reflected chart view');
+}
+
 function testUniversalBoardDisplayAndCoordinates() {
   assert.deepStrictEqual(
     [0, 7, 8, 24, 25].map((index) => game.goCoordinateFile(index)),
     ['A', 'H', 'J', 'Z', 'AA']
+  );
+  assert.deepStrictEqual(game.__test.hexCoverOffsetRange, { min: -2, max: 2, step: 0.05, default: 0 });
+  assert.deepStrictEqual(game.__test.normalizeHexCoverOffset({ x: 3, y: -3 }), { x: 2, y: -2 });
+  assert.deepStrictEqual(game.__test.normalizeHexCoverOffset({ x: 'bad', y: 1.5 }), { x: 0, y: 1.5 });
+  const usualStrip = game.createBilliardsState('usual-strip');
+  assert.strictEqual(Object.hasOwn(usualStrip.preset, 'wrappedCoverOffset'), false);
+  const usualStripGeometry = game.__test.buildGeometry(usualStrip.preset, 1000, 0, 1);
+  const usualStripDeck = game.__test.wrappedCoverDescriptor(
+    usualStripGeometry,
+    usualStrip.preset,
+    { x: 'repeat' }
+  );
+  assert.strictEqual(usualStripDeck.seamDerived, true);
+  assert.ok(Math.abs(usualStripDeck.x.x - (5 * Math.sqrt(3) * usualStripGeometry.radius)) < 0.001);
+  assert.deepStrictEqual(usualStripDeck.debugOffset, { x: 0, y: 0 });
+  const adjustedUsualStripDeck = game.__test.wrappedCoverDescriptor(
+    usualStripGeometry,
+    usualStrip.preset,
+    { x: 'repeat' },
+    { x: usualStripGeometry.radius * 0.5, y: -usualStripGeometry.radius * 0.25 }
+  );
+  assert.deepStrictEqual(
+    game.__test.wrappedDeckCopyTransform(adjustedUsualStripDeck, 1, 0),
+    {
+      x: usualStripDeck.x.x + (usualStripGeometry.radius * 0.5),
+      y: -usualStripGeometry.radius * 0.25,
+      reflected: false,
+      advanceX: usualStripDeck.x.x + (usualStripGeometry.radius * 0.5)
+    }
+  );
+  const usualStripSeam = game.__test.wrappedCoverSeamResidual(usualStripGeometry, usualStrip.preset, usualStripDeck);
+  assert.ok(usualStripSeam.max <= usualStripGeometry.radius * 0.0001, 'the derived usual-strip copies meet at every glued edge');
+  const goodMobius = game.createConnectFourState('connect-four-hex-good-mobius-strip');
+  const goodMobiusGeometry = game.__test.buildGeometry(goodMobius.preset, 1000, 0, 1);
+  const goodMobiusDeck = game.__test.wrappedCoverDescriptor(
+    goodMobiusGeometry,
+    goodMobius.preset,
+    { x: 'reflect-y' }
+  );
+  assert.strictEqual(goodMobiusDeck.seamDerived, true);
+  assert.ok(
+    game.__test.wrappedCoverSeamResidual(goodMobiusGeometry, goodMobius.preset, goodMobiusDeck).max
+      <= goodMobiusGeometry.radius * 0.0001,
+    'the good hex Möbius cover uses a fitted glide reflection'
+  );
+  const goodMobiusPoint = goodMobiusGeometry.cells[0];
+  const reflectedCopy = game.__test.wrappedDeckCopyTransform(goodMobiusDeck, 1, 0);
+  assert.strictEqual(reflectedCopy.reflected, true);
+  assert.deepStrictEqual(
+    game.__test.wrappedFundamentalCoordinates(
+      reflectedCopy.x + goodMobiusPoint.x,
+      reflectedCopy.y - goodMobiusPoint.y,
+      goodMobiusGeometry.width,
+      goodMobiusGeometry.height,
+      goodMobiusDeck
+    ),
+    { x: goodMobiusPoint.x, y: goodMobiusPoint.y, copyU: 1, copyV: 0 }
+  );
+  const rectangularDeck = game.__test.wrappedCoverDescriptor(
+    { width: 100, height: 80, lattice: { shape: 'square' } },
+    { gluedEdges: [] },
+    { x: 'repeat', y: 'repeat' }
+  );
+  assert.deepStrictEqual(rectangularDeck.x, { kind: 'repeat', x: 100, y: 0 });
+  assert.deepStrictEqual(rectangularDeck.y, { x: 0, y: 80 });
+  assert.deepStrictEqual(
+    game.__test.wrappedDeckCopyTransform({ x: 'repeat' }, 2, 0, 100, 80, { x: 5, y: 7 }),
+    { x: 210, y: 14, reflected: false, advanceX: 105 }
+  );
+  assert.deepStrictEqual(
+    game.__test.wrappedDeckCopyTransform({ x: 'reflect-y' }, 1, 0, 100, 80, { x: 5, y: 7 }),
+    { x: 105, y: 87, reflected: true, advanceX: 105 }
+  );
+  assert.deepStrictEqual(
+    game.__test.wrappedDeckCopyTransform({ x: 'reflect-y' }, 2, 0, 100, 80, { x: 5, y: 7 }),
+    { x: 210, y: 0, reflected: false, advanceX: 105 }
+  );
+  assert.deepStrictEqual(
+    game.__test.wrappedFundamentalCoordinates(217, 16, 100, 80, { x: 'repeat' }, { x: 5, y: 7 }),
+    { x: 7, y: 2, copyU: 2, copyV: 0 }
+  );
+  assert.deepStrictEqual(
+    game.__test.wrappedFundamentalCoordinates(112, 85, 100, 80, { x: 'reflect-y' }, { x: 5, y: 7 }),
+    { x: 7, y: 2, copyU: 1, copyV: 0 }
   );
   const { elements, calls } = createHeadlessDomHarness();
   assert.strictEqual(elements.get('gomoku-display-row').hidden, false);
@@ -7717,6 +7853,7 @@ function testFullscreenSettingsPreferencesAndMarkup() {
   const wrappedDefaults = {
     torus: 'usual',
     'klein-bottle': 'usual',
+    'projective-plane': 'usual',
     cylinder: 'usual',
     'mobius-strip': 'usual'
   };
@@ -7724,6 +7861,7 @@ function testFullscreenSettingsPreferencesAndMarkup() {
   assert.deepStrictEqual(game.__test.normalizeWrappedViewPreferences({ torus: 'wrapped', 'klein-bottle': 'wrapped' }), {
     torus: 'wrapped',
     'klein-bottle': 'wrapped',
+    'projective-plane': 'usual',
     cylinder: 'usual',
     'mobius-strip': 'usual'
   });
@@ -7733,13 +7871,19 @@ function testFullscreenSettingsPreferencesAndMarkup() {
       assert.strictEqual(key, game.__test.wrappedViewStorageKey);
       return JSON.stringify({ torus: 'wrapped', 'klein-bottle': 'usual' });
     }
-  }), { torus: 'wrapped', 'klein-bottle': 'usual', cylinder: 'usual', 'mobius-strip': 'usual' });
+  }), { torus: 'wrapped', 'klein-bottle': 'usual', 'projective-plane': 'usual', cylinder: 'usual', 'mobius-strip': 'usual' });
   assert.deepStrictEqual(game.__test.readWrappedViewPreferences({ getItem() { return '{broken json'; } }), wrappedDefaults);
   assert.deepStrictEqual(game.__test.normalizeWrappedViewProfile({ x: 'repeat', y: 'repeat' }), {
     x: 'repeat', y: 'repeat', preferenceKey: 'torus'
   });
   assert.deepStrictEqual(game.__test.normalizeWrappedViewProfile({ x: 'reflect-y' }), {
     x: 'reflect-y', y: '', preferenceKey: 'mobius-strip'
+  });
+  assert.deepStrictEqual(game.__test.wrappedViewProfileForBoundaryMode(game.BOUNDARY_GLUE_MODES.RP2), {
+    x: 'reflect-y', y: 'reflect-x', preferenceKey: 'projective-plane'
+  });
+  assert.deepStrictEqual(game.__test.normalizeWrappedViewProfile({ x: 'reflect-y', y: 'reflect-x' }), {
+    x: 'reflect-y', y: 'reflect-x', preferenceKey: 'projective-plane'
   });
   assert.strictEqual(game.__test.normalizeWrappedViewProfile({ x: 'invalid' }), null);
   assert.deepStrictEqual(game.__test.wrappedFundamentalCoordinates(27, 14, 10, 8, game.BOUNDARY_GLUE_MODES.TORUS), {
@@ -7755,6 +7899,20 @@ function testFullscreenSettingsPreferencesAndMarkup() {
   assert.deepStrictEqual(game.__test.wrappedFundamentalCoordinates(17, 6, 10, 8, { x: 'reflect-y' }), {
     x: 7, y: 2, copyU: 1, copyV: 0
   });
+  assert.deepStrictEqual(game.__test.wrappedDeckCopyTransform(game.BOUNDARY_GLUE_MODES.RP2, 1, 1, 10, 8), {
+    x: 20, y: 16, reflected: true, advanceX: 10, reflectX: true
+  });
+  assert.deepStrictEqual(game.__test.wrappedFundamentalCoordinates(17, 14, 10, 8, game.BOUNDARY_GLUE_MODES.RP2), {
+    x: 3, y: 2, copyU: 1, copyV: 1
+  });
+  assert.deepStrictEqual(game.__test.wrappedCoverCopyRange({ minX: -21, maxX: 81, minY: -21, maxY: 81 }, 60, 60, {
+    x: 'repeat', y: 'repeat'
+  }), { minU: -1, maxU: 1, minV: -1, maxV: 1 });
+  assert.deepStrictEqual(game.__test.wrappedCoverCopyRange({ minX: -21, maxX: 81, minY: -21, maxY: 81 }, 60, 60, {
+    x: 'reflect-y'
+  }), { minU: -1, maxU: 1, minV: 0, maxV: 0 });
+  assert.strictEqual(game.__test.wrappedRenderPixelRatio(true, 1, 0.58, { kind: 'fideChessMove' }), 1);
+  assert.strictEqual(game.__test.wrappedRenderPixelRatio(true, 1, 0.58, null), 2.5);
   assert.deepStrictEqual(game.__test.normalizeFullscreenPreferences({
     soundEnabled: 'yes',
     soundVolume: null,
@@ -7898,6 +8056,29 @@ function testRuntimeChineseLocaleCatalog() {
   }), '4个目标球，1个袋口；必须且只能放置一个母球');
   assert.strictEqual(window.SiteI18n.t('setup.billiardsContactTopLeft'), '左上');
   assert.strictEqual(window.SiteI18n.t('runtime.billiardsRackDirection'), '请点击第二个点设置球框方向');
+  assert.strictEqual(window.SiteI18n.t('debug.hexCoverOffset'), '六边形覆盖偏移');
+  assert.strictEqual(window.SiteI18n.t('debug.hexCoverOffsetValue', { value: '0.50' }), '0.50 r');
+  assert.strictEqual(window.SiteI18n.t('access.hexCoverOffsetX'), '六边形覆盖水平偏移');
+  assert.strictEqual(window.SiteI18n.t('access.hexCoverOffsetY'), '六边形覆盖垂直偏移');
+  assert.strictEqual(window.SiteI18n.t('online.waitingTitle'), '在线对局等待中');
+  assert.strictEqual(window.SiteI18n.t('online.readyPlayerCountOne'), '1 名玩家已准备');
+  assert.strictEqual(window.SiteI18n.t('online.readyPlayerCountMany', { count: 0 }), '0 名玩家已准备');
+  assert.strictEqual(window.SiteI18n.t('online.waitingReadyRule'), '当前所有玩家准备后，游戏才会开始。');
+  assert.deepStrictEqual(game.__test.onlineWaitingPromptCopy({ readyClientIds: [], clientId: 'local' }), {
+    title: 'Online game waiting',
+    context: '0 players prepared',
+    rules: 'Every current player must be prepared before the game begins.',
+    action: "I'm prepared",
+    status: ''
+  });
+  assert.strictEqual(
+    game.__test.onlineWaitingPromptCopy({ readyClientIds: ['local'], clientId: 'local' }).context,
+    '1 player prepared'
+  );
+  assert.strictEqual(
+    game.__test.onlineWaitingPromptCopy({ readyClientIds: ['another', 'local'], clientId: 'local' }).action,
+    'not prepared'
+  );
   assert.strictEqual(window.SiteI18n.t('setup.billiardsSoloRules'), '从白色母球向后拖动并松开击球。球会穿过粘合边，并从未粘合的边界反弹。将所有编号球打入袋中；母球落袋后可以自由摆放母球。');
   assert.ok(window.SiteI18n.t('setup.billiardsCompetitiveRules').includes('所有编号球入袋后，得分较高者获胜，同分则为和局。'));
   assert.strictEqual(window.SiteI18n.translateSource('yellow wins'), '黄方获胜！');
@@ -8015,6 +8196,7 @@ async function run() {
   testPlacementReachAssistRoutesAndGroups();
   testTimedPlacementReachAssistInteractions();
   testPlacementHoverGuidanceRules();
+  testHexCoverOffsetDiagnosticsAndConnectFourWrappedView();
   testUniversalBoardDisplayAndCoordinates();
   testGoCaptureSuicideKoAndScoring();
   testGoGluedCaptureUsesSurfaceSuccessor();

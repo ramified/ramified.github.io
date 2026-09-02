@@ -77,24 +77,6 @@
     },
     {
       "gameTypes": [
-        "2048"
-      ],
-      "id": "classic-4x4",
-      "label": "4*4 classic",
-      "key": "classic_4x4",
-      "file": "classic_4x4.preset.js"
-    },
-    {
-      "gameTypes": [
-        "2048"
-      ],
-      "id": "4-4-classic",
-      "label": "4*4 classic",
-      "key": "4_4_classic",
-      "file": "4_4_classic.preset.js"
-    },
-    {
-      "gameTypes": [
         "2048",
         "Billiard"
       ],
@@ -112,15 +94,6 @@
       "label": "genus 2",
       "key": "genus_2",
       "file": "genus_2.preset.js"
-    },
-    {
-      "gameTypes": [
-        "2048"
-      ],
-      "id": "random-glue-4x4",
-      "label": "random glue 4*4",
-      "key": "random_glue_4x4",
-      "file": "random_glue_4x4.preset.js"
     },
     {
       "gameTypes": [
@@ -179,9 +152,9 @@
     {
       "gameTypes": [
         "2048"
-      ],
+        ],
       "id": "mobius-strip",
-      "label": "M\u00f6bius strip",
+      "label": "Mobius strip",
       "key": "mobius_strip",
       "wrappedView": { "x": "reflect-y" },
       "file": "mobius_strip.preset.js"
@@ -330,6 +303,7 @@
       "id": "connect-four-usual-strip",
       "label": "usual strip",
       "key": "connect_four_usual_strip",
+      "wrappedView": { "x": "repeat" },
       "file": "connect_four_usual_strip.preset.js"
     },
     {
@@ -339,6 +313,7 @@
       "id": "connect-four-mobius-strip",
       "label": "M\u00f6bius strip",
       "key": "connect_four_mobius_strip",
+      "wrappedView": { "x": "reflect-y" },
       "file": "connect_four_mobius_strip.preset.js"
     },
     {
@@ -348,6 +323,7 @@
       "id": "connect-four-hex-usual-strip",
       "label": "hex usual strip",
       "key": "connect_four_hex_usual_strip",
+      "wrappedView": { "x": "repeat" },
       "file": "connect_four_hex_usual_strip.preset.js"
     },
     {
@@ -415,6 +391,7 @@
       "id": "hex-strip-9-9",
       "label": "hex strip 9*9",
       "key": "hex_strip_9_9",
+      "wrappedView": { "x": "repeat" },
       "file": "hex_strip_9_9.preset.js"
     },
     {
@@ -477,6 +454,7 @@
       "id": "focus-frame",
       "label": "focus frame",
       "key": "focus_frame",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
       "file": "focus_frame.preset.js"
     },
     {
@@ -616,15 +594,6 @@
     },
     {
       "gameTypes": [
-        "2048"
-        ],
-      "id": "glue-test",
-      "label": "glue_test",
-      "key": "glue_test",
-      "file": "glue_test.preset.js"
-    },
-    {
-      "gameTypes": [
         "Sokoban"
         ],
       "id": "remote-rotate",
@@ -675,6 +644,7 @@
       "id": "classic-hex",
       "label": "classic hex",
       "key": "classic_hex",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
       "file": "classic_hex.preset.js"
     },
     {
@@ -720,6 +690,7 @@
       "id": "hex-with-three-slits",
       "label": "hex with three slits",
       "key": "hex_with_three_slits",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
       "file": "hex_with_three_slits.preset.js"
     }, 
     ]

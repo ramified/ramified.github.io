@@ -159,6 +159,10 @@
   const PLACEMENT_PREVIEW_OPACITY_MIN = 10;
   const PLACEMENT_PREVIEW_OPACITY_MAX = 90;
   const PLACEMENT_PREVIEW_OPACITY_DEFAULT = 50;
+  const HEX_COVER_OFFSET_MIN = -2;
+  const HEX_COVER_OFFSET_MAX = 2;
+  const HEX_COVER_OFFSET_STEP = 0.05;
+  const HEX_COVER_OFFSET_DEFAULT = 0;
   const HEX_NEIGHBOR_HINT_DELAY_DEFAULT = 0.4;
   const HEX_NEIGHBOR_HINT_SIZE_DEFAULT = 75;
   const HEX_NEIGHBOR_HINT_STROKE_DEFAULT = 3;
@@ -492,7 +496,7 @@
   }
 
   const PRESET_FOLDER_URL = 'ramified_minigame_presets/';
-  const PRESET_ASSET_VERSION = '20260825-2';
+  const PRESET_ASSET_VERSION = '20260902-3';
   const OPTIONAL_SCRIPT_GROUPS = Object.freeze({
     [GAME_MODES.HEX]: Object.freeze([
       'js/background_homology.js?v=20260827-1',
@@ -674,6 +678,8 @@
   let undoStack = [];
   let redoStack = [];
   let importedPreset = null;
+  let hexCoverOffset = { x: HEX_COVER_OFFSET_DEFAULT, y: HEX_COVER_OFFSET_DEFAULT };
+  let hexCoverOffsetPresetId = '';
   let noMoveDirs = new Set();
   let eventQueueChangedBoard = false;
   let pendingBonusGameOver = false;
@@ -701,6 +707,7 @@
   let billiardsRackCenter = null;
   let fideChessDrag = null;
   let fideChessPendingPromotion = null;
+  const fideChessSymbolBufferCache = new Map();
   let suppressNextCanvasClick = false;
   let suppressCanvasClickTimer = null;
   let canvasStartPromptTimer = null;
@@ -726,6 +733,7 @@
   let wrappedViewPreferences = {
     torus: 'usual',
     'klein-bottle': 'usual',
+    'projective-plane': 'usual',
     cylinder: 'usual',
     'mobius-strip': 'usual'
   };
@@ -903,6 +911,11 @@
     refs.placementPreviewOpacityRow = document.getElementById('placement-preview-opacity-row');
     refs.placementPreviewOpacity = document.getElementById('placement-preview-opacity');
     refs.placementPreviewOpacityValue = document.getElementById('placement-preview-opacity-value');
+    refs.hexCoverOffsetRow = document.getElementById('hex-cover-offset-row');
+    refs.hexCoverOffsetX = document.getElementById('hex-cover-offset-x');
+    refs.hexCoverOffsetXValue = document.getElementById('hex-cover-offset-x-value');
+    refs.hexCoverOffsetY = document.getElementById('hex-cover-offset-y');
+    refs.hexCoverOffsetYValue = document.getElementById('hex-cover-offset-y-value');
     refs.sokobanObjectSize = document.getElementById('sokoban-object-size');
     refs.sokobanObjectSizeValue = document.getElementById('sokoban-object-size-value');
     refs.sokobanGlowInner = document.getElementById('sokoban-glow-inner');
@@ -1117,6 +1130,11 @@
     if (refs.placementPreviewOpacity) refs.placementPreviewOpacity.addEventListener('input', () => {
       syncPlacementPreviewOpacityOutput();
       render();
+    });
+    [refs.hexCoverOffsetX, refs.hexCoverOffsetY].forEach((input) => {
+      if (!input) return;
+      input.addEventListener('input', handleHexCoverOffsetChange);
+      input.addEventListener('change', handleHexCoverOffsetChange);
     });
     if (refs.fullscreenSettingsClose) refs.fullscreenSettingsClose.addEventListener('click', () => closeFullscreenSettings());
     if (refs.fullscreenSettingsExit) refs.fullscreenSettingsExit.addEventListener('click', exitFromFullscreenSettings);
@@ -1834,7 +1852,9 @@
       const ready = onlineLocalPlayerIsReady();
       refs.onlineReady.hidden = !waitingRound;
       refs.onlineReady.disabled = !waitingRound || !onlineSocketOpen() || !onlineStateHasPlayableRole();
-      refs.onlineReady.textContent = tr(ready ? 'not prepared' : "I'm prepared");
+      refs.onlineReady.textContent = ready
+        ? tk('online.notPrepared', 'not prepared')
+        : tk('online.prepared', "I'm prepared");
     }
     if (refs.onlineStatus) {
       refs.onlineStatus.textContent = onlineStatusText();
@@ -1863,19 +1883,30 @@
     onlineSendRaw({ type: 'acceptRematch', clientId: onlineState.clientId });
   }
 
+  function onlineWaitingPromptCopy(state = onlineState) {
+    const readyClientIds = state && Array.isArray(state.readyClientIds) ? state.readyClientIds : [];
+    const readyCount = readyClientIds.length;
+    const localReady = !!(state && readyClientIds.includes(state.clientId));
+    return {
+      title: tk('online.waitingTitle', 'Online game waiting'),
+      context: readyCount === 1
+        ? tk('online.readyPlayerCountOne', '1 player prepared')
+        : tk('online.readyPlayerCountMany', '{{count}} players prepared', { count: readyCount }),
+      rules: tk('online.waitingReadyRule', 'Every current player must be prepared before the game begins.'),
+      action: localReady
+        ? tk('online.notPrepared', 'not prepared')
+        : tk('online.prepared', "I'm prepared"),
+      status: ''
+    };
+  }
+
   function syncOnlineCanvasPrompt() {
     if (!onlineIsInRoom() || !game || !onlineState) return;
     if (onlineState.roundState === 'waiting') {
       showCanvasStartPrompt({
         force: true,
         action: 'online-ready',
-        copy: {
-          title: 'Online game waiting',
-          context: `${(onlineState.readyClientIds || []).length} player${(onlineState.readyClientIds || []).length === 1 ? '' : 's'} prepared`,
-          rules: 'Every current player must be prepared before the game begins.',
-          action: onlineLocalPlayerIsReady() ? 'not prepared' : "I'm prepared",
-          status: ''
-        }
+        copy: onlineWaitingPromptCopy(onlineState)
       });
       return;
     }
@@ -7944,6 +7975,12 @@
     if (refs.placementPreviewOpacityRow) refs.placementPreviewOpacityRow.hidden = !previewAvailable;
     if (refs.placementPreviewOpacity) refs.placementPreviewOpacity.disabled = !previewAvailable;
     syncPlacementPreviewOpacityOutput();
+    const hexCoverOffsetAvailable = hexCoverOffsetControlAvailable();
+    if (refs.hexCoverOffsetRow) refs.hexCoverOffsetRow.hidden = !hexCoverOffsetAvailable;
+    [refs.hexCoverOffsetX, refs.hexCoverOffsetY].forEach((input) => {
+      if (input) input.disabled = !hexCoverOffsetAvailable;
+    });
+    syncHexCoverOffsetOutputs();
     if (refs.onlineTurnFeedbackDuration) refs.onlineTurnFeedbackDuration.disabled = !debugMode;
     if (refs.onlineTurnFeedbackPreview) refs.onlineTurnFeedbackPreview.disabled = !debugMode;
     syncConnectFourHoleEditControl();
@@ -8114,6 +8151,7 @@
     return {
       torus: source.torus === 'wrapped' ? 'wrapped' : 'usual',
       'klein-bottle': source['klein-bottle'] === 'wrapped' ? 'wrapped' : 'usual',
+      'projective-plane': source['projective-plane'] === 'wrapped' ? 'wrapped' : 'usual',
       cylinder: source.cylinder === 'wrapped' ? 'wrapped' : 'usual',
       'mobius-strip': source['mobius-strip'] === 'wrapped' ? 'wrapped' : 'usual'
     };
@@ -8142,15 +8180,21 @@
   function wrappedBoundaryMode() {
     if (!selectedPresetIsBoundaryGlueBoard()) return '';
     const mode = selectedBoundaryGlueMode();
-    return mode === BOUNDARY_GLUE_MODES.TORUS || mode === BOUNDARY_GLUE_MODES.KLEIN_BOTTLE ? mode : '';
+    return mode === BOUNDARY_GLUE_MODES.TORUS
+      || mode === BOUNDARY_GLUE_MODES.KLEIN_BOTTLE
+      || mode === BOUNDARY_GLUE_MODES.RP2
+      ? mode
+      : '';
   }
 
   function normalizeWrappedViewProfile(value) {
     const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
     const x = source.x === 'repeat' || source.x === 'reflect-y' ? source.x : '';
-    const y = source.y === 'repeat' ? 'repeat' : '';
+    const y = source.y === 'repeat' || source.y === 'reflect-x' ? source.y : '';
     if (!x && !y) return null;
-    const preferenceKey = x === 'reflect-y'
+    const preferenceKey = x === 'reflect-y' && y === 'reflect-x'
+      ? 'projective-plane'
+      : x === 'reflect-y'
       ? (y ? 'klein-bottle' : 'mobius-strip')
       : (x && y ? 'torus' : 'cylinder');
     return { x, y, preferenceKey };
@@ -8159,6 +8203,9 @@
   function wrappedViewProfileForBoundaryMode(mode) {
     if (mode === BOUNDARY_GLUE_MODES.TORUS) return { x: 'repeat', y: 'repeat', preferenceKey: 'torus' };
     if (mode === BOUNDARY_GLUE_MODES.KLEIN_BOTTLE) return { x: 'reflect-y', y: 'repeat', preferenceKey: 'klein-bottle' };
+    // This is a repeated reflected chart for inspecting the boundary model,
+    // not the universal cover of RP².
+    if (mode === BOUNDARY_GLUE_MODES.RP2) return { x: 'reflect-y', y: 'reflect-x', preferenceKey: 'projective-plane' };
     return null;
   }
 
@@ -8210,6 +8257,7 @@
     wrappedViewPreferences = { ...wrappedViewPreferences, [profile.preferenceKey]: next };
     persistWrappedViewPreferences();
     syncWrappedViewUi();
+    syncDebugModeUi();
     render();
   }
 
@@ -13365,12 +13413,12 @@
     const wrappedCover = wrappedViewIsActive(preset);
     const removed = game ? game.removed : initialRemovedSet(preset);
     const deviceDpr = Math.max((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1, 1);
-    // Covers start zoomed out, so render them with a supersampled backing store from
-    // the first frame as well as while zooming in. The CSS viewport remains unchanged.
-    const coverTargetDpr = wrappedCover
-      ? Math.max(2.5, deviceDpr * Math.max(1, wrappedViewCamera().scale))
-      : deviceDpr;
-    const dpr = Math.min(coverTargetDpr, 4);
+    const dpr = wrappedRenderPixelRatio(
+      wrappedCover,
+      deviceDpr,
+      wrappedCover ? wrappedViewCamera().scale : 1,
+      currentAnimation && currentAnimation.event
+    );
     const sizing = canvasRenderSizing();
     // A cover has no outside boundary: margins and coordinate gutters would become visible seams
     // between adjacent fundamental domains.
@@ -13534,30 +13582,326 @@
       minY: centerY + ((0 - centerY - camera.y) / scale),
       maxY: centerY + ((height - centerY - camera.y) / scale)
     };
-    const copyWidth = geometry.width;
-    const copyHeight = geometry.height;
-    const minU = profile.x ? Math.floor(worldBounds.minX / copyWidth) - 1 : 0;
-    const maxU = profile.x ? Math.floor(worldBounds.maxX / copyWidth) + 1 : 0;
-    const minV = profile.y ? Math.floor(worldBounds.minY / copyHeight) - 1 : 0;
-    const maxV = profile.y ? Math.floor(worldBounds.maxY / copyHeight) + 1 : 0;
+    const deckOffset = activeHexCoverOffset(geometry, game && game.preset ? game.preset : selectedPreset());
+    const deck = wrappedCoverDescriptor(geometry, game && game.preset ? game.preset : selectedPreset(), profile, deckOffset);
+    const range = wrappedCoverCopyRange(worldBounds, deck);
 
     ctx.save();
     ctx.translate(centerX + camera.x, centerY + camera.y);
     ctx.scale(scale, scale);
     ctx.translate(-centerX, -centerY);
-    for (let u = minU; u <= maxU; u += 1) {
-      for (let v = minV; v <= maxV; v += 1) {
+    for (let u = range.minU; u <= range.maxU; u += 1) {
+      for (let v = range.minV; v <= range.maxV; v += 1) {
+        const transform = wrappedDeckCopyTransform(deck, u, v);
         ctx.save();
-        ctx.translate(u * copyWidth, v * copyHeight);
-        if (profile.x === 'reflect-y' && Math.abs(u % 2) === 1) {
-          ctx.translate(0, copyHeight);
-          ctx.scale(1, -1);
-        }
+        ctx.translate(transform.x, transform.y);
+        if (transform.reflectX || transform.reflected) ctx.scale(transform.reflectX ? -1 : 1, transform.reflected ? -1 : 1);
         drawFundamentalBoard();
         ctx.restore();
       }
     }
     ctx.restore();
+  }
+
+  function normalizeWrappedDeckOffset(value) {
+    const source = value && typeof value === 'object' ? value : {};
+    return {
+      x: Number.isFinite(Number(source.x)) ? Number(source.x) : 0,
+      y: Number.isFinite(Number(source.y)) ? Number(source.y) : 0
+    };
+  }
+
+  function isWrappedCoverDescriptor(value) {
+    return !!(value && value.__wrappedCoverDescriptor === true);
+  }
+
+  function wrappedFallbackDescriptor(profileOrMode, copyWidth, copyHeight, deckOffset = null) {
+    const profile = typeof profileOrMode === 'string'
+      ? wrappedViewProfileForBoundaryMode(profileOrMode)
+      : normalizeWrappedViewProfile(profileOrMode);
+    if (!profile) return null;
+    return {
+      __wrappedCoverDescriptor: true,
+      profile,
+      width: copyWidth,
+      height: copyHeight,
+      x: profile.x === 'reflect-y'
+        ? { kind: 'reflect-y', advanceX: copyWidth, mirrorY: copyHeight }
+        : { kind: 'repeat', x: copyWidth, y: 0 },
+      y: profile.y === 'reflect-x'
+        ? { kind: 'reflect-x', x: 0, y: copyHeight }
+        : { x: 0, y: copyHeight },
+      debugOffset: normalizeWrappedDeckOffset(deckOffset),
+      seamDerived: false
+    };
+  }
+
+  function wrappedFullEdgeSegment(geom, edge) {
+    if (!geom || !edge || !geom.lattice || !Number.isInteger(edge.dir)) return null;
+    const cell = geom.cells[indexOf(edge.row, edge.col, geom.cols)];
+    if (!cell) return null;
+    const points = tilePoints(cell.x, cell.y, geom.radius, geom.lattice);
+    const sides = geom.lattice.sides;
+    return {
+      start: points[modulo(edge.dir - 1, sides)],
+      end: points[modulo(edge.dir, sides)]
+    };
+  }
+
+  function segmentMidpoint(segment) {
+    return {
+      x: (segment.start.x + segment.end.x) / 2,
+      y: (segment.start.y + segment.end.y) / 2
+    };
+  }
+
+  function medianNumber(values) {
+    if (!values.length) return null;
+    const sorted = values.slice().sort((left, right) => left - right);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  }
+
+  function seamPairDetails(geom, preset) {
+    if (!geom || !preset || !Array.isArray(preset.gluedEdges)) return [];
+    return preset.gluedEdges.map((pair) => {
+      const first = wrappedFullEdgeSegment(geom, pair.first);
+      const second = wrappedFullEdgeSegment(geom, pair.second);
+      if (!first || !second) return null;
+      const firstMidpoint = segmentMidpoint(first);
+      const secondMidpoint = segmentMidpoint(second);
+      return {
+        first,
+        second,
+        delta: {
+          x: secondMidpoint.x - firstMidpoint.x,
+          y: secondMidpoint.y - firstMidpoint.y
+        }
+      };
+    }).filter(Boolean);
+  }
+
+  function seamAxisForDelta(delta) {
+    return Math.abs(delta.x) >= Math.abs(delta.y) ? 'x' : 'y';
+  }
+
+  function fittedRepeatVector(pairs, axis) {
+    const candidates = pairs.filter((pair) => seamAxisForDelta(pair.delta) === axis);
+    if (!candidates.length) return null;
+    const positive = candidates.map((pair) => {
+      const sign = axis === 'x'
+        ? (pair.delta.x >= 0 ? 1 : -1)
+        : (pair.delta.y >= 0 ? 1 : -1);
+      return { x: pair.delta.x * sign, y: pair.delta.y * sign };
+    });
+    const x = medianNumber(positive.map((candidate) => candidate.x));
+    const y = medianNumber(positive.map((candidate) => candidate.y));
+    return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+  }
+
+  function fittedMobiusGlide(pairs) {
+    const candidates = pairs.filter((pair) => seamAxisForDelta(pair.delta) === 'x');
+    if (!candidates.length) return null;
+    const values = candidates.map((pair) => {
+      const firstMidpoint = segmentMidpoint(pair.first);
+      const secondMidpoint = segmentMidpoint(pair.second);
+      const left = pair.delta.x >= 0 ? firstMidpoint : secondMidpoint;
+      const right = pair.delta.x >= 0 ? secondMidpoint : firstMidpoint;
+      return {
+        advanceX: right.x - left.x,
+        mirrorY: right.y + left.y
+      };
+    });
+    const advanceX = medianNumber(values.map((value) => value.advanceX));
+    const mirrorY = medianNumber(values.map((value) => value.mirrorY));
+    return Number.isFinite(advanceX) && Number.isFinite(mirrorY)
+      ? { advanceX, mirrorY }
+      : null;
+  }
+
+  function segmentDistance(left, right) {
+    const direct = Math.max(
+      Math.hypot(left.start.x - right.start.x, left.start.y - right.start.y),
+      Math.hypot(left.end.x - right.end.x, left.end.y - right.end.y)
+    );
+    const reversed = Math.max(
+      Math.hypot(left.start.x - right.end.x, left.start.y - right.end.y),
+      Math.hypot(left.end.x - right.start.x, left.end.y - right.start.y)
+    );
+    return Math.min(direct, reversed);
+  }
+
+  function transformWrappedSegment(segment, transform) {
+    const point = (value) => ({
+      x: transform.reflectX ? transform.x - value.x : transform.x + value.x,
+      y: transform.reflected ? transform.y - value.y : transform.y + value.y
+    });
+    return { start: point(segment.start), end: point(segment.end) };
+  }
+
+  function wrappedCoverSeamResidual(geom, preset, descriptor) {
+    if (!geom || !preset || !isWrappedCoverDescriptor(descriptor)) return null;
+    const pairs = seamPairDetails(geom, preset);
+    const residuals = pairs.map((pair) => {
+      const axis = seamAxisForDelta(pair.delta);
+      if (axis === 'x' && descriptor.profile.x) {
+        const forward = wrappedDeckCopyTransform(descriptor, 1, 0);
+        return Math.min(
+          segmentDistance(transformWrappedSegment(pair.first, forward), pair.second),
+          segmentDistance(transformWrappedSegment(pair.second, forward), pair.first)
+        );
+      }
+      if (axis === 'y' && descriptor.profile.y) {
+        const forward = wrappedDeckCopyTransform(descriptor, 0, 1);
+        return Math.min(
+          segmentDistance(transformWrappedSegment(pair.first, forward), pair.second),
+          segmentDistance(transformWrappedSegment(pair.second, forward), pair.first)
+        );
+      }
+      return null;
+    }).filter((value) => Number.isFinite(value));
+    if (!residuals.length) return { max: 0, mean: 0, residuals: [] };
+    return {
+      max: Math.max(...residuals),
+      mean: residuals.reduce((total, value) => total + value, 0) / residuals.length,
+      residuals
+    };
+  }
+
+  function wrappedCoverDescriptor(geom, preset, profileOrMode, deckOffset = null) {
+    const profile = typeof profileOrMode === 'string'
+      ? wrappedViewProfileForBoundaryMode(profileOrMode)
+      : normalizeWrappedViewProfile(profileOrMode);
+    // Fit and validate the physical deck at its exact zero adjustment. The
+    // debug controls are deliberately applied only after that fit succeeds.
+    const requestedOffset = normalizeWrappedDeckOffset(deckOffset);
+    const fallback = wrappedFallbackDescriptor(profile, geom ? geom.width : 0, geom ? geom.height : 0);
+    if (!fallback) return null;
+    fallback.debugOffset = requestedOffset;
+    if (!geom || !preset || !geom.lattice || geom.lattice.shape !== 'hex') return fallback;
+    const pairs = seamPairDetails(geom, preset);
+    if (!pairs.length) return fallback;
+    const descriptor = {
+      ...fallback,
+      x: { ...fallback.x },
+      y: { ...fallback.y },
+      debugOffset: { x: 0, y: 0 }
+    };
+    if (profile.x === 'reflect-y') {
+      const glide = fittedMobiusGlide(pairs);
+      if (glide && glide.advanceX > 0) descriptor.x = { kind: 'reflect-y', ...glide };
+    } else if (profile.x === 'repeat') {
+      const vector = fittedRepeatVector(pairs, 'x');
+      if (vector && vector.x > 0) descriptor.x = { kind: 'repeat', ...vector };
+    }
+    if (profile.y === 'repeat') {
+      const vector = fittedRepeatVector(pairs, 'y');
+      if (vector && vector.y > 0) descriptor.y = vector;
+    }
+    const residual = wrappedCoverSeamResidual(geom, preset, descriptor);
+    const tolerance = Math.max(0.0001, (Number(geom.radius) || 1) * 0.0001);
+    if (!residual || residual.max > tolerance) {
+      fallback.debugOffset = requestedOffset;
+      return fallback;
+    }
+    descriptor.seamDerived = true;
+    descriptor.debugOffset = requestedOffset;
+    return descriptor;
+  }
+
+  function wrappedDeckCopyTransform(profileOrDescriptor, copyU, copyV, copyWidth, copyHeight, deckOffset = null) {
+    const descriptor = isWrappedCoverDescriptor(profileOrDescriptor)
+      ? profileOrDescriptor
+      : wrappedFallbackDescriptor(profileOrDescriptor, copyWidth, copyHeight, deckOffset);
+    if (!descriptor) return { x: 0, y: 0, reflected: false, advanceX: copyWidth };
+    const u = Number.isInteger(copyU) ? copyU : 0;
+    const v = Number.isInteger(copyV) ? copyV : 0;
+    const offset = normalizeWrappedDeckOffset(descriptor.debugOffset);
+    const profile = descriptor.profile;
+    let x = 0;
+    let y = 0;
+    let reflected = false;
+    let reflectX = false;
+    let advanceX = descriptor.width;
+    if (profile.x === 'reflect-y') {
+      advanceX = Math.max(descriptor.width * 0.2, descriptor.x.advanceX + offset.x);
+      reflected = wrappedCopyIsReflected(profile, u);
+      x = u * advanceX;
+      y = reflected ? descriptor.x.mirrorY + offset.y : 0;
+    } else if (profile.x === 'repeat') {
+      const stepX = Math.max(descriptor.width * 0.2, descriptor.x.x + offset.x);
+      const stepY = descriptor.x.y + offset.y;
+      advanceX = stepX;
+      x = u * stepX;
+      y = u * stepY;
+    }
+    if (profile.y === 'repeat' || profile.y === 'reflect-x') {
+      x += v * descriptor.y.x;
+      y += v * descriptor.y.y;
+      reflectX = profile.y === 'reflect-x' && Math.abs(v % 2) === 1;
+      if (reflectX) x += descriptor.width;
+    }
+    const result = { x, y, reflected, advanceX };
+    if (reflectX) result.reflectX = true;
+    return result;
+  }
+
+  function wrappedCoverCopyRange(worldBounds, descriptorOrWidth, copyHeight, profile, deckOffset = null) {
+    const descriptor = isWrappedCoverDescriptor(descriptorOrWidth)
+      ? descriptorOrWidth
+      : wrappedFallbackDescriptor(profile, descriptorOrWidth, copyHeight, deckOffset);
+    if (!descriptor) return { minU: 0, maxU: 0, minV: 0, maxV: 0 };
+    const rangeForAxis = (min, max, size, repeats) => {
+      if (!repeats || !Number.isFinite(size) || size <= 0) return { min: 0, max: 0 };
+      // A copy [n*size, (n+1)*size] is needed exactly when it intersects the
+      // viewport. The old one-copy padding redrew fully off-screen boards on
+      // every frame, which is particularly costly for chess pieces.
+      return {
+        min: Math.floor(min / size),
+        max: Math.ceil(max / size) - 1
+      };
+    };
+    const horizontalStep = wrappedDeckCopyTransform(descriptor, 1, 0).advanceX;
+    const horizontal = rangeForAxis(worldBounds.minX, worldBounds.maxX, horizontalStep, !!descriptor.profile.x);
+    if (descriptor.profile.y === 'reflect-x') {
+      // Odd vertical chart rows mirror around their right edge, so include
+      // neighbouring columns when determining which copies can be visible.
+      horizontal.min -= 1;
+      horizontal.max += 1;
+    }
+    let vertical = { min: 0, max: 0 };
+    if (descriptor.profile.y) {
+      vertical = { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY };
+      for (let u = horizontal.min; u <= Math.max(horizontal.min, horizontal.max); u += 1) {
+        const transform = wrappedDeckCopyTransform(descriptor, u, 0);
+        const candidate = rangeForAxis(
+          worldBounds.minY - transform.y,
+          worldBounds.maxY - transform.y,
+          descriptor.y.y,
+          true
+        );
+        vertical.min = Math.min(vertical.min, candidate.min);
+        vertical.max = Math.max(vertical.max, candidate.max);
+      }
+    }
+    return {
+      minU: horizontal.min,
+      maxU: Math.max(horizontal.min, horizontal.max),
+      minV: vertical.min,
+      maxV: Math.max(vertical.min, vertical.max)
+    };
+  }
+
+  function wrappedRenderPixelRatio(wrappedCover, deviceDpr, cameraScale, animationEvent = null) {
+    const safeDpr = Math.max(1, Number(deviceDpr) || 1);
+    if (!wrappedCover) return Math.min(safeDpr, 4);
+    // Covers normally stay supersampled while zoomed out. A chess animation
+    // instead prioritizes frame cadence: dense repeated boards otherwise turn
+    // a short move into just one or two expensive redraws.
+    const animatingChess = !!(animationEvent && animationEvent.kind === 'fideChessMove');
+    const animationCap = animatingChess ? Math.min(safeDpr, 1.5) : 4;
+    const target = Math.max(2.5, safeDpr * Math.max(1, Number(cameraScale) || 1));
+    return Math.min(target, 4, animationCap);
   }
 
   function wrappedDisplayPointDetails(displayPoint) {
@@ -13573,7 +13917,13 @@
     const centerY = height / 2;
     const worldX = centerX + ((displayPoint.x - centerX - camera.x) / camera.scale);
     const worldY = centerY + ((displayPoint.y - centerY - camera.y) / camera.scale);
-    const fundamental = wrappedFundamentalCoordinates(worldX, worldY, width, height, profile);
+    const deck = wrappedCoverDescriptor(
+      geometry,
+      game && game.preset ? game.preset : selectedPreset(),
+      profile,
+      activeHexCoverOffset(geometry)
+    );
+    const fundamental = wrappedFundamentalCoordinates(worldX, worldY, width, height, deck);
     return fundamental ? { ...fundamental, profile } : null;
   }
 
@@ -13596,9 +13946,15 @@
     const centerY = height / 2;
     const copyU = Number.isInteger(details && details.copyU) ? details.copyU : 0;
     const copyV = Number.isInteger(details && details.copyV) ? details.copyV : 0;
-    const reflected = wrappedCopyIsReflected(profile, copyU);
-    const worldX = copyU * width + point.x;
-    const worldY = copyV * height + (reflected ? height - point.y : point.y);
+    const deck = wrappedCoverDescriptor(
+      geometry,
+      game && game.preset ? game.preset : selectedPreset(),
+      profile,
+      activeHexCoverOffset(geometry)
+    );
+    const transform = wrappedDeckCopyTransform(deck, copyU, copyV);
+    const worldX = transform.reflectX ? transform.x - point.x : transform.x + point.x;
+    const worldY = transform.reflected ? transform.y - point.y : transform.y + point.y;
     const scale = Math.max(WRAPPED_VIEW_MIN_SCALE, Math.min(WRAPPED_VIEW_MAX_SCALE, camera.scale));
     return {
       x: centerX + camera.x + (scale * (worldX - centerX)),
@@ -13606,22 +13962,34 @@
     };
   }
 
-  function wrappedFundamentalCoordinates(worldX, worldY, width, height, profileOrMode) {
-    const profile = typeof profileOrMode === 'string'
-      ? wrappedViewProfileForBoundaryMode(profileOrMode)
-      : normalizeWrappedViewProfile(profileOrMode);
-    if (!profile || !Number.isFinite(worldX) || !Number.isFinite(worldY) || width <= 0 || height <= 0) return null;
-    if ((!profile.x && (worldX < 0 || worldX >= width)) || (!profile.y && (worldY < 0 || worldY >= height))) return null;
-    const copyU = profile.x ? Math.floor(worldX / width) : 0;
-    const copyV = profile.y ? Math.floor(worldY / height) : 0;
-    const localX = profile.x ? modulo(worldX, width) : worldX;
-    const localY = profile.y ? modulo(worldY, height) : worldY;
-    return {
-      x: localX,
-      y: profile.x === 'reflect-y' && Math.abs(copyU % 2) === 1 ? modulo(-localY, height) : localY,
-      copyU,
-      copyV
-    };
+  function wrappedFundamentalCoordinates(worldX, worldY, width, height, profileOrDescriptor, deckOffset = null) {
+    const descriptor = isWrappedCoverDescriptor(profileOrDescriptor)
+      ? profileOrDescriptor
+      : wrappedFallbackDescriptor(profileOrDescriptor, width, height, deckOffset);
+    if (!descriptor || !Number.isFinite(worldX) || !Number.isFinite(worldY) || width <= 0 || height <= 0) return null;
+    const profile = descriptor.profile;
+    if (!profile.x && (worldX < 0 || worldX >= width)) return null;
+    const horizontalStep = wrappedDeckCopyTransform(descriptor, 1, 0).advanceX;
+    const roughU = profile.x ? Math.floor(worldX / horizontalStep) : 0;
+    // Draw order is ascending, so an overlap in a tight seam-derived deck is
+    // owned by the later copy that is visibly on top.
+    const uCandidates = profile.x ? [roughU + 1, roughU, roughU - 1] : [0];
+    for (const copyU of uCandidates) {
+      const horizontalTransform = wrappedDeckCopyTransform(descriptor, copyU, 0);
+      const verticalStep = descriptor.y.y;
+      const roughV = profile.y
+        ? Math.floor((worldY - horizontalTransform.y) / verticalStep)
+        : 0;
+      const vCandidates = profile.y ? [roughV + 1, roughV, roughV - 1] : [0];
+      for (const copyV of vCandidates) {
+        const transform = wrappedDeckCopyTransform(descriptor, copyU, copyV);
+        const localX = transform.reflectX ? transform.x - worldX : worldX - transform.x;
+        const localY = transform.reflected ? transform.y - worldY : worldY - transform.y;
+        if (localX < 0 || localX >= width || localY < 0 || localY >= height) continue;
+        return { x: localX, y: localY, copyU, copyV };
+      }
+    }
+    return null;
   }
 
   function panWrappedViewByClientDelta(clientDx, clientDy) {
@@ -17232,16 +17600,26 @@
 
   function drawFideChessSymbolPieceWithCutouts(ctx, geom, radius, kind, symbol, side) {
     const size = Math.max(48, Math.ceil(radius * 3.7 + geom.radius * 0.5));
-    const buffer = createFideChessSymbolBuffer(size);
-    const bufferCtx = buffer && typeof buffer.getContext === 'function' ? buffer.getContext('2d') : null;
-    if (!bufferCtx) return false;
-    bufferCtx.clearRect(0, 0, size, size);
-    bufferCtx.save();
-    bufferCtx.translate(size / 2, size / 2);
-    drawFideChessSymbolGlyph(bufferCtx, geom, radius, symbol, side);
-    cutFideChessSymbolInterior(bufferCtx, radius, kind);
-    bufferCtx.restore();
-    ctx.drawImage(buffer, -size / 2, -size / 2, size, size);
+    // The repeated cover draws this same black bishop/knight many times. Reuse
+    // the punched-out glyph rather than allocating and rasterizing a canvas
+    // for every piece on every animation frame.
+    const cacheKey = `${kind}|${side}|${symbol}|${size}|${Math.round(radius)}|${Math.round(geom.radius)}`;
+    let cached = fideChessSymbolBufferCache.get(cacheKey);
+    if (!cached) {
+      const buffer = createFideChessSymbolBuffer(size);
+      const bufferCtx = buffer && typeof buffer.getContext === 'function' ? buffer.getContext('2d') : null;
+      if (!bufferCtx) return false;
+      bufferCtx.clearRect(0, 0, size, size);
+      bufferCtx.save();
+      bufferCtx.translate(size / 2, size / 2);
+      drawFideChessSymbolGlyph(bufferCtx, geom, radius, symbol, side);
+      cutFideChessSymbolInterior(bufferCtx, radius, kind);
+      bufferCtx.restore();
+      if (fideChessSymbolBufferCache.size >= 48) fideChessSymbolBufferCache.clear();
+      cached = { buffer, size };
+      fideChessSymbolBufferCache.set(cacheKey, cached);
+    }
+    ctx.drawImage(cached.buffer, -cached.size / 2, -cached.size / 2, cached.size, cached.size);
     return true;
   }
 
@@ -29276,6 +29654,78 @@
     if (refs.placementPreviewOpacityValue) refs.placementPreviewOpacityValue.textContent = `${percent}%`;
   }
 
+  function normalizeHexCoverOffset(value) {
+    const source = value && typeof value === 'object' ? value : {};
+    return {
+      x: clampNumber(Number(source.x), HEX_COVER_OFFSET_MIN, HEX_COVER_OFFSET_MAX, HEX_COVER_OFFSET_DEFAULT),
+      y: clampNumber(Number(source.y), HEX_COVER_OFFSET_MIN, HEX_COVER_OFFSET_MAX, HEX_COVER_OFFSET_DEFAULT)
+    };
+  }
+
+  function hexCoverOffsetPresetKey(preset) {
+    if (!preset || typeof preset !== 'object') return '';
+    return String(preset.sourceId || preset.id || preset.label || 'unnamed-preset');
+  }
+
+  function resetHexCoverOffsetForPreset(preset = game && game.preset ? game.preset : selectedPreset()) {
+    const key = hexCoverOffsetPresetKey(preset);
+    if (hexCoverOffsetPresetId === key) return hexCoverOffset;
+    hexCoverOffsetPresetId = key;
+    // These are diagnostic deltas from the seam-derived transform, never a
+    // preset calibration. Switching presets starts a fresh, zero adjustment.
+    hexCoverOffset = { x: HEX_COVER_OFFSET_DEFAULT, y: HEX_COVER_OFFSET_DEFAULT };
+    if (refs.hexCoverOffsetX) refs.hexCoverOffsetX.value = String(hexCoverOffset.x);
+    if (refs.hexCoverOffsetY) refs.hexCoverOffsetY.value = String(hexCoverOffset.y);
+    return hexCoverOffset;
+  }
+
+  function selectedHexCoverOffset() {
+    return normalizeHexCoverOffset({
+      x: refs.hexCoverOffsetX ? refs.hexCoverOffsetX.value : hexCoverOffset.x,
+      y: refs.hexCoverOffsetY ? refs.hexCoverOffsetY.value : hexCoverOffset.y
+    });
+  }
+
+  function hexCoverOffsetControlAvailable(preset = game && game.preset ? game.preset : selectedPreset()) {
+    const profile = wrappedViewProfile(preset);
+    return !!(
+      debugMode
+      && preset
+      && latticeForPreset(preset).shape === 'hex'
+      && profile
+      && profile.x
+      && wrappedViewIsActive(preset)
+    );
+  }
+
+  function activeHexCoverOffset(geom = geometry, preset = game && game.preset ? game.preset : selectedPreset()) {
+    if (!preset || !wrappedViewIsActive(preset) || latticeForPreset(preset).shape !== 'hex' || !geom || !Number.isFinite(geom.radius)) {
+      return { x: 0, y: 0 };
+    }
+    resetHexCoverOffsetForPreset(preset);
+    const offset = selectedHexCoverOffset();
+    return { x: offset.x * geom.radius, y: offset.y * geom.radius };
+  }
+
+  function hexCoverOffsetValueText(value) {
+    return tk('debug.hexCoverOffsetValue', '{{value}} r', { value: Number(value).toFixed(2) });
+  }
+
+  function syncHexCoverOffsetOutputs() {
+    resetHexCoverOffsetForPreset();
+    const offset = selectedHexCoverOffset();
+    hexCoverOffset = offset;
+    if (refs.hexCoverOffsetX) refs.hexCoverOffsetX.value = String(offset.x);
+    if (refs.hexCoverOffsetY) refs.hexCoverOffsetY.value = String(offset.y);
+    if (refs.hexCoverOffsetXValue) refs.hexCoverOffsetXValue.textContent = hexCoverOffsetValueText(offset.x);
+    if (refs.hexCoverOffsetYValue) refs.hexCoverOffsetYValue.textContent = hexCoverOffsetValueText(offset.y);
+  }
+
+  function handleHexCoverOffsetChange() {
+    syncHexCoverOffsetOutputs();
+    render();
+  }
+
   function selectedHexNeighborHintSize() {
     const value = refs.hexNeighborSize ? Number(refs.hexNeighborSize.value) : HEX_NEIGHBOR_HINT_SIZE_DEFAULT;
     return clampNumber(value, 50, 100, HEX_NEIGHBOR_HINT_SIZE_DEFAULT) / 100;
@@ -30395,6 +30845,7 @@
       billiardsCueGuidanceFlags,
       billiardsShotDragFromDisplayPoints,
       canvasStartPromptCopy,
+      onlineWaitingPromptCopy,
       lianliankanTilesMatch,
       placementHoverPreview,
       selectedPlacementPreviewOpacity,
@@ -30407,11 +30858,25 @@
       fullscreenSettingsDefaults: { ...FULLSCREEN_SETTINGS_DEFAULTS },
       wrappedViewStorageKey: WRAPPED_VIEW_STORAGE_KEY,
       wrappedViewDefaultScale: WRAPPED_VIEW_DEFAULT_SCALE,
+      hexCoverOffsetRange: {
+        min: HEX_COVER_OFFSET_MIN,
+        max: HEX_COVER_OFFSET_MAX,
+        step: HEX_COVER_OFFSET_STEP,
+        default: HEX_COVER_OFFSET_DEFAULT
+      },
+      wrappedCoverCopyRange,
+      wrappedDeckCopyTransform,
+      wrappedCoverDescriptor,
+      wrappedCoverSeamResidual,
+      wrappedRenderPixelRatio,
+      normalizeHexCoverOffset,
+      buildGeometry,
       normalizeFullscreenPreferences,
       readFullscreenPreferences,
       persistFullscreenPreferences,
       normalizeWrappedViewPreferences,
       normalizeWrappedViewProfile,
+      wrappedViewProfileForBoundaryMode,
       readWrappedViewPreferences,
       wrappedFundamentalCoordinates,
       setFullscreenPreferences(value) {

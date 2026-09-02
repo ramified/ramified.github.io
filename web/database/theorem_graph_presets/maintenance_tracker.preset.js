@@ -38,8 +38,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 76.4,
-      "y": 81.4,
+      "x": 76.3,
+      "y": 81.2,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -73,8 +73,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 116.6,
-      "y": 309.7
+      "x": 116.4,
+      "y": 309
     },
     {
       "id": "n39",
@@ -95,8 +95,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 292.2,
-      "y": 370.6
+      "x": 291.8,
+      "y": 369.8
     },
     {
       "id": "n58",
@@ -110,8 +110,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 269.1,
-      "y": 81.4
+      "x": 268.8,
+      "y": 81.2
     },
     {
       "id": "n63",
@@ -132,8 +132,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 469.7,
-      "y": 370.6,
+      "x": 469.1,
+      "y": 369.8,
       "childGraph": {
         "title": "double click",
         "nodes": [
@@ -210,19 +210,19 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "4d",
           "label": "4d",
           "type": "checkbox",
-          "text": "https://www.dimensions-math.org/Dim_E.htm\n4d toys"
+          "text": "- [x] https://www.dimensions-math.org/Dim_E.htm\n- [x] 4d toys"
         },
         {
           "id": "3-2d",
           "label": "3/2d",
           "type": "checkbox",
-          "text": "Isoball 4\nStephen's Sausage Roll\nThe Geometer's Sketchpad\nPlotTropCurve\nProjective Hex"
+          "text": "- [x] Isoball 4\n- [x] Stephen's Sausage Roll\n- [x] The Geometer's Sketchpad\n- [x] PlotTropCurve\n- [x] Projective Hex"
         },
         {
           "id": "updates",
           "label": "updates",
           "type": "checkbox",
-          "text": "Lievis is also used in Higher-Dimensional Slice Calculator"
+          "text": "- [x] Lievis is also used in Higher-Dimensional Slice Calculator"
         }
       ],
       "setting": "",
@@ -230,10 +230,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#7a6f65",
-      "fillColor": "#f7f5f1",
-      "x": 658.1,
-      "y": 343.7
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 657.2,
+      "y": 342.9
     },
     {
       "id": "n66",
@@ -254,8 +254,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 359.7,
-      "y": 145.2
+      "x": 359.2,
+      "y": 144.9
     },
     {
       "id": "n68",
@@ -266,7 +266,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "bugs",
           "label": "bugs",
           "type": "checkbox",
-          "text": "- [x] Add hex support for Tile matching\n- [x] \"Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.\" should appear in the main canvas, like the caption. \"drag to shoot\" label can be removed\n- [x] For the Hex, click undo should remove \"red wins. Start another round with the same game settings.\" chart\n- [x] Like \"Test in Minigames\" row in Mosaic calculator export page, there should be also a \"edit in Mosaic calculator\" row in minigames export page. When clicked, the default boundary should be \"Glued\", Mode being \"Background space\", Click action being \"Add/remove decorations\"\n- [x] The code should only store reusable game-specific computations when the checkbox is clicked and user click \"refresh\".\n- [x] For Import chart in Mosaic calculator, the Catalog row should be a selectbox of \"knot/link\", \"stable curve\" and \"minigames\". Under the minigames choice there is a row for the types of the minigame and finally the name of the level(there are some special cases where rows and colomns should be specified further). Remove the Preset row in the background space mode, as they will be covered by this.\n- [x] For those objects in Decoration palette, if they appear in the main canvas and be dragged out of the main canvas then it should be removed, like what we see in Tiling preferences."
+          "text": "fix wrapped bug\nwrapped chess game has nearly no animation(and it stucked),\nFor settings, display & sound should be on the first position\nSettings can hide many cards\nadd an extra energy game level"
         }
       ],
       "setting": "",
@@ -274,27 +274,21 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 537.5,
-      "y": 221.4
+      "color": "#46786e",
+      "fillColor": "#eef7f4",
+      "x": 537.2,
+      "y": 220.9
     },
     {
-      "id": "n71",
+      "id": "n72",
       "type": "misc",
-      "label": "bugs",
+      "label": "Matrix Calculator",
       "details": [
         {
-          "id": "goals-2",
-          "label": "Billiard",
+          "id": "goal",
+          "label": "goal",
           "type": "checkbox",
-          "text": "- [x] \"Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.\" should appear in the main canvas, like the caption. For the caption I mean on the bottom of the main canvas,not on the right up side of the cue ball\n- [x] The yellow circle emphasize and the sentence should also appear when user click something which is not the cue ball.\n- [x] the rule is not the billiard rule, that describes the rule of 2048 instead. Please give a correct billiard rule."
-        },
-        {
-          "id": "hex",
-          "label": "hex",
-          "type": "checkbox",
-          "text": "- [x] For hex, the green hex/square just disappear when user's cursor move, even when the cursor is still inside the same tile. Please only disappear when user's cursor moves out of the tile"
+          "text": "Add an action on polynomial card\nallow rational function to have multiple variables"
         }
       ],
       "setting": "",
@@ -302,10 +296,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#2f5f9f",
-      "fillColor": "#eef4fb",
-      "x": 635.1,
-      "y": 130.8
+      "color": "#46786e",
+      "fillColor": "#eef7f4",
+      "x": 422.7,
+      "y": 264.9
     }
   ],
   "arrows": [
@@ -374,32 +368,13 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
-    },
-    {
-      "id": "a49",
-      "sourceId": "n71",
-      "targetId": "n68",
-      "labels": [],
-      "terms": [],
-      "label": "",
-      "remark": "",
-      "body": "solid",
-      "head": "arrow",
-      "tail": "hook",
-      "level": 1,
-      "endpointScale": 1,
-      "curve": 0,
-      "labelOffset": 0,
-      "labelPosition": 0.5,
-      "labelAlign": "left",
-      "color": "#5f574e"
     }
   ],
   "view": {
-    "selectedId": "",
+    "selectedId": "n68",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 452,
+    "canvasHeight": 451,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 1.6674,
     "relativeNodePositions": {
@@ -432,12 +407,12 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
         "y": 0.3212
       },
       "n68": {
-        "x": 0.7138,
+        "x": 0.7143,
         "y": 0.4899
       },
-      "n71": {
-        "x": 0.8434,
-        "y": 0.2893
+      "n72": {
+        "x": 0.5621,
+        "y": 0.5874
       }
     },
     "selectedReferenceKeys": []

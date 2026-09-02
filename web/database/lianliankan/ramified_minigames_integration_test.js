@@ -201,7 +201,7 @@ function testTileMatchingTileSets() {
   assert.ok(html.includes('id="lianliankan-ipa-audio-note"'));
   assert.ok(html.includes('value="young-3x3"'));
   const koreanAudioScript = 'js/ramified_minigames_korean_audio.js?v=20260901-1';
-  const setupScript = 'js/ramified_minigames_setup.js?v=20260902-1';
+  const setupScript = 'js/ramified_minigames_setup.js?v=20260902-10';
   assert.ok(html.includes(koreanAudioScript), 'the Korean audio catalog is loaded in the browser');
   assert.ok(html.indexOf(koreanAudioScript) < html.indexOf(setupScript), 'the Korean audio catalog loads before minigame setup');
 }
