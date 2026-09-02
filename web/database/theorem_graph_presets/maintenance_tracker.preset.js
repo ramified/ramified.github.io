@@ -232,8 +232,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 658.1,
-      "y": 343.7
+      "x": 602.1,
+      "y": 181
     },
     {
       "id": "n66",
@@ -254,8 +254,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 359.7,
-      "y": 145.2
+      "x": 475,
+      "y": 89.2
     },
     {
       "id": "n68",
@@ -266,7 +266,13 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "bugs",
           "label": "bugs",
           "type": "checkbox",
-          "text": "- [ ] fix wrapped bug\n- [x] wrapped chess game has nearly no animation(and it stucked),\n- [ ] For settings, display & sound should be on the first position\n- [ ] Settings can hide many cards\n- [ ] add an extra energy game level\n- [ ] For the N queens puzzle on the torus, the \"collect\" row should not belong to the whole chart, it should only appear once on the bottom of the scrren, and above the periodic tiles.\n- [ ] In the wrapped mode, if a glued boundary is removed from the display, its cursor style should not appear neither\n- [ ] 2048 games should be fixed. The heavy stroke inside should be removed.\n- [ ] For the 2048, When numbers pass through the glued boundary it should be rotated like the balls in Billiard games.\n- [ ] Add some balls for Billiard presets"
+          "text": "- [x] fix wrapped bug\n- [x] wrapped chess game has nearly no animation(and it stucked),\n- [ ] For settings, display & sound should be on the first position\n- [ ] Settings can hide many cards\n- [x] add an extra energy game level\n- [x] For the N queens puzzle on the torus, the \"collect\" row should not belong to the whole chart, it should only appear once on the bottom of the scrren, and above the periodic tiles.\n- [x] In the wrapped mode, if a glued boundary is removed from the display, its cursor style should not appear neither\n- [x] 2048 games should be fixed. The heavy stroke inside should be removed.\n- [?] For the 2048, When numbers pass through the glued boundary it should be rotated like the balls in Billiard games.(current rotation is wrong, which is clear from the half_glued preset, according to the glued direction the rotation is trivial, but the realization is wrong)\n- [ ] Add some balls for Billiard presets\n- [ ] Add the link to topo-sudoku"
+        },
+        {
+          "id": "more-bugs",
+          "label": "more bugs",
+          "type": "checkbox",
+          "text": "- [ ] glued arrow should emphasize the paired arrow the cursor hover over, when the glued boundary is a CHAIN.\n- [ ] Fix some problems with online games. For example there are some ghost rooms, I would like the room to be removed if 5 minutes there is no responding\n- [ ] In the advanced mode, export from Mosaic calculator for minigames should allow user to give corresponding Chinese name, and decide if the wrapped board view is allowed and how"
         }
       ],
       "setting": "",
@@ -276,8 +282,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 537.9,
-      "y": 221.4
+      "x": 596.5,
+      "y": 273.4
     },
     {
       "id": "n72",
@@ -298,8 +304,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 423.3,
-      "y": 265.5
+      "x": 399.3,
+      "y": 238.2
     }
   ],
   "arrows": [
@@ -371,7 +377,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     }
   ],
   "view": {
-    "selectedId": "n68",
+    "selectedId": "n65",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasHeight": 452,
@@ -399,20 +405,20 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
         "y": 0.82
       },
       "n65": {
-        "x": 0.874,
-        "y": 0.7603
+        "x": 0.7996,
+        "y": 0.4004
       },
       "n66": {
-        "x": 0.4777,
-        "y": 0.3212
+        "x": 0.6309,
+        "y": 0.1973
       },
       "n68": {
-        "x": 0.7143,
-        "y": 0.4899
+        "x": 0.7922,
+        "y": 0.6049
       },
       "n72": {
-        "x": 0.5621,
-        "y": 0.5874
+        "x": 0.5302,
+        "y": 0.5269
       }
     },
     "selectedReferenceKeys": []

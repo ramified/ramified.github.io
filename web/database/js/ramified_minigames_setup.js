@@ -865,6 +865,7 @@
     refs.fideChessPuzzleThreatRow = document.getElementById('fide-chess-puzzle-threat-row');
     refs.fideChessPuzzleAttackBorders = document.getElementById('fide-chess-puzzle-attack-borders');
     refs.boxStyle = document.getElementById('number-box-style');
+    refs.keepNumbersUpright = document.getElementById('keep-numbers-upright');
     refs.highlightNewBoxes = document.getElementById('highlight-new-boxes');
     refs.begin = document.getElementById('begin-game');
     refs.canvasStartOverlay = document.getElementById('canvas-start-overlay');
@@ -1058,6 +1059,7 @@
     if (refs.chineseCheckersPlayerOptions) refs.chineseCheckersPlayerOptions.addEventListener('change', handleChineseCheckersPlayerOptionsChange);
     if (refs.chineseCheckersEndJump) refs.chineseCheckersEndJump.addEventListener('click', endChineseCheckersJumpFromUi);
     if (refs.boxStyle) refs.boxStyle.addEventListener('change', render);
+    if (refs.keepNumbersUpright) refs.keepNumbersUpright.addEventListener('change', render);
     if (refs.highlightNewBoxes) refs.highlightNewBoxes.addEventListener('change', render);
     if (refs.debugBombTool) refs.debugBombTool.addEventListener('change', syncDebugModeUi);
     if (refs.bombArtStyle) refs.bombArtStyle.addEventListener('change', render);
@@ -1255,6 +1257,7 @@
       'chinese-checkers-jump-pause-row',
       'chinese-checkers-hints-row',
       'box-ui-row',
+      'box-orientation-row',
       'new-boxes-row',
       'speed-row',
       'billiards-assistance-row',
@@ -3799,7 +3802,6 @@
       gameTypes: entry.gameTypes.slice(),
       ...(entry.wrappedView ? { wrappedView: { ...entry.wrappedView } } : {}),
       ...(entry.wrappedCoverFit ? { wrappedCoverFit: entry.wrappedCoverFit } : {}),
-      ...(entry.wrappedHexCutouts ? { wrappedHexCutouts: true } : {}),
       __lazyPreset: true
     };
   }
@@ -3971,7 +3973,6 @@
           gameTypes: cleanPresetGameTypes(entry.gameTypes, entry.groups, entry.group),
           wrappedView: normalizeWrappedViewProfile(entry.wrappedView),
           wrappedCoverFit: entry.wrappedCoverFit === 'glued' ? 'glued' : '',
-          wrappedHexCutouts: entry.wrappedHexCutouts === true,
           data: entry.data && typeof entry.data === 'object' && !Array.isArray(entry.data) ? entry.data : null,
           json: cleanPresetString(entry.json || '')
         };
@@ -6762,12 +6763,13 @@
     if (!isFideChessGame(game) || currentAnimation || game.phase !== 'ready') return false;
     if (fideChessPendingPromotion) return false;
     const point = canvasPointFromEvent(event);
-    if (!point) return false;
+    const trayPoint = fideChessPuzzleTrayPointFromEvent(event);
+    if (!point && !trayPoint) return false;
     let target = tileFromCanvasEvent(event);
     let piece = target ? fideChessPieceAt(game, target.index) : null;
     let fromWaiting = false;
     if (isFideChessPuzzle(game)) {
-      const trayHit = fideChessPuzzleTrayHitAtPoint(point, geometry, game);
+      const trayHit = fideChessPuzzleTrayHitAtPoint(trayPoint, geometry, game);
       if (trayHit && trayHit.kind === 'piece') {
         piece = trayHit.piece;
         target = null;
@@ -6841,9 +6843,11 @@
   }
 
   function finishFideChessPuzzlePieceDrag(drag, event) {
-    const point = canvasPointFromEvent(event);
-    const trayHit = fideChessPuzzleTrayHitAtPoint(point, geometry, game);
-    const target = tileFromCanvasEvent(event);
+    const trayPoint = fideChessPuzzleTrayPointFromEvent(event);
+    const trayHit = fideChessPuzzleTrayHitAtPoint(trayPoint, geometry, game);
+    // The viewport tray is painted above the cover, so it owns all hits in its
+    // rectangle even when a repeated board tile is geometrically underneath.
+    const target = trayHit ? null : tileFromCanvasEvent(event);
     if (drag.fromWaiting) {
       if (target) {
         playFideChessPuzzleFromWaiting(drag.pieceId, target.index, target);
@@ -8229,11 +8233,28 @@
   }
 
   function wrappedHexCutoutMode(state, wrappedCover) {
-    return !!(wrappedCover && isHexGame(state) && state.preset && state.preset.wrappedHexCutouts === true);
+    // A removed Hex cell is a hole in the chart, not a repeated wall.  This
+    // deliberately applies to imported and future Hex presets too.
+    return !!(wrappedCover && isHexGame(state));
   }
 
   function wrappedHexGlueContextOverlayActive(state, wrappedCover) {
     return !!(wrappedCover && isHexGame(state));
+  }
+
+  function wrappedFideChessPuzzleTrayOverlayActive(state = game, preset = state && state.preset) {
+    return !!(
+      state
+      && shouldShowFideChessPuzzleTray(state)
+      && fideChessIsToroidalNQueensPuzzle(state)
+      && wrappedViewIsActive(preset)
+    );
+  }
+
+  // Wrapped charts have no clickable boundary markers.  The final Hex/Nash
+  // arrows are deliberately context-only, so they do not restore this affordance.
+  function glueHoverInteractionAvailable(preset = (game ? game.preset : selectedPreset())) {
+    return !wrappedViewIsActive(preset);
   }
 
   function wrappedViewCamera(profile = wrappedViewProfile()) {
@@ -9041,6 +9062,7 @@
 
   function canvasClickHitsGlueBoundary(event) {
     const preset = game ? game.preset : selectedPreset();
+    if (!glueHoverInteractionAvailable(preset)) return false;
     return !!hoveredGlueBoundaryAtPoint(preset, geometry, canvasPointFromEvent(event));
   }
 
@@ -9227,10 +9249,10 @@
     } else if (existing) {
       pushUndoSnapshot(`debug set ${target.label}`);
       removeBoxesAtIndex(game, target.index);
-      game.boxes.push({ id: existing.id, index: target.index, value });
+      game.boxes.push({ id: existing.id, index: target.index, value, orientation: cloneBoxOrientation(existing.orientation) });
     } else {
       pushUndoSnapshot(`debug set ${target.label}`);
-      const box = { id: game.nextBoxId, index: target.index, value };
+      const box = { id: game.nextBoxId, index: target.index, value, orientation: normalizeBoxOrientation() };
       game.nextBoxId += 1;
       game.boxes.push(box);
     }
@@ -9275,7 +9297,9 @@
   function handleCanvasHover(event) {
     if (!geometry || !geometry.cells || !geometry.cells.length) return;
     const preset = game ? game.preset : selectedPreset();
-    setGlueHover(hoveredGlueBoundaryAtPoint(preset, geometry, canvasPointFromEvent(event)));
+    setGlueHover(glueHoverInteractionAvailable(preset)
+      ? hoveredGlueBoundaryAtPoint(preset, geometry, canvasPointFromEvent(event))
+      : null);
     if (!isHexGame(game)) updatePlacementHover(event);
     const target = isHexGame(game) ? tileFromCanvasEvent(event) : null;
     const playableTarget = target && !game.removed.has(target.index) ? target : null;
@@ -9948,8 +9972,8 @@
   }
 
   function handleFideChessPuzzleCanvasClick(event) {
-    const point = canvasPointFromEvent(event);
-    const trayHit = fideChessPuzzleTrayHitAtPoint(point, geometry, game);
+    const trayPoint = fideChessPuzzleTrayPointFromEvent(event);
+    const trayHit = fideChessPuzzleTrayHitAtPoint(trayPoint, geometry, game);
     if (trayHit) {
       handleFideChessPuzzleTrayClick(trayHit);
       return;
@@ -11385,12 +11409,14 @@
   }
 
   function boxExport(box, cols) {
-    return {
+    const exported = {
       id: box.id,
       index: box.index,
       ...rowCol(box.index, cols),
       value: box.value
     };
+    if (!boxOrientationIsIdentity(box.orientation)) exported.orientation = cloneBoxOrientation(box.orientation);
+    return exported;
   }
 
   function bombExport(bomb, cols) {
@@ -12494,8 +12520,63 @@
       const id = normalizePositiveInteger(entry && entry.id, index + 1);
       if (usedIds.has(id)) throw new Error(`status box id ${id} is duplicated`);
       usedIds.add(id);
-      return { id, index: tileIndex, value };
+      return { id, index: tileIndex, value, orientation: normalizeBoxOrientation(entry && entry.orientation) };
     });
+  }
+
+  // Number boxes carry the local frame they acquired while crossing glued
+  // seams.  The compact 2×2 form is deliberately serializable for records,
+  // undo snapshots, and debug imports.
+  function normalizeBoxOrientation(value) {
+    const identity = { a: 1, b: 0, c: 0, d: 1 };
+    if (!value || typeof value !== 'object') return identity;
+    const matrix = { a: Number(value.a), b: Number(value.b), c: Number(value.c), d: Number(value.d) };
+    if (![matrix.a, matrix.b, matrix.c, matrix.d].every(Number.isFinite)) return identity;
+    const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+    if (Math.abs(Math.abs(determinant) - 1) > 0.02) return identity;
+    return matrix;
+  }
+
+  function cloneBoxOrientation(value) {
+    return { ...normalizeBoxOrientation(value) };
+  }
+
+  function boxOrientationIsIdentity(value) {
+    const matrix = normalizeBoxOrientation(value);
+    return Math.abs(matrix.a - 1) < 0.0001 && Math.abs(matrix.b) < 0.0001
+      && Math.abs(matrix.c) < 0.0001 && Math.abs(matrix.d - 1) < 0.0001;
+  }
+
+  function multiplyBoxOrientations(left, right) {
+    return {
+      a: left.a * right.a + left.c * right.b,
+      b: left.b * right.a + left.d * right.b,
+      c: left.a * right.c + left.c * right.d,
+      d: left.b * right.c + left.d * right.d
+    };
+  }
+
+  function boxOrientationAcrossTransition(orientation, transition, preset) {
+    const before = normalizeBoxOrientation(orientation);
+    if (!transition || transition.kind !== 'glued' || !transition.edge) return before;
+    const lattice = latticeForPreset(preset);
+    const sourceNormal = dirVector(transition.edge.dir, 1, lattice);
+    const targetNormal = dirVector(transition.dir, 1, lattice);
+    const sourceTangent = { x: -sourceNormal.y, y: sourceNormal.x };
+    const targetTangent = { x: -targetNormal.y, y: targetNormal.x };
+    // Glue arrows describe the parametrisation of both edge segments.  Their
+    // relative direction is the seam's actual tangent transport; `reversed`
+    // alone is insufficient for imported asymmetric arrow metadata.
+    const tangentSign = transition.transport && Number.isFinite(transition.transport.tangentSign)
+      ? transition.transport.tangentSign
+      : (transition.edge.reversed ? -1 : 1);
+    const transport = {
+      a: targetNormal.x * sourceNormal.x + tangentSign * targetTangent.x * sourceTangent.x,
+      b: targetNormal.y * sourceNormal.x + tangentSign * targetTangent.y * sourceTangent.x,
+      c: targetNormal.x * sourceNormal.y + tangentSign * targetTangent.x * sourceTangent.y,
+      d: targetNormal.y * sourceNormal.y + tangentSign * targetTangent.y * sourceTangent.y
+    };
+    return multiplyBoxOrientations(transport, before);
   }
 
   function normalizeStatusBombs(entries, preset, removed, boxes = []) {
@@ -13424,7 +13505,7 @@
     if (placementHover && (!placementHoverInteractionAvailable() || placementHover.state !== game)) clearPlacementHover(false);
     const preset = game ? game.preset : selectedPreset();
     if (!preset) return;
-    if (hoveredGlue && !activeGlueHoverForPreset(preset, hoveredGlue)) {
+    if (hoveredGlue && (!glueHoverInteractionAvailable(preset) || !activeGlueHoverForPreset(preset, hoveredGlue))) {
       hoveredGlue = null;
       syncCanvasCursor();
     }
@@ -13445,7 +13526,9 @@
       heightAvailable: sizing.heightAvailable,
       immersive: sizing.immersive
     });
-    applyFideChessPuzzleTrayGeometry(geometry, game);
+    applyFideChessPuzzleTrayGeometry(geometry, game, {
+      screenOverlay: wrappedFideChessPuzzleTrayOverlayActive(game, preset)
+    });
     // The cover copies use the board's native horizontal and vertical deck transformations.
     // A presentation-only Connect Four rotation would otherwise rotate those transformations too.
     applyDisplayRotationToGeometry(geometry, wrappedCover ? 0 : connectFourDisplayRotationAngle());
@@ -13495,7 +13578,10 @@
     }
 
     drawBackgroundBoundaries(ctx, geometry, preset, visualBlocked, {
-      skipSourceIndices: hexCutoutChart ? removed : null
+      skipSourceIndices: hexCutoutChart ? removed : null,
+      // A cutout cell draws no boundary of its own, but a neighbouring live
+      // cell must still retain its actual unglued edge beside that cutout.
+      boundaryBlocked: hexCutoutChart ? boardBlocked : null
     });
     // In the universal cover these edges are physically adjacent on the canvas,
     // so the ordinary glued-boundary arrows are drawn only in the final
@@ -13533,7 +13619,9 @@
       if (isGoGame(game)) drawGoScoreOverlay(ctx, geometry, game);
       drawPlacementLastMoveUnderlays(ctx, geometry, game);
       drawPlacementSelectionOverlays(ctx, geometry, game);
-      drawFideChessPuzzleWaitingTray(ctx, geometry, game);
+      if (!wrappedFideChessPuzzleTrayOverlayActive(game, preset)) {
+        drawFideChessPuzzleWaitingTray(ctx, geometry, game);
+      }
       if (!isHexGame(game)) drawPlacementPieces(ctx, geometry, placementPieces(game));
       drawFideChessPendingPromotion(ctx, geometry, game);
       drawFideChessDraggedPiece(ctx, geometry, game);
@@ -13567,6 +13655,9 @@
       drawFundamentalBoard();
     }
     drawCanvasFeedbackOverlays(ctx, geometry, { skipBombDetonations: wrappedCover });
+    if (wrappedFideChessPuzzleTrayOverlayActive(game, preset)) {
+      drawFideChessPuzzleWaitingTray(ctx, geometry, game);
+    }
     if (wrappedHexGlueContextOverlayActive(game, wrappedCover)) {
       drawWrappedHexGlueContextOverlay(ctx, logicalWidth, logicalHeight);
     }
@@ -14482,8 +14573,9 @@
     };
   }
 
-  function applyFideChessPuzzleTrayGeometry(geom, state) {
+  function applyFideChessPuzzleTrayGeometry(geom, state, options = {}) {
     if (!shouldShowFideChessPuzzleTray(state) || !geom) return geom;
+    if (options.screenOverlay) return geom;
     geom.boardWidth = geom.width;
     geom.boardHeight = geom.height;
     const layout = computeFideChessPuzzleTrayLayout(geom, state);
@@ -14502,10 +14594,13 @@
 
   function fideChessPuzzleTrayLayout(geom, state) {
     if (!shouldShowFideChessPuzzleTray(state) || !geom) return null;
+    if (wrappedFideChessPuzzleTrayOverlayActive(state)) {
+      return computeFideChessPuzzleTrayLayout(geom, state, { anchor: 'bottom' });
+    }
     return geom.fideChessPuzzleTray || computeFideChessPuzzleTrayLayout(geom, state);
   }
 
-  function computeFideChessPuzzleTrayLayout(geom, state) {
+  function computeFideChessPuzzleTrayLayout(geom, state, options = {}) {
     const boardWidth = Math.max(1, geom.boardWidth || geom.baseWidth || geom.width || 1);
     const boardHeight = Math.max(1, geom.boardHeight || geom.baseHeight || geom.height || 1);
     const outerPad = Math.max(8, geom.radius * 0.2);
@@ -14521,7 +14616,9 @@
     const rows = Math.max(1, Math.ceil(totalSlots / cols));
     const slotsHeight = rows * slotSize + (rows - 1) * gap;
     const height = (outerPad * 2) + Math.max(slotsHeight, buttonHeight);
-    const y = boardHeight + Math.max(6, geom.radius * 0.18);
+    const y = options.anchor === 'bottom'
+      ? Math.max(outerPad, boardHeight - height - outerPad)
+      : boardHeight + Math.max(6, geom.radius * 0.18);
     const slotY = y + outerPad + Math.max(0, (height - outerPad * 2 - slotsHeight) / 2);
     const slots = Array.from({ length: totalSlots }, (_, index) => {
       const row = Math.floor(index / cols);
@@ -14602,6 +14699,7 @@
     const glued = gluedEdgeKeySet(preset);
     const cuts = cutEdgeKeySet(preset);
     const skipSourceIndices = options.skipSourceIndices instanceof Set ? options.skipSourceIndices : null;
+    const boundaryBlocked = options.boundaryBlocked instanceof Set ? options.boundaryBlocked : removed;
     ctx.save();
     ctx.strokeStyle = '#111111';
     ctx.lineWidth = Math.max(1.8, geom.radius * 0.055);
@@ -14615,7 +14713,7 @@
           if (glued.has(boundaryEdgeKey({ row, col, dir }, preset.cols))) continue;
           const next = neighbor(row, col, dir, preset);
           const boundary = !next
-            || removed.has(indexOf(next.row, next.col, preset.cols))
+            || boundaryBlocked.has(indexOf(next.row, next.col, preset.cols))
             || cuts.has(cutKey(index, indexOf(next.row, next.col, preset.cols)));
           if (boundary) drawBackgroundBoundarySegment(ctx, edgeSegment(geom, row, col, dir));
         }
@@ -14676,7 +14774,8 @@
     boxes.forEach((box) => {
       if (hidden.has(box.id)) return;
       drawBoxAtIndex(ctx, geom, box.index, box.value, 1, {
-        highlight: shouldHighlightBox(box)
+        highlight: shouldHighlightBox(box),
+        orientation: box.orientation
       });
     });
   }
@@ -14712,17 +14811,6 @@
     drawBombBlockedHalo(ctx, geom, point, bombKind, scale);
     const drewPng = option && option.kind === 'png' && drawPngBomb(ctx, geom, point, bombKind, scale, option);
     if (!drewPng) drawCanvasSparkBomb(ctx, geom, point, bombKind, scale);
-    drawBombBoundary(ctx, geom, point, scale);
-  }
-
-  function drawBombBoundary(ctx, geom, point, scale) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(12, 14, 18, 0.92)';
-    ctx.lineWidth = Math.max(1.5, geom.radius * 0.062);
-    ctx.shadowColor = 'transparent';
-    boxPath(ctx, point, geom.radius * 1.48 * scale, geom.lattice);
-    ctx.stroke();
-    ctx.restore();
   }
 
   function backgroundBoundarySourceEnabled(index, removed, skipSourceIndices = null) {
@@ -16839,6 +16927,12 @@
     }
     if (rectContainsPoint(layout, point)) return { kind: 'tray', layout };
     return null;
+  }
+
+  function fideChessPuzzleTrayPointFromEvent(event) {
+    return wrappedFideChessPuzzleTrayOverlayActive(game)
+      ? canvasDisplayPointFromEvent(event)
+      : canvasPointFromEvent(event);
   }
 
   function rectContainsPoint(rect, point) {
@@ -19019,7 +19113,9 @@
         const to = geom.cells[move.to];
         if (!from || !to) return;
         if (move.glued) drawGluedMove(ctx, geom, move, progress);
-        else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, move.value, 1, geom.lattice);
+        else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, move.value, 1, geom.lattice, {
+          orientation: progress < 0.5 ? move.orientationBefore : move.orientationAfter
+        });
       });
       if (event.bounces) event.bounces.forEach((move) => drawBounceMove(ctx, geom, move, progress));
       if (event.merges) event.merges.forEach((merge) => drawMergeAnimation(ctx, geom, merge, progress));
@@ -19036,7 +19132,9 @@
       const to = geom.cells[event.to];
       if (!from || !to) return;
       if (event.glued) drawGluedMove(ctx, geom, event, progress);
-      else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, event.value, 1, geom.lattice);
+      else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, event.value, 1, geom.lattice, {
+        orientation: progress < 0.5 ? event.orientationBefore : event.orientationAfter
+      });
       return;
     }
     if (event.kind === 'merge') {
@@ -19068,7 +19166,8 @@
     }
     if (event.kind === 'spawn') {
       drawBoxAtIndex(ctx, geom, event.index, event.value, Math.max(0.12, progress), {
-        highlight: shouldHighlightNewBoxes()
+        highlight: shouldHighlightNewBoxes(),
+        orientation: event.orientation
       });
     }
   }
@@ -19085,11 +19184,13 @@
       const to = geom.cells[move.to];
       if (!from || !to) return;
       if (move.glued) drawGluedMove(ctx, geom, move, progress);
-      else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, move.value, 1, geom.lattice);
+      else drawBoxAtPoint(ctx, lerpPoint(from, to, progress), geom.radius, move.value, 1, geom.lattice, {
+        orientation: progress < 0.5 ? move.orientationBefore : move.orientationAfter
+      });
     });
     if (progress > 0.68) {
       const pulse = 1 + Math.sin((progress - 0.68) / 0.32 * Math.PI) * 0.18;
-      drawBoxAtIndex(ctx, geom, event.to, event.newValue, pulse);
+      drawBoxAtIndex(ctx, geom, event.to, event.newValue, pulse, { orientation: event.orientationAfter });
     }
   }
 
@@ -19342,6 +19443,18 @@
   }
 
   function drawBoxAtPoint(ctx, point, radius, value, scale, lattice = LATTICES.square, options = {}) {
+    const orientation = normalizeBoxOrientation(options.orientation);
+    const orient = !shouldKeepNumbersUpright()
+      && (Math.abs(orientation.a - 1) > 0.0001 || Math.abs(orientation.b) > 0.0001
+        || Math.abs(orientation.c) > 0.0001 || Math.abs(orientation.d - 1) > 0.0001);
+    if (orient) {
+      ctx.save();
+      ctx.translate(point.x, point.y);
+      ctx.transform(orientation.a, orientation.b, orientation.c, orientation.d, 0, 0);
+      drawBoxAtPoint(ctx, { x: 0, y: 0 }, radius, value, scale, lattice, { ...options, orientation: null });
+      ctx.restore();
+      return;
+    }
     const style = refs.boxStyle ? refs.boxStyle.value : 'paper';
     if (options.highlight) drawBoxHighlight(ctx, point, radius, scale, lattice);
     if (style === 'ink') drawInkBox(ctx, point, radius, value, scale, lattice);
@@ -19389,8 +19502,8 @@
       x: to.x - incoming.x * (1 - progress),
       y: to.y - incoming.y * (1 - progress)
     };
-    drawBoxClippedToTile(ctx, geom, move.from, exitPoint, move.value);
-    drawBoxClippedToTile(ctx, geom, move.to, entryPoint, move.value);
+    drawBoxClippedToTile(ctx, geom, move.from, exitPoint, move.value, move.orientationBefore);
+    drawBoxClippedToTile(ctx, geom, move.to, entryPoint, move.value, move.orientationAfter);
     drawGlueFlash(ctx, geom, move, progress);
   }
 
@@ -19409,7 +19522,7 @@
       drawGlueFlash(ctx, geom, move, progress);
       return;
     }
-    drawBoxAtPoint(ctx, lerpPoint(from, to, impact), geom.radius, move.value, 1, geom.lattice);
+    drawBoxAtPoint(ctx, lerpPoint(from, to, impact), geom.radius, move.value, 1, geom.lattice, { orientation: move.orientationBefore });
   }
 
   function drawExplosionImpact(ctx, geom, event, progress) {
@@ -19431,10 +19544,11 @@
       return;
     }
     const point = move.glued ? to : lerpPoint(from, to, travel);
-    drawSqueezedBoxAtPoint(ctx, point, geom.radius, move.value, squeeze, move.dir, geom.lattice, alpha);
+    drawSqueezedBoxAtPoint(ctx, point, geom.radius, move.value, squeeze, move.dir, geom.lattice, alpha,
+      move.glued ? move.orientationAfter : move.orientationBefore);
   }
 
-  function drawSqueezedBoxAtPoint(ctx, point, radius, value, squeeze, dir, lattice = LATTICES.square, alpha = 1) {
+  function drawSqueezedBoxAtPoint(ctx, point, radius, value, squeeze, dir, lattice = LATTICES.square, alpha = 1, orientation = null) {
     const angle = (lattice.angles && lattice.angles[modulo(dir, lattice.sides)]) || 0;
     const compression = 1 - squeeze * 0.48;
     const expansion = 1 + squeeze * 0.16;
@@ -19444,16 +19558,16 @@
     ctx.rotate(angle);
     ctx.scale(compression, expansion);
     ctx.rotate(-angle);
-    drawBoxAtPoint(ctx, { x: 0, y: 0 }, radius, value, 1, lattice);
+    drawBoxAtPoint(ctx, { x: 0, y: 0 }, radius, value, 1, lattice, { orientation });
     ctx.restore();
   }
 
-  function drawBoxClippedToTile(ctx, geom, index, point, value) {
+  function drawBoxClippedToTile(ctx, geom, index, point, value, orientation = null) {
     const cell = geom.cells[index];
     if (!cell) return;
     ctx.save();
     clipToTile(ctx, geom, cell, geom.radius * 0.96);
-    drawBoxAtPoint(ctx, point, geom.radius, value, 1, geom.lattice);
+    drawBoxAtPoint(ctx, point, geom.radius, value, 1, geom.lattice, { orientation });
     ctx.restore();
   }
 
@@ -26375,6 +26489,8 @@
         id: box.id,
         index: box.index,
         value: box.value,
+        orientation: cloneBoxOrientation(box.orientation),
+        preset: state.preset,
         dir,
         k: 0
       }]));
@@ -26494,7 +26610,7 @@
         const value = Number.isFinite(result.value)
           ? result.value
           : (result.actor ? result.actor.value : box.value);
-        return { result, boxId, box, from, value, skipped: false };
+        return { result, boxId, box, from, value, orientationBefore: cloneBoxOrientation(box.orientation), skipped: false };
       });
       const blockedMoveIds = blockedMovesByBouncingResidents(state, moveEntries, bouncingBoxIds);
       extendBlockedMovesByOccupiedTargets(
@@ -26531,7 +26647,7 @@
           if (entry.deleteActor && entry.result.actor) active.delete(entry.result.actor.id);
           return;
         }
-        const { result, boxId, box, from, value } = entry;
+        const { result, boxId, box, from, value, orientationBefore } = entry;
         if (settledMoveIds.has(boxId)) return;
         if (blockedMoveIds.has(boxId)) {
           bounceEvents.push(animationMoveFromResult({
@@ -26554,14 +26670,18 @@
           to: result.transition.index,
           dir: result.transition.dir,
           glued: result.transition.kind === 'glued',
-          edge: result.transition.edge || null
+          edge: result.transition.edge || null,
+          orientationBefore,
+          orientationAfter: boxOrientationAcrossTransition(orientationBefore, result.transition, state.preset)
         };
         moveEvents.push(event);
         box.index = result.transition.index;
+        box.orientation = cloneBoxOrientation(event.orientationAfter);
         const activeActor = active.get(boxId);
         if (activeActor) {
           activeActor.index = result.transition.index;
           activeActor.dir = result.transition.dir;
+          activeActor.orientation = cloneBoxOrientation(event.orientationAfter);
           activeActor.waiting = false;
           if (result.transition.kind === 'glued') activeActor.k += 1;
         }
@@ -26935,6 +27055,8 @@
       id: entry.boxId,
       index: entry.from,
       value: entry.value,
+      orientation: cloneBoxOrientation(entry.orientationBefore),
+      preset: entry.result && entry.result.actor && entry.result.actor.preset,
       dir: transition ? transition.dir : undefined
     };
   }
@@ -26945,6 +27067,7 @@
       actor: actorFromMoveEntry(entry),
       boxId: entry.boxId,
       value: entry.value,
+      orientation: cloneBoxOrientation(entry.orientationBefore),
       from: entry.from,
       transition: entry.result.transition
     };
@@ -27076,12 +27199,16 @@
       kind: 'move',
       boxId: box.id,
       value: box.value,
+      orientation: cloneBoxOrientation(box.orientation),
       from: box.index,
       transition
     };
   }
 
   function animationMoveFromResult(result) {
+    const orientationBefore = cloneBoxOrientation(result.orientation || (result.actor && result.actor.orientation));
+    const orientationAfter = boxOrientationAcrossTransition(orientationBefore, result.transition,
+      result.preset || (result.actor && result.actor.preset) || (game && game.preset));
     return {
       kind: 'move',
       boxId: result.boxId || (result.actor && result.actor.id),
@@ -27090,7 +27217,9 @@
       to: result.transition.index,
       dir: result.transition.dir,
       glued: result.transition.kind === 'glued',
-      edge: result.transition.edge || null
+      edge: result.transition.edge || null,
+      orientationBefore,
+      orientationAfter
     };
   }
 
@@ -27116,6 +27245,15 @@
     const removeBoxIds = result.targetBoxId
       ? result.movingActors.map((actor) => actor.id)
       : result.movingActors.slice(1).map((actor) => actor.id);
+    const keeperActor = result.movingActors.find((actor) => actor.id === keeperId);
+    const keeperMove = (result.moves || []).find((move) => (move.boxId || (move.actor && move.actor.id)) === keeperId);
+    const keeperOrientation = result.targetBoxId
+      ? cloneBoxOrientation((findBox(state, keeperId) || {}).orientation)
+      : boxOrientationAcrossTransition(
+        keeperMove && keeperMove.orientation ? keeperMove.orientation : (keeperActor && keeperActor.orientation),
+        keeperMove && keeperMove.transition,
+        state.preset
+      );
     const event = {
       kind: 'merge',
       boxId: keeperId,
@@ -27126,20 +27264,22 @@
         kind: 'direct',
         index: result.target,
         dir: actor.dir
-      }))).map(animationMoveFromResult),
+      }))).map((move) => animationMoveFromResult({ ...move, orientation: move.orientation || (move.actor && move.actor.orientation) })),
       to: result.target,
       value: result.value,
-      newValue: result.newValue
+      newValue: result.newValue,
+      orientationAfter: keeperOrientation
     };
     events.push(event);
     removeBoxIds.forEach((id) => removeBox(state, id));
     let keeper = findBox(state, keeperId);
     if (!keeper) {
-      keeper = { id: keeperId, index: result.target, value: result.newValue };
+      keeper = { id: keeperId, index: result.target, value: result.newValue, orientation: cloneBoxOrientation(result.movingActors[0] && result.movingActors[0].orientation) };
       state.boxes.push(keeper);
     }
     keeper.index = result.target;
     keeper.value = result.newValue;
+    keeper.orientation = cloneBoxOrientation(keeperOrientation);
     state.score += result.newValue;
     mergeLocked.add(keeperId);
     result.movingActors.forEach((actor) => active.delete(actor.id));
@@ -27147,6 +27287,7 @@
   }
 
   function addPushedMergeEvent(state, events, merge, mergeLocked, active) {
+    const target = findBox(state, merge.targetBoxId);
     const event = {
       kind: 'merge',
       boxId: merge.targetBoxId,
@@ -27156,11 +27297,11 @@
       moves: merge.move ? [animationMoveFromResult(merge.move)] : [],
       to: merge.to,
       value: merge.value,
-      newValue: merge.newValue
+      newValue: merge.newValue,
+      orientationAfter: cloneBoxOrientation(target && target.orientation)
     };
     events.push(event);
     removeBox(state, merge.movingBoxId);
-    const target = findBox(state, merge.targetBoxId);
     if (target) {
       target.index = merge.to;
       target.value = merge.newValue;
@@ -27207,7 +27348,10 @@
       if (is2048BlockedIndex(targetState, event.to)) return;
       if (boxesAtIndex(targetState, event.to).some((box) => box.id !== event.boxId)) return;
       const box = findBox(targetState, event.boxId);
-      if (box) box.index = event.to;
+      if (box) {
+        box.index = event.to;
+        if (event.orientationAfter) box.orientation = normalizeBoxOrientation(event.orientationAfter);
+      }
       return;
     }
     if (event.kind === 'merge') {
@@ -27234,7 +27378,7 @@
     }
     if (event.kind === 'spawn') {
       if (!findBox(targetState, event.boxId) && !is2048BlockedIndex(targetState, event.index)) {
-        targetState.boxes.push({ id: event.boxId, index: event.index, value: event.value });
+        targetState.boxes.push({ id: event.boxId, index: event.index, value: event.value, orientation: normalizeBoxOrientation(event.orientation) });
         targetState.nextBoxId = Math.max(targetState.nextBoxId, event.boxId + 1);
       }
       if (!targetState.newBoxIds) targetState.newBoxIds = new Set();
@@ -27298,11 +27442,12 @@
     event.removeBoxIds.forEach((id) => removeBox(targetState, id));
     let box = findBox(targetState, event.boxId);
     if (!box) {
-      box = { id: event.boxId, index: event.to, value: event.newValue };
+      box = { id: event.boxId, index: event.to, value: event.newValue, orientation: normalizeBoxOrientation(event.orientationAfter) };
       targetState.boxes.push(box);
     }
     box.index = event.to;
     box.value = event.newValue;
+    if (event.orientationAfter) box.orientation = normalizeBoxOrientation(event.orientationAfter);
     targetState.score += event.newValue;
   }
 
@@ -27337,7 +27482,10 @@
     moves.forEach((move) => {
       if (blocked.has(move.boxId)) return;
       const box = findBox(targetState, move.boxId);
-      if (box) box.index = move.to;
+      if (box) {
+        box.index = move.to;
+        if (move.orientationAfter) box.orientation = normalizeBoxOrientation(move.orientationAfter);
+      }
     });
   }
 
@@ -27365,11 +27513,11 @@
       if (!empty.length) break;
       const index = empty[Math.floor(rng() * empty.length)];
       const value = valuePicker(rng);
-      const box = { id: state.nextBoxId, index, value };
+      const box = { id: state.nextBoxId, index, value, orientation: normalizeBoxOrientation() };
       state.nextBoxId += 1;
       state.boxes.push(box);
       state.newBoxIds.add(box.id);
-      if (events) events.push({ kind: 'spawn', boxId: box.id, index, value });
+      if (events) events.push({ kind: 'spawn', boxId: box.id, index, value, orientation: cloneBoxOrientation(box.orientation) });
       spawned += 1;
     }
     return spawned;
@@ -27403,6 +27551,10 @@
         dir,
         color: partner.color,
         reversed: !!(partner.pair && partner.pair.reversed)
+      },
+      transport: {
+        tangentSign: ((partner.fromFirst ? glueFirstArrowReversed(partner.pair) : glueSecondArrowReversed(partner.pair))
+          === (partner.fromFirst ? glueSecondArrowReversed(partner.pair) : glueFirstArrowReversed(partner.pair))) ? 1 : -1
       }
     };
   }
@@ -27423,8 +27575,8 @@
     for (const pair of preset.gluedEdges) {
       const first = normalizeBoundaryEdge(pair.first, preset.cols);
       const second = normalizeBoundaryEdge(pair.second, preset.cols);
-      if (`${first.index}:${first.dir}` === key) return { ...second, color: glueColor(pair), pair };
-      if (`${second.index}:${second.dir}` === key) return { ...first, color: glueColor(pair), pair };
+      if (`${first.index}:${first.dir}` === key) return { ...second, color: glueColor(pair), pair, fromFirst: true };
+      if (`${second.index}:${second.dir}` === key) return { ...first, color: glueColor(pair), pair, fromFirst: false };
     }
     return null;
   }
@@ -27762,7 +27914,7 @@
       preset: source.preset,
       phase: source.phase,
       removed: new Set(source.removed),
-      boxes: source.boxes.map((box) => ({ id: box.id, index: box.index, value: box.value })),
+      boxes: source.boxes.map((box) => ({ id: box.id, index: box.index, value: box.value, orientation: cloneBoxOrientation(box.orientation) })),
       bombs: (source.bombs || []).map(cloneBomb).filter((bomb) => bomb.index >= 0),
       newBoxIds: new Set(source.newBoxIds || []),
       nextBoxId: source.nextBoxId,
@@ -28551,9 +28703,6 @@
     if (firstPresentValue(source, ['wrappedCoverFit']) === 'glued' || firstPresentValue(payload, ['wrappedCoverFit']) === 'glued') {
       normalized.wrappedCoverFit = 'glued';
     }
-    if (firstPresentValue(source, ['wrappedHexCutouts']) === true || firstPresentValue(payload, ['wrappedHexCutouts']) === true) {
-      normalized.wrappedHexCutouts = true;
-    }
     const billiardsSource = firstPresentValue(source, ['billiards']) ?? firstPresentValue(payload, ['billiards']);
     if (billiardsSource && typeof billiardsSource === 'object' && !Array.isArray(billiardsSource)) {
       normalized.billiards = clonePlain(billiardsSource);
@@ -29264,7 +29413,6 @@
       gluedEdges: (source.gluedEdges || []).map(cloneGluePair),
       wrappedView: source.wrappedView ? { ...source.wrappedView } : undefined,
       wrappedCoverFit: source.wrappedCoverFit === 'glued' ? 'glued' : undefined,
-      wrappedHexCutouts: source.wrappedHexCutouts === true,
       pieceSets: source.pieceSets ? clonePlain(source.pieceSets) : undefined,
       pieces: Array.isArray(source.pieces) ? source.pieces.map((piece) => ({ ...piece })) : undefined,
       chineseCheckersPlayers: Array.isArray(source.chineseCheckersPlayers) ? source.chineseCheckersPlayers.slice() : undefined,
@@ -30269,6 +30417,10 @@
     return !refs.highlightNewBoxes || !!refs.highlightNewBoxes.checked;
   }
 
+  function shouldKeepNumbersUpright() {
+    return !!(refs.keepNumbersUpright && refs.keepNumbersUpright.checked);
+  }
+
   function shouldHighlightBox(box) {
     return !!(box && game && game.newBoxIds && game.newBoxIds.has(box.id) && shouldHighlightNewBoxes());
   }
@@ -30886,7 +31038,11 @@
     }
     return {
       boxes: state.boxes
-        .map((box) => ({ id: box.id, index: box.index, value: box.value }))
+        .map((box) => {
+          const summary = { id: box.id, index: box.index, value: box.value };
+          if (!boxOrientationIsIdentity(box.orientation)) summary.orientation = cloneBoxOrientation(box.orientation);
+          return summary;
+        })
         .sort((a, b) => a.index - b.index || a.id - b.id),
       bombs: (state.bombs || [])
         .map((bomb) => ({
@@ -31083,6 +31239,10 @@
       wrappedCoverSeamResidual,
       wrappedHexCutoutMode,
       wrappedHexGlueContextOverlayActive,
+      wrappedFideChessPuzzleTrayOverlayActive,
+      glueHoverInteractionAvailable,
+      applyFideChessPuzzleTrayGeometry,
+      fideChessPuzzleTrayLayout,
       wrappedRenderPixelRatio,
       normalizeHexCoverOffset,
       buildGeometry,
@@ -31093,6 +31253,11 @@
       normalizeWrappedViewProfile,
       wrappedViewProfileForBoundaryMode,
       readWrappedViewPreferences,
+      getWrappedViewPreferences() { return { ...wrappedViewPreferences }; },
+      setWrappedViewPreferences(value) {
+        wrappedViewPreferences = normalizeWrappedViewPreferences(value);
+        return { ...wrappedViewPreferences };
+      },
       wrappedTileCandidateAtWorldPoint,
       wrappedFundamentalCoordinateCandidates,
       wrappedFundamentalCoordinates,

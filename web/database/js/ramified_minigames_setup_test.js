@@ -3349,9 +3349,11 @@ function testExtraBackgroundPresets() {
     assert.strictEqual(sourceProfile.y || '', expected.y);
   });
   assert.strictEqual(game.PRESETS.find((preset) => preset.id === 'half-glued').wrappedCoverFit, 'glued');
-  ['classic-hex', 'hex-torus-5-5', 'hex-klein-bottle-5-5'].forEach((id) => {
-    assert.strictEqual(game.PRESETS.find((preset) => preset.id === id).wrappedHexCutouts, true);
-    assert.strictEqual(presetRegistry.find((preset) => preset.id === id).wrappedHexCutouts, true);
+  ['classic-hex', 'hex-torus-5-5', 'hex-klein-bottle-5-5', 'hex-rp2-5-5', 'hex-with-three-slits'].forEach((id) => {
+    const hexState = game.createHexState(id);
+    assert.strictEqual(game.__test.wrappedHexCutoutMode(hexState, true), true, `${id} uses wrapped Hex cutouts`);
+    assert.strictEqual(game.__test.wrappedHexCutoutMode(hexState, false), false, `${id} keeps ordinary Hex cells`);
+    assert.strictEqual(hexState.preset.wrappedHexCutouts, undefined, `${id} needs no cutout metadata`);
   });
   assert.strictEqual(game.PRESETS.find((preset) => preset.id === 'n-queens-puzzle').wrappedView, undefined);
   const toroidalNQueens = game.createFideChessState('n-queens-torus-puzzle');
@@ -4263,6 +4265,45 @@ function testBombStatusImportCloneAndSummary() {
   assert.deepStrictEqual(bombsAt(detonated), []);
 }
 
+function test2048BoxOrientationImportCloneAndSummary() {
+  const orientation = { a: 0, b: 1, c: -1, d: 0 };
+  const imported = game.gameStateFromDebugImportPayload({
+    gameMode: '2048',
+    preset: { id: 'oriented-box', rows: 2, cols: 2, lattice: 'square', label: 'oriented box', surface: 'test' },
+    phase: 'ready',
+    removed: [],
+    boxes: [{ id: 1, row: 1, col: 1, value: 8, orientation }],
+    nextBoxId: 2,
+    score: 0,
+    round: 0
+  }).state;
+  assert.deepStrictEqual(imported.boxes[0].orientation, orientation);
+  assert.deepStrictEqual(game.cloneGameState(imported).boxes[0].orientation, orientation);
+  assert.deepStrictEqual(game.stateSummary(imported).boxes[0].orientation, orientation);
+  const spawned = game.beginGame({ id: 'spawn-orientation', rows: 2, cols: 2, lattice: 'square', label: 'spawn', surface: 'test' }, {
+    rng: game.createRng([0, 0, 0, 0])
+  });
+  assert.deepStrictEqual(spawned.boxes.map((box) => box.orientation), [
+    { a: 1, b: 0, c: 0, d: 1 },
+    { a: 1, b: 0, c: 0, d: 1 }
+  ]);
+  const seamState = game.createGameState({
+    id: 'oriented-seam', rows: 1, cols: 2, lattice: 'square', label: 'oriented seam', surface: 'test',
+    gluedEdges: [{
+      first: { row: 1, col: 2, dir: game.DIRS.E },
+      second: { row: 1, col: 1, dir: game.DIRS.W },
+      firstArrowReversed: false,
+      secondArrowReversed: true
+    }]
+  });
+  seamState.phase = 'ready';
+  seamState.boxes = [{ id: 1, index: 1, value: 2, orientation: { a: 1, b: 0, c: 0, d: 1 } }];
+  seamState.nextBoxId = 2;
+  const seamResult = game.simulateRound(seamState, game.DIRS.E, { spawn: false });
+  const seamMove = seamResult.events[0].moves[0];
+  assert.deepStrictEqual(seamMove.orientationAfter, { a: 1, b: 0, c: 0, d: -1 }, 'a seam reflection transports the box frame');
+}
+
 function testSpawnAfterValidRound() {
   const state = stateWithBoxes('classic-4x4', [
     box(1, 1, 1, 2),
@@ -4399,6 +4440,10 @@ function createHeadlessDomHarness(options = {}) {
   const ctx = new Proxy({}, {
     get(target, prop) {
       if (prop in target) return target[prop];
+      if (prop === 'measureText') {
+        target[prop] = (text) => ({ width: String(text || '').length * 8 });
+        return target[prop];
+      }
       target[prop] = (...args) => {
         calls.push({ method: prop, args });
       };
@@ -5323,6 +5368,68 @@ function testHexCoverOffsetDiagnosticsAndConnectFourWrappedView() {
   elements.get('boundary-glue-mode').value = game.BOUNDARY_GLUE_MODES.RP2;
   elements.get('boundary-glue-mode').listeners.change();
   assert.strictEqual(elements.get('boundary-glue-wrapped-view-row').hidden, false, 'RP² exposes the reflected chart view');
+}
+
+function testWrappedNQueensTrayAndGlueHoverInteraction() {
+  const originalWrappedViews = game.__test.getWrappedViewPreferences();
+  const nQueens = game.beginFideChessGame('n-queens-torus-puzzle');
+  const ordinaryGeometry = game.__test.buildGeometry(nQueens.preset, 720, 16, 1);
+  game.__test.applyFideChessPuzzleTrayGeometry(ordinaryGeometry, nQueens);
+  assert.ok(ordinaryGeometry.height > ordinaryGeometry.boardHeight, 'ordinary N-Queens reserves board-space for its tray');
+
+  game.__test.setWrappedViewPreferences({ torus: 'wrapped' });
+  const wrappedGeometry = game.__test.buildGeometry(nQueens.preset, 720, 0, 1);
+  const wrappedWidth = wrappedGeometry.width;
+  const wrappedHeight = wrappedGeometry.height;
+  game.__test.applyFideChessPuzzleTrayGeometry(wrappedGeometry, nQueens, { screenOverlay: true });
+  assert.strictEqual(wrappedGeometry.width, wrappedWidth, 'the wrapped tray does not expand each chart');
+  assert.strictEqual(wrappedGeometry.height, wrappedHeight, 'the wrapped tray does not extend each chart below its board');
+  const wrappedTray = game.__test.fideChessPuzzleTrayLayout(wrappedGeometry, nQueens);
+  assert.ok(wrappedTray);
+  assert.ok(wrappedTray.y + wrappedTray.height <= wrappedGeometry.height, 'the wrapped tray remains within the viewport');
+  assert.ok(wrappedTray.y >= wrappedGeometry.height - wrappedTray.height - (wrappedGeometry.radius * 0.3) - 10, 'the wrapped tray is bottom anchored');
+  assert.strictEqual(game.__test.wrappedFideChessPuzzleTrayOverlayActive(nQueens), true);
+  assert.strictEqual(game.__test.glueHoverInteractionAvailable(nQueens.preset), false, 'wrapped seams are not cursor affordances');
+  game.__test.setWrappedViewPreferences({ torus: 'usual' });
+  assert.strictEqual(game.__test.wrappedFideChessPuzzleTrayOverlayActive(nQueens), false);
+  assert.strictEqual(game.__test.glueHoverInteractionAvailable(nQueens.preset), true, 'ordinary glue arrows retain their cursor affordance');
+  game.__test.setWrappedViewPreferences(originalWrappedViews);
+
+  const { elements, canvas, calls } = createHeadlessDomHarness();
+  elements.get('game-mode-select').value = 'fide-chess';
+  elements.get('game-mode-select').listeners.change();
+  elements.get('surface-preset-select').value = 'n-queens-torus-puzzle';
+  elements.get('surface-preset-select').listeners.change();
+  elements.get('boundary-glue-wrapped-view-mode').value = 'wrapped';
+  elements.get('boundary-glue-wrapped-view-mode').listeners.change({ target: elements.get('boundary-glue-wrapped-view-mode') });
+  calls.length = 0;
+  elements.get('begin-game').listeners.click();
+  const collectCalls = calls.filter((call) => call.method === 'fillText' && call.args[0] === 'Collect');
+  assert.strictEqual(collectCalls.length, 1, 'wrapped N-Queens paints one Collect control above all chart copies');
+  const collectCenter = collectCalls[0].args;
+  const [logicalWidth, logicalHeight] = canvas.style.aspectRatio.split('/').map((value) => Number(value.trim()));
+  canvas.listeners.click(pointerEvent(
+    collectCenter[1] * (288 / logicalWidth),
+    collectCenter[2] * (288 / logicalHeight)
+  ));
+  assert.strictEqual(elements.get('status-line').textContent, 'Puzzle pieces collected', 'the fixed display-space Collect control receives its click');
+
+  elements.get('game-mode-select').value = 'go';
+  elements.get('game-mode-select').listeners.change();
+  elements.get('surface-preset-select').value = game.BOUNDARY_GLUE_BOARD_PRESET_ID;
+  elements.get('surface-preset-select').listeners.change();
+  elements.get('boundary-glue-mode').value = game.BOUNDARY_GLUE_MODES.TORUS;
+  elements.get('boundary-glue-mode').listeners.change();
+  elements.get('boundary-glue-wrapped-view-mode').value = 'usual';
+  elements.get('boundary-glue-wrapped-view-mode').listeners.change({ target: elements.get('boundary-glue-wrapped-view-mode') });
+  canvas.listeners.mousemove({ clientX: 57, clientY: 29 });
+  assert.strictEqual(canvas.style.cursor, 'help', 'visible ordinary glue arrows retain the help cursor');
+  elements.get('boundary-glue-wrapped-view-mode').value = 'wrapped';
+  elements.get('boundary-glue-wrapped-view-mode').listeners.change({ target: elements.get('boundary-glue-wrapped-view-mode') });
+  canvas.listeners.mousemove({ clientX: 57, clientY: 29 });
+  assert.notStrictEqual(canvas.style.cursor, 'help', 'hidden wrapped seams do not expose a help cursor');
+  canvas.listeners.click(pointerEvent(57, 29));
+  assert.strictEqual(elements.get('canvas-start-overlay').hidden, false, 'a hidden seam no longer consumes setup clicks');
 }
 
 function testUniversalBoardDisplayAndCoordinates() {
@@ -8228,6 +8335,7 @@ async function run() {
   testNoSpawnAfterNoop();
   testGameOverWhenFullAndBlocked();
   testBombKeepsFullBoardPlayable();
+  test2048BoxOrientationImportCloneAndSummary();
   testOrdinaryMergeOnce();
   testNewlyMergedTileBlocksLaterPush();
   testLongGluedChainConvergesBeforeBackMerge();
@@ -8272,6 +8380,7 @@ async function run() {
   testTimedPlacementReachAssistInteractions();
   testPlacementHoverGuidanceRules();
   testHexCoverOffsetDiagnosticsAndConnectFourWrappedView();
+  testWrappedNQueensTrayAndGlueHoverInteraction();
   testUniversalBoardDisplayAndCoordinates();
   testGoCaptureSuicideKoAndScoring();
   testGoGluedCaptureUsesSurfaceSuccessor();

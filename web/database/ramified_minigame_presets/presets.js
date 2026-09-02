@@ -508,6 +508,15 @@
       "gameTypes": [
         "Sokoban"
         ],
+      "id": "easy-energy-bridge",
+      "label": "easy energy bridge",
+      "key": "easy_energy_bridge",
+      "file": "easy_energy_bridge.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
       "id": "energy-test",
       "label": "energy_test",
       "key": "energy_test",
@@ -647,7 +656,6 @@
       "label": "classic hex",
       "key": "classic_hex",
       "wrappedView": { "x": "repeat", "y": "repeat" },
-      "wrappedHexCutouts": true,
       "file": "classic_hex.preset.js"
     },
     {
@@ -658,7 +666,6 @@
       "label": "hex torus 5*5",
       "key": "hex_torus_5_5",
       "wrappedView": { "x": "repeat", "y": "repeat" },
-      "wrappedHexCutouts": true,
       "file": "hex_torus_5_5.preset.js"
     },
     {
@@ -669,7 +676,6 @@
       "label": "hex Klein bottle 5*5",
       "key": "hex_klein_bottle_5_5",
       "wrappedView": { "x": "repeat", "y": "reflect-x" },
-      "wrappedHexCutouts": true,
       "file": "hex_klein_bottle_5_5.preset.js"
     },
     {
