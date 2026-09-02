@@ -38,8 +38,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 76.3,
-      "y": 81.2,
+      "x": 76.4,
+      "y": 81.4,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -73,8 +73,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 116.4,
-      "y": 309
+      "x": 116.6,
+      "y": 309.7
     },
     {
       "id": "n39",
@@ -95,8 +95,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 291.8,
-      "y": 369.8
+      "x": 292.2,
+      "y": 370.6
     },
     {
       "id": "n58",
@@ -110,8 +110,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 268.8,
-      "y": 81.2
+      "x": 269.1,
+      "y": 81.4
     },
     {
       "id": "n63",
@@ -132,8 +132,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 469.1,
-      "y": 369.8,
+      "x": 469.7,
+      "y": 370.6,
       "childGraph": {
         "title": "double click",
         "nodes": [
@@ -232,8 +232,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 657.2,
-      "y": 342.9
+      "x": 658.1,
+      "y": 343.7
     },
     {
       "id": "n66",
@@ -254,8 +254,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 359.2,
-      "y": 144.9
+      "x": 359.7,
+      "y": 145.2
     },
     {
       "id": "n68",
@@ -266,7 +266,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "bugs",
           "label": "bugs",
           "type": "checkbox",
-          "text": "fix wrapped bug\nwrapped chess game has nearly no animation(and it stucked),\nFor settings, display & sound should be on the first position\nSettings can hide many cards\nadd an extra energy game level"
+          "text": "- [ ] fix wrapped bug\n- [x] wrapped chess game has nearly no animation(and it stucked),\n- [ ] For settings, display & sound should be on the first position\n- [ ] Settings can hide many cards\n- [ ] add an extra energy game level\n- [ ] For the N queens puzzle on the torus, the \"collect\" row should not belong to the whole chart, it should only appear once on the bottom of the scrren, and above the periodic tiles.\n- [ ] In the wrapped mode, if a glued boundary is removed from the display, its cursor style should not appear neither\n- [ ] 2048 games should be fixed. The heavy stroke inside should be removed.\n- [ ] For the 2048, When numbers pass through the glued boundary it should be rotated like the balls in Billiard games.\n- [ ] Add some balls for Billiard presets"
         }
       ],
       "setting": "",
@@ -276,8 +276,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 537.2,
-      "y": 220.9
+      "x": 537.9,
+      "y": 221.4
     },
     {
       "id": "n72",
@@ -298,8 +298,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 422.7,
-      "y": 264.9
+      "x": 423.3,
+      "y": 265.5
     }
   ],
   "arrows": [
@@ -374,7 +374,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     "selectedId": "n68",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 451,
+    "canvasHeight": 452,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 1.6674,
     "relativeNodePositions": {

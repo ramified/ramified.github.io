@@ -103,6 +103,8 @@
       "id": "half-glued",
       "label": "half-glued",
       "key": "half_glued",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
+      "wrappedCoverFit": "glued",
       "file": "half_glued.preset.js"
     },
     {
@@ -645,6 +647,7 @@
       "label": "classic hex",
       "key": "classic_hex",
       "wrappedView": { "x": "repeat", "y": "repeat" },
+      "wrappedHexCutouts": true,
       "file": "classic_hex.preset.js"
     },
     {
@@ -654,6 +657,8 @@
       "id": "hex-torus-5-5",
       "label": "hex torus 5*5",
       "key": "hex_torus_5_5",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
+      "wrappedHexCutouts": true,
       "file": "hex_torus_5_5.preset.js"
     },
     {
@@ -663,6 +668,8 @@
       "id": "hex-klein-bottle-5-5",
       "label": "hex Klein bottle 5*5",
       "key": "hex_klein_bottle_5_5",
+      "wrappedView": { "x": "repeat", "y": "reflect-x" },
+      "wrappedHexCutouts": true,
       "file": "hex_klein_bottle_5_5.preset.js"
     },
     {

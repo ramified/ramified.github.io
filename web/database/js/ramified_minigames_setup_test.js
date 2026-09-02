@@ -95,7 +95,8 @@ function testBilliardsCueGuidanceAndQuickRules() {
   const setupSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
   const nativeSource = fs.readFileSync(require.resolve('./billiards/topological_billiards_native.js'), 'utf8');
   assert.match(setupSource, /if \(!local\) \{\s+showBilliardsCueHint\(\);/);
-  assert.match(setupSource, /drawCanvasFeedbackOverlays[\s\S]{0,240}drawBilliardsCueCaption\(/);
+  assert.match(setupSource, /drawCanvasFeedbackOverlays[\s\S]{0,600}drawBilliardsCueCaption\(/);
+  assert.match(setupSource, /drawCanvasFeedbackOverlays[\s\S]{0,320}wrappedHexGlueContextOverlayActive[\s\S]{0,180}drawWrappedHexGlueContextOverlay/);
   assert.ok(!nativeSource.includes('view.cueHintLabel'));
 }
 
@@ -3334,6 +3335,9 @@ function testExtraBackgroundPresets() {
     'between-two-fires': { x: 'repeat', y: 'repeat', preferenceKey: 'torus' },
     'n-queens-torus-puzzle': { x: 'repeat', y: 'repeat', preferenceKey: 'torus' },
     'three-slits': { x: 'repeat', y: 'repeat', preferenceKey: 'torus' },
+    'half-glued': { x: 'repeat', y: 'repeat', preferenceKey: 'torus' },
+    'hex-torus-5-5': { x: 'repeat', y: 'repeat', preferenceKey: 'torus' },
+    'hex-klein-bottle-5-5': { x: 'repeat', y: 'reflect-x', preferenceKey: 'klein-bottle' },
     'usual-strip': { x: 'repeat', y: '', preferenceKey: 'cylinder' },
     'mobius-strip': { x: 'reflect-y', y: '', preferenceKey: 'mobius-strip' },
     'connect-four-hex-good-mobius-strip': { x: 'reflect-y', y: '', preferenceKey: 'mobius-strip' }
@@ -3343,6 +3347,11 @@ function testExtraBackgroundPresets() {
     const sourceProfile = presetRegistry.find((preset) => preset.id === id).wrappedView;
     assert.strictEqual(sourceProfile.x, expected.x);
     assert.strictEqual(sourceProfile.y || '', expected.y);
+  });
+  assert.strictEqual(game.PRESETS.find((preset) => preset.id === 'half-glued').wrappedCoverFit, 'glued');
+  ['classic-hex', 'hex-torus-5-5', 'hex-klein-bottle-5-5'].forEach((id) => {
+    assert.strictEqual(game.PRESETS.find((preset) => preset.id === id).wrappedHexCutouts, true);
+    assert.strictEqual(presetRegistry.find((preset) => preset.id === id).wrappedHexCutouts, true);
   });
   assert.strictEqual(game.PRESETS.find((preset) => preset.id === 'n-queens-puzzle').wrappedView, undefined);
   const toroidalNQueens = game.createFideChessState('n-queens-torus-puzzle');
@@ -5378,6 +5387,72 @@ function testUniversalBoardDisplayAndCoordinates() {
     ),
     { x: goodMobiusPoint.x, y: goodMobiusPoint.y, copyU: 1, copyV: 0 }
   );
+  const shiftedTorus = game.createHexState('hex-torus-5-5');
+  const shiftedTorusGeometry = game.__test.buildGeometry(shiftedTorus.preset, 1000, 0, 1);
+  const shiftedTorusDeck = game.__test.wrappedCoverDescriptor(shiftedTorusGeometry, shiftedTorus.preset, shiftedTorus.preset.wrappedView);
+  assert.strictEqual(shiftedTorusDeck.seamDerived, true);
+  assert.ok(Math.abs(shiftedTorusDeck.y.x) > 0.001, 'the shifted hex torus retains its skew period');
+  assert.ok(game.__test.wrappedCoverSeamResidual(shiftedTorusGeometry, shiftedTorus.preset, shiftedTorusDeck).max <= shiftedTorusGeometry.radius * 0.0001);
+  const shiftedPoint = shiftedTorusGeometry.cells[shiftedTorus.preset.cols + 1];
+  const shiftedTransform = game.__test.wrappedDeckCopyTransform(shiftedTorusDeck, 1, 1);
+  assert.deepStrictEqual(
+    game.__test.wrappedFundamentalCoordinates(
+      shiftedTransform.x + shiftedPoint.x,
+      shiftedTransform.y + shiftedPoint.y,
+      shiftedTorusGeometry.width,
+      shiftedTorusGeometry.height,
+      shiftedTorusDeck
+    ),
+    { x: shiftedPoint.x, y: shiftedPoint.y, copyU: 1, copyV: 1 }
+  );
+  const shiftedKlein = game.createHexState('hex-klein-bottle-5-5');
+  const shiftedKleinGeometry = game.__test.buildGeometry(shiftedKlein.preset, 1000, 0, 1);
+  const shiftedKleinDeck = game.__test.wrappedCoverDescriptor(shiftedKleinGeometry, shiftedKlein.preset, shiftedKlein.preset.wrappedView);
+  assert.strictEqual(shiftedKleinDeck.seamDerived, true);
+  assert.strictEqual(game.__test.wrappedDeckCopyTransform(shiftedKleinDeck, 0, 1).reflectX, true);
+  assert.ok(game.__test.wrappedCoverSeamResidual(shiftedKleinGeometry, shiftedKlein.preset, shiftedKleinDeck).max <= shiftedKleinGeometry.radius * 0.0001);
+  const halfGlued = game.createBilliardsState('half-glued');
+  const halfGluedGeometry = game.__test.buildGeometry(halfGlued.preset, 1000, 0, 1);
+  const halfGluedDeck = game.__test.wrappedCoverDescriptor(halfGluedGeometry, halfGlued.preset, halfGlued.preset.wrappedView);
+  assert.strictEqual(halfGluedDeck.seamDerived, true);
+  assert.deepStrictEqual(halfGluedDeck.x, { kind: 'repeat', x: halfGluedGeometry.radius * 8, y: -halfGluedGeometry.radius * 4 });
+  assert.deepStrictEqual(halfGluedDeck.y, { x: halfGluedGeometry.radius * 4, y: halfGluedGeometry.radius * 8 });
+  assert.ok(game.__test.wrappedCoverSeamResidual(halfGluedGeometry, halfGlued.preset, halfGluedDeck).max <= halfGluedGeometry.radius * 0.0001);
+  const compatibleSquare = game.createGameState('between-two-fires');
+  const compatibleSquareGeometry = game.__test.buildGeometry(compatibleSquare.preset, 1000, 0, 1);
+  assert.strictEqual(
+    game.__test.wrappedCoverDescriptor(compatibleSquareGeometry, compatibleSquare.preset, compatibleSquare.preset.wrappedView).seamDerived,
+    false,
+    'established square covers retain their rectangular compatibility placement'
+  );
+  const classicHex = game.createHexState('classic-hex');
+  assert.strictEqual(game.__test.wrappedHexCutoutMode(classicHex, true), true);
+  assert.strictEqual(game.__test.wrappedHexCutoutMode(classicHex, false), false);
+  const firstClassicCutout = [...classicHex.removed][0];
+  assert.strictEqual(game.__test.backgroundBoundarySourceEnabled(firstClassicCutout, new Set(), classicHex.removed), false);
+  assert.strictEqual(game.__test.backgroundBoundarySourceEnabled(1, new Set(), classicHex.removed), true);
+  assert.strictEqual(game.placeHexTile(classicHex, [...classicHex.removed][0]).changed, false, 'the visual cutout remains illegal');
+  assert.strictEqual(game.__test.wrappedHexGlueContextOverlayActive(classicHex, true), true);
+  assert.strictEqual(game.__test.wrappedHexGlueContextOverlayActive(classicHex, false), false);
+  assert.strictEqual(game.__test.wrappedHexGlueContextOverlayActive(usualStrip, true), false);
+  [
+    [classicHex, 46],
+    [shiftedTorus, 19],
+    [shiftedKlein, 19]
+  ].forEach(([state, sourceIndex]) => {
+    const geom = game.__test.buildGeometry(state.preset, 1000, 0, 1);
+    const deck = game.__test.wrappedCoverDescriptor(geom, state.preset, state.preset.wrappedView);
+    const transform = game.__test.wrappedDeckCopyTransform(deck, -2, -2);
+    const source = geom.cells[sourceIndex];
+    const world = {
+      x: transform.reflectX ? transform.x - source.x : transform.x + source.x,
+      y: transform.reflected ? transform.y - source.y : transform.y + source.y
+    };
+    const target = game.__test.wrappedTileCandidateAtWorldPoint(geom, state, deck, world);
+    assert.strictEqual(target.index, sourceIndex, `${state.preset.id} resolves a visible live chart beneath a cutout`);
+    assert.strictEqual(target.copyU, -2);
+    assert.strictEqual(target.copyV, -2);
+  });
   const rectangularDeck = game.__test.wrappedCoverDescriptor(
     { width: 100, height: 80, lattice: { shape: 'square' } },
     { gluedEdges: [] },

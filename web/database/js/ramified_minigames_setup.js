@@ -496,7 +496,7 @@
   }
 
   const PRESET_FOLDER_URL = 'ramified_minigame_presets/';
-  const PRESET_ASSET_VERSION = '20260902-3';
+  const PRESET_ASSET_VERSION = '20260903-1';
   const OPTIONAL_SCRIPT_GROUPS = Object.freeze({
     [GAME_MODES.HEX]: Object.freeze([
       'js/background_homology.js?v=20260827-1',
@@ -3798,6 +3798,8 @@
       label: entry.label,
       gameTypes: entry.gameTypes.slice(),
       ...(entry.wrappedView ? { wrappedView: { ...entry.wrappedView } } : {}),
+      ...(entry.wrappedCoverFit ? { wrappedCoverFit: entry.wrappedCoverFit } : {}),
+      ...(entry.wrappedHexCutouts ? { wrappedHexCutouts: true } : {}),
       __lazyPreset: true
     };
   }
@@ -3968,6 +3970,8 @@
           label,
           gameTypes: cleanPresetGameTypes(entry.gameTypes, entry.groups, entry.group),
           wrappedView: normalizeWrappedViewProfile(entry.wrappedView),
+          wrappedCoverFit: entry.wrappedCoverFit === 'glued' ? 'glued' : '',
+          wrappedHexCutouts: entry.wrappedHexCutouts === true,
           data: entry.data && typeof entry.data === 'object' && !Array.isArray(entry.data) ? entry.data : null,
           json: cleanPresetString(entry.json || '')
         };
@@ -8194,7 +8198,7 @@
     if (!x && !y) return null;
     const preferenceKey = x === 'reflect-y' && y === 'reflect-x'
       ? 'projective-plane'
-      : x === 'reflect-y'
+      : (x === 'reflect-y' || y === 'reflect-x')
       ? (y ? 'klein-bottle' : 'mobius-strip')
       : (x && y ? 'torus' : 'cylinder');
     return { x, y, preferenceKey };
@@ -8222,6 +8226,14 @@
   function wrappedViewIsActive(preset = selectedPreset()) {
     const profile = wrappedViewProfile(preset);
     return !!profile && wrappedViewPreferences[profile.preferenceKey] === 'wrapped';
+  }
+
+  function wrappedHexCutoutMode(state, wrappedCover) {
+    return !!(wrappedCover && isHexGame(state) && state.preset && state.preset.wrappedHexCutouts === true);
+  }
+
+  function wrappedHexGlueContextOverlayActive(state, wrappedCover) {
+    return !!(wrappedCover && isHexGame(state));
   }
 
   function wrappedViewCamera(profile = wrappedViewProfile()) {
@@ -10153,17 +10165,23 @@
   }
 
   function tileFromCanvasEvent(event) {
+    const displayPoint = canvasDisplayPointFromEvent(event);
+    if (wrappedViewIsActive()) return wrappedTileFromDisplayPoint(displayPoint);
     const point = canvasPointFromEvent(event);
     return tileFromCanvasPoint(point);
   }
 
   function tileFromCanvasPoint(point) {
-    if (!point || !geometry || !geometry.cells || !geometry.cells.length) return null;
-    const radius = geometry.radius * 0.96;
-    for (let index = 0; index < geometry.cells.length; index += 1) {
-      const cell = geometry.cells[index];
+    return tileFromGeometryPoint(geometry, point);
+  }
+
+  function tileFromGeometryPoint(geom, point) {
+    if (!point || !geom || !geom.cells || !geom.cells.length) return null;
+    const radius = geom.radius * 0.96;
+    for (let index = 0; index < geom.cells.length; index += 1) {
+      const cell = geom.cells[index];
       if (!cell) continue;
-      if (pointInPolygon(point, tilePoints(cell.x, cell.y, radius, geometry.lattice))) {
+      if (pointInPolygon(point, tilePoints(cell.x, cell.y, radius, geom.lattice))) {
         return {
           index,
           row: cell.row,
@@ -13451,18 +13469,24 @@
     ctx.fillStyle = explosionMode ? '#fff0ee' : '#fffdf8';
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
-    function drawFundamentalBoard() {
+    function drawFundamentalBoard(copy = null) {
     ctx.save();
     applyGeometryDisplayTransform(ctx, geometry);
     const sharedDisplayGame = isPlacementGame(game) || isBilliardsGame(game);
     const displayStyle = placementDisplayStyle();
     const vertexDisplay = isVertexPlacementDisplay(displayStyle);
     const polishedVertexDisplay = vertexDisplay && displayStyle === 'polished-vertex';
+    // A removed Hex cell is a chart cutout, not a wall in the developed
+    // surface. Do not let repeated blocked artwork cover the adjacent chart.
+    const hexCutoutChart = wrappedHexCutoutMode(game, wrappedCover);
+    const visualRemoved = hexCutoutChart ? new Set() : removed;
+    const visualBlocked = hexCutoutChart ? bombBlocked : boardBlocked;
     if (!vertexDisplay) {
       geometry.cells.forEach((cell, index) => {
+        if (hexCutoutChart && removed.has(index)) return;
         if (cell) {
-          drawTile(ctx, geometry, cell.row, cell.col, boardBlocked.has(index), explosionMode, displayStyle, {
-            markRemoved: removed.has(index)
+          drawTile(ctx, geometry, cell.row, cell.col, visualBlocked.has(index), explosionMode, displayStyle, {
+            markRemoved: visualRemoved.has(index)
           });
         }
       });
@@ -13470,9 +13494,12 @@
       drawGenericVertexBoard(ctx, geometry, preset, removed, polishedVertexDisplay);
     }
 
-    drawBackgroundBoundaries(ctx, geometry, preset, boardBlocked);
+    drawBackgroundBoundaries(ctx, geometry, preset, visualBlocked, {
+      skipSourceIndices: hexCutoutChart ? removed : null
+    });
     // In the universal cover these edges are physically adjacent on the canvas,
-    // so the ordinary glued-boundary arrows would be misleading.
+    // so the ordinary glued-boundary arrows are drawn only in the final
+    // fundamental-chart context overlay, above every repeated card.
     if (!wrappedCover) drawGlueEdges(ctx, geometry, preset, hoveredGlue);
     if (!wrappedCover && shouldShowBoardCoordinates()) drawBoardCoordinates(ctx, geometry, preset, removed, vertexDisplay);
     if (isLianliankanGame(game)) {
@@ -13492,7 +13519,9 @@
         debugTexture: !!(refs.billiardsDebugTexture && refs.billiardsDebugTexture.checked)
       });
     } else if (isPlacementGame(game)) {
-      if (polishedVertexDisplay) drawPolishedPlacementVertexBoard(ctx, geometry, game);
+      if (polishedVertexDisplay) drawPolishedPlacementVertexBoard(ctx, geometry, game, {
+        hideRemovedBoundaries: hexCutoutChart
+      });
       else if (vertexDisplay) drawPlacementVertexBoard(ctx, geometry, game);
       else if (isConnectFourGame(game)) drawConnectFourHoles(ctx, geometry, game);
       drawPlacementHoverCue(ctx, geometry, game);
@@ -13538,6 +13567,9 @@
       drawFundamentalBoard();
     }
     drawCanvasFeedbackOverlays(ctx, geometry, { skipBombDetonations: wrappedCover });
+    if (wrappedHexGlueContextOverlayActive(game, wrappedCover)) {
+      drawWrappedHexGlueContextOverlay(ctx, logicalWidth, logicalHeight);
+    }
     if (billiardsGuidance && billiardsGuidance.caption) {
       drawBilliardsCueCaption(
         ctx,
@@ -13596,10 +13628,30 @@
         ctx.save();
         ctx.translate(transform.x, transform.y);
         if (transform.reflectX || transform.reflected) ctx.scale(transform.reflectX ? -1 : 1, transform.reflected ? -1 : 1);
-        drawFundamentalBoard();
+        drawFundamentalBoard({ copyU: u, copyV: v });
         ctx.restore();
       }
     }
+    ctx.restore();
+  }
+
+  function drawWrappedHexGlueContextOverlay(ctx, width, height) {
+    if (!geometry || !game || !game.preset) return;
+    const profile = wrappedViewProfile(game.preset);
+    if (!profile) return;
+    const camera = wrappedViewCamera(profile);
+    const scale = Math.max(WRAPPED_VIEW_MIN_SCALE, Math.min(WRAPPED_VIEW_MAX_SCALE, camera.scale));
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const deck = wrappedCoverDescriptor(geometry, game.preset, profile, activeHexCoverOffset(geometry));
+    const transform = wrappedDeckCopyTransform(deck, 0, 0);
+    ctx.save();
+    ctx.translate(centerX + camera.x, centerY + camera.y);
+    ctx.scale(scale, scale);
+    ctx.translate(-centerX, -centerY);
+    ctx.translate(transform.x, transform.y);
+    applyGeometryDisplayTransform(ctx, geometry);
+    drawGlueEdges(ctx, geometry, game.preset, null, { opacity: 0.5 });
     ctx.restore();
   }
 
@@ -13629,7 +13681,7 @@
         ? { kind: 'reflect-y', advanceX: copyWidth, mirrorY: copyHeight }
         : { kind: 'repeat', x: copyWidth, y: 0 },
       y: profile.y === 'reflect-x'
-        ? { kind: 'reflect-x', x: 0, y: copyHeight }
+        ? { kind: 'reflect-x', advanceY: copyHeight, mirrorX: copyWidth }
         : { x: 0, y: copyHeight },
       debugOffset: normalizeWrappedDeckOffset(deckOffset),
       seamDerived: false
@@ -13642,6 +13694,12 @@
     if (!cell) return null;
     const points = tilePoints(cell.x, cell.y, geom.radius, geom.lattice);
     const sides = geom.lattice.sides;
+    if (geom.lattice.shape !== 'hex') {
+      return {
+        start: points[(edge.dir + 1) % sides],
+        end: points[(edge.dir + 2) % sides]
+      };
+    }
     return {
       start: points[modulo(edge.dir - 1, sides)],
       end: points[modulo(edge.dir, sides)]
@@ -13664,7 +13722,7 @@
 
   function seamPairDetails(geom, preset) {
     if (!geom || !preset || !Array.isArray(preset.gluedEdges)) return [];
-    return preset.gluedEdges.map((pair) => {
+    return preset.gluedEdges.map((pair, index) => {
       const first = wrappedFullEdgeSegment(geom, pair.first);
       const second = wrappedFullEdgeSegment(geom, pair.second);
       if (!first || !second) return null;
@@ -13673,6 +13731,9 @@
       return {
         first,
         second,
+        // A group is one geometric seam.  Corner/singleton groups are still
+        // useful constraints, but must not be mistaken for a new period.
+        group: pair.group == null ? `edge-${index}` : String(pair.group),
         delta: {
           x: secondMidpoint.x - firstMidpoint.x,
           y: secondMidpoint.y - firstMidpoint.y
@@ -13685,24 +13746,46 @@
     return Math.abs(delta.x) >= Math.abs(delta.y) ? 'x' : 'y';
   }
 
-  function fittedRepeatVector(pairs, axis) {
-    const candidates = pairs.filter((pair) => seamAxisForDelta(pair.delta) === axis);
-    if (!candidates.length) return null;
-    const positive = candidates.map((pair) => {
-      const sign = axis === 'x'
-        ? (pair.delta.x >= 0 ? 1 : -1)
-        : (pair.delta.y >= 0 ? 1 : -1);
-      return { x: pair.delta.x * sign, y: pair.delta.y * sign };
+  function groupedSeamPairs(pairs) {
+    const groups = new Map();
+    pairs.forEach((pair) => {
+      if (!groups.has(pair.group)) groups.set(pair.group, []);
+      groups.get(pair.group).push(pair);
     });
-    const x = medianNumber(positive.map((candidate) => candidate.x));
-    const y = medianNumber(positive.map((candidate) => candidate.y));
-    return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+    return [...groups.values()];
+  }
+
+  function fittedGroupVector(group, axis) {
+    if (!group || !group.length) return null;
+    const average = {
+      x: group.reduce((sum, pair) => sum + pair.delta.x, 0) / group.length,
+      y: group.reduce((sum, pair) => sum + pair.delta.y, 0) / group.length
+    };
+    if (seamAxisForDelta(average) !== axis) return null;
+    const sign = axis === 'x' ? (average.x >= 0 ? 1 : -1) : (average.y >= 0 ? 1 : -1);
+    const vector = {
+      x: medianNumber(group.map((pair) => pair.delta.x * sign)),
+      y: medianNumber(group.map((pair) => pair.delta.y * sign))
+    };
+    const spread = Math.max(...group.map((pair) => Math.hypot(pair.delta.x * sign - vector.x, pair.delta.y * sign - vector.y)));
+    return Number.isFinite(vector.x) && Number.isFinite(vector.y) ? { vector, spread, count: group.length } : null;
+  }
+
+  function fittedRepeatVector(pairs, axis) {
+    const candidates = groupedSeamPairs(pairs)
+      .map((group) => fittedGroupVector(group, axis))
+      .filter(Boolean)
+      .sort((left, right) => right.count - left.count || left.spread - right.spread);
+    return candidates.length ? candidates[0].vector : null;
   }
 
   function fittedMobiusGlide(pairs) {
-    const candidates = pairs.filter((pair) => seamAxisForDelta(pair.delta) === 'x');
-    if (!candidates.length) return null;
-    const values = candidates.map((pair) => {
+    const candidates = groupedSeamPairs(pairs).map((group) => {
+      if (!group.length || seamAxisForDelta({
+        x: group.reduce((sum, pair) => sum + pair.delta.x, 0) / group.length,
+        y: group.reduce((sum, pair) => sum + pair.delta.y, 0) / group.length
+      }) !== 'x') return null;
+      const values = group.map((pair) => {
       const firstMidpoint = segmentMidpoint(pair.first);
       const secondMidpoint = segmentMidpoint(pair.second);
       const left = pair.delta.x >= 0 ? firstMidpoint : secondMidpoint;
@@ -13711,12 +13794,40 @@
         advanceX: right.x - left.x,
         mirrorY: right.y + left.y
       };
-    });
-    const advanceX = medianNumber(values.map((value) => value.advanceX));
-    const mirrorY = medianNumber(values.map((value) => value.mirrorY));
-    return Number.isFinite(advanceX) && Number.isFinite(mirrorY)
-      ? { advanceX, mirrorY }
-      : null;
+      });
+      const result = {
+        advanceX: medianNumber(values.map((value) => value.advanceX)),
+        mirrorY: medianNumber(values.map((value) => value.mirrorY)),
+        count: group.length
+      };
+      const spread = Math.max(...values.map((value) => Math.hypot(value.advanceX - result.advanceX, value.mirrorY - result.mirrorY)));
+      return Number.isFinite(result.advanceX) && Number.isFinite(result.mirrorY) ? { ...result, spread } : null;
+    }).filter(Boolean).sort((left, right) => right.count - left.count || left.spread - right.spread);
+    return candidates.length ? candidates[0] : null;
+  }
+
+  function fittedVerticalReflection(pairs) {
+    const candidates = groupedSeamPairs(pairs).map((group) => {
+      const average = {
+        x: group.reduce((sum, pair) => sum + pair.delta.x, 0) / group.length,
+        y: group.reduce((sum, pair) => sum + pair.delta.y, 0) / group.length
+      };
+      if (seamAxisForDelta(average) !== 'y') return null;
+      const values = group.map((pair) => {
+        const first = segmentMidpoint(pair.first);
+        const second = segmentMidpoint(pair.second);
+        const lower = first.y >= second.y ? first : second;
+        const upper = first.y >= second.y ? second : first;
+        return { advanceY: lower.y - upper.y, mirrorX: lower.x + upper.x };
+      });
+      const advanceY = medianNumber(values.map((value) => value.advanceY));
+      const mirrorX = medianNumber(values.map((value) => value.mirrorX));
+      const spread = Math.max(...values.map((value) => Math.hypot(value.advanceY - advanceY, value.mirrorX - mirrorX)));
+      return Number.isFinite(advanceY) && Number.isFinite(mirrorX)
+        ? { advanceY, mirrorX, count: group.length, spread }
+        : null;
+    }).filter(Boolean).sort((left, right) => right.count - left.count || left.spread - right.spread);
+    return candidates.length ? candidates[0] : null;
   }
 
   function segmentDistance(left, right) {
@@ -13742,24 +13853,16 @@
   function wrappedCoverSeamResidual(geom, preset, descriptor) {
     if (!geom || !preset || !isWrappedCoverDescriptor(descriptor)) return null;
     const pairs = seamPairDetails(geom, preset);
-    const residuals = pairs.map((pair) => {
-      const axis = seamAxisForDelta(pair.delta);
-      if (axis === 'x' && descriptor.profile.x) {
-        const forward = wrappedDeckCopyTransform(descriptor, 1, 0);
-        return Math.min(
-          segmentDistance(transformWrappedSegment(pair.first, forward), pair.second),
-          segmentDistance(transformWrappedSegment(pair.second, forward), pair.first)
-        );
-      }
-      if (axis === 'y' && descriptor.profile.y) {
-        const forward = wrappedDeckCopyTransform(descriptor, 0, 1);
-        return Math.min(
-          segmentDistance(transformWrappedSegment(pair.first, forward), pair.second),
-          segmentDistance(transformWrappedSegment(pair.second, forward), pair.first)
-        );
-      }
-      return null;
-    }).filter((value) => Number.isFinite(value));
+    const steps = [];
+    const uValues = descriptor.profile.x ? [-1, 0, 1] : [0];
+    const vValues = descriptor.profile.y ? [-1, 0, 1] : [0];
+    uValues.forEach((u) => vValues.forEach((v) => {
+      if (u || v) steps.push(wrappedDeckCopyTransform(descriptor, u, v));
+    }));
+    const residuals = pairs.map((pair) => Math.min(...steps.map((forward) => Math.min(
+      segmentDistance(transformWrappedSegment(pair.first, forward), pair.second),
+      segmentDistance(transformWrappedSegment(pair.second, forward), pair.first)
+    )))).filter((value) => Number.isFinite(value));
     if (!residuals.length) return { max: 0, mean: 0, residuals: [] };
     return {
       max: Math.max(...residuals),
@@ -13778,7 +13881,9 @@
     const fallback = wrappedFallbackDescriptor(profile, geom ? geom.width : 0, geom ? geom.height : 0);
     if (!fallback) return null;
     fallback.debugOffset = requestedOffset;
-    if (!geom || !preset || !geom.lattice || geom.lattice.shape !== 'hex') return fallback;
+    // Explicit catalog covers are allowed to fit any lattice.  Boundary-mode
+    // boards deliberately retain their compatibility rectangle.
+    if (!geom || !preset || !geom.lattice || (geom.lattice.shape !== 'hex' && preset.wrappedCoverFit !== 'glued')) return fallback;
     const pairs = seamPairDetails(geom, preset);
     if (!pairs.length) return fallback;
     const descriptor = {
@@ -13797,6 +13902,9 @@
     if (profile.y === 'repeat') {
       const vector = fittedRepeatVector(pairs, 'y');
       if (vector && vector.y > 0) descriptor.y = vector;
+    } else if (profile.y === 'reflect-x') {
+      const reflection = fittedVerticalReflection(pairs);
+      if (reflection && reflection.advanceY > 0) descriptor.y = { kind: 'reflect-x', ...reflection };
     }
     const residual = wrappedCoverSeamResidual(geom, preset, descriptor);
     const tolerance = Math.max(0.0001, (Number(geom.radius) || 1) * 0.0001);
@@ -13836,10 +13944,14 @@
       y = u * stepY;
     }
     if (profile.y === 'repeat' || profile.y === 'reflect-x') {
-      x += v * descriptor.y.x;
-      y += v * descriptor.y.y;
       reflectX = profile.y === 'reflect-x' && Math.abs(v % 2) === 1;
-      if (reflectX) x += descriptor.width;
+      if (profile.y === 'reflect-x') {
+        y += v * descriptor.y.advanceY;
+        if (reflectX) x += descriptor.y.mirrorX;
+      } else {
+        x += v * descriptor.y.x;
+        y += v * descriptor.y.y;
+      }
     }
     const result = { x, y, reflected, advanceX };
     if (reflectX) result.reflectX = true;
@@ -13851,6 +13963,28 @@
       ? descriptorOrWidth
       : wrappedFallbackDescriptor(profile, descriptorOrWidth, copyHeight, deckOffset);
     if (!descriptor) return { minU: 0, maxU: 0, minV: 0, maxV: 0 };
+    const skewDirect = descriptor.seamDerived
+      && descriptor.profile.x === 'repeat'
+      && descriptor.profile.y === 'repeat'
+      && (Math.abs(descriptor.x.y) > 0.0001 || Math.abs(descriptor.y.x) > 0.0001);
+    if (skewDirect) {
+      const determinant = (descriptor.x.x * descriptor.y.y) - (descriptor.x.y * descriptor.y.x);
+      if (Math.abs(determinant) > 0.0001) {
+        const coordinates = [
+          [worldBounds.minX, worldBounds.minY], [worldBounds.minX, worldBounds.maxY],
+          [worldBounds.maxX, worldBounds.minY], [worldBounds.maxX, worldBounds.maxY]
+        ].map(([x, y]) => ({
+          u: ((x * descriptor.y.y) - (y * descriptor.y.x)) / determinant,
+          v: ((descriptor.x.x * y) - (descriptor.x.y * x)) / determinant
+        }));
+        return {
+          minU: Math.floor(Math.min(...coordinates.map((value) => value.u))) - 2,
+          maxU: Math.ceil(Math.max(...coordinates.map((value) => value.u))) + 1,
+          minV: Math.floor(Math.min(...coordinates.map((value) => value.v))) - 2,
+          maxV: Math.ceil(Math.max(...coordinates.map((value) => value.v))) + 1
+        };
+      }
+    }
     const rangeForAxis = (min, max, size, repeats) => {
       if (!repeats || !Number.isFinite(size) || size <= 0) return { min: 0, max: 0 };
       // A copy [n*size, (n+1)*size] is needed exactly when it intersects the
@@ -13877,7 +14011,7 @@
         const candidate = rangeForAxis(
           worldBounds.minY - transform.y,
           worldBounds.maxY - transform.y,
-          descriptor.y.y,
+          descriptor.profile.y === 'reflect-x' ? descriptor.y.advanceY : descriptor.y.y,
           true
         );
         vertical.min = Math.min(vertical.min, candidate.min);
@@ -13910,26 +14044,61 @@
       return { x: displayPoint.x, y: displayPoint.y, copyU: 0, copyV: 0, profile: null };
     }
     const profile = wrappedViewProfile();
-    const camera = wrappedViewCamera(profile);
     const width = geometry.width;
     const height = geometry.height;
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const worldX = centerX + ((displayPoint.x - centerX - camera.x) / camera.scale);
-    const worldY = centerY + ((displayPoint.y - centerY - camera.y) / camera.scale);
+    const world = wrappedDisplayWorldPoint(displayPoint, width, height, profile);
     const deck = wrappedCoverDescriptor(
       geometry,
       game && game.preset ? game.preset : selectedPreset(),
       profile,
       activeHexCoverOffset(geometry)
     );
-    const fundamental = wrappedFundamentalCoordinates(worldX, worldY, width, height, deck);
+    const fundamental = wrappedFundamentalCoordinates(world.x, world.y, width, height, deck);
     return fundamental ? { ...fundamental, profile } : null;
+  }
+
+  function wrappedDisplayWorldPoint(displayPoint, width = geometry && geometry.width, height = geometry && geometry.height, profile = wrappedViewProfile()) {
+    if (!displayPoint || !Number.isFinite(width) || !Number.isFinite(height)) return null;
+    const camera = wrappedViewCamera(profile);
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const scale = Math.max(WRAPPED_VIEW_MIN_SCALE, Math.min(WRAPPED_VIEW_MAX_SCALE, camera.scale));
+    return {
+      x: centerX + ((displayPoint.x - centerX - camera.x) / scale),
+      y: centerY + ((displayPoint.y - centerY - camera.y) / scale)
+    };
   }
 
   function wrappedDisplayPointToFundamentalPoint(displayPoint) {
     const details = wrappedDisplayPointDetails(displayPoint);
     return details ? { x: details.x, y: details.y } : null;
+  }
+
+  function wrappedTileFromDisplayPoint(displayPoint) {
+    if (!displayPoint || !geometry || !wrappedViewIsActive()) return null;
+    const profile = wrappedViewProfile();
+    const world = wrappedDisplayWorldPoint(displayPoint, geometry.width, geometry.height, profile);
+    if (!world) return null;
+    const deck = wrappedCoverDescriptor(
+      geometry,
+      game && game.preset ? game.preset : selectedPreset(),
+      profile,
+      activeHexCoverOffset(geometry)
+    );
+    return wrappedTileCandidateAtWorldPoint(geometry, game, deck, world);
+  }
+
+  function wrappedTileCandidateAtWorldPoint(geom, state, deck, world) {
+    if (!geom || !deck || !world) return null;
+    const ignoreCutouts = wrappedHexCutoutMode(state, true);
+    const candidates = wrappedFundamentalCoordinateCandidates(world.x, world.y, geom.width, geom.height, deck);
+    for (const candidate of candidates) {
+      const target = tileFromGeometryPoint(geom, displayPointToGeometryPoint(candidate, geom));
+      if (!target) continue;
+      if (ignoreCutouts && state.removed && state.removed.has(target.index)) continue;
+      return { ...target, copyU: candidate.copyU, copyV: candidate.copyV };
+    }
+    return null;
   }
 
   function wrappedCopyIsReflected(profile, copyU) {
@@ -13962,34 +14131,61 @@
     };
   }
 
-  function wrappedFundamentalCoordinates(worldX, worldY, width, height, profileOrDescriptor, deckOffset = null) {
+  function wrappedFundamentalCoordinateCandidates(worldX, worldY, width, height, profileOrDescriptor, deckOffset = null) {
     const descriptor = isWrappedCoverDescriptor(profileOrDescriptor)
       ? profileOrDescriptor
       : wrappedFallbackDescriptor(profileOrDescriptor, width, height, deckOffset);
-    if (!descriptor || !Number.isFinite(worldX) || !Number.isFinite(worldY) || width <= 0 || height <= 0) return null;
+    if (!descriptor || !Number.isFinite(worldX) || !Number.isFinite(worldY) || width <= 0 || height <= 0) return [];
     const profile = descriptor.profile;
-    if (!profile.x && (worldX < 0 || worldX >= width)) return null;
+    if (!profile.x && (worldX < 0 || worldX >= width)) return [];
+    const skewDirect = descriptor.seamDerived
+      && profile.x === 'repeat'
+      && profile.y === 'repeat'
+      && (Math.abs(descriptor.x.y) > 0.0001 || Math.abs(descriptor.y.x) > 0.0001);
+    if (skewDirect) {
+      const determinant = (descriptor.x.x * descriptor.y.y) - (descriptor.x.y * descriptor.y.x);
+      if (Math.abs(determinant) > 0.0001) {
+        const roughU = ((worldX * descriptor.y.y) - (worldY * descriptor.y.x)) / determinant;
+        const roughV = ((descriptor.x.x * worldY) - (descriptor.x.y * worldX)) / determinant;
+        const candidates = [];
+        for (let u = Math.floor(roughU) - 2; u <= Math.ceil(roughU) + 2; u += 1) {
+          for (let v = Math.floor(roughV) - 2; v <= Math.ceil(roughV) + 2; v += 1) candidates.push({ u, v });
+        }
+        candidates.sort((left, right) => right.u - left.u || right.v - left.v);
+        return candidates.map((candidate) => {
+          const transform = wrappedDeckCopyTransform(descriptor, candidate.u, candidate.v);
+          const localX = worldX - transform.x;
+          const localY = worldY - transform.y;
+          return { x: localX, y: localY, copyU: candidate.u, copyV: candidate.v };
+        }).filter((candidate) => candidate.x >= 0 && candidate.x < width && candidate.y >= 0 && candidate.y < height);
+      }
+    }
     const horizontalStep = wrappedDeckCopyTransform(descriptor, 1, 0).advanceX;
     const roughU = profile.x ? Math.floor(worldX / horizontalStep) : 0;
     // Draw order is ascending, so an overlap in a tight seam-derived deck is
     // owned by the later copy that is visibly on top.
-    const uCandidates = profile.x ? [roughU + 1, roughU, roughU - 1] : [0];
+    const uCandidates = profile.x ? [roughU + 2, roughU + 1, roughU, roughU - 1, roughU - 2] : [0];
+    const results = [];
     for (const copyU of uCandidates) {
       const horizontalTransform = wrappedDeckCopyTransform(descriptor, copyU, 0);
-      const verticalStep = descriptor.y.y;
+      const verticalStep = profile.y === 'reflect-x' ? descriptor.y.advanceY : descriptor.y.y;
       const roughV = profile.y
         ? Math.floor((worldY - horizontalTransform.y) / verticalStep)
         : 0;
-      const vCandidates = profile.y ? [roughV + 1, roughV, roughV - 1] : [0];
+      const vCandidates = profile.y ? [roughV + 2, roughV + 1, roughV, roughV - 1, roughV - 2] : [0];
       for (const copyV of vCandidates) {
         const transform = wrappedDeckCopyTransform(descriptor, copyU, copyV);
         const localX = transform.reflectX ? transform.x - worldX : worldX - transform.x;
         const localY = transform.reflected ? transform.y - worldY : worldY - transform.y;
         if (localX < 0 || localX >= width || localY < 0 || localY >= height) continue;
-        return { x: localX, y: localY, copyU, copyV };
+        results.push({ x: localX, y: localY, copyU, copyV });
       }
     }
-    return null;
+    return results;
+  }
+
+  function wrappedFundamentalCoordinates(worldX, worldY, width, height, profileOrDescriptor, deckOffset = null) {
+    return wrappedFundamentalCoordinateCandidates(worldX, worldY, width, height, profileOrDescriptor, deckOffset)[0] || null;
   }
 
   function panWrappedViewByClientDelta(clientDx, clientDy) {
@@ -14402,9 +14598,10 @@
     return ((cell.row + cell.col) % 2 === 0) ? CHESSBOARD_SQUARE_COLORS[0] : CHESSBOARD_SQUARE_COLORS[1];
   }
 
-  function drawBackgroundBoundaries(ctx, geom, preset, removed) {
+  function drawBackgroundBoundaries(ctx, geom, preset, removed, options = {}) {
     const glued = gluedEdgeKeySet(preset);
     const cuts = cutEdgeKeySet(preset);
+    const skipSourceIndices = options.skipSourceIndices instanceof Set ? options.skipSourceIndices : null;
     ctx.save();
     ctx.strokeStyle = '#111111';
     ctx.lineWidth = Math.max(1.8, geom.radius * 0.055);
@@ -14413,7 +14610,7 @@
     for (let row = 1; row <= preset.rows; row += 1) {
       for (let col = 1; col <= preset.cols; col += 1) {
         const index = indexOf(row, col, preset.cols);
-        if (removed.has(index)) continue;
+        if (!backgroundBoundarySourceEnabled(index, removed, skipSourceIndices)) continue;
         for (const dir of directionsForPreset(preset)) {
           if (glued.has(boundaryEdgeKey({ row, col, dir }, preset.cols))) continue;
           const next = neighbor(row, col, dir, preset);
@@ -14427,10 +14624,11 @@
     ctx.restore();
   }
 
-  function drawGlueEdges(ctx, geom, preset, hover) {
+  function drawGlueEdges(ctx, geom, preset, hover, options = {}) {
     const activeHover = activeGlueHoverForPreset(preset, hover);
     const activeGroup = activeHover && activeHover.groupKey;
     ctx.save();
+    ctx.globalAlpha *= Number.isFinite(options.opacity) ? Math.max(0, Math.min(1, options.opacity)) : 1;
     preset.gluedEdges.forEach((pair) => {
       const color = glueColor(pair);
       drawGlueHalf(ctx, geom, pair.first, color, glueFirstArrowReversed(pair));
@@ -14525,6 +14723,10 @@
     boxPath(ctx, point, geom.radius * 1.48 * scale, geom.lattice);
     ctx.stroke();
     ctx.restore();
+  }
+
+  function backgroundBoundarySourceEnabled(index, removed, skipSourceIndices = null) {
+    return !removed.has(index) && !(skipSourceIndices && skipSourceIndices.has(index));
   }
 
   // Wrapped covers omit the usual colored glue arrows. Retain a compact dark
@@ -16350,7 +16552,7 @@
     if (isConnectFourGame(state)) drawConnectFourHoles(ctx, geom, state);
   }
 
-  function drawPolishedPlacementVertexBoard(ctx, geom, state) {
+  function drawPolishedPlacementVertexBoard(ctx, geom, state, options = {}) {
     const removed = state && state.removed ? state.removed : new Set();
     const preset = state && state.preset;
     const glued = gluedEdgeKeySet(preset);
@@ -16380,7 +16582,9 @@
         }
         const nextIndex = indexOf(next.row, next.col, preset.cols);
         if (removed.has(nextIndex) || cuts.has(cutKey(index, nextIndex))) {
-          boundaryEdges.push({ index, row: cell.row, col: cell.col, dir });
+          if (!(options.hideRemovedBoundaries && removed.has(nextIndex))) {
+            boundaryEdges.push({ index, row: cell.row, col: cell.col, dir });
+          }
           return;
         }
         const key = cutKey(index, nextIndex);
@@ -28344,6 +28548,12 @@
       firstPresentValue(source, ['wrappedView']) || firstPresentValue(payload, ['wrappedView'])
     );
     if (wrappedView) normalized.wrappedView = wrappedView;
+    if (firstPresentValue(source, ['wrappedCoverFit']) === 'glued' || firstPresentValue(payload, ['wrappedCoverFit']) === 'glued') {
+      normalized.wrappedCoverFit = 'glued';
+    }
+    if (firstPresentValue(source, ['wrappedHexCutouts']) === true || firstPresentValue(payload, ['wrappedHexCutouts']) === true) {
+      normalized.wrappedHexCutouts = true;
+    }
     const billiardsSource = firstPresentValue(source, ['billiards']) ?? firstPresentValue(payload, ['billiards']);
     if (billiardsSource && typeof billiardsSource === 'object' && !Array.isArray(billiardsSource)) {
       normalized.billiards = clonePlain(billiardsSource);
@@ -29053,6 +29263,8 @@
       connectFourHoles: (source.connectFourHoles || []).map((tile) => ({ ...tile })),
       gluedEdges: (source.gluedEdges || []).map(cloneGluePair),
       wrappedView: source.wrappedView ? { ...source.wrappedView } : undefined,
+      wrappedCoverFit: source.wrappedCoverFit === 'glued' ? 'glued' : undefined,
+      wrappedHexCutouts: source.wrappedHexCutouts === true,
       pieceSets: source.pieceSets ? clonePlain(source.pieceSets) : undefined,
       pieces: Array.isArray(source.pieces) ? source.pieces.map((piece) => ({ ...piece })) : undefined,
       chineseCheckersPlayers: Array.isArray(source.chineseCheckersPlayers) ? source.chineseCheckersPlayers.slice() : undefined,
@@ -30829,6 +31041,7 @@
     surfaceSuccessor,
     __test: {
       backgroundPresetForExport,
+      backgroundBoundarySourceEnabled,
       buildMosaicCalculatorHref,
       base64UrlEncodeUtf8,
       lazyPresetFromRegistryEntry,
@@ -30868,6 +31081,8 @@
       wrappedDeckCopyTransform,
       wrappedCoverDescriptor,
       wrappedCoverSeamResidual,
+      wrappedHexCutoutMode,
+      wrappedHexGlueContextOverlayActive,
       wrappedRenderPixelRatio,
       normalizeHexCoverOffset,
       buildGeometry,
@@ -30878,6 +31093,8 @@
       normalizeWrappedViewProfile,
       wrappedViewProfileForBoundaryMode,
       readWrappedViewPreferences,
+      wrappedTileCandidateAtWorldPoint,
+      wrappedFundamentalCoordinateCandidates,
       wrappedFundamentalCoordinates,
       setFullscreenPreferences(value) {
         fullscreenPreferences = normalizeFullscreenPreferences(value);
