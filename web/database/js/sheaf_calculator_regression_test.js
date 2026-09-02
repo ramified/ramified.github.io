@@ -297,7 +297,7 @@ function testSheafComplexCalculatorPageAndPrototypeLink() {
   assert(html.includes('value="preset">presets</option>'));
   assert(html.includes('value="import">import</option>'));
   assert(html.includes('id="complex-chart-preset"'));
-  assert(html.includes('<select id="complex-chart-preset" class="sheaf-select"></select>'));
+  assert(html.includes('<select id="complex-chart-preset" class="sheaf-select calculator-control"></select>'));
   assert(!html.includes('id="complex-chart-add-complex"'));
   assert(!html.includes('id="complex-chart-add-filtration"'));
   assert(html.includes('id="complex-chart-saved"'));

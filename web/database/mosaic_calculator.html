@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mosaic Calculator</title>
-  <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/site.css?v=20260902-2">
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
         .mosaic-layout {
@@ -83,11 +83,6 @@
       font-size: 0.82rem;
     }
 
-    .mosaic-toolbar-select:focus {
-      outline: 2px solid var(--accent);
-      border-color: var(--accent);
-    }
-
     .mosaic-toolbar-toggle {
       padding-left: 12px;
       border-left: 1px solid var(--border);
@@ -100,18 +95,6 @@
       height: 14px;
       accent-color: var(--accent);
       cursor: pointer;
-    }
-
-    .mosaic-underbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      padding: 0 16px 14px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
-      color: var(--muted);
-      flex-wrap: wrap;
     }
 
     .mosaic-underbar-left {
@@ -150,12 +133,6 @@
       color: var(--text);
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.78rem;
-    }
-
-    .mosaic-number-row input[type=number]:focus,
-    .mosaic-editor-input:focus {
-      outline: 2px solid var(--accent);
-      border-color: var(--accent);
     }
 
     .mosaic-editor-input {
@@ -562,20 +539,6 @@
       border-radius: 50%;
       border: 1px solid var(--border);
       background: var(--boundary-color);
-    }
-
-    .mosaic-chip {
-      display: inline-flex;
-      align-items: center;
-      min-height: 21px;
-      padding: 1px 6px;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      color: var(--text);
-      background: rgba(255,255,255,0.55);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
-      white-space: nowrap;
     }
 
     .slice-info-row {
@@ -1260,11 +1223,11 @@
     <header class="panel-title">
       <span class="panel-title-text">Mosaic Canvas</span>
       <div class="canvas-toolbar" aria-label="Mosaic canvas controls">
-        <span class="shape-indicator" title="Editor status"><span id="status-badge" class="mosaic-chip">empty</span></span>
+        <span class="shape-indicator" title="Editor status"><span id="status-badge" class="mosaic-chip calculator-badge">empty</span></span>
         <span class="mosaic-toolbar-group" aria-label="Mosaic lattice">
           <label title="Mosaic lattice">
             <span>lattice</span>
-            <select id="lattice-select" class="mosaic-toolbar-select">
+            <select id="lattice-select" class="mosaic-toolbar-select calculator-control">
               <option value="hexagonal">Hexagonal</option>
               <option value="square">Square</option>
             </select>
@@ -1273,7 +1236,7 @@
         <span class="mosaic-toolbar-group" aria-label="Canvas boundary">
           <label title="Canvas boundary">
             <span>boundary</span>
-            <select id="boundary-mode" class="mosaic-toolbar-select">
+            <select id="boundary-mode" class="mosaic-toolbar-select calculator-control">
               <option value="grid">Grid</option>
               <option value="wrapped">Wrapped</option>
               <option value="glued">Glued</option>
@@ -1296,7 +1259,7 @@
     <div id="canvas-wrap">
       <canvas id="mosaic-canvas" tabindex="0" aria-label="Pipe mosaic"></canvas>
     </div>
-    <div class="mosaic-underbar">
+    <div class="mosaic-underbar calculator-underbar">
       <span class="mosaic-underbar-left">
         <button class="btn btn-ghost mosaic-underbar-clear" id="clear-board" type="button">clear</button>
         <span id="status-line">ready</span>
@@ -1663,30 +1626,30 @@
             <div class="mosaic-import-preset-controls" id="dual-graph-preset-controls" hidden>
               <label class="mosaic-preset-field">
                 <span class="input-label">g:</span>
-                <input type="number" id="dual-graph-preset-genus" class="mosaic-editor-input" min="0" max="12" value="2">
+                <input type="number" id="dual-graph-preset-genus" class="mosaic-editor-input calculator-control" min="0" max="12" value="2">
               </label>
               <label class="mosaic-preset-field">
                 <span class="input-label">n:</span>
-                <input type="number" id="dual-graph-preset-markings" class="mosaic-editor-input" min="0" max="6" value="5">
+                <input type="number" id="dual-graph-preset-markings" class="mosaic-editor-input calculator-control" min="0" max="6" value="5">
               </label>
             </div>
             <div class="mosaic-import-preset-controls" id="minigame-rect-size-controls" hidden>
               <label class="mosaic-preset-field">
                 <span class="input-label">Rows</span>
-                <input type="number" id="minigame-rows" class="mosaic-editor-input" min="2" max="25" value="4">
+                <input type="number" id="minigame-rows" class="mosaic-editor-input calculator-control" min="2" max="25" value="4">
               </label>
               <label class="mosaic-preset-field">
                 <span class="input-label">Cols</span>
-                <input type="number" id="minigame-cols" class="mosaic-editor-input" min="2" max="25" value="4">
+                <input type="number" id="minigame-cols" class="mosaic-editor-input calculator-control" min="2" max="25" value="4">
               </label>
             </div>
             <div class="mosaic-inline-row" id="minigame-square-size-row" hidden>
               <span class="input-label">Board n</span>
-              <input type="number" id="minigame-board-size" class="mosaic-editor-input" min="2" max="25" value="8">
+              <input type="number" id="minigame-board-size" class="mosaic-editor-input calculator-control" min="2" max="25" value="8">
             </div>
             <button class="btn btn-ghost mosaic-import-button" id="load-import-preset" type="button">load preset</button>
           </div>
-          <textarea id="import-input" class="mosaic-editor-input mosaic-import-input" spellcheck="false" autocomplete="off" placeholder="{ ... }"></textarea>
+          <textarea id="import-input" class="mosaic-editor-input calculator-control mosaic-import-input" spellcheck="false" autocomplete="off" placeholder="{ ... }"></textarea>
           <button class="btn mosaic-import-button" id="generate-import">generate</button>
         </div>
       </div>
@@ -1711,7 +1674,7 @@
       <div class="card-body">
         <div class="stat-row"><span class="stat-label homology-math">\(\operatorname{H}_{1}(X;\mathbb{Z})\)</span><span class="stat-value homology-math" id="homology-group">\(\text{not computed}\)</span></div>
         <div class="action-row homology-actions">
-          <button class="btn btn-ghost" id="compute-homology" type="button">compute integral H&#8321;</button>
+              <button class="btn btn-ghost" id="compute-homology" type="button" data-shortcut-primary>compute integral H&#8321;</button>
           <button class="btn btn-ghost" id="trace-homology-circle" type="button" title="Click a quotient corner and then incident tile edges to make a closed background loop." disabled>trace a background loop</button>
           <button class="btn btn-ghost" id="homology-trace-undo" type="button" disabled>undo</button>
           <button class="btn btn-ghost" id="homology-trace-clear" type="button" disabled>clear</button>
@@ -1866,7 +1829,7 @@
                 <option value="kamada-kawai">Kamada-Kawai</option>
               </select>
             </label>
-            <button class="btn" id="compute-layout" type="button">Compute layout</button>
+              <button class="btn" id="compute-layout" type="button" data-shortcut-primary>Compute layout</button>
             <button class="btn btn-ghost" id="reset-layout" type="button">Reset</button>
             <span class="hint dual-graph-layout-time" id="dual-graph-layout-time">-</span>
           </div>
@@ -1951,7 +1914,7 @@
         <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Boundary Divisors</span><em class="toggle-icon">&#9662;</em></div>
         <div class="card-body">
           <div class="dual-graph-degeneration-actions">
-            <button class="btn btn-ghost" id="compute-degenerations" type="button">Compute divisors</button>
+              <button class="btn btn-ghost" id="compute-degenerations" type="button" data-shortcut-primary>Compute divisors</button>
             <button class="btn btn-ghost" id="export-degenerations" type="button" data-import-export-trigger="degenerations" data-export-filename="dual-graph-degenerations.json">Export</button>
             <button class="btn btn-ghost dual-graph-degeneration-wide-toggle" id="toggle-degenerations-wide" type="button">wide</button>
             <span class="hint" id="dual-graph-degenerations-status">stable graph required</span>
@@ -2027,7 +1990,7 @@
               <option value="braid">Braid</option>
             </select>
           </div>
-          <textarea id="knot-code" class="mosaic-editor-input mosaic-knot-code" readonly spellcheck="false">-</textarea>
+          <textarea id="knot-code" class="mosaic-editor-input calculator-control mosaic-knot-code" readonly spellcheck="false">-</textarea>
         </div>
       </div>
     </section>
@@ -2110,6 +2073,7 @@
 <script src="js/mosaic_knot_engine.js"></script>
 <script src="ramified_minigame_presets/presets.js?v=20260825-1"></script>
 <script src="js/calculator_cards.js"></script>
+<script src="js/calculator_input_settings.js?v=20260902-2"></script>
 <script src="js/background_homology.js?v=20260827-1"></script>
 <script src="js/hex_homology_game.js?v=20260827-1"></script>
 <script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>

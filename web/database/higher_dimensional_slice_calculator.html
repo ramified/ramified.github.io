@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Higher-Dimensional Slice Calculator</title>
-  <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/site.css?v=20260902-2">
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
     .slice-calculator-layout {
@@ -1075,7 +1075,7 @@
             <div class="slice-control-line">
               <select id="source-add-type" class="slice-select" aria-label="New object type"></select>
               <select id="source-add-variant" class="slice-select" aria-label="Source variant" hidden></select>
-              <button id="source-add-object" class="slice-btn" type="button">add</button>
+              <button id="source-add-object" class="slice-btn" type="button" data-shortcut-primary>add</button>
             </div>
           </div>
 
@@ -1158,7 +1158,7 @@
                   <option value="singular-simplicial">singular simplicial</option>
                   <option value="square-cone">square cone</option>
                 </select>
-                <button id="toric-cone-apply-preset" class="slice-btn" type="button">apply</button>
+                <button id="toric-cone-apply-preset" class="slice-btn" type="button" data-shortcut-primary>apply</button>
               </div>
             </div>
             <div class="slice-toric-input-modes">
@@ -1176,7 +1176,7 @@
                   </div>
                 </div>
                 <div class="slice-button-line">
-                  <button id="toric-cone-apply-manual" class="slice-btn" type="button">apply manual</button>
+                  <button id="toric-cone-apply-manual" class="slice-btn" type="button" data-shortcut-primary>apply manual</button>
                   <button id="toric-cone-add-generator" class="slice-btn" type="button">add ray column</button>
                 </div>
               </div>
@@ -1193,7 +1193,7 @@
                   <textarea id="toric-cone-rows-import" class="slice-textarea slice-vector-textarea" spellcheck="false" aria-label="Ray matrix import" placeholder="1, 0, 1&#10;0, 1, 1"></textarea>
                 </div>
                 <div class="slice-button-line">
-                  <button id="toric-cone-apply-rows" class="slice-btn" type="button">apply import</button>
+                  <button id="toric-cone-apply-rows" class="slice-btn" type="button" data-shortcut-primary>apply import</button>
                 </div>
               </div>
 
@@ -1255,7 +1255,7 @@
                     <option value="affine-space">affine space A^n</option>
                     <option value="weighted-projective-space">weighted P(1,...,1,2)</option>
                   </select>
-                  <button id="toric-fan-apply-preset" class="slice-btn" type="button">apply</button>
+                  <button id="toric-fan-apply-preset" class="slice-btn" type="button" data-shortcut-primary>apply</button>
                 </div>
               </div>
             </div>
@@ -1381,14 +1381,14 @@
                   <div id="direct-frame-grid" class="slice-direct-matrix-grid" aria-label="Manual frame matrix with columns v_i"></div>
                 </div>
                 <div class="slice-button-line">
-                  <button id="direct-manual-apply" class="slice-btn" type="button">apply manual</button>
+                  <button id="direct-manual-apply" class="slice-btn" type="button" data-shortcut-primary>apply manual</button>
                 </div>
               </div>
 
               <div class="slice-direct-mode-panel" data-direct-input-mode-panel="import" hidden>
                 <div class="slice-direct-frame-row">
                   <textarea id="direct-frame-import" class="slice-textarea" spellcheck="false" aria-label="Import frame matrix rows" placeholder="Paste matrix_calculator rows here; columns are v_i"></textarea>
-                  <button id="direct-import-apply" class="slice-btn" type="button">apply import</button>
+                  <button id="direct-import-apply" class="slice-btn" type="button" data-shortcut-primary>apply import</button>
                 </div>
               </div>
             </div>
@@ -1610,8 +1610,9 @@
     window.SLICE_LMFDB_PROXY_URL = 'https://lmfdb-proxy.ramified.workers.dev';
   </script>
   <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
-  <script src="js/calculator_cards.js"></script>
-  <script src="js/toric_cone_math.js?v=20260830-2"></script>
+<script src="js/calculator_cards.js"></script>
+<script src="js/calculator_input_settings.js?v=20260902-2"></script>
+<script src="js/toric_cone_math.js?v=20260830-2"></script>
   <script src="js/higher_dimensional_slice_explorer.js?v=20260830-2"></script>
   <script src="js/import_export_panel.js?v=20260821-7"></script>
   <script src="js/import_export_page_adapters.js?v=20260821-9"></script>

@@ -1101,6 +1101,7 @@
 
     createBoard(5, 5, state.lattice, state.wrapped);
     importMosaicFromUrlParams();
+    setupCalculatorInputSettings();
   }
 
   function importMosaicFromUrlParams() {
@@ -2016,7 +2017,6 @@
       });
       refs.wanderCanvas.addEventListener('contextmenu', (event) => event.preventDefault());
     }
-    document.addEventListener('keydown', handleWanderKeyDown);
     refs.knotCodeKind.addEventListener('change', () => {
       state.knotCodeKind = normalizeKnotCodeKind(refs.knotCodeKind.value);
       updateKnotCard(analyze());
@@ -31676,6 +31676,84 @@
   function normalizeHomologyCordPointSpacing(value) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? clamp(parsed, 0.05, 0.3) : 0.12;
+  }
+
+  function setupCalculatorInputSettings() {
+    const api = typeof window !== 'undefined' ? window.CalculatorInputSettings : null;
+    if (!api || api.getSession('mosaic')) return;
+    const sessionRef = { current: null };
+    const clickAction = (id) => () => {
+      const button = document.getElementById(id);
+      if (!button || button.disabled || button.hidden || button.closest('[hidden]')) return false;
+      button.click();
+      return true;
+    };
+    const enabledButton = (id) => () => {
+      const button = document.getElementById(id);
+      return !!(button && !button.disabled && !button.hidden && !button.closest('[hidden]'));
+    };
+    const wanderReady = () => !!(state.wanderOpen && !state.wanderSelectingStart && state.wanderTiles.length && isGluedBoundaryMode() && currentWanderTile());
+    const directionAction = (dir, label, bindings) => ({
+      id: `wander-direction-${dir}`,
+      group: 'Wander',
+      label,
+      description: 'Crosses the selected edge of the current Wander tile.',
+      defaultBindings: bindings,
+      enabled: wanderReady,
+      repeat: true,
+      trigger: () => {
+        if (!wanderReady()) return false;
+        const current = currentWanderTile();
+        stepWanderFromEdge({ id: current.id, tile: current, dir });
+        return true;
+      }
+    });
+    const actionProvider = () => {
+      const square = getLattice().shape === 'square';
+      const directions = square
+        ? [
+          directionAction(0, 'Wander east', ['d', 'ArrowRight']),
+          directionAction(1, 'Wander south', ['s', 'ArrowDown']),
+          directionAction(2, 'Wander west', ['a', 'ArrowLeft']),
+          directionAction(3, 'Wander north', ['w', 'ArrowUp'])
+        ]
+        : [
+          directionAction(0, 'Wander east', ['d']),
+          directionAction(1, 'Wander southeast', ['x']),
+          directionAction(2, 'Wander southwest', ['z']),
+          directionAction(3, 'Wander west', ['a']),
+          directionAction(4, 'Wander northwest', ['w']),
+          directionAction(5, 'Wander northeast', ['e'])
+        ];
+      return [
+        {
+          id: 'primary', group: 'Current task', label: 'Compute current panel',
+          description: 'Runs the primary action in the focused or most recently used panel.',
+          defaultBindings: ['Mod+Enter'], allowInEditable: true, storageProfile: 'global',
+          trigger: () => sessionRef.current?.triggerPrimary('[data-shortcut-primary]') || false
+        },
+        { id: 'homology-undo', group: 'Homology', label: 'Undo homology trace', description: 'Removes the last homology trace step.', defaultBindings: ['Mod+z'], storageProfile: 'global', trigger: clickAction('homology-trace-undo'), enabled: enabledButton('homology-trace-undo') },
+        ...directions,
+        { id: 'clear-board', group: 'Board', label: 'Clear board', description: 'Clears the board using its existing state rules.', defaultBindings: [], storageProfile: 'global', trigger: clickAction('clear-board'), enabled: enabledButton('clear-board') },
+        { id: 'clear-billiard-background', group: 'Board', label: 'Clear billiard background', description: 'Clears the current billiard background.', defaultBindings: [], storageProfile: 'global', trigger: clickAction('background-billiard-clear'), enabled: enabledButton('background-billiard-clear') },
+        { id: 'clear-decorations', group: 'Board', label: 'Clear decorations', description: 'Clears the current board decorations.', defaultBindings: [], storageProfile: 'global', trigger: clickAction('clear-decorations'), enabled: enabledButton('clear-decorations') },
+        { id: 'clear-homology-trace', group: 'Homology', label: 'Clear homology trace', description: 'Clears the current homology trace.', defaultBindings: [], storageProfile: 'global', trigger: clickAction('homology-trace-clear'), enabled: enabledButton('homology-trace-clear') },
+        { id: 'reset-homology-cords', group: 'Homology', label: 'Reset homology cords', description: 'Restores the homology cord layout.', defaultBindings: [], storageProfile: 'global', trigger: clickAction('reset-homology-cords'), enabled: enabledButton('reset-homology-cords') },
+        { id: 'reset-wander', group: 'Wander', label: 'Reset Wander', description: 'Resets the current Wander session.', defaultBindings: [], storageProfile: 'global', trigger: clickAction('wander-reset'), enabled: enabledButton('wander-reset') },
+        { id: 'reset-layout', group: 'Layout', label: 'Reset layout', description: 'Resets the computed layout.', defaultBindings: [], storageProfile: 'global', trigger: clickAction('reset-layout'), enabled: enabledButton('reset-layout') }
+      ];
+    };
+    sessionRef.current = api.register({
+      pageId: 'mosaic',
+      actionProvider,
+      profileProvider: () => getLattice().shape === 'square' ? 'square' : 'hex',
+      profileLabel: (profile) => profile === 'square' ? 'square grid' : 'hex grid',
+      pointerHints: [
+        { input: 'Primary click / drag', description: 'Draw, select, move, or trace according to the active Mosaic mode.' },
+        { input: 'Secondary click', description: 'Uses the mode-specific alternate canvas action when available.' },
+        { input: 'Wheel / trackpad', description: 'Scrolls the page and settings panels.' }
+      ]
+    });
   }
 
   function normalizeHomologyCordDragDrive(value) {

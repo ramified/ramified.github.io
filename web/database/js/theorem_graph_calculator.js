@@ -341,6 +341,7 @@
     resizeCanvas();
     loadPresetRegistry();
     loadDefaultPreset();
+    setupCalculatorInputSettings();
 
     if (window.ResizeObserver && refs.canvas) {
       const observer = new ResizeObserver(() => {
@@ -529,7 +530,6 @@
       });
     }
 
-    window.addEventListener('keydown', handleGlobalKeyDown);
     if (refs.clearGraph) refs.clearGraph.addEventListener('click', clearGraphWithConfirm);
     if (refs.addNode) refs.addNode.addEventListener('click', addNodeFromControls);
     if (refs.addNodeMiscDetail) refs.addNodeMiscDetail.addEventListener('click', addMiscDetailFromControls);
@@ -2024,6 +2024,55 @@
     if (!event || !isUndoKeyboardEvent(event) || isTextEditingTarget(event.target)) return;
     event.preventDefault();
     performUndo();
+  }
+
+  function setupCalculatorInputSettings() {
+    const api = window.CalculatorInputSettings;
+    if (!api || api.getSession('theorem-graph')) return;
+    const sessionRef = { current: null };
+    const buttonAction = (id, group, label, description) => ({
+      id,
+      group,
+      label,
+      description,
+      defaultBindings: [],
+      enabled: () => {
+        const button = document.getElementById(id);
+        return !!(button && !button.disabled && !button.hidden && !button.closest('[hidden]'));
+      },
+      trigger: () => {
+        const button = document.getElementById(id);
+        if (!button || button.disabled || button.hidden || button.closest('[hidden]')) return false;
+        button.click();
+        return true;
+      }
+    });
+    sessionRef.current = api.register({
+      pageId: 'theorem-graph',
+      actions: [
+        {
+          id: 'undo', group: 'Graph', label: 'Undo graph change',
+          description: 'Restores the previous graph state.', defaultBindings: ['Mod+z'],
+          enabled: () => state.undoStack.length > 0,
+          trigger: () => performUndo()
+        },
+        {
+          id: 'primary', group: 'Current task', label: 'Add / update current item',
+          description: 'Runs the primary action in the focused or most recently used panel.',
+          defaultBindings: ['Mod+Enter'], allowInEditable: true,
+          trigger: () => sessionRef.current?.triggerPrimary('[data-shortcut-primary]') || false
+        },
+        buttonAction('delete-selected', 'Graph', 'Delete selection', 'Deletes the selected node or arrow.'),
+        buttonAction('toggle-layout', 'Layout', 'Run / stop layout', 'Uses the current automatic-layout control.'),
+        buttonAction('clear-graph', 'Graph', 'Clear graph', 'Clears the graph through the existing confirmation flow.'),
+        buttonAction('reset-layout', 'Layout', 'Reset layout', 'Restores the current layout settings.')
+      ],
+      pointerHints: [
+        { input: 'Primary click', description: 'Select a node, arrow, reference, or dashboard control.' },
+        { input: 'Drag', description: 'Move graph nodes, arrow labels, the canvas height, or dashboard cards.' },
+        { input: 'Wheel / trackpad', description: 'Scroll the page and settings panels.' }
+      ]
+    });
   }
 
   function isUndoKeyboardEvent(event) {

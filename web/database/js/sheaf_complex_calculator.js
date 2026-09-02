@@ -9216,7 +9216,7 @@
     return terms.map((mono, index) => `
       ${index ? '<span class="homology-coefficient-plus">+</span>' : ''}
       <label class="homology-coefficient-term">
-        <input class="sheaf-input homology-coefficient-input" type="text" value="" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Coefficient of ${escapeHtml(mono.plain || '1')}" data-homology-assignment-coeff data-monomial-key="${escapeHtml(mono.key)}">
+        <input class="sheaf-input calculator-control homology-coefficient-input" type="text" value="" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Coefficient of ${escapeHtml(mono.plain || '1')}" data-homology-assignment-coeff data-monomial-key="${escapeHtml(mono.key)}">
         <span>\\(${mono.latex || '1'}\\)</span>
       </label>
     `).join('');
@@ -13280,11 +13280,11 @@
         </label>
         <label>
           rename ${secondary}
-          <input class="sheaf-input" type="text" value="${escapeHtml(identifyClassDisplaySymbol(candidate.secondaryDef))}" data-identify-class-rename="${escapeHtml(secondaryRenameKey)}" spellcheck="false" autocomplete="off">
+          <input class="sheaf-input calculator-control" type="text" value="${escapeHtml(identifyClassDisplaySymbol(candidate.secondaryDef))}" data-identify-class-rename="${escapeHtml(secondaryRenameKey)}" spellcheck="false" autocomplete="off">
         </label>
         <label>
           rename ${main}
-          <input class="sheaf-input" type="text" value="${escapeHtml(identifyClassDisplaySymbol(candidate.mainDef))}" data-identify-class-rename="${escapeHtml(mainRenameKey)}" spellcheck="false" autocomplete="off">
+          <input class="sheaf-input calculator-control" type="text" value="${escapeHtml(identifyClassDisplaySymbol(candidate.mainDef))}" data-identify-class-rename="${escapeHtml(mainRenameKey)}" spellcheck="false" autocomplete="off">
         </label>
       `;
       })
@@ -14449,7 +14449,7 @@
         ? context.divisorDefs.map((def, index) => `
             ${index ? '<span class="homology-coefficient-plus">+</span>' : ''}
             <label class="homology-coefficient-term">
-              <input class="sheaf-input homology-coefficient-input" type="text" value="${escapeHtml(draft.divisorCoefficients[def.id] || '')}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Coefficient of ${escapeHtml(def.symbolPlain)} in D" data-recommendation-hypersurface-divisor-coeff data-recommendation-hypersurface-divisor-class="${escapeHtml(def.id)}">
+              <input class="sheaf-input calculator-control homology-coefficient-input" type="text" value="${escapeHtml(draft.divisorCoefficients[def.id] || '')}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Coefficient of ${escapeHtml(def.symbolPlain)} in D" data-recommendation-hypersurface-divisor-coeff data-recommendation-hypersurface-divisor-class="${escapeHtml(def.id)}">
               <span>\\(${def.symbolLatex}\\)</span>
             </label>
           `).join('')
@@ -16267,7 +16267,7 @@
         <div class="sheaf-tensor-parent-row">
           <button class="btn btn-ghost sheaf-map-slot-button" type="button" data-sheaf-tensor-parent-index="${index}" aria-pressed="${pressed}" title="${escapeHtml(title)}">${escapeHtml(label)}</button>
           <span class="sheaf-map-formula-mark">^{\u2297</span>
-          <input class="sheaf-input sheaf-tensor-exponent" type="text" value="${escapeHtml(exponents[index])}" maxlength="80" spellcheck="false" autocomplete="off" aria-label="tensor exponent ${index + 1}" data-sheaf-tensor-exponent="${index}">
+          <input class="sheaf-input calculator-control sheaf-tensor-exponent" type="text" value="${escapeHtml(exponents[index])}" maxlength="80" spellcheck="false" autocomplete="off" aria-label="tensor exponent ${index + 1}" data-sheaf-tensor-exponent="${index}">
           <span class="sheaf-map-formula-mark">}</span>
         </div>
       `;
@@ -17220,7 +17220,7 @@
       ? defs.map((def, index) => `
           ${index ? '<span class="homology-coefficient-plus">+</span>' : ''}
           <label class="homology-coefficient-term">
-            <input class="sheaf-input homology-coefficient-input" type="text" value="${escapeHtml(current[def.id] || '')}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Coefficient of ${escapeHtml(def.symbolPlain)} in D" data-sheaf-divisor-coeff data-sheaf-divisor-class="${escapeHtml(def.id)}">
+            <input class="sheaf-input calculator-control homology-coefficient-input" type="text" value="${escapeHtml(current[def.id] || '')}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Coefficient of ${escapeHtml(def.symbolPlain)} in D" data-sheaf-divisor-coeff data-sheaf-divisor-class="${escapeHtml(def.id)}">
             <span>\\(${def.symbolLatex}\\)</span>
           </label>
         `).join('')
@@ -31791,7 +31791,7 @@
       <div class="sheaf-complex-operation-controls sheaf-complex-operation-mode-row">
         <label class="opt-row">
           operation
-          <select class="sheaf-select" data-complex-chart-operation-mode-select>
+          <select class="sheaf-select calculator-control" data-complex-chart-operation-mode-select>
             <option value="" ${mode ? '' : 'selected'}>choose...</option>
             <option value="truncate" ${mode === 'truncate' ? 'selected' : ''}>truncate</option>
             <option value="extend" ${mode === 'extend' ? 'selected' : ''}>extend by ker/coker</option>
@@ -31807,34 +31807,34 @@
     const settings = normalizeComplexChartLesSettings(operations);
     const usesSpace = settings.derivedFunctor === 'cohomology' || settings.derivedFunctor === 'ext-fixed-first';
     const spaceControls = usesSpace ? `
-      <label class="opt-row">space <input class="sheaf-input sheaf-complex-les-parameter-input" type="text" value="${escapeHtml(settings.lesSpace)}" data-complex-chart-les-space spellcheck="false" autocomplete="off"></label>
+      <label class="opt-row">space <input class="sheaf-input calculator-control sheaf-complex-les-parameter-input" type="text" value="${escapeHtml(settings.lesSpace)}" data-complex-chart-les-space spellcheck="false" autocomplete="off"></label>
       <label class="opt-row"><input type="checkbox" data-complex-chart-les-space-auto ${settings.lesSpaceAuto ? 'checked' : ''}>auto</label>
     ` : '';
     const extControls = settings.derivedFunctor === 'ext-fixed-first' ? `
-      <label class="opt-row">fixed E <input class="sheaf-input sheaf-complex-les-parameter-input" type="text" value="${escapeHtml(settings.lesExtFirstArgument)}" data-complex-chart-les-ext-first spellcheck="false" autocomplete="off"></label>
+      <label class="opt-row">fixed E <input class="sheaf-input calculator-control sheaf-complex-les-parameter-input" type="text" value="${escapeHtml(settings.lesExtFirstArgument)}" data-complex-chart-les-ext-first spellcheck="false" autocomplete="off"></label>
     ` : '';
     const pushforwardMaps = complexChartRegisteredPushforwardMapNames();
     const pushforwardControls = settings.derivedFunctor === 'derived-pushforward' ? `
-      <label class="opt-row">map <input class="sheaf-input sheaf-complex-les-parameter-input" type="text" list="complex-chart-les-map-suggestions" value="${escapeHtml(settings.lesPushforwardMap)}" data-complex-chart-les-pushforward-map spellcheck="false" autocomplete="off"></label>
+      <label class="opt-row">map <input class="sheaf-input calculator-control sheaf-complex-les-parameter-input" type="text" list="complex-chart-les-map-suggestions" value="${escapeHtml(settings.lesPushforwardMap)}" data-complex-chart-les-pushforward-map spellcheck="false" autocomplete="off"></label>
       <datalist id="complex-chart-les-map-suggestions">${pushforwardMaps.map((name) => `<option value="${escapeHtml(name)}"></option>`).join('')}</datalist>
     ` : '';
     const customControls = settings.derivedFunctor === 'custom' ? `
-      <label class="opt-row">template <input class="sheaf-input sheaf-complex-les-template-input" type="text" value="${escapeHtml(settings.lesCustomFunctorTemplate)}" data-complex-chart-les-custom-template spellcheck="false" autocomplete="off"></label>
-      <label class="opt-row">connecting <input class="sheaf-input sheaf-complex-les-template-input" type="text" value="${escapeHtml(settings.lesCustomConnectingTemplate)}" data-complex-chart-les-custom-connecting spellcheck="false" autocomplete="off"></label>
+      <label class="opt-row">template <input class="sheaf-input calculator-control sheaf-complex-les-template-input" type="text" value="${escapeHtml(settings.lesCustomFunctorTemplate)}" data-complex-chart-les-custom-template spellcheck="false" autocomplete="off"></label>
+      <label class="opt-row">connecting <input class="sheaf-input calculator-control sheaf-complex-les-template-input" type="text" value="${escapeHtml(settings.lesCustomConnectingTemplate)}" data-complex-chart-les-custom-connecting spellcheck="false" autocomplete="off"></label>
     ` : '';
     const validation = complexChartLesSettingsValidation(settings);
     return `
       <div class="sheaf-complex-operation-controls">
         <label class="opt-row">
           functor
-          <select class="sheaf-select" data-complex-chart-les-functor>
+          <select class="sheaf-select calculator-control" data-complex-chart-les-functor>
             <option value="cohomology" ${settings.derivedFunctor === 'cohomology' ? 'selected' : ''}>H^i(X; -)</option>
             <option value="ext-fixed-first" ${settings.derivedFunctor === 'ext-fixed-first' ? 'selected' : ''}>Ext_X^i(E, -)</option>
             <option value="derived-pushforward" ${settings.derivedFunctor === 'derived-pushforward' ? 'selected' : ''}>R^i f_*(-)</option>
             <option value="custom" ${settings.derivedFunctor === 'custom' ? 'selected' : ''}>custom T^i(-)</option>
           </select>
         </label>
-        <label class="opt-row">end i <input class="sheaf-input sheaf-complex-les-degree-input" type="number" min="0" max="${MAX_COMPLEX_CHART_LES_END_DEGREE}" value="${settings.lesEndDegree}" data-complex-chart-les-end-degree></label>
+        <label class="opt-row">end i <input class="sheaf-input calculator-control sheaf-complex-les-degree-input" type="number" min="0" max="${MAX_COMPLEX_CHART_LES_END_DEGREE}" value="${settings.lesEndDegree}" data-complex-chart-les-end-degree></label>
         ${spaceControls}${extControls}${pushforwardControls}${customControls}
       </div>
       ${validation ? `<div class="hint">${escapeHtml(validation)}</div>` : ''}
@@ -31866,7 +31866,7 @@
           return `
             <label class="sheaf-complex-operation-fiber-row">
               <span class="sheaf-step-saved-rule-kind">\\(\\xrightarrow{${escapeHtml(mapLatex)}}\\)</span>
-              <input class="sheaf-input" type="text" value="${escapeHtml(value)}" placeholder="${escapeHtml(defaultName)}" spellcheck="false" autocomplete="off" data-complex-chart-map-fiber-name="${mapCut}" aria-label="name for truncation object at map ${mapCut}">
+              <input class="sheaf-input calculator-control" type="text" value="${escapeHtml(value)}" placeholder="${escapeHtml(defaultName)}" spellcheck="false" autocomplete="off" data-complex-chart-map-fiber-name="${mapCut}" aria-label="name for truncation object at map ${mapCut}">
             </label>
           `;
         }).join('')}
@@ -32111,7 +32111,7 @@
     return `
       <label class="sheaf-complex-field">
         <span class="input-label">${escapeHtml(label)}</span>
-        <input class="sheaf-input" type="text" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" spellcheck="false" autocomplete="off" data-complex-chart-field="${escapeHtml(type)}" data-complex-chart-index="${index}">
+        <input class="sheaf-input calculator-control" type="text" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" spellcheck="false" autocomplete="off" data-complex-chart-field="${escapeHtml(type)}" data-complex-chart-index="${index}">
       </label>
     `;
   }
@@ -38971,7 +38971,7 @@
         && state.editingHomologySymbolVarietyId === geometry.varietyId;
       const symbolControl = editing
         ? `<div class="homology-symbol-edit">
-            <input class="sheaf-input homology-map-rule-input" type="text" value="${escapeHtml(def.symbolLatex)}" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Homology class symbol" data-homology-symbol-edit="${escapeHtml(def.id)}">
+            <input class="sheaf-input calculator-control homology-map-rule-input" type="text" value="${escapeHtml(def.symbolLatex)}" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Homology class symbol" data-homology-symbol-edit="${escapeHtml(def.id)}">
             <button class="btn btn-ghost homology-rule-delete" type="button" data-homology-symbol-save="${escapeHtml(def.id)}">save</button>
           </div>`
         : `<button class="homology-symbol-name" type="button" data-homology-symbol-start="${escapeHtml(def.id)}" title="Rename homology class">\\(${def.symbolLatex}\\in ${homologyCohomologyGroupLatex(def.cohomologyDegree, geometry.labelLatex)}\\)</button>`;
@@ -38986,7 +38986,7 @@
         : null;
       const degreeMode = productContext && !productBidegree ? 'total' : 'bidegree';
       const degreeModeControl = productContext && def.kind === 'custom' && editing ? `
-        <select class="sheaf-select homology-degree-mode" aria-label="Custom homology degree mode" data-homology-class-degree-mode="${escapeHtml(def.id)}">
+        <select class="sheaf-select calculator-control homology-degree-mode" aria-label="Custom homology degree mode" data-homology-class-degree-mode="${escapeHtml(def.id)}">
           <option value="bidegree" ${degreeMode === 'bidegree' ? 'selected' : ''}>bidegree</option>
           <option value="total" ${degreeMode === 'total' ? 'selected' : ''}>total</option>
         </select>
@@ -38994,13 +38994,13 @@
       const degreeControl = productContext
         ? (degreeMode === 'bidegree' ? `
             <div class="homology-product-bidegree" title="Product bidegree">
-              <input class="sheaf-input homology-map-rule-input" type="number" min="0" max="${2 * productContext.leftGeometry.dim}" step="1" value="${escapeHtml((productBidegree || productBidegreeFallback || [0, 0])[0])}" aria-label="Left product bidegree" data-homology-class-bidegree="${escapeHtml(def.id)}" data-bidegree-side="left">
-              <input class="sheaf-input homology-map-rule-input" type="number" min="0" max="${2 * productContext.rightGeometry.dim}" step="1" value="${escapeHtml((productBidegree || productBidegreeFallback || [0, 0])[1])}" aria-label="Right product bidegree" data-homology-class-bidegree="${escapeHtml(def.id)}" data-bidegree-side="right">
+              <input class="sheaf-input calculator-control homology-map-rule-input" type="number" min="0" max="${2 * productContext.leftGeometry.dim}" step="1" value="${escapeHtml((productBidegree || productBidegreeFallback || [0, 0])[0])}" aria-label="Left product bidegree" data-homology-class-bidegree="${escapeHtml(def.id)}" data-bidegree-side="left">
+              <input class="sheaf-input calculator-control homology-map-rule-input" type="number" min="0" max="${2 * productContext.rightGeometry.dim}" step="1" value="${escapeHtml((productBidegree || productBidegreeFallback || [0, 0])[1])}" aria-label="Right product bidegree" data-homology-class-bidegree="${escapeHtml(def.id)}" data-bidegree-side="right">
             </div>
           ` : `
-            <input class="sheaf-input homology-map-rule-input homology-total-degree-input" type="number" min="0" max="${2 * geometry.dim}" step="1" value="${escapeHtml(def.cohomologyDegree)}" aria-label="Custom homology class degree" data-homology-class-degree="${escapeHtml(def.id)}">
+            <input class="sheaf-input calculator-control homology-map-rule-input homology-total-degree-input" type="number" min="0" max="${2 * geometry.dim}" step="1" value="${escapeHtml(def.cohomologyDegree)}" aria-label="Custom homology class degree" data-homology-class-degree="${escapeHtml(def.id)}">
           `)
-        : `<input class="sheaf-input homology-map-rule-input homology-total-degree-input" type="number" min="0" max="${2 * geometry.dim}" step="1" value="${escapeHtml(def.cohomologyDegree)}" aria-label="Custom homology class degree" data-homology-class-degree="${escapeHtml(def.id)}">`;
+        : `<input class="sheaf-input calculator-control homology-map-rule-input homology-total-degree-input" type="number" min="0" max="${2 * geometry.dim}" step="1" value="${escapeHtml(def.cohomologyDegree)}" aria-label="Custom homology class degree" data-homology-class-degree="${escapeHtml(def.id)}">`;
       const degreeDetailsControl = def.kind === 'custom' && editing ? `
         <div class="homology-symbol-edit-details ${productContext ? 'has-product-degree-mode' : ''}">
           ${degreeModeControl}
@@ -39137,7 +39137,7 @@
     return `
       <div class="homology-rule-row is-map-relation is-waiting">
         ${renderMapHomologyLhs(def, geometry)}
-        <input class="sheaf-input homology-map-rule-input" type="text" value="${escapeHtml(value)}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Right side for ${escapeHtml(latexToPlain(def.symbolLatex))}" data-map-homology-rule="${escapeHtml(def.id)}" data-map-homology-variety="${escapeHtml(geometry.varietyId || '')}">
+        <input class="sheaf-input calculator-control homology-map-rule-input" type="text" value="${escapeHtml(value)}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Right side for ${escapeHtml(latexToPlain(def.symbolLatex))}" data-map-homology-rule="${escapeHtml(def.id)}" data-map-homology-variety="${escapeHtml(geometry.varietyId || '')}">
         <label class="homology-map-assign-toggle">
           <input type="checkbox" data-map-homology-assign aria-label="Include this relation when updating"${checked}>
         </label>
@@ -39159,7 +39159,7 @@
       ? terms.map((mono, index) => `
           ${index ? '<span class="homology-coefficient-plus">+</span>' : ''}
           <label class="homology-coefficient-term">
-            <input class="sheaf-input homology-coefficient-input" type="text" value="${escapeHtml(coefficients.get(mono.key) || '')}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Coefficient of ${escapeHtml(mono.plain || '1')} in ${escapeHtml(latexToPlain(def.symbolLatex))}" data-map-homology-coeff data-monomial-key="${escapeHtml(mono.key)}">
+            <input class="sheaf-input calculator-control homology-coefficient-input" type="text" value="${escapeHtml(coefficients.get(mono.key) || '')}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Coefficient of ${escapeHtml(mono.plain || '1')} in ${escapeHtml(latexToPlain(def.symbolLatex))}" data-map-homology-coeff data-monomial-key="${escapeHtml(mono.key)}">
             <span>\\(${mono.latex || '1'}\\)</span>
           </label>
         `).join('')
@@ -39321,7 +39321,7 @@
     return `
       <div class="homology-rule-row is-map-relation">
         ${renderSheafHomologyLhs(def)}
-        <input class="sheaf-input homology-map-rule-input" type="text" value="${escapeHtml(value)}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Right side for ${escapeHtml(latexToPlain(def.symbolLatex))}" data-sheaf-homology-rule="${escapeHtml(def.id)}" ${disabled}>
+        <input class="sheaf-input calculator-control homology-map-rule-input" type="text" value="${escapeHtml(value)}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Right side for ${escapeHtml(latexToPlain(def.symbolLatex))}" data-sheaf-homology-rule="${escapeHtml(def.id)}" ${disabled}>
         ${rule?.builtin
           ? '<span class="homology-symbol-kind">special</span>'
           : `<label class="homology-map-assign-toggle">
@@ -39344,7 +39344,7 @@
       ? terms.map((mono, index) => `
           ${index ? '<span class="homology-coefficient-plus">+</span>' : ''}
           <label class="homology-coefficient-term">
-            <input class="sheaf-input homology-coefficient-input" type="text" value="${escapeHtml(coefficients.get(mono.key) || '')}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Coefficient of ${escapeHtml(mono.plain || '1')} in ${escapeHtml(latexToPlain(def.symbolLatex))}" data-sheaf-homology-coeff data-monomial-key="${escapeHtml(mono.key)}" ${disabled}>
+            <input class="sheaf-input calculator-control homology-coefficient-input" type="text" value="${escapeHtml(coefficients.get(mono.key) || '')}" placeholder="0" spellcheck="false" autocomplete="off" aria-label="Coefficient of ${escapeHtml(mono.plain || '1')} in ${escapeHtml(latexToPlain(def.symbolLatex))}" data-sheaf-homology-coeff data-monomial-key="${escapeHtml(mono.key)}" ${disabled}>
             <span>\\(${mono.latex || '1'}\\)</span>
           </label>
         `).join('')

@@ -95,7 +95,7 @@ function testBilliardsCueGuidanceAndQuickRules() {
   const setupSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
   const nativeSource = fs.readFileSync(require.resolve('./billiards/topological_billiards_native.js'), 'utf8');
   assert.match(setupSource, /if \(!local\) \{\s+showBilliardsCueHint\(\);/);
-  assert.match(setupSource, /ctx\.restore\(\);\s+drawCanvasFeedbackOverlays[\s\S]{0,240}drawBilliardsCueCaption\(/);
+  assert.match(setupSource, /drawCanvasFeedbackOverlays[\s\S]{0,240}drawBilliardsCueCaption\(/);
   assert.ok(!nativeSource.includes('view.cueHintLabel'));
 }
 
@@ -2978,6 +2978,13 @@ function testPlacementReachAssistRoutesAndGroups() {
   const gomokuRays = game.placementReachAssist(gomoku, center);
   assert.strictEqual(gomokuRays.stepLimit, 4);
   assert.ok(gomokuRays.routes.some((route) => route.kind === 'diagonal'), 'square boards include diagonal rays');
+  const gomokuGhost = game.indexOf(3, 2, 5);
+  gomoku.turn = 'white';
+  const virtualGomokuRays = game.placementReachAssist(gomoku, gomokuGhost);
+  assert.strictEqual(virtualGomokuRays.kind, 'rays');
+  assert.strictEqual(virtualGomokuRays.origin, gomokuGhost);
+  assert.strictEqual(virtualGomokuRays.color, 'white', 'empty Gomoku points analyze the current-player ghost');
+  assert.ok(!gomoku.stones.some((stone) => stone.index === gomokuGhost), 'hypothetical Gomoku analysis must not mutate the board');
 
   const cutGomoku = game.beginGomokuGame({
     id: 'reach-assist-cut', label: 'reach assist cut', lattice: 'square', rows: 3, cols: 3,
@@ -3015,6 +3022,66 @@ function testPlacementReachAssistRoutesAndGroups() {
   assert.deepStrictEqual(group.libertyIndices, [
     game.indexOf(1, 2, 3), game.indexOf(1, 3, 3), game.indexOf(2, 1, 3), game.indexOf(3, 2, 3), game.indexOf(3, 3, 3)
   ]);
+
+  const virtualGo = game.beginGoGame({
+    id: 'reach-assist-go-virtual', label: 'reach assist go virtual', lattice: 'square', rows: 3, cols: 3,
+    surface: 'test', removedTiles: [], cutEdges: [], gluedEdges: []
+  });
+  const virtualGoCenter = game.indexOf(2, 2, 3);
+  const virtualGoRight = game.indexOf(2, 3, 3);
+  virtualGo.stones = [{ id: 1, index: virtualGoCenter, color: 'black' }];
+  virtualGo.nextStoneId = 2;
+  const virtualGroup = game.placementReachAssist(virtualGo, virtualGoRight);
+  assert.strictEqual(virtualGroup.kind, 'go-group');
+  assert.strictEqual(virtualGroup.color, 'black');
+  assert.deepStrictEqual(virtualGroup.groupIndices, [virtualGoCenter, virtualGoRight]);
+  assert.deepStrictEqual(virtualGroup.libertyIndices, [
+    game.indexOf(1, 2, 3), game.indexOf(1, 3, 3), game.indexOf(2, 1, 3), game.indexOf(3, 2, 3), game.indexOf(3, 3, 3)
+  ]);
+  assert.ok(!virtualGo.stones.some((stone) => stone.index === virtualGoRight), 'hypothetical Go analysis must not mutate the board');
+
+  const virtualCapture = game.beginGoGame({
+    id: 'reach-assist-go-capture', label: 'reach assist go capture', lattice: 'square', rows: 3, cols: 3,
+    surface: 'test', removedTiles: [], cutEdges: [], gluedEdges: []
+  });
+  virtualCapture.stones = [
+    { id: 1, index: game.indexOf(1, 1, 3), color: 'black' },
+    { id: 2, index: game.indexOf(1, 2, 3), color: 'white' },
+    { id: 3, index: game.indexOf(1, 3, 3), color: 'black' }
+  ];
+  virtualCapture.nextStoneId = 4;
+  const captureGroup = game.placementReachAssist(virtualCapture, game.indexOf(2, 2, 3));
+  assert.deepStrictEqual(captureGroup.groupIndices, [game.indexOf(2, 2, 3)]);
+  assert.ok(captureGroup.libertyIndices.includes(game.indexOf(1, 2, 3)), 'virtual Go liberties reflect captured stones');
+  assert.ok(virtualCapture.stones.some((stone) => stone.index === game.indexOf(1, 2, 3)), 'hypothetical capture leaves the live board unchanged');
+
+  const illegalVirtualGo = game.beginGoGame({
+    id: 'reach-assist-go-suicide', label: 'reach assist go suicide', lattice: 'square', rows: 3, cols: 3,
+    surface: 'test', removedTiles: [], cutEdges: [], gluedEdges: []
+  });
+  illegalVirtualGo.stones = [
+    { id: 1, index: game.indexOf(1, 2, 3), color: 'white' },
+    { id: 2, index: game.indexOf(2, 1, 3), color: 'white' },
+    { id: 3, index: game.indexOf(2, 3, 3), color: 'white' },
+    { id: 4, index: game.indexOf(3, 2, 3), color: 'white' }
+  ];
+  assert.strictEqual(game.placementReachAssist(illegalVirtualGo, game.indexOf(2, 2, 3)), null, 'suicide points do not get a hypothetical Go assist');
+
+  const koVirtualGo = game.beginGoGame({
+    id: 'reach-assist-go-ko', label: 'reach assist go ko', lattice: 'square', rows: 3, cols: 3,
+    surface: 'test', removedTiles: [], cutEdges: [], gluedEdges: []
+  });
+  koVirtualGo.stones = [
+    { id: 1, index: game.indexOf(1, 2, 3), color: 'black' },
+    { id: 2, index: game.indexOf(2, 1, 3), color: 'black' },
+    { id: 3, index: game.indexOf(3, 2, 3), color: 'black' },
+    { id: 4, index: game.indexOf(2, 2, 3), color: 'white' }
+  ];
+  koVirtualGo.previousBoardSignature = [
+    `${game.indexOf(1, 2, 3)}:black`, `${game.indexOf(2, 1, 3)}:black`,
+    `${game.indexOf(2, 3, 3)}:black`, `${game.indexOf(3, 2, 3)}:black`
+  ].sort().join('|');
+  assert.strictEqual(game.placementReachAssist(koVirtualGo, game.indexOf(2, 3, 3)), null, 'ko recaptures do not get a hypothetical Go assist');
 
   const gluedGo = game.beginGoGame({
     id: 'reach-assist-go-glued', label: 'reach assist go glued', lattice: 'square', rows: 1, cols: 2,
@@ -3568,7 +3635,7 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(importExportSection.includes('data-import-export-panel="import"'));
   assert.ok(importExportSection.includes('data-import-source-panel="file"'));
   assert.ok(importExportSection.includes('class="import-export-actions"'));
-  assert.ok(importExportSection.includes('class="mosaic-editor-input minigame-status-export"'));
+  assert.ok(importExportSection.includes('class="mosaic-editor-input calculator-control minigame-status-export"'));
   assert.ok(!importExportSection.includes('mosaic-debug-panel'));
   assert.ok(minigameSource.includes("document.querySelectorAll('.card-head')"));
   assert.ok(minigameSource.includes("card.classList.toggle('collapsed')"));
@@ -4369,6 +4436,7 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('go-komi', { value: '6.5' }),
     makeElement('go-pass'),
     makeElement('chinese-checkers-jump-rule', { value: 'unlimited' }),
+    makeElement('chinese-checkers-player-options'),
     makeElement('connect-four-fall-dir', {
       value: 'S',
       options: ['S', 'E', 'W', 'N', 'SE', 'SW', 'NW', 'NE'].map((value) => ({ value, textContent: '', hidden: false, disabled: false }))
@@ -4473,6 +4541,18 @@ function createHeadlessDomHarness(options = {}) {
     URLSearchParams,
     fetch: options.fetch || (() => Promise.reject(new Error('fetch not configured'))),
     document: {
+      head: {
+        appendChild(script) {
+          const entry = presetRegistry.find((item) => String(script.src || '').includes(item.file));
+          if (!entry || !options.loadLazyPresetScripts) {
+            if (typeof script.onerror === 'function') script.onerror();
+            return script;
+          }
+          context.window.RAMIFIED_MINIGAME_PRESET_DATA[entry.key] = presetDataByKey[entry.key];
+          if (typeof script.onload === 'function') script.onload();
+          return script;
+        }
+      },
       getElementById(id) {
         return elements.get(id) || null;
       },
@@ -4503,7 +4583,7 @@ function createHeadlessDomHarness(options = {}) {
       RAMIFIED_MINIGAMES_ONLINE_URL: options.onlineUrl || '',
       SiteI18n: options.siteI18n || null,
       RAMIFIED_MINIGAME_PRESETS: presetRegistrySource,
-      RAMIFIED_MINIGAME_PRESET_DATA: presetDataByKey,
+      RAMIFIED_MINIGAME_PRESET_DATA: options.preloadPresetData === false ? {} : presetDataByKey,
       localStorage: {
         _values: {},
         getItem(key) {
@@ -5106,6 +5186,42 @@ function testTimedPlacementReachAssistInteractions() {
   assert.strictEqual(heldClick.defaultPrevented, true, 'a completed long press suppresses its follow-up click');
 }
 
+function testPlacementHoverGuidanceRules() {
+  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  assert.ok(html.includes('id="placement-preview-opacity" min="10" max="90" step="5" value="50"'));
+  assert.ok(html.includes('data-i18n="setup.previewOpacity"'));
+  assert.deepStrictEqual(game.__test.placementPreviewOpacityRange, { min: 10, max: 90, default: 50 });
+
+  const preset = {
+    id: 'placement-hover-test', label: 'placement hover test', lattice: 'square', rows: 4, cols: 4,
+    surface: 'test', removedTiles: [], cutEdges: [], gluedEdges: []
+  };
+  const gomoku = game.createGomokuState(preset);
+  gomoku.phase = 'ready';
+  assert.deepStrictEqual(game.__test.placementHoverPreview(gomoku, 0), { kind: 'ghost', index: 0, color: 'black' });
+  gomoku.stones.push({ id: 1, index: 0, color: 'black', moveNumber: 1 });
+  assert.strictEqual(game.__test.placementHoverPreview(gomoku, 0), null, 'occupied Gomoku points do not get a ghost');
+
+  const go = game.createGoState(preset);
+  go.phase = 'ready';
+  game.__test.setGame(go);
+  assert.deepStrictEqual(game.__test.placementHoverPreview(go, 0), { kind: 'ghost', index: 0, color: 'black' });
+
+  const reversi = game.createReversiState(preset);
+  reversi.phase = 'ready';
+  assert.deepStrictEqual(game.__test.placementHoverPreview(reversi, 1), { kind: 'ghost', index: 1, color: 'black' });
+  assert.strictEqual(game.__test.placementHoverPreview(reversi, 0), null, 'Reversi only previews moves that flip a disc');
+
+  const connectFour = game.createConnectFourState({ ...preset, connectFourHoles: [{ row: 1, col: 1 }] });
+  connectFour.phase = 'ready';
+  assert.deepStrictEqual(game.__test.placementHoverPreview(connectFour, 0), { kind: 'connect-four-drop', index: 0, color: 'red' });
+  assert.strictEqual(game.__test.placementHoverPreview(connectFour, 1), null, 'Connect Four only previews input holes');
+
+  assert.strictEqual(game.__test.lianliankanTilesMatch({ id: 'A', glyph: 'A' }, { id: 'A', glyph: 'A' }), true);
+  assert.strictEqual(game.__test.lianliankanTilesMatch({ id: 'A', matchKey: 'pair-a' }, { id: 'A', matchKey: 'pair-a' }), false);
+  assert.strictEqual(game.__test.lianliankanTilesMatch({ id: 'A', matchKey: 'pair-a' }, { id: 'B', matchKey: 'pair-a' }), true);
+}
+
 function testUniversalBoardDisplayAndCoordinates() {
   assert.deepStrictEqual(
     [0, 7, 8, 24, 25].map((index) => game.goCoordinateFile(index)),
@@ -5438,6 +5554,38 @@ function testDynamicPresetCatalogOptions() {
   assert.strictEqual(elements.get('sokoban-beam-opacity-value').textContent, '34%');
   assert.strictEqual(elements.get('sokoban-glow-inner-row').hidden, false);
   assert.strictEqual(elements.get('sokoban-beam-width-row').hidden, false);
+}
+
+async function testChineseCheckersLazyPresetModeSwitch() {
+  const harness = createHeadlessDomHarness({
+    preloadPresetData: false,
+    loadLazyPresetScripts: true
+  });
+  for (let index = 0; index < 5; index += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  const modeSelect = harness.elements.get('game-mode-select');
+  modeSelect.value = 'chinese-checkers';
+  modeSelect.listeners.change();
+  for (let index = 0; index < 5; index += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  const localGame = harness.context.module.exports;
+  assert.strictEqual(harness.elements.get('surface-preset-select').value, 'octahedron-with-square-holes');
+  assert.ok(
+    harness.elements.get('chinese-checkers-player-options').querySelectorAll('input[type=checkbox]').length > 0,
+    'Chinese Checkers player options are populated after the lazy preset loads'
+  );
+
+  harness.elements.get('begin-game').listeners.click();
+  const state = localGame.__test.getGame();
+  assert.strictEqual(state.gameMode, 'chinese-checkers');
+  assert.strictEqual(state.phase, 'ready');
+  const marble = state.marbles.find((item) => item.color === state.turn);
+  const target = localGame.chineseCheckerMoveMap(state, marble.index).keys().next().value;
+  const move = localGame.placeChineseCheckerMarble(state, marble.index, target);
+  assert.strictEqual(move.changed, true, 'a started lazy-loaded Chinese Checkers game accepts its opening move');
 }
 
 function testRandomSetupAndPresetOptions() {
@@ -7522,6 +7670,26 @@ function testFullscreenSettingsPreferencesAndMarkup() {
     showActionRow: false,
     showGameTools: true
   });
+
+  const wrappedDefaults = { torus: 'usual', 'klein-bottle': 'usual' };
+  assert.deepStrictEqual(game.__test.normalizeWrappedViewPreferences(null), wrappedDefaults);
+  assert.deepStrictEqual(game.__test.normalizeWrappedViewPreferences({ torus: 'wrapped', 'klein-bottle': 'wrapped' }), {
+    torus: 'wrapped', 'klein-bottle': 'wrapped'
+  });
+  assert.deepStrictEqual(game.__test.normalizeWrappedViewPreferences({ torus: 'invalid', 'klein-bottle': 'usual' }), wrappedDefaults);
+  assert.deepStrictEqual(game.__test.readWrappedViewPreferences({
+    getItem(key) {
+      assert.strictEqual(key, game.__test.wrappedViewStorageKey);
+      return JSON.stringify({ torus: 'wrapped', 'klein-bottle': 'usual' });
+    }
+  }), { torus: 'wrapped', 'klein-bottle': 'usual' });
+  assert.deepStrictEqual(game.__test.readWrappedViewPreferences({ getItem() { return '{broken json'; } }), wrappedDefaults);
+  assert.deepStrictEqual(game.__test.wrappedFundamentalCoordinates(27, 14, 10, 8, game.BOUNDARY_GLUE_MODES.TORUS), {
+    x: 7, y: 6, copyU: 2, copyV: 1
+  });
+  assert.deepStrictEqual(game.__test.wrappedFundamentalCoordinates(17, 14, 10, 8, game.BOUNDARY_GLUE_MODES.KLEIN_BOTTLE), {
+    x: 7, y: 2, copyU: 1, copyV: 1
+  });
   assert.deepStrictEqual(game.__test.normalizeFullscreenPreferences({
     soundEnabled: 'yes',
     soundVolume: null,
@@ -7568,11 +7736,14 @@ function testFullscreenSettingsPreferencesAndMarkup() {
   assert.ok(html.includes('id="fullscreen-settings-open"'));
   assert.ok(html.includes('id="fullscreen-settings-dialog" role="dialog" aria-modal="true"'));
   assert.ok(html.includes('id="fullscreen-sound-enabled"'));
+  assert.ok(html.includes('id="fullscreen-wrapped-view-mode"'));
+  assert.ok(html.includes('id="boundary-glue-wrapped-view-mode"'));
   assert.ok(html.includes('id="fullscreen-sound-volume"'));
   assert.ok(html.includes('id="fullscreen-show-action-row"'));
   assert.ok(html.includes('id="fullscreen-show-game-tools"'));
   assert.ok(html.includes('id="fullscreen-settings-exit"'));
   assert.ok(html.includes('data-i18n="fullscreen.soundEffects"'));
+  assert.ok(html.includes('data-i18n="wrapped.wrapped"'));
   assert.ok(setupSource.includes('if (fullscreenSettingsOpen) {'));
   assert.ok(setupSource.includes("if (key === 'Escape')"));
   assert.ok(!setupSource.includes('FULLSCREEN_ACTION_AUTO_COLLAPSE_MS'));
@@ -7773,6 +7944,7 @@ async function run() {
   await testOnlineRoomSearchFailureHidesSelect();
   testPlacementReachAssistRoutesAndGroups();
   testTimedPlacementReachAssistInteractions();
+  testPlacementHoverGuidanceRules();
   testUniversalBoardDisplayAndCoordinates();
   testGoCaptureSuicideKoAndScoring();
   testGoGluedCaptureUsesSurfaceSuccessor();
@@ -7858,6 +8030,7 @@ async function run() {
   testSwipeIgnoredOutsideAccepting2048();
   testHexSwipeDirections();
   testDynamicPresetCatalogOptions();
+  await testChineseCheckersLazyPresetModeSwitch();
   testRandomSetupAndPresetOptions();
   testImportExportCardDefaultsAndCatalogImport();
   testImportExportCardPastedPresetMode();

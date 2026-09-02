@@ -201,7 +201,7 @@ function testTileMatchingTileSets() {
   assert.ok(html.includes('id="lianliankan-ipa-audio-note"'));
   assert.ok(html.includes('value="young-3x3"'));
   const koreanAudioScript = 'js/ramified_minigames_korean_audio.js?v=20260901-1';
-  const setupScript = 'js/ramified_minigames_setup.js?v=20260901-9';
+  const setupScript = 'js/ramified_minigames_setup.js?v=20260902-1';
   assert.ok(html.includes(koreanAudioScript), 'the Korean audio catalog is loaded in the browser');
   assert.ok(html.indexOf(koreanAudioScript) < html.indexOf(setupScript), 'the Korean audio catalog loads before minigame setup');
 }
@@ -342,7 +342,10 @@ function testJapanesePronunciationPlayback() {
 function testJapanesePronunciationAssets() {
   const audioFolder = path.join(__dirname, '..', 'assets', 'ramified_minigames', 'japanese_pronunciation');
   const sources = JSON.parse(fs.readFileSync(path.join(audioFolder, 'sources.json'), 'utf8'));
+  const index = fs.readFileSync(path.join(audioFolder, 'audio-index.md'), 'utf8');
   const expectedIds = lianliankan.HIRAGANA_SYMBOLS.map((symbol) => symbol.id.slice('hiragana_'.length));
+  const hiraganaById = new Map(lianliankan.HIRAGANA_SYMBOLS.map((symbol) => [symbol.id.slice('hiragana_'.length), symbol]));
+  const katakanaById = new Map(lianliankan.KATAKANA_SYMBOLS.map((symbol) => [symbol.id.slice('katakana_'.length), symbol]));
   assert.strictEqual(sources.license, 'Public domain');
   assert.deepStrictEqual(sources.files.map((entry) => entry.id), expectedIds);
   sources.files.forEach((entry) => {
@@ -354,6 +357,41 @@ function testJapanesePronunciationAssets() {
     assert.ok(fs.existsSync(browserAsset), `missing browser-compatible pronunciation asset: ${browserAssetName}`);
     assert.ok(fs.statSync(browserAsset).size > 1000, `browser-compatible pronunciation asset is unexpectedly small: ${browserAssetName}`);
   });
+
+  const indexedRows = index.split(/\r?\n/).map((line) => {
+    const match = line.match(/^\|\s*`([^`]+\.mp3)`\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|/);
+    return match ? {
+      mp3: match[1],
+      hiragana: match[2].trim(),
+      katakana: match[3].trim(),
+      id: match[4],
+      commonsFile: match[5]
+    } : null;
+  }).filter(Boolean);
+  assert.strictEqual(indexedRows.length, 71, 'the Japanese audio index lists every Kana MP3');
+  assert.deepStrictEqual(indexedRows.map((row) => row.id), expectedIds);
+  indexedRows.forEach((row, indexPosition) => {
+    const source = sources.files[indexPosition];
+    assert.strictEqual(row.mp3, `${row.id}.mp3`);
+    assert.strictEqual(row.hiragana, hiraganaById.get(row.id).glyph);
+    assert.strictEqual(row.katakana, katakanaById.get(row.id).glyph);
+    assert.strictEqual(row.commonsFile, source.commonsFile);
+    assert.strictEqual(
+      minigames.lianliankanPronunciationPath(hiraganaById.get(row.id)),
+      `assets/ramified_minigames/japanese_pronunciation/${row.mp3}?v=20260901-2`
+    );
+    assert.strictEqual(
+      minigames.lianliankanPronunciationPath(katakanaById.get(row.id)),
+      `assets/ramified_minigames/japanese_pronunciation/${row.mp3}?v=20260901-2`
+    );
+  });
+  const indexedMp3s = indexedRows.map((row) => row.mp3).sort();
+  const localMp3s = fs.readdirSync(audioFolder).filter((name) => name.endsWith('.mp3')).sort();
+  assert.deepStrictEqual(localMp3s, indexedMp3s, 'every local Japanese MP3 is indexed exactly once');
+  assert.ok(
+    fs.readFileSync(path.join(audioFolder, 'o.mp3')).equals(fs.readFileSync(path.join(audioFolder, 'wo.mp3'))),
+    'modern-standard お/を pronunciation intentionally uses identical decoded source content'
+  );
 }
 
 function testKoreanPronunciationAssets() {

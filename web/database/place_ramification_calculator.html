@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Place Ramification Calculator</title>
-  <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/site.css?v=20260902-2">
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
     .ramification-layout {
@@ -105,38 +105,6 @@
 
     .ramification-input[type=number] {
       text-align: center;
-    }
-
-    .ramification-select:focus,
-    .ramification-input:focus {
-      outline: 2px solid var(--accent);
-      border-color: var(--accent);
-    }
-
-    .ramification-badge {
-      display: inline-flex;
-      align-items: center;
-      min-height: 21px;
-      padding: 1px 6px;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      color: var(--text);
-      background: rgba(255,255,255,0.55);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
-      white-space: nowrap;
-    }
-
-    .ramification-underbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      padding: 0 16px 14px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
-      color: var(--muted);
-      flex-wrap: wrap;
     }
 
     .ramification-inline-row {
@@ -512,11 +480,11 @@
     <header class="panel-title">
       <span id="ramification-relation-title" class="panel-title-text">Places of \(E\) above places of \(F\)</span>
       <div class="canvas-toolbar" aria-label="Ramification controls">
-        <span class="shape-indicator"><span id="ramification-status" class="ramification-badge">loading LMFDB...</span></span>
+        <span class="shape-indicator"><span id="ramification-status" class="ramification-badge calculator-badge">loading LMFDB...</span></span>
         <span id="prime-bound-control" class="ramification-toolbar-group ramification-prime-bound">
           <label id="place-bound-label" class="stat-label" for="prime-bound">\(p \le B\)</label>
           <input id="prime-bound" type="range" min="2" max="31" value="11">
-          <output id="prime-bound-output" class="ramification-badge">11</output>
+          <output id="prime-bound-output" class="ramification-badge calculator-badge">11</output>
         </span>
       </div>
     </header>
@@ -526,7 +494,7 @@
         <div id="ramification-labels" class="ramification-labels" aria-hidden="true"></div>
       </div>
     </div>
-    <div class="ramification-underbar">
+    <div class="ramification-underbar calculator-underbar">
       <span id="ramification-selected-label">selected place: none</span>
       <span id="ramification-count-label">finite places shown: 0</span>
     </div>
@@ -539,14 +507,14 @@
         <div class="ramification-inline-row">
           <label class="input-label" for="base-field-kind">Base \(F\)</label>
           <div class="ramification-base-controls">
-          <select id="base-field-kind" class="ramification-select">
+          <select id="base-field-kind" class="ramification-select calculator-control">
             <option value="Q" selected>\(\mathbb{Q}\)</option>
             <option value="lmfdb">LMFDB number field</option>
             <option value="Fqt">\(\mathbb{F}_q(t)\)</option>
           </select>
           <label id="generic-q-control" class="ramification-q-control" hidden>
             <span>\(q\)</span>
-            <input id="generic-q" class="ramification-input" type="text" inputmode="numeric" value="3" aria-label="Constant field size q">
+            <input id="generic-q" class="ramification-input calculator-control" type="text" inputmode="numeric" value="3" aria-label="Constant field size q">
           </label>
           </div>
         </div>
@@ -554,7 +522,7 @@
         <div id="base-lmfdb-selector" class="ramification-field-selector" hidden>
           <div class="input-label">LMFDB field \(F\)</div>
           <div class="ramification-search-row">
-            <input id="base-lmfdb-query" class="ramification-input" type="text" value="2.2.5.1" placeholder="2.2.5.1, Qsqrt(5), Qroot(3,2), Qzeta(5)" spellcheck="false" autocomplete="off">
+            <input id="base-lmfdb-query" class="ramification-input calculator-control" type="text" value="2.2.5.1" placeholder="2.2.5.1, Qsqrt(5), Qroot(3,2), Qzeta(5)" spellcheck="false" autocomplete="off">
             <button id="base-lmfdb-search" class="btn" type="button">search</button>
           </div>
           <div id="base-lmfdb-shortcut-editor">
@@ -564,9 +532,9 @@
               <button id="base-lmfdb-zeta-shortcut" class="btn btn-ghost" type="button" title="Enter a cyclotomic field." aria-label="Enter a cyclotomic field." aria-expanded="false" aria-controls="base-lmfdb-shortcut-panel">\(\zeta_n\)</button>
             </div>
             <form id="base-lmfdb-shortcut-panel" class="ramification-shortcut-panel" aria-label="Base-field shortcut parameters" hidden>
-              <div id="base-lmfdb-square-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="base-lmfdb-square-d" class="ramification-input" type="number" step="1" value="2" inputmode="numeric" aria-label="Base-field square root radicand d"></label></div>
-              <div id="base-lmfdb-root-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="base-lmfdb-root-n" class="ramification-input" type="number" step="1" value="3" inputmode="numeric" aria-label="Base-field root index n"></label><label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="base-lmfdb-root-d" class="ramification-input" type="number" step="1" value="2" inputmode="numeric" aria-label="Base-field root radicand d"></label></div>
-              <div id="base-lmfdb-zeta-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="base-lmfdb-zeta-n" class="ramification-input" type="number" step="1" value="5" inputmode="numeric" aria-label="Base-field cyclotomic index n"></label></div>
+              <div id="base-lmfdb-square-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="base-lmfdb-square-d" class="ramification-input calculator-control" type="number" step="1" value="2" inputmode="numeric" aria-label="Base-field square root radicand d"></label></div>
+              <div id="base-lmfdb-root-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="base-lmfdb-root-n" class="ramification-input calculator-control" type="number" step="1" value="3" inputmode="numeric" aria-label="Base-field root index n"></label><label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="base-lmfdb-root-d" class="ramification-input calculator-control" type="number" step="1" value="2" inputmode="numeric" aria-label="Base-field root radicand d"></label></div>
+              <div id="base-lmfdb-zeta-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="base-lmfdb-zeta-n" class="ramification-input calculator-control" type="number" step="1" value="5" inputmode="numeric" aria-label="Base-field cyclotomic index n"></label></div>
               <button class="btn" type="submit">insert</button>
               <button id="base-lmfdb-shortcut-close" class="btn btn-ghost ramification-shortcut-close" type="button" title="Close field shortcut" aria-label="Close field shortcut">&#215;</button>
               <div id="base-lmfdb-shortcut-error" class="ramification-shortcut-error" role="alert"></div>
@@ -578,7 +546,7 @@
 
         <div class="ramification-inline-row ramification-extension-divider">
           <label class="input-label" for="extension-input-kind">Extension \(E\)</label>
-          <select id="extension-input-kind" class="ramification-select">
+          <select id="extension-input-kind" class="ramification-select calculator-control">
             <option value="lmfdb" selected>LMFDB field</option>
             <option value="polynomial">Irreducible polynomial over \(F\)</option>
           </select>
@@ -587,7 +555,7 @@
         <div id="extension-lmfdb-selector" class="ramification-field-selector">
           <div class="input-label">LMFDB field \(E\)</div>
           <div class="ramification-search-row">
-            <input id="lmfdb-query" class="ramification-input" type="text" value="2.2.5.1" placeholder="2.2.5.1, Qsqrt(5), Qroot(3,2), Qzeta(5)" spellcheck="false" autocomplete="off">
+            <input id="lmfdb-query" class="ramification-input calculator-control" type="text" value="2.2.5.1" placeholder="2.2.5.1, Qsqrt(5), Qroot(3,2), Qzeta(5)" spellcheck="false" autocomplete="off">
             <button id="lmfdb-search" class="btn" type="button">search</button>
           </div>
           <div id="lmfdb-shortcut-editor">
@@ -597,9 +565,9 @@
               <button id="lmfdb-zeta-shortcut" class="btn btn-ghost" type="button" title="Enter a cyclotomic field." aria-label="Enter a cyclotomic field." aria-expanded="false" aria-controls="lmfdb-shortcut-panel">\(\zeta_n\)</button>
             </div>
             <form id="lmfdb-shortcut-panel" class="ramification-shortcut-panel" aria-label="Extension-field shortcut parameters" hidden>
-              <div id="lmfdb-square-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="lmfdb-square-d" class="ramification-input" type="number" step="1" value="2" inputmode="numeric" aria-label="Square root radicand d"></label></div>
-              <div id="lmfdb-root-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="lmfdb-root-n" class="ramification-input" type="number" step="1" value="3" inputmode="numeric" aria-label="Root index n"></label><label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="lmfdb-root-d" class="ramification-input" type="number" step="1" value="2" inputmode="numeric" aria-label="Root radicand d"></label></div>
-              <div id="lmfdb-zeta-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="lmfdb-zeta-n" class="ramification-input" type="number" step="1" value="5" inputmode="numeric" aria-label="Cyclotomic index n"></label></div>
+              <div id="lmfdb-square-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="lmfdb-square-d" class="ramification-input calculator-control" type="number" step="1" value="2" inputmode="numeric" aria-label="Square root radicand d"></label></div>
+              <div id="lmfdb-root-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="lmfdb-root-n" class="ramification-input calculator-control" type="number" step="1" value="3" inputmode="numeric" aria-label="Root index n"></label><label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="lmfdb-root-d" class="ramification-input calculator-control" type="number" step="1" value="2" inputmode="numeric" aria-label="Root radicand d"></label></div>
+              <div id="lmfdb-zeta-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="lmfdb-zeta-n" class="ramification-input calculator-control" type="number" step="1" value="5" inputmode="numeric" aria-label="Cyclotomic index n"></label></div>
               <button class="btn" type="submit">insert</button>
               <button id="lmfdb-shortcut-close" class="btn btn-ghost ramification-shortcut-close" type="button" title="Close field shortcut" aria-label="Close field shortcut">&#215;</button>
               <div id="lmfdb-shortcut-error" class="ramification-shortcut-error" role="alert"></div>
@@ -613,14 +581,14 @@
           <p class="hint">Certified locally. Places outside the current certificates are shown as unresolved without inferred \((e_i,f_i)\).</p>
           <div class="ramification-inline-row">
             <span class="input-label">Generator</span>
-            <input id="generic-generator" class="ramification-input" type="text" value="alpha" maxlength="32" spellcheck="false">
+            <input id="generic-generator" class="ramification-input calculator-control" type="text" value="alpha" maxlength="32" spellcheck="false">
           </div>
           <div class="ramification-inline-row">
             <span class="input-label">\(f(x)\)</span>
-            <input id="generic-polynomial" class="ramification-input" type="text" value="x^2-2" spellcheck="false" autocomplete="off">
+            <input id="generic-polynomial" class="ramification-input calculator-control" type="text" value="x^2-2" spellcheck="false" autocomplete="off">
           </div>
           <div class="ramification-preset-row">
-            <button id="generic-compute" class="btn" type="button">compute</button>
+              <button id="generic-compute" class="btn" type="button" data-shortcut-primary>compute</button>
             <button class="btn btn-ghost" type="button" data-generic-example="number">\(x^3-x-1\)</button>
             <button class="btn btn-ghost" type="button" data-generic-example="relative">\(x^2-a\)</button>
             <button class="btn btn-ghost" type="button" data-generic-example="function">\(x^2-t\)</button>
@@ -637,14 +605,14 @@
             </label>
           </div>
           <div class="ramification-place-row">
-            <input id="extra-prime-input" class="ramification-input" type="text" placeholder="prime p" spellcheck="false">
+            <input id="extra-prime-input" class="ramification-input calculator-control" type="text" placeholder="prime p" spellcheck="false">
             <button id="add-extra-prime" class="btn btn-ghost" type="button">add place</button>
           </div>
           <div id="place-chip-list" class="ramification-chip-list"></div>
         </div>
         <div class="result-meta" id="ramification-input-note">Loading \(E/\mathbb{Q}\) from LMFDB...</div>
         <div class="ramification-preset-row ramification-update-row">
-          <button id="extension-update" class="btn" type="button">update</button>
+              <button id="extension-update" class="btn" type="button" data-shortcut-primary>update</button>
         </div>
       </div>
     </section>
@@ -699,8 +667,10 @@
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js"></script>
+<script src="js/calculator_input_settings.js?v=20260902-2"></script>
 <script src="js/place_ramification_engine.js?v=20260830-2"></script>
 <script src="js/place_ramification_calculator.js?v=20260831-3"></script>
+<script src="js/calculator_input_profiles.js?v=20260902-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

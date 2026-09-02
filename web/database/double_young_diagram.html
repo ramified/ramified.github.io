@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Young Diagram² Calculator</title>
-  <link rel="stylesheet" href="css/site.css" />
+  <link rel="stylesheet" href="css/site.css?v=20260902-2" />
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7" />
   <style>
     .double-layout {
@@ -560,7 +560,7 @@
             <span><strong>Lie algebra rank fixed</strong><br><span class="hint" id="lr-mode-hint">Unchecked: stable n ≫ 0. Checked: tensor product in the fixed-rank Weyl representation ring.</span></span>
           </label>
           <div class="lr-action-row">
-            <button id="compute-schur" class="btn">compute</button>
+            <button id="compute-schur" class="btn" data-shortcut-primary>compute</button>
             <button id="export-schur" class="btn btn-ghost" data-import-export-trigger="schur" data-export-filename="lr-decomposition.txt">export</button>
           </div>
           <div id="schur-out" class="decomposition-output"><span class="hint">Draw λ and μ, choose stable or fixed-rank mode, then compute.</span></div>
@@ -605,7 +605,7 @@
         <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">kostka tableaux</span><i class="toggle-icon">▾</i></div>
         <div class="card-body">
           <div class="lr-action-row">
-            <button id="compute-kostka" class="btn">compute</button>
+            <button id="compute-kostka" class="btn" data-shortcut-primary>compute</button>
             <button id="export-kostka" class="btn btn-ghost" data-import-export-trigger="kostka" data-export-filename="kostka-tableaux.txt">export</button>
           </div>
           <div id="kostka-out" class="decomposition-output"><span class="hint">Compute all semistandard Young tableaux of shape λ and weight μ. This card is independent of the selected Lie type.</span></div>
@@ -617,7 +617,7 @@
         <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">kronecker decomposition</span><i class="toggle-icon">▾</i></div>
         <div class="card-body">
           <div class="lr-action-row">
-            <button id="compute-kronecker" class="btn">compute</button>
+            <button id="compute-kronecker" class="btn" data-shortcut-primary>compute</button>
             <button id="export-kronecker" class="btn btn-ghost" data-import-export-trigger="kronecker" data-export-filename="kronecker-decomposition.txt">export</button>
           </div>
           <div id="kronecker-out" class="decomposition-output"><span class="hint">Compute all nonzero Kronecker coefficients g<sup>ν</sup><sub>λ,μ</sub> for |λ| = |μ|.</span></div>
@@ -629,7 +629,7 @@
         <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">plethysm decomposition</span><i class="toggle-icon">▾</i></div>
         <div class="card-body">
           <div class="lr-action-row">
-            <button id="compute-plethysm" class="btn">compute</button>
+            <button id="compute-plethysm" class="btn" data-shortcut-primary>compute</button>
             <button id="export-plethysm" class="btn btn-ghost" data-import-export-trigger="plethysm" data-export-filename="plethysm-decomposition.txt">export</button>
           </div>
           <div id="plethysm-out" class="decomposition-output"><span class="hint">Compute all nonzero coefficients in the Schur plethysm s<sub>λ</sub>∘s<sub>μ</sub>.</span></div>
@@ -641,7 +641,7 @@
         <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">schur functor</span><i class="toggle-icon">▾</i></div>
         <div class="card-body">
           <div class="lr-action-row">
-            <button id="compute-schur-functor" class="btn">compute</button>
+            <button id="compute-schur-functor" class="btn" data-shortcut-primary>compute</button>
             <button id="export-schur-functor" class="btn btn-ghost" data-import-export-trigger="schur-functor" data-export-filename="schur-functor-decomposition.txt">export</button>
           </div>
           <div id="schur-functor-out" class="decomposition-output"><span class="hint">Compute 𝕊<sup>μ</sup>(V<sup>λ</sup>) for the selected Dynkin type/rank and decompose it as a sum of V<sup>γ</sup>.</span></div>
@@ -660,7 +660,7 @@
             </select>
           </div>
           <div class="lr-action-row">
-            <button id="compute-grassmannian" class="btn">compute</button>
+            <button id="compute-grassmannian" class="btn" data-shortcut-primary>compute</button>
             <button id="export-grassmannian" class="btn btn-ghost" data-import-export-trigger="grassmannian" data-export-filename="grassmannian-cup-product.txt">export</button>
           </div>
           <div id="grassmannian-out" class="decomposition-output"><span class="hint">Compute σ<sub>λ</sub> ∪ σ<sub>μ</sub> in H*(Gr(r,n)), where r is the number of grid rows and n−r is the number of grid columns.</span></div>
@@ -715,7 +715,7 @@
                 <option value="linear">linear</option>
                 <option value="polynomial">poly</option>
               </select>
-              <button id="compute-sympoly" class="symfun-export-btn" type="button">compute</button>
+              <button id="compute-sympoly" class="symfun-export-btn" type="button" data-shortcut-primary>compute</button>
               <button id="export-sympoly" class="symfun-export-btn" type="button" data-import-export-trigger="symmetric-polynomials" data-export-filename="symmetric-polynomial-product.txt">export</button>
             </span>
           </div>
@@ -748,8 +748,10 @@
     <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
   </footer>
 
-  <script src="js/calculator_cards.js"></script>
-  <script src="js/double_young_diagram.js?v=20260821-1"></script>
+<script src="js/calculator_cards.js"></script>
+<script src="js/calculator_input_settings.js?v=20260902-2"></script>
+<script src="js/double_young_diagram.js?v=20260821-1"></script>
+<script src="js/calculator_input_profiles.js?v=20260902-1"></script>
   <script src="js/import_export_panel.js?v=20260821-7"></script>
   <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

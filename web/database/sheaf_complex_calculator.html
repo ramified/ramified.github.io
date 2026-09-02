@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sheaf Complex Calculator</title>
-  <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/site.css?v=20260902-2">
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
     .sheaf-layout {
@@ -230,12 +230,6 @@
 
     .sheaf-input[type=number] {
       text-align: center;
-    }
-
-    .sheaf-select:focus,
-    .sheaf-input:focus {
-      outline: 2px solid var(--accent);
-      border-color: var(--accent);
     }
 
     .sheaf-object-button:disabled {
@@ -469,18 +463,6 @@
       cursor: grabbing;
       z-index: 3;
       box-shadow: 0 4px 12px rgba(40, 34, 20, 0.14);
-    }
-
-    .sheaf-underbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      padding: 0 16px 14px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
-      color: var(--muted);
-      flex-wrap: wrap;
     }
 
     .sheaf-underbar span {
@@ -2939,20 +2921,6 @@
       font-size: 0.76rem;
     }
 
-    .sheaf-badge {
-      display: inline-flex;
-      align-items: center;
-      min-height: 21px;
-      padding: 1px 6px;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      color: var(--text);
-      background: rgba(255,255,255,0.55);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
-      white-space: nowrap;
-    }
-
     @media (max-width: 860px) {
       .sheaf-layout {
         grid-template-columns: 1fr;
@@ -3024,7 +2992,7 @@
       <header class="panel-title">
         <span class="panel-title-text">Variety and Sheaf</span>
         <div class="canvas-toolbar" aria-label="Sheaf calculator controls">
-          <span class="sheaf-badge" id="object-badge">\(X,\mathcal{E}\)</span>
+          <span class="sheaf-badge calculator-badge" id="object-badge">\(X,\mathcal{E}\)</span>
           <label class="opt-row sheaf-cache-toggle" id="main-result-cache-label" for="main-result-cache" title="Cache calculations is off.">
             <input type="checkbox" id="main-result-cache">
             cache calculations
@@ -3043,7 +3011,7 @@
         </div>
       </div>
 
-      <div class="sheaf-underbar">
+      <div class="sheaf-underbar calculator-underbar">
         <span id="sheaf-status">ready</span>
           <span id="ring-summary">\(A^*(X)_{\le 3}\)</span>
       </div>
@@ -3072,7 +3040,7 @@
           <div class="sheaf-formula-builder" id="class-formula-builder" hidden>
             <div class="sheaf-step-builder-row">
               <label class="input-label" for="class-formula-variety">variety</label>
-              <select id="class-formula-variety" class="sheaf-select"></select>
+              <select id="class-formula-variety" class="sheaf-select calculator-control"></select>
             </div>
             <div class="sheaf-step-token-row" id="class-formula-homology-row">
               <span class="input-label">homology</span>
@@ -3082,9 +3050,9 @@
               <span class="input-label">sheaves</span>
               <div class="sheaf-step-class-picker" id="class-formula-sheaf-picker">
                 <button class="sheaf-step-token-button" id="class-formula-add-sheaf-class" type="button">add class</button>
-                <select id="class-formula-class-family" class="sheaf-select" aria-label="Characteristic class family"></select>
-                <select id="class-formula-class-degree" class="sheaf-select" aria-label="Characteristic class degree"></select>
-                <select id="class-formula-class-sheaf" class="sheaf-select" aria-label="Characteristic class sheaf"></select>
+                <select id="class-formula-class-family" class="sheaf-select calculator-control" aria-label="Characteristic class family"></select>
+                <select id="class-formula-class-degree" class="sheaf-select calculator-control" aria-label="Characteristic class degree"></select>
+                <select id="class-formula-class-sheaf" class="sheaf-select calculator-control" aria-label="Characteristic class sheaf"></select>
               </div>
             </div>
             <div class="sheaf-step-token-row" id="class-formula-map-row">
@@ -3101,7 +3069,7 @@
               <button class="btn btn-ghost sheaf-chart-export" id="class-formula-clear" type="button">clear</button>
               <button class="btn btn-ghost sheaf-chart-export" id="class-formula-slot-done" type="button" hidden>done</button>
               <button class="btn btn-ghost sheaf-chart-export" id="class-formula-check" type="button">check formula</button>
-              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-compute" type="button" disabled>compute step-by-step</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-formula-compute" type="button" disabled data-shortcut-primary>compute step-by-step</button>
               <button class="btn btn-ghost sheaf-chart-export" id="class-formula-close" type="button">close editor</button>
             </div>
             <div class="sheaf-step-formula sheaf-step-formula-preview" id="class-formula-preview"></div>
@@ -3110,7 +3078,7 @@
           <div class="sheaf-step-panel" id="class-step-panel" hidden>
             <div class="sheaf-step-row" id="class-step-target-row" hidden>
               <span class="input-label">target</span>
-              <select id="class-step-family" class="sheaf-select">
+              <select id="class-step-family" class="sheaf-select calculator-control">
                 <option value="chern">c(F)</option>
                 <option value="character">ch(F)</option>
                 <option value="todd">td(F)</option>
@@ -3123,7 +3091,7 @@
                 <input type="checkbox" id="class-step-term-only">
                 term
               </label>
-              <input id="class-step-term-index" class="sheaf-input" type="number" min="0" max="15" value="1" aria-label="step term index" disabled>
+              <input id="class-step-term-index" class="sheaf-input calculator-control" type="number" min="0" max="15" value="1" aria-label="step term index" disabled>
               <button class="btn btn-ghost sheaf-chart-export sheaf-step-layout-toggle" id="class-step-layout" type="button" aria-pressed="true">wide</button>
             </div>
             <div class="sheaf-step-work">
@@ -3150,7 +3118,7 @@
             </div>
             <div class="sheaf-step-controls">
               <button class="btn btn-ghost sheaf-chart-export" id="class-step-add-selected-rules" type="button">add selected rules</button>
-              <button class="btn btn-ghost sheaf-chart-export" id="class-step-apply" type="button">apply rules</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="class-step-apply" type="button" data-shortcut-primary>apply rules</button>
               <button class="btn btn-ghost sheaf-chart-export" id="class-step-save-rule" type="button">close editor</button>
               <button class="btn btn-ghost sheaf-chart-export" id="class-step-undo" type="button">cancel last step</button>
               <button class="btn btn-ghost sheaf-chart-export" id="class-step-restart" type="button">restart</button>
@@ -3176,7 +3144,7 @@
           <div class="sheaf-complex-add-panel" id="complex-chart-add-panel" hidden>
             <div class="sheaf-complex-editor-controls">
               <label class="input-label" for="complex-chart-add-mode">add by</label>
-              <select id="complex-chart-add-mode" class="sheaf-select">
+              <select id="complex-chart-add-mode" class="sheaf-select calculator-control">
                 <option value="manual">manual input</option>
                 <option value="preset">presets</option>
                 <option value="import">import</option>
@@ -3186,7 +3154,7 @@
             <div class="sheaf-complex-add-mode-panel" id="complex-chart-manual-panel">
               <div class="sheaf-complex-editor-controls">
                 <label class="input-label" for="complex-chart-manual-kind">type</label>
-                <select id="complex-chart-manual-kind" class="sheaf-select">
+                <select id="complex-chart-manual-kind" class="sheaf-select calculator-control">
                   <option value="chain-complex">chain complex</option>
                   <option value="filtration">filtration</option>
                 </select>
@@ -3196,7 +3164,7 @@
             <div class="sheaf-complex-add-mode-panel" id="complex-chart-preset-panel" hidden>
               <div class="sheaf-complex-editor-controls">
                 <label class="input-label" for="complex-chart-preset">preset</label>
-                <select id="complex-chart-preset" class="sheaf-select"></select>
+                <select id="complex-chart-preset" class="sheaf-select calculator-control"></select>
                 <button class="btn btn-ghost sheaf-object-button" id="complex-chart-preset-load" type="button">add preset</button>
               </div>
             </div>
@@ -3211,12 +3179,12 @@
             <div class="sheaf-complex-editor" id="complex-chart-editor" hidden>
               <div class="sheaf-complex-editor-controls">
                 <label class="input-label" id="complex-chart-length-label" for="complex-chart-length">length</label>
-                <input id="complex-chart-length" class="sheaf-input" type="number" min="1" max="20" value="3">
+                <input id="complex-chart-length" class="sheaf-input calculator-control" type="number" min="1" max="20" value="3">
               </div>
               <div class="sheaf-complex-editor-grid" id="complex-chart-fields"></div>
               <div class="sheaf-complex-display" id="complex-chart-preview"></div>
               <div class="sheaf-complex-editor-controls">
-                <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-save" type="button">save</button>
+              <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-save" type="button" data-shortcut-primary>save</button>
                 <button class="btn btn-ghost sheaf-chart-export" id="complex-chart-cancel" type="button">cancel</button>
               </div>
               <div class="hint" id="complex-chart-message"></div>
@@ -3234,11 +3202,11 @@
       <div class="card-body">
         <div class="sheaf-input-toolbar">
           <div class="sheaf-input-add">
-            <select id="input-mode" class="sheaf-select sheaf-mode-select" aria-label="Input mode">
+            <select id="input-mode" class="sheaf-select calculator-control sheaf-mode-select" aria-label="Input mode">
               <option value="create" selected>Create</option>
               <option value="modify" disabled>Modify</option>
             </select>
-            <select id="add-object-kind" class="sheaf-select" aria-label="Object type to add">
+            <select id="add-object-kind" class="sheaf-select calculator-control" aria-label="Object type to add">
               <option value="variety">Variety</option>
               <option value="sheaf" disabled>Sheaf</option>
               <option value="map" disabled>Map</option>
@@ -3246,7 +3214,7 @@
               <option value="recommendations" disabled>Recommended constructions</option>
               <option value="number">Rational number</option>
             </select>
-            <button class="btn btn-ghost sheaf-object-button" id="add-object" type="button">add</button>
+              <button class="btn btn-ghost sheaf-object-button" id="add-object" type="button" data-shortcut-primary>add</button>
             <button class="btn btn-ghost sheaf-object-button" id="delete-object" type="button">delete</button>
             <button class="btn btn-ghost sheaf-object-button" id="input-pick-mode" type="button" aria-pressed="false" hidden>cancel</button>
             <button class="btn btn-ghost sheaf-object-button" id="import-preset-toggle" type="button" aria-expanded="false">import</button>
@@ -3256,7 +3224,7 @@
               <input type="checkbox" id="repeat-names" checked>
               repetition
             </label>
-            <select id="repeat-style" class="sheaf-select" aria-label="Repetition style">
+            <select id="repeat-style" class="sheaf-select calculator-control" aria-label="Repetition style">
               <option value="letters" selected>X,Y,Z,W...</option>
               <option value="prime">X,X',X''...</option>
               <option value="paren">X,X^{(1)},X^{(2)}...</option>
@@ -3279,7 +3247,7 @@
           <div class="sheaf-editor-title" id="global-invariant-editor-title">New rational number</div>
           <div class="sheaf-field-row">
             <label class="input-label" for="global-invariant-name">name</label>
-            <input id="global-invariant-name" class="sheaf-input" type="text" value="a" maxlength="24" spellcheck="false" autocomplete="off">
+            <input id="global-invariant-name" class="sheaf-input calculator-control" type="text" value="a" maxlength="24" spellcheck="false" autocomplete="off">
           </div>
           <div class="sheaf-field-row">
             <span class="input-label">value</span>
@@ -3296,7 +3264,7 @@
           </div>
           <div class="sheaf-field-row" id="global-invariant-value-row" hidden>
             <label class="input-label" for="global-invariant-value">integer</label>
-            <input id="global-invariant-value" class="sheaf-input" type="number" step="1" value="0">
+            <input id="global-invariant-value" class="sheaf-input calculator-control" type="number" step="1" value="0">
           </div>
           <div class="sheaf-field-row">
             <span class="input-label">replace</span>
@@ -3318,7 +3286,7 @@
         <div class="sheaf-input-editor" id="combined-editor" hidden>
           <div class="sheaf-field-row">
             <label class="input-label" for="combined-type">Type</label>
-            <select id="combined-type" class="sheaf-select">
+            <select id="combined-type" class="sheaf-select calculator-control">
               <option value="product" selected>Product + projections</option>
               <option value="abel-jacobi">Abel-Jacobi + Jacobian</option>
               <option value="short-exact-sequence">Short exact sequence / triangle</option>
@@ -3332,7 +3300,7 @@
           </div>
           <div class="sheaf-field-row" id="identify-kind-row" hidden>
             <label class="input-label" for="identify-kind">objects</label>
-            <select id="identify-kind" class="sheaf-select">
+            <select id="identify-kind" class="sheaf-select calculator-control">
               <option value="variety" selected>Varieties</option>
               <option value="sheaf">Sheaves</option>
             </select>
@@ -3364,7 +3332,7 @@
             <div class="identify-name-tools">
               <button class="btn btn-ghost sheaf-map-slot-button" id="identify-name-left" type="button" data-identify-name="left">first</button>
               <button class="btn btn-ghost sheaf-map-slot-button" id="identify-name-right" type="button" data-identify-name="right">second</button>
-              <input id="identify-name" class="sheaf-input" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off">
+              <input id="identify-name" class="sheaf-input calculator-control" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off">
             </div>
           </div>
           <div class="sheaf-field-row" id="identify-auto-row" hidden>
@@ -3399,7 +3367,7 @@
           <div class="sheaf-note" id="ses-pick-note" hidden>pick two sheaves on the same base</div>
           <div class="sheaf-field-row" id="ses-computed-row" hidden>
             <label class="input-label" for="ses-computed-index">compute</label>
-            <select id="ses-computed-index" class="sheaf-select">
+            <select id="ses-computed-index" class="sheaf-select calculator-control">
               <option value="0">A from B and C</option>
               <option value="1">B from A and C</option>
               <option value="2">C from A and B</option>
@@ -3435,22 +3403,22 @@
           </div>
           <div class="sheaf-field-row" id="ramified-cover-degree-row" hidden>
             <label class="input-label" for="ramified-cover-degree">degree</label>
-            <input id="ramified-cover-degree" class="sheaf-input" type="number" min="1" max="99" step="1" value="2">
+            <input id="ramified-cover-degree" class="sheaf-input calculator-control" type="number" min="1" max="99" step="1" value="2">
           </div>
           <div class="sheaf-field-row" id="ramified-cover-mode-row" hidden>
             <label class="input-label" for="ramified-cover-mode">mode</label>
-            <select id="ramified-cover-mode" class="sheaf-select">
+            <select id="ramified-cover-mode" class="sheaf-select calculator-control">
               <option value="cyclic" selected>Cyclic</option>
               <option value="general">General finite</option>
             </select>
           </div>
           <div class="sheaf-field-row" id="ramified-cover-branch-row" hidden>
             <label class="input-label" for="ramified-cover-branch-symbol">branch</label>
-            <input id="ramified-cover-branch-symbol" class="sheaf-input" type="text" value="B" maxlength="48" spellcheck="false" autocomplete="off">
+            <input id="ramified-cover-branch-symbol" class="sheaf-input calculator-control" type="text" value="B" maxlength="48" spellcheck="false" autocomplete="off">
           </div>
           <div class="sheaf-field-row" id="ramified-cover-ramification-row" hidden>
             <label class="input-label" for="ramified-cover-ramification-symbol">ramification</label>
-            <input id="ramified-cover-ramification-symbol" class="sheaf-input" type="text" value="R" maxlength="48" spellcheck="false" autocomplete="off">
+            <input id="ramified-cover-ramification-symbol" class="sheaf-input calculator-control" type="text" value="R" maxlength="48" spellcheck="false" autocomplete="off">
           </div>
           <div class="sheaf-field-row" id="ramified-cover-smooth-row" hidden>
             <span class="input-label">smooth</span>
@@ -3461,7 +3429,7 @@
           </div>
           <div class="sheaf-field-row" id="ramified-cover-root-row" hidden>
             <label class="input-label" for="ramified-cover-branch-degree">branch degree</label>
-            <input id="ramified-cover-branch-degree" class="sheaf-input" type="number" min="1" max="99" step="1" value="4">
+            <input id="ramified-cover-branch-degree" class="sheaf-input calculator-control" type="number" min="1" max="99" step="1" value="4">
           </div>
           <div class="sheaf-note" id="ramified-cover-pick-note" hidden>pick a base variety</div>
           <div class="sheaf-field-row" id="tautological-ses-base-row" hidden>
@@ -3485,11 +3453,11 @@
             <div class="grassmannian-param-picker">
               <label class="grassmannian-param" for="grassmannian-map-r">
                 <span>r</span>
-                <input type="number" id="grassmannian-map-r" class="sheaf-input" min="1" max="8" value="2">
+                <input type="number" id="grassmannian-map-r" class="sheaf-input calculator-control" min="1" max="8" value="2">
               </label>
               <label class="grassmannian-param" for="grassmannian-map-n">
                 <span>n</span>
-                <input type="number" id="grassmannian-map-n" class="sheaf-input" min="2" max="9" value="4">
+                <input type="number" id="grassmannian-map-n" class="sheaf-input calculator-control" min="2" max="9" value="4">
               </label>
             </div>
           </div>
@@ -3518,7 +3486,7 @@
           </div>
           <div class="sheaf-field-row" id="picard-canonical-degree-row" hidden>
             <label class="input-label" for="picard-canonical-degree">d</label>
-            <input id="picard-canonical-degree" class="sheaf-input" type="text" value="d" maxlength="16" spellcheck="false" autocomplete="off">
+            <input id="picard-canonical-degree" class="sheaf-input calculator-control" type="text" value="d" maxlength="16" spellcheck="false" autocomplete="off">
           </div>
           <div class="sheaf-note" id="picard-canonical-pick-note" hidden>pick a curve</div>
         </div>
@@ -3533,7 +3501,7 @@
           </div>
           <div class="sheaf-field-row" id="recommendation-list-row" hidden>
             <label class="input-label" for="recommendation-list">choice</label>
-            <select id="recommendation-list" class="sheaf-select"></select>
+            <select id="recommendation-list" class="sheaf-select calculator-control"></select>
           </div>
           <div class="sheaf-field-row" id="recommendation-hypersurface-divisor-row" hidden>
             <span class="input-label">D=[X]</span>
@@ -3555,7 +3523,7 @@
           <div class="sheaf-editor-title" id="variety-editor-title">New variety</div>
           <div class="sheaf-field-row">
             <label class="input-label" for="variety-type">Type</label>
-            <select id="variety-type" class="sheaf-select">
+            <select id="variety-type" class="sheaf-select calculator-control">
               <option value="abstract" selected>Abstract variety</option>
               <option value="curve">Curve</option>
               <option value="symmetric-product-curve">Sym^m(C)</option>
@@ -3579,18 +3547,18 @@
           <div class="sheaf-note" id="product-pick-note" hidden>click two varieties on the canvas</div>
           <div class="sheaf-field-row" id="ppav-genus-row" hidden>
             <label class="input-label" for="ppav-genus">genus</label>
-            <input type="number" id="ppav-genus" class="sheaf-input" min="1" max="5" value="2">
+            <input type="number" id="ppav-genus" class="sheaf-input calculator-control" min="1" max="5" value="2">
           </div>
           <div class="sheaf-field-row" id="symmetric-product-params-row" hidden>
             <span class="input-label">parameters</span>
             <div class="grassmannian-param-picker">
               <label class="grassmannian-param" for="symmetric-product-m">
                 <span>m</span>
-                <input type="number" id="symmetric-product-m" class="sheaf-input" min="0" max="15" value="3">
+                <input type="number" id="symmetric-product-m" class="sheaf-input calculator-control" min="0" max="15" value="3">
               </label>
               <label class="grassmannian-param" for="symmetric-product-genus">
                 <span>g</span>
-                <input id="symmetric-product-genus" class="sheaf-input curve-genus-input" type="text" value="g" maxlength="12" spellcheck="false" autocomplete="off">
+                <input id="symmetric-product-genus" class="sheaf-input calculator-control curve-genus-input" type="text" value="g" maxlength="12" spellcheck="false" autocomplete="off">
               </label>
             </div>
           </div>
@@ -3599,17 +3567,17 @@
             <div class="grassmannian-param-picker">
               <label class="grassmannian-param" for="grassmannian-r">
                 <span>r</span>
-                <input type="number" id="grassmannian-r" class="sheaf-input" min="1" max="8" value="2">
+                <input type="number" id="grassmannian-r" class="sheaf-input calculator-control" min="1" max="8" value="2">
               </label>
               <label class="grassmannian-param" for="grassmannian-n">
                 <span>n</span>
-                <input type="number" id="grassmannian-n" class="sheaf-input" min="2" max="9" value="4">
+                <input type="number" id="grassmannian-n" class="sheaf-input calculator-control" min="2" max="9" value="4">
               </label>
             </div>
           </div>
           <div class="sheaf-field-row">
             <label class="input-label" for="variety-dim">dimension</label>
-            <input type="number" id="variety-dim" class="sheaf-input" min="0" max="15" value="3">
+            <input type="number" id="variety-dim" class="sheaf-input calculator-control" min="0" max="15" value="3">
           </div>
           <div class="sheaf-field-row" id="point-name-preset-row" hidden>
             <span class="input-label">preset</span>
@@ -3622,15 +3590,15 @@
           </div>
           <div class="sheaf-field-row">
             <label class="input-label" for="variety-name">name</label>
-            <input id="variety-name" class="sheaf-input" type="text" value="X" maxlength="48" spellcheck="false" autocomplete="off">
+            <input id="variety-name" class="sheaf-input calculator-control" type="text" value="X" maxlength="48" spellcheck="false" autocomplete="off">
           </div>
           <div class="sheaf-field-row" id="curve-genus-row" hidden>
             <label class="input-label" for="curve-genus">genus</label>
-            <input id="curve-genus" class="sheaf-input curve-genus-input" type="text" value="g" maxlength="12" spellcheck="false" autocomplete="off">
+            <input id="curve-genus" class="sheaf-input calculator-control curve-genus-input" type="text" value="g" maxlength="12" spellcheck="false" autocomplete="off">
           </div>
           <div class="sheaf-field-row" id="ci-degrees-row" hidden>
             <label class="input-label" for="ci-degrees">degrees</label>
-            <input id="ci-degrees" class="sheaf-input" type="text" value="" spellcheck="false" autocomplete="off" placeholder="2, 3">
+            <input id="ci-degrees" class="sheaf-input calculator-control" type="text" value="" spellcheck="false" autocomplete="off" placeholder="2, 3">
           </div>
           <div class="sheaf-field-row" id="ci-equation-count-row" hidden>
             <label class="input-label" for="ci-equation-count">equations</label>
@@ -3647,7 +3615,7 @@
           <div class="sheaf-editor-title" id="sheaf-editor-title">New sheaf</div>
           <div class="sheaf-field-row">
             <label class="input-label" for="sheaf-type">Type</label>
-            <select id="sheaf-type" class="sheaf-select">
+            <select id="sheaf-type" class="sheaf-select calculator-control">
               <option value="abstract" selected>Abstract sheaf</option>
               <option value="locally-free">Locally free sheaf</option>
               <option value="structure">Structure sheaf</option>
@@ -3674,12 +3642,12 @@
           </div>
           <div class="sheaf-field-row">
             <label class="input-label" for="sheaf-name">name</label>
-            <input id="sheaf-name" class="sheaf-input" type="text" value="\mathcal{E}" maxlength="48" spellcheck="false" autocomplete="off">
+            <input id="sheaf-name" class="sheaf-input calculator-control" type="text" value="\mathcal{E}" maxlength="48" spellcheck="false" autocomplete="off">
           </div>
           <div class="sheaf-field-row" id="sheaf-base-row" hidden>
             <label class="input-label" for="sheaf-base-button">base variety</label>
             <div class="sheaf-base-picker">
-              <select id="sheaf-base-variety" class="sheaf-select" hidden></select>
+              <select id="sheaf-base-variety" class="sheaf-select calculator-control" hidden></select>
               <button class="btn btn-ghost sheaf-map-slot-button sheaf-base-pick-button" id="sheaf-base-button" type="button">variety</button>
             </div>
           </div>
@@ -3692,7 +3660,7 @@
           </div>
           <div class="sheaf-field-row" id="sheaf-differential-degree-row" hidden>
             <label class="input-label" for="sheaf-differential-degree">degree</label>
-            <select id="sheaf-differential-degree" class="sheaf-select"></select>
+            <select id="sheaf-differential-degree" class="sheaf-select calculator-control"></select>
           </div>
           <div class="sheaf-note" id="sheaf-differential-note" hidden></div>
           <div class="sheaf-field-row" id="sheaf-binary-formula-row" hidden>
@@ -3719,7 +3687,7 @@
           </div>
           <div class="sheaf-field-row" id="sheaf-tensor-parent-count-row" hidden>
             <label class="input-label" for="sheaf-tensor-parent-count">parents</label>
-            <select id="sheaf-tensor-parent-count" class="sheaf-select">
+            <select id="sheaf-tensor-parent-count" class="sheaf-select calculator-control">
               <option value="0">0</option>
               <option value="1">1</option>
               <option value="2">2</option>
@@ -3739,7 +3707,7 @@
             <div class="sheaf-map-formula-picker">
               <button class="btn btn-ghost sheaf-map-slot-button" id="sheaf-self-sum-parent-button" type="button" data-sheaf-self-sum-pick="parent">sheaf</button>
               <span class="sheaf-map-formula-mark" id="sheaf-self-sum-symbol">^{&oplus;</span>
-              <input id="sheaf-self-sum-count" class="sheaf-input sheaf-self-sum-count" type="text" value="2" maxlength="80" spellcheck="false" autocomplete="off" aria-label="self direct sum multiplicity">
+              <input id="sheaf-self-sum-count" class="sheaf-input calculator-control sheaf-self-sum-count" type="text" value="2" maxlength="80" spellcheck="false" autocomplete="off" aria-label="self direct sum multiplicity">
               <span class="sheaf-map-formula-mark">}</span>
             </div>
           </div>
@@ -3844,12 +3812,12 @@
           </div>
           <div class="sheaf-field-row" id="sheaf-schur-partition-row" hidden>
             <label class="input-label" for="sheaf-schur-partition">diagram</label>
-            <input id="sheaf-schur-partition" class="sheaf-input" type="text" value="2,1" maxlength="48" spellcheck="false" autocomplete="off" placeholder="2, 1">
+            <input id="sheaf-schur-partition" class="sheaf-input calculator-control" type="text" value="2,1" maxlength="48" spellcheck="false" autocomplete="off" placeholder="2, 1">
           </div>
           <div class="sheaf-note" id="sheaf-schur-pick-note" hidden>pick a locally free sheaf on the canvas</div>
           <div class="sheaf-field-row" id="sheaf-map-operation-row" hidden>
             <label class="input-label" for="sheaf-map-operation">operation</label>
-            <select id="sheaf-map-operation" class="sheaf-select">
+            <select id="sheaf-map-operation" class="sheaf-select calculator-control">
               <option value="auto" selected>auto</option>
               <option value="pullback">pullback</option>
               <option value="pushforward">pushforward</option>
@@ -3881,7 +3849,7 @@
           <div class="sheaf-note" id="sheaf-map-pick-note" hidden>pick a map and a sheaf on the canvas</div>
           <div class="sheaf-field-row" id="twist-row" hidden>
             <label class="input-label sheaf-lower-label" for="twist-r">r</label>
-            <input id="twist-r" class="sheaf-input" type="number" min="-24" max="24" value="1">
+            <input id="twist-r" class="sheaf-input calculator-control" type="number" min="-24" max="24" value="1">
           </div>
           <div class="sheaf-field-row" id="sheaf-divisor-row" hidden>
             <span class="input-label">D</span>
@@ -3889,7 +3857,7 @@
           </div>
           <div class="sheaf-field-row" id="rank-row">
             <label class="input-label" for="rank-symbol">rank</label>
-            <input id="rank-symbol" class="sheaf-input" type="text" value="" maxlength="80" spellcheck="false" autocomplete="off">
+            <input id="rank-symbol" class="sheaf-input calculator-control" type="text" value="" maxlength="80" spellcheck="false" autocomplete="off">
           </div>
         </div>
 
@@ -3897,7 +3865,7 @@
           <div class="sheaf-editor-title" id="map-editor-title">New map</div>
           <div class="sheaf-field-row">
             <label class="input-label" for="map-type">Type</label>
-            <select id="map-type" class="sheaf-select">
+            <select id="map-type" class="sheaf-select calculator-control">
               <option value="ordinary" selected>Map of varieties</option>
               <option value="sheaf">Map of sheaves</option>
               <option value="abel-jacobi" id="map-abel-jacobi-option">Abel-Jacobi map</option>
@@ -3906,7 +3874,7 @@
           </div>
           <div class="sheaf-field-row">
             <label class="input-label" for="map-name">name</label>
-            <input id="map-name" class="sheaf-input" type="text" value="f" maxlength="48" spellcheck="false" autocomplete="off">
+            <input id="map-name" class="sheaf-input calculator-control" type="text" value="f" maxlength="48" spellcheck="false" autocomplete="off">
           </div>
           <div class="sheaf-field-row" id="map-endpoints-row">
             <span class="input-label">parents</span>
@@ -3953,22 +3921,22 @@
           </div>
           <div class="sheaf-field-row" id="map-ramified-cover-degree-row" hidden>
             <label class="input-label" for="map-ramified-cover-degree">degree</label>
-            <input id="map-ramified-cover-degree" class="sheaf-input" type="number" min="1" max="99" step="1" value="2">
+            <input id="map-ramified-cover-degree" class="sheaf-input calculator-control" type="number" min="1" max="99" step="1" value="2">
           </div>
           <div class="sheaf-field-row" id="map-ramified-cover-mode-row" hidden>
             <label class="input-label" for="map-ramified-cover-mode">mode</label>
-            <select id="map-ramified-cover-mode" class="sheaf-select">
+            <select id="map-ramified-cover-mode" class="sheaf-select calculator-control">
               <option value="cyclic">Cyclic</option>
               <option value="general">General finite</option>
             </select>
           </div>
           <div class="sheaf-field-row" id="map-ramified-cover-branch-row" hidden>
             <label class="input-label" for="map-ramified-cover-branch-symbol">branch</label>
-            <input id="map-ramified-cover-branch-symbol" class="sheaf-input" type="text" value="B" maxlength="48" spellcheck="false" autocomplete="off">
+            <input id="map-ramified-cover-branch-symbol" class="sheaf-input calculator-control" type="text" value="B" maxlength="48" spellcheck="false" autocomplete="off">
           </div>
           <div class="sheaf-field-row" id="map-ramified-cover-ramification-row" hidden>
             <label class="input-label" for="map-ramified-cover-ramification-symbol">ramification</label>
-            <input id="map-ramified-cover-ramification-symbol" class="sheaf-input" type="text" value="R" maxlength="48" spellcheck="false" autocomplete="off">
+            <input id="map-ramified-cover-ramification-symbol" class="sheaf-input calculator-control" type="text" value="R" maxlength="48" spellcheck="false" autocomplete="off">
           </div>
           <div class="sheaf-field-row" id="map-ramified-cover-smooth-row" hidden>
             <span class="input-label">smooth</span>
@@ -3979,7 +3947,7 @@
           </div>
           <div class="sheaf-field-row" id="map-ramified-cover-branch-degree-row" hidden>
             <label class="input-label" for="map-ramified-cover-branch-degree">branch degree</label>
-            <input id="map-ramified-cover-branch-degree" class="sheaf-input" type="number" min="1" max="99" step="1" value="4">
+            <input id="map-ramified-cover-branch-degree" class="sheaf-input calculator-control" type="number" min="1" max="99" step="1" value="4">
           </div>
           <div class="map-pick-status" id="map-pick-status">pick a domain</div>
           <div class="map-pick-actions">
@@ -4006,7 +3974,7 @@
         </div>
         <div class="sheaf-inline-row" id="basis-row">
           <span class="input-label">basis</span>
-          <select id="abstract-basis" class="sheaf-select">
+          <select id="abstract-basis" class="sheaf-select calculator-control">
             <option value="chern" selected>Chern classes</option>
             <option value="character">Chern character</option>
             <option value="roots">Chern roots</option>
@@ -4014,7 +3982,7 @@
         </div>
         <div class="sheaf-inline-row" id="root-form-row" hidden>
           <span class="input-label">root form</span>
-          <select id="root-form" class="sheaf-select">
+          <select id="root-form" class="sheaf-select calculator-control">
             <option value="product" selected>Product</option>
             <option value="expanded">Expanded polynomial</option>
           </select>
@@ -4022,7 +3990,7 @@
         <div class="sheaf-inline-row" id="class-term-row">
           <span class="input-label">terms</span>
           <div class="sheaf-term-only-control">
-            <input id="class-term-index" class="sheaf-input" type="number" min="0" max="15" value="1" aria-label="term index" disabled>
+            <input id="class-term-index" class="sheaf-input calculator-control" type="number" min="0" max="15" value="1" aria-label="term index" disabled>
             <span>th term only</span>
             <input type="checkbox" id="class-term-only" aria-label="only compute selected term">
             <label class="opt-row"><input type="checkbox" id="class-bracket-display" aria-label="display all terms in brackets"> bracket display</label>
@@ -4074,13 +4042,13 @@
           <div class="homology-tool-row">
             <label class="opt-row homology-map-mode-row" for="homology-map-input-mode">
               <span>input</span>
-              <select id="homology-map-input-mode" class="sheaf-select homology-map-mode-select">
+              <select id="homology-map-input-mode" class="sheaf-select calculator-control homology-map-mode-select">
                 <option value="formula">formulas</option>
                 <option value="coefficients" selected>only provide coefficients</option>
               </select>
             </label>
             <div class="homology-tool-actions">
-              <button class="btn btn-ghost homology-update-button" id="homology-update-all" type="button">update</button>
+              <button class="btn btn-ghost homology-update-button" id="homology-update-all" type="button" data-shortcut-primary>update</button>
             </div>
           </div>
           <details class="homology-expression-panel" id="homology-expression-panel">
@@ -4088,7 +4056,7 @@
             <div class="homology-expression-chart" id="homology-expression-chart"></div>
             <div class="homology-assignment-form" id="homology-assignment-form" hidden>
               <span class="homology-assignment-lhs" id="homology-assignment-lhs"></span>
-              <input id="homology-assignment-rhs" class="sheaf-input homology-map-rule-input" type="text" value="" maxlength="120" spellcheck="false" autocomplete="off" aria-label="Assigned linear combination" placeholder="0">
+              <input id="homology-assignment-rhs" class="sheaf-input calculator-control homology-map-rule-input" type="text" value="" maxlength="120" spellcheck="false" autocomplete="off" aria-label="Assigned linear combination" placeholder="0">
               <div class="homology-coefficient-editor homology-assignment-coefficients" id="homology-assignment-coefficients" hidden></div>
               <div class="homology-assignment-actions">
                 <button class="btn btn-ghost homology-rule-delete" id="homology-assignment-save" type="button">assign</button>
@@ -4102,11 +4070,11 @@
         </div>
         <div class="sheaf-field-row" id="homology-hyperplane-row" hidden>
           <label class="input-label" for="homology-hyperplane-symbol">hyperplane</label>
-          <input id="homology-hyperplane-symbol" class="sheaf-input" type="text" value="H" maxlength="48" spellcheck="false" autocomplete="off">
+          <input id="homology-hyperplane-symbol" class="sheaf-input calculator-control" type="text" value="H" maxlength="48" spellcheck="false" autocomplete="off">
         </div>
         <div class="sheaf-field-row" id="homology-point-row" hidden>
           <label class="input-label" for="homology-point-symbol">point</label>
-          <input id="homology-point-symbol" class="sheaf-input" type="text" value="[p]" maxlength="48" spellcheck="false" autocomplete="off">
+          <input id="homology-point-symbol" class="sheaf-input calculator-control" type="text" value="[p]" maxlength="48" spellcheck="false" autocomplete="off">
         </div>
         <div class="homology-symbol-list" id="homology-symbols"></div>
         <div class="homology-symbol-actions">
@@ -4114,20 +4082,20 @@
         </div>
         <div class="homology-rule-list" id="homology-rules"></div>
         <div class="homology-add-class" id="homology-add-class">
-          <input id="homology-class-symbol" class="sheaf-input" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Homology class symbol" placeholder="A">
-          <select id="homology-class-degree-mode" class="sheaf-select homology-degree-mode" aria-label="Homology class degree mode" hidden>
+          <input id="homology-class-symbol" class="sheaf-input calculator-control" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Homology class symbol" placeholder="A">
+          <select id="homology-class-degree-mode" class="sheaf-select calculator-control homology-degree-mode" aria-label="Homology class degree mode" hidden>
             <option value="bidegree">bidegree</option>
             <option value="total">total</option>
           </select>
-          <input id="homology-class-degree" class="sheaf-input" type="number" value="2" min="0" max="30" step="1" aria-label="Homology class degree">
+          <input id="homology-class-degree" class="sheaf-input calculator-control" type="number" value="2" min="0" max="30" step="1" aria-label="Homology class degree">
           <div class="homology-product-bidegree" id="homology-class-bidegree" hidden>
-            <input id="homology-class-bidegree-left" class="sheaf-input" type="number" value="" min="0" max="30" step="1" aria-label="Left product bidegree">
-            <input id="homology-class-bidegree-right" class="sheaf-input" type="number" value="" min="0" max="30" step="1" aria-label="Right product bidegree">
+            <input id="homology-class-bidegree-left" class="sheaf-input calculator-control" type="number" value="" min="0" max="30" step="1" aria-label="Left product bidegree">
+            <input id="homology-class-bidegree-right" class="sheaf-input calculator-control" type="number" value="" min="0" max="30" step="1" aria-label="Right product bidegree">
           </div>
           <button class="btn btn-ghost sheaf-object-button homology-add-button" id="homology-add-class-button" type="button">add class</button>
         </div>
         <div class="homology-add-rule" id="homology-add-rule">
-          <input id="homology-rule-equation" class="sheaf-input" type="text" value="" maxlength="120" spellcheck="false" autocomplete="off" aria-label="Rule equation">
+          <input id="homology-rule-equation" class="sheaf-input calculator-control" type="text" value="" maxlength="120" spellcheck="false" autocomplete="off" aria-label="Rule equation">
           <button class="btn btn-ghost sheaf-object-button homology-add-button" id="homology-add-rule-button" type="button">add rule</button>
         </div>
         <div id="homology-message" class="hint homology-message"></div>
@@ -4154,13 +4122,13 @@
         <div class="hodge-query" id="hodge-query" hidden>
           <label class="hodge-query-index" for="hodge-query-p">
             <span>p</span>
-            <input type="number" id="hodge-query-p" class="sheaf-input" min="0" max="15" value="0">
+            <input type="number" id="hodge-query-p" class="sheaf-input calculator-control" min="0" max="15" value="0">
           </label>
           <label class="hodge-query-index" for="hodge-query-q">
             <span>q</span>
-            <input type="number" id="hodge-query-q" class="sheaf-input" min="0" max="15" value="0">
+            <input type="number" id="hodge-query-q" class="sheaf-input calculator-control" min="0" max="15" value="0">
           </label>
-          <button class="btn btn-ghost" id="hodge-query-run" type="button">compute</button>
+              <button class="btn btn-ghost" id="hodge-query-run" type="button" data-shortcut-primary>compute</button>
           <span class="hodge-query-output" id="hodge-query-output"></span>
         </div>
         <div id="hodge-chart" class="hodge-grid" role="button" tabindex="0" aria-expanded="false"></div>
@@ -4183,7 +4151,7 @@
       <div class="card-body">
         <div class="sheaf-inline-row">
           <span class="input-label">Format</span>
-          <select id="export-format" class="sheaf-select">
+          <select id="export-format" class="sheaf-select calculator-control">
             <option value="latex" selected>LaTeX</option>
             <option value="tikzcd">TikZ-cd</option>
             <option value="plain">Plain text</option>
@@ -4220,7 +4188,9 @@
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js"></script>
+<script src="js/calculator_input_settings.js?v=20260902-2"></script>
 <script src="js/sheaf_complex_calculator.js?v=complex-chart-38"></script>
+<script src="js/calculator_input_profiles.js?v=20260902-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

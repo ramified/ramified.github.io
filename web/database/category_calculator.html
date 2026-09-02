@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Category Calculator</title>
-  <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/site.css?v=20260902-2">
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
     .category-layout {
@@ -395,13 +395,6 @@
       line-height: 1.35;
     }
 
-    .category-select:focus,
-    .category-input:focus,
-    .category-textarea:focus {
-      outline: 2px solid var(--accent);
-      border-color: var(--accent);
-    }
-
     .category-small-button {
       padding: 4px 10px;
       font-size: 0.76rem;
@@ -524,15 +517,15 @@
       <div class="card-body">
         <div class="category-input-toolbar">
           <div class="category-input-add">
-            <select id="category-input-mode" class="category-select category-mode-select" aria-label="Input mode">
+            <select id="category-input-mode" class="category-select calculator-control category-mode-select" aria-label="Input mode">
               <option value="create" selected>Create</option>
               <option value="modify" disabled>Modify</option>
             </select>
-            <select id="category-object-kind" class="category-select" aria-label="Object type to add">
+            <select id="category-object-kind" class="category-select calculator-control" aria-label="Object type to add">
               <option value="category" selected>Category</option>
               <option value="functor" disabled>Functor</option>
             </select>
-            <button class="btn btn-ghost category-small-button" id="category-apply-object" type="button">add</button>
+              <button class="btn btn-ghost category-small-button" id="category-apply-object" type="button" data-shortcut-primary>add</button>
             <button class="btn btn-ghost category-small-button" id="category-delete-object" type="button" disabled>delete</button>
           </div>
           <div class="category-note" id="category-input-note">Add two categories to enable functors.</div>
@@ -542,20 +535,20 @@
           <div class="category-field-row">
             <label class="input-label" for="category-preset-select">preset</label>
             <div class="category-preset-controls">
-              <select id="category-preset-select" class="category-select" aria-label="Category preset">
+              <select id="category-preset-select" class="category-select calculator-control" aria-label="Category preset">
                 <option value="">Loading presets...</option>
               </select>
-              <button class="btn btn-ghost category-small-button" id="category-apply-preset" type="button">apply</button>
+              <button class="btn btn-ghost category-small-button" id="category-apply-preset" type="button" data-shortcut-primary>apply</button>
             </div>
           </div>
           <div class="category-field-row">
             <label class="input-label" for="category-label">category</label>
-            <input id="category-label" class="category-input" type="text" value="\mathcal{C}" maxlength="80" spellcheck="false" autocomplete="off">
+            <input id="category-label" class="category-input calculator-control" type="text" value="\mathcal{C}" maxlength="80" spellcheck="false" autocomplete="off">
           </div>
           <div class="category-field-row">
             <label class="input-label" for="category-object-symbol">object</label>
             <div class="category-symbol-picker">
-              <select id="category-object-symbol" class="category-select" aria-label="Object symbol">
+              <select id="category-object-symbol" class="category-select calculator-control" aria-label="Object symbol">
                 <option value="X" selected>X</option>
                 <option value="A">A</option>
                 <option value="a">a</option>
@@ -564,7 +557,7 @@
                 <option value="V">V</option>
                 <option value="custom">custom</option>
               </select>
-              <input id="category-object-symbol-custom" class="category-input" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Custom object symbol" hidden>
+              <input id="category-object-symbol-custom" class="category-input calculator-control" type="text" value="" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Custom object symbol" hidden>
             </div>
           </div>
           <div class="category-formula-editor" id="category-formula-editor" aria-label="Category set-builder formulas">
@@ -596,7 +589,7 @@
         <div class="category-editor" id="functor-editor" hidden>
           <div class="category-field-row">
             <label class="input-label" for="functor-label">functor</label>
-            <input id="functor-label" class="category-input" type="text" value="F" maxlength="48" spellcheck="false" autocomplete="off">
+            <input id="functor-label" class="category-input calculator-control" type="text" value="F" maxlength="48" spellcheck="false" autocomplete="off">
           </div>
           <div class="category-field-row">
             <span class="input-label">parents</span>
@@ -610,7 +603,7 @@
           </div>
           <div class="category-field-row">
             <label class="input-label" for="functor-variance">variance</label>
-            <select id="functor-variance" class="category-select">
+            <select id="functor-variance" class="category-select calculator-control">
               <option value="covariant" selected>Covariant</option>
               <option value="contravariant">Contravariant</option>
             </select>
@@ -628,7 +621,7 @@
       <div class="card-body">
         <div class="category-field-row">
           <label class="input-label" for="category-export-format">format</label>
-          <select id="category-export-format" class="category-select">
+          <select id="category-export-format" class="category-select calculator-control">
             <option value="latex" selected>LaTeX</option>
             <option value="plain">Plain text</option>
             <option value="json">JSON preset</option>
@@ -678,7 +671,9 @@
 </script>
 <script src="category_presets/presets.js"></script>
 <script src="js/calculator_cards.js"></script>
+<script src="js/calculator_input_settings.js?v=20260902-2"></script>
 <script src="js/category_calculator.js"></script>
+<script src="js/calculator_input_profiles.js?v=20260902-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

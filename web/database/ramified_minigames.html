@@ -1,10 +1,10 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title data-i18n="meta.title">Ramified Minigames</title>
-  <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/site.css?v=20260902-2">
   <link rel="stylesheet" href="css/site_i18n.css">
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
 <style>
@@ -20,6 +20,14 @@
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
+    }
+
+    #mosaic-canvas.wrapped-universal-cover {
+      cursor: grab;
+    }
+
+    #mosaic-canvas.wrapped-universal-cover.is-panning {
+      cursor: grabbing;
     }
 
     #canvas-wrap {
@@ -545,12 +553,12 @@
       pointer-events: auto;
     }
 
-    body.canvas-fullscreen-active .fullscreen-settings-overlay:not([hidden]) {
+    .fullscreen-settings-overlay:not([hidden]) {
       display: flex;
     }
 
     .fullscreen-settings-dialog {
-      width: min(420px, 100%);
+      width: min(720px, 100%);
       max-height: calc(100vh - 32px);
       overflow: auto;
       box-sizing: border-box;
@@ -613,6 +621,43 @@
     .fullscreen-settings-options {
       display: grid;
       padding: 4px 16px;
+    }
+
+    .fullscreen-settings-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 10px 16px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .fullscreen-settings-tab {
+      min-height: 40px;
+      padding: 8px 12px;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .fullscreen-settings-tab[aria-selected="true"] {
+      border-bottom-color: var(--accent);
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .fullscreen-settings-panel[hidden] {
+      display: none !important;
+    }
+
+    .fullscreen-settings-controls {
+      max-height: min(64vh, 620px);
+      overflow: auto;
+    }
+
+    body:not(.canvas-fullscreen-active) .fullscreen-settings-exit {
+      display: none;
     }
 
     .fullscreen-setting-row {
@@ -780,11 +825,6 @@
       font-size: 0.82rem;
     }
 
-    .mosaic-toolbar-select:focus {
-      outline: 2px solid var(--accent);
-      border-color: var(--accent);
-    }
-
     .mosaic-toolbar-toggle {
       padding-left: 12px;
       border-left: 1px solid var(--border);
@@ -797,18 +837,6 @@
       height: 14px;
       accent-color: var(--accent);
       cursor: pointer;
-    }
-
-    .mosaic-underbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      padding: 0 16px 14px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
-      color: var(--muted);
-      flex-wrap: wrap;
     }
 
     .mosaic-underbar-left {
@@ -871,12 +899,6 @@
       color: var(--text);
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.78rem;
-    }
-
-    .mosaic-number-row input[type=number]:focus,
-    .mosaic-editor-input:focus {
-      outline: 2px solid var(--accent);
-      border-color: var(--accent);
     }
 
     .mosaic-editor-input {
@@ -1369,20 +1391,6 @@
       border-radius: 50%;
       border: 1px solid var(--border);
       background: var(--boundary-color);
-    }
-
-    .mosaic-chip {
-      display: inline-flex;
-      align-items: center;
-      min-height: 21px;
-      padding: 1px 6px;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      color: var(--text);
-      background: rgba(255,255,255,0.55);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
-      white-space: nowrap;
     }
 
     .slice-info-row {
@@ -1926,7 +1934,7 @@
     <header class="panel-title">
       <span class="panel-title-text" data-i18n="setup.canvas">Mosaic Canvas</span>
       <div class="canvas-toolbar" aria-label="Ramified minigame status">
-        <span class="shape-indicator" title="Prototype status"><span id="status-badge" class="mosaic-chip">setup</span></span>
+        <span class="shape-indicator" title="Prototype status"><span id="status-badge" class="mosaic-chip calculator-badge">setup</span></span>
         <span class="canvas-view-row" id="canvas-view-row" aria-label="Canvas view">
           <button class="canvas-view-btn active" type="button" data-canvas-display-mode="normal" aria-pressed="true">normal</button>
           <button class="canvas-view-btn" type="button" data-canvas-display-mode="fit-viewport" aria-pressed="false">fit viewport</button>
@@ -2004,47 +2012,61 @@
               </svg>
             </button>
           </header>
-          <div class="fullscreen-settings-options">
-            <label class="fullscreen-setting-row" for="fullscreen-sound-enabled">
-              <span data-i18n="fullscreen.soundEffects">Sound effects</span>
-              <span class="fullscreen-setting-switch">
-                <input id="fullscreen-sound-enabled" type="checkbox">
-                <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
-              </span>
-            </label>
-            <div class="fullscreen-setting-row">
-              <label for="fullscreen-sound-volume" data-i18n="fullscreen.volume">Volume</label>
-              <span class="fullscreen-volume-control">
-                <input id="fullscreen-sound-volume" type="range" min="0" max="100" step="1" value="100" data-i18n-aria-label="access.soundVolume" aria-label="Sound volume" disabled>
-                <output id="fullscreen-sound-volume-value" for="fullscreen-sound-volume">100%</output>
-              </span>
+          <nav class="fullscreen-settings-tabs" role="tablist" data-i18n-aria-label="controls.settingsSections" aria-label="Settings sections">
+            <button class="fullscreen-settings-tab" id="fullscreen-settings-controls-tab" type="button" role="tab" aria-selected="true" aria-controls="fullscreen-settings-controls" data-settings-panel="controls" data-i18n="controls.controlsTab">Controls</button>
+            <button class="fullscreen-settings-tab" id="fullscreen-settings-display-tab" type="button" role="tab" aria-selected="false" aria-controls="fullscreen-settings-display" data-settings-panel="display" data-i18n="controls.displayTab">Display &amp; sound</button>
+          </nav>
+          <div class="fullscreen-settings-panel fullscreen-settings-controls calculator-input-settings-content" id="fullscreen-settings-controls" role="tabpanel" aria-labelledby="fullscreen-settings-controls-tab"></div>
+          <div class="fullscreen-settings-panel" id="fullscreen-settings-display" role="tabpanel" aria-labelledby="fullscreen-settings-display-tab" hidden>
+            <div class="fullscreen-settings-options">
+              <div class="fullscreen-setting-row" id="fullscreen-wrapped-view-row" hidden>
+                <label for="fullscreen-wrapped-view-mode" data-i18n="fullscreen.wrappedView">Board display</label>
+                <select id="fullscreen-wrapped-view-mode" data-i18n-aria-label="access.wrappedView" aria-label="Boundary board display">
+                  <option value="usual" data-i18n="wrapped.usual">usual</option>
+                  <option value="wrapped" data-i18n="wrapped.wrapped">wrapped</option>
+                </select>
+              </div>
+              <label class="fullscreen-setting-row" for="fullscreen-sound-enabled">
+                <span data-i18n="fullscreen.soundEffects">Sound effects</span>
+                <span class="fullscreen-setting-switch">
+                  <input id="fullscreen-sound-enabled" type="checkbox">
+                  <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
+                </span>
+              </label>
+              <div class="fullscreen-setting-row">
+                <label for="fullscreen-sound-volume" data-i18n="fullscreen.volume">Volume</label>
+                <span class="fullscreen-volume-control">
+                  <input id="fullscreen-sound-volume" type="range" min="0" max="100" step="1" value="100" data-i18n-aria-label="access.soundVolume" aria-label="Sound volume" disabled>
+                  <output id="fullscreen-sound-volume-value" for="fullscreen-sound-volume">100%</output>
+                </span>
+              </div>
+              <label class="fullscreen-setting-row" for="fullscreen-show-action-row">
+                <span data-i18n="fullscreen.showActionRow">Show action row</span>
+                <span class="fullscreen-setting-switch">
+                  <input id="fullscreen-show-action-row" type="checkbox" checked>
+                  <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
+                </span>
+              </label>
+              <label class="fullscreen-setting-row" for="fullscreen-show-game-tools">
+                <span data-i18n="fullscreen.showGameTools">Show game tools</span>
+                <span class="fullscreen-setting-switch">
+                  <input id="fullscreen-show-game-tools" type="checkbox" checked>
+                  <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
+                </span>
+              </label>
             </div>
-            <label class="fullscreen-setting-row" for="fullscreen-show-action-row">
-              <span data-i18n="fullscreen.showActionRow">Show action row</span>
-              <span class="fullscreen-setting-switch">
-                <input id="fullscreen-show-action-row" type="checkbox" checked>
-                <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
-              </span>
-            </label>
-            <label class="fullscreen-setting-row" for="fullscreen-show-game-tools">
-              <span data-i18n="fullscreen.showGameTools">Show game tools</span>
-              <span class="fullscreen-setting-switch">
-                <input id="fullscreen-show-game-tools" type="checkbox" checked>
-                <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
-              </span>
-            </label>
+            <footer class="fullscreen-settings-footer">
+              <button class="btn fullscreen-settings-exit" id="fullscreen-settings-exit" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M9 3v6H3"></path>
+                  <path d="M15 3v6h6"></path>
+                  <path d="M9 21v-6H3"></path>
+                  <path d="M15 21v-6h6"></path>
+                </svg>
+                <span data-i18n="fullscreen.exit">Exit fullscreen</span>
+              </button>
+            </footer>
           </div>
-          <footer class="fullscreen-settings-footer">
-            <button class="btn fullscreen-settings-exit" id="fullscreen-settings-exit" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M9 3v6H3"></path>
-                <path d="M15 3v6h6"></path>
-                <path d="M9 21v-6H3"></path>
-                <path d="M15 21v-6h6"></path>
-              </svg>
-              <span data-i18n="fullscreen.exit">Exit fullscreen</span>
-            </button>
-          </footer>
         </div>
       </div>
       <div class="canvas-start-overlay" id="canvas-start-overlay" role="region" aria-live="polite" aria-label="Canvas action prompt" hidden>
@@ -2059,7 +2081,7 @@
         </div>
       </div>
     </div>
-    <div class="mosaic-underbar">
+    <div class="mosaic-underbar calculator-underbar">
       <span class="mosaic-underbar-left">
         <span id="status-line">choose a preset</span>
       </span>
@@ -2101,6 +2123,13 @@
             <option value="rp2">RP^2</option>
             <option value="open">open/classic</option>
             <option value="random">random boundary glue</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="boundary-glue-wrapped-view-row" hidden>
+          <span class="input-label" data-i18n="setup.display">Display</span>
+          <select id="boundary-glue-wrapped-view-mode" data-i18n-aria-label="access.wrappedView" aria-label="Boundary board display">
+            <option value="usual" data-i18n="wrapped.usual">usual</option>
+            <option value="wrapped" data-i18n="wrapped.wrapped">wrapped</option>
           </select>
         </div>
         <div class="mosaic-inline-row" id="boundary-glue-shape-row" hidden>
@@ -2416,9 +2445,16 @@
               <output id="hex-neighbor-stroke-value">3 px</output>
             </span>
           </div>
+          <div class="mosaic-inline-row" id="placement-preview-opacity-row" hidden>
+            <span class="input-label" data-i18n="setup.previewOpacity">Preview opacity</span>
+            <span class="background-slider-controls">
+              <input type="range" id="placement-preview-opacity" min="10" max="90" step="5" value="50" data-i18n-aria-label="access.previewOpacity" aria-label="Placement preview opacity">
+              <output id="placement-preview-opacity-value">50%</output>
+            </span>
+          </div>
           <div class="mosaic-inline-row" id="debug-tile-row" data-mode-control="2048">
             <span class="input-label">Tile value</span>
-            <select class="mosaic-editor-input" id="debug-tile-value" aria-label="Debug tile value">
+            <select class="mosaic-editor-input calculator-control" id="debug-tile-value" aria-label="Debug tile value">
               <option value="">empty</option>
               <option value="2">2</option>
               <option value="4">4</option>
@@ -2444,7 +2480,7 @@
           </div>
           <div class="mosaic-inline-row" id="debug-bomb-row" data-mode-control="2048">
             <span class="input-label">Tile tool</span>
-            <select class="mosaic-editor-input" id="debug-bomb-tool" aria-label="Debug tile tool">
+            <select class="mosaic-editor-input calculator-control" id="debug-bomb-tool" aria-label="Debug tile tool">
               <option value="number" selected>number / empty</option>
               <option value="blue">place blue bomb</option>
               <option value="red">place red bomb</option>
@@ -2453,7 +2489,7 @@
           </div>
           <div class="mosaic-inline-row" id="bomb-art-row" data-mode-control="2048">
             <span class="input-label">Bomb art</span>
-            <select class="mosaic-editor-input" id="bomb-art-style" aria-label="Bomb art style">
+            <select class="mosaic-editor-input calculator-control" id="bomb-art-style" aria-label="Bomb art style">
               <option value="png-1" selected>PNG skull</option>
               <option value="png-2">PNG stripe</option>
               <option value="png-3">PNG vortex</option>
@@ -2547,13 +2583,13 @@
         <div class="mosaic-inline-row">
           <span class="input-label">Room</span>
           <span class="online-room-fields">
-            <input class="mosaic-editor-input online-room-code" id="online-room-code" type="text" maxlength="8" autocomplete="off" spellcheck="false" placeholder="room code" aria-label="Online room code">
-            <select class="mosaic-editor-input" id="online-room-select" aria-label="Available online rooms" hidden></select>
+            <input class="mosaic-editor-input calculator-control online-room-code" id="online-room-code" type="text" maxlength="8" autocomplete="off" spellcheck="false" placeholder="room code" aria-label="Online room code">
+            <select class="mosaic-editor-input calculator-control" id="online-room-select" aria-label="Available online rooms" hidden></select>
           </span>
         </div>
         <div class="mosaic-inline-row">
           <span class="input-label">Name</span>
-          <input class="mosaic-editor-input" id="online-player-name" type="text" maxlength="32" autocomplete="off" spellcheck="false" placeholder="player name" aria-label="Online player name">
+          <input class="mosaic-editor-input calculator-control" id="online-player-name" type="text" maxlength="32" autocomplete="off" spellcheck="false" placeholder="player name" aria-label="Online player name">
         </div>
         <div class="mosaic-inline-row">
           <span class="input-label">Side</span>
@@ -2608,7 +2644,7 @@
                 <span class="import-export-field-value" data-export-format-value aria-live="polite" hidden></span>
               </span>
             </div>
-            <textarea class="mosaic-editor-input minigame-status-export" id="debug-export-output" data-export-output spellcheck="false" autocomplete="off" data-i18n-aria-label="access.exportOutput" aria-label="Current game status or preset export" readonly></textarea>
+            <textarea class="mosaic-editor-input calculator-control minigame-status-export" id="debug-export-output" data-export-output spellcheck="false" autocomplete="off" data-i18n-aria-label="access.exportOutput" aria-label="Current game status or preset export" readonly></textarea>
             <div class="mosaic-inline-row" id="edit-mosaic-link-row">
               <span class="input-label" data-i18n="common.edit">edit</span>
               <a class="export-test-link" id="edit-mosaic-link" href="mosaic_calculator.html" target="_blank" rel="noopener" data-i18n="io.editInMosaicCalculator">edit in Mosaic calculator</a>
@@ -2663,7 +2699,7 @@
               </label>
               <span class="import-export-filename" id="import-state-filename" data-import-filename aria-live="polite"></span>
             </div>
-            <textarea class="mosaic-editor-input mosaic-import-input" id="import-preset-input" data-import-input spellcheck="false" autocomplete="off" data-i18n-placeholder="io.pastePlaceholder" placeholder="Paste preset, status, or game-record JSON" data-i18n-aria-label="access.importPayload" aria-label="Imported preset or status" hidden></textarea>
+            <textarea class="mosaic-editor-input calculator-control mosaic-import-input" id="import-preset-input" data-import-input spellcheck="false" autocomplete="off" data-i18n-placeholder="io.pastePlaceholder" placeholder="Paste preset, status, or game-record JSON" data-i18n-aria-label="access.importPayload" aria-label="Imported preset or status" hidden></textarea>
             <div class="import-export-actions import-export-import-actions">
               <button class="btn" id="clear-import-preset" type="button" data-import-action="clear" data-i18n="common.clear" hidden>clear</button>
               <button class="btn" id="apply-import-preset" type="button" data-import-action="apply" data-i18n="common.import">import</button>
@@ -2695,14 +2731,15 @@
 
 <script src="ramified_minigame_presets/presets.js?v=20260825-1"></script>
 <script src="js/calculator_cards.js"></script>
+<script src="js/calculator_input_settings.js?v=20260902-2"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260901-4"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260902-3"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
-<script src="js/ramified_minigames_setup.js?v=20260901-9"></script>
+<script src="js/ramified_minigames_setup.js?v=20260902-3"></script>
 </body>
 </html>

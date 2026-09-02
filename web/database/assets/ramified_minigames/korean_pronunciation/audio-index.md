@@ -1,4 +1,4 @@
-# LingoDeer Korean alphabet audio index
+# Korean alphabet audio index
 
 This index maps every MP3`to the Korean letter or syllable shown on the two source pages. The `f`/`m` suffix identifies the voice file served by the site.
 

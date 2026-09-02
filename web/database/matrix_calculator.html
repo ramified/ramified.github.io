@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Matrix Calculator</title>
-  <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/site.css?v=20260902-2">
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
     .matrix-layout {
@@ -58,18 +58,6 @@
       border-color: var(--accent2);
       box-shadow: inset 0 0 0 1px rgba(139,58,42,0.2);
       background: #fff7f3;
-    }
-
-    .matrix-underbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      padding: 0 16px 14px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
-      color: var(--muted);
-      flex-wrap: wrap;
     }
 
     .matrix-underbar-left,
@@ -150,29 +138,6 @@
       line-height: 1.35;
       padding: 7px 8px;
       resize: vertical;
-    }
-
-    .matrix-toolbar-group select:focus,
-    .matrix-toolbar-group input:focus,
-    .matrix-select:focus,
-    .matrix-number-input:focus,
-    .matrix-textarea:focus {
-      outline: 2px solid var(--accent);
-      border-color: var(--accent);
-    }
-
-    .matrix-badge {
-      display: inline-flex;
-      align-items: center;
-      min-height: 21px;
-      padding: 1px 6px;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      color: var(--text);
-      background: rgba(255,255,255,0.55);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
-      white-space: nowrap;
     }
 
     .matrix-inline-row {
@@ -433,11 +398,11 @@
     <header class="panel-title">
       <span class="panel-title-text">Matrix Canvas</span>
       <div class="canvas-toolbar" aria-label="Matrix controls">
-        <span class="shape-indicator" title="Matrix status"><span id="status-badge" class="matrix-badge">5 x 5</span></span>
+        <span class="shape-indicator" title="Matrix status"><span id="status-badge" class="matrix-badge calculator-badge">5 x 5</span></span>
         <span class="matrix-toolbar-group" aria-label="Matrix data type">
           <label title="Allowed data type">
             <span>type</span>
-            <select id="data-type-select">
+            <select id="data-type-select" class="calculator-control">
               <option value="complex">Complex</option>
               <option value="real">Real</option>
               <option value="rational">Rational</option>
@@ -450,21 +415,21 @@
           <span id="finite-field-symbol" class="matrix-field-symbol" hidden>\(\mathbb{F}_{7}\)</span>
           <label id="finite-field-prime-label" title="Prime modulus for finite field" hidden>
             <span>p</span>
-            <input type="number" id="finite-field-prime" min="2" max="999983" step="1" value="7">
+            <input type="number" id="finite-field-prime" class="calculator-control" min="2" max="999983" step="1" value="7">
           </label>
           <span id="rational-function-symbol" class="matrix-field-symbol" hidden>\(\mathbb{Q}(t)\)</span>
           <label id="rational-function-variable-label" title="Rational function variable" hidden>
             <span>var</span>
-            <input class="matrix-symbol-input" type="text" id="rational-function-variable" value="t" maxlength="8" spellcheck="false" autocomplete="off">
+            <input class="matrix-symbol-input calculator-control" type="text" id="rational-function-variable" value="t" maxlength="8" spellcheck="false" autocomplete="off">
           </label>
           <span id="number-field-symbol" class="matrix-field-symbol" hidden>\(\mathbb{Q}(a)\)</span>
           <label id="number-field-symbol-label" title="Number field generator" hidden>
             <span>gen</span>
-            <input class="matrix-symbol-input" type="text" id="number-field-generator" value="a" maxlength="8" spellcheck="false" autocomplete="off">
+            <input class="matrix-symbol-input calculator-control" type="text" id="number-field-generator" value="a" maxlength="8" spellcheck="false" autocomplete="off">
           </label>
           <label id="number-field-polynomial-label" title="Minimal polynomial" hidden>
             <span>min</span>
-            <input class="matrix-polynomial-input" type="text" id="number-field-polynomial" value="a^2 - 2" spellcheck="false" autocomplete="off">
+            <input class="matrix-polynomial-input calculator-control" type="text" id="number-field-polynomial" value="a^2 - 2" spellcheck="false" autocomplete="off">
           </label>
         </span>
         <span class="canvas-size-inline" aria-label="Matrix size">
@@ -483,7 +448,7 @@
     <div class="matrix-editor">
       <div id="matrix-grid" class="matrix-grid" aria-label="Matrix entries"></div>
     </div>
-    <div class="matrix-underbar">
+    <div class="matrix-underbar calculator-underbar">
       <span class="matrix-underbar-left">
         <button class="btn btn-ghost" id="clear-matrix" type="button">clear</button>
         <span id="matrix-status">ready</span>
@@ -533,7 +498,7 @@
       <div class="card-body">
         <div class="matrix-inline-row">
           <span class="input-label">Operation</span>
-          <select id="operation-select" class="matrix-select">
+          <select id="operation-select" class="matrix-select calculator-control">
             <option value="transpose">A^T</option>
             <option value="inverse">A^{-1}</option>
             <option value="power">A^n</option>
@@ -548,17 +513,17 @@
         </div>
         <div class="matrix-inline-row">
           <span class="input-label">Result</span>
-          <select id="result-mode-select" class="matrix-select">
+          <select id="result-mode-select" class="matrix-select calculator-control">
             <option value="numeric">Numerical</option>
             <option value="symbolic">Symbolic</option>
           </select>
         </div>
         <div class="matrix-inline-row" id="power-row">
           <span class="input-label">n</span>
-          <input type="number" id="power-exponent" class="matrix-number-input" value="2" step="1" min="-12" max="12">
+          <input type="number" id="power-exponent" class="matrix-number-input calculator-control" value="2" step="1" min="-12" max="12">
         </div>
         <div class="matrix-action-row">
-          <button class="btn" id="compute-operation" type="button">compute</button>
+            <button class="btn" id="compute-operation" type="button" data-shortcut-primary>compute</button>
           <button class="btn btn-ghost" id="export-operation" type="button" data-import-export-trigger="operation" data-export-filename="matrix-operation.txt">export</button>
           <button class="btn btn-ghost" id="clear-output" type="button">clear output</button>
         </div>
@@ -572,7 +537,7 @@
       <div class="card-body">
         <div class="matrix-inline-row">
           <span class="input-label">Format</span>
-          <select id="export-format" class="matrix-select">
+          <select id="export-format" class="matrix-select calculator-control">
             <option value="latex">LaTeX</option>
             <option value="python">Python</option>
             <option value="sage">SageMath</option>
@@ -595,12 +560,12 @@
 <div id="import-dialog" class="matrix-dialog-backdrop" hidden>
   <div class="matrix-dialog" role="dialog" aria-modal="true" aria-labelledby="import-dialog-title">
     <div id="import-dialog-title" class="matrix-dialog-title">Input Matrix</div>
-    <textarea id="import-text" class="matrix-textarea" spellcheck="false" autocomplete="off"></textarea>
+    <textarea id="import-text" class="matrix-textarea calculator-control" spellcheck="false" autocomplete="off"></textarea>
     <div class="matrix-output-note">Accepts bulk rows such as 1, 2; 3, 4, or LaTeX matrices such as \begin{pmatrix}1 & 2 \\ 3 & 4\end{pmatrix}.</div>
     <div id="import-dialog-message" class="err"></div>
     <div class="matrix-dialog-actions">
       <button class="btn btn-ghost" id="cancel-import" type="button">cancel</button>
-      <button class="btn" id="confirm-import" type="button">import</button>
+        <button class="btn" id="confirm-import" type="button" data-shortcut-primary>import</button>
     </div>
   </div>
 </div>
@@ -624,7 +589,9 @@
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js"></script>
+<script src="js/calculator_input_settings.js?v=20260902-2"></script>
 <script src="js/matrix_calculator.js?v=20260821-1"></script>
+<script src="js/calculator_input_profiles.js?v=20260902-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dynkin Diagram Calculator</title>
-  <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/site.css?v=20260902-2">
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
     .dynkin-layout {
@@ -82,38 +82,6 @@
       height: 14px;
       accent-color: var(--accent);
       cursor: pointer;
-    }
-
-    .dynkin-toolbar-group select:focus,
-    .dynkin-toolbar-group input:focus {
-      outline: 2px solid var(--accent);
-      border-color: var(--accent);
-    }
-
-    .dynkin-badge {
-      display: inline-flex;
-      align-items: center;
-      min-height: 21px;
-      padding: 1px 6px;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      color: var(--text);
-      background: rgba(255,255,255,0.55);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
-      white-space: nowrap;
-    }
-
-    .dynkin-underbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      padding: 0 16px 14px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
-      color: var(--muted);
-      flex-wrap: wrap;
     }
 
     .dynkin-action-row {
@@ -684,10 +652,10 @@
     <header class="panel-title">
       <span class="panel-title-text">Dynkin Diagram</span>
       <div class="canvas-toolbar" aria-label="Dynkin diagram controls">
-        <span class="shape-indicator"><span id="dynkin-status" class="dynkin-badge">\(E_{6}\)</span></span>
+        <span class="shape-indicator"><span id="dynkin-status" class="dynkin-badge calculator-badge">\(E_{6}\)</span></span>
         <span class="dynkin-toolbar-group">
           <label class="stat-label" for="dynkin-type">Type</label>
-          <select id="dynkin-type">
+          <select id="dynkin-type" class="calculator-control">
             <optgroup label="Classical">
               <option value="A">A series</option>
               <option value="B">B series</option>
@@ -704,14 +672,14 @@
           </select>
           <span id="dynkin-rank-wrap" class="dynkin-toolbar-group">
             <label class="stat-label" for="dynkin-rank">rank</label>
-            <input id="dynkin-rank" type="number" min="1" max="12" value="6">
+            <input id="dynkin-rank" class="calculator-control" type="number" min="1" max="12" value="6">
           </span>
           <label class="dynkin-check-label" for="dynkin-multi-select">
-            <input id="dynkin-multi-select" type="checkbox">
+            <input id="dynkin-multi-select" class="calculator-control" type="checkbox">
             <span>select multi-vertices</span>
           </label>
           <label class="dynkin-check-label" for="dynkin-quiver-mode" title="Orient every edge for ADE types">
-            <input id="dynkin-quiver-mode" type="checkbox">
+            <input id="dynkin-quiver-mode" class="calculator-control" type="checkbox">
             <span>quiver arrows</span>
           </label>
         </span>
@@ -720,7 +688,7 @@
     <div class="dynkin-stage">
       <canvas id="dynkin-canvas" class="dynkin-canvas" width="900" height="360"></canvas>
     </div>
-    <div class="dynkin-underbar">
+    <div class="dynkin-underbar calculator-underbar">
       <span id="dynkin-selected-label">selected vertex: \(\alpha_{1}\)</span>
       <span id="dynkin-root-count-label">positive roots: \(21\)</span>
     </div>
@@ -803,7 +771,9 @@
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js"></script>
+<script src="js/calculator_input_settings.js?v=20260902-2"></script>
 <script src="js/dynkin_diagram_calculator.js?v=20260821-1"></script>
+<script src="js/calculator_input_profiles.js?v=20260902-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

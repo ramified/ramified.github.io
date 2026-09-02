@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Maintenance Tracker</title>
-  <link rel="stylesheet" href="css/site.css">
+  <link rel="stylesheet" href="css/site.css?v=20260902-2">
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
     .theorem-layout {
@@ -1524,7 +1524,7 @@
         </div>
         <div class="theorem-detail-actions">
           <button class="btn btn-ghost" id="node-export" type="button" data-import-export-trigger="current-node" data-export-filename="theorem-current-node.json">export</button>
-          <button class="btn" id="detail-update" type="button" disabled>update</button>
+          <button class="btn" id="detail-update" type="button" disabled data-shortcut-primary>update</button>
           <button class="btn btn-ghost" id="detail-cancel" type="button" disabled>cancel</button>
         </div>
       </div>
@@ -1555,7 +1555,7 @@
           </div>
         </div>
         <div class="theorem-graph-actions">
-          <button class="btn" id="add-node" type="button">add node</button>
+          <button class="btn" id="add-node" type="button" data-shortcut-primary>add node</button>
           <button class="btn btn-ghost" id="connect-mode" type="button" aria-pressed="false">connect</button>
           <button class="btn btn-ghost" id="delete-selected" type="button">delete selected</button>
         </div>
@@ -1665,8 +1665,8 @@
           <input id="link-reference-title" class="theorem-input" type="text" spellcheck="true" autocomplete="off" placeholder="source title">
         </div>
         <div class="theorem-reference-actions">
-          <button class="btn" id="add-reference" type="button">add BibTeX</button>
-          <button class="btn" id="add-link-reference" type="button">add source</button>
+          <button class="btn" id="add-reference" type="button" data-shortcut-primary>add BibTeX</button>
+          <button class="btn" id="add-link-reference" type="button" data-shortcut-primary>add source</button>
           <button class="btn btn-ghost" id="clear-bibtex" type="button">clear inputs</button>
           <button class="btn btn-ghost" id="export-selected-references" type="button" data-import-export-trigger="selected-references" data-export-filename="theorem-selected-references.json">export selected</button>
           <button class="btn btn-ghost" id="delete-selected-references" type="button">delete selected</button>
@@ -1722,7 +1722,7 @@
             <textarea id="reference-edit-raw" class="theorem-textarea" spellcheck="false" autocomplete="off"></textarea>
           </div>
           <div class="theorem-reference-actions">
-            <button class="btn" id="reference-edit-save" type="button">save edit</button>
+            <button class="btn" id="reference-edit-save" type="button" data-shortcut-primary>save edit</button>
             <button class="btn btn-ghost" id="reference-edit-cancel" type="button">cancel</button>
           </div>
         </div>
@@ -1828,6 +1828,7 @@
 </script>
 <script id="theorem-preset-registry" src="theorem_graph_presets/presets.js"></script>
 <script src="js/calculator_cards.js"></script>
+<script src="js/calculator_input_settings.js?v=20260902-2"></script>
 <script src="js/theorem_graph_calculator.js?v=20260830-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260825-3"></script>

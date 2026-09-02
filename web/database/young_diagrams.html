@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Young Diagram Calculator</title>
-<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/site.css?v=20260902-2">
 <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
 </head>
 <body>
@@ -153,7 +153,7 @@
             <div class="lie-subsection" aria-label="Weight space decomposition controls">
               <div class="lie-subsection-title tooltip-label" tabindex="0" data-tooltip="Computes the nonzero weight spaces of V^λ, grouped by dominant Weyl-orbit representative γ. Candidate representatives are enumerated only when dominant and satisfying ‖γ‖ ≤ ‖λ‖.">Weight space decomposition</div>
               <div class="action-row">
-                <button class="btn" onclick="computeWeightSpaceDecomposition()">compute</button>
+            <button class="btn" onclick="computeWeightSpaceDecomposition()" data-shortcut-primary>compute</button>
                 <button class="btn" onclick="exportWeightSpaceDecomposition(event)" data-import-export-trigger="weight-spaces" data-export-filename="weight-space-decomposition.txt" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
               </div>
               <div id="lie-ws-warning" class="err" style="margin-bottom:4px;"></div>
@@ -164,7 +164,7 @@
             <div class="lie-subsection" aria-label="Borel-Weil-Bott controls">
               <div class="lie-subsection-title tooltip-label" tabindex="0" data-tooltip="Computes the cohomology of L_lambda on G/B using the dot action w(lambda+rho)-rho.">Borel-Weil-Bott</div>
               <div class="action-row">
-                <button class="btn" onclick="computeBorelWeilBott()">compute</button>
+            <button class="btn" onclick="computeBorelWeilBott()" data-shortcut-primary>compute</button>
                 <button class="btn" onclick="exportBorelWeilBott(event)" data-import-export-trigger="borel-weil-bott" data-export-filename="borel-weil-bott.txt" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
               </div>
               <div id="lie-bwb-warning" class="err" style="margin-bottom:4px;"></div>
@@ -226,7 +226,7 @@
               </span>
             </div>
             <div class="action-row branching-action-row">
-              <button class="btn" onclick="computeBranching()">compute</button>
+            <button class="btn" onclick="computeBranching()" data-shortcut-primary>compute</button>
               <button class="btn" onclick="exportBranching(event)" data-import-export-trigger="branching" data-export-filename="branching-decomposition.txt" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
             </div>
             <div class="hint" id="br-rule-hint" style="margin:4px 0 8px;">
@@ -358,7 +358,9 @@
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <!-- p5.js and BigInteger inline-free: we implement bigint ourselves -->
 <script src="js/calculator_cards.js"></script>
+<script src="js/calculator_input_settings.js?v=20260902-2"></script>
 <script src="js/young_diagrams.js?v=20260821-1"></script>
+<script src="js/calculator_input_profiles.js?v=20260902-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

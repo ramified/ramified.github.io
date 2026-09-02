@@ -9283,8 +9283,6 @@
       $("slice-viewport").style.cursor = "default";
     });
 
-    window.addEventListener("keydown", handleKeyboardDown);
-    window.addEventListener("keyup", handleKeyboardUp);
     window.addEventListener("blur", clearAllMotion);
     window.addEventListener("resize", resizeCanvas);
     window.addEventListener("load", () => queueMathTypeset());
@@ -9316,6 +9314,85 @@
     const action = motionActionFromKey(event);
     if (!action) return;
     clearMotionToken(motionTokenForKey(event, action));
+  }
+
+  function setupCalculatorInputSettings() {
+    const api = window.CalculatorInputSettings;
+    if (!api || api.getSession("higher-dimensional-slice")) return;
+    const sessionRef = { current: null };
+    const motionAction = (id, label, kind, sign, defaultBindings) => ({
+      id,
+      group: "Move and rotate",
+      label,
+      description: () => state.motionMode === "continuous" ? "Hold to move continuously." : "Press to move by the configured step.",
+      defaultBindings,
+      repeat: true,
+      enabled: () => state.slideInputMode === "move",
+      onDown(event, binding) {
+        if (state.slideInputMode !== "move") return false;
+        if (state.motionMode === "discrete") {
+          if (!event.repeat) applyDiscreteMotion(kind, sign);
+          return true;
+        }
+        setMotionHold(kind, sign, `calculator-input:${id}:${event.code || binding}`, true);
+        return true;
+      },
+      onUp(event, binding) {
+        clearMotionToken(`calculator-input:${id}:${event.code || binding}`);
+      }
+    });
+    const axisActions = Array.from({ length: 9 }, (_unused, index) => ({
+      id: `rotation-axis-${index + 1}`,
+      group: "Rotation plane",
+      label: `Choose rotation axis ${index + 1}`,
+      description: "Updates the active rotation-plane pair.",
+      defaultBindings: [String(index + 1)],
+      enabled: () => state.slideInputMode === "move" && index < state.ambientDim,
+      trigger: () => setRotationPairFromShortcut(index)
+    }));
+    const click = (id) => () => {
+      const button = $(id);
+      if (!button || button.disabled || button.hidden || button.closest("[hidden]")) return false;
+      button.click();
+      return true;
+    };
+    const enabled = (id) => () => {
+      const button = $(id);
+      return !!(button && !button.disabled && !button.hidden && !button.closest("[hidden]"));
+    };
+    const actions = [
+      {
+        id: "primary",
+        group: "Current task",
+        label: "Apply current panel",
+        description: "Runs the primary action in the focused or most recently used panel.",
+        defaultBindings: ["Mod+Enter"],
+        allowInEditable: true,
+        storageProfile: "global",
+        trigger: () => sessionRef.current?.triggerPrimary("[data-shortcut-primary]") || false
+      },
+      motionAction("translate-positive", "Move forward", "translation", 1, ["w", "ArrowUp", "+"]),
+      motionAction("translate-negative", "Move backward", "translation", -1, ["s", "ArrowDown", "-"]),
+      motionAction("rotate-negative", "Rotate left", "rotation", -1, ["a", "ArrowLeft"]),
+      motionAction("rotate-positive", "Rotate right", "rotation", 1, ["d", "ArrowRight"]),
+      ...axisActions,
+      { id: "delete-object", group: "Canvas", label: "Delete active object", description: "Uses the current delete-object action.", defaultBindings: [], trigger: click("object-delete"), enabled: enabled("object-delete") },
+      { id: "clear-canvas", group: "Canvas", label: "Clear canvas", description: "Clears the canvas using its existing confirmation and state rules.", defaultBindings: [], trigger: click("clear-canvas"), enabled: enabled("clear-canvas") },
+      { id: "reset-position", group: "View", label: "Reset slice position", description: "Restores the current slice position.", defaultBindings: [], trigger: click("reset-position"), enabled: enabled("reset-position") },
+      { id: "reset-frame", group: "View", label: "Reset frame", description: "Restores the current coordinate frame.", defaultBindings: [], trigger: click("reset-frame"), enabled: enabled("reset-frame") },
+      { id: "reset-screen", group: "View", label: "Reset screen", description: "Restores the screen projection settings.", defaultBindings: [], trigger: click("reset-screen"), enabled: enabled("reset-screen") },
+      { id: "reset-orbit", group: "View", label: "Reset orbit", description: "Restores the current orbit view.", defaultBindings: [], trigger: click("reset-orbit"), enabled: enabled("reset-orbit") },
+      { id: "reset-demo", group: "Canvas", label: "Reset demo", description: "Restores the current demo preset.", defaultBindings: [], trigger: click("reset-preset"), enabled: enabled("reset-preset") }
+    ];
+    sessionRef.current = api.register({
+      pageId: "higher-dimensional-slice",
+      actions,
+      pointerHints: [
+        { input: "Primary drag", description: "Drag supported handles and cards; use the canvas controls to change the slice." },
+        { input: "Wheel / trackpad", description: "Scroll the page or the active settings panel." },
+        { input: "Primary click", description: "Select canvas objects, vertices, chambers, or controls." }
+      ]
+    });
   }
 
   function renderAll() {
@@ -15308,6 +15385,7 @@
     syncSourceMode();
     syncStaticMathLabels();
     setupEventListeners();
+    setupCalculatorInputSettings();
     if (typeof ResizeObserver !== "undefined") {
       const observer = new ResizeObserver(resizeCanvas);
       observer.observe($("slice-viewport"));

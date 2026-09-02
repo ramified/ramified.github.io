@@ -156,6 +156,9 @@
   const LIANLIANKAN_PATH_DISPLAY_MS = 500;
   const PLACEMENT_ASSIST_DWELL_MS = 500;
   const PLACEMENT_ASSIST_HOLD_MS = 1000;
+  const PLACEMENT_PREVIEW_OPACITY_MIN = 10;
+  const PLACEMENT_PREVIEW_OPACITY_MAX = 90;
+  const PLACEMENT_PREVIEW_OPACITY_DEFAULT = 50;
   const HEX_NEIGHBOR_HINT_DELAY_DEFAULT = 0.4;
   const HEX_NEIGHBOR_HINT_SIZE_DEFAULT = 75;
   const HEX_NEIGHBOR_HINT_STROKE_DEFAULT = 3;
@@ -459,6 +462,10 @@
   const ONLINE_CLIENT_ID_KEY = 'ramified-minigames-online-client-id';
   const ONLINE_PLAYER_NAME_KEY = 'ramified-minigames-online-player-name';
   const FULLSCREEN_SETTINGS_STORAGE_KEY = 'ramified-minigames-fullscreen-settings-v1';
+  const WRAPPED_VIEW_STORAGE_KEY = 'ramified-minigames-wrapped-view-v1';
+  const WRAPPED_VIEW_MIN_SCALE = 0.35;
+  const WRAPPED_VIEW_MAX_SCALE = 3.5;
+  const WRAPPED_VIEW_DEFAULT_SCALE = 0.58;
   const FULLSCREEN_SETTINGS_DEFAULTS = Object.freeze({
     soundEnabled: false,
     soundVolume: 1,
@@ -705,6 +712,7 @@
   let placementReachAssistData = null;
   let placementReachAssistState = null;
   let placementReachSuppressClick = false;
+  let placementHover = null;
   let heldArrowKeys = new Set();
   let activeHexVerticalKey = null;
   let chineseCheckersSelectedPlayers = null;
@@ -714,6 +722,13 @@
   let fullscreenPreferences = { ...FULLSCREEN_SETTINGS_DEFAULTS };
   let fullscreenSettingsOpen = false;
   let fullscreenSettingsReturnFocus = null;
+  let fullscreenSettingsPanel = 'controls';
+  let wrappedViewPreferences = { torus: 'usual', 'klein-bottle': 'usual' };
+  const wrappedViewCameras = new Map();
+  let wrappedPanGesture = null;
+  const wrappedTouchPointers = new Map();
+  let wrappedPinchGesture = null;
+  let calculatorInputSession = null;
   let fullscreenActionPlacementFrame = null;
   let fullscreenRestartPending = false;
   let fullscreenRestartConfirmTimer = null;
@@ -744,6 +759,11 @@
     refs.fullscreenSettingsDialog = document.getElementById('fullscreen-settings-dialog');
     refs.fullscreenSettingsClose = document.getElementById('fullscreen-settings-close');
     refs.fullscreenSettingsExit = document.getElementById('fullscreen-settings-exit');
+    refs.fullscreenSettingsTabs = document.querySelectorAll ? Array.from(document.querySelectorAll('[data-settings-panel]')) : [];
+    refs.fullscreenSettingsControls = document.getElementById('fullscreen-settings-controls');
+    refs.fullscreenSettingsDisplay = document.getElementById('fullscreen-settings-display');
+    refs.fullscreenWrappedViewRow = document.getElementById('fullscreen-wrapped-view-row');
+    refs.fullscreenWrappedViewMode = document.getElementById('fullscreen-wrapped-view-mode');
     refs.fullscreenSoundEnabled = document.getElementById('fullscreen-sound-enabled');
     refs.fullscreenSoundVolume = document.getElementById('fullscreen-sound-volume');
     refs.fullscreenSoundVolumeValue = document.getElementById('fullscreen-sound-volume-value');
@@ -794,6 +814,8 @@
     refs.hexPieSwap = document.getElementById('hex-pie-swap');
     refs.boundaryGlueModeRow = document.getElementById('boundary-glue-mode-row');
     refs.boundaryGlueMode = document.getElementById('boundary-glue-mode');
+    refs.boundaryGlueWrappedViewRow = document.getElementById('boundary-glue-wrapped-view-row');
+    refs.boundaryGlueWrappedViewMode = document.getElementById('boundary-glue-wrapped-view-mode');
     refs.boundaryGlueShapeRow = document.getElementById('boundary-glue-shape-row');
     refs.boundaryGlueShape = document.getElementById('boundary-glue-shape');
     refs.boundaryGlueRectRow = document.getElementById('boundary-glue-rect-row');
@@ -873,6 +895,9 @@
     refs.hexNeighborSizeValue = document.getElementById('hex-neighbor-size-value');
     refs.hexNeighborStroke = document.getElementById('hex-neighbor-stroke');
     refs.hexNeighborStrokeValue = document.getElementById('hex-neighbor-stroke-value');
+    refs.placementPreviewOpacityRow = document.getElementById('placement-preview-opacity-row');
+    refs.placementPreviewOpacity = document.getElementById('placement-preview-opacity');
+    refs.placementPreviewOpacityValue = document.getElementById('placement-preview-opacity-value');
     refs.sokobanObjectSize = document.getElementById('sokoban-object-size');
     refs.sokobanObjectSizeValue = document.getElementById('sokoban-object-size-value');
     refs.sokobanGlowInner = document.getElementById('sokoban-glow-inner');
@@ -925,6 +950,7 @@
     refs.removed = document.getElementById('removed-tile-value');
     refs.round = document.getElementById('round-value');
     fullscreenPreferences = readFullscreenPreferences();
+    wrappedViewPreferences = readWrappedViewPreferences();
     syncFullscreenSettingsUi();
     moveVisualControlsToDisplayCard();
     bindCards();
@@ -989,6 +1015,7 @@
     });
     if (refs.hexPieSwap) refs.hexPieSwap.addEventListener('click', handleHexPieSwap);
     if (refs.boundaryGlueMode) refs.boundaryGlueMode.addEventListener('change', handleBoundaryGlueBoardChange);
+    if (refs.boundaryGlueWrappedViewMode) refs.boundaryGlueWrappedViewMode.addEventListener('change', handleWrappedViewModeChange);
     if (refs.boundaryGlueShape) refs.boundaryGlueShape.addEventListener('change', handleBoundaryGlueShapeChange);
     [refs.boundaryGlueRows, refs.boundaryGlueCols].forEach((input) => {
       if (!input) return;
@@ -1078,14 +1105,25 @@
     refs.canvasViewButtons.forEach((button) => {
       button.addEventListener('click', () => handleCanvasDisplayModeButton(button));
     });
-    if (refs.fullscreenSettingsOpen) refs.fullscreenSettingsOpen.addEventListener('click', openFullscreenSettings);
+    if (refs.fullscreenSettingsOpen) refs.fullscreenSettingsOpen.addEventListener('click', () => {
+      if (calculatorInputSession) calculatorInputSession.open(refs.fullscreenSettingsOpen);
+      else openFullscreenSettings('controls', refs.fullscreenSettingsOpen);
+    });
+    if (refs.placementPreviewOpacity) refs.placementPreviewOpacity.addEventListener('input', () => {
+      syncPlacementPreviewOpacityOutput();
+      render();
+    });
     if (refs.fullscreenSettingsClose) refs.fullscreenSettingsClose.addEventListener('click', () => closeFullscreenSettings());
     if (refs.fullscreenSettingsExit) refs.fullscreenSettingsExit.addEventListener('click', exitFromFullscreenSettings);
     if (refs.fullscreenSettingsOverlay) refs.fullscreenSettingsOverlay.addEventListener('pointerdown', handleFullscreenSettingsBackdrop);
     if (refs.fullscreenSoundEnabled) refs.fullscreenSoundEnabled.addEventListener('change', handleFullscreenSoundEnabledChange);
+    if (refs.fullscreenWrappedViewMode) refs.fullscreenWrappedViewMode.addEventListener('change', handleWrappedViewModeChange);
     if (refs.fullscreenSoundVolume) refs.fullscreenSoundVolume.addEventListener('input', handleFullscreenSoundVolumeInput);
     if (refs.fullscreenShowActionRow) refs.fullscreenShowActionRow.addEventListener('change', handleFullscreenActionRowChange);
     if (refs.fullscreenShowGameTools) refs.fullscreenShowGameTools.addEventListener('change', handleFullscreenGameToolsChange);
+    refs.fullscreenSettingsTabs.forEach((button) => {
+      button.addEventListener('click', () => setFullscreenSettingsPanel(button.dataset.settingsPanel));
+    });
     if (refs.fullscreenUndo) refs.fullscreenUndo.addEventListener('click', undoFromFullscreenAction);
     if (refs.fullscreenRedo) refs.fullscreenRedo.addEventListener('click', redoFromFullscreenAction);
     if (refs.fullscreenExit) refs.fullscreenExit.addEventListener('click', exitFromFullscreenAction);
@@ -1099,18 +1137,24 @@
         clearGlueHover();
         clearHexHover();
         clearPlacementReachAssist(true);
+        clearPlacementHover();
       });
       refs.canvas.addEventListener('blur', () => {
         clearGlueHover();
         clearHexHover();
         clearPlacementReachAssist();
+        clearPlacementHover();
       });
       refs.canvas.addEventListener('pointerdown', handleCanvasPointerDown);
       refs.canvas.addEventListener('pointermove', handleCanvasPointerMove);
       refs.canvas.addEventListener('pointerup', handleCanvasPointerUp);
       refs.canvas.addEventListener('pointercancel', handleCanvasPointerCancel);
-      refs.canvas.addEventListener('pointerleave', () => clearPlacementReachAssist(true));
+      refs.canvas.addEventListener('pointerleave', () => {
+        clearPlacementReachAssist(true);
+        clearPlacementHover();
+      });
       refs.canvas.addEventListener('lostpointercapture', handleCanvasLostPointerCapture);
+      refs.canvas.addEventListener('wheel', handleWrappedViewWheel, { passive: false });
     }
     refs.moveButtons.forEach((button) => {
       button.addEventListener('click', () => handleDirectionalButton(button));
@@ -1132,6 +1176,9 @@
       clearPlacementReachAssist(true);
     });
     window.addEventListener('resize', handleWindowResize);
+    if (window.visualViewport && typeof window.visualViewport.addEventListener === 'function') {
+      window.visualViewport.addEventListener('resize', handleWindowResize);
+    }
 
     syncSpeedOutput();
     syncSokobanObjectSizeOutput();
@@ -1143,6 +1190,7 @@
     syncHexNeighborHintOutputs();
     syncDebugModeUi();
     syncCanvasDisplayModeUi();
+    setupCalculatorInputSettings();
     initOnlinePlay();
     setPresetSelectLoading();
     const catalogLoad = ensurePresetCatalogLoaded();
@@ -5216,8 +5264,9 @@
       }
       return;
     }
-    if (handleGameShortcutKey(event, key)) return;
+    if (!calculatorInputSession && handleGameShortcutKey(event, key)) return;
     if (!game || !isDirectionalMoveGame(game)) return;
+    if (calculatorInputSession && latticeForPreset(game.preset).shape !== 'hex') return;
     if (!keyboardKeyHandledByPreset(key, game.preset)) return;
     const reserved = shouldReserveDirectionalKeyboardInput(key);
     if (event.repeat) {
@@ -5390,7 +5439,69 @@
     if (refs.billiardsFriction && isBilliardsGame(imported.state)) syncBilliardsFriction();
   }
 
+  function handleWrappedViewPointerDown(event) {
+    if (!wrappedViewIsActive() || !event) return false;
+    if (event.pointerType === 'mouse' && event.button === 1) {
+      wrappedPanGesture = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+      if (refs.canvas && refs.canvas.setPointerCapture) {
+        try { refs.canvas.setPointerCapture(event.pointerId); } catch (_error) {}
+      }
+      syncWrappedViewUi();
+      if (event.preventDefault) event.preventDefault();
+      return true;
+    }
+    return false;
+  }
+
+  function handleWrappedViewPointerMove(event) {
+    if (!wrappedPanGesture || !event || event.pointerId !== wrappedPanGesture.pointerId) return false;
+    const dx = event.clientX - wrappedPanGesture.x;
+    const dy = event.clientY - wrappedPanGesture.y;
+    wrappedPanGesture.x = event.clientX;
+    wrappedPanGesture.y = event.clientY;
+    panWrappedViewByClientDelta(dx, dy);
+    if (event.preventDefault) event.preventDefault();
+    return true;
+  }
+
+  function clearWrappedPanGesture(pointerId) {
+    if (!wrappedPanGesture || (pointerId != null && wrappedPanGesture.pointerId !== pointerId)) return false;
+    const active = wrappedPanGesture;
+    wrappedPanGesture = null;
+    if (refs.canvas && refs.canvas.releasePointerCapture) {
+      try { refs.canvas.releasePointerCapture(active.pointerId); } catch (_error) {}
+    }
+    syncWrappedViewUi();
+    return true;
+  }
+
+  function handleWrappedViewPointerUp(event) {
+    return clearWrappedPanGesture(event && event.pointerId);
+  }
+
+  function handleWrappedViewPointerCancel(event) {
+    return clearWrappedPanGesture(event && event.pointerId);
+  }
+
+  function wrappedWheelUsesTrackpadPan(event) {
+    if (!event || event.ctrlKey) return false;
+    if (event.sourceCapabilities && event.sourceCapabilities.firesTouchEvents) return true;
+    return event.deltaMode === 0 && (Math.abs(event.deltaX || 0) > 0 || Math.abs(event.deltaY || 0) < 50);
+  }
+
+  function handleWrappedViewWheel(event) {
+    if (!wrappedViewIsActive() || !event) return;
+    if (wrappedWheelUsesTrackpadPan(event)) {
+      panWrappedViewByClientDelta(-(event.deltaX || 0), -(event.deltaY || 0));
+    } else {
+      const factor = Math.exp(-(event.deltaY || 0) * (event.deltaMode === 1 ? 0.08 : 0.0015));
+      zoomWrappedViewAtClientPoint(event.clientX, event.clientY, wrappedViewCamera().scale * factor);
+    }
+    if (event.preventDefault) event.preventDefault();
+  }
+
   function handleCanvasPointerDown(event) {
+    if (handleWrappedViewPointerDown(event)) return;
     if (event.isPrimary === false) return;
     if (Number.isInteger(event.button) && event.button !== 0) return;
     if (handleBilliardsPointerDown(event)) return;
@@ -5412,6 +5523,7 @@
   }
 
   function handleCanvasPointerMove(event) {
+    if (handleWrappedViewPointerMove(event)) return;
     if (handleBilliardsPointerMove(event)) return;
     if (activeFideChessDragEvent(event)) {
       clearPlacementReachAssist();
@@ -5419,6 +5531,7 @@
       return;
     }
     updatePlacementReachDwell(event);
+    if (!isHexGame(game)) updatePlacementHover(event);
     if (!activeSwipeEvent(event)) return;
     swipeGesture.lastX = event.clientX;
     swipeGesture.lastY = event.clientY;
@@ -5430,6 +5543,7 @@
   }
 
   function handleCanvasPointerUp(event) {
+    if (handleWrappedViewPointerUp(event)) return;
     if (handleBilliardsPointerUp(event)) return;
     if (activeFideChessDragEvent(event)) {
       finishFideChessPieceDrag(event);
@@ -5454,24 +5568,28 @@
   }
 
   function handleCanvasPointerCancel(event) {
+    if (handleWrappedViewPointerCancel(event)) return;
     if (handleBilliardsPointerCancel(event)) return;
     if (activeFideChessDragEvent(event)) {
       cancelFideChessPieceDrag(event);
       return;
     }
     clearPlacementReachAssist();
+    clearPlacementHover();
     if (!activeSwipeEvent(event)) return;
     releaseSwipePointer(swipeGesture.pointerId);
     resetSwipeGesture();
   }
 
   function handleCanvasLostPointerCapture(event) {
+    if (handleWrappedViewPointerCancel(event)) return;
     if (handleBilliardsPointerCancel(event)) return;
     if (activeFideChessDragEvent(event)) {
       cancelFideChessPieceDrag(event);
       return;
     }
     clearPlacementReachAssist();
+    clearPlacementHover();
     if (!activeSwipeEvent(event)) return;
     resetSwipeGesture();
   }
@@ -5482,6 +5600,7 @@
       && !currentAnimation
       && !fideChessDrag
       && !billiardsShotPending
+      && !onlineBoardMoveBlockedForCursor(state)
     );
   }
 
@@ -5657,6 +5776,236 @@
       highlight: !!allowed && (!dismissed || transient),
       transient
     };
+  }
+
+  function placementHoverInteractionAvailable(state = game) {
+    return !!(
+      state
+      && !currentAnimation
+      && !fideChessDrag
+      && !billiardsShotPending
+      && !onlineBoardMoveBlockedForCursor(state)
+      && (isGomokuGame(state) || isGoGame(state) || isConnectFourGame(state) || isReversiGame(state) || isLianliankanGame(state))
+    );
+  }
+
+  function lianliankanTilesMatch(first, second) {
+    if (!first || !second) return false;
+    const firstKey = String(first.matchKey || first.id || '');
+    const secondKey = String(second.matchKey || second.id || '');
+    if (!firstKey || firstKey !== secondKey) return false;
+    return (first.matchKey == null && second.matchKey == null) || first.id !== second.id;
+  }
+
+  function placementHoverAtEvent(event, state = game) {
+    if (!placementHoverInteractionAvailable(state)) return null;
+    const target = tileFromCanvasEvent(event);
+    if (!target || (state.removed && state.removed.has(target.index))) return null;
+    return placementHoverPreview(state, target.index);
+  }
+
+  function placementHoverPreview(state, index) {
+    if (!state || !Number.isInteger(index) || (state.removed && state.removed.has(index))) return null;
+    if (isGomokuGame(state) || isGoGame(state)) {
+      const result = placementGhostMove(state, index);
+      return result.changed ? { kind: 'ghost', index, color: result.stone.color } : null;
+    }
+    if (isReversiGame(state)) {
+      const result = placementGhostMove(state, index);
+      return result.changed ? { kind: 'ghost', index, color: result.disc.color } : null;
+    }
+    if (isConnectFourGame(state)) {
+      if (!connectFourHasHole(state, index)) return null;
+      const result = placeConnectFourToken(state, index);
+      return result.changed ? { kind: 'connect-four-drop', index, color: result.token.color } : null;
+    }
+    if (!isLianliankanGame(state) || state.phase !== 'ready' || lianliankanHint || !state.board) return null;
+    const cell = state.board.cells && state.board.cells[index];
+    return cell && cell.playable && cell.tile ? { kind: 'lianliankan-tile', index } : null;
+  }
+
+  // Keep rendered ghosts and hypothetical hover assists on the exact same
+  // legality path as a real move. The resulting state is never installed.
+  function placementGhostMove(state, index) {
+    if (isGomokuGame(state)) return placeGomokuStone(state, index);
+    if (isGoGame(state)) {
+      if (isGoDeadMarkModeActive() || isGoTerritoryEditModeActive()) {
+        return { changed: false, state, message: 'Go score review is active' };
+      }
+      return placeGoStone(state, index);
+    }
+    if (isReversiGame(state)) return placeReversiDisc(state, index);
+    return { changed: false, state, message: 'not a placement preview game' };
+  }
+
+  function samePlacementHover(left, right) {
+    if (!left && !right) return true;
+    if (!left || !right) return false;
+    return left.state === right.state && left.kind === right.kind && left.index === right.index && left.color === right.color;
+  }
+
+  function updatePlacementHover(event) {
+    const next = placementHoverAtEvent(event);
+    const normalized = next ? { ...next, state: game } : null;
+    if (samePlacementHover(placementHover, normalized)) return;
+    placementHover = normalized;
+    syncCanvasCursor();
+    render();
+  }
+
+  function clearPlacementHover(redraw = true) {
+    if (!placementHover) return;
+    placementHover = null;
+    syncCanvasCursor();
+    if (redraw) render();
+  }
+
+  function activePlacementHover(state) {
+    return placementHover && placementHover.state === state && placementHoverInteractionAvailable(state)
+      ? placementHover
+      : null;
+  }
+
+  function setupCalculatorInputSettings() {
+    const api = typeof window !== 'undefined' ? window.CalculatorInputSettings : null;
+    if (!api || api.getSession('ramified-minigames')) return;
+    const localizedField = (key, fallback, parameters) => (
+      tk(String(key || '').includes('.') ? key : `controls.ui.${key}`, fallback, parameters)
+    );
+    const action = (id, groupKey, group, labelKey, label, descriptionKey, description, options = {}) => ({
+      id,
+      group,
+      groupKey,
+      label,
+      labelKey,
+      description,
+      descriptionKey,
+      ...options
+    });
+    const directionAction = (dir, labelKey, label, defaultBindings, descriptionKey = 'controls.directionDescription', description = 'Moves in this direction when the current game accepts directional input.') => action(
+      `direction-${dir}`,
+      'controls.groupDirections',
+      'Directions',
+      labelKey,
+      label,
+      descriptionKey,
+      description,
+      {
+        defaultBindings,
+        repeat: false,
+        enabled: () => {
+          if (!game || !isDirectionalMoveGame(game) || !canAcceptDirectionalMove()) return false;
+          const lattice = latticeForPreset(game.preset);
+          return lattice.shape !== 'hex' || !activeHexVerticalKey || (dir !== HEX_DIRS.E && dir !== HEX_DIRS.W);
+        },
+        trigger: () => {
+          if (!game || !isDirectionalMoveGame(game) || !canAcceptDirectionalMove()) return false;
+          clearKeyboardState();
+          playDirectionalMove(dir);
+          return true;
+        }
+      }
+    );
+    const actionProvider = () => {
+      const actions = [
+        action('undo', 'controls.groupHistory', 'History', 'controls.undo', 'Undo', 'controls.undoDescription', 'Restores the previous game step.', {
+          defaultBindings: ['z'], storageProfile: 'global', enabled: () => undoStack.length > 0,
+          trigger: () => {
+            if (!undoStack.length) return false;
+            undoPreviousStep();
+            return true;
+          }
+        }),
+        action('redo', 'controls.groupHistory', 'History', 'controls.redo', 'Redo', 'controls.redoDescription', 'Reapplies the last undone game step.', {
+          defaultBindings: ['y'], storageProfile: 'global', enabled: () => redoStack.length > 0,
+          trigger: () => {
+            if (!redoStack.length) return false;
+            redoPreviousUndo();
+            return true;
+          }
+        }),
+        action('restart', 'controls.groupGame', 'Game', 'controls.restart', 'Restart game', 'controls.restartDescription', 'Uses the existing two-step restart confirmation.', {
+          defaultBindings: [], storageProfile: 'global', enabled: () => !!game,
+          trigger: restartFromInputShortcut
+        })
+      ];
+      if (!game || !isDirectionalMoveGame(game)) return actions;
+      const lattice = latticeForPreset(game.preset);
+      if (lattice.shape === 'square') {
+        actions.push(
+          directionAction(DIRS.E, 'controls.moveRight', 'Move right', ['ArrowRight', 'd']),
+          directionAction(DIRS.S, 'controls.moveDown', 'Move down', ['ArrowDown', 's']),
+          directionAction(DIRS.W, 'controls.moveLeft', 'Move left', ['ArrowLeft', 'a']),
+          directionAction(DIRS.N, 'controls.moveUp', 'Move up', ['ArrowUp', 'w'])
+        );
+      } else {
+        actions.push(
+          directionAction(HEX_DIRS.E, 'controls.moveEast', 'Move east', ['ArrowRight'], 'controls.hexHorizontalDescription', 'Arrow right; diagonal arrow chords remain available.'),
+          directionAction(HEX_DIRS.SE, 'controls.moveSoutheast', 'Move southeast', [], 'controls.hexSoutheastDescription', 'Existing chord: Arrow down + Arrow right. Add an alternate key here.'),
+          directionAction(HEX_DIRS.SW, 'controls.moveSouthwest', 'Move southwest', [], 'controls.hexSouthwestDescription', 'Existing chord: Arrow down + Arrow left. Add an alternate key here.'),
+          directionAction(HEX_DIRS.W, 'controls.moveWest', 'Move west', ['ArrowLeft'], 'controls.hexHorizontalDescription', 'Arrow left; diagonal arrow chords remain available.'),
+          directionAction(HEX_DIRS.NW, 'controls.moveNorthwest', 'Move northwest', [], 'controls.hexNorthwestDescription', 'Existing chord: Arrow up + Arrow left. Add an alternate key here.'),
+          directionAction(HEX_DIRS.NE, 'controls.moveNortheast', 'Move northeast', [], 'controls.hexNortheastDescription', 'Existing chord: Arrow up + Arrow right. Add an alternate key here.')
+        );
+      }
+      return actions;
+    };
+    const pointerHintProvider = () => {
+      const hints = [
+        { input: 'Primary click', inputKey: 'controls.pointerClick', description: 'Selects or plays the object under the pointer.', descriptionKey: 'controls.pointerClickDescription' },
+        { input: 'Drag', inputKey: 'controls.pointerDrag', description: 'Moves supported pieces, balls, or board controls.', descriptionKey: 'controls.pointerDragDescription' },
+        { input: 'Swipe', inputKey: 'controls.pointerSwipe', description: 'Moves in directional games on touch screens.', descriptionKey: 'controls.pointerSwipeDescription' }
+      ];
+      if (wrappedViewIsActive()) {
+        hints.push(
+          { input: 'Middle drag', inputKey: 'controls.pointerMiddleDrag', description: 'Pans the universal-cover view.', descriptionKey: 'controls.pointerMiddleDragDescription' },
+          { input: 'Mouse wheel', inputKey: 'controls.pointerWheel', description: 'Zooms at the pointer.', descriptionKey: 'controls.pointerWheelDescription' },
+          { input: 'Trackpad', inputKey: 'controls.pointerTrackpad', description: 'Two-finger scroll pans; pinch zooms.', descriptionKey: 'controls.pointerTrackpadDescription' }
+        );
+      }
+      return hints;
+    };
+    calculatorInputSession = api.register({
+      pageId: 'ramified-minigames',
+      actionProvider,
+      pointerHintProvider,
+      profileProvider: () => {
+        if (!game) return 'preview';
+        return `${gameModeValue(game)}:${latticeForPreset(game.preset).id}`;
+      },
+      profileLabel: () => {
+        if (!game) return tk('controls.previewProfile', 'game preview');
+        const lattice = latticeForPreset(game.preset);
+        return tk('controls.profileValue', '{{game}} · {{lattice}}', {
+          game: localizedGameName(gameModeValue(game)),
+          lattice: lattice.shape === 'hex' ? tk('controls.hexGrid', 'hex grid') : tk('controls.squareGrid', 'square grid')
+        });
+      },
+      translate: localizedField,
+      externalDialog: {
+        content: '#fullscreen-settings-controls',
+        dialog: '#fullscreen-settings-dialog',
+        trigger: '#fullscreen-settings-open',
+        isOpen: () => fullscreenSettingsOpen,
+        open: (panel, trigger) => openFullscreenSettings(panel, trigger),
+        close: () => closeFullscreenSettings()
+      }
+    });
+  }
+
+  function restartFromInputShortcut() {
+    if (!game) return false;
+    if (!fullscreenRestartPending) {
+      setFullscreenRestartConfirmation(true);
+      syncStatus(
+        tk('common.restartQuestion', 'Restart this game?'),
+        tk('controls.pressAgainToRestart', 'Press the restart shortcut again to confirm.'),
+        'warn'
+      );
+      return true;
+    }
+    clearFullscreenRestartConfirmation();
+    return restartCurrentGameFromFullscreenAction();
   }
 
   function billiardsCueGuidanceState(currentTime = now()) {
@@ -7559,6 +7908,10 @@
     [refs.hexNeighborDelay, refs.hexNeighborSize, refs.hexNeighborStroke].forEach((input) => {
       if (input) input.disabled = !debugMode || !isHexGame(game);
     });
+    const previewAvailable = debugMode && (isGomokuGame(game) || isGoGame(game) || isReversiGame(game));
+    if (refs.placementPreviewOpacityRow) refs.placementPreviewOpacityRow.hidden = !previewAvailable;
+    if (refs.placementPreviewOpacity) refs.placementPreviewOpacity.disabled = !previewAvailable;
+    syncPlacementPreviewOpacityOutput();
     if (refs.onlineTurnFeedbackDuration) refs.onlineTurnFeedbackDuration.disabled = !debugMode;
     if (refs.onlineTurnFeedbackPreview) refs.onlineTurnFeedbackPreview.disabled = !debugMode;
     syncConnectFourHoleEditControl();
@@ -7724,6 +8077,80 @@
     }
   }
 
+  function normalizeWrappedViewPreferences(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    return {
+      torus: source.torus === 'wrapped' ? 'wrapped' : 'usual',
+      'klein-bottle': source['klein-bottle'] === 'wrapped' ? 'wrapped' : 'usual'
+    };
+  }
+
+  function readWrappedViewPreferences(storage = fullscreenSettingsStorage()) {
+    if (!storage || typeof storage.getItem !== 'function') return normalizeWrappedViewPreferences(null);
+    try {
+      const stored = storage.getItem(WRAPPED_VIEW_STORAGE_KEY);
+      return normalizeWrappedViewPreferences(stored ? JSON.parse(stored) : null);
+    } catch (_error) {
+      return normalizeWrappedViewPreferences(null);
+    }
+  }
+
+  function persistWrappedViewPreferences(storage = fullscreenSettingsStorage()) {
+    if (!storage || typeof storage.setItem !== 'function') return false;
+    try {
+      storage.setItem(WRAPPED_VIEW_STORAGE_KEY, JSON.stringify(wrappedViewPreferences));
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function wrappedBoundaryMode() {
+    if (!selectedPresetIsBoundaryGlueBoard()) return '';
+    const mode = selectedBoundaryGlueMode();
+    return mode === BOUNDARY_GLUE_MODES.TORUS || mode === BOUNDARY_GLUE_MODES.KLEIN_BOTTLE ? mode : '';
+  }
+
+  function wrappedViewIsActive() {
+    const mode = wrappedBoundaryMode();
+    return !!mode && wrappedViewPreferences[mode] === 'wrapped';
+  }
+
+  function wrappedViewCamera(mode = wrappedBoundaryMode()) {
+    if (!mode) return { scale: 1, x: 0, y: 0 };
+    if (!wrappedViewCameras.has(mode)) {
+      wrappedViewCameras.set(mode, { scale: WRAPPED_VIEW_DEFAULT_SCALE, x: 0, y: 0 });
+    }
+    return wrappedViewCameras.get(mode);
+  }
+
+  function syncWrappedViewUi() {
+    const mode = wrappedBoundaryMode();
+    const available = !!mode;
+    const value = available ? wrappedViewPreferences[mode] : 'usual';
+    if (refs.boundaryGlueWrappedViewRow) refs.boundaryGlueWrappedViewRow.hidden = !available;
+    if (refs.fullscreenWrappedViewRow) refs.fullscreenWrappedViewRow.hidden = !available;
+    [refs.boundaryGlueWrappedViewMode, refs.fullscreenWrappedViewMode].forEach((control) => {
+      if (!control) return;
+      control.disabled = !available;
+      control.value = value;
+    });
+    if (refs.canvas && refs.canvas.classList) {
+      refs.canvas.classList.toggle('wrapped-universal-cover', available && value === 'wrapped');
+      refs.canvas.classList.toggle('is-panning', !!wrappedPanGesture);
+    }
+  }
+
+  function handleWrappedViewModeChange(event) {
+    const mode = wrappedBoundaryMode();
+    if (!mode) return;
+    const next = event && event.target && event.target.value === 'wrapped' ? 'wrapped' : 'usual';
+    wrappedViewPreferences = { ...wrappedViewPreferences, [mode]: next };
+    persistWrappedViewPreferences();
+    syncWrappedViewUi();
+    render();
+  }
+
   function updateFullscreenPreferences(changes, options = {}) {
     fullscreenPreferences = normalizeFullscreenPreferences({
       ...fullscreenPreferences,
@@ -7751,6 +8178,7 @@
     }
     if (refs.fullscreenShowActionRow) refs.fullscreenShowActionRow.checked = fullscreenPreferences.showActionRow;
     if (refs.fullscreenShowGameTools) refs.fullscreenShowGameTools.checked = fullscreenPreferences.showGameTools;
+    syncWrappedViewUi();
   }
 
   function handleFullscreenSoundEnabledChange() {
@@ -7770,23 +8198,44 @@
     updateFullscreenPreferences({ showGameTools: !!(refs.fullscreenShowGameTools && refs.fullscreenShowGameTools.checked) });
   }
 
-  function openFullscreenSettings() {
-    if (!currentFullscreenElement() || !refs.fullscreenSettingsOverlay) return;
-    fullscreenSettingsReturnFocus = typeof document !== 'undefined' ? document.activeElement : null;
+  function setFullscreenSettingsPanel(panel) {
+    fullscreenSettingsPanel = panel === 'display' ? 'display' : 'controls';
+    refs.fullscreenSettingsTabs.forEach((button) => {
+      const selected = button.dataset.settingsPanel === fullscreenSettingsPanel;
+      button.setAttribute('aria-selected', selected ? 'true' : 'false');
+      button.tabIndex = selected ? 0 : -1;
+    });
+    if (refs.fullscreenSettingsControls) refs.fullscreenSettingsControls.hidden = fullscreenSettingsPanel !== 'controls';
+    if (refs.fullscreenSettingsDisplay) refs.fullscreenSettingsDisplay.hidden = fullscreenSettingsPanel !== 'display';
+  }
+
+  function openFullscreenSettings(panel = 'controls', trigger = null) {
+    if (!refs.fullscreenSettingsOverlay) return;
+    fullscreenSettingsReturnFocus = trigger || (typeof document !== 'undefined' ? document.activeElement : null);
     fullscreenSettingsOpen = true;
     refs.fullscreenSettingsOverlay.hidden = false;
     if (refs.fullscreenSettingsOpen) refs.fullscreenSettingsOpen.setAttribute('aria-expanded', 'true');
     clearKeyboardState();
     syncFullscreenSettingsUi();
-    const focusTarget = refs.fullscreenSettingsClose || refs.fullscreenSoundEnabled;
+    setFullscreenSettingsPanel(panel);
+    if (calculatorInputSession) calculatorInputSession.refresh();
+    const focusTarget = fullscreenSettingsPanel === 'controls'
+      ? (refs.fullscreenSettingsControls?.querySelector('.calculator-input-binding, .calculator-input-add') || refs.fullscreenSettingsTabs[0] || refs.fullscreenSettingsClose)
+      : (refs.fullscreenSoundEnabled || refs.fullscreenSettingsTabs[1] || refs.fullscreenSettingsClose);
     if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
   }
 
   function closeFullscreenSettings(options = {}) {
     const wasOpen = fullscreenSettingsOpen;
     fullscreenSettingsOpen = false;
+    if (calculatorInputSession) {
+      calculatorInputSession.capture = null;
+      calculatorInputSession.pendingConflict = null;
+      calculatorInputSession.returnFocus = null;
+    }
     if (refs.fullscreenSettingsOverlay) refs.fullscreenSettingsOverlay.hidden = true;
     if (refs.fullscreenSettingsOpen) refs.fullscreenSettingsOpen.setAttribute('aria-expanded', 'false');
+    if (calculatorInputSession) calculatorInputSession.refresh();
     if (!wasOpen || options.restoreFocus === false) {
       fullscreenSettingsReturnFocus = null;
       return;
@@ -7806,7 +8255,7 @@
     if (!refs.fullscreenSettingsDialog || typeof refs.fullscreenSettingsDialog.querySelectorAll !== 'function') return [];
     return Array.from(refs.fullscreenSettingsDialog.querySelectorAll(
       'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    )).filter((element) => !element.hidden);
+    )).filter((element) => !element.hidden && !element.closest('[hidden]'));
   }
 
   function trapFullscreenSettingsFocus(event) {
@@ -7837,7 +8286,6 @@
       canvasDisplayMode = 'fullscreen';
     } else if (canvasDisplayMode === 'fullscreen') {
       canvasDisplayMode = fullscreenReturnMode || 'normal';
-      closeFullscreenSettings({ restoreFocus: false });
     }
     syncCanvasDisplayModeUi();
     syncControls();
@@ -7870,7 +8318,6 @@
     if (refs.fullscreenActionBar) {
       refs.fullscreenActionBar.hidden = !fullscreenActive || !fullscreenPreferences.showActionRow;
     }
-    if (!fullscreenActive && fullscreenSettingsOpen) closeFullscreenSettings({ restoreFocus: false });
     requestFullscreenActionPlacement();
   }
 
@@ -8707,6 +9154,7 @@
     if (!geometry || !geometry.cells || !geometry.cells.length) return;
     const preset = game ? game.preset : selectedPreset();
     setGlueHover(hoveredGlueBoundaryAtPoint(preset, geometry, canvasPointFromEvent(event)));
+    if (!isHexGame(game)) updatePlacementHover(event);
     const target = isHexGame(game) ? tileFromCanvasEvent(event) : null;
     const playableTarget = target && !game.removed.has(target.index) ? target : null;
     updateHexNeighborHover(playableTarget ? playableTarget.index : null);
@@ -8795,6 +9243,8 @@
       refs.canvas.style.cursor = 'grabbing';
     } else if (hoveredGlue) {
       refs.canvas.style.cursor = 'help';
+    } else if (activePlacementHover(game)) {
+      refs.canvas.style.cursor = 'pointer';
     } else if (isHexGame(game) && Number.isInteger(hoveredHexIndex)) {
       refs.canvas.style.cursor = 'pointer';
     } else if (onlineBoardMoveBlockedForCursor()) {
@@ -9626,7 +10076,7 @@
       x: ((event.clientX || 0) - left) * (geometry.width / Math.max(1, width)),
       y: ((event.clientY || 0) - top) * (geometry.height / Math.max(1, height))
     };
-    return displayPointToGeometryPoint(displayPoint, geometry);
+    return displayPointToGeometryPoint(wrappedDisplayPointToFundamentalPoint(displayPoint), geometry);
   }
 
   function normalizedDebugTileValue() {
@@ -12839,22 +13289,34 @@
   function render() {
     if (!refs.canvas || !refs.ctx) return;
     if (placementReachAssistData && (!placementReachInteractionAvailable() || placementReachAssistState !== game)) clearPlacementReachAssist();
+    if (placementHover && (!placementHoverInteractionAvailable() || placementHover.state !== game)) clearPlacementHover(false);
     const preset = game ? game.preset : selectedPreset();
     if (!preset) return;
     if (hoveredGlue && !activeGlueHoverForPreset(preset, hoveredGlue)) {
       hoveredGlue = null;
       syncCanvasCursor();
     }
+    const wrappedCover = wrappedViewIsActive();
     const removed = game ? game.removed : initialRemovedSet(preset);
-    const dpr = Math.min(Math.max((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1, 1), 2.5);
+    const deviceDpr = Math.max((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1, 1);
+    // Covers start zoomed out, so render them with a supersampled backing store from
+    // the first frame as well as while zooming in. The CSS viewport remains unchanged.
+    const coverTargetDpr = wrappedCover
+      ? Math.max(2.5, deviceDpr * Math.max(1, wrappedViewCamera().scale))
+      : deviceDpr;
+    const dpr = Math.min(coverTargetDpr, 4);
     const sizing = canvasRenderSizing();
-    const coordinateMargin = shouldShowBoardCoordinates() ? boardCoordinateMargin(sizing) : 0;
-    geometry = buildGeometry(preset, sizing.widthAvailable, sizing.margin + coordinateMargin, dpr, {
+    // A cover has no outside boundary: margins and coordinate gutters would become visible seams
+    // between adjacent fundamental domains.
+    const coordinateMargin = !wrappedCover && shouldShowBoardCoordinates() ? boardCoordinateMargin(sizing) : 0;
+    geometry = buildGeometry(preset, sizing.widthAvailable, wrappedCover ? 0 : sizing.margin + coordinateMargin, dpr, {
       heightAvailable: sizing.heightAvailable,
       immersive: sizing.immersive
     });
     applyFideChessPuzzleTrayGeometry(geometry, game);
-    applyDisplayRotationToGeometry(geometry, connectFourDisplayRotationAngle());
+    // The cover copies use the board's native horizontal and vertical deck transformations.
+    // A presentation-only Connect Four rotation would otherwise rotate those transformations too.
+    applyDisplayRotationToGeometry(geometry, wrappedViewIsActive() ? 0 : connectFourDisplayRotationAngle());
     const logicalWidth = geometry.width;
     const logicalHeight = geometry.height;
     refs.canvas.width = Math.max(1, Math.ceil(logicalWidth * dpr));
@@ -12862,6 +13324,8 @@
     refs.canvas.style.aspectRatio = `${logicalWidth} / ${logicalHeight}`;
     applyCanvasDisplaySize(logicalWidth, logicalHeight, sizing);
     refs.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    refs.ctx.imageSmoothingEnabled = true;
+    if ('imageSmoothingQuality' in refs.ctx) refs.ctx.imageSmoothingQuality = 'high';
 
     const ctx = refs.ctx;
     const billiardsGuidance = isBilliardsGame(game) ? billiardsCueGuidanceState() : null;
@@ -12873,6 +13337,7 @@
     ctx.fillStyle = explosionMode ? '#fff0ee' : '#fffdf8';
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
+    function drawFundamentalBoard() {
     ctx.save();
     applyGeometryDisplayTransform(ctx, geometry);
     const sharedDisplayGame = isPlacementGame(game) || isBilliardsGame(game);
@@ -12892,8 +13357,10 @@
     }
 
     drawBackgroundBoundaries(ctx, geometry, preset, boardBlocked);
-    drawGlueEdges(ctx, geometry, preset, hoveredGlue);
-    if (shouldShowBoardCoordinates()) drawBoardCoordinates(ctx, geometry, preset, removed, vertexDisplay);
+    // In the universal cover these edges are physically adjacent on the canvas,
+    // so the ordinary glued-boundary arrows would be misleading.
+    if (!wrappedCover) drawGlueEdges(ctx, geometry, preset, hoveredGlue);
+    if (!wrappedCover && shouldShowBoardCoordinates()) drawBoardCoordinates(ctx, geometry, preset, removed, vertexDisplay);
     if (isLianliankanGame(game)) {
       drawLianliankanGame(ctx, geometry, game);
     } else if (isBilliardsGame(game) && Billiards) {
@@ -12914,6 +13381,7 @@
       if (polishedVertexDisplay) drawPolishedPlacementVertexBoard(ctx, geometry, game);
       else if (vertexDisplay) drawPlacementVertexBoard(ctx, geometry, game);
       else if (isConnectFourGame(game)) drawConnectFourHoles(ctx, geometry, game);
+      drawPlacementHoverCue(ctx, geometry, game);
       drawPlacementReachAssistUnderlay(ctx, geometry, game);
       if (isHexGame(game)) drawHexTileFills(ctx, geometry, game);
       if (isHexGame(game)) drawHexNeighborHints(ctx, geometry, game);
@@ -12944,6 +13412,13 @@
       }
     }
     ctx.restore();
+    }
+
+    if (wrappedViewIsActive()) {
+      drawWrappedUniversalCover(ctx, logicalWidth, logicalHeight, drawFundamentalBoard);
+    } else {
+      drawFundamentalBoard();
+    }
     drawCanvasFeedbackOverlays(ctx, geometry);
     if (billiardsGuidance && billiardsGuidance.caption) {
       drawBilliardsCueCaption(
@@ -12958,6 +13433,110 @@
     syncBilliardsCueGuidanceAnimation();
   }
 
+  function drawWrappedUniversalCover(ctx, width, height, drawFundamentalBoard) {
+    const mode = wrappedBoundaryMode();
+    if (!mode || !geometry) {
+      drawFundamentalBoard();
+      return;
+    }
+    const camera = wrappedViewCamera(mode);
+    const scale = Math.max(WRAPPED_VIEW_MIN_SCALE, Math.min(WRAPPED_VIEW_MAX_SCALE, camera.scale));
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const worldBounds = {
+      minX: centerX + ((0 - centerX - camera.x) / scale),
+      maxX: centerX + ((width - centerX - camera.x) / scale),
+      minY: centerY + ((0 - centerY - camera.y) / scale),
+      maxY: centerY + ((height - centerY - camera.y) / scale)
+    };
+    const copyWidth = geometry.width;
+    const copyHeight = geometry.height;
+    const minU = Math.floor(worldBounds.minX / copyWidth) - 1;
+    const maxU = Math.floor(worldBounds.maxX / copyWidth) + 1;
+    const minV = Math.floor(worldBounds.minY / copyHeight) - 1;
+    const maxV = Math.floor(worldBounds.maxY / copyHeight) + 1;
+
+    ctx.save();
+    ctx.translate(centerX + camera.x, centerY + camera.y);
+    ctx.scale(scale, scale);
+    ctx.translate(-centerX, -centerY);
+    for (let u = minU; u <= maxU; u += 1) {
+      for (let v = minV; v <= maxV; v += 1) {
+        ctx.save();
+        ctx.translate(u * copyWidth, v * copyHeight);
+        if (mode === BOUNDARY_GLUE_MODES.KLEIN_BOTTLE && Math.abs(u % 2) === 1) {
+          ctx.translate(0, copyHeight);
+          ctx.scale(1, -1);
+        }
+        drawFundamentalBoard();
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  }
+
+  function wrappedDisplayPointToFundamentalPoint(displayPoint) {
+    if (!displayPoint || !geometry || !wrappedViewIsActive()) return displayPoint;
+    const mode = wrappedBoundaryMode();
+    const camera = wrappedViewCamera(mode);
+    const width = geometry.width;
+    const height = geometry.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const worldX = centerX + ((displayPoint.x - centerX - camera.x) / camera.scale);
+    const worldY = centerY + ((displayPoint.y - centerY - camera.y) / camera.scale);
+    return wrappedFundamentalCoordinates(worldX, worldY, width, height, mode);
+  }
+
+  function wrappedFundamentalCoordinates(worldX, worldY, width, height, mode) {
+    const copyU = Math.floor(worldX / width);
+    const copyV = Math.floor(worldY / height);
+    const localX = modulo(worldX, width);
+    const localY = modulo(worldY, height);
+    return {
+      x: localX,
+      y: mode === BOUNDARY_GLUE_MODES.KLEIN_BOTTLE && Math.abs(copyU % 2) === 1 ? modulo(-localY, height) : localY,
+      copyU,
+      copyV
+    };
+  }
+
+  function panWrappedViewByClientDelta(clientDx, clientDy) {
+    if (!wrappedViewIsActive() || !refs.canvas || !geometry) return false;
+    const rect = refs.canvas.getBoundingClientRect ? refs.canvas.getBoundingClientRect() : null;
+    const width = rect && rect.width ? rect.width : geometry.width;
+    const height = rect && rect.height ? rect.height : geometry.height;
+    const camera = wrappedViewCamera();
+    camera.x += clientDx * (geometry.width / Math.max(1, width));
+    camera.y += clientDy * (geometry.height / Math.max(1, height));
+    render();
+    return true;
+  }
+
+  function zoomWrappedViewAtClientPoint(clientX, clientY, scale) {
+    if (!wrappedViewIsActive() || !geometry || !refs.canvas) return false;
+    const rect = refs.canvas.getBoundingClientRect ? refs.canvas.getBoundingClientRect() : null;
+    const width = rect && rect.width ? rect.width : geometry.width;
+    const height = rect && rect.height ? rect.height : geometry.height;
+    const left = rect ? rect.left : 0;
+    const top = rect ? rect.top : 0;
+    const point = {
+      x: (clientX - left) * (geometry.width / Math.max(1, width)),
+      y: (clientY - top) * (geometry.height / Math.max(1, height))
+    };
+    const camera = wrappedViewCamera();
+    const nextScale = Math.max(WRAPPED_VIEW_MIN_SCALE, Math.min(WRAPPED_VIEW_MAX_SCALE, scale));
+    const centerX = geometry.width / 2;
+    const centerY = geometry.height / 2;
+    const worldX = centerX + ((point.x - centerX - camera.x) / camera.scale);
+    const worldY = centerY + ((point.y - centerY - camera.y) / camera.scale);
+    camera.scale = nextScale;
+    camera.x = point.x - centerX - (nextScale * (worldX - centerX));
+    camera.y = point.y - centerY - (nextScale * (worldY - centerY));
+    render();
+    return true;
+  }
+
   function drawLianliankanGame(ctx, geom, state) {
     if (!state || !state.board || !LianliankanMosaicAdapter) return;
     const matchEffects = activeLianliankanMatchEffects(state);
@@ -12965,13 +13544,25 @@
     if (lianliankanHint && lianliankanHint.path) drawLianliankanPath(ctx, geom, lianliankanHint.path, { hint: true });
     state.board.cells.forEach((boardCell, index) => {
       if (!boardCell.playable || !boardCell.tile || !geom.cells[index]) return;
-      drawLianliankanTile(ctx, geom, index, boardCell.tile, state.selectedIndex === index);
+      drawLianliankanTile(ctx, geom, index, boardCell.tile, lianliankanTileDisplayStyle(state, index));
     });
     matchEffects.forEach((effect) => {
       effect.tiles.forEach((entry) => {
         if (geom.cells[entry.index]) drawLianliankanTile(ctx, geom, entry.index, entry.tile, false);
       });
     });
+  }
+
+  function lianliankanTileDisplayStyle(state, index) {
+    const selectedIndex = Number.isInteger(state && state.selectedIndex) ? state.selectedIndex : null;
+    if (selectedIndex === index) return 'selected';
+    const hover = activePlacementHover(state);
+    if (hover && hover.kind === 'lianliankan-tile' && hover.index === index) return 'hover';
+    if (!Number.isInteger(selectedIndex) || !state || !state.board || !Lianliankan) return 'default';
+    const selectedCell = state.board.cells[selectedIndex];
+    const cell = state.board.cells[index];
+    if (!selectedCell || !selectedCell.tile || !cell || !cell.tile || !lianliankanTilesMatch(selectedCell.tile, cell.tile)) return 'default';
+    return Lianliankan.findConnection(state.board, state.topology, selectedIndex, index) ? 'reachable' : 'compatible';
   }
 
   function drawLianliankanPath(ctx, geom, path, options = {}) {
@@ -12992,11 +13583,16 @@
     ctx.restore();
   }
 
-  function drawLianliankanTile(ctx, geom, index, tile, selected) {
+  function drawLianliankanTile(ctx, geom, index, tile, style = 'default') {
     const cell = geom.cells[index];
     const hexagonal = geom.lattice && geom.lattice.shape === 'hex';
     const size = geom.radius * (hexagonal ? 1.4 : 1.48);
+    const selected = style === 'selected';
+    const hovered = style === 'hover';
+    const compatible = style === 'compatible';
+    const reachable = style === 'reachable';
     ctx.save();
+    if (hovered) ctx.translate(0, -geom.radius * 0.045);
     if (hexagonal) {
       const points = tilePoints(cell.x, cell.y, geom.radius * 0.78, geom.lattice);
       ctx.beginPath();
@@ -13010,10 +13606,10 @@
       const top = cell.y - (size / 2);
       roundedRectPath(ctx, left, top, size, size, Math.max(3, geom.radius * 0.16));
     }
-    ctx.fillStyle = selected ? '#dff3ef' : '#fffdf8';
+    ctx.fillStyle = selected ? '#dff3ef' : (hovered ? '#f7eee2' : (reachable ? '#e5f6ef' : '#fffdf8'));
     ctx.fill();
-    ctx.lineWidth = selected ? Math.max(3, geom.radius * 0.1) : Math.max(1.5, geom.radius * 0.055);
-    ctx.strokeStyle = selected ? '#0f766e' : '#806f5e';
+    ctx.lineWidth = selected || reachable ? Math.max(3, geom.radius * 0.1) : (hovered ? Math.max(2.5, geom.radius * 0.08) : Math.max(1.5, geom.radius * 0.055));
+    ctx.strokeStyle = selected || reachable ? '#0f766e' : (compatible ? '#4f8f82' : (hovered ? '#a65d18' : '#806f5e'));
     ctx.stroke();
     const youngRows = youngDiagramRows(tile);
     if (youngRows) {
@@ -13275,7 +13871,8 @@
   function drawTile(ctx, geom, row, col, removed, explosionMode = false, displayStyle = 'center', options = {}) {
     const cell = geom.cells[indexOf(row, col, geom.cols)];
     const billiardsTable = !removed && !explosionMode && displayStyle === 'billiards-table';
-    const tileRadiusScale = billiardsTable ? 1.0015 : 0.96;
+    // Slight overlap removes anti-aliased seams, including where two cover copies meet.
+    const tileRadiusScale = wrappedViewIsActive() ? 1.0015 : (billiardsTable ? 1.0015 : 0.96);
     const points = tilePoints(cell.x, cell.y, geom.radius * tileRadiusScale, geom.lattice);
     ctx.beginPath();
     points.forEach((point, pointIndex) => {
@@ -14702,6 +15299,37 @@
     return placementReachAssistData && placementReachAssistState === state && placementReachInteractionAvailable(state)
       ? placementReachAssistData
       : null;
+  }
+
+  function drawPlacementHoverCue(ctx, geom, state) {
+    const hover = activePlacementHover(state);
+    if (!hover) return;
+    const point = placementPiecePoint(geom, hover.index);
+    if (!point) return;
+    if (hover.kind === 'ghost') {
+      drawPlacementPieceAtPoint(ctx, geom, point, {
+        id: `preview-${hover.index}`,
+        index: hover.index,
+        color: hover.color
+      }, { alpha: selectedPlacementPreviewOpacity() });
+      return;
+    }
+    if (hover.kind !== 'connect-four-drop') return;
+    const colors = placementPieceColors(hover.color);
+    const radius = placementPieceBaseRadius(geom);
+    ctx.save();
+    ctx.strokeStyle = colors.stroke;
+    ctx.fillStyle = colors.fallback;
+    ctx.globalAlpha *= 0.22;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius * 1.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha *= 3.2;
+    ctx.lineWidth = Math.max(1.6, geom.radius * 0.065);
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius * 0.9, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawPlacementReachAssistUnderlay(ctx, geom, state) {
@@ -21586,16 +22214,22 @@
     }
     if (isGomokuGame(state)) {
       const stone = gomokuStoneAt(state, index);
-      return stone ? placementReachRayAssist(state, index, stone.color, GOMOKU_WIN_LENGTH - 1, gomokuStoneAt) : null;
+      if (stone) return placementReachRayAssist(state, index, stone.color, GOMOKU_WIN_LENGTH - 1, gomokuStoneAt);
+      const ghostMove = placementGhostMove(state, index);
+      return ghostMove.changed
+        ? placementReachRayAssist(state, index, ghostMove.stone.color, GOMOKU_WIN_LENGTH - 1, gomokuStoneAt)
+        : null;
     }
     if (isGoGame(state)) {
       const stone = goStoneAt(state, index);
-      if (!stone) return null;
-      const group = goGroupAt(state, index);
+      const preview = stone ? null : placementGhostMove(state, index);
+      if (!stone && (!preview || !preview.changed)) return null;
+      const groupState = stone ? state : preview.state;
+      const group = goGroupAt(groupState, index);
       return {
         kind: 'go-group',
         origin: index,
-        color: stone.color,
+        color: stone ? stone.color : preview.stone.color,
         groupIndices: group.stones.map((member) => member.index).sort((a, b) => a - b),
         libertyIndices: Array.from(group.liberties).sort((a, b) => a - b)
       };
@@ -27919,7 +28553,8 @@
   }
 
   function initialRemovedSet(preset) {
-    return new Set(preset.removedTiles.map((tile) => indexOf(tile.row, tile.col, preset.cols)));
+    const removedTiles = preset && Array.isArray(preset.removedTiles) ? preset.removedTiles : [];
+    return new Set(removedTiles.map((tile) => indexOf(tile.row, tile.col, preset.cols)));
   }
 
   function previewInfo(preset) {
@@ -28221,6 +28856,8 @@
   }
 
   function syncControls() {
+    if (placementHover && (!placementHoverInteractionAvailable() || placementHover.state !== game)) clearPlacementHover(false);
+    syncCanvasCursor();
     syncLianliankanPronunciationContext();
     const catalogAvailable = presetCatalogReady && PRESETS.length > 0;
     const mode2048 = catalogAvailable && is2048Game(game) && selectedGameMode() === GAME_MODES.NUMBER_2048;
@@ -28308,6 +28945,7 @@
     }
     syncBoundaryGlueBoardControls();
     if (refs.boundaryGlueModeRow) refs.boundaryGlueModeRow.hidden = !boundaryGlueBoard;
+    syncWrappedViewUi();
     if (refs.boundaryGlueShapeRow) refs.boundaryGlueShapeRow.hidden = !boundaryGlueBoard;
     if (refs.boundaryGlueRectRow) refs.boundaryGlueRectRow.hidden = !boundaryGlueBoard || !boundaryRectangle;
     if (refs.gomokuSizeRow) refs.gomokuSizeRow.hidden = !selectedPresetUsesDynamicBoardSize() || boundaryRectangle;
@@ -28436,6 +29074,22 @@
   function selectedHexNeighborHintDelay() {
     const value = refs.hexNeighborDelay ? Number(refs.hexNeighborDelay.value) : HEX_NEIGHBOR_HINT_DELAY_DEFAULT;
     return clampNumber(value, 0.1, 0.8, HEX_NEIGHBOR_HINT_DELAY_DEFAULT);
+  }
+
+  function selectedPlacementPreviewOpacity() {
+    const value = refs.placementPreviewOpacity ? Number(refs.placementPreviewOpacity.value) : PLACEMENT_PREVIEW_OPACITY_DEFAULT;
+    return clampInteger(
+      value,
+      PLACEMENT_PREVIEW_OPACITY_MIN,
+      PLACEMENT_PREVIEW_OPACITY_MAX,
+      PLACEMENT_PREVIEW_OPACITY_DEFAULT
+    ) / 100;
+  }
+
+  function syncPlacementPreviewOpacityOutput() {
+    const percent = Math.round(selectedPlacementPreviewOpacity() * 100);
+    if (refs.placementPreviewOpacity) refs.placementPreviewOpacity.value = String(percent);
+    if (refs.placementPreviewOpacityValue) refs.placementPreviewOpacityValue.textContent = `${percent}%`;
   }
 
   function selectedHexNeighborHintSize() {
@@ -28653,6 +29307,9 @@
     refs.chineseCheckersPlayerOptions.textContent = '';
     if (!modeChineseCheckers || !presetCatalogReady || !PRESETS.length) return;
     const preset = game && isChineseCheckersGame(game) ? game.preset : selectedPreset();
+    // A mode switch calls syncControls before a lazy preset is loaded. Its
+    // registry shell intentionally has no board geometry or removed tiles.
+    if (!preset || preset.__lazyPreset) return;
     const available = chineseCheckersAvailablePlayerColors(preset);
     const selected = isChineseCheckersGame(game)
       ? chineseCheckersPlayerColors(game)
@@ -29553,11 +30210,24 @@
       billiardsCueCaptionLayout,
       billiardsCueGuidanceFlags,
       canvasStartPromptCopy,
+      lianliankanTilesMatch,
+      placementHoverPreview,
+      selectedPlacementPreviewOpacity,
+      placementPreviewOpacityRange: {
+        min: PLACEMENT_PREVIEW_OPACITY_MIN,
+        max: PLACEMENT_PREVIEW_OPACITY_MAX,
+        default: PLACEMENT_PREVIEW_OPACITY_DEFAULT
+      },
       fullscreenSettingsStorageKey: FULLSCREEN_SETTINGS_STORAGE_KEY,
       fullscreenSettingsDefaults: { ...FULLSCREEN_SETTINGS_DEFAULTS },
+      wrappedViewStorageKey: WRAPPED_VIEW_STORAGE_KEY,
+      wrappedViewDefaultScale: WRAPPED_VIEW_DEFAULT_SCALE,
       normalizeFullscreenPreferences,
       readFullscreenPreferences,
       persistFullscreenPreferences,
+      normalizeWrappedViewPreferences,
+      readWrappedViewPreferences,
+      wrappedFundamentalCoordinates,
       setFullscreenPreferences(value) {
         fullscreenPreferences = normalizeFullscreenPreferences(value);
         syncLianliankanPronunciationContext();
