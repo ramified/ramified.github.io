@@ -99,6 +99,26 @@ function testBilliardsCueGuidanceAndQuickRules() {
   assert.ok(!nativeSource.includes('view.cueHintLabel'));
 }
 
+function testBilliardsDisplaySpaceShotDrag() {
+  const direct = game.__test.billiardsShotDragFromDisplayPoints({ x: 12, y: 10 }, { x: 2, y: 10 });
+  assert.strictEqual(direct.distance, 10);
+  assert.deepStrictEqual(direct.aim, { x: 1, y: 0 });
+
+  const reflected = game.__test.billiardsShotDragFromDisplayPoints(
+    { x: 12, y: 10 },
+    { x: 2, y: 4 },
+    { x: 'reflect-y' },
+    1
+  );
+  assert.ok(Math.abs(reflected.distance - Math.sqrt(136)) < 1e-12);
+  assert.ok(Math.abs(reflected.aim.x - (10 / Math.sqrt(136))) < 1e-12);
+  assert.ok(Math.abs(reflected.aim.y + (6 / Math.sqrt(136))) < 1e-12);
+
+  const shortDrag = game.__test.billiardsShotDragFromDisplayPoints({ x: 10, y: 10 }, { x: 9, y: 10 });
+  assert.strictEqual(shortDrag.distance, 1);
+  assert.strictEqual(shortDrag.aim, null);
+}
+
 function testQuickRulesFadeAndHexSameTileHoverPersistence() {
   const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
   assert.ok(html.includes('animation: canvas-start-sheet-fade-in 300ms ease-out both'));
@@ -3614,6 +3634,7 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('id="sokoban-beam-opacity" min="5" max="80" step="5" value="34"'));
   assert.ok(minigameHtml.includes('id="gomoku-board-size"'));
   assert.ok(minigameHtml.includes('id="display-card-body"'));
+  assert.ok(minigameHtml.includes('id="boundary-glue-wrapped-view-row"'));
   assert.ok(minigameHtml.includes('id="gomoku-display-row"'));
   assert.ok(!minigameHtml.includes('id="gomoku-display-row" data-mode-control="gomoku"'));
   assert.ok(minigameHtml.includes('id="gomoku-display-style"'));
@@ -4442,6 +4463,8 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('apply-import-preset'),
     makeElement('boundary-glue-mode-row', { hidden: true }),
     makeElement('boundary-glue-mode', { value: 'torus' }),
+    makeElement('boundary-glue-wrapped-view-row', { hidden: true }),
+    makeElement('boundary-glue-wrapped-view-mode', { value: 'usual' }),
     makeElement('boundary-glue-shape-row', { hidden: true }),
     makeElement('boundary-glue-shape', { value: 'square' }),
     makeElement('boundary-glue-rect-row', { hidden: true }),
@@ -5249,6 +5272,7 @@ function testUniversalBoardDisplayAndCoordinates() {
   const { elements, calls } = createHeadlessDomHarness();
   assert.strictEqual(elements.get('gomoku-display-row').hidden, false);
   assert.ok(elements.get('display-card-body').children.includes(elements.get('gomoku-display-row')));
+  assert.ok(elements.get('display-card-body').children.includes(elements.get('boundary-glue-wrapped-view-row')));
   assert.strictEqual(elements.get('show-board-coordinates').checked, false);
   importHeadlessStatus(elements, {
     gameMode: 'go',
@@ -7784,6 +7808,10 @@ function testFullscreenSettingsPreferencesAndMarkup() {
   assert.ok(html.includes('id="fullscreen-show-game-tools"'));
   assert.ok(html.includes('id="fullscreen-settings-exit"'));
   assert.ok(html.includes('data-i18n="fullscreen.soundEffects"'));
+  assert.ok(html.includes('data-i18n="setup.boardView"'));
+  assert.ok(html.includes('data-i18n="setup.tileStyle"'));
+  assert.ok(html.includes('data-i18n-aria-label="access.boardView"'));
+  assert.ok(html.includes('data-i18n-aria-label="access.tileStyle"'));
   assert.ok(html.includes('data-i18n="wrapped.wrapped"'));
   assert.ok(setupSource.includes('if (fullscreenSettingsOpen) {'));
   assert.ok(setupSource.includes("if (key === 'Escape')"));
@@ -7935,6 +7963,7 @@ async function run() {
   testRuntimeChineseLocaleCatalog();
   testBilliardsPaletteRepaintsAfterLazyLoad();
   testBilliardsCueGuidanceAndQuickRules();
+  testBilliardsDisplaySpaceShotDrag();
   testQuickRulesFadeAndHexSameTileHoverPersistence();
   testBilliardsQuickRulesAvailability();
   testBilliardsReplayRestoresRoundSetup();

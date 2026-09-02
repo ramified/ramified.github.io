@@ -1226,6 +1226,7 @@
   function moveVisualControlsToDisplayCard() {
     if (!refs.displayCardBody || typeof document === 'undefined') return;
     [
+      'boundary-glue-wrapped-view-row',
       'gomoku-display-row',
       'move-number-label-row',
       'placement-piece-size-row',
@@ -5712,6 +5713,23 @@
     return Billiards.canvasToLocal(canvasPointFromEvent(event), geometry, game.atlas);
   }
 
+  function billiardsShotDragFromDisplayPoints(cuePoint, cursorPoint, profile = null, copyU = 0) {
+    if (!cuePoint || !cursorPoint) return null;
+    const pull = {
+      x: cuePoint.x - cursorPoint.x,
+      y: cuePoint.y - cursorPoint.y
+    };
+    const distance = Math.hypot(pull.x, pull.y);
+    if (!Number.isFinite(distance)) return null;
+    const localPull = wrappedCopyIsReflected(profile, copyU)
+      ? { x: pull.x, y: -pull.y }
+      : pull;
+    return {
+      distance,
+      aim: distance > 2 ? { x: localPull.x / distance, y: localPull.y / distance } : null
+    };
+  }
+
   function billiardsSetupHoverLabel(preview, selection) {
     if (!preview) return '';
     if (!preview.valid) return tk('runtime.billiardsHoverBlocked', 'cannot: {{reason}}', { reason: localizedBilliardsIssue(preview.message) });
@@ -6160,12 +6178,16 @@
       return false;
     }
     const cueCanvas = Billiards.localToCanvas(hit.image.tileIndex, hit.image.position, geometry, game.atlas);
-    const point = canvasPointFromEvent(event);
+    const point = canvasDisplayPointFromEvent(event);
+    const wrappedDetails = wrappedDisplayPointDetails(point);
+    const cueDisplay = wrappedFundamentalPointToDisplayPoint(cueCanvas, wrappedDetails);
     billiardsPointer = {
       kind: 'shot',
       pointerId: event.pointerId,
-      cueCanvas,
-      currentCanvas: point
+      cueDisplay,
+      currentDisplay: point,
+      wrappedProfile: wrappedDetails && wrappedDetails.profile,
+      wrappedCopyU: wrappedDetails && wrappedDetails.copyU
     };
     billiardsDragPower = 0;
     captureBilliardsPointer(event.pointerId);
@@ -6195,19 +6217,22 @@
         render();
       }
     } else if (billiardsPointer.kind === 'shot') {
-      const point = canvasPointFromEvent(event);
-      if (point && billiardsPointer.cueCanvas) {
-        billiardsPointer.currentCanvas = point;
-        const pull = {
-          x: billiardsPointer.cueCanvas.x - point.x,
-          y: billiardsPointer.cueCanvas.y - point.y
-        };
-        const distance = Math.hypot(pull.x, pull.y);
-        if (distance > 2) billiardsAim = { x: pull.x / distance, y: pull.y / distance };
-        const scale = game.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
-        billiardsDragPower = clampNumber(distance / Math.max(1, scale * 2.2), 0, 1, 0);
-        syncBilliardsPower();
-        render();
+      const point = canvasDisplayPointFromEvent(event);
+      if (point && billiardsPointer.cueDisplay) {
+        billiardsPointer.currentDisplay = point;
+        const drag = billiardsShotDragFromDisplayPoints(
+          billiardsPointer.cueDisplay,
+          point,
+          billiardsPointer.wrappedProfile,
+          billiardsPointer.wrappedCopyU
+        );
+        if (drag) {
+          if (drag.aim) billiardsAim = drag.aim;
+          const scale = game.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
+          billiardsDragPower = clampNumber(drag.distance / Math.max(1, scale * 2.2), 0, 1, 0);
+          syncBilliardsPower();
+          render();
+        }
       }
     }
     if (event.preventDefault) event.preventDefault();
@@ -10102,17 +10127,21 @@
     return null;
   }
 
-  function canvasPointFromEvent(event) {
+  function canvasDisplayPointFromEvent(event) {
     if (!refs.canvas || !geometry || !geometry.cells || !geometry.cells.length) return null;
     const rect = refs.canvas.getBoundingClientRect ? refs.canvas.getBoundingClientRect() : null;
     const width = rect && rect.width ? rect.width : geometry.width;
     const height = rect && rect.height ? rect.height : geometry.height;
     const left = rect ? rect.left : 0;
     const top = rect ? rect.top : 0;
-    const displayPoint = {
+    return {
       x: ((event.clientX || 0) - left) * (geometry.width / Math.max(1, width)),
       y: ((event.clientY || 0) - top) * (geometry.height / Math.max(1, height))
     };
+  }
+
+  function canvasPointFromEvent(event) {
+    const displayPoint = canvasDisplayPointFromEvent(event);
     return displayPointToGeometryPoint(wrappedDisplayPointToFundamentalPoint(displayPoint), geometry);
   }
 
@@ -13531,8 +13560,11 @@
     ctx.restore();
   }
 
-  function wrappedDisplayPointToFundamentalPoint(displayPoint) {
-    if (!displayPoint || !geometry || !wrappedViewIsActive()) return displayPoint;
+  function wrappedDisplayPointDetails(displayPoint) {
+    if (!displayPoint || !geometry) return null;
+    if (!wrappedViewIsActive()) {
+      return { x: displayPoint.x, y: displayPoint.y, copyU: 0, copyV: 0, profile: null };
+    }
     const profile = wrappedViewProfile();
     const camera = wrappedViewCamera(profile);
     const width = geometry.width;
@@ -13541,7 +13573,37 @@
     const centerY = height / 2;
     const worldX = centerX + ((displayPoint.x - centerX - camera.x) / camera.scale);
     const worldY = centerY + ((displayPoint.y - centerY - camera.y) / camera.scale);
-    return wrappedFundamentalCoordinates(worldX, worldY, width, height, profile);
+    const fundamental = wrappedFundamentalCoordinates(worldX, worldY, width, height, profile);
+    return fundamental ? { ...fundamental, profile } : null;
+  }
+
+  function wrappedDisplayPointToFundamentalPoint(displayPoint) {
+    const details = wrappedDisplayPointDetails(displayPoint);
+    return details ? { x: details.x, y: details.y } : null;
+  }
+
+  function wrappedCopyIsReflected(profile, copyU) {
+    return !!(profile && profile.x === 'reflect-y' && Math.abs(Number(copyU) % 2) === 1);
+  }
+
+  function wrappedFundamentalPointToDisplayPoint(point, details = null) {
+    if (!point || !geometry || !wrappedViewIsActive()) return point;
+    const profile = details && details.profile ? details.profile : wrappedViewProfile();
+    const camera = wrappedViewCamera(profile);
+    const width = geometry.width;
+    const height = geometry.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const copyU = Number.isInteger(details && details.copyU) ? details.copyU : 0;
+    const copyV = Number.isInteger(details && details.copyV) ? details.copyV : 0;
+    const reflected = wrappedCopyIsReflected(profile, copyU);
+    const worldX = copyU * width + point.x;
+    const worldY = copyV * height + (reflected ? height - point.y : point.y);
+    const scale = Math.max(WRAPPED_VIEW_MIN_SCALE, Math.min(WRAPPED_VIEW_MAX_SCALE, camera.scale));
+    return {
+      x: centerX + camera.x + (scale * (worldX - centerX)),
+      y: centerY + camera.y + (scale * (worldY - centerY))
+    };
   }
 
   function wrappedFundamentalCoordinates(worldX, worldY, width, height, profileOrMode) {
@@ -30331,6 +30393,7 @@
       rebuildHexRuntime,
       billiardsCueCaptionLayout,
       billiardsCueGuidanceFlags,
+      billiardsShotDragFromDisplayPoints,
       canvasStartPromptCopy,
       lianliankanTilesMatch,
       placementHoverPreview,
