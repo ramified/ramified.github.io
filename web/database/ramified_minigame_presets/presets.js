@@ -53,6 +53,7 @@
       "id": "between-two-fires",
       "label": "between two fires",
       "key": "between_two_fires",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
       "file": "between_two_fires.preset.js"
     },
     {
@@ -71,6 +72,7 @@
       "id": "n-queens-torus-puzzle",
       "label": "N queens puzzle on torus",
       "key": "n_queens_torus_puzzle",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
       "file": "n_queens_torus_puzzle.preset.js"
     },
     {
@@ -171,6 +173,7 @@
       "id": "usual-strip",
       "label": "usual strip",
       "key": "usual_strip",
+      "wrappedView": { "x": "repeat" },
       "file": "usual_strip.preset.js"
     },
     {
@@ -180,6 +183,7 @@
       "id": "mobius-strip",
       "label": "M\u00f6bius strip",
       "key": "mobius_strip",
+      "wrappedView": { "x": "reflect-y" },
       "file": "mobius_strip.preset.js"
     },
     {
@@ -371,6 +375,7 @@
       "id": "connect-four-hex-good-mobius-strip",
       "label": "hex good M\u00f6bius strip",
       "key": "connect_four_hex_good_mobius_strip",
+      "wrappedView": { "x": "reflect-y" },
       "file": "connect_four_hex_good_mobius_strip.preset.js"
     },
     {"gameTypes":["Connect Four"],"id":"r","label":"R","key":"r","file":"r.preset.js"},
@@ -391,6 +396,7 @@
       "id": "three-slits",
       "label": "three_slits",
       "key": "three_slits",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
       "file": "three_slits.preset.js"
     },
     {

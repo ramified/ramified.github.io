@@ -3310,6 +3310,25 @@ function testExtraBackgroundPresets() {
 
   assertPresetRegistryDefaults();
 
+  const wrappedProfiles = {
+    'between-two-fires': { x: 'repeat', y: 'repeat', preferenceKey: 'torus' },
+    'n-queens-torus-puzzle': { x: 'repeat', y: 'repeat', preferenceKey: 'torus' },
+    'three-slits': { x: 'repeat', y: 'repeat', preferenceKey: 'torus' },
+    'usual-strip': { x: 'repeat', y: '', preferenceKey: 'cylinder' },
+    'mobius-strip': { x: 'reflect-y', y: '', preferenceKey: 'mobius-strip' },
+    'connect-four-hex-good-mobius-strip': { x: 'reflect-y', y: '', preferenceKey: 'mobius-strip' }
+  };
+  Object.entries(wrappedProfiles).forEach(([id, expected]) => {
+    assert.deepStrictEqual(game.PRESETS.find((preset) => preset.id === id).wrappedView, expected);
+    const sourceProfile = presetRegistry.find((preset) => preset.id === id).wrappedView;
+    assert.strictEqual(sourceProfile.x, expected.x);
+    assert.strictEqual(sourceProfile.y || '', expected.y);
+  });
+  assert.strictEqual(game.PRESETS.find((preset) => preset.id === 'n-queens-puzzle').wrappedView, undefined);
+  const toroidalNQueens = game.createFideChessState('n-queens-torus-puzzle');
+  assert.deepStrictEqual(toroidalNQueens.preset.wrappedView, wrappedProfiles['n-queens-torus-puzzle']);
+  assert.strictEqual(toroidalNQueens.preset.gluedEdges.length, 10);
+
   const exchangePreset = game.createConnectFourState('connect-four-exchange').preset;
   assert.strictEqual(exchangePreset.cutEdges.length, 4);
   assert.strictEqual(exchangePreset.gluedEdges.length, 4);
@@ -7671,10 +7690,18 @@ function testFullscreenSettingsPreferencesAndMarkup() {
     showGameTools: true
   });
 
-  const wrappedDefaults = { torus: 'usual', 'klein-bottle': 'usual' };
+  const wrappedDefaults = {
+    torus: 'usual',
+    'klein-bottle': 'usual',
+    cylinder: 'usual',
+    'mobius-strip': 'usual'
+  };
   assert.deepStrictEqual(game.__test.normalizeWrappedViewPreferences(null), wrappedDefaults);
   assert.deepStrictEqual(game.__test.normalizeWrappedViewPreferences({ torus: 'wrapped', 'klein-bottle': 'wrapped' }), {
-    torus: 'wrapped', 'klein-bottle': 'wrapped'
+    torus: 'wrapped',
+    'klein-bottle': 'wrapped',
+    cylinder: 'usual',
+    'mobius-strip': 'usual'
   });
   assert.deepStrictEqual(game.__test.normalizeWrappedViewPreferences({ torus: 'invalid', 'klein-bottle': 'usual' }), wrappedDefaults);
   assert.deepStrictEqual(game.__test.readWrappedViewPreferences({
@@ -7682,13 +7709,27 @@ function testFullscreenSettingsPreferencesAndMarkup() {
       assert.strictEqual(key, game.__test.wrappedViewStorageKey);
       return JSON.stringify({ torus: 'wrapped', 'klein-bottle': 'usual' });
     }
-  }), { torus: 'wrapped', 'klein-bottle': 'usual' });
+  }), { torus: 'wrapped', 'klein-bottle': 'usual', cylinder: 'usual', 'mobius-strip': 'usual' });
   assert.deepStrictEqual(game.__test.readWrappedViewPreferences({ getItem() { return '{broken json'; } }), wrappedDefaults);
+  assert.deepStrictEqual(game.__test.normalizeWrappedViewProfile({ x: 'repeat', y: 'repeat' }), {
+    x: 'repeat', y: 'repeat', preferenceKey: 'torus'
+  });
+  assert.deepStrictEqual(game.__test.normalizeWrappedViewProfile({ x: 'reflect-y' }), {
+    x: 'reflect-y', y: '', preferenceKey: 'mobius-strip'
+  });
+  assert.strictEqual(game.__test.normalizeWrappedViewProfile({ x: 'invalid' }), null);
   assert.deepStrictEqual(game.__test.wrappedFundamentalCoordinates(27, 14, 10, 8, game.BOUNDARY_GLUE_MODES.TORUS), {
     x: 7, y: 6, copyU: 2, copyV: 1
   });
   assert.deepStrictEqual(game.__test.wrappedFundamentalCoordinates(17, 14, 10, 8, game.BOUNDARY_GLUE_MODES.KLEIN_BOTTLE), {
     x: 7, y: 2, copyU: 1, copyV: 1
+  });
+  assert.deepStrictEqual(game.__test.wrappedFundamentalCoordinates(27, 6, 10, 8, { x: 'repeat' }), {
+    x: 7, y: 6, copyU: 2, copyV: 0
+  });
+  assert.strictEqual(game.__test.wrappedFundamentalCoordinates(27, 14, 10, 8, { x: 'repeat' }), null);
+  assert.deepStrictEqual(game.__test.wrappedFundamentalCoordinates(17, 6, 10, 8, { x: 'reflect-y' }), {
+    x: 7, y: 2, copyU: 1, copyV: 0
   });
   assert.deepStrictEqual(game.__test.normalizeFullscreenPreferences({
     soundEnabled: 'yes',

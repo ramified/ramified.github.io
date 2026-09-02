@@ -723,7 +723,12 @@
   let fullscreenSettingsOpen = false;
   let fullscreenSettingsReturnFocus = null;
   let fullscreenSettingsPanel = 'controls';
-  let wrappedViewPreferences = { torus: 'usual', 'klein-bottle': 'usual' };
+  let wrappedViewPreferences = {
+    torus: 'usual',
+    'klein-bottle': 'usual',
+    cylinder: 'usual',
+    'mobius-strip': 'usual'
+  };
   const wrappedViewCameras = new Map();
   let wrappedPanGesture = null;
   const wrappedTouchPointers = new Map();
@@ -3760,6 +3765,7 @@
       id: entry.id,
       label: entry.label,
       gameTypes: entry.gameTypes.slice(),
+      ...(entry.wrappedView ? { wrappedView: { ...entry.wrappedView } } : {}),
       __lazyPreset: true
     };
   }
@@ -3929,6 +3935,7 @@
           file,
           label,
           gameTypes: cleanPresetGameTypes(entry.gameTypes, entry.groups, entry.group),
+          wrappedView: normalizeWrappedViewProfile(entry.wrappedView),
           data: entry.data && typeof entry.data === 'object' && !Array.isArray(entry.data) ? entry.data : null,
           json: cleanPresetString(entry.json || '')
         };
@@ -8081,7 +8088,9 @@
     const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
     return {
       torus: source.torus === 'wrapped' ? 'wrapped' : 'usual',
-      'klein-bottle': source['klein-bottle'] === 'wrapped' ? 'wrapped' : 'usual'
+      'klein-bottle': source['klein-bottle'] === 'wrapped' ? 'wrapped' : 'usual',
+      cylinder: source.cylinder === 'wrapped' ? 'wrapped' : 'usual',
+      'mobius-strip': source['mobius-strip'] === 'wrapped' ? 'wrapped' : 'usual'
     };
   }
 
@@ -8111,23 +8120,51 @@
     return mode === BOUNDARY_GLUE_MODES.TORUS || mode === BOUNDARY_GLUE_MODES.KLEIN_BOTTLE ? mode : '';
   }
 
-  function wrappedViewIsActive() {
-    const mode = wrappedBoundaryMode();
-    return !!mode && wrappedViewPreferences[mode] === 'wrapped';
+  function normalizeWrappedViewProfile(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const x = source.x === 'repeat' || source.x === 'reflect-y' ? source.x : '';
+    const y = source.y === 'repeat' ? 'repeat' : '';
+    if (!x && !y) return null;
+    const preferenceKey = x === 'reflect-y'
+      ? (y ? 'klein-bottle' : 'mobius-strip')
+      : (x && y ? 'torus' : 'cylinder');
+    return { x, y, preferenceKey };
   }
 
-  function wrappedViewCamera(mode = wrappedBoundaryMode()) {
-    if (!mode) return { scale: 1, x: 0, y: 0 };
-    if (!wrappedViewCameras.has(mode)) {
-      wrappedViewCameras.set(mode, { scale: WRAPPED_VIEW_DEFAULT_SCALE, x: 0, y: 0 });
+  function wrappedViewProfileForBoundaryMode(mode) {
+    if (mode === BOUNDARY_GLUE_MODES.TORUS) return { x: 'repeat', y: 'repeat', preferenceKey: 'torus' };
+    if (mode === BOUNDARY_GLUE_MODES.KLEIN_BOTTLE) return { x: 'reflect-y', y: 'repeat', preferenceKey: 'klein-bottle' };
+    return null;
+  }
+
+  function wrappedViewProfile(preset = selectedPreset()) {
+    const explicit = normalizeWrappedViewProfile(preset && preset.wrappedView);
+    if (explicit) return explicit;
+    const selected = selectedPreset();
+    const mode = preset === selected
+      ? wrappedBoundaryMode()
+      : (preset && isBoundaryGlueBoardPreset(preset) ? normalizeBoundaryGlueMode(preset.boundaryGlueMode) : '');
+    return wrappedViewProfileForBoundaryMode(mode);
+  }
+
+  function wrappedViewIsActive(preset = selectedPreset()) {
+    const profile = wrappedViewProfile(preset);
+    return !!profile && wrappedViewPreferences[profile.preferenceKey] === 'wrapped';
+  }
+
+  function wrappedViewCamera(profile = wrappedViewProfile()) {
+    const preferenceKey = profile && profile.preferenceKey;
+    if (!preferenceKey) return { scale: 1, x: 0, y: 0 };
+    if (!wrappedViewCameras.has(preferenceKey)) {
+      wrappedViewCameras.set(preferenceKey, { scale: WRAPPED_VIEW_DEFAULT_SCALE, x: 0, y: 0 });
     }
-    return wrappedViewCameras.get(mode);
+    return wrappedViewCameras.get(preferenceKey);
   }
 
   function syncWrappedViewUi() {
-    const mode = wrappedBoundaryMode();
-    const available = !!mode;
-    const value = available ? wrappedViewPreferences[mode] : 'usual';
+    const profile = wrappedViewProfile();
+    const available = !!profile;
+    const value = available ? wrappedViewPreferences[profile.preferenceKey] : 'usual';
     if (refs.boundaryGlueWrappedViewRow) refs.boundaryGlueWrappedViewRow.hidden = !available;
     if (refs.fullscreenWrappedViewRow) refs.fullscreenWrappedViewRow.hidden = !available;
     [refs.boundaryGlueWrappedViewMode, refs.fullscreenWrappedViewMode].forEach((control) => {
@@ -8142,10 +8179,10 @@
   }
 
   function handleWrappedViewModeChange(event) {
-    const mode = wrappedBoundaryMode();
-    if (!mode) return;
+    const profile = wrappedViewProfile();
+    if (!profile) return;
     const next = event && event.target && event.target.value === 'wrapped' ? 'wrapped' : 'usual';
-    wrappedViewPreferences = { ...wrappedViewPreferences, [mode]: next };
+    wrappedViewPreferences = { ...wrappedViewPreferences, [profile.preferenceKey]: next };
     persistWrappedViewPreferences();
     syncWrappedViewUi();
     render();
@@ -13296,7 +13333,7 @@
       hoveredGlue = null;
       syncCanvasCursor();
     }
-    const wrappedCover = wrappedViewIsActive();
+    const wrappedCover = wrappedViewIsActive(preset);
     const removed = game ? game.removed : initialRemovedSet(preset);
     const deviceDpr = Math.max((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1, 1);
     // Covers start zoomed out, so render them with a supersampled backing store from
@@ -13316,7 +13353,7 @@
     applyFideChessPuzzleTrayGeometry(geometry, game);
     // The cover copies use the board's native horizontal and vertical deck transformations.
     // A presentation-only Connect Four rotation would otherwise rotate those transformations too.
-    applyDisplayRotationToGeometry(geometry, wrappedViewIsActive() ? 0 : connectFourDisplayRotationAngle());
+    applyDisplayRotationToGeometry(geometry, wrappedCover ? 0 : connectFourDisplayRotationAngle());
     const logicalWidth = geometry.width;
     const logicalHeight = geometry.height;
     refs.canvas.width = Math.max(1, Math.ceil(logicalWidth * dpr));
@@ -13414,12 +13451,16 @@
     ctx.restore();
     }
 
-    if (wrappedViewIsActive()) {
+    if (wrappedCover) {
       drawWrappedUniversalCover(ctx, logicalWidth, logicalHeight, drawFundamentalBoard);
+      if (is2048Game(game)) {
+        drawWrappedUniversalCover(ctx, logicalWidth, logicalHeight, drawFundamentalBombTopLayer);
+        drawWrappedUniversalCover(ctx, logicalWidth, logicalHeight, drawWrappedBombFeedbackLayer);
+      }
     } else {
       drawFundamentalBoard();
     }
-    drawCanvasFeedbackOverlays(ctx, geometry);
+    drawCanvasFeedbackOverlays(ctx, geometry, { skipBombDetonations: wrappedCover });
     if (billiardsGuidance && billiardsGuidance.caption) {
       drawBilliardsCueCaption(
         ctx,
@@ -13431,15 +13472,30 @@
     syncStats();
     requestFullscreenActionPlacement();
     syncBilliardsCueGuidanceAnimation();
+
+    function drawFundamentalBombTopLayer() {
+      ctx.save();
+      applyGeometryDisplayTransform(ctx, geometry);
+      drawBombs(ctx, geometry, game ? game.bombs : []);
+      drawWrappedBombGlueSeams(ctx, geometry, game ? game.bombs : []);
+      ctx.restore();
+    }
+
+    function drawWrappedBombFeedbackLayer() {
+      ctx.save();
+      applyGeometryDisplayTransform(ctx, geometry);
+      drawWrappedBombFeedbackOverlays(ctx, geometry);
+      ctx.restore();
+    }
   }
 
   function drawWrappedUniversalCover(ctx, width, height, drawFundamentalBoard) {
-    const mode = wrappedBoundaryMode();
-    if (!mode || !geometry) {
+    const profile = wrappedViewProfile(game && game.preset ? game.preset : selectedPreset());
+    if (!profile || !geometry) {
       drawFundamentalBoard();
       return;
     }
-    const camera = wrappedViewCamera(mode);
+    const camera = wrappedViewCamera(profile);
     const scale = Math.max(WRAPPED_VIEW_MIN_SCALE, Math.min(WRAPPED_VIEW_MAX_SCALE, camera.scale));
     const centerX = width / 2;
     const centerY = height / 2;
@@ -13451,10 +13507,10 @@
     };
     const copyWidth = geometry.width;
     const copyHeight = geometry.height;
-    const minU = Math.floor(worldBounds.minX / copyWidth) - 1;
-    const maxU = Math.floor(worldBounds.maxX / copyWidth) + 1;
-    const minV = Math.floor(worldBounds.minY / copyHeight) - 1;
-    const maxV = Math.floor(worldBounds.maxY / copyHeight) + 1;
+    const minU = profile.x ? Math.floor(worldBounds.minX / copyWidth) - 1 : 0;
+    const maxU = profile.x ? Math.floor(worldBounds.maxX / copyWidth) + 1 : 0;
+    const minV = profile.y ? Math.floor(worldBounds.minY / copyHeight) - 1 : 0;
+    const maxV = profile.y ? Math.floor(worldBounds.maxY / copyHeight) + 1 : 0;
 
     ctx.save();
     ctx.translate(centerX + camera.x, centerY + camera.y);
@@ -13464,7 +13520,7 @@
       for (let v = minV; v <= maxV; v += 1) {
         ctx.save();
         ctx.translate(u * copyWidth, v * copyHeight);
-        if (mode === BOUNDARY_GLUE_MODES.KLEIN_BOTTLE && Math.abs(u % 2) === 1) {
+        if (profile.x === 'reflect-y' && Math.abs(u % 2) === 1) {
           ctx.translate(0, copyHeight);
           ctx.scale(1, -1);
         }
@@ -13477,25 +13533,30 @@
 
   function wrappedDisplayPointToFundamentalPoint(displayPoint) {
     if (!displayPoint || !geometry || !wrappedViewIsActive()) return displayPoint;
-    const mode = wrappedBoundaryMode();
-    const camera = wrappedViewCamera(mode);
+    const profile = wrappedViewProfile();
+    const camera = wrappedViewCamera(profile);
     const width = geometry.width;
     const height = geometry.height;
     const centerX = width / 2;
     const centerY = height / 2;
     const worldX = centerX + ((displayPoint.x - centerX - camera.x) / camera.scale);
     const worldY = centerY + ((displayPoint.y - centerY - camera.y) / camera.scale);
-    return wrappedFundamentalCoordinates(worldX, worldY, width, height, mode);
+    return wrappedFundamentalCoordinates(worldX, worldY, width, height, profile);
   }
 
-  function wrappedFundamentalCoordinates(worldX, worldY, width, height, mode) {
-    const copyU = Math.floor(worldX / width);
-    const copyV = Math.floor(worldY / height);
-    const localX = modulo(worldX, width);
-    const localY = modulo(worldY, height);
+  function wrappedFundamentalCoordinates(worldX, worldY, width, height, profileOrMode) {
+    const profile = typeof profileOrMode === 'string'
+      ? wrappedViewProfileForBoundaryMode(profileOrMode)
+      : normalizeWrappedViewProfile(profileOrMode);
+    if (!profile || !Number.isFinite(worldX) || !Number.isFinite(worldY) || width <= 0 || height <= 0) return null;
+    if ((!profile.x && (worldX < 0 || worldX >= width)) || (!profile.y && (worldY < 0 || worldY >= height))) return null;
+    const copyU = profile.x ? Math.floor(worldX / width) : 0;
+    const copyV = profile.y ? Math.floor(worldY / height) : 0;
+    const localX = profile.x ? modulo(worldX, width) : worldX;
+    const localY = profile.y ? modulo(worldY, height) : worldY;
     return {
       x: localX,
-      y: mode === BOUNDARY_GLUE_MODES.KLEIN_BOTTLE && Math.abs(copyU % 2) === 1 ? modulo(-localY, height) : localY,
+      y: profile.x === 'reflect-y' && Math.abs(copyU % 2) === 1 ? modulo(-localY, height) : localY,
       copyU,
       copyV
     };
@@ -14021,8 +14082,47 @@
     const artId = selectedBombArtStyle();
     const option = BOMB_ART_OPTIONS.find((item) => item.id === artId) || BOMB_ART_OPTIONS[0];
     drawBombBlockedHalo(ctx, geom, point, bombKind, scale);
-    if (option && option.kind === 'png' && drawPngBomb(ctx, geom, point, bombKind, scale, option)) return;
-    drawCanvasSparkBomb(ctx, geom, point, bombKind, scale);
+    const drewPng = option && option.kind === 'png' && drawPngBomb(ctx, geom, point, bombKind, scale, option);
+    if (!drewPng) drawCanvasSparkBomb(ctx, geom, point, bombKind, scale);
+    drawBombBoundary(ctx, geom, point, scale);
+  }
+
+  function drawBombBoundary(ctx, geom, point, scale) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(12, 14, 18, 0.92)';
+    ctx.lineWidth = Math.max(1.5, geom.radius * 0.062);
+    ctx.shadowColor = 'transparent';
+    boxPath(ctx, point, geom.radius * 1.48 * scale, geom.lattice);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Wrapped covers omit the usual colored glue arrows. Retain a compact dark
+  // seam only where a bomb occupies a glued edge, so the blocked bomb tile
+  // remains legible without turning the whole cover back into the usual view.
+  function drawWrappedBombGlueSeams(ctx, geom, bombs) {
+    if (!wrappedViewIsActive() || !game || !game.preset || !Array.isArray(game.preset.gluedEdges)) return;
+    const bombIndices = new Set((bombs || []).map((bomb) => bomb.index).filter(Number.isInteger));
+    if (!bombIndices.size) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(12, 14, 18, 0.94)';
+    ctx.lineWidth = Math.max(2, geom.radius * 0.075);
+    ctx.lineCap = 'butt';
+    game.preset.gluedEdges.forEach((pair) => {
+      const firstIndex = pair.first && indexOf(pair.first.row, pair.first.col, geom.cols);
+      const secondIndex = pair.second && indexOf(pair.second.row, pair.second.col, geom.cols);
+      // Two bomb tiles already make the joined edge visually explicit; a seam
+      // between them would read as an unnecessary split in the wrapped cover.
+      if (bombIndices.has(firstIndex) && bombIndices.has(secondIndex)) return;
+      [pair.first, pair.second].forEach((edge) => {
+        if (!edge) return;
+        const index = indexOf(edge.row, edge.col, geom.cols);
+        if (!bombIndices.has(index)) return;
+        const segment = edgeSegmentFromIndex(geom, index, edge.dir);
+        if (segment) drawBackgroundBoundarySegment(ctx, segment);
+      });
+    });
+    ctx.restore();
   }
 
   function drawBombBlockedHalo(ctx, geom, point, kind, scale) {
@@ -17457,12 +17557,14 @@
     });
   }
 
-  function drawCanvasFeedbackOverlays(ctx, geom) {
+  function drawCanvasFeedbackOverlays(ctx, geom, options = {}) {
+    const skipBombDetonations = !!options.skipBombDetonations;
     const current = now();
     placementFeedbacks = placementFeedbacks.filter((feedback) => {
       const duration = Number.isFinite(feedback.duration) ? Math.max(1, feedback.duration) : REVERSI_INVALID_MARK_DURATION;
       const age = current - feedback.startedAt;
       if (age >= duration) return false;
+      if (skipBombDetonations && feedback.kind === 'bombDetonation') return true;
       if (age < 0) {
         if (feedback.kind === 'bombDetonation') drawBombAtIndex(ctx, geom, feedback.index, feedback.bombKind, 1);
         return true;
@@ -17471,6 +17573,21 @@
       if (feedback.kind === 'onlineTurnBlocked') drawOnlineTurnFeedback(ctx, geom, feedback, progress);
       if (feedback.kind === 'bombDetonation') drawBombDetonationFeedback(ctx, geom, feedback, progress);
       return true;
+    });
+  }
+
+  function drawWrappedBombFeedbackOverlays(ctx, geom) {
+    const current = now();
+    placementFeedbacks.forEach((feedback) => {
+      if (feedback.kind !== 'bombDetonation') return;
+      const duration = Number.isFinite(feedback.duration) ? Math.max(1, feedback.duration) : REVERSI_INVALID_MARK_DURATION;
+      const age = current - feedback.startedAt;
+      if (age >= duration) return;
+      if (age < 0) {
+        drawBombAtIndex(ctx, geom, feedback.index, feedback.bombKind, 1);
+        return;
+      }
+      drawBombDetonationFeedback(ctx, geom, feedback, Math.max(0, Math.min(1, age / duration)));
     });
   }
 
@@ -27783,6 +27900,10 @@
         sourceId || registryEntry.id
       )
     };
+    const wrappedView = normalizeWrappedViewProfile(
+      firstPresentValue(source, ['wrappedView']) || firstPresentValue(payload, ['wrappedView'])
+    );
+    if (wrappedView) normalized.wrappedView = wrappedView;
     const billiardsSource = firstPresentValue(source, ['billiards']) ?? firstPresentValue(payload, ['billiards']);
     if (billiardsSource && typeof billiardsSource === 'object' && !Array.isArray(billiardsSource)) {
       normalized.billiards = clonePlain(billiardsSource);
@@ -28491,6 +28612,7 @@
       })),
       connectFourHoles: (source.connectFourHoles || []).map((tile) => ({ ...tile })),
       gluedEdges: (source.gluedEdges || []).map(cloneGluePair),
+      wrappedView: source.wrappedView ? { ...source.wrappedView } : undefined,
       pieceSets: source.pieceSets ? clonePlain(source.pieceSets) : undefined,
       pieces: Array.isArray(source.pieces) ? source.pieces.map((piece) => ({ ...piece })) : undefined,
       chineseCheckersPlayers: Array.isArray(source.chineseCheckersPlayers) ? source.chineseCheckersPlayers.slice() : undefined,
@@ -30226,6 +30348,7 @@
       readFullscreenPreferences,
       persistFullscreenPreferences,
       normalizeWrappedViewPreferences,
+      normalizeWrappedViewProfile,
       readWrappedViewPreferences,
       wrappedFundamentalCoordinates,
       setFullscreenPreferences(value) {
