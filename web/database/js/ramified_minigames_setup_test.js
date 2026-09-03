@@ -3201,6 +3201,9 @@ function testAnimatedPlacementRayHintHelpers() {
   assert.strictEqual(game.__test.placementAssistGrowProgress(1), 1);
   assert.deepStrictEqual(game.__test.placementHintColorCounts({ lattice: 'square' }), { axis: 4, direction: 8 });
   assert.deepStrictEqual(game.__test.placementHintColorCounts({ lattice: 'hexagonal' }), { axis: 3, direction: 6 });
+  assert.strictEqual(game.__test.normalizePlacementHintColorMode(), 'axis');
+  assert.strictEqual(game.__test.normalizePlacementHintColorMode('uniform'), 'uniform');
+  assert.strictEqual(game.__test.normalizePlacementHintColorMode('direction'), 'direction');
 
   const squareDirections = game.__test.placementHintDirectionDescriptors({ lattice: 'square' });
   const assist = { kind: 'rays', directions: squareDirections };
@@ -3225,6 +3228,177 @@ function testAnimatedPlacementRayHintHelpers() {
   assert.strictEqual(throughGlue[0].end.x, 10);
   assert.strictEqual(throughGlue[1].end.x, 45);
   assert.strictEqual(game.__test.placementAssistVisibleSegments(orderedFragments, 1).length, 2);
+
+  const dropState = game.beginConnectFourGame(connectFourPreset(), {
+    fallDir: game.DIRS.S,
+    holes: [game.indexOf(1, 1, 7)]
+  });
+  const dropAssist = game.placementReachAssist(dropState, game.indexOf(1, 1, 7));
+  const dropGeometry = game.__test.buildGeometry(dropState.preset, 720, 16, 1);
+  const dropTrack = game.__test.placementAssistDropTrack(dropState, dropGeometry, dropAssist);
+  const markerRadius = dropGeometry.radius * 0.43;
+  const markerLineWidth = game.__test.connectFourAssistMarkerLineWidth(markerRadius);
+  const beamClipRadius = game.__test.connectFourAssistBeamClipRadius(markerRadius);
+  const landingPoint = dropGeometry.cells[dropAssist.landingIndex];
+  assert.strictEqual(dropTrack.segments.length, dropAssist.transitions.length);
+  assert.ok(dropTrack.totalLength > 0);
+  const dropStartFrame = game.__test.placementAssistDropFrame(dropTrack, 0, landingPoint, false);
+  assert.deepStrictEqual(dropStartFrame.segments, []);
+  assert.deepStrictEqual(dropStartFrame.markerPoint, dropTrack.segments[0].start);
+  const dropMidFrame = game.__test.placementAssistDropFrame(dropTrack, 0.5, landingPoint, false);
+  assert.ok(dropMidFrame.segments.length > 0);
+  const dropMidBeamEnd = dropMidFrame.segments[dropMidFrame.segments.length - 1].end;
+  assert.ok(Math.hypot(
+    dropMidFrame.markerPoint.x - dropMidBeamEnd.x,
+    dropMidFrame.markerPoint.y - dropMidBeamEnd.y
+  ) < 0.001, 'the logical growing beam reaches the moving marker center');
+  assert.ok(beamClipRadius < markerRadius - markerLineWidth / 2, 'the circular clip overlaps beneath the near-side dash');
+  assert.ok(beamClipRadius > 0, 'the circular clip preserves a hollow center');
+  const dropEndFrame = game.__test.placementAssistDropFrame(dropTrack, 1, landingPoint, false);
+  assert.deepStrictEqual(dropEndFrame.markerPoint, { x: landingPoint.x, y: landingPoint.y });
+  assert.strictEqual(dropEndFrame.markerVisible, true);
+
+  const blockedDropState = game.beginConnectFourGame(connectFourPreset(), {
+    fallDir: game.DIRS.S,
+    holes: [game.indexOf(1, 1, 7)]
+  });
+  blockedDropState.tokens = [{ id: 1, index: game.indexOf(3, 1, 7), color: 'yellow' }];
+  const blockedAssist = game.placementReachAssist(blockedDropState, game.indexOf(1, 1, 7));
+  const blockedTrack = game.__test.placementAssistDropTrack(blockedDropState, dropGeometry, blockedAssist);
+  const blockedLandingPoint = dropGeometry.cells[game.indexOf(2, 1, 7)];
+  const blockedFrame = game.__test.placementAssistDropFrame(blockedTrack, 1, blockedLandingPoint, false);
+  assert.strictEqual(blockedAssist.landingIndex, game.indexOf(2, 1, 7));
+  assert.deepStrictEqual(blockedFrame.markerPoint, { x: blockedLandingPoint.x, y: blockedLandingPoint.y });
+
+  const markerArcs = [];
+  const markerDashes = [];
+  let markerStrokes = 0;
+  let markerFills = 0;
+  const markerContext = {
+    save() {}, restore() {}, beginPath() {},
+    arc(...args) { markerArcs.push(args); },
+    stroke() { markerStrokes += 1; },
+    fill() { markerFills += 1; },
+    setLineDash(value) { markerDashes.push(value.slice()); }
+  };
+  game.__test.drawConnectFourAssistDashedMarker(markerContext, dropGeometry, dropState, { x: 12, y: 20 });
+  assert.strictEqual(markerArcs.length, 1);
+  assert.strictEqual(markerArcs[0][2], markerRadius);
+  assert.strictEqual(markerStrokes, 1);
+  assert.strictEqual(markerFills, 0, 'the dashed marker never fills its interior');
+  assert.deepStrictEqual(markerDashes[0], game.__test.connectFourAssistMarkerDash(markerRadius));
+  assert.deepStrictEqual(markerDashes[markerDashes.length - 1], []);
+  assert.notStrictEqual(
+    game.__test.connectFourAssistMarkerColors({ turn: 'red' }).stroke,
+    game.__test.connectFourAssistMarkerColors({ turn: 'yellow' }).stroke
+  );
+  assert.strictEqual(game.__test.connectFourAssistMarkerColors({ turn: 'red' }).stroke, 'rgba(132, 31, 36, 0.98)');
+  assert.strictEqual(game.__test.connectFourAssistMarkerColors({ turn: 'yellow' }).stroke, 'rgba(154, 113, 23, 0.98)');
+
+  const clipCalls = [];
+  const clipContext = {
+    beginPath() { clipCalls.push({ method: 'beginPath' }); },
+    rect(...args) { clipCalls.push({ method: 'rect', args }); },
+    arc(...args) { clipCalls.push({ method: 'arc', args }); },
+    clip(...args) { clipCalls.push({ method: 'clip', args }); }
+  };
+  game.__test.clipConnectFourAssistBeamOutsideMarkers(
+    clipContext,
+    dropGeometry,
+    [dropTrack.segments[0].start, dropMidFrame.markerPoint],
+    markerRadius
+  );
+  const beamClipArcs = clipCalls.filter((call) => call.method === 'arc');
+  assert.strictEqual(beamClipArcs.length, 2, 'the beam is circularly clipped at its source and moving marker');
+  assert.deepStrictEqual(beamClipArcs[0].args.slice(0, 2), [dropTrack.segments[0].start.x, dropTrack.segments[0].start.y]);
+  assert.deepStrictEqual(beamClipArcs[1].args.slice(0, 2), [dropMidFrame.markerPoint.x, dropMidFrame.markerPoint.y]);
+  assert.ok(beamClipArcs.every((call) => call.args[2] === beamClipRadius));
+  assert.strictEqual(clipCalls.filter((call) => call.method === 'clip').length, 2);
+  assert.ok(clipCalls.filter((call) => call.method === 'clip').every((call) => call.args[0] === 'evenodd'));
+
+  clipCalls.length = 0;
+  game.__test.clipConnectFourAssistBeamOutsideMarkers(
+    clipContext,
+    dropGeometry,
+    [dropTrack.segments[0].start, { ...dropTrack.segments[0].start }],
+    markerRadius
+  );
+  assert.strictEqual(
+    clipCalls.filter((call) => call.method === 'arc').length,
+    1,
+    'coincident source and moving markers share one circular clip'
+  );
+
+  const gluedDropState = game.beginConnectFourGame(boundaryConnectFourPreset(), {
+    fallDir: game.DIRS.E,
+    holes: [game.indexOf(1, 4, 4)]
+  });
+  gluedDropState.tokens = [{ id: 1, index: game.indexOf(1, 2, 4), color: 'yellow' }];
+  const gluedDropAssist = game.placementReachAssist(gluedDropState, game.indexOf(1, 4, 4));
+  const gluedDropGeometry = game.__test.buildGeometry(gluedDropState.preset, 720, 16, 1);
+  const gluedDropTrack = game.__test.placementAssistDropTrack(gluedDropState, gluedDropGeometry, gluedDropAssist);
+  const gapIndex = gluedDropTrack.segments.findIndex((segment, index, segments) => {
+    if (!index) return false;
+    const previous = segments[index - 1];
+    return Math.hypot(previous.end.x - segment.start.x, previous.end.y - segment.start.y) > 0.001;
+  });
+  assert.ok(gapIndex > 0, 'glued routes retain ordered exit and re-entry fragments');
+  const beforeGap = gluedDropTrack.segments[gapIndex - 1];
+  const afterGap = gluedDropTrack.segments[gapIndex];
+  assert.deepStrictEqual(
+    game.__test.placementAssistTrackPoint(gluedDropTrack, beforeGap.endProgress),
+    beforeGap.end
+  );
+  const afterGapPoint = game.__test.placementAssistTrackPoint(gluedDropTrack, afterGap.startProgress + 0.000001);
+  assert.ok(Math.hypot(afterGapPoint.x - afterGap.start.x, afterGapPoint.y - afterGap.start.y) < 0.01);
+
+  const cycleDropState = game.beginConnectFourGame(boundaryConnectFourPreset(), {
+    fallDir: game.DIRS.E,
+    holes: [game.indexOf(1, 1, 4)]
+  });
+  const cycleDropAssist = game.placementReachAssist(cycleDropState, game.indexOf(1, 1, 4));
+  const cycleDropGeometry = game.__test.buildGeometry(cycleDropState.preset, 720, 16, 1);
+  const cycleDropTrack = game.__test.placementAssistDropTrack(cycleDropState, cycleDropGeometry, cycleDropAssist);
+  assert.strictEqual(cycleDropAssist.cycle, true);
+  assert.ok(cycleDropTrack.segments.length >= cycleDropAssist.transitions.length, 'the cycle closing transition is rendered');
+  assert.strictEqual(
+    game.__test.placementAssistDropFrame(cycleDropTrack, 0.999, null, true).markerVisible,
+    true
+  );
+  assert.strictEqual(
+    game.__test.placementAssistDropFrame(cycleDropTrack, 1, null, true).markerVisible,
+    false
+  );
+  const completedCycleFrame = game.__test.placementAssistDropFrame(cycleDropTrack, 1, null, true);
+  assert.deepStrictEqual(
+    completedCycleFrame.segments[completedCycleFrame.segments.length - 1].end,
+    cycleDropTrack.segments[cycleDropTrack.segments.length - 1].end,
+    'the completed cyclic beam has no marker-shaped gap'
+  );
+
+  const zeroState = game.beginConnectFourGame({
+    id: 'zero-drop', label: 'zero drop', lattice: 'square', rows: 1, cols: 1,
+    surface: 'test', removedTiles: [], cutEdges: [], gluedEdges: []
+  }, { fallDir: game.DIRS.S, holes: [0] });
+  const zeroAssist = game.placementReachAssist(zeroState, 0);
+  const zeroGeometry = game.__test.buildGeometry(zeroState.preset, 240, 16, 1);
+  const zeroPoint = zeroGeometry.cells[0];
+  const zeroTrack = game.__test.placementAssistDropTrack(zeroState, zeroGeometry, zeroAssist);
+  const zeroFrame = game.__test.placementAssistDropFrame(
+    zeroTrack,
+    0,
+    zeroPoint,
+    false
+  );
+  assert.strictEqual(zeroTrack.totalLength, 0);
+  assert.deepStrictEqual(zeroFrame.markerPoint, { x: zeroPoint.x, y: zeroPoint.y });
+  assert.strictEqual(zeroFrame.markerVisible, true);
+  assert.strictEqual(game.__test.placementReachAssistIsAnimated(zeroAssist), false);
+
+  const setupSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
+  assert.ok(setupSource.includes('const placementAssistRenderProgress = placementReachAssistRawProgress();'));
+  assert.ok(setupSource.includes('drawPlacementReachAssistUnderlay(ctx, geometry, game, placementAssistRenderProgress);'));
+  assert.ok(setupSource.includes('drawPlacementReachAssistOverlay(ctx, geometry, game, placementAssistRenderProgress);'));
 }
 
 function testConnectFourDropStopsAtBoundaryAndBlocker() {
@@ -4632,7 +4806,7 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('placement-hint-highlight-row', { hidden: true }),
     makeElement('placement-hint-highlight', { value: 'single' }),
     makeElement('placement-hint-colors-row', { hidden: true }),
-    makeElement('placement-hint-colors', { value: 'uniform' }),
+    makeElement('placement-hint-colors', { value: 'axis' }),
     makeElement('placement-hint-colors-axis', { tagName: 'OPTION' }),
     makeElement('placement-hint-colors-direction', { tagName: 'OPTION' }),
     makeElement('go-komi', { value: '6.5' }),
@@ -5358,7 +5532,7 @@ function testSwipeSuppressesFollowupClick() {
   assert.strictEqual(elements.get('status-line').textContent, 'round 1: right');
 }
 
-function testTimedPlacementReachAssistInteractions() {
+async function testTimedPlacementReachAssistInteractions() {
   const { elements, canvas, calls, advanceTimers, pendingTimerCount } = createHeadlessDomHarness();
   importHeadlessStatus(elements, {
     gameMode: 'go',
@@ -5370,6 +5544,7 @@ function testTimedPlacementReachAssistInteractions() {
     stones: [{ id: 1, row: 2, col: 2, color: 'black', moveNumber: 1 }],
     removed: [], queue: { eventIndex: 0, stepPaused: false, events: [] }
   });
+  for (let index = 0; index < 5; index += 1) await new Promise((resolve) => setImmediate(resolve));
   elements.get('export-state').listeners.click();
   const exported = JSON.parse(elements.get('debug-export-output').value);
   const center = pointerEvent(144, 144);
@@ -5386,19 +5561,34 @@ function testTimedPlacementReachAssistInteractions() {
   canvas.listeners.pointercancel(pointerEvent(144, 144));
   assert.strictEqual(pendingTimerCount(), 0, 'pointer cancellation clears pending assist timers');
 
+  canvas.listeners.pointermove(pointerEvent(144, 144));
+  advanceTimers(300);
+  const pendingBeforePress = pendingTimerCount();
+  const beforeHoverPressDwell = calls.length;
   canvas.listeners.pointerdown(pointerEvent(144, 144));
-  advanceTimers(999);
+  assert.strictEqual(pendingTimerCount(), pendingBeforePress, 'pressing the hovered tile does not start a second dwell timer');
+  advanceTimers(199);
+  assert.strictEqual(calls.length, beforeHoverPressDwell, 'the shared hover-and-press dwell still waits 500 ms total');
+  advanceTimers(1);
+  assert.ok(calls.length > beforeHoverPressDwell, 'the original hover timer activates while the pointer remains pressed');
+  canvas.listeners.pointerup(pointerEvent(144, 144));
+  const hoverPressClick = pointerEvent(144, 144);
+  canvas.listeners.click(hoverPressClick);
+  assert.strictEqual(hoverPressClick.defaultPrevented, true, 'a press held through shared dwell activation suppresses its click');
+
+  canvas.listeners.pointerdown(pointerEvent(144, 144));
+  advanceTimers(499);
   canvas.listeners.pointerup(pointerEvent(144, 144));
   const shortClick = pointerEvent(144, 144);
   canvas.listeners.click(shortClick);
   assert.strictEqual(shortClick.defaultPrevented, false, 'a short press must retain normal clicks');
 
   canvas.listeners.pointerdown(pointerEvent(144, 144));
-  advanceTimers(1000);
+  advanceTimers(500);
   canvas.listeners.pointerup(pointerEvent(144, 144));
   const heldClick = pointerEvent(144, 144);
   canvas.listeners.click(heldClick);
-  assert.strictEqual(heldClick.defaultPrevented, true, 'a completed long press suppresses its follow-up click');
+  assert.strictEqual(heldClick.defaultPrevented, true, 'a completed press dwell suppresses its follow-up click');
 }
 
 async function testAnimatedPlacementRayHintInteractions() {
@@ -5423,6 +5613,41 @@ async function testAnimatedPlacementRayHintInteractions() {
   gomokuHarness.canvas.listeners.pointermove(pointerEvent(144, 144));
   assert.strictEqual(gomokuHarness.context.module.exports.__test.getPlacementReachDirectionId(), 'W', 'the center dead zone retains the stable direction');
 
+  const connectFourPayload = {
+    gameMode: 'connect-four',
+    preset: {
+      label: 'animated drop assist', lattice: 'square', rows: 3, cols: 3, surface: 'test',
+      removedTiles: [], cutEdges: [], gluedEdges: [], connectFourHoles: [{ row: 1, col: 2 }]
+    },
+    phase: 'ready', turn: 'red', round: 0, nextTokenId: 1, fallDirName: 'S',
+    holes: [{ row: 1, col: 2 }], tokens: [],
+    removed: [], queue: { eventIndex: 0, stepPaused: false, events: [] }
+  };
+  const connectFourHarness = createHeadlessDomHarness();
+  importHeadlessStatus(connectFourHarness.elements, connectFourPayload);
+  for (let index = 0; index < 5; index += 1) await new Promise((resolve) => setImmediate(resolve));
+  connectFourHarness.calls.length = 0;
+  connectFourHarness.canvas.listeners.pointermove(pointerEvent(144, 57));
+  connectFourHarness.advanceTimers(500);
+  assert.ok(
+    connectFourHarness.calls.some((call) => call.method === 'requestAnimationFrame'),
+    'Connect Four drop hints schedule the shared grow animation'
+  );
+  connectFourHarness.canvas.listeners.pointercancel(pointerEvent(144, 57));
+  const framesAfterCancel = connectFourHarness.calls.filter((call) => call.method === 'requestAnimationFrame').length;
+  connectFourHarness.advanceTimers(32);
+  assert.strictEqual(
+    connectFourHarness.calls.filter((call) => call.method === 'requestAnimationFrame').length,
+    framesAfterCancel,
+    'clearing a drop hint cancels its animation frame'
+  );
+  connectFourHarness.calls.length = 0;
+  connectFourHarness.canvas.listeners.click(pointerEvent(144, 57));
+  assert.ok(
+    connectFourHarness.calls.some((call) => call.method === 'createRadialGradient'),
+    'the committed Connect Four drop still renders a solid game token'
+  );
+
   const reducedHarness = createHeadlessDomHarness({ reducedMotion: true });
   importHeadlessStatus(reducedHarness.elements, {
     gameMode: 'gomoku',
@@ -5439,6 +5664,17 @@ async function testAnimatedPlacementRayHintInteractions() {
   reducedHarness.canvas.listeners.pointermove(pointerEvent(156, 144));
   reducedHarness.advanceTimers(500);
   assert.ok(!reducedHarness.calls.some((call) => call.method === 'requestAnimationFrame'), 'reduced motion reveals rays without animation frames');
+
+  const reducedDropHarness = createHeadlessDomHarness({ reducedMotion: true });
+  importHeadlessStatus(reducedDropHarness.elements, connectFourPayload);
+  for (let index = 0; index < 5; index += 1) await new Promise((resolve) => setImmediate(resolve));
+  reducedDropHarness.calls.length = 0;
+  reducedDropHarness.canvas.listeners.pointermove(pointerEvent(144, 57));
+  reducedDropHarness.advanceTimers(500);
+  assert.ok(
+    !reducedDropHarness.calls.some((call) => call.method === 'requestAnimationFrame'),
+    'reduced motion reveals the finished drop beam and marker immediately'
+  );
 
   assert.strictEqual(gomokuHarness.elements.get('placement-hint-highlight-row').hidden, false);
   assert.strictEqual(gomokuHarness.elements.get('placement-hint-colors-row').hidden, false);
@@ -5461,7 +5697,8 @@ function testPlacementHoverGuidanceRules() {
   assert.ok(html.includes('<option value="single" selected data-i18n="setup.hintHighlightSingle">'));
   assert.ok(html.includes('<option value="opposites" data-i18n="setup.hintHighlightOpposites">'));
   assert.ok(html.includes('id="placement-hint-colors"'));
-  assert.ok(html.includes('<option value="uniform" selected data-i18n="setup.hintLineColorsUniform">'));
+  assert.ok(html.includes('<option value="uniform" data-i18n="setup.hintLineColorsUniform">'));
+  assert.ok(html.includes('id="placement-hint-colors-axis" value="axis" selected'));
 
   const preset = {
     id: 'placement-hover-test', label: 'placement hover test', lattice: 'square', rows: 4, cols: 4,
@@ -8547,7 +8784,7 @@ async function run() {
   await testOnlineRoomSearchFailureHidesSelect();
   testPlacementReachAssistRoutesAndGroups();
   testAnimatedPlacementRayHintHelpers();
-  testTimedPlacementReachAssistInteractions();
+  await testTimedPlacementReachAssistInteractions();
   await testAnimatedPlacementRayHintInteractions();
   testPlacementHoverGuidanceRules();
   testHexCoverOffsetDiagnosticsAndConnectFourWrappedView();

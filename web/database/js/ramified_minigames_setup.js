@@ -164,7 +164,6 @@
   const FULLSCREEN_RESTART_CONFIRM_MS = 4200;
   const LIANLIANKAN_PATH_DISPLAY_MS = 500;
   const PLACEMENT_ASSIST_DWELL_MS = 500;
-  const PLACEMENT_ASSIST_HOLD_MS = 1000;
   const PLACEMENT_ASSIST_GROW_MS = 360;
   const PLACEMENT_ASSIST_DIRECTION_DEAD_ZONE = 0.12;
   const PLACEMENT_HINT_AXIS_COLORS = Object.freeze(['#1f7a8c', '#d97706', '#7c3aed', '#15803d']);
@@ -730,7 +729,6 @@
   let localResultPromptDismissed = false;
   let placementReachCandidate = null;
   let placementReachDwellTimer = null;
-  let placementReachHoldTimer = null;
   let placementReachAssistData = null;
   let placementReachAssistState = null;
   let placementReachAssistStartedAt = 0;
@@ -5693,6 +5691,15 @@
       clearPlacementReachAssist(true);
       return;
     }
+    const same = placementReachCandidate
+      && placementReachCandidate.index === target.index
+      && placementReachCandidate.pointerId === event.pointerId;
+    if (same) {
+      placementReachCandidate.point = target.point;
+      placementReachCandidate.pressed = true;
+      if (placementReachAssistData) updatePlacementReachDirection(target.point);
+      return;
+    }
     setPlacementReachCandidate({
       pointerId: event.pointerId,
       index: target.index,
@@ -5736,15 +5743,9 @@
     if (hadAssist) render();
     placementReachDwellTimer = setTimeout(() => {
       if (!placementReachCandidate || placementReachCandidate !== candidate) return;
+      if (candidate.pressed) placementReachSuppressClick = true;
       activatePlacementReachAssist(candidate);
     }, PLACEMENT_ASSIST_DWELL_MS);
-    if (candidate.pressed) {
-      placementReachHoldTimer = setTimeout(() => {
-        if (!placementReachCandidate || placementReachCandidate !== candidate || !candidate.pressed) return;
-        placementReachSuppressClick = true;
-        activatePlacementReachAssist(candidate);
-      }, PLACEMENT_ASSIST_HOLD_MS);
-    }
   }
 
   function activatePlacementReachAssist(candidate) {
@@ -5791,8 +5792,16 @@
     );
   }
 
+  function placementReachAssistIsAnimated(assist = placementReachAssistData) {
+    if (!assist) return false;
+    if (assist.kind === 'rays') return true;
+    return assist.kind === 'connect-four-drop'
+      && Array.isArray(assist.transitions)
+      && assist.transitions.length > 0;
+  }
+
   function placementReachAssistRawProgress(at = now()) {
-    if (!placementReachAssistData || placementReachAssistData.kind !== 'rays') return 1;
+    if (!placementReachAssistIsAnimated()) return 1;
     if (placementReachReducedMotion()) return 1;
     return Math.max(0, Math.min(1, (at - placementReachAssistStartedAt) / PLACEMENT_ASSIST_GROW_MS));
   }
@@ -5800,14 +5809,13 @@
   function schedulePlacementReachAssistFrame() {
     if (
       placementReachAssistFrame != null
-      || !placementReachAssistData
-      || placementReachAssistData.kind !== 'rays'
+      || !placementReachAssistIsAnimated()
       || placementReachReducedMotion()
       || placementReachAssistRawProgress() >= 1
     ) return;
     placementReachAssistFrame = requestFrame(() => {
       placementReachAssistFrame = null;
-      if (!activePlacementReachAssist(game) || placementReachAssistData.kind !== 'rays') return;
+      if (!activePlacementReachAssist(game) || !placementReachAssistIsAnimated()) return;
       render();
       schedulePlacementReachAssistFrame();
     });
@@ -5821,16 +5829,14 @@
 
   function endPlacementReachPress(event) {
     if (!placementReachCandidate || placementReachCandidate.pointerId !== event.pointerId) return;
-    const completedHold = placementReachSuppressClick;
+    const completedDwell = placementReachSuppressClick;
     clearPlacementReachAssist(true);
-    if (completedHold) suppressUpcomingCanvasClick();
+    if (completedDwell) suppressUpcomingCanvasClick();
   }
 
   function clearPlacementReachTimers() {
     if (placementReachDwellTimer != null) clearTimeout(placementReachDwellTimer);
-    if (placementReachHoldTimer != null) clearTimeout(placementReachHoldTimer);
     placementReachDwellTimer = null;
-    placementReachHoldTimer = null;
   }
 
   function clearPlacementReachAssist(redraw = false) {
@@ -13716,6 +13722,7 @@
 
     const ctx = refs.ctx;
     const billiardsGuidance = isBilliardsGame(game) ? billiardsCueGuidanceState() : null;
+    const placementAssistRenderProgress = placementReachAssistRawProgress();
     ctx.clearRect(0, 0, logicalWidth, logicalHeight);
     const explosionMode = is2048Game(game) && isExplosionModeActive(game);
     const bombBlocked = is2048Game(game) ? bombIndexSet(game) : new Set();
@@ -13783,7 +13790,7 @@
       else if (vertexDisplay) drawPlacementVertexBoard(ctx, geometry, game);
       else if (isConnectFourGame(game)) drawConnectFourHoles(ctx, geometry, game);
       drawPlacementHoverCue(ctx, geometry, game);
-      drawPlacementReachAssistUnderlay(ctx, geometry, game);
+      drawPlacementReachAssistUnderlay(ctx, geometry, game, placementAssistRenderProgress);
       if (isHexGame(game)) drawHexTileFills(ctx, geometry, game);
       if (isHexGame(game)) drawHexNeighborHints(ctx, geometry, game);
       if (isHexGame(game)) drawHexWinningCycle(ctx, geometry, game);
@@ -13799,7 +13806,7 @@
       drawFideChessDraggedPiece(ctx, geometry, game);
       drawPlacementLastMovePieceMarkers(ctx, geometry, game);
       if (isGoGame(game)) drawGoDeadStoneMarks(ctx, geometry, game);
-      drawPlacementReachAssistOverlay(ctx, geometry, game);
+      drawPlacementReachAssistOverlay(ctx, geometry, game, placementAssistRenderProgress);
       drawPlacementMoveNumberLabels(ctx, geometry, game);
       drawPlacementAnimationOverlays(ctx, geometry);
       drawPlacementFeedbackOverlays(ctx, geometry);
@@ -16325,23 +16332,33 @@
     ctx.restore();
   }
 
-  function drawPlacementReachAssistUnderlay(ctx, geom, state) {
+  function drawPlacementReachAssistUnderlay(ctx, geom, state, rawProgress = placementReachAssistRawProgress()) {
     const assist = activePlacementReachAssist(state);
     if (!assist) return;
     if (assist.kind === 'connect-four-drop') {
-      const segments = placementAssistDropSegments(state, geom, assist);
-      if (!segments.length) return;
+      const track = placementAssistDropTrack(state, geom, assist);
+      const markerRadius = placementPieceBaseRadius(geom);
+      const frame = placementAssistDropFrame(
+        track,
+        rawProgress,
+        placementPiecePoint(geom, assist.landingIndex) || placementPiecePoint(geom, assist.origin),
+        assist.cycle
+      );
+      if (!frame.segments.length) return;
       ctx.save();
+      clipConnectFourAssistBeamOutsideMarkers(ctx, geom, [
+        placementPiecePoint(geom, assist.origin),
+        frame.markerVisible ? frame.markerPoint : null
+      ], markerRadius);
       ctx.lineCap = 'butt';
       ctx.lineJoin = 'bevel';
       const beamColors = connectFourAssistBeamColors(state);
       ctx.strokeStyle = beamColors.outer;
       ctx.lineWidth = placementPieceBaseRadius(geom) * 2;
-      drawPlacementAssistSegments(ctx, segments);
+      drawPlacementAssistSegments(ctx, frame.segments);
       ctx.strokeStyle = beamColors.inner;
       ctx.lineWidth = Math.max(1.5, placementPieceBaseRadius(geom) * 0.24);
-      drawPlacementAssistSegments(ctx, segments);
-      drawConnectFourAssistEndpointMarkers(ctx, geom, state, assist);
+      drawPlacementAssistSegments(ctx, frame.segments);
       ctx.restore();
       return;
     }
@@ -16378,18 +16395,38 @@
 
   function placementAssistDropSegments(state, geom, assist) {
     const segments = [];
-    const path = Array.isArray(assist.path) ? assist.path : [];
     const transitions = Array.isArray(assist.transitions) ? assist.transitions : [];
-    for (let step = 0; step < transitions.length && step + 1 < path.length; step += 1) {
-      const transition = transitions[step];
-      segments.push(...placementLineRenderSegments(state, geom, path[step], path[step + 1], {
+    transitions.forEach((transition) => {
+      if (!transition || !Number.isInteger(transition.from) || !Number.isInteger(transition.to)) return;
+      segments.push(...placementLineRenderSegments(state, geom, transition.from, transition.to, {
         kind: 'axis',
-        start: path[step],
-        end: path[step + 1],
+        start: transition.from,
+        end: transition.to,
         transitions: [transition]
       }));
-    }
-    return uniquePlacementAssistSegments(segments);
+    });
+    return segments;
+  }
+
+  function placementAssistTimedTrack(segments) {
+    const source = Array.isArray(segments) ? segments : [];
+    const totalLength = source.reduce((sum, segment) => sum + placementAssistSegmentLength(segment), 0);
+    let distance = 0;
+    const timedSegments = source.map((segment) => {
+      const length = placementAssistSegmentLength(segment);
+      const startProgress = totalLength > 0 ? distance / totalLength : 0;
+      distance += length;
+      return {
+        ...segment,
+        startProgress,
+        endProgress: totalLength > 0 ? distance / totalLength : 1
+      };
+    });
+    return { segments: timedSegments, totalLength };
+  }
+
+  function placementAssistDropTrack(state, geom, assist) {
+    return placementAssistTimedTrack(placementAssistDropSegments(state, geom, assist));
   }
 
   function placementAssistRouteSegments(state, geom, route) {
@@ -16413,27 +16450,15 @@
 
   function placementAssistRayTracks(state, geom, assist) {
     return (assist.routes || []).map((route) => {
-      const segments = placementAssistRouteSegments(state, geom, route);
-      const totalLength = segments.reduce((sum, segment) => sum + placementAssistSegmentLength(segment), 0);
-      let distance = 0;
-      const timedSegments = segments.map((segment) => {
-        const length = placementAssistSegmentLength(segment);
-        const startProgress = totalLength > 0 ? distance / totalLength : 0;
-        distance += length;
-        return {
-          ...segment,
-          startProgress,
-          endProgress: totalLength > 0 ? distance / totalLength : 1
-        };
-      });
+      const track = placementAssistTimedTrack(placementAssistRouteSegments(state, geom, route));
       return {
         directionId: route.directionId || '',
         oppositeDirectionId: route.oppositeDirectionId || '',
         axisId: route.axisId || '',
         axisIndex: route.axisIndex || 0,
         paletteIndex: route.paletteIndex || 0,
-        segments: timedSegments,
-        totalLength
+        segments: track.segments,
+        totalLength: track.totalLength
       };
     }).filter((track) => track.totalLength > 0);
   }
@@ -16480,6 +16505,36 @@
     return visible;
   }
 
+  function placementAssistTrackPoint(track, progress, fallbackPoint = null) {
+    const segments = track && Array.isArray(track.segments) ? track.segments : [];
+    if (!segments.length || !(track.totalLength > 0)) {
+      return fallbackPoint ? { x: fallbackPoint.x, y: fallbackPoint.y } : null;
+    }
+    const position = Math.max(0, Math.min(1, Number(progress) || 0));
+    if (position <= 0) return { ...segments[0].start };
+    if (position >= 1) return { ...segments[segments.length - 1].end };
+    const segment = segments.find((candidate) => position <= candidate.endProgress) || segments[segments.length - 1];
+    const span = segment.endProgress - segment.startProgress;
+    const local = span > 0 ? Math.max(0, Math.min(1, (position - segment.startProgress) / span)) : 1;
+    return {
+      x: segment.start.x + (segment.end.x - segment.start.x) * local,
+      y: segment.start.y + (segment.end.y - segment.start.y) * local
+    };
+  }
+
+  function placementAssistDropFrame(track, rawProgress, fallbackPoint = null, cycle = false) {
+    const progress = placementAssistGrowProgress(rawProgress);
+    const markerPoint = placementAssistTrackPoint(track, progress, fallbackPoint);
+    const visible = placementAssistVisibleSegments(track && track.segments, progress);
+    const markerVisible = !!markerPoint && (!cycle || progress < 1);
+    return {
+      progress,
+      markerPoint,
+      markerVisible,
+      segments: visible
+    };
+  }
+
   function placementHintRgba(hex, alpha) {
     const normalized = String(hex || '').replace(/^#/, '');
     if (!/^[0-9a-f]{6}$/i.test(normalized)) return `rgba(31, 122, 140, ${alpha})`;
@@ -16506,25 +16561,61 @@
     });
   }
 
-  function drawConnectFourAssistEndpointMarkers(ctx, geom, state, assist) {
-    const indices = [assist && assist.origin, assist && assist.landingIndex]
-      .filter(Number.isInteger)
-      .filter((index, position, values) => values.indexOf(index) === position);
-    if (!indices.length) return;
-    const colors = state && state.turn === 'yellow'
-      ? { fill: 'rgba(154, 113, 23, 0.92)', stroke: 'rgba(255, 241, 166, 0.94)' }
-      : { fill: 'rgba(132, 31, 36, 0.92)', stroke: 'rgba(255, 154, 143, 0.94)' };
-    ctx.fillStyle = colors.fill;
-    ctx.strokeStyle = colors.stroke;
-    ctx.lineWidth = Math.max(1.1, geom.radius * 0.035);
-    indices.forEach((index) => {
-      const point = placementPiecePoint(geom, index);
-      if (!point) return;
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, placementPieceBaseRadius(geom), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+  function connectFourAssistMarkerColors(state) {
+    return state && state.turn === 'yellow'
+      ? { stroke: 'rgba(154, 113, 23, 0.98)', glow: 'rgba(112, 77, 8, 0.28)' }
+      : { stroke: 'rgba(132, 31, 36, 0.98)', glow: 'rgba(96, 18, 23, 0.30)' };
+  }
+
+  function connectFourAssistMarkerLineWidth(markerRadius) {
+    return Math.max(2, markerRadius * 0.14);
+  }
+
+  function connectFourAssistBeamClipRadius(markerRadius) {
+    const radius = Math.max(0, Number(markerRadius) || 0);
+    return Math.max(0, radius - connectFourAssistMarkerLineWidth(radius) / 2 - 1);
+  }
+
+  function connectFourAssistMarkerDash(markerRadius) {
+    const radius = Math.max(0, Number(markerRadius) || 0);
+    return [Math.max(3, radius * 0.34), Math.max(2, radius * 0.22)];
+  }
+
+  function clipConnectFourAssistBeamOutsideMarkers(ctx, geom, points, markerRadius) {
+    if (!ctx || !ctx.rect || !ctx.arc || !ctx.clip) return;
+    const clipRadius = connectFourAssistBeamClipRadius(markerRadius);
+    if (!(clipRadius > 0)) return;
+    const extent = Math.max(1, geom && geom.width || 0, geom && geom.height || 0, markerRadius * 4) * 2;
+    const unique = [];
+    (Array.isArray(points) ? points : [points]).forEach((point) => {
+      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+      if (unique.some((candidate) => samePoint(candidate, point))) return;
+      unique.push(point);
     });
+    unique.forEach((point) => {
+      ctx.beginPath();
+      ctx.rect(-extent, -extent, extent * 2, extent * 2);
+      ctx.arc(point.x, point.y, clipRadius, 0, Math.PI * 2);
+      ctx.clip('evenodd');
+    });
+  }
+
+  function drawConnectFourAssistDashedMarker(ctx, geom, state, point) {
+    if (!point) return;
+    const radius = placementPieceBaseRadius(geom);
+    const colors = connectFourAssistMarkerColors(state);
+    ctx.save();
+    ctx.strokeStyle = colors.stroke;
+    ctx.lineWidth = connectFourAssistMarkerLineWidth(radius);
+    ctx.lineCap = 'round';
+    if (ctx.setLineDash) ctx.setLineDash(connectFourAssistMarkerDash(radius));
+    ctx.shadowColor = colors.glow;
+    ctx.shadowBlur = Math.max(2, radius * 0.22);
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    if (ctx.setLineDash) ctx.setLineDash([]);
+    ctx.restore();
   }
 
   function connectFourAssistBeamColors(state) {
@@ -16533,9 +16624,22 @@
       : { outer: 'rgba(220, 70, 70, 0.18)', inner: 'rgba(255, 245, 242, 0.72)' };
   }
 
-  function drawPlacementReachAssistOverlay(ctx, geom, state) {
+  function drawPlacementReachAssistOverlay(ctx, geom, state, rawProgress = placementReachAssistRawProgress()) {
     const assist = activePlacementReachAssist(state);
-    if (!assist || assist.kind !== 'go-group') return;
+    if (!assist) return;
+    if (assist.kind === 'connect-four-drop') {
+      const track = placementAssistDropTrack(state, geom, assist);
+      const markerRadius = placementPieceBaseRadius(geom);
+      const frame = placementAssistDropFrame(
+        track,
+        rawProgress,
+        placementPiecePoint(geom, assist.landingIndex) || placementPiecePoint(geom, assist.origin),
+        assist.cycle
+      );
+      if (frame.markerVisible) drawConnectFourAssistDashedMarker(ctx, geom, state, frame.markerPoint);
+      return;
+    }
+    if (assist.kind !== 'go-group') return;
     ctx.save();
     (assist.groupIndices || []).forEach((index) => {
       const point = placementPiecePoint(geom, index);
@@ -28501,11 +28605,11 @@
 
   function normalizePlacementHintColorMode(value) {
     const mode = String(value || '').trim().toLowerCase();
-    return mode === 'axis' || mode === 'direction' ? mode : 'uniform';
+    return mode === 'uniform' || mode === 'direction' ? mode : 'axis';
   }
 
   function selectedPlacementHintColorMode() {
-    return normalizePlacementHintColorMode(refs.placementHintColors ? refs.placementHintColors.value : 'uniform');
+    return normalizePlacementHintColorMode(refs.placementHintColors ? refs.placementHintColors.value : 'axis');
   }
 
   function placementHintColorCounts(preset) {
@@ -31651,6 +31755,16 @@
       placementAssistGrowProgress,
       placementAssistVisibleSegments,
       placementAssistRayTracks,
+      placementAssistDropTrack,
+      placementAssistDropFrame,
+      placementAssistTrackPoint,
+      drawConnectFourAssistDashedMarker,
+      connectFourAssistMarkerColors,
+      connectFourAssistMarkerLineWidth,
+      connectFourAssistMarkerDash,
+      connectFourAssistBeamClipRadius,
+      clipConnectFourAssistBeamOutsideMarkers,
+      placementReachAssistIsAnimated,
       placementAssistGrowDuration: PLACEMENT_ASSIST_GROW_MS,
       getPlacementReachDirectionId() { return placementReachDirectionId; },
       selectedPlacementPreviewOpacity,

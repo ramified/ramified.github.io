@@ -719,7 +719,7 @@
 
   function rationalFunctionLatex(variables = currentFieldInfo().variables || ['t']) {
     const names = normalizeRationalFunctionVariables(variables);
-    return `\\mathbb{Q}(${names.map(escapeLatexIdentifier).join(',')})`;
+    return `\\mathbb{Q}(${names.map(formatLatexIdentifier).join(',')})`;
   }
 
   function rationalFunctionPlain(variables = currentFieldInfo().variables || ['t']) {
@@ -727,7 +727,7 @@
   }
 
   function numberFieldLatex(field = currentNumberFieldInfo()) {
-    return `\\mathbb{Q}(${escapeLatexIdentifier(field.symbol)})`;
+    return `\\mathbb{Q}(${formatLatexIdentifier(field.symbol)})`;
   }
 
   function numberFieldPlain(field = currentNumberFieldInfo()) {
@@ -760,6 +760,15 @@
     return String(value).replace(/_/g, '\\_');
   }
 
+  function formatLatexIdentifier(value) {
+    const identifier = String(value);
+    const explicitIndex = identifier.match(/^([A-Za-z][A-Za-z0-9]*)_([A-Za-z0-9]+)$/);
+    if (explicitIndex) return `${escapeLatexIdentifier(explicitIndex[1])}_{${escapeLatexIdentifier(explicitIndex[2])}}`;
+    const numericIndex = identifier.match(/^([A-Za-z][A-Za-z_]*?)(\d+)$/);
+    if (numericIndex) return `${escapeLatexIdentifier(numericIndex[1])}_{${numericIndex[2]}}`;
+    return escapeLatexIdentifier(identifier);
+  }
+
   function renderFiniteFieldSymbol() {
     if (!refs.finiteFieldSymbol || !isFiniteFieldMode()) return;
     let p = state.finiteFieldPrime;
@@ -790,7 +799,7 @@
     let symbol = state.numberFieldSymbol;
     try { symbol = currentNumberFieldInfo().symbol; } catch (_) {}
     if (window.MathJax?.typesetClear) window.MathJax.typesetClear([refs.numberFieldSymbol]);
-    refs.numberFieldSymbol.innerHTML = `\\(\\mathbb{Q}(${escapeLatexIdentifier(symbol)})\\)`;
+    refs.numberFieldSymbol.innerHTML = `\\(\\mathbb{Q}(${formatLatexIdentifier(symbol)})\\)`;
     typesetFieldSymbol(refs.numberFieldSymbol);
   }
 
@@ -1792,7 +1801,9 @@
       const absolute = negative ? scalarNeg(coefficient) : coefficient;
       const monomial = term.exponents.map((power, i) => formatPowerVariable(polynomial.variables[i], power, mode)).filter(Boolean).join(mode === 'latex' ? '' : '*');
       const coefficientText = exactScalarSource(absolute, mode === 'latex' ? 'latex' : mode === 'python' ? 'python' : 'text');
-      let body = monomial && scalarIsOne(absolute) ? monomial : monomial ? `(${coefficientText})${mode === 'latex' ? '' : '*'}${monomial}` : coefficientText;
+      let coefficientFactor = `(${coefficientText})`;
+      if (mode === 'latex') coefficientFactor = latexScalarNeedsProductGrouping(absolute) ? `\\left(${coefficientText}\\right)` : coefficientText;
+      let body = monomial && scalarIsOne(absolute) ? monomial : monomial ? `${coefficientFactor}${mode === 'latex' ? '' : '*'}${monomial}` : coefficientText;
       if (!index) return negative ? `-${body}` : body;
       return `${negative ? ' - ' : ' + '}${body}`;
     }).join('');
@@ -5113,8 +5124,11 @@
       const absolute = negative ? scalarNeg(coeff) : coeff;
       const coeffText = absolute instanceof RationalFunctionScalar ? formatRationalFunction(absolute, mode) : formatFractionForMode(absolute, mode);
       const variablePart = formatPowerVariable(variable, power, mode);
+      const coefficientFactor = mode === 'latex'
+        ? latexScalarNeedsProductGrouping(absolute) ? `\\left(${coeffText}\\right)` : coeffText
+        : `(${coeffText})`;
       const body = variablePart
-        ? scalarIsOne(absolute) ? variablePart : `(${coeffText})${mode === 'latex' ? '' : '*'}${variablePart}`
+        ? scalarIsOne(absolute) ? variablePart : `${coefficientFactor}${mode === 'latex' ? '' : '*'}${variablePart}`
         : coeffText;
       terms.push({ negative, body });
     }
@@ -5152,9 +5166,33 @@
 
   function formatPowerVariable(variable, power, mode = 'text') {
     if (power === 0) return '';
-    const name = mode === 'latex' ? escapeLatexIdentifier(variable) : variable;
+    const name = mode === 'latex' ? formatLatexIdentifier(variable) : variable;
     if (power === 1) return name;
-    return mode === 'python' ? `${name}**${power}` : `${name}^${power}`;
+    if (mode === 'python') return `${name}**${power}`;
+    return mode === 'latex' ? `${name}^{${power}}` : `${name}^${power}`;
+  }
+
+  function latexScalarNeedsProductGrouping(value) {
+    if (value instanceof RationalFunctionScalar) {
+      if (!rfPolyEqual(value.den, [rfCoeffOne(value.den[0])])) return false;
+      return rfPolynomialHasTopLevelSum(value.num);
+    }
+    if (value instanceof NumberFieldScalar) return polyQTrim(value.coeffs).filter((coefficient) => !coefficient.isZero()).length > 1;
+    if (value instanceof SymbolicExpScalar) return value.terms.length > 1;
+    if (value instanceof ModScalar) return false;
+    if (value instanceof ExactScalar) return !value.re.isZero() && !value.im.isZero();
+    const complex = Complex.from(value);
+    return Math.abs(complex.re) > DISPLAY_TOL && Math.abs(complex.im) > DISPLAY_TOL;
+  }
+
+  function rfPolynomialHasTopLevelSum(poly) {
+    const terms = rfPolyTrim(poly)
+      .map((coefficient, power) => ({ coefficient, power }))
+      .filter((term) => !term.coefficient.isZero());
+    if (terms.length > 1) return true;
+    if (terms.length !== 1 || terms[0].power !== 0) return false;
+    return terms[0].coefficient instanceof RationalFunctionScalar
+      && latexScalarNeedsProductGrouping(terms[0].coefficient);
   }
 
   function formatFractionForMode(value, mode = 'text') {
