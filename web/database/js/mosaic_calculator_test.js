@@ -296,16 +296,16 @@ function testMinigameTestLink() {
 function testAdvancedChineseNameAndWrappedViewExport() {
   setupBoard();
   const profiles = [
-    ['x-repeat', { x: 'repeat' }],
-    ['x-reflect-y', { x: 'reflect-y' }],
-    ['y-repeat', { y: 'repeat' }],
-    ['y-reflect-x', { y: 'reflect-x' }],
-    ['torus', { x: 'repeat', y: 'repeat' }],
-    ['klein-x', { x: 'reflect-y', y: 'repeat' }],
-    ['klein-y', { x: 'repeat', y: 'reflect-x' }],
-    ['rp2', { x: 'reflect-y', y: 'reflect-x' }]
+    { x: 'repeat' },
+    { x: 'reflect-y' },
+    { y: 'repeat' },
+    { y: 'reflect-x' },
+    { x: 'repeat', y: 'repeat' },
+    { x: 'reflect-y', y: 'repeat' },
+    { x: 'repeat', y: 'reflect-x' },
+    { x: 'reflect-y', y: 'reflect-x' }
   ];
-  profiles.forEach(([control, wrappedView]) => {
+  profiles.forEach((wrappedView) => {
     mosaic.setTestExportControls({
       type: 'minigame',
       format: 'dsl',
@@ -316,7 +316,8 @@ function testAdvancedChineseNameAndWrappedViewExport() {
       advanced: true,
       wrappedView
     });
-    assert.strictEqual(mosaic.refs.exportPresetWrappedView.value, control);
+    assert.strictEqual(mosaic.refs.exportPresetWrappedViewX.value, wrappedView.x || '');
+    assert.strictEqual(mosaic.refs.exportPresetWrappedViewY.value, wrappedView.y || '');
     const metadata = mosaic.currentExportPresetMetadata();
     assert.strictEqual(metadata.labelZh, '中文棋盘');
     assert.deepStrictEqual(metadata.wrappedView, wrappedView);
@@ -543,7 +544,8 @@ function testExportHiddenRowsHaveCssRule() {
   const testRow = html.indexOf('id="export-test-link-row"');
   assert.ok(html.includes('id="export-precomputed-game-data"'));
   assert.ok(html.includes('id="export-preset-label-zh"'));
-  assert.ok(html.includes('id="export-preset-wrapped-view"'));
+  assert.ok(html.includes('id="export-preset-wrapped-view-x"'));
+  assert.ok(html.includes('id="export-preset-wrapped-view-y"'));
   assert.ok(html.includes('store precomputed game data'));
   assert.ok(presetRow < storedDataRow && storedDataRow < testRow, 'stored game data occupies one row immediately before Test');
   assert.ok(

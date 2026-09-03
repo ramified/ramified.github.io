@@ -2044,17 +2044,19 @@
                 <span class="export-group-checks" id="export-preset-groups" aria-label="Minigame preset game types"></span>
               </label>
               <label class="export-meta-field">
-                <span class="export-meta-field-label">Board view</span>
-                <select id="export-preset-wrapped-view" aria-label="Minigame preset Board view">
-                  <option value="">not available</option>
-                  <option value="x-repeat">horizontal repeat</option>
-                  <option value="x-reflect-y">horizontal reflection</option>
-                  <option value="y-repeat">vertical repeat</option>
-                  <option value="y-reflect-x">vertical reflection</option>
-                  <option value="torus">Torus</option>
-                  <option value="klein-x">Klein bottle (horizontal reflection)</option>
-                  <option value="klein-y">Klein bottle (vertical reflection)</option>
-                  <option value="rp2">RP² chart cover</option>
+                <span class="export-meta-field-label">Horizontal Board view</span>
+                <select id="export-preset-wrapped-view-x" aria-label="Minigame preset horizontal Board view">
+                  <option value="">none</option>
+                  <option value="repeat">repeat</option>
+                  <option value="reflect-y">reflection</option>
+                </select>
+              </label>
+              <label class="export-meta-field">
+                <span class="export-meta-field-label">Vertical Board view</span>
+                <select id="export-preset-wrapped-view-y" aria-label="Minigame preset vertical Board view">
+                  <option value="">none</option>
+                  <option value="repeat">repeat</option>
+                  <option value="reflect-x">reflection</option>
                 </select>
               </label>
             </span>
@@ -2097,7 +2099,7 @@
 <script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_native.js?v=20260825-1"></script>
-<script src="js/mosaic_calculator.js?v=homology-local-carrier-8"></script>
+<script src="js/mosaic_calculator.js?v=homology-local-carrier-9"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260826-1"></script>
 <script>

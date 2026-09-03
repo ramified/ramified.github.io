@@ -738,7 +738,7 @@
   let fullscreenPreferences = { ...FULLSCREEN_SETTINGS_DEFAULTS };
   let fullscreenSettingsOpen = false;
   let fullscreenSettingsReturnFocus = null;
-  let fullscreenSettingsPanel = 'controls';
+  let fullscreenSettingsPanel = 'display';
   let wrappedViewPreferences = {
     torus: 'usual',
     'klein-bottle': 'usual',
@@ -1136,7 +1136,7 @@
     });
     if (refs.fullscreenSettingsOpen) refs.fullscreenSettingsOpen.addEventListener('click', () => {
       if (calculatorInputSession) calculatorInputSession.open(refs.fullscreenSettingsOpen);
-      else openFullscreenSettings('controls', refs.fullscreenSettingsOpen);
+      else openFullscreenSettings('display', refs.fullscreenSettingsOpen);
     });
     if (refs.placementPreviewOpacity) refs.placementPreviewOpacity.addEventListener('input', () => {
       syncPlacementPreviewOpacityOutput();
@@ -6059,7 +6059,7 @@
         dialog: '#fullscreen-settings-dialog',
         trigger: '#fullscreen-settings-open',
         isOpen: () => fullscreenSettingsOpen,
-        open: (panel, trigger) => openFullscreenSettings(panel, trigger),
+        open: (_panel, trigger) => openFullscreenSettings('display', trigger),
         close: () => closeFullscreenSettings()
       }
     });
@@ -8372,7 +8372,7 @@
     if (refs.fullscreenSettingsDisplay) refs.fullscreenSettingsDisplay.hidden = fullscreenSettingsPanel !== 'display';
   }
 
-  function openFullscreenSettings(panel = 'controls', trigger = null) {
+  function openFullscreenSettings(panel = 'display', trigger = null) {
     if (!refs.fullscreenSettingsOverlay) return;
     fullscreenSettingsReturnFocus = trigger || (typeof document !== 'undefined' ? document.activeElement : null);
     fullscreenSettingsOpen = true;
@@ -8382,9 +8382,10 @@
     syncFullscreenSettingsUi();
     setFullscreenSettingsPanel(panel);
     if (calculatorInputSession) calculatorInputSession.refresh();
+    const tabForPanel = (name) => refs.fullscreenSettingsTabs.find((button) => button.dataset.settingsPanel === name);
     const focusTarget = fullscreenSettingsPanel === 'controls'
-      ? (refs.fullscreenSettingsControls?.querySelector('.calculator-input-binding, .calculator-input-add') || refs.fullscreenSettingsTabs[0] || refs.fullscreenSettingsClose)
-      : (refs.fullscreenSoundEnabled || refs.fullscreenSettingsTabs[1] || refs.fullscreenSettingsClose);
+      ? (refs.fullscreenSettingsControls?.querySelector('.calculator-input-binding, .calculator-input-add') || tabForPanel('controls') || refs.fullscreenSettingsClose)
+      : (refs.fullscreenSoundEnabled || tabForPanel('display') || refs.fullscreenSettingsClose);
     if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
   }
 

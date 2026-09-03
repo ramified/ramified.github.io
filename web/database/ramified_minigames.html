@@ -2013,11 +2013,10 @@
             </button>
           </header>
           <nav class="fullscreen-settings-tabs" role="tablist" data-i18n-aria-label="controls.settingsSections" aria-label="Settings sections">
-            <button class="fullscreen-settings-tab" id="fullscreen-settings-controls-tab" type="button" role="tab" aria-selected="true" aria-controls="fullscreen-settings-controls" data-settings-panel="controls" data-i18n="controls.controlsTab">Controls</button>
-            <button class="fullscreen-settings-tab" id="fullscreen-settings-display-tab" type="button" role="tab" aria-selected="false" aria-controls="fullscreen-settings-display" data-settings-panel="display" data-i18n="controls.displayTab">Display &amp; sound</button>
+            <button class="fullscreen-settings-tab" id="fullscreen-settings-display-tab" type="button" role="tab" aria-selected="true" aria-controls="fullscreen-settings-display" data-settings-panel="display" data-i18n="controls.displayTab">Display &amp; sound</button>
+            <button class="fullscreen-settings-tab" id="fullscreen-settings-controls-tab" type="button" role="tab" aria-selected="false" aria-controls="fullscreen-settings-controls" data-settings-panel="controls" data-i18n="controls.controlsTab">Controls</button>
           </nav>
-          <div class="fullscreen-settings-panel fullscreen-settings-controls calculator-input-settings-content" id="fullscreen-settings-controls" role="tabpanel" aria-labelledby="fullscreen-settings-controls-tab"></div>
-          <div class="fullscreen-settings-panel" id="fullscreen-settings-display" role="tabpanel" aria-labelledby="fullscreen-settings-display-tab" hidden>
+          <div class="fullscreen-settings-panel" id="fullscreen-settings-display" role="tabpanel" aria-labelledby="fullscreen-settings-display-tab">
             <div class="fullscreen-settings-options">
               <div class="fullscreen-setting-row" id="fullscreen-wrapped-view-row" hidden>
                 <label for="fullscreen-wrapped-view-mode" data-i18n="fullscreen.wrappedView">Board view</label>
@@ -2671,6 +2670,7 @@
               <button class="btn" id="download-state" type="button" data-export-action="download" data-i18n="common.download" disabled>download</button>
             </div>
           </div>
+          <div class="fullscreen-settings-panel fullscreen-settings-controls calculator-input-settings-content" id="fullscreen-settings-controls" role="tabpanel" aria-labelledby="fullscreen-settings-controls-tab" hidden></div>
 
           <div class="import-export-tabpanel" id="import-preset-tools" role="tabpanel" aria-labelledby="import-export-tab-import" data-import-export-panel="import" hidden>
             <label class="opt-row"><input type="checkbox" id="import-keep-game-mode" checked> <span data-i18n="io.keepMode">keep current game type</span></label>

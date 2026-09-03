@@ -137,17 +137,6 @@
     DSL: 'dsl',
     VERBOSE: 'verbose'
   };
-  const EXPORT_WRAPPED_VIEW_PROFILES = {
-    '': null,
-    'x-repeat': { x: 'repeat' },
-    'x-reflect-y': { x: 'reflect-y' },
-    'y-repeat': { y: 'repeat' },
-    'y-reflect-x': { y: 'reflect-x' },
-    torus: { x: 'repeat', y: 'repeat' },
-    'klein-x': { x: 'reflect-y', y: 'repeat' },
-    'klein-y': { x: 'repeat', y: 'reflect-x' },
-    rp2: { x: 'reflect-y', y: 'reflect-x' }
-  };
   const EXPORT_GROUP_FALLBACKS = ['2048', 'Hex (Nash)', 'Tile Matching', 'Billiard', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Sokoban', 'FIDE Chess'];
   const KNOT_PRESETS = [
     {
@@ -1334,7 +1323,8 @@
     refs.exportPresetId = document.getElementById('export-preset-id');
     refs.exportPresetLabel = document.getElementById('export-preset-label');
     refs.exportPresetLabelZh = document.getElementById('export-preset-label-zh');
-    refs.exportPresetWrappedView = document.getElementById('export-preset-wrapped-view');
+    refs.exportPresetWrappedViewX = document.getElementById('export-preset-wrapped-view-x');
+    refs.exportPresetWrappedViewY = document.getElementById('export-preset-wrapped-view-y');
     refs.exportPresetAdvanced = document.getElementById('export-preset-advanced');
     refs.exportPresetAdvancedRow = document.getElementById('export-preset-advanced-row');
     refs.exportPresetKeyRow = document.getElementById('export-preset-key-row');
@@ -1851,9 +1841,9 @@
         refreshExport();
       });
     }
-    if (refs.exportPresetWrappedView) {
-      refs.exportPresetWrappedView.addEventListener('change', () => refreshExport({ fillPresetDefaults: false }));
-    }
+    [refs.exportPresetWrappedViewX, refs.exportPresetWrappedViewY].forEach((control) => {
+      if (control) control.addEventListener('change', () => refreshExport({ fillPresetDefaults: false }));
+    });
     if (refs.importExport) refs.importExport.addEventListener('click', importExportText);
     document.getElementById('refresh-export').addEventListener('click', () => refreshExport({ manual: true }));
     document.getElementById('copy-export').addEventListener('click', copyExport);
@@ -29411,7 +29401,9 @@
     if (refs.exportPresetLabel) refs.exportPresetLabel.value = metadata.label;
     if (refs.exportPresetLabelZh) refs.exportPresetLabelZh.value = metadata.labelZh || '';
     if (refs.exportPresetId) refs.exportPresetId.value = metadata.key || cleanExportPresetKey(metadata.id || metadata.label);
-    if (refs.exportPresetWrappedView) refs.exportPresetWrappedView.value = exportWrappedViewControlValue(metadata.wrappedView);
+    const wrappedAxes = exportWrappedViewAxisValues(metadata.wrappedView);
+    if (refs.exportPresetWrappedViewX) refs.exportPresetWrappedViewX.value = wrappedAxes.x;
+    if (refs.exportPresetWrappedViewY) refs.exportPresetWrappedViewY.value = wrappedAxes.y;
     syncExportGroupOptions(exportImportGroupChoices(gameTypes));
     if (refs.exportPresetGroup) refs.exportPresetGroup.value = gameTypes[0];
     if (Array.isArray(refs.exportPresetGroupChecks)) {
@@ -30453,21 +30445,16 @@
   }
 
   function normalizedExportWrappedView(value) {
-    const profile = typeof value === 'string'
-      ? EXPORT_WRAPPED_VIEW_PROFILES[value] || null
-      : value;
+    const profile = value;
     if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return null;
     const x = profile.x === 'repeat' || profile.x === 'reflect-y' ? profile.x : '';
     const y = profile.y === 'repeat' || profile.y === 'reflect-x' ? profile.y : '';
     return x || y ? { ...(x ? { x } : {}), ...(y ? { y } : {}) } : null;
   }
 
-  function exportWrappedViewControlValue(profile) {
+  function exportWrappedViewAxisValues(profile) {
     const normalized = normalizedExportWrappedView(profile);
-    return Object.keys(EXPORT_WRAPPED_VIEW_PROFILES).find((key) => {
-      const candidate = EXPORT_WRAPPED_VIEW_PROFILES[key];
-      return JSON.stringify(candidate || null) === JSON.stringify(normalized || null);
-    }) || '';
+    return { x: normalized ? normalized.x || '' : '', y: normalized ? normalized.y || '' : '' };
   }
 
   function currentExportPresetMetadata() {
@@ -30483,7 +30470,10 @@
     const labelZh = advanced && refs.exportPresetLabelZh && refs.exportPresetLabelZh.value.trim()
       ? refs.exportPresetLabelZh.value.trim()
       : '';
-    const wrappedView = advanced && normalizedExportWrappedView(refs.exportPresetWrappedView && refs.exportPresetWrappedView.value);
+    const wrappedView = advanced && normalizedExportWrappedView({
+      x: refs.exportPresetWrappedViewX && refs.exportPresetWrappedViewX.value,
+      y: refs.exportPresetWrappedViewY && refs.exportPresetWrappedViewY.value
+    });
     const keySource = advanced && rawCustomKey ? rawCustomKey : rawLabel;
     const id = cleanExportPresetId(keySource);
     return {
@@ -32398,7 +32388,9 @@
     refs.exportPresetId = { value: options.id || '' };
     refs.exportPresetLabel = { value: options.label || '' };
     refs.exportPresetLabelZh = { value: options.labelZh || '' };
-    refs.exportPresetWrappedView = { value: exportWrappedViewControlValue(options.wrappedView) };
+    const wrappedAxes = exportWrappedViewAxisValues(options.wrappedView);
+    refs.exportPresetWrappedViewX = { value: wrappedAxes.x };
+    refs.exportPresetWrappedViewY = { value: wrappedAxes.y };
     refs.exportPresetAdvanced = { checked: !!options.advanced };
     refs.exportPresetAdvancedRow = { hidden: false };
     refs.exportPresetKeyRow = { hidden: false };
@@ -32440,7 +32432,7 @@
       compactTileListForExport,
       currentExportPresetMetadata,
       normalizedExportWrappedView,
-      exportWrappedViewControlValue,
+      exportWrappedViewAxisValues,
       exportPresetGroupChoices,
       currentBilliardsEditorState,
       billiardsEditorGeometry,
