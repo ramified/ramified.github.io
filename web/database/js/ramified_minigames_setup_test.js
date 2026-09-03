@@ -1536,7 +1536,57 @@ function testGlueHoverFindsMultiEdgeGroup() {
     `${game.indexOf(3, 3, 9)}:${game.DIRS.N}`,
     `${game.indexOf(3, 4, 9)}:${game.DIRS.N}`
   ].sort());
+  assert.deepStrictEqual(Array.from(game.hoveredGluePairEdgeKeys(state.preset, hover)).sort(), [
+    `${game.indexOf(2, 8, 9)}:${game.DIRS.S}`,
+    `${game.indexOf(3, 3, 9)}:${game.DIRS.N}`
+  ].sort());
+
+  const drawCalls = [];
+  const ctx = new Proxy({ globalAlpha: 1 }, {
+    get(target, property) {
+      if (property in target) return target[property];
+      target[property] = (...args) => drawCalls.push({ method: property, args });
+      return target[property];
+    },
+    set(target, property, value) {
+      drawCalls.push({ property, value });
+      target[property] = value;
+      return true;
+    }
+  });
+  game.__test.drawGlueEdges(ctx, geom, state.preset, hover);
+  assert.strictEqual(
+    drawCalls.filter((call) => call.property === 'strokeStyle' && call.value === 'rgba(255,255,255,0.95)').length,
+    4,
+    'every pair in the two-pair chain keeps the existing white chain highlight'
+  );
+  const baseLineWidth = Math.max(1.8, geom.radius * 0.055) * 1.15;
+  assert.strictEqual(
+    drawCalls.filter((call) => call.property === 'lineWidth' && call.value === baseLineWidth * 4.2).length,
+    2,
+    'the hovered pair retains the full chain-highlight width'
+  );
+  assert.strictEqual(
+    drawCalls.filter((call) => call.property === 'lineWidth' && call.value === baseLineWidth * 2.65).length,
+    2,
+    'other pairs in the chain use the reduced highlight width'
+  );
+  assert.strictEqual(
+    drawCalls.filter((call) => call.property === 'strokeStyle' && call.value === 'rgba(255,209,102,0.96)').length,
+    0,
+    'pair-focused width contrast uses no gold accent'
+  );
+  const pairedHover = game.hoveredGlueBoundaryAtPoint(state.preset, geom, { x: 85, y: 19.8 }, { threshold: 1 });
+  assert.ok(pairedHover);
+  assert.notStrictEqual(pairedHover.pairIndex, hover.pairIndex, 'moving within the chain switches the full-width pair');
   assert.strictEqual(game.hoveredGlueBoundaryAtPoint(state.preset, geom, { x: 5, y: 5 }, { threshold: 1 }), null);
+  drawCalls.length = 0;
+  game.__test.drawGlueEdges(ctx, geom, state.preset, null);
+  assert.strictEqual(
+    drawCalls.filter((call) => call.property === 'strokeStyle' && call.value === 'rgba(255,209,102,0.96)').length,
+    0,
+    'clearing the hover leaves no gold accent'
+  );
 }
 
 function testGenus2PresetFromExport() {
@@ -4293,7 +4343,7 @@ function test2048BoxOrientationImportCloneAndSummary() {
       first: { row: 1, col: 2, dir: game.DIRS.E },
       second: { row: 1, col: 1, dir: game.DIRS.W },
       firstArrowReversed: false,
-      secondArrowReversed: true
+      secondArrowReversed: false
     }]
   });
   seamState.phase = 'ready';

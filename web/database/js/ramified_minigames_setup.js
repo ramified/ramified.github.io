@@ -24,6 +24,15 @@
     return window.SiteI18n.translateSource(String(value ?? ''));
   }
 
+  function localizedPresetLabel(preset, fallback = 'selected background') {
+    const label = preset && preset.label ? String(preset.label) : fallback;
+    const locale = typeof window !== 'undefined' && window.SiteI18n && typeof window.SiteI18n.getLocale === 'function'
+      ? window.SiteI18n.getLocale()
+      : '';
+    if (locale === 'zh-CN' && preset && String(preset.labelZh || '').trim()) return String(preset.labelZh).trim();
+    return tr(label);
+  }
+
   function tk(key, fallback, parameters) {
     if (typeof window !== 'undefined' && window.SiteI18n && typeof window.SiteI18n.t === 'function') {
       const translated = window.SiteI18n.t(key, parameters);
@@ -3548,7 +3557,7 @@
       return Promise.resolve(true);
     }
     selectionLoading = true;
-    syncStatus('loading setup', `loading ${gameTypeForGameMode(mode)}${preset && preset.label ? `: ${preset.label}` : ''}`, 'setup');
+    syncStatus('loading setup', `loading ${localizedGameName(mode)}${preset && preset.label ? `: ${localizedPresetLabel(preset)}` : ''}`, 'setup');
     syncControls();
     const presetLoad = preset && preset.__lazyPreset ? ensurePresetLoaded(preset.id) : Promise.resolve(preset);
     return Promise.all([ensureModeDependencies(mode), presetLoad])
@@ -3799,6 +3808,7 @@
     return {
       id: entry.id,
       label: entry.label,
+      ...(entry.labelZh ? { labelZh: entry.labelZh } : {}),
       gameTypes: entry.gameTypes.slice(),
       ...(entry.wrappedView ? { wrappedView: { ...entry.wrappedView } } : {}),
       ...(entry.wrappedCoverFit ? { wrappedCoverFit: entry.wrappedCoverFit } : {}),
@@ -3970,6 +3980,7 @@
           key,
           file,
           label,
+          labelZh: sanitizeImportedText(entry.labelZh, ''),
           gameTypes: cleanPresetGameTypes(entry.gameTypes, entry.groups, entry.group),
           wrappedView: normalizeWrappedViewProfile(entry.wrappedView),
           wrappedCoverFit: entry.wrappedCoverFit === 'glued' ? 'glued' : '',
@@ -4207,7 +4218,7 @@
         group.presets.forEach((preset) => {
           const option = document.createElement('option');
           option.value = preset.id;
-          option.textContent = preset.label;
+          option.textContent = localizedPresetLabel(preset);
           optgroup.appendChild(option);
         });
         refs.select.appendChild(optgroup);
@@ -4217,7 +4228,7 @@
         customGroup.label = 'Custom';
         const importedOption = document.createElement('option');
         importedOption.value = IMPORTED_PRESET_ID;
-        importedOption.textContent = importedPreset.label || 'imported preset';
+        importedOption.textContent = localizedPresetLabel(importedPreset, 'imported preset');
         customGroup.appendChild(importedOption);
         refs.select.appendChild(customGroup);
       }
@@ -4412,28 +4423,28 @@
     if (game.phase !== 'gameover' && !isBilliardsGame(game)) game.phase = 'ready';
     render();
     if (isHexGame(game)) {
-      syncStatus(`${game.preset.label} Hex`, hexTurnInfo(game), 'ready');
+      syncStatus(`${localizedPresetLabel(game.preset)} ${localizedGameName(GAME_MODES.HEX)}`, hexTurnInfo(game), 'ready');
     } else if (isGomokuGame(game)) {
-      syncStatus(`${game.preset.label} Gomoku`, gomokuTurnInfo(game), 'ready');
+      syncStatus(`${localizedPresetLabel(game.preset)} ${localizedGameName(GAME_MODES.GOMOKU)}`, gomokuTurnInfo(game), 'ready');
     } else if (isConnectFourGame(game)) {
-      syncStatus(`${game.preset.label} Connect Four`, connectFourTurnInfo(game), 'ready');
+      syncStatus(`${localizedPresetLabel(game.preset)} ${localizedGameName(GAME_MODES.CONNECT_FOUR)}`, connectFourTurnInfo(game), 'ready');
     } else if (isGoGame(game)) {
-      syncStatus(`${game.preset.label} Go`, goTurnInfo(game), 'ready');
+      syncStatus(`${localizedPresetLabel(game.preset)} ${localizedGameName(GAME_MODES.GO)}`, goTurnInfo(game), 'ready');
     } else if (isReversiGame(game)) {
-      syncStatus(`${game.preset.label} Reversi`, reversiTurnInfo(game), 'ready');
+      syncStatus(`${localizedPresetLabel(game.preset)} ${localizedGameName(GAME_MODES.REVERSI)}`, reversiTurnInfo(game), 'ready');
     } else if (isChineseCheckersGame(game)) {
-      syncStatus(`${game.preset.label} Chinese Checkers`, chineseCheckersTurnInfo(game), 'ready');
+      syncStatus(`${localizedPresetLabel(game.preset)} ${localizedGameName(GAME_MODES.CHINESE_CHECKERS)}`, chineseCheckersTurnInfo(game), 'ready');
     } else if (isLianliankanGame(game)) {
       syncStatusForCurrentGame();
     } else if (isSokobanGame(game)) {
-      syncStatus(`${game.preset.label} Sokoban`, sokobanTurnInfo(game), 'ready');
+      syncStatus(`${localizedPresetLabel(game.preset)} ${localizedGameName(GAME_MODES.SOKOBAN)}`, sokobanTurnInfo(game), 'ready');
     } else if (isFideChessGame(game)) {
       if (game.phase === 'gameover') syncStatus(fideChessResultText(game), `${game.round || 0} move${game.round === 1 ? '' : 's'}`, 'over');
-      else syncStatus(`${game.preset.label} FIDE Chess`, fideChessTurnInfo(game), 'ready');
+      else syncStatus(`${localizedPresetLabel(game.preset)} ${localizedGameName(GAME_MODES.FIDE_CHESS)}`, fideChessTurnInfo(game), 'ready');
     } else if (isBilliardsGame(game)) {
-      syncStatus(`${game.preset.label} Billiard`, billiardsTurnInfo(game), 'ready');
+      syncStatus(`${localizedPresetLabel(game.preset)} ${localizedGameName(GAME_MODES.BILLIARDS)}`, billiardsTurnInfo(game), 'ready');
     } else {
-      syncStatus(`${game.preset.label} game seed`, 'use arrow keys, buttons, or swipe/drag to slide', 'ready');
+      syncStatus(`${localizedPresetLabel(game.preset)} game seed`, 'use arrow keys, buttons, or swipe/drag to slide', 'ready');
     }
     syncControls();
     if (refs.canvas) refs.canvas.focus();
@@ -5264,7 +5275,7 @@
       presets.forEach((preset) => {
         const option = document.createElement('option');
         option.value = preset.id;
-        option.textContent = preset.label;
+        option.textContent = localizedPresetLabel(preset);
         refs.importCatalog.appendChild(option);
       });
     }
@@ -5293,7 +5304,7 @@
       option.value = IMPORTED_PRESET_ID;
       refs.select.appendChild(option);
     }
-    if (option) option.textContent = preset.label || 'imported preset';
+    if (option) option.textContent = localizedPresetLabel(preset, 'imported preset');
   }
 
   function handleKeydown(event) {
@@ -8208,6 +8219,15 @@
     return { x, y, preferenceKey };
   }
 
+  function wrappedViewMetadataForExport(preset) {
+    const profile = normalizeWrappedViewProfile(preset && preset.wrappedView);
+    if (!profile) return null;
+    return {
+      ...(profile.x ? { x: profile.x } : {}),
+      ...(profile.y ? { y: profile.y } : {})
+    };
+  }
+
   function wrappedViewProfileForBoundaryMode(mode) {
     if (mode === BOUNDARY_GLUE_MODES.TORUS) return { x: 'repeat', y: 'repeat', preferenceKey: 'torus' };
     if (mode === BOUNDARY_GLUE_MODES.KLEIN_BOTTLE) return { x: 'reflect-y', y: 'repeat', preferenceKey: 'klein-bottle' };
@@ -8992,7 +9012,7 @@
   function canvasStartPromptCopy(state) {
     const mode = gameModeValue(state);
     const gameName = tr(gameTypeForGameMode(mode));
-    const presetLabel = tr(state && state.preset && state.preset.label ? state.preset.label : 'selected background');
+    const presetLabel = localizedPresetLabel(state && state.preset, 'selected background');
     let rules = 'Read the quick rule, then begin the selected game on this glued mosaic.';
     if (mode === GAME_MODES.HEX) {
       rules = 'Red and blue alternately fill tiles. Create a connected loop with nonzero integral H₁ to win; the pie rule lets Blue swap colors after Red’s first tile.';
@@ -10831,6 +10851,7 @@
     const preset = {
       id: source.id,
       label: source.label,
+      ...(source.labelZh ? { labelZh: source.labelZh } : {}),
       lattice: source.lattice || 'square',
       rows: source.rows,
       cols: source.cols,
@@ -10842,6 +10863,8 @@
       })),
       gluedEdges: (source.gluedEdges || []).map(cloneGluePair)
     };
+    const wrappedView = wrappedViewMetadataForExport(source);
+    if (wrappedView) preset.wrappedView = wrappedView;
     const holes = backgroundConnectFourHolesForExport(source, sourceState);
     if (holes.length) {
       preset.connectFourHoles = holes;
@@ -10882,10 +10905,13 @@
     const compact = {
       id: preset.id,
       label: preset.label,
+      ...(preset.labelZh ? { labelZh: preset.labelZh } : {}),
       lattice: preset.lattice || 'square',
       size: `${preset.rows}x${preset.cols}`,
       surface: preset.surface
     };
+    const wrappedView = wrappedViewMetadataForExport(preset);
+    if (wrappedView) compact.wrappedView = wrappedView;
     const removed = compactTileListForExport(preset.removedTiles, preset.rows, preset.cols, { rect: true });
     const holes = compactTileListForExport(preset.connectFourHoles, preset.rows, preset.cols, { top: true });
     const cuts = compactCutListForExport(preset.cutEdges);
@@ -11095,6 +11121,7 @@
     const presetPayload = {
       id: preset.id,
       label: preset.label,
+      ...(preset.labelZh ? { labelZh: preset.labelZh } : {}),
       lattice: preset.lattice || 'square',
       rows: preset.rows,
       cols: preset.cols,
@@ -11106,6 +11133,8 @@
       })),
       gluedEdges: (preset.gluedEdges || []).map(cloneGluePair)
     };
+    const wrappedView = wrappedViewMetadataForExport(preset);
+    if (wrappedView) presetPayload.wrappedView = wrappedView;
     if (Array.isArray(preset.connectFourHoles)) {
       presetPayload.connectFourHoles = preset.connectFourHoles.map((tile) => ({ ...tile }));
     }
@@ -12438,10 +12467,15 @@
       Array.isArray(source.gluedEdges) ? source.gluedEdges : ((base && !base.randomGlue && base.gluedEdges) || []),
       shell
     );
+    const statusLabelZh = sanitizeImportedText(
+      source.labelZh || source.nameZh || (base && (base.labelZh || base.nameZh)) || '',
+      ''
+    );
     const statusPreset = {
       id: IMPORTED_PRESET_ID,
       sourceId,
       label: sanitizeImportedText(source.label || (base && base.label) || 'imported status', 'imported status'),
+      ...(statusLabelZh ? { labelZh: statusLabelZh } : {}),
       lattice,
       rows,
       cols,
@@ -12459,6 +12493,8 @@
         sourceId || (base && base.id)
       )
     };
+    const statusWrappedView = wrappedViewMetadataForExport(source) || wrappedViewMetadataForExport(base);
+    if (statusWrappedView) statusPreset.wrappedView = statusWrappedView;
     const pieceSetSource = source.pieceSets || (base && base.pieceSets);
     const pieceSets = normalizePieceSets(pieceSetSource, statusPreset, new Set(removedTileSet));
     if (pieceSetsHaveEntries(pieceSets)) statusPreset.pieceSets = pieceSetsToTileRefs(pieceSets, cols);
@@ -12530,7 +12566,13 @@
   function normalizeBoxOrientation(value) {
     const identity = { a: 1, b: 0, c: 0, d: 1 };
     if (!value || typeof value !== 'object') return identity;
-    const matrix = { a: Number(value.a), b: Number(value.b), c: Number(value.c), d: Number(value.d) };
+    const snap = (number) => {
+      if (Math.abs(number) < 1e-10) return 0;
+      if (Math.abs(number - 1) < 1e-10) return 1;
+      if (Math.abs(number + 1) < 1e-10) return -1;
+      return number;
+    };
+    const matrix = { a: snap(Number(value.a)), b: snap(Number(value.b)), c: snap(Number(value.c)), d: snap(Number(value.d)) };
     if (![matrix.a, matrix.b, matrix.c, matrix.d].every(Number.isFinite)) return identity;
     const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
     if (Math.abs(Math.abs(determinant) - 1) > 0.02) return identity;
@@ -12560,6 +12602,33 @@
     const before = normalizeBoxOrientation(orientation);
     if (!transition || transition.kind !== 'glued' || !transition.edge) return before;
     const lattice = latticeForPreset(preset);
+    if (transition.transport && Number.isInteger(transition.transport.sourceDir)
+      && Number.isInteger(transition.transport.destinationDir)) {
+      // Match the billiards atlas exactly: orient each edge by its displayed
+      // arrow, map its tangent to the partner tangent, and map the outward
+      // normal to the partner's inward normal.  This matters on shifted seams
+      // such as Half-glued, where a direction-only shortcut invents a mirror.
+      const sourceTangent = boxSeamEdgeTangent(
+        transition.transport.sourceDir,
+        lattice,
+        !!transition.transport.sourceArrowReversed
+      );
+      const destinationTangent = boxSeamEdgeTangent(
+        transition.transport.destinationDir,
+        lattice,
+        !!transition.transport.destinationArrowReversed
+      );
+      const sourceNormal = dirVector(transition.transport.sourceDir, 1, lattice);
+      const destinationOutward = dirVector(transition.transport.destinationDir, 1, lattice);
+      const destinationNormal = { x: -destinationOutward.x, y: -destinationOutward.y };
+      const transport = {
+        a: destinationTangent.x * sourceTangent.x + destinationNormal.x * sourceNormal.x,
+        b: destinationTangent.y * sourceTangent.x + destinationNormal.y * sourceNormal.x,
+        c: destinationTangent.x * sourceTangent.y + destinationNormal.x * sourceNormal.y,
+        d: destinationTangent.y * sourceTangent.y + destinationNormal.y * sourceNormal.y
+      };
+      return normalizeBoxOrientation(multiplyBoxOrientations(transport, before));
+    }
     const sourceNormal = dirVector(transition.edge.dir, 1, lattice);
     const targetNormal = dirVector(transition.dir, 1, lattice);
     const sourceTangent = { x: -sourceNormal.y, y: sourceNormal.x };
@@ -12576,7 +12645,19 @@
       c: targetNormal.x * sourceNormal.y + tangentSign * targetTangent.x * sourceTangent.y,
       d: targetNormal.y * sourceNormal.y + tangentSign * targetTangent.y * sourceTangent.y
     };
-    return multiplyBoxOrientations(transport, before);
+    return normalizeBoxOrientation(multiplyBoxOrientations(transport, before));
+  }
+
+  function boxSeamEdgeTangent(dir, lattice, reversed) {
+    const points = tilePoints(0, 0, 1, lattice);
+    const sides = lattice.sides;
+    const startIndex = lattice.shape === 'hex' ? modulo(dir - 1, sides) : modulo(dir + 1, sides);
+    const endIndex = lattice.shape === 'hex' ? modulo(dir, sides) : modulo(dir + 2, sides);
+    const start = points[startIndex];
+    const end = points[endIndex];
+    const length = Math.hypot(end.x - start.x, end.y - start.y) || 1;
+    const sign = reversed ? -1 : 1;
+    return { x: ((end.x - start.x) / length) * sign, y: ((end.y - start.y) / length) * sign };
   }
 
   function normalizeStatusBombs(entries, preset, removed, boxes = []) {
@@ -13306,7 +13387,7 @@
   }
 
   function localizedPreviewTitle(preset, mode = '') {
-    const parts = [tr(preset && preset.label ? preset.label : 'selected background')];
+    const parts = [localizedPresetLabel(preset, 'selected background')];
     if (mode) parts.push(localizedGameName(mode));
     parts.push(tr('preview'));
     return parts.filter(Boolean).join(' ');
@@ -14736,8 +14817,9 @@
       preset.gluedEdges.forEach((pair, pairIndex) => {
         if (gluePairGroupKey(pair, pairIndex) !== activeGroup) return;
         const color = glueColor(pair);
-        drawGlueHalf(ctx, geom, pair.first, color, glueFirstArrowReversed(pair), { highlighted: true });
-        drawGlueHalf(ctx, geom, pair.second, color, glueSecondArrowReversed(pair), { highlighted: true });
+        const reduced = pairIndex !== activeHover.pairIndex;
+        drawGlueHalf(ctx, geom, pair.first, color, glueFirstArrowReversed(pair), { highlighted: true, reduced });
+        drawGlueHalf(ctx, geom, pair.second, color, glueSecondArrowReversed(pair), { highlighted: true, reduced });
       });
     }
     ctx.restore();
@@ -14749,22 +14831,22 @@
     ctx.save();
     if (options.highlighted) {
       ctx.strokeStyle = 'rgba(255,255,255,0.95)';
-      ctx.lineWidth = lineWidth * 4.2;
+      ctx.lineWidth = lineWidth * (options.reduced ? 2.65 : 4.2);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       drawBackgroundBoundarySegment(ctx, segment);
     }
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
-    ctx.lineWidth = options.highlighted ? lineWidth * 2 : lineWidth;
+    ctx.lineWidth = options.highlighted ? lineWidth * (options.reduced ? 1.12 : 2) : lineWidth;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     if (options.highlighted) {
       ctx.shadowColor = 'rgba(17,17,17,0.22)';
-      ctx.shadowBlur = Math.max(6, geom.radius * 0.16);
+      ctx.shadowBlur = Math.max(options.reduced ? 3 : 6, geom.radius * (options.reduced ? 0.09 : 0.16));
     }
     drawBackgroundBoundarySegment(ctx, segment);
-    drawSegmentArrow(ctx, segment, reverse, color, options.highlighted ? lineWidth * 1.8 : lineWidth, geom.radius);
+    drawSegmentArrow(ctx, segment, reverse, color, options.highlighted ? lineWidth * (options.reduced ? 1.12 : 1.8) : lineWidth, geom.radius);
     ctx.restore();
   }
 
@@ -27553,8 +27635,10 @@
         reversed: !!(partner.pair && partner.pair.reversed)
       },
       transport: {
-        tangentSign: ((partner.fromFirst ? glueFirstArrowReversed(partner.pair) : glueSecondArrowReversed(partner.pair))
-          === (partner.fromFirst ? glueSecondArrowReversed(partner.pair) : glueFirstArrowReversed(partner.pair))) ? 1 : -1
+        sourceDir: dir,
+        destinationDir: partner.dir,
+        sourceArrowReversed: partner.fromFirst ? glueFirstArrowReversed(partner.pair) : glueSecondArrowReversed(partner.pair),
+        destinationArrowReversed: partner.fromFirst ? glueSecondArrowReversed(partner.pair) : glueFirstArrowReversed(partner.pair)
       }
     };
   }
@@ -28659,6 +28743,13 @@
         || 'imported preset',
       'imported preset'
     );
+    const labelZh = sanitizeImportedText(
+      firstPresentValue(source, ['labelZh', 'nameZh'])
+        || firstPresentValue(payload, ['labelZh', 'nameZh'])
+        || registryEntry.labelZh
+        || '',
+      ''
+    );
     const surface = sanitizeImportedText(
       firstPresentValue(source, ['surface'])
         || firstPresentValue(payload, ['surface'])
@@ -28680,6 +28771,7 @@
       id: options.imported ? IMPORTED_PRESET_ID : cleanPresetId(sourceId || registryEntry.id || label),
       sourceId: options.imported ? sourceId : '',
       label,
+      ...(labelZh ? { labelZh } : {}),
       gameTypes: options.imported && !hasGameTypeMetadata
         ? []
         : cleanPresetGameTypes(gameTypesValue, legacyGroupsValue, legacyGroupValue),
@@ -30681,6 +30773,16 @@
     return keys;
   }
 
+  function hoveredGluePairEdgeKeys(preset, hover) {
+    const keys = new Set();
+    if (!preset || !hover || !Array.isArray(preset.gluedEdges) || !Number.isInteger(hover.pairIndex)) return keys;
+    const pair = preset.gluedEdges[hover.pairIndex];
+    if (!pair) return keys;
+    keys.add(boundaryEdgeKey(pair.first, preset.cols));
+    keys.add(boundaryEdgeKey(pair.second, preset.cols));
+    return keys;
+  }
+
   function activeGlueHoverForPreset(preset, hover) {
     if (!preset || !hover || hover.presetKey !== glueHoverPresetKey(preset)) return null;
     return hoveredGlueEdgeKeys(preset, hover).has(hover.edgeKey) ? hover : null;
@@ -31138,6 +31240,7 @@
     hexNeighborHintOpacity,
     hoveredGlueBoundaryAtPoint,
     hoveredGlueEdgeKeys,
+    hoveredGluePairEdgeKeys,
     indexOf,
     isGameOver,
     isExplosionModeActive,
@@ -31175,6 +31278,7 @@
     scoreGoGame,
     swapHexPieColors,
     normalizePresetPayload,
+    localizedPresetLabel,
     presetFromImportPayload,
     presetFromImportText,
     presetListForMode,
@@ -31237,6 +31341,7 @@
       wrappedDeckCopyTransform,
       wrappedCoverDescriptor,
       wrappedCoverSeamResidual,
+      drawGlueEdges,
       wrappedHexCutoutMode,
       wrappedHexGlueContextOverlayActive,
       wrappedFideChessPuzzleTrayOverlayActive,

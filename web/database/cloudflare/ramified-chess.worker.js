@@ -41,6 +41,8 @@ const APPROVED_HISTORY_TTL_MS = 20 * 1000;
 const ROOM_INDEX_OBJECT_NAME = '__room-index__';
 const ROOM_INDEX_STORAGE_KEY = 'rooms';
 const ROOM_INDEX_MAX_ROOMS = 200;
+const ROOM_EMPTY_TTL_MS = 5 * 60 * 1000;
+const ROOM_EXPIRY_RETRY_MS = 60 * 1000;
 
 export default {
   async fetch(request, env) {
@@ -100,7 +102,9 @@ export class GameRoom {
     try {
       const url = new URL(request.url);
       if (url.pathname === '/room-index/register' && request.method === 'POST') return this.handleRoomIndexRegister(request);
+      if (url.pathname === '/room-index/remove' && request.method === 'POST') return this.handleRoomIndexRemove(request);
       if (url.pathname === '/room-index/list' && request.method === 'GET') return this.handleRoomIndexList();
+      if (url.pathname === '/lifecycle/reconcile' && request.method === 'POST') return this.handleLifecycleReconcile();
       if (url.pathname === '/init' && request.method === 'POST') return this.handleInit(request);
       if (url.pathname === '/meta' && request.method === 'GET') return this.handleMeta();
       if (/^\/ws\//.test(url.pathname) && request.headers.get('Upgrade') === 'websocket') return this.handleWebSocket(request);
@@ -150,11 +154,13 @@ export class GameRoom {
       pendingApproval: null,
       approvedHistory: null,
       disconnected: {},
+      emptySince: now,
       createdAt: now,
       updatedAt: now
     };
     updateRoomReadiness(this.room);
     await this.saveRoom();
+    await this.ctx.storage.setAlarm(Date.now() + ROOM_EMPTY_TTL_MS);
     return jsonResponse(publicRoomPayload(this.room, {
       role: rolesAssigned[0] || 'spectator',
       rolesAssigned
@@ -179,10 +185,77 @@ export class GameRoom {
     return jsonResponse({ ok: true });
   }
 
+  async handleRoomIndexRemove(request) {
+    const body = await readJson(request);
+    const roomCode = normalizeRoomCode(body.roomCode || body.code);
+    if (!roomCode) return jsonResponse({ error: 'Invalid room code.' }, 400);
+    const existing = await this.ctx.storage.get(ROOM_INDEX_STORAGE_KEY);
+    const rooms = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {};
+    if (Object.prototype.hasOwnProperty.call(rooms, roomCode)) {
+      delete rooms[roomCode];
+      await this.ctx.storage.put(ROOM_INDEX_STORAGE_KEY, rooms);
+    }
+    return jsonResponse({ ok: true });
+  }
+
   async handleRoomIndexList() {
     const existing = await this.ctx.storage.get(ROOM_INDEX_STORAGE_KEY);
     const rooms = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {};
-    return jsonResponse({ rooms: roomIndexList(rooms) });
+    const now = Date.now();
+    const reconciled = new Map();
+    for (const entry of roomIndexList(rooms)) {
+      if (!roomIndexEntryNeedsReconciliation(entry, now)) continue;
+      try {
+        const lifecycle = await reconcileIndexedRoom(this.env, entry.roomCode);
+        const connected = Math.max(0, Math.floor(Number(lifecycle && lifecycle.connected) || 0));
+        const expiresAt = normalizeOptionalTimestamp(lifecycle && lifecycle.expiresAt);
+        if (!lifecycle || lifecycle.exists === false || connected === 0 && (!expiresAt || Date.parse(expiresAt) <= now)) {
+          reconciled.set(entry.roomCode, { previous: entry, remove: true });
+          continue;
+        }
+        reconciled.set(entry.roomCode, {
+          previous: entry,
+          entry: normalizeRoomIndexEntry({
+            ...entry,
+            ...(lifecycle.room || {}),
+            verifiedAt: new Date(now).toISOString(),
+            expiresAt: connected > 0 ? '' : expiresAt
+          })
+        });
+      } catch (_) {
+        // Keep the prior entry on transient room/index errors and retry on the next search.
+      }
+    }
+    if (!reconciled.size) return jsonResponse({ rooms: roomIndexList(rooms).map(publicRoomIndexEntry) });
+
+    const latestStored = await this.ctx.storage.get(ROOM_INDEX_STORAGE_KEY);
+    const latest = latestStored && typeof latestStored === 'object' && !Array.isArray(latestStored) ? latestStored : {};
+    let changed = false;
+    reconciled.forEach((result, roomCode) => {
+      const current = normalizeRoomIndexEntry(latest[roomCode]);
+      if (!sameRoomIndexLease(current, result.previous)) return;
+      if (result.remove) delete latest[roomCode];
+      else latest[roomCode] = result.entry;
+      changed = true;
+    });
+    if (changed) await this.ctx.storage.put(ROOM_INDEX_STORAGE_KEY, pruneRoomIndex(latest));
+    return jsonResponse({ rooms: roomIndexList(latest).map(publicRoomIndexEntry) });
+  }
+
+  async handleLifecycleReconcile() {
+    await this.loadRoom();
+    if (!this.room) return jsonResponse({ exists: false }, 404);
+    const connected = this.playerSockets().length;
+    if (connected > 0) {
+      if (this.room.emptySince) {
+        this.room.emptySince = null;
+        await this.saveRoom();
+      }
+      await this.ctx.storage.deleteAlarm();
+      return jsonResponse({ exists: true, connected, room: publicRoomPayload(this.room), expiresAt: '' });
+    }
+    const expiresAt = await this.ensureEmptyRoomExpiry({ inferExisting: true, publish: false });
+    return jsonResponse({ exists: true, connected: 0, room: publicRoomPayload(this.room), expiresAt });
   }
 
   async handleWebSocket(request) {
@@ -285,15 +358,60 @@ export class GameRoom {
   }
 
   async webSocketClose(ws) {
-    await this.announceSocketDisconnect(ws, 'disconnected');
-    this.sessions.delete(ws);
-    this.broadcastPresence();
+    await this.finishSocket(ws, 'disconnected');
   }
 
   async webSocketError(ws) {
-    await this.announceSocketDisconnect(ws, 'connection error');
-    this.sessions.delete(ws);
-    this.broadcastPresence();
+    await this.finishSocket(ws, 'connection error');
+  }
+
+  async alarm() {
+    await this.loadRoom();
+    if (!this.room) return;
+    if (this.playerSockets().length > 0) {
+      this.room.emptySince = null;
+      await this.saveRoom();
+      try {
+        await this.publishRoomIndex({ throwOnError: true });
+      } catch (_) {
+        await this.ctx.storage.setAlarm(Date.now() + ROOM_EXPIRY_RETRY_MS);
+        return;
+      }
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+
+    const emptySince = roomEmptySinceTime(this.room, Date.now());
+    const expiresAt = emptySince + ROOM_EMPTY_TTL_MS;
+    if (Date.now() < expiresAt) {
+      await this.ctx.storage.setAlarm(expiresAt);
+      return;
+    }
+
+    const roomCode = this.room.roomCode;
+    const expectedEmptySince = this.room.emptySince;
+    try {
+      await unregisterRoomFromIndex(this.env, roomCode);
+    } catch (_) {
+      await this.ctx.storage.setAlarm(Date.now() + ROOM_EXPIRY_RETRY_MS);
+      return;
+    }
+
+    if (this.playerSockets().length > 0 || this.room.emptySince !== expectedEmptySince) {
+      this.room.emptySince = null;
+      await this.saveRoom();
+      try {
+        await this.publishRoomIndex({ throwOnError: true });
+      } catch (_) {
+        await this.ctx.storage.setAlarm(Date.now() + ROOM_EXPIRY_RETRY_MS);
+        return;
+      }
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+
+    await this.ctx.storage.deleteAll();
+    this.room = null;
   }
 
   async handleHello(ws, payload) {
@@ -320,9 +438,12 @@ export class GameRoom {
     this.sessions.set(ws, attachment);
     ws.serializeAttachment(attachment);
     this.room.updatedAt = new Date().toISOString();
+    this.room.emptySince = null;
     if (reconnected && this.room.disconnected) delete this.room.disconnected[clientId];
     updateRoomReadiness(this.room);
+    await this.ctx.storage.deleteAlarm();
     await this.saveRoom();
+    await this.publishRoomIndex();
     this.safeSend(ws, {
       type: 'joined',
       roomCode: this.room.roomCode,
@@ -861,6 +982,44 @@ export class GameRoom {
     });
   }
 
+  async finishSocket(ws, reason) {
+    if (!this.sessions.has(ws)) return;
+    await this.announceSocketDisconnect(ws, reason);
+    this.sessions.delete(ws);
+    this.broadcastPresence();
+    if (this.playerSockets().length === 0) {
+      await this.ensureEmptyRoomExpiry({ reset: true, publish: true });
+    }
+  }
+
+  async ensureEmptyRoomExpiry(options = {}) {
+    if (!this.room || this.playerSockets().length > 0) return '';
+    const now = Date.now();
+    const inferred = options.inferExisting ? roomEmptySinceTime(this.room, now) : now;
+    const emptySince = options.reset ? now : inferred;
+    const emptySinceIso = new Date(emptySince).toISOString();
+    const changed = this.room.emptySince !== emptySinceIso;
+    this.room.emptySince = emptySinceIso;
+    if (options.reset) this.room.updatedAt = emptySinceIso;
+    if (changed || options.reset) await this.saveRoom();
+    const expiresAt = emptySince + ROOM_EMPTY_TTL_MS;
+    await this.ctx.storage.setAlarm(Math.max(now, expiresAt));
+    if (options.publish) await this.publishRoomIndex();
+    return new Date(expiresAt).toISOString();
+  }
+
+  async publishRoomIndex(options = {}) {
+    if (!this.room || !hasRoomNamespace(this.env)) return false;
+    try {
+      await registerRoomInIndex(this.env, this.room);
+      return true;
+    } catch (_) {
+      if (options.throwOnError) throw _;
+      // Discovery is best-effort while the room itself remains authoritative.
+      return false;
+    }
+  }
+
   broadcastPlayerReconnect(attachment) {
     if (!this.room || !attachment || !attachment.joined) return;
     const rolesAssigned = attachmentRoles(attachment);
@@ -979,7 +1138,8 @@ async function createRoom(request, env) {
     if (response.status !== 409) {
       if (response.ok) {
         try {
-          await registerRoomInIndex(env, await response.clone().json());
+          const room = await response.clone().json();
+          await registerRoomInIndex(env, { ...room, emptySince: room.createdAt });
         } catch (_) {
           // Room creation already succeeded; discovery can recover on the next room creation.
         }
@@ -997,7 +1157,13 @@ async function listRooms(env) {
 }
 
 async function registerRoomInIndex(env, room) {
-  const entry = normalizeRoomIndexEntry(room);
+  if (!hasRoomNamespace(env)) throw new Error('Room namespace is unavailable.');
+  const emptySince = normalizeOptionalTimestamp(room && room.emptySince);
+  const entry = normalizeRoomIndexEntry({
+    ...room,
+    verifiedAt: new Date().toISOString(),
+    expiresAt: emptySince ? new Date(Date.parse(emptySince) + ROOM_EMPTY_TTL_MS).toISOString() : ''
+  });
   if (!entry) return;
   const stub = roomIndexStub(env);
   await stub.fetch(new Request('https://room-index/room-index/register', {
@@ -1005,6 +1171,30 @@ async function registerRoomInIndex(env, room) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(entry)
   }));
+}
+
+async function unregisterRoomFromIndex(env, roomCode) {
+  if (!hasRoomNamespace(env)) throw new Error('Room namespace is unavailable.');
+  const stub = roomIndexStub(env);
+  const response = await stub.fetch(new Request('https://room-index/room-index/remove', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roomCode })
+  }));
+  if (!response.ok) throw new Error(`Room index removal failed with HTTP ${response.status}.`);
+}
+
+async function reconcileIndexedRoom(env, roomCode) {
+  if (!hasRoomNamespace(env)) throw new Error('Room namespace is unavailable.');
+  const stub = env.GAME_ROOM.get(env.GAME_ROOM.idFromName(roomCode));
+  const response = await stub.fetch(new Request('https://room/lifecycle/reconcile', { method: 'POST' }));
+  if (response.status === 404) return { exists: false };
+  if (!response.ok) throw new Error(`Room reconciliation failed with HTTP ${response.status}.`);
+  return response.json();
+}
+
+function hasRoomNamespace(env) {
+  return !!(env && env.GAME_ROOM && typeof env.GAME_ROOM.idFromName === 'function' && typeof env.GAME_ROOM.get === 'function');
 }
 
 function roomIndexStub(env) {
@@ -1343,7 +1533,9 @@ function normalizeRoomIndexEntry(source) {
     roomCode,
     gameMode,
     summary: sanitizeText(source.summary, 220),
-    updatedAt
+    updatedAt,
+    verifiedAt: normalizeOptionalTimestamp(source.verifiedAt),
+    expiresAt: normalizeOptionalTimestamp(source.expiresAt)
   };
 }
 
@@ -1357,6 +1549,31 @@ function roomIndexList(rooms) {
   return list;
 }
 
+function publicRoomIndexEntry(entry) {
+  return {
+    roomCode: entry.roomCode,
+    gameMode: entry.gameMode,
+    summary: entry.summary || '',
+    updatedAt: entry.updatedAt
+  };
+}
+
+function roomIndexEntryNeedsReconciliation(entry, now = Date.now()) {
+  const expiresAt = Date.parse(entry && entry.expiresAt || '');
+  if (Number.isFinite(expiresAt)) return expiresAt <= now;
+  const verifiedAt = Date.parse(entry && (entry.verifiedAt || entry.updatedAt) || '');
+  return !Number.isFinite(verifiedAt) || verifiedAt + ROOM_EMPTY_TTL_MS <= now;
+}
+
+function sameRoomIndexLease(left, right) {
+  if (!left || !right) return false;
+  return left.roomCode === right.roomCode
+    && left.gameMode === right.gameMode
+    && left.updatedAt === right.updatedAt
+    && left.verifiedAt === right.verifiedAt
+    && left.expiresAt === right.expiresAt;
+}
+
 function pruneRoomIndex(rooms) {
   return roomIndexList(rooms).slice(0, ROOM_INDEX_MAX_ROOMS).reduce((result, entry) => {
     result[entry.roomCode] = entry;
@@ -1368,6 +1585,21 @@ function normalizeTimestamp(value) {
   const text = String(value || '').trim();
   const time = Date.parse(text);
   return Number.isFinite(time) ? new Date(time).toISOString() : new Date().toISOString();
+}
+
+function normalizeOptionalTimestamp(value) {
+  const text = String(value || '').trim();
+  const time = Date.parse(text);
+  return Number.isFinite(time) ? new Date(time).toISOString() : '';
+}
+
+function roomEmptySinceTime(room, fallback = Date.now()) {
+  const candidates = [room && room.emptySince, room && room.updatedAt, room && room.createdAt];
+  for (const candidate of candidates) {
+    const time = Date.parse(String(candidate || ''));
+    if (Number.isFinite(time)) return Math.min(time, fallback);
+  }
+  return fallback;
 }
 
 function publicRoles(roles) {

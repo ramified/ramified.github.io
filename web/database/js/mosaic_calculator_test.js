@@ -293,6 +293,107 @@ function testMinigameTestLink() {
   assert.strictEqual(mosaic.minigameModeForExportGameType('2048'), '2048');
 }
 
+function testAdvancedChineseNameAndWrappedViewExport() {
+  setupBoard();
+  const profiles = [
+    ['x-repeat', { x: 'repeat' }],
+    ['x-reflect-y', { x: 'reflect-y' }],
+    ['y-repeat', { y: 'repeat' }],
+    ['y-reflect-x', { y: 'reflect-x' }],
+    ['torus', { x: 'repeat', y: 'repeat' }],
+    ['klein-x', { x: 'reflect-y', y: 'repeat' }],
+    ['klein-y', { x: 'repeat', y: 'reflect-x' }],
+    ['rp2', { x: 'reflect-y', y: 'reflect-x' }]
+  ];
+  profiles.forEach(([control, wrappedView]) => {
+    mosaic.setTestExportControls({
+      type: 'minigame',
+      format: 'dsl',
+      id: 'named-cover',
+      label: 'Named cover',
+      labelZh: '中文棋盘',
+      group: 'Gomoku',
+      advanced: true,
+      wrappedView
+    });
+    assert.strictEqual(mosaic.refs.exportPresetWrappedView.value, control);
+    const metadata = mosaic.currentExportPresetMetadata();
+    assert.strictEqual(metadata.labelZh, '中文棋盘');
+    assert.deepStrictEqual(metadata.wrappedView, wrappedView);
+    const exported = loadPresetJs(mosaic.buildExportText());
+    assert.strictEqual(exported.labelZh, '中文棋盘');
+    assert.strictEqual(JSON.stringify(exported.wrappedView), JSON.stringify(wrappedView));
+    const registry = mosaic.minigamePresetRegistryEntry(metadata);
+    assert.strictEqual(registry.labelZh, '中文棋盘');
+    assert.deepStrictEqual(registry.wrappedView, wrappedView);
+    const normalized = minigames.normalizePresetPayload(exported, { registryEntry: registry });
+    assert.strictEqual(normalized.labelZh, '中文棋盘');
+    assert.deepStrictEqual(normalized.wrappedView.x, wrappedView.x || '');
+    assert.deepStrictEqual(normalized.wrappedView.y, wrappedView.y || '');
+    const url = new URL(mosaic.buildMinigameTestHref(), 'https://example.test/');
+    const payload = decodeBase64UrlJson(url.searchParams.get('minigamePreset'));
+    assert.strictEqual(payload.labelZh, '中文棋盘');
+    assert.deepStrictEqual(payload.wrappedView, wrappedView);
+  });
+
+  mosaic.setTestExportControls({ type: 'minigame', format: 'verbose', label: 'English fallback', group: '2048' });
+  const defaultExport = mosaic.buildMinigamePresetExport();
+  assert.strictEqual(defaultExport.labelZh, undefined);
+  assert.strictEqual(defaultExport.wrappedView, undefined);
+
+  const previousWindow = global.window;
+  try {
+    global.window = { SiteI18n: { getLocale: () => 'zh-CN', translateSource: (value) => `tr:${value}` } };
+    assert.strictEqual(minigames.localizedPresetLabel({ label: 'Named cover', labelZh: '中文棋盘' }), '中文棋盘');
+    assert.strictEqual(minigames.localizedPresetLabel({ label: 'English fallback' }), 'tr:English fallback');
+  } finally {
+    if (previousWindow === undefined) delete global.window;
+    else global.window = previousWindow;
+  }
+}
+
+function testGluedChainHoverUsesPairFocusedWidthContrast() {
+  setupBoard();
+  mosaic.setTestGeometry({
+    width: 80,
+    height: 80,
+    radius: 10,
+    cells: Array.from({ length: 16 }, (_, index) => ({
+      row: Math.floor(index / 4) + 1,
+      col: (index % 4) + 1,
+      x: 10 + ((index % 4) * 20),
+      y: 10 + (Math.floor(index / 4) * 20)
+    }))
+  });
+  const pair = mosaic.state.gluedEdges[0];
+  mosaic.state.gluedHover = {
+    edgeKey: `${pair.first.index}:${pair.first.dir}`,
+    pairIndex: 0,
+    group: pair.group
+  };
+  const drawCalls = [];
+  const ctx = new Proxy({}, {
+    get(target, property) {
+      if (property in target) return target[property];
+      target[property] = (...args) => drawCalls.push({ method: property, args });
+      return target[property];
+    },
+    set(target, property, value) {
+      drawCalls.push({ property, value });
+      target[property] = value;
+      return true;
+    }
+  });
+  mosaic.drawGluedBoundaryPairs(ctx);
+  const base = Math.max(1.8, 10 * 0.055) * 1.15;
+  assert.strictEqual(drawCalls.filter((call) => call.property === 'strokeStyle' && call.value === 'rgba(255,255,255,0.95)').length, 8);
+  assert.strictEqual(drawCalls.filter((call) => call.property === 'lineWidth' && call.value === base * 4.2).length, 2);
+  assert.strictEqual(drawCalls.filter((call) => call.property === 'lineWidth' && call.value === base * 2.65).length, 6);
+  assert.strictEqual(drawCalls.filter((call) => call.property === 'strokeStyle' && call.value === 'rgba(255,209,102,0.96)').length, 0);
+  assert.strictEqual(mosaic.clearGluedBoundaryHover(), true);
+  assert.strictEqual(mosaic.state.gluedHover, null);
+}
+
 function testHexAndTileMatchingTestLinks() {
   const gluedEdges = minigames.generateTorusBoundaryGlue(4, 4);
   mosaic.setTestBoard({
@@ -441,6 +542,8 @@ function testExportHiddenRowsHaveCssRule() {
   const storedDataRow = html.indexOf('id="export-precomputed-game-data-row"');
   const testRow = html.indexOf('id="export-test-link-row"');
   assert.ok(html.includes('id="export-precomputed-game-data"'));
+  assert.ok(html.includes('id="export-preset-label-zh"'));
+  assert.ok(html.includes('id="export-preset-wrapped-view"'));
   assert.ok(html.includes('store precomputed game data'));
   assert.ok(presetRow < storedDataRow && storedDataRow < testRow, 'stored game data occupies one row immediately before Test');
   assert.ok(
@@ -1124,6 +1227,8 @@ const tests = [
   testDisplayNameGeneratesPresetKey,
   testCustomKeyOverride,
   testAdvancedMultiGroupExport,
+  testAdvancedChineseNameAndWrappedViewExport,
+  testGluedChainHoverUsesPairFocusedWidthContrast,
   testPresetMetadataCanBeClearedWhileEditing,
   testMinigameTestLink,
   testHexAndTileMatchingTestLinks,

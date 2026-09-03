@@ -2036,8 +2036,26 @@
                 <input type="text" id="export-preset-id" spellcheck="false" aria-label="Minigame preset file key" placeholder="file key">
               </label>
               <label class="export-meta-field">
+                <span class="export-meta-field-label">Chinese display name</span>
+                <input type="text" id="export-preset-label-zh" spellcheck="false" aria-label="Minigame preset Chinese display name" placeholder="中文名称">
+              </label>
+              <label class="export-meta-field">
                 <span class="export-meta-field-label">Game types</span>
                 <span class="export-group-checks" id="export-preset-groups" aria-label="Minigame preset game types"></span>
+              </label>
+              <label class="export-meta-field">
+                <span class="export-meta-field-label">Board view</span>
+                <select id="export-preset-wrapped-view" aria-label="Minigame preset Board view">
+                  <option value="">not available</option>
+                  <option value="x-repeat">horizontal repeat</option>
+                  <option value="x-reflect-y">horizontal reflection</option>
+                  <option value="y-repeat">vertical repeat</option>
+                  <option value="y-reflect-x">vertical reflection</option>
+                  <option value="torus">Torus</option>
+                  <option value="klein-x">Klein bottle (horizontal reflection)</option>
+                  <option value="klein-y">Klein bottle (vertical reflection)</option>
+                  <option value="rp2">RP² chart cover</option>
+                </select>
               </label>
             </span>
           </span>
@@ -2079,7 +2097,7 @@
 <script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_native.js?v=20260825-1"></script>
-<script src="js/mosaic_calculator.js?v=homology-local-carrier-7"></script>
+<script src="js/mosaic_calculator.js?v=homology-local-carrier-8"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260826-1"></script>
 <script>

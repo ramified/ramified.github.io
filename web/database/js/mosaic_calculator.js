@@ -137,6 +137,17 @@
     DSL: 'dsl',
     VERBOSE: 'verbose'
   };
+  const EXPORT_WRAPPED_VIEW_PROFILES = {
+    '': null,
+    'x-repeat': { x: 'repeat' },
+    'x-reflect-y': { x: 'reflect-y' },
+    'y-repeat': { y: 'repeat' },
+    'y-reflect-x': { y: 'reflect-x' },
+    torus: { x: 'repeat', y: 'repeat' },
+    'klein-x': { x: 'reflect-y', y: 'repeat' },
+    'klein-y': { x: 'repeat', y: 'reflect-x' },
+    rp2: { x: 'reflect-y', y: 'reflect-x' }
+  };
   const EXPORT_GROUP_FALLBACKS = ['2048', 'Hex (Nash)', 'Tile Matching', 'Billiard', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Sokoban', 'FIDE Chess'];
   const KNOT_PRESETS = [
     {
@@ -987,6 +998,7 @@
     drawDebugHit: null,
     hoverIndex: -1,
     backgroundHoverEdge: null,
+    gluedHover: null,
     dualGraphLayout: null,
     dualGraphLayoutMethod: 'force',
     dualGraphLayoutTimings: {},
@@ -1321,6 +1333,8 @@
     refs.exportPresetMetaRow = document.getElementById('export-preset-meta-row');
     refs.exportPresetId = document.getElementById('export-preset-id');
     refs.exportPresetLabel = document.getElementById('export-preset-label');
+    refs.exportPresetLabelZh = document.getElementById('export-preset-label-zh');
+    refs.exportPresetWrappedView = document.getElementById('export-preset-wrapped-view');
     refs.exportPresetAdvanced = document.getElementById('export-preset-advanced');
     refs.exportPresetAdvancedRow = document.getElementById('export-preset-advanced-row');
     refs.exportPresetKeyRow = document.getElementById('export-preset-key-row');
@@ -1477,6 +1491,7 @@
         state.hoverIndex = -1;
         state.backgroundHoverEdge = null;
         state.backgroundHoverCusp = null;
+        clearGluedBoundaryHover();
         if (!isBackgroundHomologyRepresentativeAction()) state.homologyEditingGeneratorId = '';
         if (!isBackgroundGlueAction()) clearPendingGlueEdge();
         if (!isBackgroundBilliardAction()) stopBackgroundBilliard(false);
@@ -1815,7 +1830,7 @@
     if (refs.exportPrecomputedGameData) {
       refs.exportPrecomputedGameData.addEventListener('change', () => refreshExport({ fillPresetDefaults: false }));
     }
-    [refs.exportPresetLabel, refs.exportPresetId].forEach((input) => {
+    [refs.exportPresetLabel, refs.exportPresetLabelZh, refs.exportPresetId].forEach((input) => {
       if (!input) return;
       input.addEventListener('input', () => refreshExport({ fillPresetDefaults: false }));
       input.addEventListener('blur', () => {
@@ -1835,6 +1850,9 @@
         syncExportPresetGroupChecks({ ensurePrimary: true });
         refreshExport();
       });
+    }
+    if (refs.exportPresetWrappedView) {
+      refs.exportPresetWrappedView.addEventListener('change', () => refreshExport({ fillPresetDefaults: false }));
     }
     if (refs.importExport) refs.importExport.addEventListener('click', importExportText);
     document.getElementById('refresh-export').addEventListener('click', () => refreshExport({ manual: true }));
@@ -2268,6 +2286,7 @@
     state.decorationHoverHit = null;
     state.backgroundHoverEdge = null;
     state.backgroundHoverCusp = null;
+    clearGluedBoundaryHover();
     if (state.inputMode !== 'background') clearPendingGlueEdge();
     if (state.inputMode !== 'background') stopBackgroundBilliard(false);
     syncMainCanvasCursor();
@@ -2894,6 +2913,7 @@
       state.hoverIndex = -1;
       state.decorationHoverHit = null;
       state.backgroundHoverEdge = null;
+      clearGluedBoundaryHover();
       state.backgroundHoverCusp = null;
       state.billiardsHover = null;
       if (state.backgroundBilliard) state.backgroundBilliard.aimPoint = null;
@@ -2902,8 +2922,9 @@
     });
     refs.canvas.addEventListener('mousemove', (event) => {
       if (pointerState) return;
+      const gluedHoverChanged = updateGluedBoundaryHover(event.clientX, event.clientY);
       if (state.inputMode === 'import') {
-        if (state.hoverIndex !== -1) {
+        if (state.hoverIndex !== -1 || gluedHoverChanged) {
           state.hoverIndex = -1;
           state.decorationHoverHit = null;
           syncMainCanvasCursor();
@@ -2927,7 +2948,7 @@
         const aimChanged = isBilliard ? updateBackgroundBilliardAim(event.clientX, event.clientY, false) : false;
         const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
         const cuspChanged = !sameBackgroundCuspHit(cusp, state.backgroundHoverCusp);
-        if (hit !== state.hoverIndex || edgeChanged || cuspChanged || state.decorationHoverHit || debugChanged || aimChanged || billiardsHoverChanged) {
+        if (hit !== state.hoverIndex || edgeChanged || cuspChanged || state.decorationHoverHit || debugChanged || aimChanged || billiardsHoverChanged || gluedHoverChanged) {
           state.hoverIndex = hit;
           state.backgroundHoverEdge = edge;
           state.backgroundHoverCusp = cusp;
@@ -2939,7 +2960,7 @@
       }
       if (state.inputMode === 'pick') {
         const pickChanged = updatePickHoverFromPoint(event.clientX, event.clientY, false);
-        if (state.hoverIndex !== -1 || state.decorationHoverHit || pickChanged) {
+        if (state.hoverIndex !== -1 || state.decorationHoverHit || pickChanged || gluedHoverChanged) {
           state.hoverIndex = -1;
           state.decorationHoverHit = null;
           syncMainCanvasCursor();
@@ -2952,7 +2973,7 @@
         const hit = decorationHitFromPoint(event.clientX, event.clientY);
         const hoverIndex = hit && hit.type === 'vertex' ? hit.index : -1;
         const hoverChanged = !sameDecorationHit(hit, state.decorationHoverHit);
-        if (hoverIndex !== state.hoverIndex || hoverChanged || debugChanged) {
+        if (hoverIndex !== state.hoverIndex || hoverChanged || debugChanged || gluedHoverChanged) {
           state.hoverIndex = hoverIndex;
           state.decorationHoverHit = hit;
           syncMainCanvasCursor();
@@ -2963,7 +2984,7 @@
       if (state.inputMode === 'draw') {
         if (state.drawAction === 'edge') {
           const debugChanged = updateDrawDebugFromPoint(event.clientX, event.clientY, false);
-          if (state.hoverIndex !== -1 || state.decorationHoverHit || debugChanged) {
+          if (state.hoverIndex !== -1 || state.decorationHoverHit || debugChanged || gluedHoverChanged) {
             state.hoverIndex = -1;
             state.decorationHoverHit = null;
             syncMainCanvasCursor();
@@ -2972,7 +2993,7 @@
         } else {
           const debugChanged = clearDrawDebugHit(false);
           const hit = hitTest(event.clientX, event.clientY);
-          if (hit !== state.hoverIndex || state.decorationHoverHit || debugChanged) {
+          if (hit !== state.hoverIndex || state.decorationHoverHit || debugChanged || gluedHoverChanged) {
             state.hoverIndex = hit;
             state.decorationHoverHit = null;
             syncMainCanvasCursor();
@@ -2983,7 +3004,7 @@
       }
       const debugChanged = updateDrawDebugFromPoint(event.clientX, event.clientY, false);
       const hit = hitTest(event.clientX, event.clientY);
-      if (hit !== state.hoverIndex || state.decorationHoverHit || debugChanged) {
+      if (hit !== state.hoverIndex || state.decorationHoverHit || debugChanged || gluedHoverChanged) {
         state.hoverIndex = hit;
         state.decorationHoverHit = null;
         syncMainCanvasCursor();
@@ -3075,6 +3096,7 @@
     state.removedTiles = new Set();
     state.cutEdges = new Set();
     state.gluedEdges = [];
+    clearGluedBoundaryHover();
     state.inputHoles = new Set();
     state.lianliankanEmpty = new Set();
     state.hexSeeds = new Map();
@@ -3189,6 +3211,7 @@
     state.gluedEdges = oldLattice !== nextLattice
       ? []
       : reshapeGluedEdges(oldGluedEdges, oldRows, oldCols, rows, cols);
+    clearGluedBoundaryHover();
     state.inputHoles = reshapeRemovedTiles(oldInputHoles, oldRows, oldCols, rows, cols);
     state.lianliankanEmpty = reshapeRemovedTiles(oldLianliankanEmpty, oldRows, oldCols, rows, cols);
     state.hexSeeds = reshapeHexSeeds(oldHexSeeds, oldRows, oldCols, rows, cols);
@@ -3508,6 +3531,8 @@
     return {
       id: metadata.id,
       label: metadata.label,
+      ...(metadata.labelZh ? { labelZh: metadata.labelZh } : {}),
+      ...(metadata.wrappedView ? { wrappedView: metadata.wrappedView } : {}),
       lattice: state.lattice,
       rows: state.rows,
       cols: state.cols,
@@ -3531,7 +3556,9 @@
     const compact = includeMetadata
       ? {
         id: metadata.id,
-        label: metadata.label
+        label: metadata.label,
+        ...(metadata.labelZh ? { labelZh: metadata.labelZh } : {}),
+        ...(metadata.wrappedView ? { wrappedView: metadata.wrappedView } : {})
       }
       : {};
     compact.lattice = state.lattice;
@@ -3590,7 +3617,9 @@
       gameTypes: metadata.gameTypes,
       id: metadata.id,
       label: metadata.label,
+      ...(metadata.labelZh ? { labelZh: metadata.labelZh } : {}),
       key: metadata.key,
+      ...(metadata.wrappedView ? { wrappedView: metadata.wrappedView } : {}),
       file: `${metadata.key}.preset.js`
     };
   }
@@ -3969,6 +3998,7 @@
     state.gluedEdges = hasImportedGluedEdges(options)
       ? importGluedEdges(options, rows, cols)
       : (oldLattice === latticeName ? reshapeGluedEdges(oldGluedEdges, oldRows, oldCols, rows, cols) : []);
+    clearGluedBoundaryHover();
     state.inputHoles = new Set();
     state.lianliankanEmpty = new Set();
     state.hexSeeds = new Map();
@@ -4670,6 +4700,7 @@
     state.gluedEdges = hasImportedGluedEdges(payload)
       ? importGluedEdges(payload, rows, cols)
       : (oldLattice === latticeName ? reshapeGluedEdges(oldGluedEdges, oldRows, oldCols, rows, cols) : []);
+    clearGluedBoundaryHover();
     state.inputHoles = hasImportedInputHoles(payload)
       ? importInputHoles(payload, rows, cols)
       : reshapeRemovedTiles(cloneInputHoleSet(), oldRows, oldCols, rows, cols);
@@ -5512,6 +5543,7 @@
     state.removedTiles = new Set();
     state.cutEdges = new Set();
     state.gluedEdges = [];
+    clearGluedBoundaryHover();
     state.inputHoles = new Set();
     state.lianliankanEmpty = new Set();
     state.hexSeeds = new Map();
@@ -6308,6 +6340,51 @@
 
   function sameBoundaryEdge(left, right) {
     return boundaryEdgeKey(left) === boundaryEdgeKey(right);
+  }
+
+  function gluedBoundaryHoverAtClientPoint(clientX, clientY) {
+    if (!isGluedBoundaryMode()) return null;
+    const edge = boundaryEdgeHitTest(clientX, clientY);
+    if (!edge) return null;
+    const edgeKey = boundaryEdgeKey(edge);
+    const pairs = cloneGluedEdges();
+    const pairIndex = pairs.findIndex((pair) => (
+      boundaryEdgeKey(pair.first) === edgeKey || boundaryEdgeKey(pair.second) === edgeKey
+    ));
+    if (pairIndex < 0) return null;
+    return {
+      edgeKey,
+      pairIndex,
+      group: gluePairGroup(pairs[pairIndex], pairIndex)
+    };
+  }
+
+  function sameGluedBoundaryHover(left, right) {
+    return !!left && !!right
+      ? left.edgeKey === right.edgeKey && left.pairIndex === right.pairIndex && left.group === right.group
+      : left === right;
+  }
+
+  function updateGluedBoundaryHover(clientX, clientY) {
+    const next = gluedBoundaryHoverAtClientPoint(clientX, clientY);
+    if (sameGluedBoundaryHover(next, state.gluedHover)) return false;
+    state.gluedHover = next;
+    return true;
+  }
+
+  function clearGluedBoundaryHover() {
+    if (!state.gluedHover) return false;
+    state.gluedHover = null;
+    return true;
+  }
+
+  function activeGluedBoundaryHover(pairs) {
+    const hover = state.gluedHover;
+    if (!hover || !Number.isInteger(hover.pairIndex) || !Array.isArray(pairs)) return null;
+    const pair = pairs[hover.pairIndex];
+    if (!pair || gluePairGroup(pair, hover.pairIndex) !== hover.group) return null;
+    const matches = boundaryEdgeKey(pair.first) === hover.edgeKey || boundaryEdgeKey(pair.second) === hover.edgeKey;
+    return matches ? hover : null;
   }
 
   function gluedPairKey(pair) {
@@ -26003,13 +26080,25 @@
       drawGluedBoundaryEdge(ctx, pair.first, color, gluePairFirstArrowReversed(pair));
       drawGluedBoundaryEdge(ctx, pair.second, color, gluePairSecondArrowReversed(pair));
     });
+    const hover = activeGluedBoundaryHover(pairs);
+    if (!hover) return;
+    pairs.forEach((pair, pairIndex) => {
+      if (gluePairGroup(pair, pairIndex) !== hover.group) return;
+      const color = gluedBoundaryColor(gluePairGroup(pair, pairIndex));
+      const reduced = pairIndex !== hover.pairIndex;
+      drawGluedBoundaryEdge(ctx, pair.first, color, gluePairFirstArrowReversed(pair), { highlighted: true, reduced });
+      drawGluedBoundaryEdge(ctx, pair.second, color, gluePairSecondArrowReversed(pair), { highlighted: true, reduced });
+    });
   }
 
-  function drawGluedBoundaryEdge(ctx, edge, color, reverse) {
+  function drawGluedBoundaryEdge(ctx, edge, color, reverse, options = {}) {
     const segment = boundaryEdgeSegment(edge);
     if (!segment) return;
     const lineWidth = hoverEdgeLineWidth(geometry.radius) * 1.15;
     ctx.save();
+    if (options.highlighted) {
+      drawHoverEdgeSegment(ctx, segment, 'rgba(255,255,255,0.95)', lineWidth * (options.reduced ? 2.65 : 4.2));
+    }
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
     ctx.lineWidth = lineWidth;
@@ -29314,13 +29403,15 @@
     if (refs.exportType) refs.exportType.value = type;
     if (refs.exportFormat) refs.exportFormat.value = format;
     if (refs.exportPresetAdvanced) {
-      refs.exportPresetAdvanced.checked = type === EXPORT_TYPES.MINIGAME && (!!metadata.key || gameTypes.length > 1);
+      refs.exportPresetAdvanced.checked = type === EXPORT_TYPES.MINIGAME && (!!metadata.key || !!metadata.labelZh || !!metadata.wrappedView || gameTypes.length > 1);
     }
     syncExportControls({ fillPresetDefaults: false });
     if (type !== EXPORT_TYPES.MINIGAME) return;
 
     if (refs.exportPresetLabel) refs.exportPresetLabel.value = metadata.label;
+    if (refs.exportPresetLabelZh) refs.exportPresetLabelZh.value = metadata.labelZh || '';
     if (refs.exportPresetId) refs.exportPresetId.value = metadata.key || cleanExportPresetKey(metadata.id || metadata.label);
+    if (refs.exportPresetWrappedView) refs.exportPresetWrappedView.value = exportWrappedViewControlValue(metadata.wrappedView);
     syncExportGroupOptions(exportImportGroupChoices(gameTypes));
     if (refs.exportPresetGroup) refs.exportPresetGroup.value = gameTypes[0];
     if (Array.isArray(refs.exportPresetGroupChecks)) {
@@ -29354,6 +29445,12 @@
       payload && payload.label,
       source && source.name
     ) || 'Mosaic background';
+    const labelZh = firstNonEmptyString(
+      registryMetadata && registryMetadata.labelZh,
+      source && source.labelZh,
+      payload && payload.labelZh,
+      source && source.nameZh
+    );
     const id = firstNonEmptyString(
       registryMetadata && registryMetadata.id,
       source && source.id,
@@ -29364,10 +29461,17 @@
       source && source.key,
       payload && payload.key
     );
+    const wrappedView = normalizedExportWrappedView(
+      (registryMetadata && registryMetadata.wrappedView)
+      || (source && source.wrappedView)
+      || (payload && payload.wrappedView)
+    );
     return {
       id,
       key,
       label,
+      ...(labelZh ? { labelZh } : {}),
+      ...(wrappedView ? { wrappedView } : {}),
       gameTypes: groups
     };
   }
@@ -30348,6 +30452,24 @@
     return unique.length ? unique : [primary];
   }
 
+  function normalizedExportWrappedView(value) {
+    const profile = typeof value === 'string'
+      ? EXPORT_WRAPPED_VIEW_PROFILES[value] || null
+      : value;
+    if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return null;
+    const x = profile.x === 'repeat' || profile.x === 'reflect-y' ? profile.x : '';
+    const y = profile.y === 'repeat' || profile.y === 'reflect-x' ? profile.y : '';
+    return x || y ? { ...(x ? { x } : {}), ...(y ? { y } : {}) } : null;
+  }
+
+  function exportWrappedViewControlValue(profile) {
+    const normalized = normalizedExportWrappedView(profile);
+    return Object.keys(EXPORT_WRAPPED_VIEW_PROFILES).find((key) => {
+      const candidate = EXPORT_WRAPPED_VIEW_PROFILES[key];
+      return JSON.stringify(candidate || null) === JSON.stringify(normalized || null);
+    }) || '';
+  }
+
   function currentExportPresetMetadata() {
     const defaults = defaultExportPresetMetadata();
     const rawLabel = refs.exportPresetLabel && refs.exportPresetLabel.value.trim()
@@ -30357,12 +30479,19 @@
       ? refs.exportPresetId.value.trim()
       : '';
     const gameTypes = selectedExportPresetGameTypes();
-    const keySource = exportPresetAdvancedEnabled() && rawCustomKey ? rawCustomKey : rawLabel;
+    const advanced = exportPresetAdvancedEnabled();
+    const labelZh = advanced && refs.exportPresetLabelZh && refs.exportPresetLabelZh.value.trim()
+      ? refs.exportPresetLabelZh.value.trim()
+      : '';
+    const wrappedView = advanced && normalizedExportWrappedView(refs.exportPresetWrappedView && refs.exportPresetWrappedView.value);
+    const keySource = advanced && rawCustomKey ? rawCustomKey : rawLabel;
     const id = cleanExportPresetId(keySource);
     return {
       id,
       key: cleanExportPresetKey(keySource),
       label: rawLabel,
+      ...(labelZh ? { labelZh } : {}),
+      ...(wrappedView ? { wrappedView } : {}),
       gameTypes
     };
   }
@@ -32226,6 +32355,7 @@
     state.billiardsHover = null;
     state.cutEdges = importCutEdges({ cutEdges: options.cutEdges || options.cuts || [] }, rows, cols);
     state.gluedEdges = importGluedEdges({ gluedEdges: options.gluedEdges || options.glue || [] }, rows, cols);
+    clearGluedBoundaryHover();
     state.presetPieces = importPresetPieces({ pieceSets: options.pieceSets, pieces: options.pieces || [] }, rows, cols);
     state.sokoban = importSokobanDecorations(options, rows, cols);
     pruneInputHoles();
@@ -32267,6 +32397,8 @@
     refs.exportPresetMetaRow = { hidden: false };
     refs.exportPresetId = { value: options.id || '' };
     refs.exportPresetLabel = { value: options.label || '' };
+    refs.exportPresetLabelZh = { value: options.labelZh || '' };
+    refs.exportPresetWrappedView = { value: exportWrappedViewControlValue(options.wrappedView) };
     refs.exportPresetAdvanced = { checked: !!options.advanced };
     refs.exportPresetAdvancedRow = { hidden: false };
     refs.exportPresetKeyRow = { hidden: false };
@@ -32307,6 +32439,8 @@
       compactSokobanDecorationsForExport,
       compactTileListForExport,
       currentExportPresetMetadata,
+      normalizedExportWrappedView,
+      exportWrappedViewControlValue,
       exportPresetGroupChoices,
       currentBilliardsEditorState,
       billiardsEditorGeometry,
@@ -32319,6 +32453,11 @@
       minigameGluedEdgesForExport,
       minigamePresetRegistryEntry,
       minigamePresetRegistryEntries,
+      gluedBoundaryHoverAtClientPoint,
+      updateGluedBoundaryHover,
+      clearGluedBoundaryHover,
+      drawGluedBoundaryPairs,
+      setTestGeometry,
       materializeMinigamePresetForMosaic,
       materializeMinigamePresetGenerator,
       isolateMinigamePresetDecorations,
