@@ -14,7 +14,7 @@
     ["sokoban", "classic-fans", "center"],
     ["fide-chess", "fide-chess-8x8", "chessboard"],
     ["billiards", "half-glued", "billiards-table"],
-    ["lianliankan", "rubiks-cube-2x2x2", "center"]
+    ["lianliankan", "rubiks-cube-3x3x3", "center"]
   ];
   return {
     gameOrder: defaultForEntries.map(([mode]) => mode),
@@ -79,9 +79,10 @@
       "gameTypes": [
         "2048",
         "Billiard"
-      ],
+        ],
       "id": "twisted-torus",
       "label": "twisted torus",
+      "labelZh": "扭曲环面",
       "key": "twisted_torus",
       "file": "twisted_torus.preset.js"
     },
@@ -89,9 +90,10 @@
       "gameTypes": [
         "2048",
         "Billiard"
-      ],
+        ],
       "id": "genus-2",
-      "label": "genus 2",
+      "label": "twisted torus",
+      "labelZh": "亏格2",
       "key": "genus_2",
       "file": "genus_2.preset.js"
     },
@@ -99,11 +101,15 @@
       "gameTypes": [
         "2048",
         "Billiard"
-      ],
+        ],
       "id": "half-glued",
-      "label": "half-glued",
+      "label": "twisted torus",
+      "labelZh": "半粘合",
       "key": "half_glued",
-      "wrappedView": { "x": "repeat", "y": "repeat" },
+      "wrappedView": {
+        "x": "repeat",
+        "y": "repeat"
+      },
       "wrappedCoverFit": "glued",
       "file": "half_glued.preset.js"
     },
@@ -122,11 +128,12 @@
         "2048",
         "Tile Matching",
         "Billiard"
-      ],
-      "id": "rubiks-cube-2x2x2",
+        ],
+      "id": "rubik-s-cube-2-2-2",
       "label": "Rubik's Cube 2*2*2",
-      "key": "rubiks_cube_2x2x2",
-      "file": "rubiks_cube_2x2x2.preset.js"
+      "labelZh": "2阶魔方",
+      "key": "rubik_s_cube_2_2_2",
+      "file": "rubik_s_cube_2_2_2.preset.js"
     },
     {
       "gameTypes": [

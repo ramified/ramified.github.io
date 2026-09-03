@@ -254,7 +254,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 475,
+      "x": 475.1,
       "y": 89.2
     },
     {
@@ -266,13 +266,13 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "bugs",
           "label": "bugs",
           "type": "checkbox",
-          "text": "- [x] fix wrapped bug\n- [x] wrapped chess game has nearly no animation(and it stucked),\n- [ ] For settings, display & sound should be on the first position\n- [ ] Settings can hide many cards\n- [x] add an extra energy game level\n- [x] For the N queens puzzle on the torus, the \"collect\" row should not belong to the whole chart, it should only appear once on the bottom of the scrren, and above the periodic tiles.\n- [x] In the wrapped mode, if a glued boundary is removed from the display, its cursor style should not appear neither\n- [x] 2048 games should be fixed. The heavy stroke inside should be removed.\n- [?] For the 2048, When numbers pass through the glued boundary it should be rotated like the balls in Billiard games.(current rotation is wrong, which is clear from the half_glued preset, according to the glued direction the rotation is trivial, but the realization is wrong)\n- [ ] Add some balls for Billiard presets\n- [ ] Add the link to topo-sudoku"
+          "text": "- [x] fix wrapped bug\n- [x] wrapped chess game has nearly no animation(and it stucked),\n- [x] For settings, display & sound should be on the first position\n- [ ] Settings can hide many cards\n- [x] add an extra energy game level\n- [x] For the N queens puzzle on the torus, the \"collect\" row should not belong to the whole chart, it should only appear once on the bottom of the scrren, and above the periodic tiles.\n- [x] In the wrapped mode, if a glued boundary is removed from the display, its cursor style should not appear neither\n- [x] 2048 games should be fixed. The heavy stroke inside should be removed.\n- [x] For the 2048, When numbers pass through the glued boundary it should be rotated like the balls in Billiard games.(current rotation is wrong, which is clear from the half_glued preset, according to the glued direction the rotation is trivial, but the realization is wrong)\n- [x] Add some balls for Billiard presets\n- [ ] Add the link to topo-sudoku"
         },
         {
           "id": "more-bugs",
           "label": "more bugs",
           "type": "checkbox",
-          "text": "- [ ] glued arrow should emphasize the paired arrow the cursor hover over, when the glued boundary is a CHAIN.\n- [ ] Fix some problems with online games. For example there are some ghost rooms, I would like the room to be removed if 5 minutes there is no responding\n- [ ] In the advanced mode, export from Mosaic calculator for minigames should allow user to give corresponding Chinese name, and decide if the wrapped board view is allowed and how"
+          "text": "- [x] glued arrow should emphasize the paired arrow the cursor hover over, when the glued boundary is a CHAIN.\n- [?] Fix some problems with online games. For example there are some ghost rooms, I would like the room to be removed if 5 minutes there is no responding\n- [?] In the advanced mode, export from Mosaic calculator for minigames should allow user to give corresponding Chinese name, and decide if the wrapped board view is allowed and how"
         }
       ],
       "setting": "",
@@ -304,7 +304,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 399.3,
+      "x": 399.2,
       "y": 238.2
     }
   ],
@@ -377,7 +377,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     }
   ],
   "view": {
-    "selectedId": "n65",
+    "selectedId": "n68",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasHeight": 452,
