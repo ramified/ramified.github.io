@@ -25,7 +25,7 @@ const expectedExternalExporters = {
   'double_young_diagram.html': ['grassmannian', 'kostka', 'kronecker', 'plethysm', 'schur', 'schur-functor', 'symmetric-polynomials'],
   'higher_dimensional_slice_calculator.html': ['active-object', 'frame', 'frame-json', 'position'],
   'mosaic_calculator.html': ['degenerations', 'dual-graph'],
-  'matrix_calculator.html': ['operation'],
+  'matrix_calculator.html': ['operation', 'polynomial-action'],
   'sheaf_calculator.html': ['classes', 'hodge', 'saved-formulas', 'step-classes'],
   'theorem_graph_calculator.html': ['current-node', 'selected-references'],
   'sheaf_complex_calculator.html': ['classes', 'complex-chart', 'hodge', 'saved-formulas', 'step-classes']

@@ -9,12 +9,16 @@
   let listenersReady = false;
 
   const DEFAULT_STRINGS = Object.freeze({
-    settings: 'Controls',
-    openSettings: 'Open control settings',
+    settings: 'Settings',
+    openSettings: 'Open settings',
     close: 'Close',
     keyboard: 'Keyboard shortcuts',
     pointer: 'Mouse & touch hints',
     restore: 'Restore defaults',
+    cards: 'Cards',
+    cardsHelp: 'Choose which cards are shown on this page.',
+    advanced: 'Advanced',
+    cardsRestored: 'Default settings restored.',
     addBinding: 'Add key',
     editBinding: 'Change {{binding}}',
     removeBinding: 'Remove binding',
@@ -154,7 +158,7 @@
   function normalizeStoredData(value) {
     const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
     if (source.version !== VERSION || !source.profiles || typeof source.profiles !== 'object' || Array.isArray(source.profiles)) {
-      return { version: VERSION, profiles: {} };
+      return { version: VERSION, profiles: {}, cardVisibility: {} };
     }
     const profiles = {};
     Object.entries(source.profiles).forEach(([profile, bindings]) => {
@@ -166,16 +170,22 @@
       });
       profiles[String(profile)] = clean;
     });
-    return { version: VERSION, profiles };
+    const cardVisibility = {};
+    if (source.cardVisibility && typeof source.cardVisibility === 'object' && !Array.isArray(source.cardVisibility)) {
+      Object.entries(source.cardVisibility).forEach(([cardId, visible]) => {
+        if (typeof visible === 'boolean') cardVisibility[String(cardId)] = visible;
+      });
+    }
+    return { version: VERSION, profiles, cardVisibility };
   }
 
   function readStorage(storage, key) {
-    if (!storage || typeof storage.getItem !== 'function') return { version: VERSION, profiles: {} };
+    if (!storage || typeof storage.getItem !== 'function') return { version: VERSION, profiles: {}, cardVisibility: {} };
     try {
       const raw = storage.getItem(key);
       return normalizeStoredData(raw ? JSON.parse(raw) : null);
     } catch (_error) {
-      return { version: VERSION, profiles: {} };
+      return { version: VERSION, profiles: {}, cardVisibility: {} };
     }
   }
 
@@ -271,6 +281,60 @@
     const provider = session.options.pointerHintProvider || session.options.pointerHints;
     const values = typeof provider === 'function' ? provider() : provider;
     return (Array.isArray(values) ? values : []).filter(Boolean);
+  }
+
+  function currentCards(session) {
+    return Array.from(session.root?.querySelectorAll?.('.card[data-card-settings-id]') || []).map((card) => ({
+      card,
+      id: card.dataset.cardSettingsId,
+      advanced: card.dataset.cardAdvanced === 'true',
+      label: card.dataset.cardSettingsLabel || card.querySelector('.card-head-label')?.textContent?.trim() || card.dataset.cardSettingsId
+    }));
+  }
+
+  function ensureCardSettingsIds(session) {
+    const used = new Set();
+    Array.from(session.root?.querySelectorAll?.('.card') || []).forEach((card, index) => {
+      let id = String(card.dataset.cardSettingsId || card.id || `card-${index + 1}`)
+        .trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `card-${index + 1}`;
+      const base = id;
+      let suffix = 2;
+      while (used.has(id)) id = `${base}-${suffix++}`;
+      used.add(id);
+      card.dataset.cardSettingsId = id;
+    });
+  }
+
+  function cardIsVisible(session, descriptor) {
+    const stored = session.data.cardVisibility || {};
+    return Object.prototype.hasOwnProperty.call(stored, descriptor.id)
+      ? stored[descriptor.id]
+      : !descriptor.advanced;
+  }
+
+  function applyCardVisibility(session) {
+    currentCards(session).forEach((descriptor) => {
+      const visible = cardIsVisible(session, descriptor);
+      if (window.CalculatorCards?.setCardUserVisible) window.CalculatorCards.setCardUserVisible(descriptor.card, visible);
+      else {
+        descriptor.card.classList.toggle('calculator-card-user-hidden', !visible);
+        if (visible) {
+          if (descriptor.card.dataset.cardUserAriaHidden === 'true') descriptor.card.removeAttribute('aria-hidden');
+          delete descriptor.card.dataset.cardUserAriaHidden;
+        } else {
+          descriptor.card.setAttribute('aria-hidden', 'true');
+          descriptor.card.dataset.cardUserAriaHidden = 'true';
+        }
+      }
+      descriptor.card.classList.add('calculator-card-settings-ready');
+    });
+  }
+
+  function setCardVisibility(session, cardId, visible) {
+    session.data.cardVisibility ||= {};
+    session.data.cardVisibility[String(cardId)] = !!visible;
+    writeStorage(session.storage, session.storageKey, session.data);
+    applyCardVisibility(session);
   }
 
   function actionEnabled(action) {
@@ -585,6 +649,14 @@
       html += `<div class="calculator-pointer-hint"><span class="calculator-pointer-lock" aria-hidden="true">🔒</span><strong>${escapeHtml(input)}</strong><span>${escapeHtml(description)}</span></div>`;
     });
     html += `</div></section>`;
+    const cards = currentCards(session);
+    if (cards.length) {
+      html += `<section class="calculator-input-section"><h3>${escapeHtml(translate(session, 'cards'))}</h3><p class="calculator-input-help">${escapeHtml(translate(session, 'cardsHelp'))}</p><div class="calculator-card-settings-list">`;
+      cards.forEach((descriptor) => {
+        html += `<label class="calculator-card-settings-row"><input type="checkbox" data-card-visibility="${escapeHtml(descriptor.id)}"${cardIsVisible(session, descriptor) ? ' checked' : ''}><span>${escapeHtml(descriptor.label)}</span>${descriptor.advanced ? `<em>${escapeHtml(translate(session, 'advanced'))}</em>` : ''}</label>`;
+      });
+      html += '</div></section>';
+    }
     if (session.pendingConflict) {
       const pending = session.pendingConflict;
       const conflict = actions.find((item) => item.id === pending.conflictId);
@@ -624,19 +696,23 @@
       session.pendingConflict = null;
       render(session);
     });
+    session.content.querySelectorAll('[data-card-visibility]').forEach((input) => {
+      input.addEventListener('change', () => setCardVisibility(session, input.dataset.cardVisibility, input.checked));
+    });
     session.content.querySelector('[data-restore-defaults]')?.addEventListener('click', () => {
       restoreDefaults(session);
-      session.setStatus(translate(session, 'restored'));
+      session.setStatus(translate(session, 'cardsRestored'));
       render(session);
     });
   }
 
   function restoreDefaults(session) {
-    session.data = { version: VERSION, profiles: {} };
+    session.data = { version: VERSION, profiles: {}, cardVisibility: {} };
     writeStorage(session.storage, session.storageKey, session.data);
     session.capture = null;
     session.pendingConflict = null;
     if (session.activeUps) clearActiveUps(session);
+    applyCardVisibility(session);
     return session.data;
   }
 
@@ -726,6 +802,7 @@
       }
     };
     sessions.set(pageId, session);
+    ensureCardSettingsIds(session);
     if (options.externalDialog) {
       session.content = resolveElement(options.externalDialog.content);
       session.dialog = resolveElement(options.externalDialog.dialog) || session.content?.closest('[role="dialog"]') || null;
@@ -737,6 +814,7 @@
     const host = resolveElement(options.triggerHost || '.canvas-panel .panel-title');
     if (host) makeTrigger(session, host);
     installGlobalListeners();
+    applyCardVisibility(session);
     render(session);
     return session;
   }
@@ -765,7 +843,12 @@
       restoreDefaults,
       executeActionDown,
       executeActionUp,
-      canTriggerFromTarget
+      canTriggerFromTarget,
+      currentCards,
+      ensureCardSettingsIds,
+      cardIsVisible,
+      applyCardVisibility,
+      setCardVisibility
     }
   };
 

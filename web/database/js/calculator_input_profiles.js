@@ -165,6 +165,21 @@
         pointer('Home / End / Insert', 'Navigate or change insertion mode in the formula builder.')
       ]
     },
+    'sheaf_calculator.html': {
+      pageId: 'sheaf',
+      actions: [
+        { id: 'formula-undo', group: 'Formula', label: 'Undo formula token', description: 'Uses the formula builder undo action when available.', defaultBindings: ['Mod+z'], trigger: clickAction('#class-formula-undo'), enabled: enabledSelector('#class-formula-undo') },
+        { id: 'delete-object', group: 'Canvas', label: 'Delete active object', description: 'Deletes the currently active object.', defaultBindings: [], trigger: clickAction('#delete-object'), enabled: enabledSelector('#delete-object') },
+        { id: 'clear-canvas', group: 'Canvas', label: 'Clear canvas', description: 'Clears the Sheaf canvas.', defaultBindings: [], trigger: clickAction('#clear-canvas'), enabled: enabledSelector('#clear-canvas') },
+        { id: 'restart-step', group: 'Formula', label: 'Restart step calculation', description: 'Restarts the current step-by-step calculation.', defaultBindings: [], trigger: clickAction('#class-step-restart'), enabled: enabledSelector('#class-step-restart') }
+      ],
+      pointerHints: [
+        pointer('Primary click', 'Select a variety, sheaf, map, formula token, or chart object.'),
+        pointer('Drag', 'Move labels, map controls, sequence tails, and dashboard cards.'),
+        pointer('Enter / Space', 'Activate a focused canvas label or sequence control.'),
+        pointer('Arrow keys', 'Move focused map and sequence controls; Shift moves farther.')
+      ]
+    },
     'place_ramification_calculator.html': {
       pageId: 'place-ramification',
       primary: ['[data-shortcut-primary]'],

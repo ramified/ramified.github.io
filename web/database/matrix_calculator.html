@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Matrix Calculator</title>
-  <link rel="stylesheet" href="css/site.css?v=20260902-2">
+  <link rel="stylesheet" href="css/site.css?v=20260903-1">
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
   <style>
     .matrix-layout {
@@ -307,6 +307,18 @@
       min-height: 138px;
     }
 
+    .matrix-polynomial-action-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+    }
+
     .matrix-dialog-backdrop {
       position: fixed;
       inset: 0;
@@ -418,9 +430,9 @@
             <input type="number" id="finite-field-prime" class="calculator-control" min="2" max="999983" step="1" value="7">
           </label>
           <span id="rational-function-symbol" class="matrix-field-symbol" hidden>\(\mathbb{Q}(t)\)</span>
-          <label id="rational-function-variable-label" title="Rational function variable" hidden>
-            <span>var</span>
-            <input class="matrix-symbol-input calculator-control" type="text" id="rational-function-variable" value="t" maxlength="8" spellcheck="false" autocomplete="off">
+          <label id="rational-function-variable-label" title="Comma-separated rational function variables" hidden>
+            <span>vars</span>
+            <input class="matrix-polynomial-input calculator-control" type="text" id="rational-function-variable" value="t" maxlength="95" spellcheck="false" autocomplete="off">
           </label>
           <span id="number-field-symbol" class="matrix-field-symbol" hidden>\(\mathbb{Q}(a)\)</span>
           <label id="number-field-symbol-label" title="Number field generator" hidden>
@@ -458,7 +470,7 @@
   </section>
 
   <aside class="side" id="cards">
-    <section class="card" draggable="true">
+    <section class="card" draggable="true" data-card-settings-id="input">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="matrix-inline-row">
@@ -482,7 +494,7 @@
       </div>
     </section>
 
-    <section class="card" draggable="true">
+    <section class="card" draggable="true" data-card-settings-id="basic-invariants">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Basic Invariants</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="stat-row"><span class="stat-label">Size</span><span class="stat-value" id="out-size">5 x 5</span></div>
@@ -493,7 +505,7 @@
       </div>
     </section>
 
-    <section class="card" draggable="true">
+    <section class="card" draggable="true" data-card-settings-id="computation">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Computation</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="matrix-inline-row">
@@ -532,7 +544,33 @@
       </div>
     </section>
 
-    <section class="card" draggable="true">
+    <section class="card collapsed" draggable="true" data-card-settings-id="polynomial-action" data-card-advanced="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Action on Polynomial</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="matrix-inline-row">
+          <label class="input-label" for="polynomial-action-variables">Variables</label>
+          <input class="matrix-polynomial-action-input calculator-control" type="text" id="polynomial-action-variables" value="x1, x2, x3, x4, x5" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="matrix-inline-row">
+          <label class="input-label" for="polynomial-action-mode">Action</label>
+          <select id="polynomial-action-mode" class="matrix-select calculator-control">
+            <option value="direct">f(Ax)</option>
+            <option value="inverse">f(A⁻¹x)</option>
+          </select>
+        </div>
+        <label class="input-label" for="polynomial-action-input">Polynomial</label>
+        <textarea id="polynomial-action-input" class="matrix-textarea calculator-control" spellcheck="false" autocomplete="off" placeholder="x1^2 + x2*x3"></textarea>
+        <div class="matrix-action-row">
+          <button class="btn" id="compute-polynomial-action" type="button">compute</button>
+          <button class="btn btn-ghost" id="export-polynomial-action" type="button" data-import-export-trigger="polynomial-action" data-export-filename="matrix-polynomial-action.txt">export</button>
+          <button class="btn btn-ghost" id="clear-polynomial-action" type="button">clear</button>
+        </div>
+        <div id="polynomial-action-message" class="err"></div>
+        <div id="polynomial-action-output" class="matrix-result-scroll"><span class="hint">No polynomial action yet.</span></div>
+      </div>
+    </section>
+
+    <section class="card" draggable="true" data-card-settings-id="export">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
         <div class="matrix-inline-row">
@@ -588,10 +626,10 @@
   };
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
-<script src="js/calculator_cards.js"></script>
-<script src="js/calculator_input_settings.js?v=20260902-2"></script>
-<script src="js/matrix_calculator.js?v=20260821-1"></script>
-<script src="js/calculator_input_profiles.js?v=20260902-1"></script>
+<script src="js/calculator_cards.js?v=20260903-1"></script>
+<script src="js/calculator_input_settings.js?v=20260903-1"></script>
+<script src="js/matrix_calculator.js?v=20260903-1"></script>
+<script src="js/calculator_input_profiles.js?v=20260903-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

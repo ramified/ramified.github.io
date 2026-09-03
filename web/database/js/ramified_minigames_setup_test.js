@@ -3036,6 +3036,8 @@ function testPlacementReachAssistRoutesAndGroups() {
   const connectRays = game.placementReachAssist(connect, game.indexOf(3, 3, 7));
   assert.strictEqual(connectRays.kind, 'rays');
   assert.strictEqual(connectRays.stepLimit, 3);
+  assert.deepStrictEqual(connectRays.directions.map((direction) => direction.id), ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE']);
+  assert.ok(connectRays.routes.every((route) => route.directionId && route.oppositeDirectionId && route.axisId));
   assert.ok(connectRays.routes.some((route) => route.kind === 'axis' && route.path.includes(game.indexOf(3, 4, 7))));
   assert.ok(!connectRays.routes.some((route) => route.path.includes(game.indexOf(3, 5, 7))), 'opponents stop rays before their tile');
 
@@ -3049,6 +3051,7 @@ function testPlacementReachAssistRoutesAndGroups() {
   const gomokuRays = game.placementReachAssist(gomoku, center);
   assert.strictEqual(gomokuRays.stepLimit, 4);
   assert.ok(gomokuRays.routes.some((route) => route.kind === 'diagonal'), 'square boards include diagonal rays');
+  assert.ok(gomokuRays.routes.some((route) => route.directionId === 'NE' && route.axisId === 'SW-NE'));
   const gomokuGhost = game.indexOf(3, 2, 5);
   gomoku.turn = 'white';
   const virtualGomokuRays = game.placementReachAssist(gomoku, gomokuGhost);
@@ -3074,6 +3077,7 @@ function testPlacementReachAssistRoutesAndGroups() {
   const hexCenter = game.indexOf(3, 3, 5);
   hex.stones = [{ id: 1, index: hexCenter, color: 'black' }];
   const hexRays = game.placementReachAssist(hex, hexCenter);
+  assert.deepStrictEqual(hexRays.directions.map((direction) => direction.id), ['E', 'SE', 'SW', 'W', 'NW', 'NE']);
   assert.strictEqual(hexRays.routes.filter((route) => route.kind === 'axis').length, 6);
   assert.strictEqual(hexRays.routes.filter((route) => route.kind === 'diagonal').length, 0);
 
@@ -3176,6 +3180,51 @@ function testPlacementReachAssistRoutesAndGroups() {
   const gluedDrop = game.placementReachAssist(glued, game.indexOf(1, 4, 4));
   assert.strictEqual(gluedDrop.transitions[0].glued, true);
   assert.strictEqual(gluedDrop.landingIndex, game.indexOf(1, 1, 4));
+
+  glued.holes = new Set();
+  glued.tokens = [{ id: 1, index: game.indexOf(1, 4, 4), color: 'red' }];
+  const gluedRays = game.placementReachAssist(glued, game.indexOf(1, 4, 4));
+  const eastRoute = gluedRays.routes.find((route) => route.directionId === 'E');
+  assert.ok(eastRoute && eastRoute.transitions[0].glued, 'ray metadata survives a glued boundary transition');
+  const gluedGeometry = game.__test.buildGeometry(glued.preset, 720, 16, 1);
+  const eastTrack = game.__test.placementAssistRayTracks(glued, gluedGeometry, gluedRays)
+    .find((track) => track.directionId === 'E');
+  assert.ok(eastTrack && eastTrack.segments.length >= 2, 'a glued step keeps its ordered exit and re-entry fragments');
+  assert.strictEqual(eastTrack.segments[0].startProgress, 0);
+  assert.strictEqual(eastTrack.segments[eastTrack.segments.length - 1].endProgress, 1);
+}
+
+function testAnimatedPlacementRayHintHelpers() {
+  assert.strictEqual(game.__test.placementAssistGrowDuration, 360);
+  assert.strictEqual(game.__test.placementAssistGrowProgress(0), 0);
+  assert.strictEqual(game.__test.placementAssistGrowProgress(0.5), 0.875);
+  assert.strictEqual(game.__test.placementAssistGrowProgress(1), 1);
+  assert.deepStrictEqual(game.__test.placementHintColorCounts({ lattice: 'square' }), { axis: 4, direction: 8 });
+  assert.deepStrictEqual(game.__test.placementHintColorCounts({ lattice: 'hexagonal' }), { axis: 3, direction: 6 });
+
+  const squareDirections = game.__test.placementHintDirectionDescriptors({ lattice: 'square' });
+  const assist = { kind: 'rays', directions: squareDirections };
+  assert.deepStrictEqual(Array.from(game.__test.placementHintHighlightedDirectionIds(assist, 'SE', 'single')), ['SE']);
+  assert.deepStrictEqual(Array.from(game.__test.placementHintHighlightedDirectionIds(assist, 'SE', 'opposites')), ['SE', 'NW']);
+  const east = squareDirections.find((direction) => direction.id === 'E');
+  const west = squareDirections.find((direction) => direction.id === 'W');
+  assert.strictEqual(game.__test.placementHintColorForRoute(east, 'uniform'), '#1f7a8c');
+  assert.strictEqual(game.__test.placementHintColorForRoute(east, 'axis'), game.__test.placementHintColorForRoute(west, 'axis'));
+  assert.notStrictEqual(game.__test.placementHintColorForRoute(east, 'direction'), game.__test.placementHintColorForRoute(west, 'direction'));
+
+  const orderedFragments = [
+    { start: { x: 0, y: 0 }, end: { x: 10, y: 0 }, startProgress: 0, endProgress: 0.4 },
+    { start: { x: 40, y: 0 }, end: { x: 50, y: 0 }, startProgress: 0.4, endProgress: 1 }
+  ];
+  assert.deepStrictEqual(game.__test.placementAssistVisibleSegments(orderedFragments, 0), []);
+  const firstOnly = game.__test.placementAssistVisibleSegments(orderedFragments, 0.25);
+  assert.strictEqual(firstOnly.length, 1);
+  assert.strictEqual(firstOnly[0].end.x, 6.25);
+  const throughGlue = game.__test.placementAssistVisibleSegments(orderedFragments, 0.7);
+  assert.strictEqual(throughGlue.length, 2);
+  assert.strictEqual(throughGlue[0].end.x, 10);
+  assert.strictEqual(throughGlue[1].end.x, 45);
+  assert.strictEqual(game.__test.placementAssistVisibleSegments(orderedFragments, 1).length, 2);
 }
 
 function testConnectFourDropStopsAtBoundaryAndBlocker() {
@@ -4580,6 +4629,12 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('gomoku-display-row'),
     makeElement('gomoku-display-style', { value: 'vertex' }),
     makeElement('show-board-coordinates'),
+    makeElement('placement-hint-highlight-row', { hidden: true }),
+    makeElement('placement-hint-highlight', { value: 'single' }),
+    makeElement('placement-hint-colors-row', { hidden: true }),
+    makeElement('placement-hint-colors', { value: 'uniform' }),
+    makeElement('placement-hint-colors-axis', { tagName: 'OPTION' }),
+    makeElement('placement-hint-colors-direction', { tagName: 'OPTION' }),
     makeElement('go-komi', { value: '6.5' }),
     makeElement('go-pass'),
     makeElement('chinese-checkers-jump-rule', { value: 'unlimited' }),
@@ -4750,6 +4805,14 @@ function createHeadlessDomHarness(options = {}) {
       },
       addEventListener(type, handler) {
         windowListeners[type] = handler;
+      },
+      matchMedia(query) {
+        return {
+          media: query,
+          matches: !!options.reducedMotion && query === '(prefers-reduced-motion: reduce)',
+          addEventListener() {},
+          removeEventListener() {}
+        };
       },
       requestAnimationFrame(handler) {
         calls.push({ method: 'requestAnimationFrame', args: [] });
@@ -5338,11 +5401,67 @@ function testTimedPlacementReachAssistInteractions() {
   assert.strictEqual(heldClick.defaultPrevented, true, 'a completed long press suppresses its follow-up click');
 }
 
+async function testAnimatedPlacementRayHintInteractions() {
+  const gomokuHarness = createHeadlessDomHarness();
+  importHeadlessStatus(gomokuHarness.elements, {
+    gameMode: 'gomoku',
+    preset: {
+      label: 'animated reach assist', lattice: 'square', rows: 3, cols: 3, surface: 'test',
+      removedTiles: [], cutEdges: [], gluedEdges: []
+    },
+    phase: 'ready', turn: 'white', round: 1, nextStoneId: 2,
+    stones: [{ id: 1, row: 2, col: 2, color: 'black', moveNumber: 1 }],
+    removed: [], queue: { eventIndex: 0, stepPaused: false, events: [] }
+  });
+  for (let index = 0; index < 5; index += 1) await new Promise((resolve) => setImmediate(resolve));
+  gomokuHarness.canvas.listeners.pointermove(pointerEvent(156, 144));
+  gomokuHarness.advanceTimers(500);
+  assert.strictEqual(gomokuHarness.context.module.exports.__test.getPlacementReachDirectionId(), 'E');
+  assert.ok(gomokuHarness.calls.some((call) => call.method === 'requestAnimationFrame'), 'ray assist schedules its grow animation');
+  gomokuHarness.canvas.listeners.pointermove(pointerEvent(132, 144));
+  assert.strictEqual(gomokuHarness.context.module.exports.__test.getPlacementReachDirectionId(), 'W', 'same-tile bearing changes the highlighted ray');
+  gomokuHarness.canvas.listeners.pointermove(pointerEvent(144, 144));
+  assert.strictEqual(gomokuHarness.context.module.exports.__test.getPlacementReachDirectionId(), 'W', 'the center dead zone retains the stable direction');
+
+  const reducedHarness = createHeadlessDomHarness({ reducedMotion: true });
+  importHeadlessStatus(reducedHarness.elements, {
+    gameMode: 'gomoku',
+    preset: {
+      label: 'reduced reach assist', lattice: 'square', rows: 3, cols: 3, surface: 'test',
+      removedTiles: [], cutEdges: [], gluedEdges: []
+    },
+    phase: 'ready', turn: 'white', round: 1, nextStoneId: 2,
+    stones: [{ id: 1, row: 2, col: 2, color: 'black', moveNumber: 1 }],
+    removed: [], queue: { eventIndex: 0, stepPaused: false, events: [] }
+  });
+  for (let index = 0; index < 5; index += 1) await new Promise((resolve) => setImmediate(resolve));
+  reducedHarness.calls.length = 0;
+  reducedHarness.canvas.listeners.pointermove(pointerEvent(156, 144));
+  reducedHarness.advanceTimers(500);
+  assert.ok(!reducedHarness.calls.some((call) => call.method === 'requestAnimationFrame'), 'reduced motion reveals rays without animation frames');
+
+  assert.strictEqual(gomokuHarness.elements.get('placement-hint-highlight-row').hidden, false);
+  assert.strictEqual(gomokuHarness.elements.get('placement-hint-colors-row').hidden, false);
+  assert.strictEqual(gomokuHarness.elements.get('placement-hint-colors-axis').textContent, '4 colors — one per axis');
+  assert.strictEqual(gomokuHarness.elements.get('placement-hint-colors-direction').textContent, '8 colors — one per direction');
+  gomokuHarness.elements.get('placement-hint-highlight').value = 'opposites';
+  gomokuHarness.elements.get('placement-hint-colors').value = 'direction';
+  gomokuHarness.elements.get('export-state').listeners.click();
+  const hintExport = JSON.parse(gomokuHarness.elements.get('debug-export-output').value);
+  assert.ok(!Object.hasOwn(hintExport.settings, 'placementHintHighlight'));
+  assert.ok(!Object.hasOwn(hintExport.settings, 'placementHintColors'));
+}
+
 function testPlacementHoverGuidanceRules() {
   const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
   assert.ok(html.includes('id="placement-preview-opacity" min="10" max="90" step="5" value="50"'));
   assert.ok(html.includes('data-i18n="setup.previewOpacity"'));
   assert.deepStrictEqual(game.__test.placementPreviewOpacityRange, { min: 10, max: 90, default: 50 });
+  assert.ok(html.includes('id="placement-hint-highlight"'));
+  assert.ok(html.includes('<option value="single" selected data-i18n="setup.hintHighlightSingle">'));
+  assert.ok(html.includes('<option value="opposites" data-i18n="setup.hintHighlightOpposites">'));
+  assert.ok(html.includes('id="placement-hint-colors"'));
+  assert.ok(html.includes('<option value="uniform" selected data-i18n="setup.hintLineColorsUniform">'));
 
   const preset = {
     id: 'placement-hover-test', label: 'placement hover test', lattice: 'square', rows: 4, cols: 4,
@@ -8427,7 +8546,9 @@ async function run() {
   await testOnlineRoomSearchEmptyResults();
   await testOnlineRoomSearchFailureHidesSelect();
   testPlacementReachAssistRoutesAndGroups();
+  testAnimatedPlacementRayHintHelpers();
   testTimedPlacementReachAssistInteractions();
+  await testAnimatedPlacementRayHintInteractions();
   testPlacementHoverGuidanceRules();
   testHexCoverOffsetDiagnosticsAndConnectFourWrappedView();
   testWrappedNQueensTrayAndGlueHoverInteraction();

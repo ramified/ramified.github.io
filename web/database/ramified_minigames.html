@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title data-i18n="meta.title">Ramified Minigames</title>
-  <link rel="stylesheet" href="css/site.css?v=20260902-2">
+  <link rel="stylesheet" href="css/site.css?v=20260903-1">
   <link rel="stylesheet" href="css/site_i18n.css">
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
 <style>
@@ -2014,7 +2014,7 @@
           </header>
           <nav class="fullscreen-settings-tabs" role="tablist" data-i18n-aria-label="controls.settingsSections" aria-label="Settings sections">
             <button class="fullscreen-settings-tab" id="fullscreen-settings-display-tab" type="button" role="tab" aria-selected="true" aria-controls="fullscreen-settings-display" data-settings-panel="display" data-i18n="controls.displayTab">Display &amp; sound</button>
-            <button class="fullscreen-settings-tab" id="fullscreen-settings-controls-tab" type="button" role="tab" aria-selected="false" aria-controls="fullscreen-settings-controls" data-settings-panel="controls" data-i18n="controls.controlsTab">Controls</button>
+            <button class="fullscreen-settings-tab" id="fullscreen-settings-controls-tab" type="button" role="tab" aria-selected="false" aria-controls="fullscreen-settings-controls" data-settings-panel="controls" data-i18n="controls.controlsTab">Controls &amp; cards</button>
           </nav>
           <div class="fullscreen-settings-panel" id="fullscreen-settings-display" role="tabpanel" aria-labelledby="fullscreen-settings-display-tab">
             <div class="fullscreen-settings-options">
@@ -2234,6 +2234,21 @@
         <div class="mosaic-inline-row" id="move-number-label-row" hidden>
           <span class="input-label">Labels</span>
           <label class="opt-row"><input type="checkbox" id="move-number-labels"> move numbers</label>
+        </div>
+        <div class="mosaic-inline-row" id="placement-hint-highlight-row" hidden>
+          <span class="input-label" data-i18n="setup.hintHighlight">Hint highlight</span>
+          <select id="placement-hint-highlight" data-i18n-aria-label="access.placementHintHighlight" aria-label="Directional hint highlight">
+            <option value="single" selected data-i18n="setup.hintHighlightSingle">one direction</option>
+            <option value="opposites" data-i18n="setup.hintHighlightOpposites">direction and opposite</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="placement-hint-colors-row" hidden>
+          <span class="input-label" data-i18n="setup.hintLineColors">Hint colors</span>
+          <select id="placement-hint-colors" data-i18n-aria-label="access.placementHintColors" aria-label="Directional hint line colors">
+            <option value="uniform" selected data-i18n="setup.hintLineColorsUniform">one color</option>
+            <option id="placement-hint-colors-axis" value="axis"></option>
+            <option id="placement-hint-colors-direction" value="direction"></option>
+          </select>
         </div>
         <div class="mosaic-inline-row" id="placement-piece-size-row" hidden>
           <span class="input-label">Piece</span>
@@ -2746,16 +2761,16 @@
 </footer>
 
 <script src="ramified_minigame_presets/presets.js?v=20260903-2"></script>
-<script src="js/calculator_cards.js"></script>
-<script src="js/calculator_input_settings.js?v=20260902-2"></script>
+<script src="js/calculator_cards.js?v=20260903-1"></script>
+<script src="js/calculator_input_settings.js?v=20260903-1"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260903-1"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260903-4"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
-<script src="js/ramified_minigames_setup.js?v=20260903-7"></script>
+<script src="js/ramified_minigames_setup.js?v=20260903-8"></script>
 </body>
 </html>

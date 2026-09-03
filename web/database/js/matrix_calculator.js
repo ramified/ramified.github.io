@@ -5,6 +5,9 @@
   const TOL = 1e-10;
   const DISPLAY_TOL = 1e-12;
   const CHARPOLY_TIMEOUT_MS = 1500;
+  const POLYNOMIAL_ACTION_TIMEOUT_MS = 1500;
+  const POLYNOMIAL_ACTION_MAX_TERMS = 2000;
+  const POLYNOMIAL_ACTION_MAX_EXPONENT = 64;
   const DEFAULT_FINITE_FIELD_PRIME = 7;
   const SMALL_PRIMES = [
     2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
@@ -202,43 +205,71 @@
   }
 
   class RationalFunctionScalar {
-    constructor(num = [Fraction.zero()], den = [Fraction.one()], variable = 't') {
-      this.variable = normalizeSymbolName(variable, 't');
-      const normalized = rationalFunctionNormalize(num, den);
+    constructor(num = [Fraction.zero()], den = [Fraction.one()], variables = ['t']) {
+      this.variables = normalizeRationalFunctionVariables(variables);
+      this.variable = this.variables[this.variables.length - 1];
+      this.fieldKey = this.variables.join(',');
+      const normalized = rfNormalize(num, den, this.variables);
       this.num = normalized.num;
       this.den = normalized.den;
     }
 
-    static zero(variable = 't') { return new RationalFunctionScalar([Fraction.zero()], [Fraction.one()], variable); }
-    static one(variable = 't') { return new RationalFunctionScalar([Fraction.one()], [Fraction.one()], variable); }
-    static variable(variable = 't') { return new RationalFunctionScalar([Fraction.zero(), Fraction.one()], [Fraction.one()], variable); }
-    static fromFraction(value, variable = 't') { return new RationalFunctionScalar([Fraction.from(value)], [Fraction.one()], variable); }
+    static coefficient(value, variables) {
+      const vars = normalizeRationalFunctionVariables(variables);
+      if (vars.length === 1) return Fraction.from(value);
+      return RationalFunctionScalar.fromFraction(value, vars.slice(0, -1));
+    }
+    static zero(variables = ['t']) { const vars = normalizeRationalFunctionVariables(variables); return new RationalFunctionScalar([this.coefficient(Fraction.zero(), vars)], [this.coefficient(Fraction.one(), vars)], vars); }
+    static one(variables = ['t']) { const vars = normalizeRationalFunctionVariables(variables); return new RationalFunctionScalar([this.coefficient(Fraction.one(), vars)], [this.coefficient(Fraction.one(), vars)], vars); }
+    static variable(name, variables = null) {
+      const vars = normalizeRationalFunctionVariables(variables || [name || 't']);
+      const target = normalizeSymbolName(name || vars[vars.length - 1], vars[vars.length - 1]);
+      if (!vars.includes(target)) throw new Error(`Unknown rational function variable "${target}".`);
+      const zero = this.coefficient(Fraction.zero(), vars);
+      const one = this.coefficient(Fraction.one(), vars);
+      if (target === vars[vars.length - 1]) return new RationalFunctionScalar([zero, one], [one], vars);
+      const lower = RationalFunctionScalar.variable(target, vars.slice(0, -1));
+      return new RationalFunctionScalar([lower], [RationalFunctionScalar.one(vars.slice(0, -1))], vars);
+    }
+    static fromFraction(value, variables = ['t']) {
+      const vars = normalizeRationalFunctionVariables(variables);
+      const coeff = this.coefficient(Fraction.from(value), vars);
+      return new RationalFunctionScalar([coeff], [this.coefficient(Fraction.one(), vars)], vars);
+    }
 
-    clone() { return new RationalFunctionScalar(this.num, this.den, this.variable); }
+    clone() { return new RationalFunctionScalar(this.num, this.den, this.variables); }
     add(other) {
       other = this.coerce(other);
       return new RationalFunctionScalar(
-        polyQAdd(polyQMul(this.num, other.den), polyQMul(other.num, this.den)),
-        polyQMul(this.den, other.den),
-        this.variable
+        rfPolyAdd(rfPolyMul(this.num, other.den), rfPolyMul(other.num, this.den)),
+        rfPolyMul(this.den, other.den),
+        this.variables
       );
     }
     sub(other) { other = this.coerce(other); return this.add(other.neg()); }
-    neg() { return new RationalFunctionScalar(polyQNeg(this.num), this.den, this.variable); }
+    neg() { return new RationalFunctionScalar(rfPolyNeg(this.num), this.den, this.variables); }
     mul(other) {
       other = this.coerce(other);
-      return new RationalFunctionScalar(polyQMul(this.num, other.num), polyQMul(this.den, other.den), this.variable);
+      return new RationalFunctionScalar(rfPolyMul(this.num, other.num), rfPolyMul(this.den, other.den), this.variables);
     }
     div(other) {
       other = this.coerce(other);
       if (other.isZero()) throw new Error('Division by zero.');
-      return new RationalFunctionScalar(polyQMul(this.num, other.den), polyQMul(this.den, other.num), this.variable);
+      return new RationalFunctionScalar(rfPolyMul(this.num, other.den), rfPolyMul(this.den, other.num), this.variables);
     }
-    isZero() { return polyQIsZero(this.num); }
-    isOne() { return polyQEqual(this.num, this.den); }
+    isZero() { return rfPolyIsZero(this.num); }
+    isOne() { return rfPolyEqual(this.num, this.den); }
     isReal() { return this.isConstant(); }
-    isConstant() { return polyQDegree(this.num) <= 0 && polyQDegree(this.den) <= 0; }
-    constantFraction() { return this.isConstant() ? this.num[0].div(this.den[0]) : null; }
+    isConstant() {
+      if (rfPolyDegree(this.num) > 0 || rfPolyDegree(this.den) > 0) return false;
+      const value = this.num[0].div(this.den[0]);
+      return value instanceof Fraction || value.isConstant();
+    }
+    constantFraction() {
+      if (rfPolyDegree(this.num) > 0 || rfPolyDegree(this.den) > 0) return null;
+      const value = this.num[0].div(this.den[0]);
+      return value instanceof Fraction ? value : value.constantFraction();
+    }
     toComplex() {
       const value = this.constantFraction();
       return new Complex(value ? value.toNumber() : 0, 0);
@@ -246,11 +277,11 @@
 
     coerce(other) {
       if (other instanceof RationalFunctionScalar) {
-        if (other.variable !== this.variable) throw new Error('Cannot mix rational function variables.');
+        if (other.fieldKey !== this.fieldKey) throw new Error('Cannot mix rational function fields.');
         return other;
       }
-      if (other instanceof Fraction) return RationalFunctionScalar.fromFraction(other, this.variable);
-      return RationalFunctionScalar.fromFraction(new Fraction(other, 1n), this.variable);
+      if (other instanceof Fraction) return RationalFunctionScalar.fromFraction(other, this.variables);
+      return RationalFunctionScalar.fromFraction(new Fraction(other, 1n), this.variables);
     }
   }
 
@@ -390,10 +421,11 @@
     cols: 5,
     finiteFieldPrime: DEFAULT_FINITE_FIELD_PRIME,
     finiteFieldPrimeTextEditing: false,
-    rationalFunctionVariable: 't',
+    rationalFunctionVariables: ['t'],
     numberFieldSymbol: 'a',
     numberFieldPolynomial: 'a^2 - 2',
     lastOperationResult: null,
+    lastPolynomialAction: null,
     entries: [
       ['1', '0', '0', '0', '0'],
       ['0', '1', '0', '0', '0'],
@@ -453,6 +485,14 @@
     refs.clearOutput = $('clear-output');
     refs.operationMessage = $('operation-message');
     refs.operationOutput = $('operation-output');
+    refs.polynomialActionVariables = $('polynomial-action-variables');
+    refs.polynomialActionMode = $('polynomial-action-mode');
+    refs.polynomialActionInput = $('polynomial-action-input');
+    refs.computePolynomialAction = $('compute-polynomial-action');
+    refs.exportPolynomialAction = $('export-polynomial-action');
+    refs.clearPolynomialAction = $('clear-polynomial-action');
+    refs.polynomialActionMessage = $('polynomial-action-message');
+    refs.polynomialActionOutput = $('polynomial-action-output');
     refs.applyBulk = $('apply-bulk');
     refs.bulkMessage = $('bulk-message');
     refs.importDialog = $('import-dialog');
@@ -479,6 +519,7 @@
     refs.dataType.addEventListener('change', () => {
       updateFieldControls();
       clearOperationResult();
+      clearPolynomialActionResult();
       refreshAll();
     });
     if (refs.finiteFieldPrime) {
@@ -491,16 +532,23 @@
         } catch (_) {}
         state.finiteFieldPrimeTextEditing = false;
         clearOperationResult();
+        clearPolynomialActionResult();
         refreshAll();
       });
     }
     if (refs.rationalFunctionVariable) {
       refs.rationalFunctionVariable.addEventListener('change', () => {
-        refs.rationalFunctionVariable.value = normalizeSymbolName(refs.rationalFunctionVariable.value, 't');
-        state.rationalFunctionVariable = refs.rationalFunctionVariable.value;
-        updateFieldControls();
-        clearOperationResult();
-        refreshAll();
+        try {
+          const variables = normalizeRationalFunctionVariables(refs.rationalFunctionVariable.value);
+          refs.rationalFunctionVariable.value = variables.join(', ');
+          state.rationalFunctionVariables = variables;
+          updateFieldControls();
+          clearOperationResult();
+          clearPolynomialActionResult();
+          refreshAll();
+        } catch (error) {
+          refs.matrixStatus.textContent = error.message;
+        }
       });
     }
     if (refs.numberFieldGenerator) {
@@ -512,6 +560,7 @@
         }
         updateFieldControls();
         clearOperationResult();
+        clearPolynomialActionResult();
         refreshAll();
       });
     }
@@ -521,6 +570,7 @@
         refs.numberFieldPolynomial.value = state.numberFieldPolynomial;
         updateFieldControls();
         clearOperationResult();
+        clearPolynomialActionResult();
         refreshAll();
       });
     }
@@ -536,6 +586,15 @@
     refs.exportOperation.addEventListener('click', exportOperationResult);
     refs.clearOutput.addEventListener('click', () => {
       clearOperationResult();
+    });
+    refs.computePolynomialAction?.addEventListener('click', computePolynomialAction);
+    refs.exportPolynomialAction?.addEventListener('click', exportPolynomialActionResult);
+    refs.clearPolynomialAction?.addEventListener('click', () => {
+      refs.polynomialActionInput.value = '';
+      clearPolynomialActionResult();
+    });
+    [refs.polynomialActionVariables, refs.polynomialActionMode, refs.polynomialActionInput].filter(Boolean).forEach((control) => {
+      control.addEventListener(control.tagName === 'TEXTAREA' ? 'input' : 'change', clearPolynomialActionResult);
     });
     refs.applyBulk.addEventListener('click', openImportDialog);
     refs.confirmImport.addEventListener('click', applyBulkInput);
@@ -570,8 +629,8 @@
     const type = currentDataType();
     if (type === 'finite-field') return { kind: 'finite-field', p: currentFiniteFieldPrime() };
     if (type === 'rational-function') {
-      const variable = normalizeSymbolName(refs.rationalFunctionVariable ? refs.rationalFunctionVariable.value : state.rationalFunctionVariable, 't');
-      return { kind: 'rational-function', variable };
+      const variables = normalizeRationalFunctionVariables(refs.rationalFunctionVariable ? refs.rationalFunctionVariable.value : state.rationalFunctionVariables);
+      return { kind: 'rational-function', variables, variable: variables[variables.length - 1], key: variables.join(',') };
     }
     if (type === 'number-field') return currentNumberFieldInfo();
     return { kind: type };
@@ -592,7 +651,7 @@
       refs.finiteFieldPrime.value = String(state.finiteFieldPrime);
     }
     if (refs.rationalFunctionVariable && rationalFunction && !refs.rationalFunctionVariable.value) {
-      refs.rationalFunctionVariable.value = state.rationalFunctionVariable;
+      refs.rationalFunctionVariable.value = state.rationalFunctionVariables.join(', ');
     }
     if (refs.numberFieldGenerator && numberField && !refs.numberFieldGenerator.value) {
       refs.numberFieldGenerator.value = state.numberFieldSymbol;
@@ -617,6 +676,7 @@
     const current = currentFiniteFieldPrime();
     setFiniteFieldPrime(event.key === 'ArrowUp' ? nextPrimeAfter(current) : previousPrimeBefore(current));
     clearOperationResult();
+    clearPolynomialActionResult();
     refreshAll();
   }
 
@@ -628,10 +688,12 @@
     if (raw === current + 1) {
       setFiniteFieldPrime(nextPrimeAfter(current));
       clearOperationResult();
+      clearPolynomialActionResult();
       refreshAll();
     } else if (raw === current - 1) {
       setFiniteFieldPrime(previousPrimeBefore(current));
       clearOperationResult();
+      clearPolynomialActionResult();
       refreshAll();
     }
   }
@@ -655,12 +717,13 @@
     return `F_${p}`;
   }
 
-  function rationalFunctionLatex(variable = currentFieldInfo().variable || 't') {
-    return `\\mathbb{Q}(${escapeLatexIdentifier(variable)})`;
+  function rationalFunctionLatex(variables = currentFieldInfo().variables || ['t']) {
+    const names = normalizeRationalFunctionVariables(variables);
+    return `\\mathbb{Q}(${names.map(escapeLatexIdentifier).join(',')})`;
   }
 
-  function rationalFunctionPlain(variable = currentFieldInfo().variable || 't') {
-    return `Q(${variable})`;
+  function rationalFunctionPlain(variables = currentFieldInfo().variables || ['t']) {
+    return `Q(${normalizeRationalFunctionVariables(variables).join(',')})`;
   }
 
   function numberFieldLatex(field = currentNumberFieldInfo()) {
@@ -715,9 +778,10 @@
 
   function renderRationalFunctionSymbol() {
     if (!refs.rationalFunctionSymbol || currentDataType() !== 'rational-function') return;
-    const variable = normalizeSymbolName(refs.rationalFunctionVariable ? refs.rationalFunctionVariable.value : state.rationalFunctionVariable, 't');
+    let variables = state.rationalFunctionVariables;
+    try { variables = normalizeRationalFunctionVariables(refs.rationalFunctionVariable ? refs.rationalFunctionVariable.value : variables); } catch (_) {}
     if (window.MathJax?.typesetClear) window.MathJax.typesetClear([refs.rationalFunctionSymbol]);
-    refs.rationalFunctionSymbol.innerHTML = `\\(${rationalFunctionLatex(variable)}\\)`;
+    refs.rationalFunctionSymbol.innerHTML = `\\(${rationalFunctionLatex(variables)}\\)`;
     typesetFieldSymbol(refs.rationalFunctionSymbol);
   }
 
@@ -871,6 +935,7 @@
         input.addEventListener('input', () => {
           state.entries[r][c] = input.value;
           clearOperationResult();
+          clearPolynomialActionResult();
           refreshAll();
         });
         input.addEventListener('focus', () => input.select());
@@ -883,10 +948,10 @@
     const rows = clampInt(refs.rows.value, 1, MAX_SIZE, state.rows);
     const cols = clampInt(refs.cols.value, 1, MAX_SIZE, state.cols);
     resizeMatrix(rows, cols);
-    clearOperationResult();
   }
 
   function resizeMatrix(rows, cols) {
+    const oldDefault = defaultPolynomialVariables(state.cols).join(', ');
     const next = [];
     for (let r = 0; r < rows; r++) {
       const row = [];
@@ -898,6 +963,10 @@
     state.entries = next;
     refs.rows.value = String(rows);
     refs.cols.value = String(cols);
+    if (refs.polynomialActionVariables && (!refs.polynomialActionVariables.value.trim() || refs.polynomialActionVariables.value.trim() === oldDefault)) {
+      refs.polynomialActionVariables.value = defaultPolynomialVariables(cols).join(', ');
+    }
+    clearPolynomialActionResult();
     clearOperationResult();
     renderMatrixGrid();
     refreshAll();
@@ -923,6 +992,7 @@
       }
     }
     clearOperationResult();
+    clearPolynomialActionResult();
     renderMatrixGrid();
     refreshAll();
   }
@@ -937,7 +1007,9 @@
       }
     }
     if (type === 'rational-function') {
-      const variable = normalizeSymbolName(refs.rationalFunctionVariable ? refs.rationalFunctionVariable.value : state.rationalFunctionVariable, 't');
+      let variables = state.rationalFunctionVariables;
+      try { variables = normalizeRationalFunctionVariables(refs.rationalFunctionVariable ? refs.rationalFunctionVariable.value : variables); } catch (_) {}
+      const variable = variables[randomInt(0, variables.length - 1)];
       return randomInt(-2, 2) === 0 ? variable : `${randomInt(-3, 3)}+${randomInt(1, 3)}*${variable}`;
     }
     if (type === 'number-field') {
@@ -1276,6 +1348,107 @@
     return { num, den };
   }
 
+  function normalizeRationalFunctionVariables(value) {
+    const raw = Array.isArray(value) ? value : String(value == null ? 't' : value).split(',');
+    const variables = raw.map((item) => String(item).trim());
+    if (variables.some((name) => !name)) throw new Error('Rational function variables cannot be empty.');
+    if (!variables.length || variables.length > MAX_SIZE) throw new Error(`Use between 1 and ${MAX_SIZE} rational function variables.`);
+    variables.forEach((name) => {
+      if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) throw new Error(`Invalid rational function variable "${name}".`);
+    });
+    if (new Set(variables).size !== variables.length) throw new Error('Rational function variables must be unique.');
+    return variables;
+  }
+
+  function rfCoeffZero(sample) { return sample instanceof RationalFunctionScalar ? RationalFunctionScalar.zero(sample.variables) : Fraction.zero(); }
+  function rfCoeffOne(sample) { return sample instanceof RationalFunctionScalar ? RationalFunctionScalar.one(sample.variables) : Fraction.one(); }
+  function rfCoeffEqual(a, b) {
+    if (a instanceof RationalFunctionScalar || b instanceof RationalFunctionScalar) {
+      if (!(a instanceof RationalFunctionScalar)) a = RationalFunctionScalar.fromFraction(a, b.variables);
+      if (!(b instanceof RationalFunctionScalar)) b = RationalFunctionScalar.fromFraction(b, a.variables);
+      return a.fieldKey === b.fieldKey && rfPolyEqual(a.num, b.num) && rfPolyEqual(a.den, b.den);
+    }
+    a = Fraction.from(a); b = Fraction.from(b);
+    return a.num === b.num && a.den === b.den;
+  }
+  function rfPolyTrim(poly) {
+    const out = poly && poly.length ? poly.slice() : [Fraction.zero()];
+    let end = out.length - 1;
+    while (end > 0 && out[end].isZero()) end--;
+    return out.slice(0, end + 1);
+  }
+  function rfPolyDegree(poly) { return rfPolyTrim(poly).length - 1; }
+  function rfPolyIsZero(poly) { const p = rfPolyTrim(poly); return p.length === 1 && p[0].isZero(); }
+  function rfPolyEqual(a, b) {
+    a = rfPolyTrim(a); b = rfPolyTrim(b);
+    return a.length === b.length && a.every((value, index) => rfCoeffEqual(value, b[index]));
+  }
+  function rfPolyAdd(a, b) {
+    a = rfPolyTrim(a); b = rfPolyTrim(b);
+    const sample = a[0] || b[0];
+    const out = [];
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const x = i < a.length ? a[i] : rfCoeffZero(sample);
+      const y = i < b.length ? b[i] : rfCoeffZero(sample);
+      out.push(x.add(y));
+    }
+    return rfPolyTrim(out);
+  }
+  function rfPolyNeg(poly) { return rfPolyTrim(poly).map((value) => value.neg()); }
+  function rfPolyMul(a, b) {
+    a = rfPolyTrim(a); b = rfPolyTrim(b);
+    const sample = a[0] || b[0];
+    const out = Array.from({ length: a.length + b.length - 1 }, () => rfCoeffZero(sample));
+    for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) out[i + j] = out[i + j].add(a[i].mul(b[j]));
+    return rfPolyTrim(out);
+  }
+  function rfPolyScale(poly, scalar) { return rfPolyTrim(poly).map((value) => value.mul(scalar)); }
+  function rfPolyDivmod(dividend, divisor) {
+    dividend = rfPolyTrim(dividend); divisor = rfPolyTrim(divisor);
+    if (rfPolyIsZero(divisor)) throw new Error('Division by zero polynomial.');
+    let remainder = dividend.slice();
+    const sample = divisor[0];
+    const difference = rfPolyDegree(remainder) - rfPolyDegree(divisor);
+    if (difference < 0) return { quotient: [rfCoeffZero(sample)], remainder };
+    const quotient = Array.from({ length: difference + 1 }, () => rfCoeffZero(sample));
+    const lead = divisor[divisor.length - 1];
+    while (!rfPolyIsZero(remainder) && rfPolyDegree(remainder) >= rfPolyDegree(divisor)) {
+      const shift = rfPolyDegree(remainder) - rfPolyDegree(divisor);
+      const factor = remainder[remainder.length - 1].div(lead);
+      quotient[shift] = quotient[shift].add(factor);
+      for (let i = 0; i < divisor.length; i++) remainder[i + shift] = remainder[i + shift].sub(factor.mul(divisor[i]));
+      remainder = rfPolyTrim(remainder);
+    }
+    return { quotient: rfPolyTrim(quotient), remainder };
+  }
+  function rfPolyDivExact(a, b) {
+    const result = rfPolyDivmod(a, b);
+    if (!rfPolyIsZero(result.remainder)) throw new Error('Polynomial division left a remainder.');
+    return result.quotient;
+  }
+  function rfPolyMonic(poly) {
+    poly = rfPolyTrim(poly);
+    if (rfPolyIsZero(poly)) return poly;
+    return rfPolyScale(poly, rfCoeffOne(poly[0]).div(poly[poly.length - 1]));
+  }
+  function rfPolyGcd(a, b) {
+    a = rfPolyTrim(a); b = rfPolyTrim(b);
+    while (!rfPolyIsZero(b)) { const next = rfPolyDivmod(a, b).remainder; a = b; b = next; }
+    return rfPolyMonic(a);
+  }
+  function rfNormalize(num, den, variables) {
+    if (variables.length === 1) return rationalFunctionNormalize(num, den);
+    num = rfPolyTrim(num); den = rfPolyTrim(den);
+    if (rfPolyIsZero(den)) throw new Error('Division by zero.');
+    const one = rfCoeffOne(den[0]);
+    if (rfPolyIsZero(num)) return { num: [rfCoeffZero(one)], den: [one] };
+    const gcd = rfPolyGcd(num, den);
+    num = rfPolyDivExact(num, gcd);
+    den = rfPolyDivExact(den, gcd);
+    const scale = one.div(den[den.length - 1]);
+    return { num: rfPolyScale(num, scale), den: rfPolyScale(den, scale) };
+  }
+
   function numberFieldReduce(coeffs, field) {
     return polyQDivmod(coeffs, field.modulus).remainder;
   }
@@ -1404,6 +1577,7 @@
       if (this.match('number')) return this.builder.constant(exactFractionFromDecimalText(this.previous().value));
       if (this.match('identifier')) {
         const name = this.previous().value;
+        if (typeof this.builder.identifier === 'function') return this.builder.identifier(name);
         if (name === this.builder.symbol) return this.builder.variable();
         throw new Error(`Unknown symbol "${name}".`);
       }
@@ -1434,6 +1608,267 @@
     peek() { return this.tokens[this.index] || null; }
   }
 
+  function defaultPolynomialVariables(count) {
+    return Array.from({ length: count }, (_value, index) => `x${index + 1}`);
+  }
+
+  function polynomialActionVariables(fieldInfo, count) {
+    const variables = String(refs.polynomialActionVariables?.value || '').split(',').map((value) => value.trim());
+    if (variables.some((name) => !name)) throw new Error('Polynomial variables cannot be empty.');
+    if (variables.length !== count) throw new Error(`Enter exactly ${count} polynomial variables.`);
+    variables.forEach((name) => {
+      if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) throw new Error(`Invalid polynomial variable "${name}".`);
+    });
+    if (new Set(variables).size !== variables.length) throw new Error('Polynomial variables must be unique.');
+    const reserved = new Set();
+    if (fieldInfo.kind === 'rational-function') fieldInfo.variables.forEach((name) => reserved.add(name));
+    if (fieldInfo.kind === 'number-field') reserved.add(fieldInfo.symbol);
+    if (fieldInfo.kind === 'complex') reserved.add('i');
+    const clash = variables.find((name) => reserved.has(name));
+    if (clash) throw new Error(`Polynomial variable "${clash}" clashes with a coefficient-field symbol.`);
+    return variables;
+  }
+
+  function polynomialKey(exponents) { return exponents.join(','); }
+  function polynomialExponents(key) { return key.split(',').map(Number); }
+  function polynomialZero(variables, sample) { return { variables, sample, terms: new Map() }; }
+  function polynomialConstant(variables, coefficient, sample = coefficient) {
+    const result = polynomialZero(variables, sample);
+    if (!coefficient.isZero()) result.terms.set(polynomialKey(variables.map(() => 0)), coefficient);
+    return result;
+  }
+  function polynomialVariable(variables, index, sample) {
+    const exponents = variables.map(() => 0);
+    exponents[index] = 1;
+    const result = polynomialZero(variables, sample);
+    result.terms.set(polynomialKey(exponents), scalarOneLike(sample));
+    return result;
+  }
+  function polynomialGuard(guard, terms = 0) {
+    if (Date.now() > guard.deadline) throw new Error('Polynomial action exceeded the 1.5 second computation limit.');
+    if (terms > POLYNOMIAL_ACTION_MAX_TERMS) throw new Error(`Polynomial action exceeded ${POLYNOMIAL_ACTION_MAX_TERMS} monomials.`);
+  }
+  function polynomialAdd(a, b, guard) {
+    const result = polynomialZero(a.variables, a.sample);
+    a.terms.forEach((value, key) => result.terms.set(key, value.clone()));
+    b.terms.forEach((value, key) => {
+      const next = result.terms.has(key) ? result.terms.get(key).add(value) : value.clone();
+      if (next.isZero()) result.terms.delete(key); else result.terms.set(key, next);
+      polynomialGuard(guard, result.terms.size);
+    });
+    return result;
+  }
+  function polynomialNeg(value) {
+    const result = polynomialZero(value.variables, value.sample);
+    value.terms.forEach((coefficient, key) => result.terms.set(key, coefficient.neg()));
+    return result;
+  }
+  function polynomialMul(a, b, guard) {
+    const result = polynomialZero(a.variables, a.sample);
+    for (const [aKey, aCoefficient] of a.terms) {
+      const aExponents = polynomialExponents(aKey);
+      for (const [bKey, bCoefficient] of b.terms) {
+        const bExponents = polynomialExponents(bKey);
+        const exponents = aExponents.map((value, index) => value + bExponents[index]);
+        if (exponents.some((value) => value > POLYNOMIAL_ACTION_MAX_EXPONENT)) throw new Error(`Polynomial exponents are capped at ${POLYNOMIAL_ACTION_MAX_EXPONENT}.`);
+        const key = polynomialKey(exponents);
+        const product = aCoefficient.mul(bCoefficient);
+        const next = result.terms.has(key) ? result.terms.get(key).add(product) : product;
+        if (next.isZero()) result.terms.delete(key); else result.terms.set(key, next);
+        polynomialGuard(guard, result.terms.size);
+      }
+    }
+    return result;
+  }
+  function polynomialPow(value, exponent, guard) {
+    if (!Number.isInteger(exponent) || exponent < 0 || exponent > POLYNOMIAL_ACTION_MAX_EXPONENT) {
+      throw new Error(`Use a nonnegative integer exponent at most ${POLYNOMIAL_ACTION_MAX_EXPONENT}.`);
+    }
+    let result = polynomialConstant(value.variables, scalarOneLike(value.sample), value.sample);
+    let base = value;
+    let power = exponent;
+    while (power > 0) {
+      polynomialGuard(guard, result.terms.size);
+      if (power % 2 === 1) result = polynomialMul(result, base, guard);
+      power = Math.floor(power / 2);
+      if (power) base = polynomialMul(base, base, guard);
+    }
+    return result;
+  }
+  function polynomialConstantCoefficient(value) {
+    if (value.terms.size === 0) return scalarZeroLike(value.sample);
+    const key = polynomialKey(value.variables.map(() => 0));
+    if (value.terms.size !== 1 || !value.terms.has(key)) return null;
+    return value.terms.get(key);
+  }
+  function polynomialDivideByConstant(value, divisor) {
+    const coefficient = polynomialConstantCoefficient(divisor);
+    if (!coefficient) throw new Error('Division by an expression containing polynomial variables is not allowed.');
+    if (coefficient.isZero()) throw new Error('Division by zero.');
+    const result = polynomialZero(value.variables, value.sample);
+    value.terms.forEach((item, key) => result.terms.set(key, item.div(coefficient)));
+    return result;
+  }
+
+  function polynomialCoefficientBuilder(fieldInfo) {
+    if (fieldInfo.kind === 'finite-field') {
+      return (fraction) => new ModScalar(Number(fraction.num % BigInt(fieldInfo.p)) * modInverse(Number(fraction.den % BigInt(fieldInfo.p)), fieldInfo.p), fieldInfo.p);
+    }
+    if (fieldInfo.kind === 'rational-function') return (fraction) => RationalFunctionScalar.fromFraction(fraction, fieldInfo.variables);
+    if (fieldInfo.kind === 'number-field') return (fraction) => NumberFieldScalar.fromFraction(fraction, fieldInfo);
+    return (fraction) => ExactScalar.fromFraction(fraction);
+  }
+
+  function polynomialParserBuilder(fieldInfo, variables, guard) {
+    const makeCoefficient = polynomialCoefficientBuilder(fieldInfo);
+    const sample = makeCoefficient(Fraction.zero());
+    return {
+      zero: () => polynomialZero(variables, sample),
+      one: () => polynomialConstant(variables, scalarOneLike(sample), sample),
+      constant: (fraction) => polynomialConstant(variables, makeCoefficient(fraction), sample),
+      identifier(name) {
+        const index = variables.indexOf(name);
+        if (index >= 0) return polynomialVariable(variables, index, sample);
+        if (fieldInfo.kind === 'rational-function' && fieldInfo.variables.includes(name)) {
+          return polynomialConstant(variables, RationalFunctionScalar.variable(name, fieldInfo.variables), sample);
+        }
+        if (fieldInfo.kind === 'number-field' && name === fieldInfo.symbol) {
+          return polynomialConstant(variables, NumberFieldScalar.generator(fieldInfo), sample);
+        }
+        if (fieldInfo.kind === 'complex' && name === 'i') {
+          return polynomialConstant(variables, new ExactScalar(Fraction.zero(), Fraction.one()), sample);
+        }
+        throw new Error(`Unknown symbol "${name}".`);
+      },
+      add: (a, b) => polynomialAdd(a, b, guard),
+      sub: (a, b) => polynomialAdd(a, polynomialNeg(b), guard),
+      neg: polynomialNeg,
+      mul: (a, b) => polynomialMul(a, b, guard),
+      div: polynomialDivideByConstant,
+      pow: (value, exponent) => polynomialPow(value, exponent, guard)
+    };
+  }
+
+  function substitutePolynomial(polynomial, matrix, guard) {
+    const variables = polynomial.variables;
+    const sample = polynomial.sample;
+    const forms = matrix.map((row) => row.reduce((sum, coefficient, index) => {
+      const term = polynomialMul(
+        polynomialConstant(variables, coefficient, sample),
+        polynomialVariable(variables, index, sample),
+        guard
+      );
+      return polynomialAdd(sum, term, guard);
+    }, polynomialZero(variables, sample)));
+    let result = polynomialZero(variables, sample);
+    for (const [key, coefficient] of polynomial.terms) {
+      let term = polynomialConstant(variables, coefficient, sample);
+      polynomialExponents(key).forEach((exponent, index) => {
+        if (exponent) term = polynomialMul(term, polynomialPow(forms[index], exponent, guard), guard);
+      });
+      result = polynomialAdd(result, term, guard);
+      polynomialGuard(guard, result.terms.size);
+    }
+    return result;
+  }
+
+  function orderedPolynomialTerms(polynomial) {
+    return Array.from(polynomial.terms, ([key, coefficient]) => ({ exponents: polynomialExponents(key), coefficient }))
+      .sort((a, b) => {
+        const degreeDifference = b.exponents.reduce((sum, value) => sum + value, 0) - a.exponents.reduce((sum, value) => sum + value, 0);
+        if (degreeDifference) return degreeDifference;
+        for (let i = 0; i < a.exponents.length; i++) if (a.exponents[i] !== b.exponents[i]) return b.exponents[i] - a.exponents[i];
+        return 0;
+      });
+  }
+
+  function formatPolynomialAction(polynomial, mode = 'text') {
+    const terms = orderedPolynomialTerms(polynomial);
+    if (!terms.length) return '0';
+    return terms.map((term, index) => {
+      const coefficient = term.coefficient;
+      const real = scalarIsReal(coefficient);
+      const negative = real && scalarRealSign(coefficient) < 0;
+      const absolute = negative ? scalarNeg(coefficient) : coefficient;
+      const monomial = term.exponents.map((power, i) => formatPowerVariable(polynomial.variables[i], power, mode)).filter(Boolean).join(mode === 'latex' ? '' : '*');
+      const coefficientText = exactScalarSource(absolute, mode === 'latex' ? 'latex' : mode === 'python' ? 'python' : 'text');
+      let body = monomial && scalarIsOne(absolute) ? monomial : monomial ? `(${coefficientText})${mode === 'latex' ? '' : '*'}${monomial}` : coefficientText;
+      if (!index) return negative ? `-${body}` : body;
+      return `${negative ? ' - ' : ' + '}${body}`;
+    }).join('');
+  }
+
+  function computePolynomialAction() {
+    clearPolynomialActionResult();
+    try {
+      const data = readMatrix(true);
+      if (data.errors.length) throw new Error(matrixDataErrorMessage(data.errors[0]));
+      if (data.rows !== data.cols) throw new Error('Polynomial actions require a square matrix.');
+      const variables = polynomialActionVariables(data.fieldInfo, data.cols);
+      refs.polynomialActionVariables.value = variables.join(', ');
+      const source = refs.polynomialActionInput.value.trim();
+      if (!source) throw new Error('Enter a polynomial.');
+      const guard = { deadline: Date.now() + POLYNOMIAL_ACTION_TIMEOUT_MS };
+      const polynomial = parseFieldExpression(source, polynomialParserBuilder(data.fieldInfo, variables, guard));
+      let matrix = exactMatrixFromData(data);
+      if (refs.polynomialActionMode.value === 'inverse') matrix = exactInverse(matrix);
+      const result = substitutePolynomial(polynomial, matrix, guard);
+      state.lastPolynomialAction = { source, polynomial: result, field: data.fieldInfo, mode: refs.polynomialActionMode.value };
+      const latex = formatPolynomialAction(result, 'latex');
+      refs.polynomialActionOutput.innerHTML = `<div class="matrix-result-block"><div class="matrix-result-title">Result</div><div class="matrix-polynomial">${inlineMathHtml(latex)}</div></div>`;
+      if (window.MathJax?.typesetPromise) mathJaxTypesetQueue = mathJaxTypesetQueue.then(() => window.MathJax.typesetPromise([refs.polynomialActionOutput])).catch(() => {});
+    } catch (error) {
+      refs.polynomialActionMessage.textContent = error.message;
+    }
+  }
+
+  function clearPolynomialActionResult() {
+    state.lastPolynomialAction = null;
+    if (!refs.polynomialActionOutput) return;
+    if (window.MathJax?.typesetClear) window.MathJax.typesetClear([refs.polynomialActionOutput]);
+    refs.polynomialActionMessage.textContent = '';
+    refs.polynomialActionOutput.innerHTML = '<span class="hint">No polynomial action yet.</span>';
+  }
+
+  function exportPolynomialAction(result, format) {
+    const expression = formatPolynomialAction(result.polynomial, format === 'latex' ? 'latex' : format === 'python' ? 'python' : 'text');
+    if (format === 'latex') return expression;
+    if (format === 'rows' || format === 'bulk') return expression;
+    const variables = result.polynomial.variables;
+    const prelude = operationFieldPrelude(result.field, format);
+    const lines = prelude ? [prelude, ''] : [];
+    if (format === 'sage') {
+      const base = result.field.kind === 'finite-field' ? 'F' : (result.field.kind === 'rational-function' || result.field.kind === 'number-field') ? 'K' : result.field.kind === 'complex' ? 'CC' : result.field.kind === 'real' ? 'RR' : 'QQ';
+      lines.push(`P = PolynomialRing(${base}, names=(${variables.map((name) => `'${name}'`).join(', ')}))`, `${variables.length === 1 ? `${variables[0]},` : variables.join(', ')} = P.gens()`, `result = ${expression}`);
+    } else if (format === 'python') {
+      if (!prelude) lines.push('from fractions import Fraction', 'from sympy import symbols');
+      lines.push(`${variables.join(', ')} = symbols('${variables.join(' ')}')`, `result = ${expression}`);
+    } else if (format === 'macaulay2') {
+      if (!prelude) lines.push('kk = QQ');
+      lines.push(`P = kk[${variables.join(', ')}]`, `result = ${expression}`);
+    } else if (format === 'mathematica') {
+      lines.push(`Clear[${variables.join(', ')}];`, `result = ${expression};`);
+    } else if (format === 'matlab') {
+      const coefficientVariables = result.field.kind === 'rational-function'
+        ? result.field.variables
+        : result.field.kind === 'number-field' ? [result.field.symbol] : [];
+      lines.push(`syms ${[...coefficientVariables, ...variables].join(' ')}`, `result = ${expression};`);
+    }
+    else lines.push(`result = ${expression}`);
+    return lines.join('\n');
+  }
+
+  function exportPolynomialActionResult() {
+    if (!state.lastPolynomialAction) {
+      refs.polynomialActionMessage.textContent = 'Compute a polynomial action first.';
+      return;
+    }
+    refs.exportOut.value = exportPolynomialAction(state.lastPolynomialAction, refs.exportFormat.value);
+    const card = refs.exportOut.closest('.card');
+    if (window.CalculatorCards) window.CalculatorCards.openCard(card); else card?.classList.remove('collapsed');
+    refs.matrixStatus.textContent = 'polynomial action export ready';
+  }
+
   function cyclicEntry(r, c) {
     if (r === 0 || c === 0) return state.entries[r]?.[c] ?? '0';
     return state.entries[r - 1]?.[c - 1] ?? '0';
@@ -1444,6 +1879,7 @@
       for (let c = 0; c < state.cols; c++) state.entries[r][c] = value;
     }
     clearOperationResult();
+    clearPolynomialActionResult();
     renderMatrixGrid();
     refreshAll();
   }
@@ -1508,10 +1944,10 @@
 
   function parseRationalFunctionEntry(text, fieldInfo) {
     const raw = String(text ?? '').trim();
-    const variable = fieldInfo.variable;
+    const variables = fieldInfo.variables;
     const scalar = raw
-      ? parseFieldExpression(raw, rationalFunctionBuilder(variable))
-      : RationalFunctionScalar.zero(variable);
+      ? parseFieldExpression(raw, rationalFunctionBuilder(variables))
+      : RationalFunctionScalar.zero(variables);
     return { raw, value: scalar.toComplex(), scalar };
   }
 
@@ -1523,13 +1959,17 @@
     return { raw, value: scalar.toComplex(), scalar };
   }
 
-  function rationalFunctionBuilder(variable) {
+  function rationalFunctionBuilder(variables) {
+    variables = normalizeRationalFunctionVariables(variables);
     return {
-      symbol: variable,
-      zero: () => RationalFunctionScalar.zero(variable),
-      one: () => RationalFunctionScalar.one(variable),
-      constant: (frac) => RationalFunctionScalar.fromFraction(frac, variable),
-      variable: () => RationalFunctionScalar.variable(variable),
+      symbols: variables,
+      zero: () => RationalFunctionScalar.zero(variables),
+      one: () => RationalFunctionScalar.one(variables),
+      constant: (frac) => RationalFunctionScalar.fromFraction(frac, variables),
+      identifier: (name) => {
+        if (!variables.includes(name)) throw new Error(`Unknown symbol "${name}".`);
+        return RationalFunctionScalar.variable(name, variables);
+      },
       add: (a, b) => a.add(b),
       sub: (a, b) => a.sub(b),
       neg: (a) => a.neg(),
@@ -1559,7 +1999,7 @@
     if (!Number.isInteger(exponent) || exponent < 0) throw new Error('Use a nonnegative integer exponent.');
     let n = exponent;
     let result = value instanceof RationalFunctionScalar
-      ? RationalFunctionScalar.one(value.variable)
+      ? RationalFunctionScalar.one(value.variables)
       : NumberFieldScalar.one(value.field);
     let base = value.clone();
     while (n > 0) {
@@ -1790,19 +2230,19 @@
   }
 
   function scalarZeroLike(sample) {
-    if (sample instanceof RationalFunctionScalar) return RationalFunctionScalar.zero(sample.variable);
+    if (sample instanceof RationalFunctionScalar) return RationalFunctionScalar.zero(sample.variables);
     if (sample instanceof NumberFieldScalar) return NumberFieldScalar.zero(sample.field);
     return sample instanceof ModScalar ? ModScalar.zero(sample.p) : ExactScalar.zero();
   }
 
   function scalarOneLike(sample) {
-    if (sample instanceof RationalFunctionScalar) return RationalFunctionScalar.one(sample.variable);
+    if (sample instanceof RationalFunctionScalar) return RationalFunctionScalar.one(sample.variables);
     if (sample instanceof NumberFieldScalar) return NumberFieldScalar.one(sample.field);
     return sample instanceof ModScalar ? ModScalar.one(sample.p) : ExactScalar.one();
   }
 
   function scalarFromIntLike(value, sample) {
-    if (sample instanceof RationalFunctionScalar) return RationalFunctionScalar.fromFraction(Fraction.fromInt(value), sample.variable);
+    if (sample instanceof RationalFunctionScalar) return RationalFunctionScalar.fromFraction(Fraction.fromInt(value), sample.variables);
     if (sample instanceof NumberFieldScalar) return NumberFieldScalar.fromFraction(Fraction.fromInt(value), sample.field);
     return sample instanceof ModScalar
       ? ModScalar.fromInt(value, sample.p)
@@ -4068,8 +4508,7 @@
     add(scalarZeroLike(sample));
     for (const value of extraCandidates) addFamily(value);
 
-    const generator = genericFieldGenerator(sample);
-    if (generator) {
+    for (const generator of genericFieldGenerators(sample)) {
       for (let multiplier = -3; multiplier <= 3; multiplier++) {
         if (multiplier === 0) continue;
         for (let offset = -3; offset <= 3; offset++) {
@@ -4118,21 +4557,21 @@
   }
 
   function genericFieldCompatible(value, sample) {
-    if (sample instanceof RationalFunctionScalar) return value instanceof RationalFunctionScalar && value.variable === sample.variable;
+    if (sample instanceof RationalFunctionScalar) return value instanceof RationalFunctionScalar && value.fieldKey === sample.fieldKey;
     if (sample instanceof NumberFieldScalar) return value instanceof NumberFieldScalar && value.field.key === sample.field.key;
     return false;
   }
 
   function genericFieldScalarKey(value) {
-    if (value instanceof RationalFunctionScalar) return `rf:${value.variable}:${polyQKey(value.num)}/${polyQKey(value.den)}`;
+    if (value instanceof RationalFunctionScalar) return `rf:${value.fieldKey}:${rfPolyKey(value.num)}/${rfPolyKey(value.den)}`;
     if (value instanceof NumberFieldScalar) return `nf:${value.field.key}:${polyQKey(value.coeffs)}`;
     return formatScalar(value);
   }
 
-  function genericFieldGenerator(sample) {
-    if (sample instanceof RationalFunctionScalar) return RationalFunctionScalar.variable(sample.variable);
-    if (sample instanceof NumberFieldScalar) return NumberFieldScalar.generator(sample.field);
-    return null;
+  function genericFieldGenerators(sample) {
+    if (sample instanceof RationalFunctionScalar) return sample.variables.map((name) => RationalFunctionScalar.variable(name, sample.variables));
+    if (sample instanceof NumberFieldScalar) return [NumberFieldScalar.generator(sample.field)];
+    return [];
   }
 
   function genericFieldSampleFromPolynomial(coeffs) {
@@ -4644,17 +5083,45 @@
 
   function fieldNameForInfo(fieldInfo) {
     if (fieldInfo?.kind === 'finite-field') return finiteFieldPlain(fieldInfo.p);
-    if (fieldInfo?.kind === 'rational-function') return rationalFunctionPlain(fieldInfo.variable);
+    if (fieldInfo?.kind === 'rational-function') return rationalFunctionPlain(fieldInfo.variables);
     if (fieldInfo?.kind === 'number-field') return numberFieldPlain(fieldInfo);
     return fieldName(fieldInfo?.kind || currentDataType());
   }
 
   function formatRationalFunction(value, mode = 'text') {
-    const numerator = formatPolyQ(value.num, value.variable, mode);
-    if (polyQEqual(value.den, polyQOne())) return numerator;
-    const denominator = formatPolyQ(value.den, value.variable, mode);
+    const numerator = formatRfPolynomial(value.num, value.variable, mode);
+    if (rfPolyEqual(value.den, [rfCoeffOne(value.den[0])])) return numerator;
+    const denominator = formatRfPolynomial(value.den, value.variable, mode);
     if (mode === 'latex') return `\\frac{${numerator}}{${denominator}}`;
     return `(${numerator})/(${denominator})`;
+  }
+
+  function rfPolyKey(poly) {
+    return rfPolyTrim(poly).map((coeff) => coeff instanceof RationalFunctionScalar
+      ? `(${coeff.fieldKey}:${rfPolyKey(coeff.num)}/${rfPolyKey(coeff.den)})`
+      : `${coeff.num}/${coeff.den}`).join(',');
+  }
+
+  function formatRfPolynomial(poly, variable, mode = 'text') {
+    poly = rfPolyTrim(poly);
+    if (poly.every((coeff) => coeff instanceof Fraction)) return formatPolyQ(poly, variable, mode);
+    const terms = [];
+    for (let power = poly.length - 1; power >= 0; power--) {
+      const coeff = poly[power];
+      if (coeff.isZero()) continue;
+      const negative = scalarIsReal(coeff) && scalarRealSign(coeff) < 0;
+      const absolute = negative ? scalarNeg(coeff) : coeff;
+      const coeffText = absolute instanceof RationalFunctionScalar ? formatRationalFunction(absolute, mode) : formatFractionForMode(absolute, mode);
+      const variablePart = formatPowerVariable(variable, power, mode);
+      const body = variablePart
+        ? scalarIsOne(absolute) ? variablePart : `(${coeffText})${mode === 'latex' ? '' : '*'}${variablePart}`
+        : coeffText;
+      terms.push({ negative, body });
+    }
+    if (!terms.length) return '0';
+    return terms.map((term, index) => index === 0
+      ? `${term.negative ? '-' : ''}${term.body}`
+      : `${term.negative ? ' - ' : ' + '}${term.body}`).join('');
   }
 
   function formatNumberFieldScalar(value, mode = 'text') {
@@ -5379,9 +5846,11 @@
       return '';
     }
     if (field.kind === 'rational-function') {
-      if (format === 'sage') return `R.<${field.variable}> = PolynomialRing(QQ)\nK = FractionField(R)`;
-      if (format === 'macaulay2') return `kk = frac(QQ[${field.variable}])`;
-      if (format === 'python') return `from fractions import Fraction\nfrom sympy import Matrix, symbols\n${field.variable} = symbols('${field.variable}')`;
+      const variables = field.variables || [field.variable];
+      const joined = variables.join(', ');
+      if (format === 'sage') return `R = PolynomialRing(QQ, names=(${variables.map((name) => `'${name}'`).join(', ')}))\n${variables.length === 1 ? `${joined},` : joined} = R.gens()\nK = FractionField(R)`;
+      if (format === 'macaulay2') return `kk = frac(QQ[${joined}])`;
+      if (format === 'python') return `from fractions import Fraction\nfrom sympy import Matrix, symbols\n${joined} = symbols('${variables.join(' ')}')`;
       return '';
     }
     if (field.kind === 'number-field') {
@@ -5641,6 +6110,7 @@
       refs.rows.value = String(rowCount);
       refs.cols.value = String(colCount);
       clearOperationResult();
+      clearPolynomialActionResult();
       renderMatrixGrid();
       refreshAll();
       refs.bulkMessage.textContent = `Imported ${parsed.style}.`;
@@ -5939,6 +6409,16 @@
           filename: `matrix-operation.${format === 'latex' ? 'tex' : 'txt'}`,
           mimeType: format === 'latex' ? 'application/x-tex' : 'text/plain'
         };
+      },
+      'polynomial-action'() {
+        if (!state.lastPolynomialAction) throw new Error('Compute a polynomial action before exporting it.');
+        exportPolynomialActionResult();
+        const format = refs.exportFormat.value;
+        return {
+          text: refs.exportOut.value,
+          filename: `matrix-polynomial-action.${format === 'latex' ? 'tex' : 'txt'}`,
+          mimeType: format === 'latex' ? 'application/x-tex' : 'text/plain'
+        };
       }
     },
     validateImport(_kind, raw) {
@@ -5956,6 +6436,7 @@
       refs.rows.value = String(rowCount);
       refs.cols.value = String(colCount);
       clearOperationResult();
+      clearPolynomialActionResult();
       renderMatrixGrid();
       refreshAll();
       refs.bulkMessage.textContent = `Imported ${prepared.parsed.style}.`;

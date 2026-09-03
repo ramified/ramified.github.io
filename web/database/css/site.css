@@ -248,7 +248,10 @@
     border-color: var(--accent);
   }
 
-  /* Shared keyboard and pointer settings. */
+  /* Shared calculator settings. */
+  .card[data-card-advanced="true"] { display: none; }
+  .card[data-card-advanced="true"].calculator-card-settings-ready:not(.calculator-card-user-hidden):not([hidden]) { display: block; }
+  .card.calculator-card-user-hidden { display: none !important; }
   .calculator-input-settings-host {
     position: relative;
     padding-left: 50px !important;
@@ -436,6 +439,28 @@
     font-style: italic;
   }
   .calculator-pointer-list { display: grid; gap: 4px; }
+  .calculator-card-settings-list { display: grid; gap: 2px; }
+  .calculator-card-settings-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 9px;
+    align-items: center;
+    padding: 8px 0;
+    border-top: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+    cursor: pointer;
+    font-size: 0.88rem;
+  }
+  .calculator-card-settings-row input { accent-color: var(--accent); }
+  .calculator-card-settings-row em {
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.66rem;
+    font-style: normal;
+    text-transform: uppercase;
+  }
   .calculator-pointer-hint {
     display: grid;
     grid-template-columns: 22px minmax(105px,auto) 1fr;

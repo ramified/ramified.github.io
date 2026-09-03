@@ -48,8 +48,38 @@ try {
 
   function isHidden(el) {
     if (!el) return true;
-    if (el.hidden || el.style.display === 'none') return true;
+    if (el.hidden || el.style.display === 'none' || el.classList?.contains('calculator-card-user-hidden')) return true;
     return !!el.closest('[hidden]');
+  }
+
+  function setCardUserVisible(cardRef, visible) {
+    const card = cardFrom(cardRef);
+    if (!card) return false;
+    const nextVisible = visible !== false;
+    if (!nextVisible) {
+      if (card.dataset.cardWideState === 'wide') setWide(card, false);
+      card.classList.remove('is-pinned');
+      const pin = card.querySelector('.card-pin-btn');
+      if (pin) {
+        pin.setAttribute('aria-pressed', 'false');
+        pin.setAttribute('aria-label', 'pin card');
+        pin.title = 'pin card';
+      }
+      setCardCollapsed(card, true, { reason: 'visibility' });
+    }
+    card.classList.toggle('calculator-card-user-hidden', !nextVisible);
+    if (nextVisible) {
+      if (card.dataset.cardUserAriaHidden === 'true') card.removeAttribute('aria-hidden');
+      delete card.dataset.cardUserAriaHidden;
+    } else {
+      card.setAttribute('aria-hidden', 'true');
+      card.dataset.cardUserAriaHidden = 'true';
+    }
+    card.dispatchEvent(new CustomEvent('calculator-card-visibility-change', {
+      bubbles: true,
+      detail: { visible: nextVisible }
+    }));
+    return true;
   }
 
   function setCardAriaExpanded(card, expanded) {
@@ -572,6 +602,7 @@ try {
 
     const cards = Array.from(root.querySelectorAll?.('.card') || []);
     cards.forEach((card, index) => {
+      if (!card.dataset.cardSettingsId) card.dataset.cardSettingsId = card.id || `card-${index + 1}`;
       cardSessions.set(card, session);
       card.addEventListener('dragstart', (event) => event.preventDefault());
       if (!card.dataset.openChartOrder && !card.classList.contains('collapsed')) {
@@ -621,7 +652,8 @@ try {
     setWide,
     syncWideCards,
     syncCardPinAvailability,
-    toggleCardPinned
+    toggleCardPinned,
+    setCardUserVisible
   };
 
   window.toggleCard = toggleCardFromRef;

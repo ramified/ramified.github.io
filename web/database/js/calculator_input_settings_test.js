@@ -28,16 +28,16 @@ assert.strictEqual(settings.isReservedBinding('Mod+Enter'), false);
 
 const storageKey = `${settings.STORAGE_PREFIX}unit-test`;
 let storage = memoryStorage({ [storageKey]: '{not-json' });
-assert.deepStrictEqual(settings.readStorage(storage, storageKey), { version: 1, profiles: {} });
+assert.deepStrictEqual(settings.readStorage(storage, storageKey), { version: 1, profiles: {}, cardVisibility: {} });
 storage = memoryStorage({ [storageKey]: JSON.stringify({ version: 0, profiles: { old: { run: ['x'] } } }) });
-assert.deepStrictEqual(settings.readStorage(storage, storageKey), { version: 1, profiles: {} });
+assert.deepStrictEqual(settings.readStorage(storage, storageKey), { version: 1, profiles: {}, cardVisibility: {} });
 storage = memoryStorage();
 assert.strictEqual(settings.writeStorage(storage, storageKey, { version: 1, profiles: { one: { run: ['A', 'a', 'b'] } } }), true);
-assert.deepStrictEqual(JSON.parse(storage.value(storageKey)), { version: 1, profiles: { one: { run: ['a', 'b'] } } });
+assert.deepStrictEqual(JSON.parse(storage.value(storageKey)), { version: 1, profiles: { one: { run: ['a', 'b'] } }, cardVisibility: {} });
 
 let profile = 'square';
 const session = {
-  data: { version: 1, profiles: {} },
+  data: { version: 1, profiles: {}, cardVisibility: {} },
   storage,
   storageKey,
   options: {},
@@ -65,7 +65,7 @@ assert.strictEqual(settings.__test.applyConflictReplacement(session, second, fir
 assert.deepStrictEqual(settings.__test.actionBindings(session, first), [], 'conflict replacement removes the old assignment');
 assert.deepStrictEqual(settings.__test.actionBindings(session, second), ['q'], 'conflict replacement assigns the requested action');
 settings.__test.restoreDefaults(session);
-assert.deepStrictEqual(session.data, { version: 1, profiles: {} });
+assert.deepStrictEqual(session.data, { version: 1, profiles: {}, cardVisibility: {} });
 assert.deepStrictEqual(settings.__test.actionBindings(session, globalAction), ['z'], 'restoring defaults discards saved overrides');
 
 const editable = { closest(selector) { return selector.includes('input') ? this : null; } };
@@ -78,8 +78,17 @@ assert.strictEqual(settings.__test.canTriggerFromTarget({ allowInEditable: false
 assert.strictEqual(settings.__test.canTriggerFromTarget({}, 'k', plain), true);
 
 const unavailableStorage = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
-assert.deepStrictEqual(settings.readStorage(unavailableStorage, storageKey), { version: 1, profiles: {} });
+assert.deepStrictEqual(settings.readStorage(unavailableStorage, storageKey), { version: 1, profiles: {}, cardVisibility: {} });
 assert.strictEqual(settings.writeStorage(unavailableStorage, storageKey, { version: 1, profiles: {} }), false);
+
+const ordinaryCard = { id: 'ordinary', advanced: false };
+const advancedCard = { id: 'advanced', advanced: true };
+assert.strictEqual(settings.__test.cardIsVisible(session, ordinaryCard), true);
+assert.strictEqual(settings.__test.cardIsVisible(session, advancedCard), false);
+session.data.cardVisibility.advanced = true;
+session.data.cardVisibility.ordinary = false;
+assert.strictEqual(settings.__test.cardIsVisible(session, advancedCard), true);
+assert.strictEqual(settings.__test.cardIsVisible(session, ordinaryCard), false);
 
 const calls = [];
 const heldSession = { activeUps: new Map() };

@@ -165,6 +165,12 @@
   const LIANLIANKAN_PATH_DISPLAY_MS = 500;
   const PLACEMENT_ASSIST_DWELL_MS = 500;
   const PLACEMENT_ASSIST_HOLD_MS = 1000;
+  const PLACEMENT_ASSIST_GROW_MS = 360;
+  const PLACEMENT_ASSIST_DIRECTION_DEAD_ZONE = 0.12;
+  const PLACEMENT_HINT_AXIS_COLORS = Object.freeze(['#1f7a8c', '#d97706', '#7c3aed', '#15803d']);
+  const PLACEMENT_HINT_DIRECTION_COLORS = Object.freeze([
+    '#1f7a8c', '#d97706', '#7c3aed', '#15803d', '#be123c', '#0284c7', '#a16207', '#9333ea'
+  ]);
   const PLACEMENT_PREVIEW_OPACITY_MIN = 10;
   const PLACEMENT_PREVIEW_OPACITY_MAX = 90;
   const PLACEMENT_PREVIEW_OPACITY_DEFAULT = 50;
@@ -727,6 +733,9 @@
   let placementReachHoldTimer = null;
   let placementReachAssistData = null;
   let placementReachAssistState = null;
+  let placementReachAssistStartedAt = 0;
+  let placementReachAssistFrame = null;
+  let placementReachDirectionId = '';
   let placementReachSuppressClick = false;
   let placementHover = null;
   let heldArrowKeys = new Set();
@@ -827,6 +836,12 @@
     refs.billiardsDebugTexture = document.getElementById('billiards-debug-texture');
     refs.moveNumberLabelRow = document.getElementById('move-number-label-row');
     refs.moveNumberLabels = document.getElementById('move-number-labels');
+    refs.placementHintHighlightRow = document.getElementById('placement-hint-highlight-row');
+    refs.placementHintHighlight = document.getElementById('placement-hint-highlight');
+    refs.placementHintColorsRow = document.getElementById('placement-hint-colors-row');
+    refs.placementHintColors = document.getElementById('placement-hint-colors');
+    refs.placementHintColorsAxis = document.getElementById('placement-hint-colors-axis');
+    refs.placementHintColorsDirection = document.getElementById('placement-hint-colors-direction');
     refs.placementPieceSizeRow = document.getElementById('placement-piece-size-row');
     refs.placementPieceSize = document.getElementById('placement-piece-size');
     refs.placementPieceSizeValue = document.getElementById('placement-piece-size-value');
@@ -1027,6 +1042,9 @@
     drawBilliardsSpinPad();
     syncBilliardsFriction();
     if (refs.moveNumberLabels) refs.moveNumberLabels.addEventListener('change', render);
+    [refs.placementHintHighlight, refs.placementHintColors].forEach((control) => {
+      if (control) control.addEventListener('change', render);
+    });
     if (refs.placementPieceSize) {
       refs.placementPieceSize.addEventListener('input', handlePlacementPieceSizeChange);
       refs.placementPieceSize.addEventListener('change', handlePlacementPieceSizeChange);
@@ -1258,6 +1276,8 @@
       'boundary-glue-wrapped-view-row',
       'gomoku-display-row',
       'move-number-label-row',
+      'placement-hint-highlight-row',
+      'placement-hint-colors-row',
       'placement-piece-size-row',
       'connect-four-align-row',
       'fide-chess-piece-display-row',
@@ -5664,7 +5684,7 @@
     const target = tileFromCanvasEvent(event);
     if (!target) return null;
     const assist = placementReachAssist(state, target.index);
-    return assist ? { index: target.index, assist } : null;
+    return assist ? { index: target.index, assist, point: canvasPointFromEvent(event) } : null;
   }
 
   function beginPlacementReachPress(event) {
@@ -5677,6 +5697,7 @@
       pointerId: event.pointerId,
       index: target.index,
       assist: target.assist,
+      point: target.point,
       pressed: true
     });
   }
@@ -5690,11 +5711,16 @@
     const same = placementReachCandidate
       && placementReachCandidate.index === target.index
       && placementReachCandidate.pointerId === event.pointerId;
-    if (same) return;
+    if (same) {
+      placementReachCandidate.point = target.point;
+      if (placementReachAssistData) updatePlacementReachDirection(target.point);
+      return;
+    }
     setPlacementReachCandidate({
       pointerId: event.pointerId,
       index: target.index,
       assist: target.assist,
+      point: target.point,
       pressed: !!(event.buttons & 1)
     });
   }
@@ -5702,9 +5728,11 @@
   function setPlacementReachCandidate(candidate) {
     const hadAssist = !!placementReachAssistData;
     clearPlacementReachTimers();
+    clearPlacementReachAnimation();
     placementReachCandidate = candidate;
     placementReachAssistData = null;
     placementReachAssistState = null;
+    placementReachDirectionId = '';
     if (hadAssist) render();
     placementReachDwellTimer = setTimeout(() => {
       if (!placementReachCandidate || placementReachCandidate !== candidate) return;
@@ -5728,7 +5756,67 @@
     }
     placementReachAssistData = assist;
     placementReachAssistState = game;
+    placementReachAssistStartedAt = now();
+    placementReachDirectionId = placementHintDirectionAtPoint(
+      game,
+      geometry,
+      assist,
+      candidate.point,
+      placementReachDirectionId
+    );
     render();
+    schedulePlacementReachAssistFrame();
+  }
+
+  function updatePlacementReachDirection(point) {
+    const assist = activePlacementReachAssist(game);
+    if (!assist || assist.kind !== 'rays') return;
+    const nextDirection = placementHintDirectionAtPoint(
+      game,
+      geometry,
+      assist,
+      point,
+      placementReachDirectionId
+    );
+    if (nextDirection === placementReachDirectionId) return;
+    placementReachDirectionId = nextDirection;
+    render();
+  }
+
+  function placementReachReducedMotion() {
+    return !!(
+      typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    );
+  }
+
+  function placementReachAssistRawProgress(at = now()) {
+    if (!placementReachAssistData || placementReachAssistData.kind !== 'rays') return 1;
+    if (placementReachReducedMotion()) return 1;
+    return Math.max(0, Math.min(1, (at - placementReachAssistStartedAt) / PLACEMENT_ASSIST_GROW_MS));
+  }
+
+  function schedulePlacementReachAssistFrame() {
+    if (
+      placementReachAssistFrame != null
+      || !placementReachAssistData
+      || placementReachAssistData.kind !== 'rays'
+      || placementReachReducedMotion()
+      || placementReachAssistRawProgress() >= 1
+    ) return;
+    placementReachAssistFrame = requestFrame(() => {
+      placementReachAssistFrame = null;
+      if (!activePlacementReachAssist(game) || placementReachAssistData.kind !== 'rays') return;
+      render();
+      schedulePlacementReachAssistFrame();
+    });
+  }
+
+  function clearPlacementReachAnimation() {
+    if (placementReachAssistFrame != null) cancelFrame(placementReachAssistFrame);
+    placementReachAssistFrame = null;
+    placementReachAssistStartedAt = 0;
   }
 
   function endPlacementReachPress(event) {
@@ -5748,9 +5836,11 @@
   function clearPlacementReachAssist(redraw = false) {
     const hadAssist = !!placementReachAssistData;
     clearPlacementReachTimers();
+    clearPlacementReachAnimation();
     placementReachCandidate = null;
     placementReachAssistData = null;
     placementReachAssistState = null;
+    placementReachDirectionId = '';
     placementReachSuppressClick = false;
     if (redraw && hadAssist) render();
   }
@@ -16256,17 +16346,33 @@
       return;
     }
     if (assist.kind !== 'rays') return;
-    const segments = placementAssistRaySegments(state, geom, assist);
-    if (!segments.length) return;
+    const tracks = placementAssistRayTracks(state, geom, assist);
+    if (!tracks.length) return;
+    const progress = placementAssistGrowProgress(placementReachAssistRawProgress());
+    const highlightedDirections = placementHintHighlightedDirectionIds(
+      assist,
+      placementReachDirectionId,
+      selectedPlacementHintHighlightMode()
+    );
+    const colorMode = selectedPlacementHintColorMode();
+    const orderedTracks = tracks.slice().sort((left, right) => {
+      return Number(highlightedDirections.has(left.directionId)) - Number(highlightedDirections.has(right.directionId));
+    });
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(31, 122, 140, 0.23)';
-    ctx.lineWidth = Math.max(4, geom.radius * 0.24);
-    drawPlacementAssistSegments(ctx, segments);
-    ctx.strokeStyle = 'rgba(31, 122, 140, 0.72)';
-    ctx.lineWidth = Math.max(1.25, geom.radius * 0.055);
-    drawPlacementAssistSegments(ctx, segments);
+    orderedTracks.forEach((track) => {
+      const segments = placementAssistVisibleSegments(track.segments, progress);
+      if (!segments.length) return;
+      const highlighted = highlightedDirections.has(track.directionId);
+      const color = placementHintColorForRoute(track, colorMode);
+      ctx.strokeStyle = placementHintRgba(color, highlighted ? 0.42 : 0.23);
+      ctx.lineWidth = Math.max(4, geom.radius * 0.24) * (highlighted ? 1.35 : 1);
+      drawPlacementAssistSegments(ctx, segments);
+      ctx.strokeStyle = placementHintRgba(color, highlighted ? 0.98 : 0.72);
+      ctx.lineWidth = Math.max(1.25, geom.radius * 0.055) * (highlighted ? 2 : 1);
+      drawPlacementAssistSegments(ctx, segments);
+    });
     ctx.restore();
   }
 
@@ -16286,25 +16392,98 @@
     return uniquePlacementAssistSegments(segments);
   }
 
+  function placementAssistRouteSegments(state, geom, route) {
+    const segments = [];
+    if (route.kind === 'axis') {
+      (route.transitions || []).forEach((transition, step) => {
+        const from = route.path && route.path[step];
+        const to = route.path && route.path[step + 1];
+        if (!Number.isInteger(from) || !Number.isInteger(to)) return;
+        segments.push(...placementLineRenderSegments(state, geom, from, to, {
+          kind: 'axis', start: from, end: to, transitions: [transition]
+        }));
+      });
+    } else if (route.kind === 'diagonal') {
+      (route.steps || []).forEach((step) => {
+        segments.push(...placementLineRenderSegments(state, geom, step.start, step.end, step));
+      });
+    }
+    return uniquePlacementAssistSegments(segments);
+  }
+
+  function placementAssistRayTracks(state, geom, assist) {
+    return (assist.routes || []).map((route) => {
+      const segments = placementAssistRouteSegments(state, geom, route);
+      const totalLength = segments.reduce((sum, segment) => sum + placementAssistSegmentLength(segment), 0);
+      let distance = 0;
+      const timedSegments = segments.map((segment) => {
+        const length = placementAssistSegmentLength(segment);
+        const startProgress = totalLength > 0 ? distance / totalLength : 0;
+        distance += length;
+        return {
+          ...segment,
+          startProgress,
+          endProgress: totalLength > 0 ? distance / totalLength : 1
+        };
+      });
+      return {
+        directionId: route.directionId || '',
+        oppositeDirectionId: route.oppositeDirectionId || '',
+        axisId: route.axisId || '',
+        axisIndex: route.axisIndex || 0,
+        paletteIndex: route.paletteIndex || 0,
+        segments: timedSegments,
+        totalLength
+      };
+    }).filter((track) => track.totalLength > 0);
+  }
+
   function placementAssistRaySegments(state, geom, assist) {
     const segments = [];
-    (assist.routes || []).forEach((route) => {
-      if (route.kind === 'axis') {
-        (route.transitions || []).forEach((transition, step) => {
-          const from = route.path && route.path[step];
-          const to = route.path && route.path[step + 1];
-          if (!Number.isInteger(from) || !Number.isInteger(to)) return;
-          segments.push(...placementLineRenderSegments(state, geom, from, to, {
-            kind: 'axis', start: from, end: to, transitions: [transition]
-          }));
-        });
-      } else if (route.kind === 'diagonal') {
-        (route.steps || []).forEach((step) => {
-          segments.push(...placementLineRenderSegments(state, geom, step.start, step.end, step));
-        });
-      }
+    placementAssistRayTracks(state, geom, assist).forEach((track) => {
+      segments.push(...track.segments);
     });
     return uniquePlacementAssistSegments(segments);
+  }
+
+  function placementAssistSegmentLength(segment) {
+    if (!segment || !segment.start || !segment.end) return 0;
+    return Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y);
+  }
+
+  function placementAssistGrowProgress(rawProgress) {
+    const progress = Math.max(0, Math.min(1, Number(rawProgress) || 0));
+    return 1 - Math.pow(1 - progress, 3);
+  }
+
+  function placementAssistVisibleSegments(segments, progress) {
+    const reveal = Math.max(0, Math.min(1, Number(progress) || 0));
+    const visible = [];
+    (segments || []).forEach((segment) => {
+      if (!segment || !segment.start || !segment.end) return;
+      const startProgress = Number.isFinite(segment.startProgress) ? segment.startProgress : 0;
+      const endProgress = Number.isFinite(segment.endProgress) ? segment.endProgress : 1;
+      if (reveal <= startProgress || endProgress <= startProgress) return;
+      if (reveal >= endProgress) {
+        visible.push({ ...segment });
+        return;
+      }
+      const fraction = (reveal - startProgress) / (endProgress - startProgress);
+      visible.push({
+        ...segment,
+        end: {
+          x: segment.start.x + (segment.end.x - segment.start.x) * fraction,
+          y: segment.start.y + (segment.end.y - segment.start.y) * fraction
+        }
+      });
+    });
+    return visible;
+  }
+
+  function placementHintRgba(hex, alpha) {
+    const normalized = String(hex || '').replace(/^#/, '');
+    if (!/^[0-9a-f]{6}$/i.test(normalized)) return `rgba(31, 122, 140, ${alpha})`;
+    return `rgba(${parseInt(normalized.slice(0, 2), 16)}, ${parseInt(normalized.slice(2, 4), 16)}, ${parseInt(normalized.slice(4, 6), 16)}, ${alpha})`;
   }
 
   function uniquePlacementAssistSegments(segments) {
@@ -23019,11 +23198,15 @@
     return [
       {
         name: 'NE-SW',
+        forwardId: 'NE',
+        backwardId: 'SW',
         forward: [[DIRS.N, DIRS.E], [DIRS.E, DIRS.N]],
         backward: [[DIRS.S, DIRS.W], [DIRS.W, DIRS.S]]
       },
       {
         name: 'SE-NW',
+        forwardId: 'SE',
+        backwardId: 'NW',
         forward: [[DIRS.S, DIRS.E], [DIRS.E, DIRS.S]],
         backward: [[DIRS.N, DIRS.W], [DIRS.W, DIRS.N]]
       }
@@ -23197,21 +23380,113 @@
 
   function placementReachRayAssist(state, origin, color, stepLimit, pieceAt) {
     const routes = [];
+    const directions = placementHintDirectionDescriptors(state.preset);
     directionsForPreset(state.preset).forEach((dir) => {
       const route = placementAssistAxialRay(state, origin, dir, color, stepLimit, pieceAt);
-      if (route.path.length > 1) routes.push(route);
+      const direction = directions.find((entry) => entry.initialDir === dir && entry.kind === 'axis');
+      if (route.path.length > 1) routes.push(withPlacementHintRouteDirection(route, direction));
     });
     gomokuDiagonalAxes(state.preset).forEach((axis) => {
-      routes.push(...placementAssistDiagonalRays(state, origin, axis.forward, color, stepLimit, pieceAt));
-      routes.push(...placementAssistDiagonalRays(state, origin, axis.backward, color, stepLimit, pieceAt));
+      const forwardDirection = directions.find((entry) => entry.id === axis.forwardId);
+      const backwardDirection = directions.find((entry) => entry.id === axis.backwardId);
+      routes.push(...placementAssistDiagonalRays(state, origin, axis.forward, color, stepLimit, pieceAt)
+        .map((route) => withPlacementHintRouteDirection(route, forwardDirection)));
+      routes.push(...placementAssistDiagonalRays(state, origin, axis.backward, color, stepLimit, pieceAt)
+        .map((route) => withPlacementHintRouteDirection(route, backwardDirection)));
     });
     return {
       kind: 'rays',
       origin,
       color,
       stepLimit,
+      directions,
       routes
     };
+  }
+
+  function placementHintDirectionDescriptors(preset) {
+    const lattice = latticeForPreset(preset);
+    if (lattice.shape === 'hex') {
+      return lattice.dirNames.map((id, index) => ({
+        id,
+        oppositeId: lattice.dirNames[lattice.opposite[index]],
+        axisId: ['E-W', 'SE-NW', 'SW-NE'][index % 3],
+        axisIndex: index % 3,
+        paletteIndex: index,
+        angle: lattice.angles[index],
+        initialDir: index,
+        kind: 'axis'
+      }));
+    }
+    return [
+      { id: 'E', oppositeId: 'W', axisId: 'E-W', axisIndex: 0, paletteIndex: 0, angle: 0, initialDir: DIRS.E, kind: 'axis' },
+      { id: 'SE', oppositeId: 'NW', axisId: 'SE-NW', axisIndex: 1, paletteIndex: 1, angle: Math.PI / 4, kind: 'diagonal' },
+      { id: 'S', oppositeId: 'N', axisId: 'S-N', axisIndex: 2, paletteIndex: 2, angle: Math.PI / 2, initialDir: DIRS.S, kind: 'axis' },
+      { id: 'SW', oppositeId: 'NE', axisId: 'SW-NE', axisIndex: 3, paletteIndex: 3, angle: Math.PI * 3 / 4, kind: 'diagonal' },
+      { id: 'W', oppositeId: 'E', axisId: 'E-W', axisIndex: 0, paletteIndex: 4, angle: Math.PI, initialDir: DIRS.W, kind: 'axis' },
+      { id: 'NW', oppositeId: 'SE', axisId: 'SE-NW', axisIndex: 1, paletteIndex: 5, angle: Math.PI * 5 / 4, kind: 'diagonal' },
+      { id: 'N', oppositeId: 'S', axisId: 'S-N', axisIndex: 2, paletteIndex: 6, angle: Math.PI * 3 / 2, initialDir: DIRS.N, kind: 'axis' },
+      { id: 'NE', oppositeId: 'SW', axisId: 'SW-NE', axisIndex: 3, paletteIndex: 7, angle: Math.PI * 7 / 4, kind: 'diagonal' }
+    ];
+  }
+
+  function withPlacementHintRouteDirection(route, direction) {
+    if (!route || !direction) return route;
+    return {
+      ...route,
+      directionId: direction.id,
+      oppositeDirectionId: direction.oppositeId,
+      axisId: direction.axisId,
+      axisIndex: direction.axisIndex,
+      paletteIndex: direction.paletteIndex,
+      bearingAngle: direction.angle
+    };
+  }
+
+  function placementHintDirectionAtPoint(state, geom, assist, point, previousDirectionId = '') {
+    if (!state || !geom || !assist || assist.kind !== 'rays' || !point) return '';
+    const origin = placementPiecePoint(geom, assist.origin);
+    if (!origin) return '';
+    const directions = Array.isArray(assist.directions) && assist.directions.length
+      ? assist.directions
+      : placementHintDirectionDescriptors(state.preset);
+    const dx = point.x - origin.x;
+    const dy = point.y - origin.y;
+    if (Math.hypot(dx, dy) < geom.radius * PLACEMENT_ASSIST_DIRECTION_DEAD_ZONE) {
+      return directions.some((direction) => direction.id === previousDirectionId) ? previousDirectionId : '';
+    }
+    let selected = '';
+    let bestScore = Number.NEGATIVE_INFINITY;
+    directions.forEach((direction) => {
+      const score = (dx * Math.cos(direction.angle)) + (dy * Math.sin(direction.angle));
+      if (score > bestScore) {
+        bestScore = score;
+        selected = direction.id;
+      }
+    });
+    return selected;
+  }
+
+  function placementHintHighlightedDirectionIds(assist, directionId, mode = 'single') {
+    const selected = String(directionId || '');
+    const directions = Array.isArray(assist && assist.directions) ? assist.directions : [];
+    const direction = directions.find((entry) => entry.id === selected);
+    const highlighted = new Set();
+    if (!direction) return highlighted;
+    highlighted.add(direction.id);
+    if (normalizePlacementHintHighlightMode(mode) === 'opposites') highlighted.add(direction.oppositeId);
+    return highlighted;
+  }
+
+  function placementHintColorForRoute(route, mode = 'uniform') {
+    const colorMode = normalizePlacementHintColorMode(mode);
+    if (colorMode === 'axis') {
+      return PLACEMENT_HINT_AXIS_COLORS[modulo(Number(route && route.axisIndex) || 0, PLACEMENT_HINT_AXIS_COLORS.length)];
+    }
+    if (colorMode === 'direction') {
+      return PLACEMENT_HINT_DIRECTION_COLORS[modulo(Number(route && route.paletteIndex) || 0, PLACEMENT_HINT_DIRECTION_COLORS.length)];
+    }
+    return PLACEMENT_HINT_AXIS_COLORS[0];
   }
 
   function placementAssistAxialRay(state, origin, initialDir, color, stepLimit, pieceAt) {
@@ -28216,6 +28491,46 @@
     return normalizePlacementDisplayStyle(refs.gomokuDisplay ? refs.gomokuDisplay.value : '', defaultPlacementDisplayForMode(selectedGameMode()));
   }
 
+  function normalizePlacementHintHighlightMode(value) {
+    return String(value || '').trim().toLowerCase() === 'opposites' ? 'opposites' : 'single';
+  }
+
+  function selectedPlacementHintHighlightMode() {
+    return normalizePlacementHintHighlightMode(refs.placementHintHighlight ? refs.placementHintHighlight.value : 'single');
+  }
+
+  function normalizePlacementHintColorMode(value) {
+    const mode = String(value || '').trim().toLowerCase();
+    return mode === 'axis' || mode === 'direction' ? mode : 'uniform';
+  }
+
+  function selectedPlacementHintColorMode() {
+    return normalizePlacementHintColorMode(refs.placementHintColors ? refs.placementHintColors.value : 'uniform');
+  }
+
+  function placementHintColorCounts(preset) {
+    const hexagonal = latticeForPreset(preset).shape === 'hex';
+    return { axis: hexagonal ? 3 : 4, direction: hexagonal ? 6 : 8 };
+  }
+
+  function syncPlacementHintColorOptions(preset = game && game.preset ? game.preset : selectedPreset()) {
+    const counts = placementHintColorCounts(preset);
+    if (refs.placementHintColorsAxis) {
+      refs.placementHintColorsAxis.textContent = tk(
+        'setup.hintLineColorsAxisCount',
+        '{{count}} colors — one per axis',
+        { count: counts.axis }
+      );
+    }
+    if (refs.placementHintColorsDirection) {
+      refs.placementHintColorsDirection.textContent = tk(
+        'setup.hintLineColorsDirectionCount',
+        '{{count}} colors — one per direction',
+        { count: counts.direction }
+      );
+    }
+  }
+
   function isVertexPlacementDisplay(style = placementDisplayStyle()) {
     return style === 'vertex' || style === 'polished-vertex';
   }
@@ -29972,6 +30287,10 @@
     }
     if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = false;
     if (refs.moveNumberLabelRow) refs.moveNumberLabelRow.hidden = !(modeGomoku || modeConnectFour || modeGo);
+    const placementRayHintsAvailable = modeGomoku || modeConnectFour;
+    if (refs.placementHintHighlightRow) refs.placementHintHighlightRow.hidden = !placementRayHintsAvailable;
+    if (refs.placementHintColorsRow) refs.placementHintColorsRow.hidden = !placementRayHintsAvailable;
+    syncPlacementHintColorOptions();
     if (refs.placementPieceSizeRow) refs.placementPieceSizeRow.hidden = !(modeGomoku || modeConnectFour || modeGo || modeReversi || modeFideChess);
     if (refs.hexPieRule) refs.hexPieRule.disabled = !modeHex || !game || game.phase !== 'setup' || onlineRoomActive || hexTopologyPending;
     if (refs.hexPieRule && isHexGame(game) && game.phase === 'setup') refs.hexPieRule.checked = !!game.pieRule;
@@ -31322,6 +31641,18 @@
       onlineWaitingPromptCopy,
       lianliankanTilesMatch,
       placementHoverPreview,
+      placementHintDirectionDescriptors,
+      placementHintDirectionAtPoint,
+      placementHintHighlightedDirectionIds,
+      placementHintColorForRoute,
+      placementHintColorCounts,
+      normalizePlacementHintHighlightMode,
+      normalizePlacementHintColorMode,
+      placementAssistGrowProgress,
+      placementAssistVisibleSegments,
+      placementAssistRayTracks,
+      placementAssistGrowDuration: PLACEMENT_ASSIST_GROW_MS,
+      getPlacementReachDirectionId() { return placementReachDirectionId; },
       selectedPlacementPreviewOpacity,
       placementPreviewOpacityRange: {
         min: PLACEMENT_PREVIEW_OPACITY_MIN,
