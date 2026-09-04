@@ -92,8 +92,8 @@
         "Billiard"
         ],
       "id": "genus-2",
-      "label": "twisted torus",
-      "labelZh": "亏格2",
+      "label": "genus 2",
+      "labelZh": "亏格 2",
       "key": "genus_2",
       "file": "genus_2.preset.js"
     },
@@ -103,7 +103,7 @@
         "Billiard"
         ],
       "id": "half-glued",
-      "label": "twisted torus",
+      "label": "half-glued",
       "labelZh": "半粘合",
       "key": "half_glued",
       "wrappedView": {

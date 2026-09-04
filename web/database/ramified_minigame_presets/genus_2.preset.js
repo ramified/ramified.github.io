@@ -6,8 +6,8 @@
 //     "Billiard"
 //   ],
 //   "id": "genus-2",
-//   "label": "twisted torus",
-//   "labelZh": "亏格2",
+//   "label": "genus 2",
+//   "labelZh": "亏格 2",
 //   "key": "genus_2",
 //   "file": "genus_2.preset.js"
 // },
@@ -22,8 +22,8 @@
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
   return {
     "id": "genus-2",
-    "label": "twisted torus",
-    "labelZh": "亏格2",
+    "label": "genus 2",
+    "labelZh": "亏格 2",
     "lattice": "square",
     "size": "4x4",
     "surface": "M_2,1",

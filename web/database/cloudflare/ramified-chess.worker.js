@@ -43,15 +43,49 @@ const ROOM_INDEX_STORAGE_KEY = 'rooms';
 const ROOM_INDEX_MAX_ROOMS = 200;
 const ROOM_EMPTY_TTL_MS = 5 * 60 * 1000;
 const ROOM_EXPIRY_RETRY_MS = 60 * 1000;
+const ANALYTICS_OBJECT_PREFIX = '__analytics__:';
+const ANALYTICS_STORAGE_KEY = 'aggregate';
+const ANALYTICS_MAX_SECONDS = 60;
+const ANALYTICS_MAX_REPORT_DAYS = 31;
+const ANALYTICS_GAME_MODES = new Set([
+  '2048',
+  'billiards',
+  'chinese-checkers',
+  'connect-four',
+  'fide-chess',
+  'go',
+  'gomoku',
+  'hex',
+  'lianliankan',
+  'reversi',
+  'sokoban',
+  'unknown'
+]);
 
 export default {
   async fetch(request, env) {
-    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS_HEADERS });
-
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
 
     try {
+      if (path === '/api/analytics' && request.method === 'OPTIONS') {
+        return analyticsPreflightResponse(request, env);
+      }
+
+      if (path === '/api/analytics' && request.method === 'POST') {
+        return await recordAnalyticsRequest(request, env);
+      }
+
+      if (path === '/admin/analytics' && request.method === 'GET') {
+        return analyticsAdminPageResponse(request, env);
+      }
+
+      if (path === '/api/admin/analytics' && request.method === 'GET') {
+        return await analyticsAdminReportResponse(request, env, url);
+      }
+
+      if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS_HEADERS });
+
       if (request.method === 'POST' && path === '/api/rooms') {
         return await createRoom(request, env);
       }
@@ -101,6 +135,8 @@ export class GameRoom {
   async fetch(request) {
     try {
       const url = new URL(request.url);
+      if (url.pathname === '/analytics/record' && request.method === 'POST') return this.handleAnalyticsRecord(request);
+      if (url.pathname === '/analytics/report' && request.method === 'GET') return this.handleAnalyticsReport();
       if (url.pathname === '/room-index/register' && request.method === 'POST') return this.handleRoomIndexRegister(request);
       if (url.pathname === '/room-index/remove' && request.method === 'POST') return this.handleRoomIndexRemove(request);
       if (url.pathname === '/room-index/list' && request.method === 'GET') return this.handleRoomIndexList();
@@ -172,6 +208,32 @@ export class GameRoom {
     if (!this.room) return jsonResponse({ error: 'Room not found.' }, 404);
     updateRoomReadiness(this.room);
     return jsonResponse(publicRoomPayload(this.room));
+  }
+
+  async handleAnalyticsRecord(request) {
+    const event = normalizeAnalyticsEvent(await readJson(request));
+    if (!event) return jsonResponse({ error: 'Invalid analytics event.' }, 400);
+    const current = normalizeAnalyticsAggregate(await this.ctx.storage.get(ANALYTICS_STORAGE_KEY), event.day);
+    current.events += 1;
+    current.updatedAt = new Date().toISOString();
+    const game = analyticsMetricBucket(current.byGame, event.gameMode);
+    const country = analyticsMetricBucket(current.byCountry, event.country);
+    if (event.type === 'visit') {
+      current.visits += 1;
+      game.visits += 1;
+      country.visits += 1;
+    } else {
+      current.activeSeconds += event.activeSeconds;
+      game.activeSeconds += event.activeSeconds;
+      country.activeSeconds += event.activeSeconds;
+    }
+    await this.ctx.storage.put(ANALYTICS_STORAGE_KEY, current);
+    return jsonResponse({ ok: true });
+  }
+
+  async handleAnalyticsReport() {
+    const aggregate = await this.ctx.storage.get(ANALYTICS_STORAGE_KEY);
+    return jsonResponse({ aggregate: aggregate ? normalizeAnalyticsAggregate(aggregate) : null });
   }
 
   async handleRoomIndexRegister(request) {
@@ -1130,6 +1192,337 @@ export class GameRoom {
   async saveRoom() {
     await this.ctx.storage.put('room', this.room);
   }
+}
+
+async function recordAnalyticsRequest(request, env) {
+  const origin = analyticsAllowedOrigin(request, env);
+  if (!origin) return analyticsJsonResponse({ error: 'Analytics origin is not allowed.' }, 403, '');
+  const source = await readJson(request);
+  const event = normalizeAnalyticsEvent({
+    ...source,
+    day: analyticsUtcDay(),
+    country: analyticsCountry(request)
+  });
+  if (!event) return analyticsJsonResponse({ error: 'Invalid analytics event.' }, 400, origin);
+  const stub = analyticsDayStub(env, event.day);
+  const response = await stub.fetch(new Request('https://analytics/analytics/record', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(event)
+  }));
+  if (!response.ok) return analyticsJsonResponse({ error: 'Analytics storage is unavailable.' }, 503, origin);
+  return new Response(null, {
+    status: 204,
+    headers: analyticsResponseHeaders(origin)
+  });
+}
+
+function analyticsPreflightResponse(request, env) {
+  const origin = analyticsAllowedOrigin(request, env);
+  if (!origin) return new Response(null, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+  return new Response(null, {
+    status: 204,
+    headers: {
+      ...analyticsResponseHeaders(origin),
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Max-Age': '86400'
+    }
+  });
+}
+
+function analyticsAdminPageResponse(request, env) {
+  const denied = analyticsAdminAccessResponse(request, env);
+  if (denied) return denied;
+  return new Response(analyticsAdminHtml(), {
+    status: 200,
+    headers: analyticsAdminHeaders('text/html; charset=utf-8')
+  });
+}
+
+async function analyticsAdminReportResponse(request, env, url) {
+  const denied = analyticsAdminAccessResponse(request, env);
+  if (denied) return denied;
+  const days = clampInteger(url.searchParams.get('days'), 1, ANALYTICS_MAX_REPORT_DAYS, 14);
+  const dayNames = analyticsUtcDays(days);
+  const responses = await Promise.all(dayNames.map(async (day) => {
+    const response = await analyticsDayStub(env, day).fetch(new Request('https://analytics/analytics/report'));
+    if (!response.ok) return null;
+    const payload = await response.json();
+    return payload && payload.aggregate ? normalizeAnalyticsAggregate(payload.aggregate, day) : null;
+  }));
+  return new Response(JSON.stringify(analyticsReport(responses.filter(Boolean), days)), {
+    status: 200,
+    headers: analyticsAdminHeaders('application/json; charset=utf-8')
+  });
+}
+
+function analyticsAdminAccessResponse(request, env) {
+  const configured = String(env && env.ANALYTICS_ADMIN_TOKEN || '');
+  if (!configured) {
+    return new Response('Analytics admin token is not configured.', {
+      status: 503,
+      headers: analyticsAdminHeaders('text/plain; charset=utf-8')
+    });
+  }
+  if (analyticsAdminAuthorized(request, configured)) return null;
+  const headers = analyticsAdminHeaders('text/plain; charset=utf-8');
+  headers['WWW-Authenticate'] = 'Basic realm="Ramified analytics", charset="UTF-8"';
+  return new Response('Authentication required.', { status: 401, headers });
+}
+
+export function analyticsAdminAuthorized(request, configuredToken) {
+  const authorization = String(request && request.headers && request.headers.get('Authorization') || '');
+  let supplied = '';
+  if (/^Bearer\s+/i.test(authorization)) {
+    supplied = authorization.replace(/^Bearer\s+/i, '').trim();
+  } else if (/^Basic\s+/i.test(authorization)) {
+    try {
+      const decoded = atob(authorization.replace(/^Basic\s+/i, '').trim());
+      const separator = decoded.indexOf(':');
+      supplied = separator >= 0 ? decoded.slice(separator + 1) : '';
+    } catch (_) {
+      supplied = '';
+    }
+  }
+  return timingSafeStringEqual(supplied, String(configuredToken || ''));
+}
+
+function timingSafeStringEqual(left, right) {
+  const a = String(left || '');
+  const b = String(right || '');
+  let mismatch = a.length ^ b.length;
+  const length = Math.max(a.length, b.length);
+  for (let index = 0; index < length; index += 1) {
+    mismatch |= (a.charCodeAt(index % Math.max(1, a.length)) || 0)
+      ^ (b.charCodeAt(index % Math.max(1, b.length)) || 0);
+  }
+  return mismatch === 0 && a.length > 0;
+}
+
+function analyticsDayStub(env, day) {
+  const name = `${ANALYTICS_OBJECT_PREFIX}${day}`;
+  return env.GAME_ROOM.get(env.GAME_ROOM.idFromName(name));
+}
+
+function analyticsAllowedOrigin(request, env) {
+  const origin = String(request && request.headers && request.headers.get('Origin') || '').replace(/\/+$/, '');
+  if (!origin) return '';
+  const configured = String(env && env.ANALYTICS_ALLOWED_ORIGINS || 'https://ramified.github.io');
+  const allowed = configured.split(',').map((value) => value.trim().replace(/\/+$/, '')).filter(Boolean);
+  return allowed.includes(origin) ? origin : '';
+}
+
+function analyticsResponseHeaders(origin) {
+  return {
+    ...(origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}),
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff'
+  };
+}
+
+function analyticsAdminHeaders(contentType) {
+  return {
+    'Content-Type': contentType,
+    'Cache-Control': 'no-store, private',
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY'
+  };
+}
+
+function analyticsJsonResponse(payload, status, origin) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      ...analyticsResponseHeaders(origin),
+      'Content-Type': 'application/json; charset=utf-8'
+    }
+  });
+}
+
+function analyticsCountry(request) {
+  const country = String(request && request.cf && request.cf.country || '').trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(country) ? country : 'unknown';
+}
+
+function analyticsUtcDay(time = Date.now()) {
+  return new Date(time).toISOString().slice(0, 10);
+}
+
+function analyticsUtcDays(count, time = Date.now()) {
+  const days = [];
+  const end = new Date(`${analyticsUtcDay(time)}T00:00:00.000Z`).getTime();
+  for (let offset = count - 1; offset >= 0; offset -= 1) {
+    days.push(analyticsUtcDay(end - (offset * 24 * 60 * 60 * 1000)));
+  }
+  return days;
+}
+
+export function normalizeAnalyticsEvent(source) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
+  const type = source.type === 'visit' ? 'visit' : (source.type === 'heartbeat' ? 'heartbeat' : '');
+  const day = String(source.day || '');
+  if (!type || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  const rawMode = String(source.gameMode || '').trim().toLowerCase();
+  const gameMode = ANALYTICS_GAME_MODES.has(rawMode) ? rawMode : 'unknown';
+  const rawCountry = String(source.country || '').trim().toUpperCase();
+  const country = /^[A-Z]{2}$/.test(rawCountry) ? rawCountry : 'unknown';
+  const activeSeconds = type === 'heartbeat'
+    ? clampInteger(source.activeSeconds, 1, ANALYTICS_MAX_SECONDS, 0)
+    : 0;
+  if (type === 'heartbeat' && !activeSeconds) return null;
+  return { type, day, gameMode, country, activeSeconds };
+}
+
+function normalizeAnalyticsAggregate(source, fallbackDay = '') {
+  const value = source && typeof source === 'object' && !Array.isArray(source) ? source : {};
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(String(value.day || '')) ? String(value.day) : fallbackDay;
+  return {
+    day,
+    visits: nonnegativeInteger(value.visits),
+    activeSeconds: nonnegativeInteger(value.activeSeconds),
+    events: nonnegativeInteger(value.events),
+    byGame: normalizeAnalyticsMetricMap(value.byGame),
+    byCountry: normalizeAnalyticsMetricMap(value.byCountry),
+    updatedAt: String(value.updatedAt || '')
+  };
+}
+
+function normalizeAnalyticsMetricMap(source) {
+  const result = {};
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return result;
+  Object.entries(source).slice(0, 100).forEach(([key, value]) => {
+    const cleanKey = String(key || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
+    if (!cleanKey) return;
+    result[cleanKey] = {
+      visits: nonnegativeInteger(value && value.visits),
+      activeSeconds: nonnegativeInteger(value && value.activeSeconds)
+    };
+  });
+  return result;
+}
+
+function analyticsMetricBucket(map, key) {
+  if (!map[key]) map[key] = { visits: 0, activeSeconds: 0 };
+  return map[key];
+}
+
+function nonnegativeInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0;
+}
+
+function clampInteger(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(number)));
+}
+
+function analyticsReport(aggregates, days) {
+  const totals = { visits: 0, activeSeconds: 0, events: 0 };
+  const byGame = {};
+  const byCountry = {};
+  const daily = aggregates
+    .map((entry) => normalizeAnalyticsAggregate(entry))
+    .sort((left, right) => left.day.localeCompare(right.day));
+  daily.forEach((entry) => {
+    totals.visits += entry.visits;
+    totals.activeSeconds += entry.activeSeconds;
+    totals.events += entry.events;
+    mergeAnalyticsMetricMaps(byGame, entry.byGame);
+    mergeAnalyticsMetricMaps(byCountry, entry.byCountry);
+  });
+  return {
+    generatedAt: new Date().toISOString(),
+    days,
+    totals,
+    daily: daily.map((entry) => ({
+      day: entry.day,
+      visits: entry.visits,
+      activeSeconds: entry.activeSeconds,
+      events: entry.events,
+      updatedAt: entry.updatedAt
+    })),
+    games: analyticsMetricRows(byGame, 'gameMode'),
+    countries: analyticsMetricRows(byCountry, 'country')
+  };
+}
+
+function mergeAnalyticsMetricMaps(target, source) {
+  Object.entries(source || {}).forEach(([key, value]) => {
+    const bucket = analyticsMetricBucket(target, key);
+    bucket.visits += nonnegativeInteger(value && value.visits);
+    bucket.activeSeconds += nonnegativeInteger(value && value.activeSeconds);
+  });
+}
+
+function analyticsMetricRows(source, keyName) {
+  return Object.entries(source || {})
+    .map(([key, value]) => ({ [keyName]: key, visits: value.visits, activeSeconds: value.activeSeconds }))
+    .sort((left, right) => right.activeSeconds - left.activeSeconds || right.visits - left.visits || String(left[keyName]).localeCompare(String(right[keyName])));
+}
+
+function analyticsAdminHtml() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Ramified Minigames analytics</title>
+  <style>
+    :root{color-scheme:light dark;font-family:ui-sans-serif,system-ui,sans-serif;background:#0d1720;color:#edf6f7}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#173345,#0d1720 56%);min-height:100vh}.wrap{width:min(1120px,calc(100% - 32px));margin:0 auto;padding:36px 0 60px}header,.toolbar,.card,.panel{border:1px solid #315365;background:rgba(12,29,39,.88);box-shadow:0 18px 50px rgba(0,0,0,.22)}header{padding:24px;border-radius:18px;margin-bottom:18px}h1,h2,p{margin-top:0}h1{margin-bottom:8px;font-size:clamp(1.55rem,4vw,2.5rem)}.muted{color:#a9c3cc}.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 14px;border-radius:14px;margin-bottom:18px}button,select{font:inherit;color:inherit;background:#173d4c;border:1px solid #4d7d8d;border-radius:9px;padding:8px 11px;cursor:pointer}button:hover{background:#205267}.spacer{flex:1}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.card{padding:18px;border-radius:14px}.label{color:#a9c3cc;font-size:.82rem;text-transform:uppercase;letter-spacing:.08em}.value{font-size:1.75rem;font-weight:750;margin-top:6px}.grid{display:grid;grid-template-columns:1.1fr 1fr;gap:18px}.panel{border-radius:16px;padding:18px;overflow:auto}.panel.daily{grid-column:1/-1}table{width:100%;border-collapse:collapse;min-width:430px}th,td{text-align:left;padding:9px 8px;border-bottom:1px solid #294656}th{color:#9ec6d1;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em}td.num,th.num{text-align:right}.error{color:#ff9d96}.privacy{margin:14px 0 0;font-size:.88rem;color:#9eb7bf}@media(max-width:760px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}.panel.daily{grid-column:auto}}@media(max-width:430px){.cards{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1 id="title">Ramified Minigames analytics</h1>
+      <p class="muted" id="subtitle">Anonymous aggregate traffic and active playtime.</p>
+      <p class="privacy" id="privacy">No IP addresses, names, room codes, persistent visitor IDs, or game states are stored.</p>
+    </header>
+    <div class="toolbar">
+      <label><span id="range-label">Range</span> <select id="days"><option value="7">7 days</option><option value="14" selected>14 days</option><option value="31">31 days</option></select></label>
+      <button id="refresh" type="button">Refresh</button>
+      <span class="spacer"></span>
+      <button id="language" type="button">中文</button>
+      <span class="muted" id="status" role="status">Loading…</span>
+    </div>
+    <section class="cards" aria-label="Summary">
+      <article class="card"><div class="label" id="visits-label">Visits</div><div class="value" id="visits">0</div></article>
+      <article class="card"><div class="label" id="playtime-label">Active playtime</div><div class="value" id="playtime">0m</div></article>
+      <article class="card"><div class="label" id="average-label">Average per visit</div><div class="value" id="average">0m</div></article>
+      <article class="card"><div class="label" id="events-label">Recorded events</div><div class="value" id="events">0</div></article>
+    </section>
+    <section class="grid">
+      <article class="panel daily"><h2 id="daily-title">Daily traffic</h2><table><thead><tr><th id="day-head">UTC day</th><th class="num" id="daily-visits-head">Visits</th><th class="num" id="daily-time-head">Active playtime</th></tr></thead><tbody id="daily-body"></tbody></table></article>
+      <article class="panel"><h2 id="games-title">Games</h2><table><thead><tr><th id="game-head">Game</th><th class="num" id="game-visits-head">Visits</th><th class="num" id="game-time-head">Active playtime</th></tr></thead><tbody id="games-body"></tbody></table></article>
+      <article class="panel"><h2 id="countries-title">Countries</h2><table><thead><tr><th id="country-head">Country</th><th class="num" id="country-visits-head">Visits</th><th class="num" id="country-time-head">Active playtime</th></tr></thead><tbody id="countries-body"></tbody></table></article>
+    </section>
+  </main>
+  <script>
+  (function(){
+    'use strict';
+    var copy={
+      en:{title:'Ramified Minigames analytics',subtitle:'Anonymous aggregate traffic and active playtime.',privacy:'No IP addresses, names, room codes, persistent visitor IDs, or game states are stored.',range:'Range',refresh:'Refresh',loading:'Loading…',updated:'Updated',error:'Could not load analytics.',visits:'Visits',playtime:'Active playtime',average:'Average per visit',events:'Recorded events',daily:'Daily traffic',games:'Games',countries:'Countries',day:'UTC day',game:'Game',country:'Country',empty:'No data'},
+      zh:{title:'歧趣游境数据统计',subtitle:'匿名汇总的访问流量与活跃游玩时长。',privacy:'不存储 IP 地址、姓名、房间码、持久访客标识或游戏状态。',range:'范围',refresh:'刷新',loading:'加载中…',updated:'已更新',error:'无法加载统计数据。',visits:'访问次数',playtime:'活跃游玩时长',average:'平均每次访问',events:'已记录事件',daily:'每日流量',games:'游戏',countries:'国家/地区',day:'UTC 日期',game:'游戏',country:'国家/地区',empty:'暂无数据'}
+    };
+    var gameNames={'2048':'2048',billiards:'Billiards','chinese-checkers':'Chinese Checkers','connect-four':'Connect Four','fide-chess':'FIDE Chess',go:'Go',gomoku:'Gomoku',hex:'Hex',lianliankan:'Lianliankan',reversi:'Reversi',sokoban:'Sokoban',unknown:'Unknown'};
+    var language=(navigator.language||'').toLowerCase().indexOf('zh')===0?'zh':'en';
+    var lastData=null;
+    function text(id,value){document.getElementById(id).textContent=value;}
+    function applyLanguage(){var c=copy[language];document.documentElement.lang=language==='zh'?'zh-CN':'en';document.title=c.title;text('title',c.title);text('subtitle',c.subtitle);text('privacy',c.privacy);text('range-label',c.range);text('refresh',c.refresh);text('language',language==='zh'?'English':'中文');text('visits-label',c.visits);text('playtime-label',c.playtime);text('average-label',c.average);text('events-label',c.events);text('daily-title',c.daily);text('games-title',c.games);text('countries-title',c.countries);text('day-head',c.day);text('daily-visits-head',c.visits);text('daily-time-head',c.playtime);text('game-head',c.game);text('game-visits-head',c.visits);text('game-time-head',c.playtime);text('country-head',c.country);text('country-visits-head',c.visits);text('country-time-head',c.playtime);if(lastData)render(lastData);}
+    function duration(seconds){seconds=Math.max(0,Number(seconds)||0);if(seconds<60)return Math.round(seconds)+'s';if(seconds<3600)return Math.round(seconds/60)+'m';return (seconds/3600).toFixed(seconds<36000?1:0)+'h';}
+    function row(cells){var tr=document.createElement('tr');cells.forEach(function(cell,index){var td=document.createElement('td');td.textContent=cell;if(index>0)td.className='num';tr.appendChild(td);});return tr;}
+    function fill(id,rows,mapper){var body=document.getElementById(id);body.textContent='';if(!rows.length){var empty=row([copy[language].empty,'','']);body.appendChild(empty);return;}rows.forEach(function(item){body.appendChild(row(mapper(item)));});}
+    function render(data){lastData=data;var totals=data.totals||{};text('visits',String(totals.visits||0));text('playtime',duration(totals.activeSeconds));text('average',duration((totals.activeSeconds||0)/Math.max(1,totals.visits||0)));text('events',String(totals.events||0));fill('daily-body',data.daily||[],function(item){return[item.day,String(item.visits||0),duration(item.activeSeconds)];});fill('games-body',data.games||[],function(item){return[gameNames[item.gameMode]||item.gameMode,String(item.visits||0),duration(item.activeSeconds)];});fill('countries-body',data.countries||[],function(item){return[item.country==='unknown'?'—':item.country,String(item.visits||0),duration(item.activeSeconds)];});}
+    async function load(){var status=document.getElementById('status');status.className='muted';status.textContent=copy[language].loading;try{var response=await fetch('/api/admin/analytics?days='+encodeURIComponent(document.getElementById('days').value),{cache:'no-store'});if(!response.ok)throw new Error(String(response.status));var data=await response.json();render(data);status.textContent=copy[language].updated+' '+new Date(data.generatedAt).toLocaleString();}catch(_){status.className='error';status.textContent=copy[language].error;}}
+    document.getElementById('refresh').addEventListener('click',load);document.getElementById('days').addEventListener('change',load);document.getElementById('language').addEventListener('click',function(){language=language==='en'?'zh':'en';applyLanguage();});applyLanguage();load();setInterval(load,30000);
+  })();
+  </script>
+</body>
+</html>`;
 }
 
 async function createRoom(request, env) {

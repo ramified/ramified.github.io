@@ -344,6 +344,75 @@ async function testLegacyIndexReconciliation(worker) {
   });
 }
 
+async function testAnonymousAnalyticsAndPrivateDashboard(worker) {
+  const storage = new FakeStorage();
+  const analyticsObject = new worker.GameRoom(makeContext(storage), {});
+  const stub = { fetch(request) { return analyticsObject.fetch(request); } };
+  const env = {
+    ANALYTICS_ALLOWED_ORIGINS: 'https://ramified.github.io',
+    ANALYTICS_ADMIN_TOKEN: 'correct-horse-battery-staple',
+    GAME_ROOM: {
+      idFromName(name) { return name; },
+      get(id) {
+        assert.ok(String(id).startsWith('__analytics__:'));
+        return stub;
+      }
+    }
+  };
+  const publicHeaders = {
+    Origin: 'https://ramified.github.io',
+    'Content-Type': 'text/plain;charset=UTF-8'
+  };
+
+  const visit = await worker.default.fetch(new Request('https://worker.example/api/analytics', {
+    method: 'POST',
+    headers: publicHeaders,
+    body: JSON.stringify({ type: 'visit', gameMode: 'gomoku', playerName: 'must not be stored' })
+  }), env);
+  assert.strictEqual(visit.status, 204);
+  assert.strictEqual(visit.headers.get('Access-Control-Allow-Origin'), 'https://ramified.github.io');
+
+  const heartbeat = await worker.default.fetch(new Request('https://worker.example/api/analytics', {
+    method: 'POST',
+    headers: publicHeaders,
+    body: JSON.stringify({ type: 'heartbeat', gameMode: 'gomoku', activeSeconds: 999 })
+  }), env);
+  assert.strictEqual(heartbeat.status, 204);
+
+  const blocked = await worker.default.fetch(new Request('https://worker.example/api/analytics', {
+    method: 'POST',
+    headers: { Origin: 'https://untrusted.example' },
+    body: JSON.stringify({ type: 'visit', gameMode: 'go' })
+  }), env);
+  assert.strictEqual(blocked.status, 403);
+
+  const unauthorized = await worker.default.fetch(new Request('https://worker.example/admin/analytics'), env);
+  assert.strictEqual(unauthorized.status, 401);
+  assert.ok(unauthorized.headers.get('WWW-Authenticate').includes('Basic'));
+
+  const authorization = `Basic ${Buffer.from('admin:correct-horse-battery-staple').toString('base64')}`;
+  const dashboard = await worker.default.fetch(new Request('https://worker.example/admin/analytics', {
+    headers: { Authorization: authorization }
+  }), env);
+  assert.strictEqual(dashboard.status, 200);
+  const dashboardHtml = await dashboard.text();
+  assert.ok(dashboardHtml.includes('Ramified Minigames analytics'));
+  assert.ok(dashboardHtml.includes('歧趣游境数据统计'));
+
+  const report = await worker.default.fetch(new Request('https://worker.example/api/admin/analytics?days=1', {
+    headers: { Authorization: authorization }
+  }), env);
+  assert.strictEqual(report.status, 200);
+  const payload = await report.json();
+  assert.strictEqual(payload.totals.visits, 1);
+  assert.strictEqual(payload.totals.activeSeconds, 60, 'heartbeat duration is clamped');
+  assert.deepStrictEqual(payload.games, [{ gameMode: 'gomoku', visits: 1, activeSeconds: 60 }]);
+  const stored = storage.values.get('aggregate');
+  assert.ok(stored);
+  assert.strictEqual(stored.playerName, undefined);
+  assert.deepStrictEqual(Object.keys(stored), ['day', 'visits', 'activeSeconds', 'events', 'byGame', 'byCountry', 'updatedAt']);
+}
+
 async function run() {
   const worker = await import('./ramified-chess.worker.js');
   await testCreationAndJoinAlarm(worker);
@@ -353,6 +422,7 @@ async function run() {
   await testAlarmCleanupRetryAndRace(worker);
   await testEarlyAndLegacyAlarms(worker);
   await testLegacyIndexReconciliation(worker);
+  await testAnonymousAnalyticsAndPrivateDashboard(worker);
   console.log('ramified-chess.worker_test: all tests passed');
 }
 

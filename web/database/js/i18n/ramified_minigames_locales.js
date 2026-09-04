@@ -491,6 +491,11 @@
     'games.northwest': ['northwest', '西北'],
     'games.northeast': ['northeast', '东北'],
 
+    'analytics.notice': [
+      'Anonymous visit, country, and active playtime statistics are collected; no IP addresses, names, room codes, persistent visitor IDs, or game states are stored.',
+      '本页会收集匿名的访问次数、国家／地区和活跃游玩时长统计；不存储 IP 地址、姓名、房间码、持久访客标识或游戏状态。'
+    ],
+
     'presets.boundary': ['boundary glue board', '边界粘合棋盘'],
     'presets.fide': ['FIDE chess 8x8', '国际象棋 8×8'],
     'presets.fires': ['between two fires', '两面夹击'],

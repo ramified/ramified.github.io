@@ -3569,6 +3569,8 @@ function testExtraBackgroundPresets() {
   [
     [game.BOUNDARY_GLUE_BOARD_PRESET_ID, 'boundary glue board'],
     ['twisted-torus', 'twisted torus'],
+    ['genus-2', 'genus 2'],
+    ['half-glued', 'half-glued'],
     ['gomoku-tic-tac-toe', 'Tic-tac-toe'],
     ['gomoku-strange-corner', 'strange corner'],
     ['gomoku-small-holes', 'small holes'],
@@ -3596,6 +3598,14 @@ function testExtraBackgroundPresets() {
     assert.ok(presetRegistry.find((preset) => preset.id === id && preset.label === label));
     assert.ok(game.PRESETS.find((preset) => preset.id === id));
   });
+
+  assert.deepStrictEqual(
+    presetRegistry
+      .filter((preset) => registryEntryHasGameType(preset, '2048'))
+      .filter((preset) => ['twisted-torus', 'genus-2', 'half-glued'].includes(preset.id))
+      .map((preset) => preset.label),
+    ['twisted torus', 'genus 2', 'half-glued']
+  );
 
   ['torus', 'klein-bottle', 'gomoku-classic', 'gomoku-random-glue'].forEach((id) => {
     assert.ok(!presetRegistry.some((preset) => preset.id === id), `${id} should not be registered`);

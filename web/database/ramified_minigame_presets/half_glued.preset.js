@@ -6,7 +6,7 @@
 //     "Billiard"
 //   ],
 //   "id": "half-glued",
-//   "label": "twisted torus",
+//   "label": "half-glued",
 //   "labelZh": "半粘合",
 //   "key": "half_glued",
 //   "wrappedView": {
@@ -26,7 +26,7 @@
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
   return {
     "id": "half-glued",
-    "label": "twisted torus",
+    "label": "half-glued",
     "labelZh": "半粘合",
     "wrappedView": {
       "x": "repeat",

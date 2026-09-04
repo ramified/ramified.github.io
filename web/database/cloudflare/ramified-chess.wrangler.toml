@@ -2,6 +2,12 @@ name = "ramified-chess"
 main = "ramified-chess.worker.js"
 compatibility_date = "2026-08-12"
 
+[vars]
+ANALYTICS_ALLOWED_ORIGINS = "https://ramified.github.io"
+
+[secrets]
+required = ["ANALYTICS_ADMIN_TOKEN"]
+
 [[durable_objects.bindings]]
 name = "GAME_ROOM"
 class_name = "GameRoom"

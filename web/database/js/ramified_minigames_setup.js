@@ -510,7 +510,7 @@
   }
 
   const PRESET_FOLDER_URL = 'ramified_minigame_presets/';
-  const PRESET_ASSET_VERSION = '20260903-1';
+  const PRESET_ASSET_VERSION = '20260904-1';
   const OPTIONAL_SCRIPT_GROUPS = Object.freeze({
     [GAME_MODES.HEX]: Object.freeze([
       'js/background_homology.js?v=20260827-1',
