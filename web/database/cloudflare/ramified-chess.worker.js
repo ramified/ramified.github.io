@@ -730,11 +730,22 @@ export class GameRoom {
       rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
       ...publicRoundState(this.room)
     };
-    this.broadcast(stateMessage);
+    // Role ownership in the public map is deliberately boolean. Send each
+    // connection its authoritative assignment separately so clients retain
+    // their move permission and receive role changes such as a Hex pie swap.
+    this.playerSockets().forEach(({ ws: target, attachment: targetAttachment }) => {
+      this.safeSend(target, {
+        ...stateMessage,
+        role: targetAttachment.role || 'spectator',
+        rolesAssigned: attachmentRoles(targetAttachment)
+      });
+    });
     this.safeSend(ws, {
       type: 'accepted',
       version: this.room.version,
       action,
+      role: safeAttachment(ws).role || 'spectator',
+      rolesAssigned: attachmentRoles(safeAttachment(ws)),
       roles: publicRoles(this.room.roles),
       rolePlayers: publicRolePlayers(this.room.roles, this.room.playerNames),
       ...publicRoundState(this.room)

@@ -2620,17 +2620,6 @@
     if (!onlineState || !message || typeof message !== 'object') return;
     if (message.roles && typeof message.roles === 'object') {
       onlineState.roomRoles = { ...message.roles };
-      // A Hex pie swap changes room ownership without a join/claim event.
-      // Derive this client’s roles from the authoritative room map for every
-      // state message so the local turn gate changes atomically as well.
-      if (onlineState.clientId) {
-        const owned = Object.keys(message.roles)
-          .filter((role) => message.roles[role] === onlineState.clientId)
-          .map(normalizePlacementColor)
-          .filter(Boolean);
-        onlineState.roles = owned.length ? owned : ['spectator'];
-        onlineState.role = onlineState.roles[0] || 'spectator';
-      }
     }
     if (message.rolePlayers && typeof message.rolePlayers === 'object') onlineState.rolePlayers = { ...message.rolePlayers };
     if (Object.prototype.hasOwnProperty.call(message, 'readyToPlay')) onlineState.readyToPlay = message.readyToPlay !== false;
@@ -31743,6 +31732,9 @@
       billiardsShotDragFromDisplayPoints,
       canvasStartPromptCopy,
       onlineWaitingPromptCopy,
+      updateOnlineRoomMetaFromMessage,
+      setOnlineState(value) { onlineState = value; },
+      getOnlineState() { return onlineState; },
       lianliankanTilesMatch,
       placementHoverPreview,
       placementHintDirectionDescriptors,

@@ -8673,6 +8673,43 @@ function testRuntimeChineseLocaleCatalog() {
   assert.strictEqual(window.SiteI18n.translateSource('Chinese Checkers restarted'), '跳棋已重新开始');
 }
 
+function testOnlinePublicPresencePreservesLocalRole() {
+  const previous = game.__test.getOnlineState();
+  try {
+    game.__test.setOnlineState({
+      clientId: 'player-a-1234',
+      roles: ['black'],
+      role: 'black',
+      roomRoles: {},
+      rolePlayers: {},
+      readyToPlay: true,
+      roundState: 'playing',
+      readyClientIds: [],
+      rematch: null,
+      unclaimedRoles: []
+    });
+    game.__test.updateOnlineRoomMetaFromMessage({
+      type: 'presence',
+      roles: { black: true, white: true },
+      rolePlayers: { black: 'Player 4AA0', white: 'Player B123' },
+      roundState: 'playing'
+    });
+    assert.deepStrictEqual(game.__test.getOnlineState().roles, ['black']);
+    assert.strictEqual(game.__test.getOnlineState().role, 'black');
+
+    game.__test.updateOnlineRoomMetaFromMessage({
+      type: 'state',
+      roles: { black: true, white: true },
+      rolesAssigned: ['white'],
+      role: 'white'
+    });
+    assert.deepStrictEqual(game.__test.getOnlineState().roles, ['white']);
+    assert.strictEqual(game.__test.getOnlineState().role, 'white');
+  } finally {
+    game.__test.setOnlineState(previous);
+  }
+}
+
 function testBilliardsQuickRulesAvailability() {
   const base = {
     gameMode: game.GAME_MODES.BILLIARDS,
@@ -8730,6 +8767,7 @@ async function run() {
   testFullscreenSettingsPreferencesAndMarkup();
   testReusableLocalizationWiring();
   testRuntimeChineseLocaleCatalog();
+  testOnlinePublicPresencePreservesLocalRole();
   testBilliardsPaletteRepaintsAfterLazyLoad();
   testBilliardsCueGuidanceAndQuickRules();
   testBilliardsDisplaySpaceShotDrag();

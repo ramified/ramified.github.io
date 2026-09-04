@@ -187,6 +187,34 @@ async function testReconnectionCancelsGracePeriod(worker) {
   });
 }
 
+async function testAcceptedMoveCarriesPerConnectionRoles(worker) {
+  const black = makeSocket('player-a-1234', { playerName: 'Player 4AA0', role: 'black' });
+  const white = makeSocket('player-b-5678', { playerName: 'Player B123', role: 'white' });
+  const storage = new FakeStorage();
+  const room = new worker.GameRoom(makeContext(storage, [black, white]), {});
+  room.room = makeRoom({
+    readyToPlay: true,
+    roundState: 'playing',
+    roles: { black: 'player-a-1234', white: 'player-b-5678' },
+    playerNames: { 'player-a-1234': 'Player 4AA0', 'player-b-5678': 'Player B123' }
+  });
+
+  await room.handleProposeMove(black, {
+    baseVersion: 0,
+    action: { type: 'place' },
+    snapshot: { gameMode: 'gomoku', phase: 'ready', turn: 'white' },
+    summary: 'Gomoku: Player B123 to move'
+  });
+
+  const blackState = black.sent.find((message) => message.type === 'state');
+  const whiteState = white.sent.find((message) => message.type === 'state');
+  const accepted = black.sent.find((message) => message.type === 'accepted');
+  assert.deepStrictEqual(blackState.roles, { black: true, white: true });
+  assert.deepStrictEqual(blackState.rolesAssigned, ['black']);
+  assert.deepStrictEqual(whiteState.rolesAssigned, ['white']);
+  assert.deepStrictEqual(accepted.rolesAssigned, ['black']);
+}
+
 async function testAlarmCleanupRetryAndRace(worker) {
   const now = Date.parse('2026-09-03T13:00:00.000Z');
   await withFakeNow(now, async () => {
@@ -321,6 +349,7 @@ async function run() {
   await testCreationAndJoinAlarm(worker);
   await testFinalSocketStartsGracePeriod(worker);
   await testReconnectionCancelsGracePeriod(worker);
+  await testAcceptedMoveCarriesPerConnectionRoles(worker);
   await testAlarmCleanupRetryAndRace(worker);
   await testEarlyAndLegacyAlarms(worker);
   await testLegacyIndexReconciliation(worker);
