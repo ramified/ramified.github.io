@@ -3934,6 +3934,13 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(!minigameHtml.includes('id="gomoku-display-row" data-mode-control="gomoku"'));
   assert.ok(minigameHtml.includes('id="gomoku-display-style"'));
   assert.ok(minigameHtml.includes('id="show-board-coordinates"'));
+  assert.ok(minigameHtml.includes('id="glue-flaps-row" hidden'));
+  assert.ok(minigameHtml.includes('data-i18n="setup.gluedBoundary"'));
+  assert.ok(minigameHtml.includes('id="show-glue-flaps" data-i18n-aria-label="access.glueFlaps"'));
+  assert.ok(minigameHtml.includes('data-i18n="setup.glueFlaps"'));
+  assert.ok(minigameHtml.indexOf('id="glue-flaps-row"') > minigameHtml.indexOf('id="gomoku-display-row"'));
+  assert.ok(minigameHtml.includes('js/i18n/ramified_minigames_locales.js?v=20260905-1'));
+  assert.ok(minigameHtml.includes('js/ramified_minigames_setup.js?v=20260905-1'));
   assert.ok(minigameHtml.includes('id="go-komi-row" data-mode-control="go"'));
   assert.ok(minigameHtml.includes('id="go-komi"'));
   assert.ok(minigameHtml.includes('id="go-action-row" data-mode-control="go"'));
@@ -4813,6 +4820,8 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('gomoku-display-row'),
     makeElement('gomoku-display-style', { value: 'vertex' }),
     makeElement('show-board-coordinates'),
+    makeElement('glue-flaps-row', { hidden: true }),
+    makeElement('show-glue-flaps', { checked: false }),
     makeElement('placement-hint-highlight-row', { hidden: true }),
     makeElement('placement-hint-highlight', { value: 'single' }),
     makeElement('placement-hint-colors-row', { hidden: true }),
@@ -5755,11 +5764,23 @@ function testHexCoverOffsetDiagnosticsAndConnectFourWrappedView() {
   elements.get('surface-preset-select').value = 'connect-four-hex-good-mobius-strip';
   elements.get('surface-preset-select').listeners.change();
   assert.ok(elements.get('display-card-body').children.includes(elements.get('boundary-glue-wrapped-view-row')));
+  assert.ok(elements.get('display-card-body').children.includes(elements.get('glue-flaps-row')));
+  assert.strictEqual(
+    elements.get('display-card-body').children.indexOf(elements.get('glue-flaps-row')),
+    elements.get('display-card-body').children.indexOf(elements.get('gomoku-display-row')) + 1,
+    'Glue flaps follows Tile style in the Display card'
+  );
+  assert.strictEqual(elements.get('glue-flaps-row').hidden, false);
+  assert.strictEqual(elements.get('show-glue-flaps').checked, false);
+  elements.get('show-glue-flaps').checked = true;
+  elements.get('show-glue-flaps').listeners.change();
   assert.strictEqual(elements.get('boundary-glue-wrapped-view-row').hidden, false, 'the good hex Möbius preset exposes Board view');
   assert.strictEqual(elements.get('boundary-glue-wrapped-view-mode').value, 'usual');
 
   elements.get('boundary-glue-wrapped-view-mode').value = 'wrapped';
   elements.get('boundary-glue-wrapped-view-mode').listeners.change({ target: elements.get('boundary-glue-wrapped-view-mode') });
+  assert.strictEqual(elements.get('glue-flaps-row').hidden, false, 'Glue flaps remains available in a wrapped view');
+  assert.strictEqual(elements.get('show-glue-flaps').checked, true, 'the session checkbox survives a view change');
   assert.strictEqual(elements.get('hex-cover-offset-row').hidden, true, 'the diagnostic remains debug-only');
   enableHeadlessDebug(elements);
   assert.strictEqual(elements.get('hex-cover-offset-row').hidden, false);
@@ -5773,6 +5794,7 @@ function testHexCoverOffsetDiagnosticsAndConnectFourWrappedView() {
   assert.strictEqual(elements.get('hex-cover-offset-y-value').textContent, '-0.25 r');
   elements.get('export-state').listeners.click();
   assert.ok(!elements.get('debug-export-output').value.includes('hexCoverOffset'), 'the diagnostic is not exported');
+  assert.ok(!elements.get('debug-export-output').value.includes('glueFlaps'), 'the session-only flap display is not exported');
 
   elements.get('game-mode-select').value = 'go';
   elements.get('game-mode-select').listeners.change();
@@ -5784,6 +5806,7 @@ function testHexCoverOffsetDiagnosticsAndConnectFourWrappedView() {
   elements.get('boundary-glue-mode').value = game.BOUNDARY_GLUE_MODES.RP2;
   elements.get('boundary-glue-mode').listeners.change();
   assert.strictEqual(elements.get('boundary-glue-wrapped-view-row').hidden, false, 'RP² exposes the reflected chart view');
+  assert.strictEqual(elements.get('show-glue-flaps').checked, true, 'the checkbox survives game and preset changes in this page session');
 }
 
 function testWrappedNQueensTrayAndGlueHoverInteraction() {

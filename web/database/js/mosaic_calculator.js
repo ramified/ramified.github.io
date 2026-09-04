@@ -82,6 +82,8 @@
   };
   const COMPONENT_COLOR_PALETTE = ['#b23a48', '#1f7a8c', '#6a4c93', '#c47f17'];
   const GLUED_BOUNDARY_COLORS = ['#1f7a8c', '#b23a48', '#6a4c93', '#c47f17', '#2f855a', '#8a4f7d'];
+  const GLUE_FLAP_DEPTH_RATIO = 0.22;
+  const MIN_GLUE_FLAP_LABEL_CSS_PX = 10;
   const HOMOLOGY_COLORS = ['#18748a', '#b23a48', '#6a4c93', '#c47f17', '#278050', '#8a4f7d'];
   const HOMOLOGY_CORD_REAL_BOUNDARY_INSET_RATIO = 0.05;
   // Leaves the outer cord stroke almost touching boundaries drawn at 0.96R.
@@ -943,6 +945,7 @@
     edits: 0,
     showErrors: true,
     showCoords: false,
+    showGlueFlaps: false,
     colorComponents: true,
     displayPick: false,
     showCusps: false,
@@ -1246,6 +1249,8 @@
     refs.applyPick = document.getElementById('apply-pick');
     refs.showErrors = document.getElementById('show-errors');
     refs.showCoords = document.getElementById('show-coords');
+    refs.glueFlapsRow = document.getElementById('glue-flaps-row');
+    refs.showGlueFlaps = document.getElementById('show-glue-flaps');
     refs.colorComponents = document.getElementById('color-components');
     refs.displayPick = document.getElementById('display-pick');
     refs.homologyKnotArrowSize = document.getElementById('homology-knot-arrow-size');
@@ -1856,6 +1861,14 @@
       state.showCoords = refs.showCoords.checked;
       updateReport(false);
     });
+    if (refs.showGlueFlaps) {
+      refs.showGlueFlaps.addEventListener('change', () => {
+        state.showGlueFlaps = refs.showGlueFlaps.checked;
+        updateDisplayControls();
+        updateReport(false);
+        refreshExport();
+      });
+    }
     refs.colorComponents.addEventListener('change', () => {
       state.colorComponents = refs.colorComponents.checked;
       if (state.colorComponents) state.componentColors = [];
@@ -4012,6 +4025,7 @@
     state.knotCodeKind = 'pd';
     state.showErrors = true;
     state.showCoords = false;
+    state.showGlueFlaps = false;
     state.colorComponents = true;
     state.displayPick = false;
     state.showCusps = false;
@@ -4051,6 +4065,7 @@
     syncImportPresetControls();
     if (refs.showErrors) refs.showErrors.checked = state.showErrors;
     if (refs.showCoords) refs.showCoords.checked = state.showCoords;
+    if (refs.showGlueFlaps) refs.showGlueFlaps.checked = state.showGlueFlaps;
     if (refs.colorComponents) refs.colorComponents.checked = state.colorComponents;
     if (refs.displayPick) refs.displayPick.checked = state.displayPick;
     if (refs.showCusps) refs.showCusps.checked = state.showCusps;
@@ -4553,9 +4568,59 @@
     return pairs;
   }
 
+  function importedWrappedViewMode(payload, previousValue = 'periodic') {
+    if (!payload || !Object.prototype.hasOwnProperty.call(payload, 'wrappedViewMode')) {
+      return previousValue === 'single' ? 'single' : 'periodic';
+    }
+    return payload.wrappedViewMode === 'single' ? 'single' : 'periodic';
+  }
+
+  function importedDisplaySettings(display, previous = {}) {
+    const source = display && typeof display === 'object' ? display : {};
+    const has = (key) => Object.prototype.hasOwnProperty.call(source, key);
+    return {
+      showErrors: has('showOpenEnds') ? source.showOpenEnds !== false : previous.showErrors,
+      showCoords: has('showCoords') ? !!source.showCoords : previous.showCoords,
+      showGlueFlaps: has('glueFlaps') ? !!source.glueFlaps : previous.showGlueFlaps,
+      colorComponents: has('colorComponents') ? source.colorComponents !== false : previous.colorComponents,
+      displayPick: has('pick') ? !!source.pick : previous.displayPick,
+      showCusps: has('cusps') ? !!source.cusps : previous.showCusps,
+      showSeifertSurface: has('showSeifertSurface')
+        ? !!source.showSeifertSurface
+        : previous.showSeifertSurface,
+      showSeifertBackground: has('showSeifertBackground')
+        ? !!source.showSeifertBackground
+        : previous.showSeifertBackground,
+      colorSeifertBoundaries: has('colorSeifertBoundaries')
+        ? !!source.colorSeifertBoundaries
+        : previous.colorSeifertBoundaries,
+      seifertBandWidth: normalizeSeifertBandWidth(
+        has('seifertBandWidth') ? source.seifertBandWidth : previous.seifertBandWidth
+      ),
+      seifertSurfaceColor: normalizeSeifertSurfaceColor(
+        has('seifertSurfaceColor') ? source.seifertSurfaceColor : previous.seifertSurfaceColor,
+        previous.seifertSurfaceColor
+      )
+    };
+  }
+
   function applyImportedMosaic(payload) {
     if (!payload || typeof payload !== 'object') throw new Error('mosaic data must be an object');
     payload = normalizeMosaicImportPayload(payload);
+    const previousDisplay = {
+      wrappedViewMode: state.wrappedViewMode,
+      showErrors: state.showErrors,
+      showCoords: state.showCoords,
+      showGlueFlaps: state.showGlueFlaps,
+      colorComponents: state.colorComponents,
+      displayPick: state.displayPick,
+      showCusps: state.showCusps,
+      showSeifertSurface: state.showSeifertSurface,
+      showSeifertBackground: state.showSeifertBackground,
+      colorSeifertBoundaries: state.colorSeifertBoundaries,
+      seifertBandWidth: state.seifertBandWidth,
+      seifertSurfaceColor: state.seifertSurfaceColor
+    };
     state.standardDualGraphInput = null;
     const oldRows = state.rows;
     const oldCols = state.cols;
@@ -4581,7 +4646,7 @@
     state.diagramType = diagramType;
     state.boundaryMode = boundaryMode;
     state.wrapped = wrapped;
-    state.wrappedViewMode = payload.wrappedViewMode === 'single' ? 'single' : 'periodic';
+    state.wrappedViewMode = importedWrappedViewMode(payload, previousDisplay.wrappedViewMode);
     state.inputMode = normalizeInputMode(payload.inputMode);
     state.backgroundAction = normalizeBackgroundAction(payload.backgroundAction || (payload.backgroundSpace && payload.backgroundSpace.action));
     state.backgroundDecorationKind = normalizeBackgroundDecorationKind(payload.backgroundDecorationKind || (payload.backgroundSpace && payload.backgroundSpace.decorationKind));
@@ -4631,29 +4696,7 @@
     }
     state.knotCodeKind = normalizeKnotCodeKind(payload.knotCodeKind || (payload.display && payload.display.knotCodeKind));
     state.drawLayer = normalizeDrawLayer(payload.drawLayer);
-    const display = payload.display && typeof payload.display === 'object' ? payload.display : {};
-    const hasDisplayValue = (key) => Object.prototype.hasOwnProperty.call(display, key);
-    state.showErrors = !(payload.display && payload.display.showOpenEnds === false);
-    state.showCoords = !!(payload.display && payload.display.showCoords);
-    state.colorComponents = !(payload.display && payload.display.colorComponents === false);
-    state.displayPick = !!(payload.display && payload.display.pick);
-    state.showCusps = !!(payload.display && payload.display.cusps);
-    state.showSeifertSurface = hasDisplayValue('showSeifertSurface')
-      ? !!display.showSeifertSurface
-      : !!state.showSeifertSurface;
-    state.showSeifertBackground = hasDisplayValue('showSeifertBackground')
-      ? !!display.showSeifertBackground
-      : !!state.showSeifertBackground;
-    state.colorSeifertBoundaries = hasDisplayValue('colorSeifertBoundaries')
-      ? !!display.colorSeifertBoundaries
-      : !!state.colorSeifertBoundaries;
-    state.seifertBandWidth = normalizeSeifertBandWidth(
-      hasDisplayValue('seifertBandWidth') ? display.seifertBandWidth : state.seifertBandWidth
-    );
-    state.seifertSurfaceColor = normalizeSeifertSurfaceColor(
-      hasDisplayValue('seifertSurfaceColor') ? display.seifertSurfaceColor : state.seifertSurfaceColor,
-      state.seifertSurfaceColor
-    );
+    Object.assign(state, importedDisplaySettings(payload.display, previousDisplay));
     state.displayPickInputLocked = false;
     state.displayPickReturnMode = 'draw';
     state.homologyKnotArrowScale = 0.5;
@@ -4730,6 +4773,7 @@
     syncAllInputs(rows, cols, state.lattice, state.boundaryMode);
     refs.showErrors.checked = state.showErrors;
     refs.showCoords.checked = state.showCoords;
+    if (refs.showGlueFlaps) refs.showGlueFlaps.checked = state.showGlueFlaps;
     refs.colorComponents.checked = state.colorComponents;
     refs.displayPick.checked = state.displayPick;
     if (refs.showCusps) refs.showCusps.checked = state.showCusps;
@@ -4749,6 +4793,8 @@
     resizeCanvas();
     importBackgroundBilliardState(payload);
     applyImportedView(payload.view);
+    if (state.displayPick) beginDisplayPickCapture();
+    else updateInputModeLock();
     updateReport(false);
   }
 
@@ -6334,10 +6380,14 @@
 
   function gluedBoundaryHoverAtClientPoint(clientX, clientY) {
     if (!isGluedBoundaryMode()) return null;
+    const pairs = cloneGluedEdges();
+    if (state.showGlueFlaps) {
+      const flapHit = glueFlapHoverAtBoardPoint(clientPointToBoardPoint(clientX, clientY), pairs);
+      if (flapHit) return flapHit;
+    }
     const edge = boundaryEdgeHitTest(clientX, clientY);
     if (!edge) return null;
     const edgeKey = boundaryEdgeKey(edge);
-    const pairs = cloneGluedEdges();
     const pairIndex = pairs.findIndex((pair) => (
       boundaryEdgeKey(pair.first) === edgeKey || boundaryEdgeKey(pair.second) === edgeKey
     ));
@@ -6347,6 +6397,71 @@
       pairIndex,
       group: gluePairGroup(pairs[pairIndex], pairIndex)
     };
+  }
+
+  function glueFlapHoverAtBoardPoint(point, pairs = cloneGluedEdges()) {
+    if (!point || !geometry || !Array.isArray(pairs)) return null;
+    const tolerance = Math.max(3, geometry.radius * 0.12);
+    let best = null;
+    glueFlapIndexedGroups(pairs).forEach((entries, group) => {
+      const combined = straightGlueFlapGroupGeometry(entries);
+      if (!combined) return;
+      [
+        { flap: combined.first, side: 'first' },
+        { flap: combined.second, side: 'second' }
+      ].forEach(({ flap, side }) => {
+        const score = glueFlapHitScore(point, flap, tolerance);
+        if (score == null || (best && best.score <= score)) return;
+        const nearest = entries.reduce((closest, entry) => {
+          const segment = boundaryEdgeSegment(entry.pair[side]);
+          if (!segment) return closest;
+          const distance = projectPointToSegment(point, segment.start, segment.end).distance;
+          return !closest || distance < closest.distance ? { entry, distance } : closest;
+        }, null);
+        if (!nearest) return;
+        best = {
+          edgeKey: boundaryEdgeKey(nearest.entry.pair[side]),
+          pairIndex: nearest.entry.pairIndex,
+          group,
+          score
+        };
+      });
+    });
+    pairs.forEach((pair, pairIndex) => {
+      [
+        { edge: pair.first, outward: true },
+        { edge: pair.second, outward: false }
+      ].forEach((member) => {
+        const flap = glueFlapGeometry(member.edge, member.outward);
+        if (!flap) return;
+        const score = glueFlapHitScore(point, flap, tolerance);
+        if (score == null) return;
+        if (best && best.score <= score) return;
+        best = {
+          edgeKey: boundaryEdgeKey(member.edge),
+          pairIndex,
+          group: gluePairGroup(pair, pairIndex),
+          score
+        };
+      });
+    });
+    if (!best) return null;
+    return {
+      edgeKey: best.edgeKey,
+      pairIndex: best.pairIndex,
+      group: best.group
+    };
+  }
+
+  function glueFlapHitScore(point, flap, tolerance) {
+    if (!flap || !Array.isArray(flap.points)) return null;
+    if (pointInPolygon(point, flap.points)) return 0;
+    let distance = Infinity;
+    flap.points.forEach((start, index) => {
+      const end = flap.points[(index + 1) % flap.points.length];
+      distance = Math.min(distance, projectPointToSegment(point, start, end).distance);
+    });
+    return distance <= tolerance ? distance : null;
   }
 
   function sameGluedBoundaryHover(left, right) {
@@ -17652,15 +17767,20 @@
       }
     }
 
-    refs.canvas.width = Math.max(1, Math.ceil(logicalWidth * dpr));
-    refs.canvas.height = Math.max(1, Math.ceil(logicalHeight * dpr));
     refs.canvas.style.aspectRatio = `${logicalWidth} / ${logicalHeight}`;
+    const displayedWidth = Number(refs.canvas.clientWidth) || widthAvailable;
+    const renderMetrics = mainCanvasRenderMetrics(logicalWidth, logicalHeight, displayedWidth, dpr);
+    refs.canvas.width = renderMetrics.backingWidth;
+    refs.canvas.height = renderMetrics.backingHeight;
 
     geometry = {
       width: logicalWidth,
       height: logicalHeight,
       radius,
-      dpr,
+      dpr: renderMetrics.backingScale,
+      devicePixelRatio: dpr,
+      cssScale: renderMetrics.cssScale,
+      displayedWidth: renderMetrics.displayedWidth,
       shape: lattice.shape,
       periodA,
       periodB,
@@ -21078,6 +21198,22 @@
       vertexEvent: cloneQuotientVertexEvent(fallback.vertexEvent),
       constructionTransitionIndex: fallback.constructionTransitionIndex == null
         ? null : fallback.constructionTransitionIndex
+    };
+  }
+
+  function mainCanvasRenderMetrics(logicalWidth, logicalHeight, displayedWidth, devicePixelRatio) {
+    const width = Math.max(1, Number(logicalWidth) || 1);
+    const height = Math.max(1, Number(logicalHeight) || 1);
+    const cssWidth = Math.max(1, Number(displayedWidth) || width);
+    const pixelRatio = clamp(Number(devicePixelRatio) || 1, 1, 2.5);
+    const cssScale = cssWidth / width;
+    const backingScale = cssScale * pixelRatio;
+    return {
+      displayedWidth: cssWidth,
+      cssScale,
+      backingScale,
+      backingWidth: Math.max(1, Math.ceil(width * backingScale)),
+      backingHeight: Math.max(1, Math.ceil(height * backingScale))
     };
   }
 
@@ -26065,20 +26201,318 @@
   function drawGluedBoundaryPairs(ctx) {
     const pairs = cloneGluedEdges();
     if (!pairs.length) return;
+    const labels = state.showGlueFlaps ? glueFlapPairLabels(pairs) : [];
+    const hover = activeGluedBoundaryHover(pairs);
+    if (state.showGlueFlaps) {
+      glueFlapIndexedGroups(pairs).forEach((entries, group) => {
+        const combined = straightGlueFlapGroupGeometry(entries);
+        if (combined) {
+          const groupHovered = !!hover && hover.group === group;
+          let fillAlpha = 0.14;
+          if (hover && !groupHovered) fillAlpha *= 0.55 / 0.75;
+          else if (groupHovered) fillAlpha /= 0.75;
+          const color = gluedBoundaryColor(group);
+          const options = {
+            flapStrokeScale: groupHovered ? 1 : 0.55,
+            flapFillAlpha: fillAlpha
+          };
+          drawGlueFlapShape(ctx, combined.first, color, true, options);
+          drawGlueFlapShape(ctx, combined.second, color, false, options);
+          const representative = entries[0];
+          const groupLabel = String(labels[representative.pairIndex] || '').replace(/[a-z]+$/i, '');
+          const labelShift = entries.length % 2 === 0 ? combined.first.depth * 0.8 : 0;
+          const shiftedLabelGeometry = (flap) => ({
+            ...flap,
+            labelPoint: {
+              x: flap.labelPoint.x + (combined.first.tangent.x * labelShift),
+              y: flap.labelPoint.y + (combined.first.tangent.y * labelShift)
+            }
+          });
+          drawGlueFlapLabel(
+            ctx,
+            shiftedLabelGeometry(combined.first),
+            groupLabel,
+            color,
+            gluePairFirstArrowReversed(representative.pair)
+          );
+          drawGlueFlapLabel(
+            ctx,
+            shiftedLabelGeometry(combined.second),
+            groupLabel,
+            color,
+            gluePairSecondArrowReversed(representative.pair)
+          );
+          return;
+        }
+        entries.forEach(({ pair, pairIndex }) => {
+          const strokeScale = !hover || group !== hover.group
+            ? 0.55
+            : (pairIndex === hover.pairIndex ? 1 : 0.75);
+          let fillAlpha = 0.14;
+          if (hover && group !== hover.group) fillAlpha *= 0.55 / 0.75;
+          else if (hover && pairIndex === hover.pairIndex) fillAlpha /= 0.75;
+          drawCompletedGluedBoundaryPair(
+            ctx,
+            pair,
+            pairIndex,
+            gluedBoundaryColor(group),
+            labels[pairIndex],
+            { flapStrokeScale: strokeScale, flapFillAlpha: fillAlpha }
+          );
+        });
+      });
+      return;
+    }
     pairs.forEach((pair, pairIndex) => {
       const color = gluedBoundaryColor(gluePairGroup(pair, pairIndex));
-      drawGluedBoundaryEdge(ctx, pair.first, color, gluePairFirstArrowReversed(pair));
-      drawGluedBoundaryEdge(ctx, pair.second, color, gluePairSecondArrowReversed(pair));
+      drawCompletedGluedBoundaryPair(ctx, pair, pairIndex, color, labels[pairIndex]);
     });
-    const hover = activeGluedBoundaryHover(pairs);
     if (!hover) return;
     pairs.forEach((pair, pairIndex) => {
       if (gluePairGroup(pair, pairIndex) !== hover.group) return;
       const color = gluedBoundaryColor(gluePairGroup(pair, pairIndex));
       const reduced = pairIndex !== hover.pairIndex;
-      drawGluedBoundaryEdge(ctx, pair.first, color, gluePairFirstArrowReversed(pair), { highlighted: true, reduced });
-      drawGluedBoundaryEdge(ctx, pair.second, color, gluePairSecondArrowReversed(pair), { highlighted: true, reduced });
+      drawCompletedGluedBoundaryPair(ctx, pair, pairIndex, color, labels[pairIndex], { highlighted: true, reduced });
     });
+  }
+
+  function drawCompletedGluedBoundaryPair(ctx, pair, _pairIndex, color, label, options = {}) {
+    if (state.showGlueFlaps) {
+      drawGlueFlapBoundaryEdge(ctx, pair.first, color, label, gluePairFirstArrowReversed(pair), true, options);
+      drawGlueFlapBoundaryEdge(ctx, pair.second, color, label, gluePairSecondArrowReversed(pair), false, options);
+      return;
+    }
+    drawGluedBoundaryEdge(ctx, pair.first, color, gluePairFirstArrowReversed(pair), options);
+    drawGluedBoundaryEdge(ctx, pair.second, color, gluePairSecondArrowReversed(pair), options);
+  }
+
+  function glueFlapPairLabels(pairs = cloneGluedEdges()) {
+    const groups = glueFlapIndexedGroups(pairs);
+    const labels = [];
+    let ordinal = 0;
+    groups.forEach((entries) => {
+      ordinal += 1;
+      entries.forEach(({ pairIndex }, memberIndex) => {
+        labels[pairIndex] = entries.length === 1
+          ? String(ordinal)
+          : `${ordinal}${alphabeticGlueFlapSuffix(memberIndex)}`;
+      });
+    });
+    return labels;
+  }
+
+  function glueFlapIndexedGroups(pairs = cloneGluedEdges()) {
+    const groups = new Map();
+    (Array.isArray(pairs) ? pairs : []).forEach((pair, pairIndex) => {
+      const group = gluePairGroup(pair, pairIndex);
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group).push({ pair, pairIndex });
+    });
+    return groups;
+  }
+
+  function alphabeticGlueFlapSuffix(index) {
+    let value = Math.max(0, Math.trunc(Number(index) || 0)) + 1;
+    let suffix = '';
+    while (value > 0) {
+      value -= 1;
+      suffix = String.fromCharCode(97 + (value % 26)) + suffix;
+      value = Math.floor(value / 26);
+    }
+    return suffix;
+  }
+
+  function defaultGlueFlapBaseAngle() {
+    return getLattice().shape === 'square' ? 45 : 60;
+  }
+
+  function straightGlueFlapGroupGeometry(entries) {
+    if (getLattice().shape !== 'square' || !Array.isArray(entries) || entries.length < 2) return null;
+    const first = straightGlueFlapGeometry(entries.map((entry) => entry.pair.first), true);
+    const second = straightGlueFlapGeometry(entries.map((entry) => entry.pair.second), false);
+    return first && second ? { first, second } : null;
+  }
+
+  function straightGlueFlapGeometry(edges, outward) {
+    const flaps = edges.map((edge) => glueFlapGeometry(edge, outward));
+    if (flaps.some((flap) => !flap)) return null;
+    const reference = flaps[0];
+    const tangent = reference.tangent;
+    const normal = reference.normal;
+    const origin = reference.segment.start;
+    const lineTolerance = Math.max(0.5, geometry.radius * 0.04);
+    const gapTolerance = Math.max(3, geometry.radius * 0.18);
+    const intervals = [];
+    for (const flap of flaps) {
+      const tangentAlignment = Math.abs((flap.tangent.x * tangent.x) + (flap.tangent.y * tangent.y));
+      const normalAlignment = (flap.normal.x * normal.x) + (flap.normal.y * normal.y);
+      if (tangentAlignment < 0.999 || normalAlignment < 0.999) return null;
+      const projections = [flap.segment.start, flap.segment.end].map((point) => {
+        const dx = point.x - origin.x;
+        const dy = point.y - origin.y;
+        if (Math.abs((dx * normal.x) + (dy * normal.y)) > lineTolerance) return null;
+        return (dx * tangent.x) + (dy * tangent.y);
+      });
+      if (projections.some((value) => value == null)) return null;
+      intervals.push({ min: Math.min(...projections), max: Math.max(...projections) });
+    }
+    intervals.sort((left, right) => left.min - right.min);
+    for (let index = 1; index < intervals.length; index += 1) {
+      if (intervals[index].min - intervals[index - 1].max > gapTolerance) return null;
+    }
+    const min = intervals[0].min;
+    const max = intervals[intervals.length - 1].max;
+    const length = max - min;
+    if (length <= reference.length * 1.25) return null;
+    const segment = {
+      start: { x: origin.x + (tangent.x * min), y: origin.y + (tangent.y * min) },
+      end: { x: origin.x + (tangent.x * max), y: origin.y + (tangent.y * max) }
+    };
+    const depth = Math.min(...flaps.map((flap) => flap.depth));
+    const inset = depth / Math.tan(reference.angle * Math.PI / 180);
+    const midpoint = {
+      x: (segment.start.x + segment.end.x) / 2,
+      y: (segment.start.y + segment.end.y) / 2
+    };
+    const shortStart = {
+      x: segment.start.x + (normal.x * depth) + (tangent.x * inset),
+      y: segment.start.y + (normal.y * depth) + (tangent.y * inset)
+    };
+    const shortEnd = {
+      x: segment.end.x + (normal.x * depth) - (tangent.x * inset),
+      y: segment.end.y + (normal.y * depth) - (tangent.y * inset)
+    };
+    return {
+      points: [segment.start, segment.end, shortEnd, shortStart],
+      segment,
+      tangent,
+      normal,
+      length,
+      depth,
+      inset,
+      angle: reference.angle,
+      labelPoint: {
+        x: midpoint.x + (normal.x * depth * 0.5),
+        y: midpoint.y + (normal.y * depth * 0.5)
+      },
+      labelWidth: Math.max(0, length - inset * 2)
+    };
+  }
+
+  function glueFlapGeometry(edge, outward = true) {
+    const normalized = cloneBoundaryEdge(edge);
+    const segment = boundaryEdgeSegment(normalized);
+    const cell = normalized && geometry && geometry.cells[normalized.index];
+    if (!segment || !cell) return null;
+    const dx = segment.end.x - segment.start.x;
+    const dy = segment.end.y - segment.start.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 0.001) return null;
+    const tangent = { x: dx / length, y: dy / length };
+    const midpoint = {
+      x: (segment.start.x + segment.end.x) / 2,
+      y: (segment.start.y + segment.end.y) / 2
+    };
+    const normalLength = Math.hypot(midpoint.x - cell.x, midpoint.y - cell.y);
+    if (normalLength < 0.001) return null;
+    const normalDirection = outward ? 1 : -1;
+    const normal = {
+      x: ((midpoint.x - cell.x) / normalLength) * normalDirection,
+      y: ((midpoint.y - cell.y) / normalLength) * normalDirection
+    };
+    const angle = defaultGlueFlapBaseAngle();
+    const angleRadians = angle * Math.PI / 180;
+    const depth = Math.min(
+      length * GLUE_FLAP_DEPTH_RATIO,
+      length * 0.45 * Math.tan(angleRadians)
+    );
+    const inset = depth / Math.tan(angleRadians);
+    const shortStart = {
+      x: segment.start.x + (normal.x * depth) + (tangent.x * inset),
+      y: segment.start.y + (normal.y * depth) + (tangent.y * inset)
+    };
+    const shortEnd = {
+      x: segment.end.x + (normal.x * depth) - (tangent.x * inset),
+      y: segment.end.y + (normal.y * depth) - (tangent.y * inset)
+    };
+    return {
+      points: [segment.start, segment.end, shortEnd, shortStart],
+      segment,
+      tangent,
+      normal,
+      length,
+      depth,
+      inset,
+      angle,
+      labelPoint: {
+        x: midpoint.x + (normal.x * depth * 0.5),
+        y: midpoint.y + (normal.y * depth * 0.5)
+      },
+      labelWidth: Math.max(0, length - inset * 2)
+    };
+  }
+
+  function drawGlueFlapBoundaryEdge(ctx, edge, color, label, reverse, outward, options = {}) {
+    const flap = glueFlapGeometry(edge, outward);
+    if (!flap) return;
+    drawGlueFlapShape(ctx, flap, color, outward, options);
+    drawGlueFlapLabel(ctx, flap, label, color, reverse);
+  }
+
+  function drawGlueFlapShape(ctx, flap, color, outward, options = {}) {
+    const fullLineWidth = hoverEdgeLineWidth(geometry.radius) * 1.15;
+    const emphasis = clamp(Number(options.flapStrokeScale) || 0.55, 0.55, 1);
+    const lineWidth = fullLineWidth * emphasis;
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    drawGlueFlapPath(ctx, flap.points);
+    if (outward) {
+      ctx.globalAlpha = clamp(Number(options.flapFillAlpha) || 0.14, 0.05, 0.35);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      drawGlueFlapPath(ctx, flap.points);
+    }
+    ctx.setLineDash(outward ? [] : [Math.max(3, lineWidth * 2.2), Math.max(2, lineWidth * 1.7)]);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function drawGlueFlapPath(ctx, points) {
+    if (!Array.isArray(points) || points.length < 4) return;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let index = 1; index < points.length; index += 1) ctx.lineTo(points[index].x, points[index].y);
+    ctx.closePath();
+  }
+
+  function drawGlueFlapLabel(ctx, flap, label, color, reverse) {
+    const text = String(label || '');
+    if (!text || !flap || !flap.labelPoint) return;
+    const maxFontSize = Math.min(geometry.radius * 0.28, flap.depth * 0.72);
+    let fontSize = Math.max(0.5, maxFontSize);
+    ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+    const metrics = typeof ctx.measureText === 'function' ? ctx.measureText(text) : null;
+    const measuredWidth = metrics && Number(metrics.width);
+    const maxWidth = flap.labelWidth * 0.82;
+    if (Number.isFinite(measuredWidth) && measuredWidth > maxWidth && maxWidth > 0) {
+      fontSize *= maxWidth / measuredWidth;
+    }
+    const cssScale = Number(geometry.cssScale) > 0 ? Number(geometry.cssScale) : 1;
+    if (fontSize * cssScale < MIN_GLUE_FLAP_LABEL_CSS_PX || maxWidth <= 0) return;
+    ctx.save();
+    ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+    ctx.translate(flap.labelPoint.x, flap.labelPoint.y);
+    ctx.rotate(Math.atan2(flap.tangent.y, flap.tangent.x) + (reverse ? Math.PI : 0));
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = color;
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
   }
 
   function drawGluedBoundaryEdge(ctx, edge, color, reverse, options = {}) {
@@ -29576,6 +30010,7 @@
       display: {
         showOpenEnds: state.showErrors,
         showCoords: state.showCoords,
+        glueFlaps: !!state.showGlueFlaps,
         colorComponents: state.colorComponents,
         pick: state.displayPick,
         cusps: state.showCusps,
@@ -30134,6 +30569,7 @@
     if (refs.clearHalfEdgeDecorations) refs.clearHalfEdgeDecorations.checked = !!state.clearHalfEdgeDecorations;
     refs.colorComponents.checked = state.colorComponents;
     refs.displayPick.checked = state.displayPick;
+    if (refs.showGlueFlaps) refs.showGlueFlaps.checked = !!state.showGlueFlaps;
     if (refs.showCusps) refs.showCusps.checked = state.showCusps;
     syncSeifertSurfaceControls();
     syncDualGraphInvariantVisibility();
@@ -31100,6 +31536,12 @@
 
   function updateDisplayControls() {
     syncSeifertSurfaceControls();
+    const gluedBoundary = isGluedBoundaryMode();
+    if (refs.glueFlapsRow) refs.glueFlapsRow.hidden = !gluedBoundary;
+    if (refs.showGlueFlaps) {
+      refs.showGlueFlaps.disabled = !gluedBoundary;
+      refs.showGlueFlaps.checked = !!state.showGlueFlaps;
+    }
     if (refs.homologyKnotArrowSize) {
       refs.homologyKnotArrowSize.value = normalizeHomologyKnotArrowScale(state.homologyKnotArrowScale).toFixed(1);
       if (refs.homologyKnotArrowSizeValue) refs.homologyKnotArrowSizeValue.textContent = normalizeHomologyKnotArrowScale(state.homologyKnotArrowScale).toFixed(1);
@@ -32332,6 +32774,7 @@
     state.backgroundDecorationKind = normalizeBackgroundDecorationKind(options.backgroundDecorationKind || 'input-hole');
     state.backgroundDecorationColor = normalizePresetPieceColor(options.backgroundDecorationColor || 'black') || 'black';
     state.backgroundChessPawnDirection = normalizeChessPawnDirectionChoice(options.backgroundChessPawnDirection || options.chessPawnDirection);
+    state.showGlueFlaps = !!options.showGlueFlaps;
     state.tiles = Array(rows * cols).fill(null);
     state.removedTiles = importedIndexSetForTest(options.removedTiles || options.removed || [], rows, cols);
     state.inputHoles = importedIndexSetForTest(options.inputHoles || options.connectFourHoles || options.holes || [], rows, cols);
@@ -32358,10 +32801,15 @@
 
   function setTestGeometry(options = {}) {
     const radius = Number(options.radius) || 10;
+    const cssScale = Number(options.cssScale) > 0 ? Number(options.cssScale) : 1;
     geometry = {
       width: options.width || 80,
       height: options.height || 60,
       radius,
+      cssScale,
+      dpr: Number(options.dpr) > 0 ? Number(options.dpr) : cssScale,
+      devicePixelRatio: Number(options.devicePixelRatio) > 0 ? Number(options.devicePixelRatio) : 1,
+      displayedWidth: (options.width || 80) * cssScale,
       cells: Array.isArray(options.cells) ? options.cells.map((cell) => ({ ...cell })) : []
     };
   }
@@ -32446,9 +32894,18 @@
       minigamePresetRegistryEntry,
       minigamePresetRegistryEntries,
       gluedBoundaryHoverAtClientPoint,
+      glueFlapHoverAtBoardPoint,
       updateGluedBoundaryHover,
       clearGluedBoundaryHover,
       drawGluedBoundaryPairs,
+      glueFlapPairLabels,
+      alphabeticGlueFlapSuffix,
+      defaultGlueFlapBaseAngle,
+      glueFlapGeometry,
+      straightGlueFlapGroupGeometry,
+      mainCanvasRenderMetrics,
+      importedDisplaySettings,
+      importedWrappedViewMode,
       setTestGeometry,
       materializeMinigamePresetForMosaic,
       materializeMinigamePresetGenerator,

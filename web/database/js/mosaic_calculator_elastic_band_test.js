@@ -1800,7 +1800,7 @@ const sourceText = fs.readFileSync(path.join(__dirname, 'mosaic_calculator.js'),
 const htmlText = fs.readFileSync(path.join(__dirname, '..', 'mosaic_calculator.html'), 'utf8');
 assert.strictEqual(htmlText.includes('id="homology-cord-contraction-strength"'), false);
 assert.ok(htmlText.includes('id="homology-cord-relax-speed" min="0.1" max="10" step="0.1" value="10"'));
-assert.ok(htmlText.includes('js/mosaic_calculator.js?v=homology-local-carrier-7'));
+assert.ok(htmlText.includes('js/mosaic_calculator.js?v=glue-flaps-3'));
 assert.ok(htmlText.includes('id="homology-local-chart-card"'));
 assert.ok(htmlText.includes('id="homology-local-chart-radius-controls"'));
 assert.ok(htmlText.includes('id="homology-local-chart-wide"'));

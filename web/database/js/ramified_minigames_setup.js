@@ -154,6 +154,8 @@
     [1, -1]
   ];
   const GLUE_COLORS = ['#1f7a8c', '#b23a48', '#6a4c93', '#c47f17', '#2f855a', '#8a4f7d'];
+  const GLUE_FLAP_DEPTH_RATIO = 0.22;
+  const MIN_GLUE_FLAP_LABEL_CSS_PX = 10;
   const MAX_COMPLETED_GLUINGS = 3;
   const PUSH_CHAIN_LIMIT = 50;
   const EVENT_GUARD = 900;
@@ -818,6 +820,8 @@
     refs.placementDisplayRow = document.getElementById('gomoku-display-row');
     refs.gomokuDisplay = document.getElementById('gomoku-display-style');
     refs.showBoardCoordinates = document.getElementById('show-board-coordinates');
+    refs.glueFlapsRow = document.getElementById('glue-flaps-row');
+    refs.showGlueFlaps = document.getElementById('show-glue-flaps');
     refs.billiardsRules = document.getElementById('billiards-rules');
     refs.billiardsBallPaletteRow = document.getElementById('billiards-ball-palette-row');
     refs.billiardsBallPalette = document.getElementById('billiards-ball-palette');
@@ -1014,6 +1018,11 @@
     if (refs.showBoardCoordinates) refs.showBoardCoordinates.addEventListener('change', () => {
       render();
       refreshDebugExportIfNeeded();
+    });
+    if (refs.showGlueFlaps) refs.showGlueFlaps.addEventListener('change', () => {
+      hoveredGlue = null;
+      syncCanvasCursor();
+      render();
     });
     if (refs.billiardsRules) refs.billiardsRules.addEventListener('change', handleBilliardsRulesChange);
     if (refs.billiardsAssistance) refs.billiardsAssistance.addEventListener('change', render);
@@ -1273,6 +1282,7 @@
     [
       'boundary-glue-wrapped-view-row',
       'gomoku-display-row',
+      'glue-flaps-row',
       'move-number-label-row',
       'placement-hint-highlight-row',
       'placement-hint-colors-row',
@@ -13701,11 +13711,27 @@
     applyDisplayRotationToGeometry(geometry, wrappedCover ? 0 : connectFourDisplayRotationAngle());
     const logicalWidth = geometry.width;
     const logicalHeight = geometry.height;
-    refs.canvas.width = Math.max(1, Math.ceil(logicalWidth * dpr));
-    refs.canvas.height = Math.max(1, Math.ceil(logicalHeight * dpr));
     refs.canvas.style.aspectRatio = `${logicalWidth} / ${logicalHeight}`;
     applyCanvasDisplaySize(logicalWidth, logicalHeight, sizing);
-    refs.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const canvasRect = refs.canvas.getBoundingClientRect ? refs.canvas.getBoundingClientRect() : null;
+    const fallbackDisplay = sizing.immersive && sizing.displayHeight
+      ? fitCanvasDisplaySize(logicalWidth, logicalHeight, sizing.displayWidth, sizing.displayHeight)
+      : { width: logicalWidth, height: logicalHeight };
+    const renderMetrics = canvasBackingMetrics(
+      logicalWidth,
+      logicalHeight,
+      canvasRect && canvasRect.width || refs.canvas.clientWidth || fallbackDisplay.width,
+      canvasRect && canvasRect.height || refs.canvas.clientHeight || fallbackDisplay.height,
+      dpr
+    );
+    refs.canvas.width = renderMetrics.backingWidth;
+    refs.canvas.height = renderMetrics.backingHeight;
+    geometry.cssScaleX = renderMetrics.cssScaleX;
+    geometry.cssScaleY = renderMetrics.cssScaleY;
+    geometry.cssScale = renderMetrics.cssScale;
+    geometry.backingScaleX = renderMetrics.backingScaleX;
+    geometry.backingScaleY = renderMetrics.backingScaleY;
+    refs.ctx.setTransform(renderMetrics.backingScaleX, 0, 0, renderMetrics.backingScaleY, 0, 0);
     refs.ctx.imageSmoothingEnabled = true;
     if ('imageSmoothingQuality' in refs.ctx) refs.ctx.imageSmoothingQuality = 'high';
 
@@ -14666,6 +14692,30 @@
     return { width, height };
   }
 
+  function canvasBackingMetrics(logicalWidth, logicalHeight, displayedWidth, displayedHeight, renderPixelRatio) {
+    const width = Math.max(1, Number(logicalWidth) || 1);
+    const height = Math.max(1, Number(logicalHeight) || 1);
+    const cssWidth = Math.max(1, Number(displayedWidth) || width);
+    const cssHeight = Math.max(1, Number(displayedHeight) || (cssWidth * height / width));
+    const pixelRatio = Math.max(1, Number(renderPixelRatio) || 1);
+    const backingWidth = Math.max(1, Math.ceil(cssWidth * pixelRatio));
+    const backingHeight = Math.max(1, Math.ceil(cssHeight * pixelRatio));
+    const cssScaleX = cssWidth / width;
+    const cssScaleY = cssHeight / height;
+    return {
+      displayedWidth: cssWidth,
+      displayedHeight: cssHeight,
+      cssScaleX,
+      cssScaleY,
+      cssScale: Math.min(cssScaleX, cssScaleY),
+      backingWidth,
+      backingHeight,
+      backingScaleX: backingWidth / width,
+      backingScaleY: backingHeight / height,
+      pixelRatio
+    };
+  }
+
   function buildGeometry(preset, widthAvailable, margin, dpr, options = {}) {
     const lattice = latticeForPreset(preset);
     const cells = [];
@@ -14895,6 +14945,11 @@
     const activeGroup = activeHover && activeHover.groupKey;
     ctx.save();
     ctx.globalAlpha *= Number.isFinite(options.opacity) ? Math.max(0, Math.min(1, options.opacity)) : 1;
+    if (shouldShowGlueFlaps()) {
+      drawGlueFlapPairs(ctx, geom, preset, activeHover);
+      ctx.restore();
+      return;
+    }
     preset.gluedEdges.forEach((pair) => {
       const color = glueColor(pair);
       drawGlueHalf(ctx, geom, pair.first, color, glueFirstArrowReversed(pair));
@@ -14909,6 +14964,289 @@
         drawGlueHalf(ctx, geom, pair.second, color, glueSecondArrowReversed(pair), { highlighted: true, reduced });
       });
     }
+    ctx.restore();
+  }
+
+  function drawGlueFlapPairs(ctx, geom, preset, hover) {
+    const pairs = Array.isArray(preset && preset.gluedEdges) ? preset.gluedEdges : [];
+    const labels = glueFlapPairLabels(pairs);
+    glueFlapIndexedGroups(pairs).forEach((entries, groupKey) => {
+      const combined = straightGlueFlapGroupGeometry(geom, preset, entries);
+      const groupHovered = !!hover && hover.groupKey === groupKey;
+      if (combined) {
+        let fillAlpha = 0.14;
+        if (hover && !groupHovered) fillAlpha *= 0.55 / 0.75;
+        else if (groupHovered) fillAlpha /= 0.75;
+        const representative = entries[0];
+        const color = glueColor(representative.pair);
+        const shapeOptions = {
+          flapStrokeScale: groupHovered ? 1 : 0.55,
+          flapFillAlpha: fillAlpha
+        };
+        drawGlueFlapShape(ctx, geom, combined.first, color, true, shapeOptions);
+        drawGlueFlapShape(ctx, geom, combined.second, color, false, shapeOptions);
+        const groupLabel = String(labels[representative.pairIndex] || '').replace(/[a-z]+$/i, '');
+        const labelShift = entries.length % 2 === 0 ? combined.first.depth * 0.8 : 0;
+        const shifted = (flap) => ({
+          ...flap,
+          labelPoint: {
+            x: flap.labelPoint.x + (combined.first.tangent.x * labelShift),
+            y: flap.labelPoint.y + (combined.first.tangent.y * labelShift)
+          }
+        });
+        drawGlueFlapLabel(ctx, geom, shifted(combined.first), groupLabel, color, glueFirstArrowReversed(representative.pair));
+        drawGlueFlapLabel(ctx, geom, shifted(combined.second), groupLabel, color, glueSecondArrowReversed(representative.pair));
+        return;
+      }
+      entries.forEach(({ pair, pairIndex }) => {
+        const strokeScale = !hover || hover.groupKey !== groupKey
+          ? 0.55
+          : (hover.pairIndex === pairIndex ? 1 : 0.75);
+        let fillAlpha = 0.14;
+        if (hover && hover.groupKey !== groupKey) fillAlpha *= 0.55 / 0.75;
+        else if (hover && hover.pairIndex === pairIndex) fillAlpha /= 0.75;
+        const color = glueColor(pair);
+        const shapeOptions = { flapStrokeScale: strokeScale, flapFillAlpha: fillAlpha };
+        drawGlueFlapBoundaryEdge(ctx, geom, preset, pair.first, color, labels[pairIndex], glueFirstArrowReversed(pair), true, shapeOptions);
+        drawGlueFlapBoundaryEdge(ctx, geom, preset, pair.second, color, labels[pairIndex], glueSecondArrowReversed(pair), false, shapeOptions);
+      });
+    });
+  }
+
+  function glueFlapPairLabels(pairs) {
+    const labels = [];
+    let ordinal = 0;
+    glueFlapIndexedGroups(pairs).forEach((entries) => {
+      ordinal += 1;
+      entries.forEach(({ pairIndex }, memberIndex) => {
+        labels[pairIndex] = entries.length === 1
+          ? String(ordinal)
+          : `${ordinal}${alphabeticGlueFlapSuffix(memberIndex)}`;
+      });
+    });
+    return labels;
+  }
+
+  function glueFlapIndexedGroups(pairs) {
+    const groups = new Map();
+    (Array.isArray(pairs) ? pairs : []).forEach((pair, pairIndex) => {
+      const groupKey = gluePairGroupKey(pair, pairIndex);
+      if (!groups.has(groupKey)) groups.set(groupKey, []);
+      groups.get(groupKey).push({ pair, pairIndex });
+    });
+    return groups;
+  }
+
+  function alphabeticGlueFlapSuffix(index) {
+    let value = Math.max(0, Math.trunc(Number(index) || 0)) + 1;
+    let suffix = '';
+    while (value > 0) {
+      value -= 1;
+      suffix = String.fromCharCode(97 + (value % 26)) + suffix;
+      value = Math.floor(value / 26);
+    }
+    return suffix;
+  }
+
+  function glueFlapBaseAngle(preset) {
+    return latticeForPreset(preset).shape === 'hex' ? 60 : 45;
+  }
+
+  function straightGlueFlapGroupGeometry(geom, preset, entries) {
+    if (latticeForPreset(preset).shape !== 'square' || !Array.isArray(entries) || entries.length < 2) return null;
+    const first = straightGlueFlapGeometry(geom, preset, entries.map((entry) => entry.pair.first), true);
+    const second = straightGlueFlapGeometry(geom, preset, entries.map((entry) => entry.pair.second), false);
+    return first && second ? { first, second } : null;
+  }
+
+  function straightGlueFlapGeometry(geom, preset, edges, outward) {
+    const flaps = edges.map((edge) => glueFlapGeometry(geom, preset, edge, outward));
+    if (flaps.some((flap) => !flap)) return null;
+    const reference = flaps[0];
+    const tangent = reference.tangent;
+    const normal = reference.normal;
+    const origin = reference.segment.start;
+    const lineTolerance = Math.max(0.5, geom.radius * 0.04);
+    const gapTolerance = Math.max(3, geom.radius * 0.18);
+    const intervals = [];
+    for (const flap of flaps) {
+      const tangentAlignment = Math.abs((flap.tangent.x * tangent.x) + (flap.tangent.y * tangent.y));
+      const normalAlignment = (flap.normal.x * normal.x) + (flap.normal.y * normal.y);
+      if (tangentAlignment < 0.999 || normalAlignment < 0.999) return null;
+      const projections = [flap.segment.start, flap.segment.end].map((point) => {
+        const dx = point.x - origin.x;
+        const dy = point.y - origin.y;
+        if (Math.abs((dx * normal.x) + (dy * normal.y)) > lineTolerance) return null;
+        return (dx * tangent.x) + (dy * tangent.y);
+      });
+      if (projections.some((value) => value == null)) return null;
+      intervals.push({ min: Math.min(...projections), max: Math.max(...projections) });
+    }
+    intervals.sort((left, right) => left.min - right.min);
+    for (let index = 1; index < intervals.length; index += 1) {
+      if (intervals[index].min - intervals[index - 1].max > gapTolerance) return null;
+    }
+    const min = intervals[0].min;
+    const max = intervals[intervals.length - 1].max;
+    const length = max - min;
+    if (length <= reference.length * 1.25) return null;
+    const segment = {
+      start: { x: origin.x + (tangent.x * min), y: origin.y + (tangent.y * min) },
+      end: { x: origin.x + (tangent.x * max), y: origin.y + (tangent.y * max) }
+    };
+    const depth = Math.min(...flaps.map((flap) => flap.depth));
+    const inset = depth / Math.tan(reference.angle * Math.PI / 180);
+    return makeGlueFlapGeometry(segment, tangent, normal, length, depth, inset, reference.angle);
+  }
+
+  function glueFlapGeometry(geom, preset, edge, outward = true) {
+    if (!geom || !edge) return null;
+    const segment = edgeSegment(geom, edge.row, edge.col, edge.dir);
+    const cell = geom.cells[indexOf(edge.row, edge.col, geom.cols)];
+    if (!segment || !cell) return null;
+    const dx = segment.end.x - segment.start.x;
+    const dy = segment.end.y - segment.start.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 0.001) return null;
+    const tangent = { x: dx / length, y: dy / length };
+    const midpoint = {
+      x: (segment.start.x + segment.end.x) / 2,
+      y: (segment.start.y + segment.end.y) / 2
+    };
+    const normalLength = Math.hypot(midpoint.x - cell.x, midpoint.y - cell.y);
+    if (normalLength < 0.001) return null;
+    const direction = outward ? 1 : -1;
+    const normal = {
+      x: ((midpoint.x - cell.x) / normalLength) * direction,
+      y: ((midpoint.y - cell.y) / normalLength) * direction
+    };
+    const angle = glueFlapBaseAngle(preset);
+    const angleRadians = angle * Math.PI / 180;
+    const maxShapeDepth = length * 0.45 * Math.tan(angleRadians);
+    let depth = Math.min(length * GLUE_FLAP_DEPTH_RATIO, maxShapeDepth);
+    depth = Math.min(depth, glueFlapCanvasDepthLimit(geom, segment, tangent, normal, angleRadians));
+    if (depth < 0.001) return null;
+    const inset = depth / Math.tan(angleRadians);
+    return makeGlueFlapGeometry(segment, tangent, normal, length, depth, inset, angle);
+  }
+
+  function glueFlapCanvasDepthLimit(geom, segment, tangent, normal, angleRadians) {
+    const inverseTan = 1 / Math.tan(angleRadians);
+    const padding = Math.max(0.5, geom.radius * 0.015);
+    const width = Number(geom.baseWidth) > 0 ? geom.baseWidth : geom.width;
+    const height = Number(geom.baseHeight) > 0 ? geom.baseHeight : geom.height;
+    const bounds = { minX: padding, minY: padding, maxX: width - padding, maxY: height - padding };
+    return Math.min(
+      glueFlapPointDepthLimit(segment.start, {
+        x: normal.x + (tangent.x * inverseTan),
+        y: normal.y + (tangent.y * inverseTan)
+      }, bounds),
+      glueFlapPointDepthLimit(segment.end, {
+        x: normal.x - (tangent.x * inverseTan),
+        y: normal.y - (tangent.y * inverseTan)
+      }, bounds)
+    );
+  }
+
+  function glueFlapPointDepthLimit(point, vector, bounds) {
+    let limit = Infinity;
+    if (vector.x > 0.000001) limit = Math.min(limit, (bounds.maxX - point.x) / vector.x);
+    else if (vector.x < -0.000001) limit = Math.min(limit, (bounds.minX - point.x) / vector.x);
+    if (vector.y > 0.000001) limit = Math.min(limit, (bounds.maxY - point.y) / vector.y);
+    else if (vector.y < -0.000001) limit = Math.min(limit, (bounds.minY - point.y) / vector.y);
+    return Math.max(0, limit);
+  }
+
+  function makeGlueFlapGeometry(segment, tangent, normal, length, depth, inset, angle) {
+    const midpoint = {
+      x: (segment.start.x + segment.end.x) / 2,
+      y: (segment.start.y + segment.end.y) / 2
+    };
+    const shortStart = {
+      x: segment.start.x + (normal.x * depth) + (tangent.x * inset),
+      y: segment.start.y + (normal.y * depth) + (tangent.y * inset)
+    };
+    const shortEnd = {
+      x: segment.end.x + (normal.x * depth) - (tangent.x * inset),
+      y: segment.end.y + (normal.y * depth) - (tangent.y * inset)
+    };
+    return {
+      points: [segment.start, segment.end, shortEnd, shortStart],
+      segment,
+      tangent,
+      normal,
+      length,
+      depth,
+      inset,
+      angle,
+      labelPoint: {
+        x: midpoint.x + (normal.x * depth * 0.5),
+        y: midpoint.y + (normal.y * depth * 0.5)
+      },
+      labelWidth: Math.max(0, length - inset * 2)
+    };
+  }
+
+  function drawGlueFlapBoundaryEdge(ctx, geom, preset, edge, color, label, reverse, outward, options = {}) {
+    const flap = glueFlapGeometry(geom, preset, edge, outward);
+    if (!flap) return;
+    drawGlueFlapShape(ctx, geom, flap, color, outward, options);
+    drawGlueFlapLabel(ctx, geom, flap, label, color, reverse);
+  }
+
+  function drawGlueFlapShape(ctx, geom, flap, color, outward, options = {}) {
+    const fullLineWidth = Math.max(1.8, geom.radius * 0.055) * 1.15;
+    const emphasis = Math.max(0.55, Math.min(1, Number(options.flapStrokeScale) || 0.55));
+    const lineWidth = fullLineWidth * emphasis;
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    drawGlueFlapPath(ctx, flap.points);
+    if (outward) {
+      ctx.globalAlpha *= Math.max(0.05, Math.min(0.35, Number(options.flapFillAlpha) || 0.14));
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.restore();
+      ctx.save();
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      drawGlueFlapPath(ctx, flap.points);
+    }
+    ctx.setLineDash(outward ? [] : [Math.max(3, lineWidth * 2.2), Math.max(2, lineWidth * 1.7)]);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function drawGlueFlapPath(ctx, points) {
+    if (!Array.isArray(points) || points.length < 4) return;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let index = 1; index < points.length; index += 1) ctx.lineTo(points[index].x, points[index].y);
+    ctx.closePath();
+  }
+
+  function drawGlueFlapLabel(ctx, geom, flap, label, color, reverse) {
+    const text = String(label || '');
+    if (!text || !flap || !flap.labelPoint) return;
+    let fontSize = Math.max(0.5, Math.min(geom.radius * 0.28, flap.depth * 0.72));
+    ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+    const metrics = typeof ctx.measureText === 'function' ? ctx.measureText(text) : null;
+    const measuredWidth = metrics && Number(metrics.width);
+    const maxWidth = flap.labelWidth * 0.82;
+    if (Number.isFinite(measuredWidth) && measuredWidth > maxWidth && maxWidth > 0) fontSize *= maxWidth / measuredWidth;
+    const cssScale = Number(geom.cssScale) > 0 ? Number(geom.cssScale) : 1;
+    if (fontSize * cssScale < MIN_GLUE_FLAP_LABEL_CSS_PX || maxWidth <= 0) return;
+    ctx.save();
+    ctx.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
+    ctx.translate(flap.labelPoint.x, flap.labelPoint.y);
+    ctx.rotate(Math.atan2(flap.tangent.y, flap.tangent.x) + (reverse ? Math.PI : 0));
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = color;
+    ctx.fillText(text, 0, 0);
     ctx.restore();
   }
 
@@ -28636,6 +28974,10 @@
     return !!(refs.showBoardCoordinates && refs.showBoardCoordinates.checked);
   }
 
+  function shouldShowGlueFlaps() {
+    return !!(refs.showGlueFlaps && refs.showGlueFlaps.checked);
+  }
+
   function shouldShowMoveNumberLabels(state = game) {
     return !!(supportsMoveNumberLabels(state) && refs.moveNumberLabels && refs.moveNumberLabels.checked);
   }
@@ -30379,6 +30721,12 @@
       refs.gomokuSize.step = '1';
     }
     if (refs.placementDisplayRow) refs.placementDisplayRow.hidden = false;
+    if (refs.glueFlapsRow) {
+      const glueFlapPresets = [selectedPreset(), game && game.preset].filter(Boolean);
+      refs.glueFlapsRow.hidden = !glueFlapPresets.some((preset) => (
+        Array.isArray(preset.gluedEdges) && preset.gluedEdges.length
+      ));
+    }
     if (refs.moveNumberLabelRow) refs.moveNumberLabelRow.hidden = !(modeGomoku || modeConnectFour || modeGo);
     const placementRayHintsAvailable = modeGomoku || modeConnectFour;
     if (refs.placementHintHighlightRow) refs.placementHintHighlightRow.hidden = !placementRayHintsAvailable;
@@ -31145,6 +31493,10 @@
 
   function hoveredGlueBoundaryAtPoint(preset, geom, point, options = {}) {
     if (!preset || !geom || !point || !Array.isArray(preset.gluedEdges)) return null;
+    const flapMode = Object.prototype.hasOwnProperty.call(options, 'glueFlaps')
+      ? !!options.glueFlaps
+      : shouldShowGlueFlaps();
+    if (flapMode) return hoveredGlueFlapAtPoint(preset, geom, point, options);
     const threshold = Number.isFinite(options.threshold)
       ? Math.max(0, options.threshold)
       : Math.max(8, (geom.radius || 0) * 0.2);
@@ -31173,6 +31525,73 @@
       });
     });
     return best;
+  }
+
+  function hoveredGlueFlapAtPoint(preset, geom, point, options = {}) {
+    const tolerance = Number.isFinite(options.threshold)
+      ? Math.max(0, options.threshold)
+      : Math.max(3, (geom.radius || 0) * 0.12);
+    let best = null;
+    const consider = (flap, pairIndex, half, edge, groupKey) => {
+      const score = glueFlapHitScore(point, flap, tolerance);
+      if (score == null || (best && best.distance <= score)) return;
+      const pair = preset.gluedEdges[pairIndex];
+      best = {
+        group: Number.isInteger(pair && pair.group) ? pair.group : null,
+        groupKey,
+        edgeKey: boundaryEdgeKey(edge, preset.cols),
+        pairIndex,
+        half,
+        presetKey: glueHoverPresetKey(preset),
+        distance: score,
+        threshold: tolerance
+      };
+    };
+    glueFlapIndexedGroups(preset.gluedEdges).forEach((entries, groupKey) => {
+      const combined = straightGlueFlapGroupGeometry(geom, preset, entries);
+      if (!combined) return;
+      ['first', 'second'].forEach((half) => {
+        const flap = combined[half];
+        const score = glueFlapHitScore(point, flap, tolerance);
+        if (score == null || (best && best.distance <= score)) return;
+        let nearest = null;
+        entries.forEach((entry) => {
+          const edge = entry.pair[half];
+          const segment = edgeSegment(geom, edge.row, edge.col, edge.dir);
+          const distance = pointSegmentDistance(point, segment.start, segment.end);
+          if (!nearest || distance < nearest.distance) nearest = { entry, edge, distance };
+        });
+        if (nearest) consider(flap, nearest.entry.pairIndex, half, nearest.edge, groupKey);
+      });
+    });
+    preset.gluedEdges.forEach((pair, pairIndex) => {
+      const groupKey = gluePairGroupKey(pair, pairIndex);
+      [
+        { half: 'first', edge: pair.first, outward: true },
+        { half: 'second', edge: pair.second, outward: false }
+      ].forEach((entry) => {
+        if (!entry.edge) return;
+        consider(
+          glueFlapGeometry(geom, preset, entry.edge, entry.outward),
+          pairIndex,
+          entry.half,
+          entry.edge,
+          groupKey
+        );
+      });
+    });
+    return best;
+  }
+
+  function glueFlapHitScore(point, flap, tolerance) {
+    if (!flap || !Array.isArray(flap.points)) return null;
+    if (pointInPolygon(point, flap.points)) return 0;
+    let distance = Infinity;
+    flap.points.forEach((start, index) => {
+      const end = flap.points[(index + 1) % flap.points.length];
+      distance = Math.min(distance, pointSegmentDistance(point, start, end));
+    });
+    return distance <= tolerance ? distance : null;
   }
 
   function hoveredGlueEdgeKeys(preset, hover) {
@@ -31780,6 +32199,18 @@
       wrappedCoverDescriptor,
       wrappedCoverSeamResidual,
       drawGlueEdges,
+      glueFlapPairLabels,
+      alphabeticGlueFlapSuffix,
+      glueFlapBaseAngle,
+      glueFlapGeometry,
+      straightGlueFlapGroupGeometry,
+      glueFlapHitScore,
+      canvasBackingMetrics,
+      shouldShowGlueFlaps,
+      setGlueFlapsForTest(value) {
+        refs.showGlueFlaps = refs.showGlueFlaps || {};
+        refs.showGlueFlaps.checked = !!value;
+      },
       wrappedHexCutoutMode,
       wrappedHexGlueContextOverlayActive,
       wrappedFideChessPuzzleTrayOverlayActive,
