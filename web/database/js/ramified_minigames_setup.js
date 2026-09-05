@@ -14986,16 +14986,8 @@
         drawGlueFlapShape(ctx, geom, combined.first, color, true, shapeOptions);
         drawGlueFlapShape(ctx, geom, combined.second, color, false, shapeOptions);
         const groupLabel = String(labels[representative.pairIndex] || '').replace(/[a-z]+$/i, '');
-        const labelShift = entries.length % 2 === 0 ? combined.first.depth * 0.8 : 0;
-        const shifted = (flap) => ({
-          ...flap,
-          labelPoint: {
-            x: flap.labelPoint.x + (combined.first.tangent.x * labelShift),
-            y: flap.labelPoint.y + (combined.first.tangent.y * labelShift)
-          }
-        });
-        drawGlueFlapLabel(ctx, geom, shifted(combined.first), groupLabel, color, glueFirstArrowReversed(representative.pair));
-        drawGlueFlapLabel(ctx, geom, shifted(combined.second), groupLabel, color, glueSecondArrowReversed(representative.pair));
+        drawGlueFlapLabel(ctx, geom, combined.first, groupLabel, color, glueFirstArrowReversed(representative.pair));
+        drawGlueFlapLabel(ctx, geom, combined.second, groupLabel, color, glueSecondArrowReversed(representative.pair));
         return;
       }
       entries.forEach(({ pair, pairIndex }) => {

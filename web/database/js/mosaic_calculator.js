@@ -26220,24 +26220,16 @@
           drawGlueFlapShape(ctx, combined.second, color, false, options);
           const representative = entries[0];
           const groupLabel = String(labels[representative.pairIndex] || '').replace(/[a-z]+$/i, '');
-          const labelShift = entries.length % 2 === 0 ? combined.first.depth * 0.8 : 0;
-          const shiftedLabelGeometry = (flap) => ({
-            ...flap,
-            labelPoint: {
-              x: flap.labelPoint.x + (combined.first.tangent.x * labelShift),
-              y: flap.labelPoint.y + (combined.first.tangent.y * labelShift)
-            }
-          });
           drawGlueFlapLabel(
             ctx,
-            shiftedLabelGeometry(combined.first),
+            combined.first,
             groupLabel,
             color,
             gluePairFirstArrowReversed(representative.pair)
           );
           drawGlueFlapLabel(
             ctx,
-            shiftedLabelGeometry(combined.second),
+            combined.second,
             groupLabel,
             color,
             gluePairSecondArrowReversed(representative.pair)

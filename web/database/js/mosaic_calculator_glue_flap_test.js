@@ -238,16 +238,17 @@ function testStraightSquareGroupsUseCombinedTrapezoids() {
     lattice: 'square',
     boundary: 'glued',
     showGlueFlaps: true,
+    removedTiles: [{ row: 2, col: 1 }, { row: 2, col: 2 }],
     gluedEdges: [
       {
         group: 17,
         first: { row: 1, col: 3, dir: 0 },
-        second: { row: 1, col: 1, dir: 2 }
+        second: { row: 3, col: 2, dir: 3 }
       },
       {
         group: 17,
         first: { row: 2, col: 3, dir: 0 },
-        second: { row: 2, col: 1, dir: 2 }
+        second: { row: 3, col: 1, dir: 3 }
       }
     ]
   });
@@ -274,6 +275,12 @@ function testStraightSquareGroupsUseCombinedTrapezoids() {
     rendered.calls.filter((call) => call.method === 'fillText').map((call) => call.args[0]),
     ['1', '1']
   );
+  const labelTranslations = rendered.calls.filter((call) => call.method === 'translate');
+  assert.strictEqual(labelTranslations.length, 2);
+  assert.ok(nearlyEqual(labelTranslations[0].args[0], combined.first.labelPoint.x));
+  assert.ok(nearlyEqual(labelTranslations[0].args[1], combined.first.labelPoint.y));
+  assert.ok(nearlyEqual(labelTranslations[1].args[0], combined.second.labelPoint.x));
+  assert.ok(nearlyEqual(labelTranslations[1].args[1], combined.second.labelPoint.y));
 
   const bridgeHit = mosaic.glueFlapHoverAtBoardPoint(combined.first.labelPoint);
   assert.ok(bridgeHit);
@@ -384,7 +391,7 @@ function testDisplayExportAndMarkup() {
   const html = fs.readFileSync(require.resolve('../mosaic_calculator.html'), 'utf8');
   assert.ok(html.includes('id="show-glue-flaps"'));
   assert.ok(!html.includes('id="glue-flap-base-angle"'));
-  assert.ok(html.includes('js/mosaic_calculator.js?v=glue-flaps-3'));
+  assert.ok(html.includes('js/mosaic_calculator.js?v=glue-flaps-4'));
 }
 
 testLatticeDerivedGeometry();

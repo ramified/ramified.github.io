@@ -19,6 +19,24 @@ function loadBrowserApi() {
 const game = loadBrowserApi();
 const test = game.__test;
 
+function testSessionOnlyDisplayControlMarkup() {
+  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  const source = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
+  const locales = fs.readFileSync(require.resolve('./i18n/ramified_minigames_locales.js'), 'utf8');
+  const tileStyleIndex = html.indexOf('id="gomoku-display-row"');
+  const glueFlapsIndex = html.indexOf('id="glue-flaps-row" hidden');
+  assert.ok(tileStyleIndex >= 0 && glueFlapsIndex > tileStyleIndex);
+  assert.ok(glueFlapsIndex < html.indexOf('id="lianliankan-tile-set-row"'));
+  assert.ok(html.includes('id="show-glue-flaps" data-i18n-aria-label="access.glueFlaps"'));
+  assert.ok(!/<input[^>]+id="show-glue-flaps"[^>]+checked/.test(html));
+  assert.ok(html.includes('js/i18n/ramified_minigames_locales.js?v=20260905-1'));
+  assert.ok(html.includes('js/ramified_minigames_setup.js?v=20260905-2'));
+  assert.ok(source.indexOf("'glue-flaps-row'") > source.indexOf("'gomoku-display-row'"));
+  assert.ok(locales.includes("'access.glueFlaps': ['Show glue flaps', '显示粘合片']"));
+  assert.ok(locales.includes("'setup.gluedBoundary': ['Glued boundary', '粘合边界']"));
+  assert.ok(locales.includes("'setup.glueFlaps': ['Glue flaps', '粘合片']"));
+}
+
 function makeContext() {
   const calls = [];
   const stack = [];
@@ -148,7 +166,7 @@ function testLabelsAndStraightAggregation() {
   const pairs = [1, 2].map((row) => pair(
     17,
     { row, col: 3, dir: game.DIRS.E },
-    { row, col: 1, dir: game.DIRS.W }
+    { row: 3, col: 3 - row, dir: game.DIRS.N }
   ));
   const preset = squarePreset(pairs);
   const geometry = test.buildGeometry(preset, 300, 28, 1);
@@ -168,6 +186,14 @@ function testLabelsAndStraightAggregation() {
   test.drawGlueEdges(rendered.context, geometry, preset, null);
   assert.strictEqual(rendered.calls.filter((call) => call.method === 'stroke').length, 2);
   assert.deepStrictEqual(rendered.calls.filter((call) => call.method === 'fillText').map((call) => call.args[0]), ['1', '1']);
+  const labelTranslations = rendered.calls.filter((call) => call.method === 'translate');
+  assert.strictEqual(labelTranslations.length, 2);
+  assert.ok(nearlyEqual(labelTranslations[0].args[0], combined.first.labelPoint.x));
+  assert.ok(nearlyEqual(labelTranslations[0].args[1], combined.first.labelPoint.y));
+  assert.ok(nearlyEqual(labelTranslations[1].args[0], combined.second.labelPoint.x));
+  assert.ok(nearlyEqual(labelTranslations[1].args[1], combined.second.labelPoint.y));
+  assert.strictEqual(test.glueFlapHitScore(combined.first.labelPoint, combined.first, 0), 0);
+  assert.strictEqual(test.glueFlapHitScore(combined.second.labelPoint, combined.second, 0), 0);
 }
 
 function testRenderingDirectionsCutoffAndArrowFallback() {
@@ -191,6 +217,18 @@ function testRenderingDirectionsCutoffAndArrowFallback() {
   assert.ok(nearlyEqual(rotations[1], Math.PI / 2));
   assert.strictEqual(flap.calls.filter((call) => call.method === 'strokeText').length, 0);
   assert.strictEqual(flap.calls.filter((call) => call.property === 'shadowBlur').length, 0);
+
+  const unreversedPreset = squarePreset([pair(
+    8,
+    { row: 1, col: 3, dir: game.DIRS.E },
+    { row: 1, col: 1, dir: game.DIRS.W },
+    { firstArrowReversed: false, secondArrowReversed: false }
+  )]);
+  const unreversed = makeContext();
+  test.drawGlueEdges(unreversed.context, geometry, unreversedPreset, null);
+  const unreversedRotations = unreversed.calls.filter((call) => call.method === 'rotate').map((call) => call.args[0]);
+  assert.ok(nearlyEqual(unreversedRotations[0], Math.PI / 2));
+  assert.ok(nearlyEqual(unreversedRotations[1], -Math.PI / 2));
 
   geometry.cssScale = 0.4;
   const tiny = makeContext();
@@ -256,6 +294,7 @@ function testCanvasBackingMetrics() {
   assert.strictEqual(nonUniform.cssScale, 1.4);
 }
 
+testSessionOnlyDisplayControlMarkup();
 testGeometryAndContainment();
 testLabelsAndStraightAggregation();
 testRenderingDirectionsCutoffAndArrowFallback();
