@@ -2549,6 +2549,7 @@
     cloneState,
     createState,
     defaultBallOrientation,
+    drawSetupHover,
     eraseAt,
     indexOf,
     latticeInfo,

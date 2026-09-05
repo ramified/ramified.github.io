@@ -522,7 +522,7 @@
       'js/billiards/topological_billiards_math.js?v=20260823-1',
       'js/billiards/topological_billiards_physics.js?v=20260823-1',
       'js/billiards/topological_billiards_renderer.js?v=20260823-6',
-      'js/billiards/topological_billiards_native.js?v=20260826-1'
+      'js/billiards/topological_billiards_native.js?v=20260905-1'
     ]),
     [GAME_MODES.LIANLIANKAN]: Object.freeze([
       'lianliankan/lianliankan_engine.js?v=20260830-1',
@@ -713,6 +713,8 @@
   let billiardsDragPower = 0;
   let billiardsSpinContact = { x: 0, y: 0 };
   let billiardsSetupHover = null;
+  let billiardsSnapBypass = false;
+  let billiardsLastPointerClient = null;
   let billiardsCueGuidanceDismissed = false;
   let billiardsCueHintUntil = 0;
   let billiardsCueGuidanceFrame = null;
@@ -1204,6 +1206,8 @@
         clearHexHover();
         clearPlacementReachAssist(true);
         clearPlacementHover();
+        billiardsLastPointerClient = null;
+        billiardsSetupHover = null;
       });
       refs.canvas.addEventListener('blur', () => {
         clearGlueHover();
@@ -1218,6 +1222,8 @@
       refs.canvas.addEventListener('pointerleave', () => {
         clearPlacementReachAssist(true);
         clearPlacementHover();
+        billiardsLastPointerClient = null;
+        billiardsSetupHover = null;
       });
       refs.canvas.addEventListener('lostpointercapture', handleCanvasLostPointerCapture);
       refs.canvas.addEventListener('wheel', handleWrappedViewWheel, { passive: false });
@@ -1240,6 +1246,7 @@
     window.addEventListener('blur', () => {
       clearKeyboardState();
       clearPlacementReachAssist(true);
+      billiardsSnapBypass = false;
     });
     window.addEventListener('resize', handleWindowResize);
     if (window.visualViewport && typeof window.visualViewport.addEventListener === 'function') {
@@ -4729,6 +4736,7 @@
   }
 
   function updateBilliardsPaletteDragHover(event) {
+    rememberBilliardsPointer(event);
     if (!billiardsCanvasContainsClientPoint(event.clientX, event.clientY)) {
       if (billiardsSetupHover) {
         billiardsSetupHover = null;
@@ -4737,7 +4745,7 @@
       return;
     }
     const canvasPoint = canvasPointFromEvent(event);
-    const local = billiardsLocalFromEvent(event);
+    const local = billiardsPlacementLocalFromEvent(event, billiardsPaletteDrag && billiardsPaletteDrag.choice);
     billiardsSetupHover = billiardsSetupHoverPreview(local, canvasPoint);
     render();
   }
@@ -4752,7 +4760,7 @@
       syncCanvasCursor();
       syncStatus(
         tk('runtime.billiardsRackCenter', 'rack center selected'),
-        tk('runtime.billiardsRackChooseDirection', 'click a second point to set the rack direction'),
+        billiardsSnapGuidance(tk('runtime.billiardsRackChooseDirection', 'click a second point to set the rack direction')),
         'setup'
       );
       render();
@@ -4807,7 +4815,8 @@
       button.classList.remove('dragging');
       if (active) billiardsPaletteSuppressClickUntil = now() + 180;
       if (active && billiardsCanvasContainsClientPoint(upEvent.clientX, upEvent.clientY)) {
-        const local = billiardsLocalFromEvent(upEvent);
+        rememberBilliardsPointer(upEvent);
+        const local = billiardsPlacementLocalFromEvent(upEvent, choice);
         placeBilliardsPaletteChoiceAt(choice, local);
       }
       if (!active) return;
@@ -5332,6 +5341,7 @@
   }
 
   function handleKeydown(event) {
+    updateBilliardsSnapModifier(event, true);
     const key = normalizeKeyboardKey(event.code || event.key);
     if (fullscreenSettingsOpen) {
       if (key === 'Escape') {
@@ -5366,6 +5376,7 @@
   }
 
   function handleKeyup(event) {
+    updateBilliardsSnapModifier(event, false);
     if (fullscreenSettingsOpen) return;
     forgetKeyboardKey(normalizeKeyboardKey(event.code || event.key));
   }
@@ -5862,6 +5873,70 @@
     return Billiards.canvasToLocal(canvasPointFromEvent(event), geometry, game.atlas);
   }
 
+  function billiardsSnapScale() {
+    if (!refs.canvas || !geometry || !refs.canvas.getBoundingClientRect) return { cssScaleX: 1, cssScaleY: 1 };
+    const rect = refs.canvas.getBoundingClientRect();
+    const viewScale = wrappedViewIsActive()
+      ? Math.max(WRAPPED_VIEW_MIN_SCALE, Math.min(WRAPPED_VIEW_MAX_SCALE, wrappedViewCamera().scale))
+      : 1;
+    return {
+      cssScaleX: (rect.width / Math.max(1, geometry.width)) * viewScale,
+      cssScaleY: (rect.height / Math.max(1, geometry.height)) * viewScale
+    };
+  }
+
+  function billiardsPlacementLocalFromEvent(event, selection = billiardsBallSelection) {
+    const local = billiardsLocalFromEvent(event);
+    if (!local || !Billiards || !Billiards.magneticSnapPoint || (selection && selection.kind === 'pocket')) return local;
+    const disabled = event ? !!event.ctrlKey : billiardsSnapBypass;
+    return Billiards.magneticSnapPoint(
+      game.atlas,
+      local.tileIndex,
+      local.position,
+      geometry,
+      { ...billiardsSnapScale(), disabled }
+    );
+  }
+
+  function rememberBilliardsPointer(event) {
+    if (!event || !Number.isFinite(Number(event.clientX)) || !Number.isFinite(Number(event.clientY))) return;
+    billiardsLastPointerClient = { x: Number(event.clientX), y: Number(event.clientY) };
+    billiardsSnapBypass = !!event.ctrlKey;
+  }
+
+  function updateBilliardsSnapModifier(event, pressed) {
+    const key = String(event && (event.key || event.code) || '').toLowerCase();
+    if (key !== 'control' && key !== 'controlleft' && key !== 'controlright') return false;
+    const next = !!pressed;
+    if (next === billiardsSnapBypass) return false;
+    billiardsSnapBypass = next;
+    if (!billiardsLastPointerClient || !isBilliardsGame(game)) return true;
+    const synthetic = {
+      clientX: billiardsLastPointerClient.x,
+      clientY: billiardsLastPointerClient.y,
+      ctrlKey: billiardsSnapBypass
+    };
+    const canvasPoint = canvasPointFromEvent(synthetic);
+    if (game.phase === 'setup') {
+      const selection = billiardsPointer && billiardsPointer.kind === 'move'
+        ? { kind: 'ball' }
+        : (billiardsRackSelection ? { kind: 'rack' } : billiardsBallSelection);
+      const local = billiardsPlacementLocalFromEvent(synthetic, selection);
+      if (billiardsPointer && billiardsPointer.kind === 'move') {
+        billiardsPointer.current = local;
+        billiardsSetupHover = billiardsMoveHoverPreview(local, billiardsPointer, canvasPoint);
+      } else {
+        billiardsSetupHover = billiardsSetupHoverPreview(local, canvasPoint);
+      }
+      render();
+    } else if (game.phase === 'ball-in-hand') {
+      const local = billiardsPlacementLocalFromEvent(synthetic, { kind: 'cue' });
+      billiardsSetupHover = billiardsBallInHandHoverPreview(local, canvasPoint);
+      render();
+    }
+    return true;
+  }
+
   function billiardsShotDragFromDisplayPoints(cuePoint, cursorPoint, profile = null, copyU = 0) {
     if (!cuePoint || !cursorPoint) return null;
     const pull = {
@@ -5927,6 +6002,27 @@
       canvasPoint
     };
     preview.label = billiardsSetupHoverLabel(preview, null);
+    return preview;
+  }
+
+  function billiardsBallInHandHoverPreview(local, canvasPoint) {
+    if (!local || !Billiards || !isBilliardsGame(game) || game.phase !== 'ball-in-hand') return null;
+    const player = onlineIsInRoom() && onlineState ? onlineState.role : game.ballInHandPlayer;
+    const result = Billiards.placeCueBallInHand(game, local.tileIndex, local.position, player);
+    const preview = {
+      type: 'ball',
+      kind: 'cue',
+      tileIndex: local.tileIndex,
+      position: { ...local.position },
+      radius: game.ballRadius,
+      valid: !!(result && result.changed),
+      action: 'move',
+      message: result && result.message ? result.message : 'choose a point inside an existing tile',
+      canvasPoint
+    };
+    preview.label = preview.valid
+      ? tk('runtime.billiardsHoverPlaceCue', 'click to place cue ball')
+      : billiardsSetupHoverLabel(preview, null);
     return preview;
   }
 
@@ -6298,6 +6394,7 @@
 
   function handleBilliardsPointerDown(event) {
     if (!isBilliardsGame(game) || !Billiards || currentAnimation || billiardsShotPending) return false;
+    rememberBilliardsPointer(event);
     const local = billiardsLocalFromEvent(event);
     if (game.phase === 'setup') {
       if (!local) return false;
@@ -6347,7 +6444,19 @@
 
   function handleBilliardsPointerMove(event) {
     if (!isBilliardsGame(game) || !Billiards) return false;
-    const local = billiardsLocalFromEvent(event);
+    rememberBilliardsPointer(event);
+    const rawLocal = billiardsLocalFromEvent(event);
+    const placementSelection = billiardsPointer && billiardsPointer.kind === 'move'
+      ? { kind: 'ball' }
+      : (billiardsRackSelection ? { kind: 'rack' } : billiardsBallSelection);
+    const local = game.phase === 'setup' || game.phase === 'ball-in-hand'
+      ? billiardsPlacementLocalFromEvent(event, placementSelection)
+      : rawLocal;
+    if (game.phase === 'ball-in-hand' && !billiardsPointer) {
+      billiardsSetupHover = billiardsBallInHandHoverPreview(local, canvasPointFromEvent(event));
+      render();
+      return false;
+    }
     if (game.phase === 'setup' && !billiardsPointer) {
       const canvasPoint = canvasPointFromEvent(event);
       billiardsSetupHover = billiardsSetupHoverPreview(local, canvasPoint);
@@ -6394,7 +6503,8 @@
     billiardsPointer = null;
     releaseBilliardsPointer(event.pointerId);
     if (pointer.kind === 'move') {
-      const target = pointer.current;
+      rememberBilliardsPointer(event);
+      const target = billiardsPlacementLocalFromEvent(event, { kind: 'ball' }) || pointer.current;
       const releasePoint = canvasPointFromEvent(event);
       if (releasePoint && pointer.startCanvas && Math.hypot(releasePoint.x - pointer.startCanvas.x, releasePoint.y - pointer.startCanvas.y) > 4) {
         pointer.moved = true;
@@ -6695,8 +6805,15 @@
 
   function handleBilliardsCanvasClick(event) {
     if (!isBilliardsGame(game) || !Billiards || currentAnimation) return;
+    rememberBilliardsPointer(event);
     const canvasPoint = canvasPointFromEvent(event);
-    const local = billiardsLocalFromEvent(event);
+    const rawLocal = billiardsLocalFromEvent(event);
+    const placementSelection = billiardsRackSelection
+      ? { kind: 'rack' }
+      : (game.phase === 'ball-in-hand' ? { kind: 'cue' } : billiardsBallSelection);
+    const local = placementSelection && placementSelection.kind !== 'pocket'
+      ? billiardsPlacementLocalFromEvent(event, placementSelection)
+      : rawLocal;
     if (game.phase === 'ball-in-hand') {
       if (!local) return;
       const player = onlineIsInRoom() && onlineState ? onlineState.role : game.ballInHandPlayer;
@@ -6719,11 +6836,11 @@
         if (!local) return;
         billiardsRackCenter = { tileIndex: local.tileIndex, position: { ...local.position } };
         billiardsSetupHover = null;
-        syncStatus(tk('runtime.billiardsRackCenter', 'rack center selected'), tk('runtime.billiardsRackChooseDirection', 'click a second point to set the rack direction'), 'setup');
+        syncStatus(tk('runtime.billiardsRackCenter', 'rack center selected'), billiardsSnapGuidance(tk('runtime.billiardsRackChooseDirection', 'click a second point to set the rack direction')), 'setup');
         render();
         return;
       }
-      const rackDirection = billiardsRackDirectionFromCanvasPoint(canvasPoint);
+      const rackDirection = billiardsRackDirectionFromCanvasPoint(canvasPoint, !!event.ctrlKey);
       if (!rackDirection) {
         showSetupAlert(tk('runtime.billiardsRackDirection', 'choose a second point to set the rack direction'));
         return;
@@ -6755,7 +6872,7 @@
     }
   }
 
-  function billiardsRackDirectionFromCanvasPoint(point) {
+  function billiardsRackDirectionFromCanvasPoint(point, snapDisabled = billiardsSnapBypass) {
     if (!billiardsRackCenter || !point || !Billiards || !geometry) return null;
     const center = Billiards.localToCanvas(billiardsRackCenter.tileIndex, billiardsRackCenter.position, geometry, game.atlas);
     const scale = game.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
@@ -6764,14 +6881,20 @@
     const y = Number(point.y) - center.y;
     const length = Math.hypot(x, y);
     if (length <= scale * 0.04) return null;
+    const rawDirection = { x: x / length, y: y / length };
+    const snapped = Billiards.magneticSnapDirection
+      ? Billiards.magneticSnapDirection(rawDirection, { disabled: snapDisabled })
+      : { direction: rawDirection, snapped: false };
+    const direction = snapped ? snapped.direction : rawDirection;
     return {
-      direction: { x: x / length, y: y / length },
+      ...snapped,
+      direction,
       // This virtual local point maps back to the clicked canvas position.  It is
       // intentionally allowed outside the center tile so a second tile can set
       // the direction without changing where the rack is placed.
       directionPoint: {
-        x: Number(billiardsRackCenter.position.x) + x / scale,
-        y: Number(billiardsRackCenter.position.y) + y / scale
+        x: Number(billiardsRackCenter.position.x) + direction.x * (length / scale),
+        y: Number(billiardsRackCenter.position.y) + direction.y * (length / scale)
       }
     };
   }
@@ -6783,7 +6906,7 @@
       : null);
     if (!center) return null;
     const directionChoice = billiardsRackCenter
-      ? billiardsRackDirectionFromCanvasPoint(billiardsSetupHover && billiardsSetupHover.canvasPoint)
+      ? billiardsRackDirectionFromCanvasPoint(billiardsSetupHover && billiardsSetupHover.canvasPoint, billiardsSnapBypass)
       : null;
     return {
       count: billiardsRackSelection,
@@ -13351,7 +13474,7 @@
         return;
       }
       if (game.phase === 'ball-in-hand') {
-        syncStatus(tk('runtime.billiardsBallInHand', 'Billiards ball in hand'), tk('runtime.billiardsPlaceCue', '{{player}} places the cue ball', { player: billiardsPlayerLabel(game.ballInHandPlayer || game.turn) }), 'setup');
+        syncStatus(tk('runtime.billiardsBallInHand', 'Billiards ball in hand'), billiardsSnapGuidance(tk('runtime.billiardsPlaceCue', '{{player}} places the cue ball', { player: billiardsPlayerLabel(game.ballInHandPlayer || game.turn) })), 'setup');
         return;
       }
       if (game.phase === 'gameover') {
@@ -13556,7 +13679,15 @@
     const targets = billiardsCountLabel(targetCount, 'runtime.billiardsTargetOne', 'runtime.billiardsTargetMany', '{{count}} target', '{{count}} targets');
     const pockets = billiardsCountLabel(pocketCount, 'runtime.billiardsPocketOne', 'runtime.billiardsPocketMany', '{{count}} pocket', '{{count}} pockets');
     const suffix = issue ? tk('runtime.billiardsIssueSuffix', '; {{issue}}', { issue: localizedBilliardsIssue(issue) }) : '';
-    return tk('runtime.billiardsSetupSummary', '{{targets}}, {{pockets}}{{issue}}', { targets, pockets, issue: suffix });
+    return billiardsSnapGuidance(tk('runtime.billiardsSetupSummary', '{{targets}}, {{pockets}}{{issue}}', { targets, pockets, issue: suffix }));
+  }
+
+  function billiardsSnapGuidance(instruction) {
+    return tk(
+      'runtime.billiardsSnapGuidance',
+      '{{instruction}}; positions snap near tile centers or vertices and rack directions near 15° steps; hold Ctrl for free placement',
+      { instruction }
+    );
   }
 
   function billiardsScoreInfo(state) {
@@ -13798,7 +13929,7 @@
         aim: billiardsAim,
         dragPower: billiardsDragPower,
         assistance: refs.billiardsAssistance ? refs.billiardsAssistance.value : 'beginner',
-        setupHover: game.phase === 'setup' ? billiardsSetupHover : null,
+        setupHover: (game.phase === 'setup' || game.phase === 'ball-in-hand') ? billiardsSetupHover : null,
         rackPreview: game.phase === 'setup' ? billiardsRackPreview() : null,
         cuePrompt: !!(billiardsGuidance && billiardsGuidance.highlight),
         pulseTime: now(),
@@ -14993,6 +15124,7 @@
         };
         drawGlueFlapShape(ctx, geom, combined.first, color, true, shapeOptions);
         if (showTarget) drawGlueFlapShape(ctx, geom, combined.second, color, false, shapeOptions);
+        else drawGlueFlapTargetPlaceholder(ctx, geom, combined.second, color, shapeOptions);
         const groupLabel = String(labels[representative.pairIndex] || '').replace(/[a-z]+$/i, '');
         drawGlueFlapLabel(ctx, geom, combined.first, groupLabel, color, glueFirstArrowReversed(representative.pair));
         if (showTarget) {
@@ -15014,6 +15146,8 @@
           hover && hover.groupKey === groupKey && hover.pairIndex === pairIndex
         )) {
           drawGlueFlapBoundaryEdge(ctx, geom, preset, pair.second, color, labels[pairIndex], glueSecondArrowReversed(pair), false, shapeOptions);
+        } else {
+          drawGlueFlapTargetPlaceholder(ctx, geom, glueFlapGeometry(geom, preset, pair.second, false), color, shapeOptions);
         }
       });
     });
@@ -15221,6 +15355,25 @@
     ctx.setLineDash(outward ? [] : [Math.max(3, lineWidth * 2.2), Math.max(2, lineWidth * 1.7)]);
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function drawGlueFlapTargetPlaceholder(ctx, geom, flap, color, options = {}) {
+    if (!flap || !flap.segment) return;
+    const fullLineWidth = Math.max(1.8, geom.radius * 0.055) * 1.15;
+    const emphasis = Math.max(0.55, Math.min(1, Number(options.flapStrokeScale) || 0.55));
+    const lineWidth = fullLineWidth * emphasis;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.setLineDash([Math.max(3, lineWidth * 2.2), Math.max(2, lineWidth * 1.7)]);
+    ctx.beginPath();
+    ctx.moveTo(flap.segment.start.x, flap.segment.start.y);
+    ctx.lineTo(flap.segment.end.x, flap.segment.end.y);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
@@ -31552,8 +31705,10 @@
       : hoveredGlue;
     const combinedGroups = new Set();
     let best = null;
-    const consider = (flap, pairIndex, half, edge, groupKey) => {
-      const score = glueFlapHitScore(point, flap, tolerance);
+    const consider = (flap, pairIndex, half, edge, groupKey, placeholder = false) => {
+      const score = placeholder
+        ? glueFlapTargetPlaceholderHitScore(point, flap, tolerance)
+        : glueFlapHitScore(point, flap, tolerance);
       if (score == null || (best && best.distance <= score)) return;
       const pair = preset.gluedEdges[pairIndex];
       best = {
@@ -31571,11 +31726,16 @@
       const combined = straightGlueFlapGroupGeometry(geom, preset, entries);
       if (!combined) return;
       combinedGroups.add(groupKey);
-      const halves = ['first'];
-      if (!targetsOnHover || (activeHover && activeHover.groupKey === groupKey)) halves.push('second');
-      halves.forEach((half) => {
+      const targetVisible = !targetsOnHover || (activeHover && activeHover.groupKey === groupKey);
+      const halves = [
+        { half: 'first', placeholder: false },
+        { half: 'second', placeholder: !targetVisible }
+      ];
+      halves.forEach(({ half, placeholder }) => {
         const flap = combined[half];
-        const score = glueFlapHitScore(point, flap, tolerance);
+        const score = placeholder
+          ? glueFlapTargetPlaceholderHitScore(point, flap, tolerance)
+          : glueFlapHitScore(point, flap, tolerance);
         if (score == null || (best && best.distance <= score)) return;
         let nearest = null;
         entries.forEach((entry) => {
@@ -31584,20 +31744,21 @@
           const distance = pointSegmentDistance(point, segment.start, segment.end);
           if (!nearest || distance < nearest.distance) nearest = { entry, edge, distance };
         });
-        if (nearest) consider(flap, nearest.entry.pairIndex, half, nearest.edge, groupKey);
+        if (nearest) consider(flap, nearest.entry.pairIndex, half, nearest.edge, groupKey, placeholder);
       });
     });
     preset.gluedEdges.forEach((pair, pairIndex) => {
       const groupKey = gluePairGroupKey(pair, pairIndex);
       if (combinedGroups.has(groupKey)) return;
-      const members = [{ half: 'first', edge: pair.first, outward: true }];
-      if (!targetsOnHover || (
+      const targetVisible = !targetsOnHover || (
         activeHover
         && activeHover.groupKey === groupKey
         && activeHover.pairIndex === pairIndex
-      )) {
-        members.push({ half: 'second', edge: pair.second, outward: false });
-      }
+      );
+      const members = [
+        { half: 'first', edge: pair.first, outward: true, placeholder: false },
+        { half: 'second', edge: pair.second, outward: false, placeholder: !targetVisible }
+      ];
       members.forEach((entry) => {
         if (!entry.edge) return;
         consider(
@@ -31605,7 +31766,8 @@
           pairIndex,
           entry.half,
           entry.edge,
-          groupKey
+          groupKey,
+          entry.placeholder
         );
       });
     });
@@ -31620,6 +31782,12 @@
       const end = flap.points[(index + 1) % flap.points.length];
       distance = Math.min(distance, pointSegmentDistance(point, start, end));
     });
+    return distance <= tolerance ? distance : null;
+  }
+
+  function glueFlapTargetPlaceholderHitScore(point, flap, tolerance) {
+    if (!flap || !flap.segment) return null;
+    const distance = pointSegmentDistance(point, flap.segment.start, flap.segment.end);
     return distance <= tolerance ? distance : null;
   }
 
@@ -32178,6 +32346,8 @@
       billiardsCueCaptionLayout,
       billiardsCueGuidanceFlags,
       billiardsShotDragFromDisplayPoints,
+      billiardsPlacementLocalFromEvent,
+      updateBilliardsSnapModifier,
       canvasStartPromptCopy,
       onlineWaitingPromptCopy,
       updateOnlineRoomMetaFromMessage,
@@ -32286,6 +32456,10 @@
         clearLianliankanMatchEffects();
         game = state;
         syncLianliankanPronunciationContext();
+      },
+      setBilliardsInteractionGeometryForTest(value, canvas) {
+        geometry = value;
+        if (canvas) refs.canvas = canvas;
       },
       getGame() { return game; }
     }

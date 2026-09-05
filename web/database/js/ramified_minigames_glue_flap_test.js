@@ -31,8 +31,8 @@ function testSessionOnlyDisplayControlMarkup() {
   assert.ok(!/<input[^>]+id="show-glue-flaps"[^>]+checked/.test(html));
   assert.ok(html.includes('id="glue-flap-target-on-hover" checked data-i18n-aria-label="access.glueFlapTargetOnHover"'));
   assert.ok(/class="glue-flap-controls"[\s\S]*id="show-glue-flaps"[\s\S]*id="glue-flap-target-on-hover"/.test(html));
-  assert.ok(html.includes('js/i18n/ramified_minigames_locales.js?v=20260905-3'));
-  assert.ok(html.includes('js/ramified_minigames_setup.js?v=20260905-3'));
+  assert.ok(html.includes('js/i18n/ramified_minigames_locales.js?v=20260905-4'));
+  assert.ok(html.includes('js/ramified_minigames_setup.js?v=20260905-5'));
   assert.ok(source.indexOf("'glue-flaps-row'") > source.indexOf("'gomoku-display-row'"));
   assert.ok(locales.includes("'access.glueFlaps': ['Show glue flaps', '显示粘合片']"));
   assert.ok(locales.includes("'setup.gluedBoundary': ['Glued boundary', '粘合边界']"));
@@ -199,6 +199,17 @@ function testLabelsAndStraightAggregation() {
   assert.ok(nearlyEqual(labelTranslations[1].args[1], combined.second.labelPoint.y));
   assert.strictEqual(test.glueFlapHitScore(combined.first.labelPoint, combined.first, 0), 0);
   assert.strictEqual(test.glueFlapHitScore(combined.second.labelPoint, combined.second, 0), 0);
+
+  test.setGlueFlapTargetOnHoverForTest(true);
+  const hiddenTarget = makeContext();
+  test.drawGlueEdges(hiddenTarget.context, geometry, preset, null);
+  assert.strictEqual(hiddenTarget.calls.filter((call) => call.method === 'stroke').length, 2, 'the combined target uses one continuous placeholder');
+  assert.deepStrictEqual(hiddenTarget.calls.filter((call) => call.method === 'fillText').map((call) => call.args[0]), ['1']);
+  const targetHover = game.hoveredGlueBoundaryAtPoint(preset, geometry, {
+    x: (combined.second.segment.start.x + combined.second.segment.end.x) / 2,
+    y: (combined.second.segment.start.y + combined.second.segment.end.y) / 2
+  }, { glueFlaps: true, targetOnHover: true, activeHover: null });
+  assert.strictEqual(targetHover.half, 'second');
 }
 
 function testRenderingDirectionsCutoffAndArrowFallback() {
@@ -264,7 +275,7 @@ function testHoverAndHighlightTiers() {
   assert.strictEqual(hover.half, 'first');
 
   test.setGlueFlapsForTest(true);
-  test.setGlueFlapTargetOnHoverForTest(false);
+  test.setGlueFlapTargetOnHoverForTest(true);
   const rendered = makeContext();
   test.drawGlueEdges(rendered.context, geometry, preset, hover);
   const widths = rendered.calls.filter((call) => call.method === 'stroke').map((call) => call.width);
@@ -293,9 +304,10 @@ function testHoverOnlyTargets() {
 
   const resting = makeContext();
   test.drawGlueEdges(resting.context, geometry, preset, null);
-  assert.strictEqual(resting.calls.filter((call) => call.method === 'stroke').length, 1);
+  assert.strictEqual(resting.calls.filter((call) => call.method === 'stroke').length, 2);
   assert.strictEqual(resting.calls.filter((call) => call.method === 'fillText').length, 1);
-  assert.strictEqual(resting.calls.filter((call) => call.method === 'stroke' && call.dash.length).length, 0);
+  assert.strictEqual(resting.calls.filter((call) => call.method === 'stroke' && call.dash.length).length, 1);
+  assert.strictEqual(resting.calls.filter((call) => call.method === 'closePath').length, 2, 'the hidden target adds no trapezoid path');
 
   const first = test.glueFlapGeometry(geometry, preset, preset.gluedEdges[0].first, true);
   const second = test.glueFlapGeometry(geometry, preset, preset.gluedEdges[0].second, false);
@@ -307,17 +319,28 @@ function testHoverOnlyTargets() {
     glueFlaps: true,
     targetOnHover: true,
     activeHover: null
-  }), null, 'a hidden target has no invisible hit area');
+  }), null, 'the hidden target interior has no invisible hit area');
+  const targetBasePoint = {
+    x: (second.segment.start.x + second.segment.end.x) / 2,
+    y: (second.segment.start.y + second.segment.end.y) / 2
+  };
+  const targetBaseHover = game.hoveredGlueBoundaryAtPoint(preset, geometry, targetBasePoint, {
+    glueFlaps: true,
+    targetOnHover: true,
+    activeHover: null
+  });
+  assert.strictEqual(targetBaseHover.half, 'second', 'the visible dashed target line reveals its pair');
 
   const revealed = makeContext();
-  test.drawGlueEdges(revealed.context, geometry, preset, hover);
+  test.drawGlueEdges(revealed.context, geometry, preset, targetBaseHover);
   assert.strictEqual(revealed.calls.filter((call) => call.method === 'stroke').length, 2);
   assert.strictEqual(revealed.calls.filter((call) => call.method === 'fillText').length, 2);
   assert.strictEqual(revealed.calls.filter((call) => call.method === 'stroke' && call.dash.length).length, 1);
+  assert.strictEqual(revealed.calls.filter((call) => call.method === 'closePath').length, 3);
   assert.strictEqual(game.hoveredGlueBoundaryAtPoint(preset, geometry, second.labelPoint, {
     glueFlaps: true,
     targetOnHover: true,
-    activeHover: hover
+    activeHover: targetBaseHover
   }).half, 'second');
 }
 

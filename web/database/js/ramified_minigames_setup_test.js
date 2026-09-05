@@ -3942,8 +3942,8 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('data-i18n="setup.glueFlapTargetOnHover"'));
   assert.ok(/class="glue-flap-controls"[\s\S]*id="show-glue-flaps"[\s\S]*id="glue-flap-target-on-hover"/.test(minigameHtml));
   assert.ok(minigameHtml.indexOf('id="glue-flaps-row"') > minigameHtml.indexOf('id="gomoku-display-row"'));
-  assert.ok(minigameHtml.includes('js/i18n/ramified_minigames_locales.js?v=20260905-3'));
-  assert.ok(minigameHtml.includes('js/ramified_minigames_setup.js?v=20260905-3'));
+  assert.ok(minigameHtml.includes('js/i18n/ramified_minigames_locales.js?v=20260905-4'));
+  assert.ok(minigameHtml.includes('js/ramified_minigames_setup.js?v=20260905-5'));
   assert.ok(minigameHtml.includes('id="go-komi-row" data-mode-control="go"'));
   assert.ok(minigameHtml.includes('id="go-komi"'));
   assert.ok(minigameHtml.includes('id="go-action-row" data-mode-control="go"'));

@@ -738,6 +738,7 @@
     , 'runtime.billiardsHoverAddPocket': ['click to add pocket', '点击添加袋口']
     , 'runtime.billiardsHoverPlaceCue': ['click to place cue ball', '点击放置母球']
     , 'runtime.billiardsHoverPlaceBall': ['click to place ball {{number}}', '点击放置{{number}}号球']
+    , 'runtime.billiardsSnapGuidance': ['{{instruction}}; positions snap near tile centers or vertices and rack directions near 15° steps; hold Ctrl for free placement', '{{instruction}}；位置靠近方块中心或顶点时会吸附，球框方向靠近 15° 步进时会吸附；按住 Ctrl 可自由放置']
     , 'runtime.billiardsCueHintTitle': ['Aim from the white cue ball', '从白色母球瞄准']
     , 'runtime.billiardsCueHint': ['Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.', '点击白色母球，并向目标反方向拖动；母球会沿相反方向前进。']
     , 'runtime.puzzleStatus': ['{{game}} puzzle {{count}}', '{{game}}谜题第{{count}}步']

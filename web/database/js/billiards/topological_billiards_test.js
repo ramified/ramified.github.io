@@ -239,6 +239,8 @@ function testPageIntegration() {
   assert.ok(setup.includes('topological_billiards_physics.js'));
   assert.ok(setup.includes('topological_billiards_renderer.js'));
   assert.ok(setup.includes('topological_billiards_native.js'));
+  assert.ok(setup.includes('topological_billiards_native.js?v=20260905-1'));
+  assert.ok(setup.includes('wrappedViewCamera().scale'), 'wrapped billiards snapping uses the visible camera scale');
   assert.ok(!html.includes('<script src="js/billiards/topological_billiards_native.js'));
   assert.ok(setup.includes('topological_billiards_simulation_worker.js'));
   assert.ok(setup.includes('BILLIARDS_FALLBACK_FRAME_BUDGET_MS'));
@@ -258,6 +260,9 @@ function testPageIntegration() {
   assert.ok(native.includes('showNumberPatch: !fixedLabel'));
   assert.ok(!native.includes('view.cueHintLabel'));
   assert.ok(!setup.includes('togglePocket(game, local.tileIndex, local.position, true)'));
+  assert.ok(setup.includes('function billiardsPlacementLocalFromEvent'));
+  assert.ok(setup.includes('function updateBilliardsSnapModifier'));
+  assert.ok(setup.includes("runtime.billiardsSnapGuidance"));
 }
 
 function testPaletteLabelsAreCenteredAndUpright() {
@@ -962,6 +967,105 @@ function testControllerStatusAndRecordIntegration() {
   assert.strictEqual(Controller.stateSummary(recordImport.state).gameMode, 'billiards');
 }
 
+function testMagneticPlacementSnapping() {
+  const square = N.createState({ lattice: 'square', rows: 1, cols: 1, removedTiles: [], cutEdges: [], gluedEdges: [], billiards: { pockets: [] } });
+  const squareGeometry = { width: 100, height: 100, size: 100, radius: 50, cells: [{ x: 50, y: 50 }] };
+  assert.strictEqual(N.magneticSnapPoint(square.atlas, 0, { x: 0.139, y: 0 }, squareGeometry).snapped, true);
+  assert.strictEqual(N.magneticSnapPoint(square.atlas, 0, { x: 0.14, y: 0 }, squareGeometry).snapped, true);
+  assert.strictEqual(N.magneticSnapPoint(square.atlas, 0, { x: 0.141, y: 0 }, squareGeometry).snapped, false);
+  assert.strictEqual(N.magneticSnapPoint(square.atlas, 0, { x: 0.05, y: 0 }, squareGeometry, { disabled: true }).snapped, false);
+  const scaled = N.magneticSnapPoint(square.atlas, 0, { x: 0.07, y: 0 }, squareGeometry, { cssScaleX: 2, cssScaleY: 2 });
+  assert.strictEqual(scaled.snapped, true, '14 CSS px remains inclusive after display scaling');
+  Controller.__test.setGame(square);
+  Controller.__test.setBilliardsInteractionGeometryForTest(squareGeometry, {
+    getBoundingClientRect() { return { left: 0, top: 0, width: 100, height: 100 }; }
+  });
+  assert.strictEqual(
+    Controller.__test.billiardsPlacementLocalFromEvent({ clientX: 63.9, clientY: 50, ctrlKey: false }, { kind: 'ball' }).snapped,
+    true,
+    'the Minigames controller uses the shared magnetic snap result'
+  );
+  assert.strictEqual(
+    Controller.__test.billiardsPlacementLocalFromEvent({ clientX: 63.9, clientY: 50, ctrlKey: true }, { kind: 'ball' }).snapped,
+    false,
+    'the Minigames controller forwards Ctrl bypass'
+  );
+
+  const nearVertex = N.magneticSnapPoint(square.atlas, 0, { x: 0.49, y: 0.49 }, squareGeometry);
+  assert.strictEqual(nearVertex.anchor.kind, 'vertex');
+  assert.strictEqual(nearVertex.anchor.cornerName, 'SE');
+  const tied = N.magneticSnapPoint(square.atlas, 0, { x: 0.25, y: 0.25 }, squareGeometry, { thresholdCss: 100 });
+  assert.strictEqual(tied.anchor.kind, 'center', 'center wins an exact tie');
+
+  const hex = N.createState({ lattice: 'hexagonal', rows: 1, cols: 1, removedTiles: [], cutEdges: [], gluedEdges: [], billiards: { pockets: [] } });
+  const hexGeometry = { width: 200, height: 200, radius: 100, cells: [{ x: 100, y: 100 }] };
+  assert.strictEqual(N.magneticSnapPoint(hex.atlas, 0, { x: 0.139, y: 0 }, hexGeometry).anchor.kind, 'center');
+  assert.strictEqual(N.magneticSnapPoint(hex.atlas, 0, { x: Math.cos(Math.PI / 6) - 0.02, y: 0.5 }, hexGeometry).anchor.cornerName, 'NE');
+
+  near(N.magneticSnapDirection({ x: Math.cos(46 * Math.PI / 180), y: Math.sin(46 * Math.PI / 180) }).angle, 45);
+  near(N.magneticSnapDirection({ x: Math.cos(48 * Math.PI / 180), y: Math.sin(48 * Math.PI / 180) }).angle, 45);
+  near(N.magneticSnapDirection({ x: Math.cos(48.01 * Math.PI / 180), y: Math.sin(48.01 * Math.PI / 180) }).angle, 48.01);
+  near(N.magneticSnapDirection({ x: Math.cos(359 * Math.PI / 180), y: Math.sin(359 * Math.PI / 180) }).angle, 0);
+  near(N.magneticSnapDirection({ x: Math.cos(46 * Math.PI / 180), y: Math.sin(46 * Math.PI / 180) }, { disabled: true }).angle, 46);
+}
+
+function testCompactRackRecipes() {
+  const preset = {
+    id: 'compact-rack', lattice: 'square', rows: 3, cols: 3,
+    removedTiles: [], cutEdges: [], gluedEdges: [],
+    billiards: {
+      ballRadius: 0.05,
+      pockets: [],
+      balls: [{ id: 'cue', kind: 'cue', at: { row: 1, col: 1, anchor: 'center' } }]
+    }
+  };
+  const placed = N.placeRack(N.createState(preset), 6, 4, { x: 0, y: 0 }, { x: 1, y: 0 });
+  assert.strictEqual(placed.changed, true);
+  const block = N.presetBlockFromState(placed.state);
+  assert.deepStrictEqual(block.rack, { count: 6, center: { row: 2, col: 2, anchor: 'center' }, angle: 0 });
+  assert.deepStrictEqual(block.balls, [{ id: 'cue', kind: 'cue', at: { row: 1, col: 1, anchor: 'center' } }]);
+  const reconstructed = N.createState({ ...preset, billiards: block });
+  assert.strictEqual(reconstructed.balls.filter((ball) => ball.kind === 'target').length, 6);
+  assert.deepStrictEqual(N.presetBlockFromState(reconstructed).rack, block.rack);
+  const live = N.stateExport(reconstructed);
+  assert.strictEqual(live.balls.length, 7, 'live state keeps every ball explicit');
+  assert.deepStrictEqual(live.rackRecipe, block.rack);
+
+  const moved = N.moveBall(reconstructed, '1', 8, { x: 0, y: 0 });
+  assert.strictEqual(moved.changed, true);
+  const fallback = N.presetBlockFromState(moved.state);
+  assert.strictEqual(fallback.rack, undefined);
+  assert.strictEqual(fallback.balls.filter((ball) => ball.kind === 'target').length, 6);
+
+  assert.throws(() => N.createState({
+    ...preset,
+    billiards: {
+      ...block,
+      balls: [...block.balls, { id: 'explicit-1', kind: 'target', number: 1, at: { row: 3, col: 3, anchor: 'center' } }]
+    }
+  }), /conflicts with explicit ball 1/);
+  const legacy = N.createState({ ...preset, billiards: { ...preset.billiards, balls: [{ id: '1', kind: 'target', number: 1, at: { row: 2, col: 2, x: 0.1, y: 0.1 } }] } });
+  assert.strictEqual(legacy.balls.length, 1);
+}
+
+function testCompleteSetupHoverCircle() {
+  const state = N.createState({ lattice: 'square', rows: 1, cols: 2, removedTiles: [], cutEdges: [], gluedEdges: [], billiards: { ballRadius: 0.1, pockets: [] } });
+  const geometry = { width: 200, height: 100, size: 100, radius: 50, cells: [{ x: 50, y: 50 }, { x: 150, y: 50 }] };
+  const calls = { arcs: 0, clips: 0 };
+  const ctx = {
+    save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, stroke() {}, fillText() {},
+    setLineDash() {}, arc() { calls.arcs += 1; }, clip() { calls.clips += 1; }
+  };
+  N.drawSetupHover(ctx, geometry, state, { type: 'ball', tileIndex: 0, position: { x: 0.45, y: 0 }, radius: 0.1, valid: true });
+  assert.strictEqual(calls.arcs, 2, 'a seam-crossing hint is composed from both tile images');
+  assert.strictEqual(calls.clips, 2);
+  calls.arcs = 0;
+  calls.clips = 0;
+  N.drawSetupHover(ctx, geometry, state, { type: 'ball', tileIndex: 0, position: { x: -0.48, y: 0 }, radius: 0.1, valid: false });
+  assert.strictEqual(calls.arcs, 1, 'invalid physical-boundary hint is still a complete circle');
+  assert.strictEqual(calls.clips, 0);
+}
+
 function run() {
   testOrdinaryMotionAndDeterminism();
   testTranslationSeamAndFiniteRadiusImage();
@@ -981,6 +1085,9 @@ function run() {
   testNativeBeginnerAimTracing();
   testNativeCachedChartsAndChunkedSimulation();
   testNativeSeamConditionedGlueImages();
+  testMagneticPlacementSnapping();
+  testCompactRackRecipes();
+  testCompleteSetupHoverCircle();
   testControllerStatusAndRecordIntegration();
   testPageIntegration();
   console.log('topological_billiards_test: all tests passed');

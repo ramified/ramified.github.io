@@ -1089,6 +1089,8 @@
   const minigamePresetLoadCache = new Map();
   let drawState = null;
   let decorationClickTimer = null;
+  let billiardsSnapBypass = false;
+  let billiardsLastPointerClient = null;
   let homologyMathTypesetTimer = null;
   let homologyMathTypesetAttempts = 0;
   const homologyMathTypesetTargets = new Set();
@@ -2658,7 +2660,7 @@
       }
       moveTileDragGhost(moveEvent.clientX, moveEvent.clientY);
       if (billiardsDecorationDescriptor(kind)) {
-        updateBilliardsDecorationHover(moveEvent.clientX, moveEvent.clientY);
+        updateBilliardsDecorationHover(moveEvent.clientX, moveEvent.clientY, !!moveEvent.ctrlKey);
       }
       updateDragPreview(moveEvent.clientX, moveEvent.clientY);
     };
@@ -2668,11 +2670,15 @@
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
       if (state.drag && state.drag.active && isOverCanvas(upEvent.clientX, upEvent.clientY)) {
-        const hit = hitTest(upEvent.clientX, upEvent.clientY, { includeRemoved: true });
+        const hit = hitTest(upEvent.clientX, upEvent.clientY, {
+          includeRemoved: true,
+          radiusScale: billiardsDecorationDescriptor(kind) ? 1 : 0.96
+        });
         if (hit >= 0) {
           toggleBackgroundDecoration(hit, {
             clientX: upEvent.clientX,
-            clientY: upEvent.clientY
+            clientY: upEvent.clientY,
+            snapDisabled: !!upEvent.ctrlKey
           });
         }
       }
@@ -2889,6 +2895,11 @@
     refs.canvas.addEventListener('pointercancel', handlePointerCancel);
     refs.canvas.addEventListener('wheel', handleWheel, { passive: false });
     refs.canvas.addEventListener('dblclick', handleCanvasDoubleClick);
+    document.addEventListener('keydown', handleBilliardsSnapModifier);
+    document.addEventListener('keyup', handleBilliardsSnapModifier);
+    window.addEventListener('blur', () => {
+      billiardsSnapBypass = false;
+    });
     if (refs.homologyLocalChartCanvas) {
       refs.homologyLocalChartCanvas.addEventListener('pointerdown', handleHomologyLocalChartPointerDown);
     }
@@ -2930,6 +2941,7 @@
       clearGluedBoundaryHover();
       state.backgroundHoverCusp = null;
       state.billiardsHover = null;
+      billiardsLastPointerClient = null;
       if (state.backgroundBilliard) state.backgroundBilliard.aimPoint = null;
       syncMainCanvasCursor();
       draw(analyze());
@@ -2950,7 +2962,7 @@
         const debugChanged = clearDrawDebugHit(false);
         const isBilliard = isBackgroundBilliardAction();
         const billiardsHoverChanged = isBackgroundDecorationAction()
-          ? updateBilliardsDecorationHover(event.clientX, event.clientY)
+          ? updateBilliardsDecorationHover(event.clientX, event.clientY, !!event.ctrlKey)
           : !!state.billiardsHover && (state.billiardsHover = null, true);
         const cusp = isBilliard ? null : backgroundCuspHitTest(event.clientX, event.clientY);
         const edge = !isBilliard && isBackgroundBoundaryAction()
@@ -4780,6 +4792,7 @@
     clearRemovedTileContents();
     pruneCutEdges();
     pruneGluedEdges();
+    if (hasImportedGameBlock(payload, 'billiards') && Billiards) currentBilliardsEditorState(true);
     pruneInputHoles();
     pruneLianliankanEmptyCells();
     pruneHexSeeds();
@@ -4932,16 +4945,21 @@
     const col = (index % cols) + 1;
     const kind = String(source.kind || source.id || '').toLowerCase() === 'cue' ? 'cue' : 'target';
     const number = kind === 'target' ? Math.max(1, Math.floor(Number(source.number) || 1)) : 0;
+    const normalizedAt = at.anchor === 'center'
+      ? { row, col, anchor: 'center' }
+      : (at.corner != null
+        ? { row, col, corner: String(at.corner).trim().toUpperCase() }
+        : {
+          row,
+          col,
+          x: Number.isFinite(Number(at.x)) ? Number(at.x) : 0,
+          y: Number.isFinite(Number(at.y)) ? Number(at.y) : 0
+        });
     return {
       id: String(source.id || (kind === 'cue' ? 'cue' : number)),
       kind,
       ...(kind === 'target' ? { number } : {}),
-      at: {
-        row,
-        col,
-        x: Number.isFinite(Number(at.x)) ? Number(at.x) : 0,
-        y: Number.isFinite(Number(at.y)) ? Number(at.y) : 0
-      }
+      at: normalizedAt
     };
   }
 
@@ -6113,13 +6131,16 @@
     return geometry ? { ...geometry, size: geometry.radius * 2 } : null;
   }
 
-  function currentBilliardsEditorState() {
+  function currentBilliardsEditorState(throwOnError = false) {
     // Atlas construction is entirely topological; a canvas geometry is only
     // needed when converting a pointer to a local point.  Keeping this usable
     // without a rendered board lets import/export and resize pruning canonicalize
     // balls and quotient-vertex pockets as well.
     if (!Billiards) return null;
-    try { return Billiards.createState(currentBilliardsPreset()); } catch (_) { return null; }
+    try { return Billiards.createState(currentBilliardsPreset()); } catch (error) {
+      if (throwOnError) throw error;
+      return null;
+    }
   }
 
   function billiardsRenderStateForDecoration(nativeState) {
@@ -6135,16 +6156,38 @@
     return Billiards.canvasToLocal(clientPointToBoardPoint(clientX, clientY), billiardsEditorGeometry(), nativeState.atlas);
   }
 
+  function billiardsSnapScale() {
+    if (!refs.canvas || !geometry || !refs.canvas.getBoundingClientRect) return { cssScaleX: 1, cssScaleY: 1 };
+    const rect = refs.canvas.getBoundingClientRect();
+    const viewScale = state.wrapped ? state.viewScale : 1;
+    return {
+      cssScaleX: (rect.width / Math.max(1, geometry.width)) * viewScale,
+      cssScaleY: (rect.height / Math.max(1, geometry.height)) * viewScale
+    };
+  }
+
+  function billiardsPlacementLocalAtClientPoint(clientX, clientY, nativeState = currentBilliardsEditorState(), disabled = billiardsSnapBypass) {
+    const local = billiardsLocalAtClientPoint(clientX, clientY, nativeState);
+    if (!local || !nativeState || !Billiards || !Billiards.magneticSnapPoint) return local;
+    return Billiards.magneticSnapPoint(
+      nativeState.atlas,
+      local.tileIndex,
+      local.position,
+      billiardsEditorGeometry(),
+      { ...billiardsSnapScale(), disabled }
+    );
+  }
+
   function billiardsHoverLabel(preview, descriptor, materializesDefaults = false) {
     if (!preview) return '';
     if (materializesDefaults) return 'click to materialize default pockets';
     if (!preview.valid) return `cannot: ${preview.message || 'invalid position'}`;
     if (preview.action === 'remove') return 'click to remove pocket';
     if (preview.action === 'erase') return preview.type === 'pocket' ? 'click to erase pocket' : 'click to erase ball';
-    if (preview.action === 'move') return 'drop to move';
+    if (preview.action === 'move') return preview.type === 'ball' ? `drop to move${preview.snapped ? ' · snapped' : ''} · Ctrl: free` : 'drop to move';
     if (preview.type === 'pocket') return 'click to add pocket';
-    if (descriptor && descriptor.kind === 'cue') return 'click to place cue ball';
-    if (descriptor && descriptor.kind === 'target') return `click to place ball ${descriptor.number}`;
+    if (descriptor && descriptor.kind === 'cue') return `click to place cue ball${preview.snapped ? ' · snapped' : ''} · Ctrl: free`;
+    if (descriptor && descriptor.kind === 'target') return `click to place ball ${descriptor.number}${preview.snapped ? ' · snapped' : ''} · Ctrl: free`;
     return preview.message || '';
   }
 
@@ -6157,11 +6200,12 @@
         type: 'ball',
         tileIndex: local.tileIndex,
         position: { ...local.position },
+        snapped: !!local.snapped,
         radius: ball ? ball.radius : nativeState.ballRadius,
         valid: !!(result && result.changed),
         action: 'move',
         message: result && result.message ? result.message : 'ball not found',
-        label: billiardsHoverLabel({ valid: !!(result && result.changed), action: 'move', message: result && result.message }, null)
+        label: billiardsHoverLabel({ type: 'ball', snapped: !!local.snapped, valid: !!(result && result.changed), action: 'move', message: result && result.message }, null)
       };
     }
     if (descriptor.type === 'billiards-pocket') {
@@ -6180,14 +6224,20 @@
     return null;
   }
 
-  function billiardsHoverAtClientPoint(clientX, clientY) {
+  function billiardsHoverAtClientPoint(clientX, clientY, snapDisabled = billiardsSnapBypass) {
     const kind = normalizeBackgroundDecorationKind(state.backgroundDecorationKind);
     const descriptor = billiardsDecorationDescriptor(kind);
     const canClear = kind === 'clear' && billiardsDecorationsPresent();
     const dragging = state.drag && state.drag.type === 'billiards-decoration' && state.drag.active;
     if ((!descriptor && !canClear && !dragging) || !Billiards) return null;
     const nativeState = currentBilliardsEditorState();
-    const local = billiardsLocalAtClientPoint(clientX, clientY, nativeState);
+    const rawLocal = billiardsLocalAtClientPoint(clientX, clientY, nativeState);
+    const placementDescriptor = dragging && state.drag.decoration && state.drag.decoration.type === 'billiards-ball'
+      ? { kind: 'ball' }
+      : descriptor;
+    const local = placementDescriptor && placementDescriptor.kind !== 'pocket'
+      ? billiardsPlacementLocalAtClientPoint(clientX, clientY, nativeState, snapDisabled)
+      : rawLocal;
     if (!nativeState || !local) return null;
     const canvasPoint = clientPointToBoardPoint(clientX, clientY);
     if (dragging) {
@@ -6195,23 +6245,55 @@
       return preview ? { ...preview, canvasPoint } : null;
     }
     if (descriptor && descriptor.kind === 'rack') {
+      const directionChoice = state.billiardsRack
+        ? billiardsRackDirectionChoice(nativeState, state.billiardsRack, canvasPoint, snapDisabled)
+        : null;
       return {
         type: 'rack',
         tileIndex: local.tileIndex,
         position: { ...local.position },
+        snapped: !!local.snapped,
         valid: true,
         action: state.billiardsRack ? 'direction' : 'center',
-        label: state.billiardsRack ? 'click to set rack direction' : 'click to set rack center',
+        label: state.billiardsRack
+          ? `click to set rack direction${directionChoice && directionChoice.snapped ? ' · 15° snapped' : ''} · Ctrl: free`
+          : `click to set rack center${local.snapped ? ' · snapped' : ''} · Ctrl: free`,
         canvasPoint
       };
     }
     const selection = descriptor || { kind: 'clear' };
     const preview = Billiards.setupInteractionPreview(nativeState, selection, local.tileIndex, local.position);
     if (!preview) return null;
+    preview.snapped = !!local.snapped;
     const materializesDefaults = descriptor && descriptor.kind === 'pocket' && !state.billiards.pocketsExplicit;
     preview.label = billiardsHoverLabel(preview, descriptor, materializesDefaults);
     if (materializesDefaults) preview.action = 'materialize';
     return { ...preview, canvasPoint };
+  }
+
+  function billiardsRackDirectionChoice(nativeState, center, point, snapDisabled = billiardsSnapBypass) {
+    if (!nativeState || !center || !point || !Billiards) return null;
+    const editorGeometry = billiardsEditorGeometry();
+    const origin = Billiards.localToCanvas(center.tileIndex, center.position, editorGeometry, nativeState.atlas);
+    const scale = nativeState.atlas.info.shape === 'hex' ? editorGeometry.radius : editorGeometry.size;
+    if (!origin || !Number.isFinite(scale) || scale <= 0) return null;
+    const dx = point.x - origin.x;
+    const dy = point.y - origin.y;
+    const length = Math.hypot(dx, dy);
+    if (length <= Math.max(1, scale * 0.04)) return null;
+    const rawDirection = { x: dx / length, y: dy / length };
+    const snapped = Billiards.magneticSnapDirection
+      ? Billiards.magneticSnapDirection(rawDirection, { disabled: snapDisabled })
+      : { direction: rawDirection, snapped: false };
+    const direction = snapped ? snapped.direction : rawDirection;
+    return {
+      ...snapped,
+      direction,
+      directionPoint: {
+        x: Number(center.position.x) + direction.x * (length / scale),
+        y: Number(center.position.y) + direction.y * (length / scale)
+      }
+    };
   }
 
   function billiardsRackPreviewForHover(nativeState, hover) {
@@ -6222,16 +6304,10 @@
     let direction = { x: 0, y: 1 };
     let directionPoint = null;
     if (state.billiardsRack && hover.canvasPoint) {
-      const origin = Billiards.localToCanvas(center.tileIndex, center.position, billiardsEditorGeometry(), nativeState.atlas);
-      const dx = hover.canvasPoint.x - origin.x;
-      const dy = hover.canvasPoint.y - origin.y;
-      const length = Math.hypot(dx, dy);
-      if (length > Math.max(1, geometry.radius * 0.04)) {
-        direction = { x: dx / length, y: dy / length };
-        directionPoint = {
-          x: Number(center.position.x) + dx / geometry.radius,
-          y: Number(center.position.y) + dy / geometry.radius
-        };
+      const choice = billiardsRackDirectionChoice(nativeState, center, hover.canvasPoint, billiardsSnapBypass);
+      if (choice) {
+        direction = choice.direction;
+        directionPoint = choice.directionPoint;
       }
     }
     return {
@@ -6243,12 +6319,29 @@
     };
   }
 
-  function updateBilliardsDecorationHover(clientX, clientY) {
-    const next = billiardsHoverAtClientPoint(clientX, clientY);
+  function updateBilliardsDecorationHover(clientX, clientY, snapDisabled = billiardsSnapBypass) {
+    billiardsLastPointerClient = { x: clientX, y: clientY };
+    billiardsSnapBypass = !!snapDisabled;
+    const next = billiardsHoverAtClientPoint(clientX, clientY, billiardsSnapBypass);
     const previous = state.billiardsHover;
     const unchanged = !previous && !next;
     state.billiardsHover = next;
     return !unchanged;
+  }
+
+  function handleBilliardsSnapModifier(event) {
+    const key = String(event && (event.key || event.code) || '').toLowerCase();
+    if (key !== 'control' && key !== 'controlleft' && key !== 'controlright') return;
+    const next = event.type === 'keydown';
+    if (next === billiardsSnapBypass) return;
+    billiardsSnapBypass = next;
+    if (!billiardsLastPointerClient || !isBackgroundDecorationAction()) return;
+    updateBilliardsDecorationHover(
+      billiardsLastPointerClient.x,
+      billiardsLastPointerClient.y,
+      billiardsSnapBypass
+    );
+    draw(analyze());
   }
 
   function nativeBilliardsBallEntry(ball, nativeState) {
@@ -6269,7 +6362,11 @@
   function saveBilliardsBallsFromNative(nativeState) {
     if (!nativeState) return;
     if (!state.billiards || typeof state.billiards !== 'object') state.billiards = createEmptyBilliardsDecorations();
-    state.billiards.balls = nativeState.balls.filter((ball) => ball.active).map((ball) => nativeBilliardsBallEntry(ball, nativeState));
+    const block = Billiards.presetBlockFromState(nativeState);
+    state.billiards.balls = Array.isArray(block.balls) ? block.balls.map((ball) => JSON.parse(JSON.stringify(ball))) : [];
+    if (!state.billiards.settings || typeof state.billiards.settings !== 'object') state.billiards.settings = {};
+    if (block.rack) state.billiards.settings.rack = JSON.parse(JSON.stringify(block.rack));
+    else delete state.billiards.settings.rack;
   }
 
   function saveBilliardsPocketsFromNative(nativeState) {
@@ -6428,12 +6525,15 @@
       const combined = straightGlueFlapGroupGeometry(entries);
       if (!combined) return;
       combinedGroups.add(group);
-      const members = [{ flap: combined.first, side: 'first' }];
-      if (!targetsOnHover || (activeHover && activeHover.group === group)) {
-        members.push({ flap: combined.second, side: 'second' });
-      }
-      members.forEach(({ flap, side }) => {
-        const score = glueFlapHitScore(point, flap, tolerance);
+      const targetVisible = !targetsOnHover || (activeHover && activeHover.group === group);
+      const members = [
+        { flap: combined.first, side: 'first', placeholder: false },
+        { flap: combined.second, side: 'second', placeholder: !targetVisible }
+      ];
+      members.forEach(({ flap, side, placeholder }) => {
+        const score = placeholder
+          ? glueFlapTargetPlaceholderHitScore(point, flap, tolerance)
+          : glueFlapHitScore(point, flap, tolerance);
         if (score == null || (best && best.score <= score)) return;
         const nearest = entries.reduce((closest, entry) => {
           const segment = boundaryEdgeSegment(entry.pair[side]);
@@ -6453,18 +6553,21 @@
     pairs.forEach((pair, pairIndex) => {
       const group = gluePairGroup(pair, pairIndex);
       if (combinedGroups.has(group)) return;
-      const members = [{ edge: pair.first, outward: true }];
-      if (!targetsOnHover || (
+      const targetVisible = !targetsOnHover || (
         activeHover
         && activeHover.group === group
         && activeHover.pairIndex === pairIndex
-      )) {
-        members.push({ edge: pair.second, outward: false });
-      }
+      );
+      const members = [
+        { edge: pair.first, outward: true, placeholder: false },
+        { edge: pair.second, outward: false, placeholder: !targetVisible }
+      ];
       members.forEach((member) => {
         const flap = glueFlapGeometry(member.edge, member.outward);
         if (!flap) return;
-        const score = glueFlapHitScore(point, flap, tolerance);
+        const score = member.placeholder
+          ? glueFlapTargetPlaceholderHitScore(point, flap, tolerance)
+          : glueFlapHitScore(point, flap, tolerance);
         if (score == null) return;
         if (best && best.score <= score) return;
         best = {
@@ -6491,6 +6594,12 @@
       const end = flap.points[(index + 1) % flap.points.length];
       distance = Math.min(distance, projectPointToSegment(point, start, end).distance);
     });
+    return distance <= tolerance ? distance : null;
+  }
+
+  function glueFlapTargetPlaceholderHitScore(point, flap, tolerance) {
+    if (!flap || !flap.segment) return null;
+    const distance = projectPointToSegment(point, flap.segment.start, flap.segment.end).distance;
     return distance <= tolerance ? distance : null;
   }
 
@@ -6931,8 +7040,13 @@
 
   function toggleBilliardsDecoration(index, descriptor, options = {}) {
     const nativeState = currentBilliardsEditorState();
+    const snapDisabled = Object.prototype.hasOwnProperty.call(options, 'snapDisabled')
+      ? !!options.snapDisabled
+      : billiardsSnapBypass;
     const local = options.clientX != null && options.clientY != null
-      ? billiardsLocalAtClientPoint(options.clientX, options.clientY, nativeState)
+      ? (descriptor.kind === 'pocket'
+        ? billiardsLocalAtClientPoint(options.clientX, options.clientY, nativeState)
+        : billiardsPlacementLocalAtClientPoint(options.clientX, options.clientY, nativeState, snapDisabled))
       : null;
     // In periodic display mode a pointer can be on a translated copy of a
     // tile.  The native atlas returns its canonical tile index, while hitTest
@@ -6945,14 +7059,10 @@
         return true;
       }
       const center = state.billiardsRack;
-      const centerCanvas = Billiards.localToCanvas(center.tileIndex, center.position, billiardsEditorGeometry(), nativeState.atlas);
       const point = clientPointToBoardPoint(options.clientX, options.clientY);
-      const scale = nativeState.atlas.info.shape === 'hex' ? geometry.radius : geometry.radius;
-      const dx = point.x - centerCanvas.x;
-      const dy = point.y - centerCanvas.y;
-      const length = Math.hypot(dx, dy);
-      if (length <= scale * 0.04) return false;
-      const result = Billiards.placeRack(nativeState, center.count, center.tileIndex, center.position, { x: dx / length, y: dy / length });
+      const direction = billiardsRackDirectionChoice(nativeState, center, point, snapDisabled);
+      if (!direction) return false;
+      const result = Billiards.placeRack(nativeState, center.count, center.tileIndex, center.position, direction.direction);
       if (!result.changed) return false;
       saveBilliardsBallsFromNative(result.state);
       state.billiardsRack = null;
@@ -7007,9 +7117,11 @@
     return null;
   }
 
-  function moveBilliardsDecoration(descriptor, clientX, clientY) {
+  function moveBilliardsDecoration(descriptor, clientX, clientY, snapDisabled = billiardsSnapBypass) {
     const nativeState = currentBilliardsEditorState();
-    const local = billiardsLocalAtClientPoint(clientX, clientY, nativeState);
+    const local = descriptor && descriptor.type === 'billiards-ball'
+      ? billiardsPlacementLocalAtClientPoint(clientX, clientY, nativeState, snapDisabled)
+      : billiardsLocalAtClientPoint(clientX, clientY, nativeState);
     if (!nativeState || !local || !descriptor) return false;
     if (descriptor.type === 'billiards-ball') {
       const result = Billiards.moveBall(nativeState, descriptor.id, local.tileIndex, local.position);
@@ -7031,9 +7143,13 @@
   function removeBilliardsDecoration(descriptor) {
     if (!descriptor || !state.billiards || typeof state.billiards !== 'object') return false;
     if (descriptor.type === 'billiards-ball') {
-      const before = Array.isArray(state.billiards.balls) ? state.billiards.balls.length : 0;
-      state.billiards.balls = (state.billiards.balls || []).filter((ball) => ball && ball.id !== descriptor.id);
-      return state.billiards.balls.length !== before;
+      const nativeState = currentBilliardsEditorState();
+      const ball = nativeState && nativeState.balls.find((entry) => entry.active && entry.id === descriptor.id);
+      if (!nativeState || !ball) return false;
+      const result = Billiards.eraseAt(nativeState, ball.tileIndex, ball.position);
+      if (!result.changed) return false;
+      saveBilliardsBallsFromNative(result.state);
+      return true;
     }
     if (descriptor.type === 'billiards-pocket') {
       const nativeState = currentBilliardsEditorState();
@@ -9556,6 +9672,14 @@
     return state.backgroundAction === 'decoration';
   }
 
+  function isBilliardsDecorationInteraction() {
+    if (!isBackgroundDecorationAction()) return false;
+    const kind = normalizeBackgroundDecorationKind(state.backgroundDecorationKind);
+    return !!billiardsDecorationDescriptor(kind)
+      || (kind === 'clear' && billiardsDecorationsPresent())
+      || !!(state.drag && state.drag.type === 'billiards-decoration');
+  }
+
   function isClosedBackgroundSurface(report = null) {
     if (!isGluedBoundaryMode()) return false;
     const background = report && report.background ? report.background : analyzeBackgroundSpace();
@@ -9843,7 +9967,7 @@
       ? backgroundTileHitIndex(event.clientX, event.clientY)
       : ((isBackgroundBoundaryAction() || isHomologyTrace || isHomologyRepresentative)
       ? -1
-      : hitTest(event.clientX, event.clientY, { includeRemoved: true }));
+      : hitTest(event.clientX, event.clientY, { includeRemoved: true, radiusScale: isBilliardsDecorationInteraction() ? 1 : 0.96 }));
     const decoration = isBackgroundDecorationAction() && hit >= 0
       ? backgroundDecorationDragDescriptorAtIndex(hit)
       : null;
@@ -9851,7 +9975,7 @@
       ? billiardsDecorationDragDescriptorAtClientPoint(event.clientX, event.clientY)
       : null;
     const billiardsHoverChanged = isBackgroundDecorationAction()
-      ? updateBilliardsDecorationHover(event.clientX, event.clientY)
+      ? updateBilliardsDecorationHover(event.clientX, event.clientY, !!event.ctrlKey)
       : false;
     pointerState = {
       id: event.pointerId,
@@ -9891,7 +10015,7 @@
   function updateBackgroundGesture(event) {
     if (!pointerState || event.pointerId !== pointerState.id) return;
     const billiardsHoverChanged = isBackgroundDecorationAction()
-      ? updateBilliardsDecorationHover(event.clientX, event.clientY)
+      ? updateBilliardsDecorationHover(event.clientX, event.clientY, !!event.ctrlKey)
       : false;
     const dx = event.clientX - pointerState.x;
     const dy = event.clientY - pointerState.y;
@@ -9923,7 +10047,7 @@
       ? backgroundTileHitIndex(event.clientX, event.clientY)
       : ((isBackgroundBoundaryAction() || isHomologyTrace || isHomologyRepresentative)
       ? -1
-      : hitTest(event.clientX, event.clientY, { includeRemoved: true }));
+      : hitTest(event.clientX, event.clientY, { includeRemoved: true, radiusScale: isBilliardsDecorationInteraction() ? 1 : 0.96 }));
     const aimChanged = isBilliard ? updateBackgroundBilliardAim(event.clientX, event.clientY, false) : false;
     const edgeChanged = !sameBackgroundEdgeHit(edge, state.backgroundHoverEdge);
     const cuspChanged = !sameBackgroundCuspHit(cusp, state.backgroundHoverCusp);
@@ -9950,7 +10074,7 @@
     }
     if (state.drag && state.drag.type === 'billiards-decoration' && state.drag.active) {
       const changed = isOverCanvas(event.clientX, event.clientY)
-        ? moveBilliardsDecoration(state.drag.decoration, event.clientX, event.clientY)
+        ? moveBilliardsDecoration(state.drag.decoration, event.clientX, event.clientY, !!event.ctrlKey)
         : removeBilliardsDecoration(state.drag.decoration);
       if (changed) {
         state.edits += 1;
@@ -9967,9 +10091,9 @@
       const descriptor = billiardsDecorationDescriptor(kind);
       const executesClickAction = kind === 'clear' || (descriptor && descriptor.kind === 'pocket');
       const hit = !pointerState.moved && executesClickAction && isOverCanvas(event.clientX, event.clientY)
-        ? hitTest(event.clientX, event.clientY, { includeRemoved: true })
+        ? hitTest(event.clientX, event.clientY, { includeRemoved: true, radiusScale: 1 })
         : -1;
-      if (hit >= 0) toggleBackgroundDecoration(hit, { clientX: event.clientX, clientY: event.clientY });
+      if (hit >= 0) toggleBackgroundDecoration(hit, { clientX: event.clientX, clientY: event.clientY, snapDisabled: !!event.ctrlKey });
       clearEditorDrag();
       return;
     }
@@ -10009,7 +10133,7 @@
       ? backgroundEdgeHitTest(event.clientX, event.clientY)
       : null;
     const hit = isOverCanvas(event.clientX, event.clientY) && !isBackgroundBoundaryAction()
-      ? hitTest(event.clientX, event.clientY, { includeRemoved: true })
+      ? hitTest(event.clientX, event.clientY, { includeRemoved: true, radiusScale: isBilliardsDecorationInteraction() ? 1 : 0.96 })
       : -1;
     if (!pointerState.moved && cusp && sameBackgroundCuspHit(cusp, pointerState.backgroundCusp)) {
       selectBackgroundCusp(cusp);
@@ -10022,7 +10146,7 @@
       }
       else toggleBackgroundBoundary(edge);
     } else if (!pointerState.moved && hit === pointerState.index && hit >= 0) {
-      if (isBackgroundDecorationAction()) toggleBackgroundDecoration(hit, { clientX: event.clientX, clientY: event.clientY });
+      if (isBackgroundDecorationAction()) toggleBackgroundDecoration(hit, { clientX: event.clientX, clientY: event.clientY, snapDisabled: !!event.ctrlKey });
       else toggleBackgroundTile(hit);
     }
   }
@@ -26249,6 +26373,7 @@
           };
           drawGlueFlapShape(ctx, combined.first, color, true, options);
           if (showTarget) drawGlueFlapShape(ctx, combined.second, color, false, options);
+          else drawGlueFlapTargetPlaceholder(ctx, combined.second, color, options);
           const representative = entries[0];
           const groupLabel = String(labels[representative.pairIndex] || '').replace(/[a-z]+$/i, '');
           drawGlueFlapLabel(
@@ -26311,6 +26436,8 @@
       drawGlueFlapBoundaryEdge(ctx, pair.first, color, label, gluePairFirstArrowReversed(pair), true, options);
       if (options.showFlapTarget !== false) {
         drawGlueFlapBoundaryEdge(ctx, pair.second, color, label, gluePairSecondArrowReversed(pair), false, options);
+      } else {
+        drawGlueFlapTargetPlaceholder(ctx, glueFlapGeometry(pair.second, false), color, options);
       }
       return;
     }
@@ -26509,6 +26636,25 @@
     ctx.setLineDash(outward ? [] : [Math.max(3, lineWidth * 2.2), Math.max(2, lineWidth * 1.7)]);
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function drawGlueFlapTargetPlaceholder(ctx, flap, color, options = {}) {
+    if (!flap || !flap.segment) return;
+    const fullLineWidth = hoverEdgeLineWidth(geometry.radius) * 1.15;
+    const emphasis = clamp(Number(options.flapStrokeScale) || 0.55, 0.55, 1);
+    const lineWidth = fullLineWidth * emphasis;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.setLineDash([Math.max(3, lineWidth * 2.2), Math.max(2, lineWidth * 1.7)]);
+    ctx.beginPath();
+    ctx.moveTo(flap.segment.start.x, flap.segment.start.y);
+    ctx.lineTo(flap.segment.end.x, flap.segment.end.y);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
@@ -28955,6 +29101,7 @@
   function hitTest(clientX, clientY, options = {}) {
     if (!geometry) return -1;
     const includeRemoved = !!options.includeRemoved;
+    const radiusScale = Number.isFinite(Number(options.radiusScale)) ? Number(options.radiusScale) : 0.96;
     const point = state.wrapped
       ? screenPointToWorld(clientPointToLogical(clientX, clientY))
       : clientPointToLogical(clientX, clientY);
@@ -28967,8 +29114,9 @@
         if (!includeRemoved && !tileExists(index)) continue;
         const cell = geometry.cells[index];
         if (!cell) continue;
-        if (Math.abs(x - cell.x) > geometry.radius || Math.abs(y - cell.y) > geometry.radius) continue;
-        if (pointInPolygon({ x, y }, tilePoints(cell.x, cell.y, geometry.radius * 0.96))) return index;
+        const radius = geometry.radius * radiusScale;
+        if (Math.abs(x - cell.x) > radius || Math.abs(y - cell.y) > radius) continue;
+        if (pointInPolygon({ x, y }, tilePoints(cell.x, cell.y, radius))) return index;
       }
     }
     return -1;
@@ -32923,6 +33071,8 @@
       exportPresetGroupChoices,
       currentBilliardsEditorState,
       billiardsEditorGeometry,
+      billiardsPlacementLocalAtClientPoint,
+      billiardsRackDirectionChoice,
       billiardsRenderStateForDecoration,
       eraseBilliardsBallAtClientPoint,
       inputHolesForExport,
@@ -33085,6 +33235,8 @@
       syncExportPresetDefaults,
       syncExportControls,
       toggleBackgroundDecoration,
+      hitTest,
+      isBilliardsDecorationInteraction,
       toggleInputHole
     }
   };

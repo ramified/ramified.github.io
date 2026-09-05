@@ -791,10 +791,13 @@ function testBilliardsPaletteDropAndRackDirection() {
   });
   assert.strictEqual(mosaic.toggleBackgroundDecoration(1, { clientX: 80, clientY: 50, update: false }), true);
   assert.strictEqual(mosaic.state.billiardsRack, null);
-  assert.deepStrictEqual(
-    mosaic.buildMinigamePresetExport().billiards.balls.map((ball) => ball.number).sort((a, b) => a - b),
-    [1, 2, 3, 4, 5, 6]
-  );
+  const exportedRack = mosaic.buildMinigamePresetExport().billiards;
+  assert.deepStrictEqual(exportedRack.rack, {
+    count: 6,
+    center: { row: 1, col: 1, anchor: 'center' },
+    angle: 0
+  });
+  assert.strictEqual(exportedRack.balls, undefined);
   delete mosaic.refs.canvas;
 }
 
@@ -824,6 +827,23 @@ function testSquareBilliardsUsesFullTileSide() {
   assert.ok(Math.abs(local.position.x) < 1e-9);
   assert.ok(Math.abs(local.position.y) < 1e-9);
 
+  mosaic.state.inputMode = 'background';
+  mosaic.state.backgroundAction = 'decoration';
+  mosaic.state.backgroundDecorationKind = 'billiards-cue';
+  mosaic.refs.canvas = {
+    style: {},
+    getBoundingClientRect() { return { left: 0, top: 0, width: 180, height: 100 }; }
+  };
+  assert.strictEqual(mosaic.hitTest(79, 40), -1, 'ordinary decoration hit area keeps its inset');
+  assert.strictEqual(mosaic.hitTest(79, 40, { radiusScale: 1 }), 0, 'billiards accepts the full visible tile');
+  const nearCenter = mosaic.billiardsPlacementLocalAtClientPoint(52, 40, state, false);
+  assert.strictEqual(nearCenter.snapped, true);
+  assert.deepStrictEqual(nearCenter.position, { x: 0, y: 0 });
+  const freePoint = mosaic.billiardsPlacementLocalAtClientPoint(56, 40, state, false);
+  assert.strictEqual(freePoint.snapped, false);
+  const bypassed = mosaic.billiardsPlacementLocalAtClientPoint(52, 40, state, true);
+  assert.strictEqual(bypassed.snapped, false);
+
   const arcRadii = [];
   const ctx = {
     save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, clip() {},
@@ -832,6 +852,7 @@ function testSquareBilliardsUsesFullTileSide() {
   };
   billiards.render(ctx, geometry, state);
   assert.ok(arcRadii.some((radius) => Math.abs(radius - 4) < 1e-9), '0.05 local-radius ball should render at 4 px');
+  delete mosaic.refs.canvas;
 }
 
 function testBilliardsBallDoubleClickRemovalAndCanonicalExportType() {
