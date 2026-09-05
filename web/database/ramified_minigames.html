@@ -2038,6 +2038,13 @@
                   <option value="wrapped" data-i18n="wrapped.wrapped">wrapped</option>
                 </select>
               </div>
+              <div class="fullscreen-setting-row" id="fullscreen-billiards-physics-row" hidden>
+                <label for="fullscreen-billiards-physics-profile" data-i18n="setup.billiardsPhysics">Physics</label>
+                <select id="fullscreen-billiards-physics-profile" data-i18n-aria-label="access.billiardsPhysicsProfile" aria-label="Billiards physics profile">
+                  <option value="legacy" selected data-i18n="setup.billiardsPhysicsClassic">classic (faster)</option>
+                  <option value="realistic" data-i18n="setup.billiardsPhysicsRealistic">realistic (higher CPU)</option>
+                </select>
+              </div>
               <label class="fullscreen-setting-row" for="fullscreen-sound-enabled">
                 <span data-i18n="fullscreen.soundEffects">Sound effects</span>
                 <span class="fullscreen-setting-switch">
@@ -2212,6 +2219,13 @@
           <select id="billiards-rules" data-i18n-aria-label="access.billiardsRules" aria-label="Billiards rules">
             <option value="solo" selected data-i18n="setup.billiardsSolo">solo</option>
             <option value="competitive" data-i18n="setup.billiardsCompetitive">two-player</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-physics-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.billiardsPhysics">Physics</span>
+          <select id="billiards-physics-profile" data-i18n-aria-label="access.billiardsPhysicsProfile" aria-label="Billiards physics profile">
+            <option value="legacy" selected data-i18n="setup.billiardsPhysicsClassic">classic (faster)</option>
+            <option value="realistic" data-i18n="setup.billiardsPhysicsRealistic">realistic (higher CPU)</option>
           </select>
         </div>
         <div class="mosaic-inline-row billiards-ball-palette-row" id="billiards-ball-palette-row" data-mode-control="billiards" hidden>
@@ -2786,13 +2800,13 @@
 <script src="js/calculator_input_settings.js?v=20260903-1"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260905-4"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260905-5"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
-<script src="js/ramified_minigames_setup.js?v=20260905-5"></script>
+<script src="js/ramified_minigames_setup.js?v=20260905-9"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
 </body>
 </html>

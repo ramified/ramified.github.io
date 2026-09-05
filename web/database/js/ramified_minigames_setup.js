@@ -374,7 +374,7 @@
   const BILLIARDS_SQUARE_BOARD_SIZE = 4;
   const BILLIARDS_RECTANGLE_ROWS = 3;
   const BILLIARDS_RECTANGLE_COLS = 5;
-  const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20260823-8';
+  const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20260905-2';
   const HEX_HOMOLOGY_WORKER_URL = 'js/hex_homology_worker.js?v=20260827-1';
   const BILLIARDS_FALLBACK_FRAME_BUDGET_MS = 8;
   const BILLIARDS_FALLBACK_STEP_CHUNK = 8;
@@ -486,6 +486,8 @@
   const WRAPPED_VIEW_MIN_SCALE = 0.35;
   const WRAPPED_VIEW_MAX_SCALE = 3.5;
   const WRAPPED_VIEW_DEFAULT_SCALE = 0.58;
+  const BILLIARDS_CUE_GUIDANCE_FRAME_MS = 1000 / 15;
+  const BILLIARDS_CUE_GUIDANCE_ANIMATION_MS = 900;
   const FULLSCREEN_SETTINGS_DEFAULTS = Object.freeze({
     soundEnabled: false,
     soundVolume: 1,
@@ -521,8 +523,8 @@
     [GAME_MODES.BILLIARDS]: Object.freeze([
       'js/billiards/topological_billiards_math.js?v=20260823-1',
       'js/billiards/topological_billiards_physics.js?v=20260823-1',
-      'js/billiards/topological_billiards_renderer.js?v=20260823-6',
-      'js/billiards/topological_billiards_native.js?v=20260905-1'
+      'js/billiards/topological_billiards_renderer.js?v=20260905-3',
+      'js/billiards/topological_billiards_native.js?v=20260905-3'
     ]),
     [GAME_MODES.LIANLIANKAN]: Object.freeze([
       'lianliankan/lianliankan_engine.js?v=20260830-1',
@@ -718,6 +720,8 @@
   let billiardsCueGuidanceDismissed = false;
   let billiardsCueHintUntil = 0;
   let billiardsCueGuidanceFrame = null;
+  let billiardsCueGuidanceLastRenderAt = 0;
+  let billiardsCueGuidanceAnimationStartedAt = 0;
   let billiardsPaletteDrag = null;
   let billiardsPaletteSuppressClickUntil = 0;
   let billiardsBallSelection = { kind: 'cue', number: 0 };
@@ -826,6 +830,7 @@
     refs.showGlueFlaps = document.getElementById('show-glue-flaps');
     refs.glueFlapTargetOnHover = document.getElementById('glue-flap-target-on-hover');
     refs.billiardsRules = document.getElementById('billiards-rules');
+    refs.billiardsPhysicsProfile = document.getElementById('billiards-physics-profile');
     refs.billiardsBallPaletteRow = document.getElementById('billiards-ball-palette-row');
     refs.billiardsBallPalette = document.getElementById('billiards-ball-palette');
     refs.billiardsAssistance = document.getElementById('billiards-assistance');
@@ -836,6 +841,8 @@
     refs.fullscreenBilliardsSpin = document.getElementById('fullscreen-billiards-spin');
     refs.fullscreenBilliardsSpinPad = document.getElementById('fullscreen-billiards-spin-pad');
     refs.fullscreenBilliardsSpinLabel = document.getElementById('fullscreen-billiards-spin-label');
+    refs.fullscreenBilliardsPhysicsRow = document.getElementById('fullscreen-billiards-physics-row');
+    refs.fullscreenBilliardsPhysicsProfile = document.getElementById('fullscreen-billiards-physics-profile');
     refs.billiardsPower = document.getElementById('billiards-power');
     refs.billiardsDebug = document.getElementById('billiards-debug');
     refs.billiardsDebugTexture = document.getElementById('billiards-debug-texture');
@@ -1034,6 +1041,9 @@
       render();
     });
     if (refs.billiardsRules) refs.billiardsRules.addEventListener('change', handleBilliardsRulesChange);
+    [refs.billiardsPhysicsProfile, refs.fullscreenBilliardsPhysicsProfile].filter(Boolean).forEach((control) => {
+      control.addEventListener('change', handleBilliardsPhysicsProfileChange);
+    });
     if (refs.billiardsAssistance) refs.billiardsAssistance.addEventListener('change', render);
     if (refs.billiardsFriction) {
       refs.billiardsFriction.addEventListener('input', handleBilliardsFrictionChange);
@@ -4922,6 +4932,56 @@
     refreshDebugExportIfNeeded();
   }
 
+  function selectedBilliardsPhysicsProfile(value = null) {
+    if (!Billiards || typeof Billiards.normalizePhysicsProfile !== 'function') return 'legacy';
+    const source = value != null
+      ? value
+      : (refs.billiardsPhysicsProfile ? refs.billiardsPhysicsProfile.value : 'legacy');
+    return Billiards.normalizePhysicsProfile(source);
+  }
+
+  function billiardsPhysicsProfileLabel(profile) {
+    return selectedBilliardsPhysicsProfile(profile) === 'realistic'
+      ? tk('setup.billiardsPhysicsRealistic', 'realistic (higher CPU)')
+      : tk('setup.billiardsPhysicsClassic', 'classic (faster)');
+  }
+
+  function syncBilliardsPhysicsProfile(sourceState = game) {
+    const profile = isBilliardsGame(sourceState) && sourceState.deterministic
+      ? selectedBilliardsPhysicsProfile(sourceState.deterministic.physicsProfile)
+      : selectedBilliardsPhysicsProfile();
+    [refs.billiardsPhysicsProfile, refs.fullscreenBilliardsPhysicsProfile].filter(Boolean).forEach((control) => {
+      control.value = profile;
+    });
+    return profile;
+  }
+
+  function handleBilliardsPhysicsProfileChange(event) {
+    const requested = selectedBilliardsPhysicsProfile(event && event.target ? event.target.value : null);
+    if (!isBilliardsGame(game) || !Billiards || typeof Billiards.setPhysicsProfile !== 'function') {
+      syncBilliardsPhysicsProfile();
+      return;
+    }
+    const locked = onlineIsInRoom() || !!billiardsShotPending || !!currentAnimation
+      || !['setup', 'ready', 'ball-in-hand'].includes(game.phase);
+    if (locked) {
+      syncBilliardsPhysicsProfile();
+      return;
+    }
+    game = Billiards.setPhysicsProfile(game, requested);
+    syncBilliardsPhysicsProfile();
+    syncStatus(
+      tk('runtime.billiardsPhysicsEnabled', '{{profile}} physics enabled', {
+        profile: billiardsPhysicsProfileLabel(requested)
+      }),
+      tk('runtime.billiardsPhysicsNextShot', 'The selected profile will be used for the next shot.'),
+      game.phase === 'setup' ? 'setup' : 'ready'
+    );
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
   function handleBilliardsFrictionChange() {
     if (!refs.billiardsFriction || !isBilliardsGame(game) || game.phase !== 'setup' || onlineIsInRoom() || !Billiards) {
       syncBilliardsFriction();
@@ -5526,6 +5586,7 @@
       refs.fideChessPuzzleAttackBorders.checked = normalizeBooleanSetting(attackBorders, true);
     }
     if (refs.billiardsRules && isBilliardsGame(imported.state)) refs.billiardsRules.value = imported.state.rules;
+    if (isBilliardsGame(imported.state)) syncBilliardsPhysicsProfile(imported.state);
     if (refs.billiardsFriction && isBilliardsGame(imported.state)) syncBilliardsFriction();
   }
 
@@ -6031,6 +6092,8 @@
     billiardsCueHintUntil = 0;
     if (billiardsCueGuidanceFrame != null) cancelFrame(billiardsCueGuidanceFrame);
     billiardsCueGuidanceFrame = null;
+    billiardsCueGuidanceLastRenderAt = 0;
+    billiardsCueGuidanceAnimationStartedAt = 0;
   }
 
   function billiardsLocalCueGuidanceAllowed() {
@@ -6291,13 +6354,38 @@
     if (typeof window === 'undefined' || !billiardsCueGuidanceState().highlight) {
       if (billiardsCueGuidanceFrame != null) cancelFrame(billiardsCueGuidanceFrame);
       billiardsCueGuidanceFrame = null;
+      billiardsCueGuidanceLastRenderAt = 0;
+      billiardsCueGuidanceAnimationStartedAt = 0;
       return;
     }
+    const currentTime = now();
+    if (billiardsCueGuidanceAnimationStartedAt <= 0) billiardsCueGuidanceAnimationStartedAt = currentTime;
+    if (!billiardsCueGuidanceAnimationActive(billiardsCueGuidanceAnimationStartedAt, currentTime)) return;
     if (billiardsCueGuidanceFrame != null) return;
-    billiardsCueGuidanceFrame = requestFrame(() => {
+    billiardsCueGuidanceFrame = requestFrame((timestamp) => {
       billiardsCueGuidanceFrame = null;
+      const currentTime = Number.isFinite(Number(timestamp)) ? Number(timestamp) : now();
+      if (!billiardsCueGuidanceFrameDue(billiardsCueGuidanceLastRenderAt, currentTime)) {
+        syncBilliardsCueGuidanceAnimation();
+        return;
+      }
+      billiardsCueGuidanceLastRenderAt = currentTime;
       render();
     });
+  }
+
+  function billiardsCueGuidanceFrameDue(previousTime, currentTime) {
+    const previous = Number(previousTime);
+    const current = Number(currentTime);
+    return !Number.isFinite(previous) || previous <= 0 || !Number.isFinite(current)
+      || current - previous >= BILLIARDS_CUE_GUIDANCE_FRAME_MS;
+  }
+
+  function billiardsCueGuidanceAnimationActive(startedAt, currentTime) {
+    const started = Number(startedAt);
+    const current = Number(currentTime);
+    return !Number.isFinite(started) || started <= 0 || !Number.isFinite(current)
+      || current - started < BILLIARDS_CUE_GUIDANCE_ANIMATION_MS;
   }
 
   function wrapCanvasCaptionLines(ctx, text, maxWidth) {
@@ -6372,6 +6460,7 @@
   function showBilliardsCueHint() {
     if (!billiardsLocalCueGuidanceAllowed()) return;
     billiardsCueHintUntil = now() + 4200;
+    billiardsCueGuidanceAnimationStartedAt = 0;
     syncStatus(
       tk('runtime.billiardsCueHintTitle', 'Aim from the white cue ball'),
       tk('runtime.billiardsCueHint', 'Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.'),
@@ -13862,13 +13951,13 @@
       canvasRect && canvasRect.height || refs.canvas.clientHeight || fallbackDisplay.height,
       dpr
     );
-    refs.canvas.width = renderMetrics.backingWidth;
-    refs.canvas.height = renderMetrics.backingHeight;
+    resizeCanvasBacking(refs.canvas, renderMetrics.backingWidth, renderMetrics.backingHeight);
     geometry.cssScaleX = renderMetrics.cssScaleX;
     geometry.cssScaleY = renderMetrics.cssScaleY;
     geometry.cssScale = renderMetrics.cssScale;
     geometry.backingScaleX = renderMetrics.backingScaleX;
     geometry.backingScaleY = renderMetrics.backingScaleY;
+    geometry.devicePixelRatio = deviceDpr;
     refs.ctx.setTransform(renderMetrics.backingScaleX, 0, 0, renderMetrics.backingScaleY, 0, 0);
     refs.ctx.imageSmoothingEnabled = true;
     if ('imageSmoothingQuality' in refs.ctx) refs.ctx.imageSmoothingQuality = 'high';
@@ -14852,6 +14941,16 @@
       backingScaleY: backingHeight / height,
       pixelRatio
     };
+  }
+
+  function resizeCanvasBacking(canvas, width, height) {
+    if (!canvas) return false;
+    const nextWidth = Math.max(1, Math.floor(Number(width) || 1));
+    const nextHeight = Math.max(1, Math.floor(Number(height) || 1));
+    if (canvas.width === nextWidth && canvas.height === nextHeight) return false;
+    canvas.width = nextWidth;
+    canvas.height = nextHeight;
+    return true;
   }
 
   function buildGeometry(preset, widthAvailable, margin, dpr, options = {}) {
@@ -29322,6 +29421,7 @@
       options.rules = Billiards
         ? Billiards.normalizeRules(refs.billiardsRules ? refs.billiardsRules.value : 'solo')
         : 'solo';
+      options.physicsProfile = selectedBilliardsPhysicsProfile();
     }
     if (selectedGameMode() === GAME_MODES.LIANLIANKAN) options.symbols = lianliankanSymbolsForTileSet();
     return options;
@@ -30907,6 +31007,17 @@
       if (refs.hexPieSwap.parentElement) refs.hexPieSwap.parentElement.hidden = !available;
     }
     if (refs.billiardsRules) refs.billiardsRules.disabled = !modeBilliards || !!(game && game.phase !== 'setup') || onlineRoomActive || !!billiardsShotPending;
+    if (refs.fullscreenBilliardsPhysicsRow) refs.fullscreenBilliardsPhysicsRow.hidden = !modeBilliards;
+    const billiardsPhysicsLocked = !modeBilliards
+      || !game
+      || !['setup', 'ready', 'ball-in-hand'].includes(game.phase)
+      || onlineRoomActive
+      || !!billiardsShotPending
+      || !!currentAnimation;
+    [refs.billiardsPhysicsProfile, refs.fullscreenBilliardsPhysicsProfile].filter(Boolean).forEach((control) => {
+      control.disabled = billiardsPhysicsLocked;
+    });
+    syncBilliardsPhysicsProfile();
     if (refs.lianliankanTileSet) refs.lianliankanTileSet.disabled = !modeLianliankan || !game || game.phase !== 'setup' || onlineRoomActive;
     syncLianliankanTileLevelControl(modeLianliankan);
     if (refs.lianliankanTileLevel) refs.lianliankanTileLevel.disabled = !modeLianliankan || !game || game.phase !== 'setup' || onlineRoomActive;
@@ -32345,6 +32456,8 @@
       rebuildHexRuntime,
       billiardsCueCaptionLayout,
       billiardsCueGuidanceFlags,
+      billiardsCueGuidanceFrameDue,
+      billiardsCueGuidanceAnimationActive,
       billiardsShotDragFromDisplayPoints,
       billiardsPlacementLocalFromEvent,
       updateBilliardsSnapModifier,
@@ -32405,6 +32518,7 @@
       straightGlueFlapGroupGeometry,
       glueFlapHitScore,
       canvasBackingMetrics,
+      resizeCanvasBacking,
       shouldShowGlueFlaps,
       shouldShowGlueFlapTargetOnHover,
       setGlueFlapsForTest(value) {

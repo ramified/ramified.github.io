@@ -15,6 +15,12 @@
   const EPSILON = 1e-8;
   const CONE_ANGLE_TOLERANCE = 1e-7;
   const PHYSICS_DT = 1 / 240;
+  const REALISTIC_PHYSICS_DT = 1 / 480;
+  const DEFAULT_PHYSICS_PROFILE = 'legacy';
+  const PHYSICS_VERSION = Object.freeze({
+    legacy: 'legacy-v1',
+    realistic: 'realistic-v1'
+  });
   const POSITION_SNAP_CSS_PX = 14;
   const DIRECTION_SNAP_STEP_DEGREES = 15;
   const DIRECTION_SNAP_TOLERANCE_DEGREES = 3;
@@ -42,7 +48,13 @@
     stopSpin: 0.08,
     shotSpeed: 4.8,
     maxShotSeconds: 28,
-    localCoverDepth: 3
+    localCoverDepth: 3,
+    ballBallFriction: 0,
+    cushionFriction: 0
+  });
+  const REALISTIC_PARAMETER_DEFAULTS = Object.freeze({
+    ballBallFriction: 0.055,
+    cushionFriction: 0.18
   });
 
   function clonePlain(value) {
@@ -62,6 +74,23 @@
     const fallbackNumber = Number(fallback);
     const resolvedFallback = Number.isFinite(fallbackNumber) ? fallbackNumber : DEFAULT_PARAMETERS.friction;
     return clamp(Number.isFinite(number) ? number : resolvedFallback, 0.5, 2.5);
+  }
+
+  function normalizePhysicsProfile(value) {
+    return String(value || '').trim().toLowerCase() === 'realistic' ? 'realistic' : DEFAULT_PHYSICS_PROFILE;
+  }
+
+  function physicsTimeStep(profile) {
+    return normalizePhysicsProfile(profile) === 'realistic' ? REALISTIC_PHYSICS_DT : PHYSICS_DT;
+  }
+
+  function parametersForPhysicsProfile(profile, overrides = {}) {
+    const normalized = normalizePhysicsProfile(profile);
+    return {
+      ...DEFAULT_PARAMETERS,
+      ...(normalized === 'realistic' ? REALISTIC_PARAMETER_DEFAULTS : {}),
+      ...(overrides || {})
+    };
   }
 
   function normalizeLattice(value) {
@@ -596,7 +625,8 @@
     const defaults = { ballRadius, pocketRadius };
     const ballSources = Array.isArray(block.balls) ? block.balls : [];
     const balls = ballSources.map((source, index) => ballFromPayload(source, preset, atlas, defaults, index + 1)).filter(Boolean);
-    const parameters = { ...DEFAULT_PARAMETERS, ...(block.parameters || {}) };
+    const physicsProfile = normalizePhysicsProfile(options.physicsProfile || block.physicsProfile);
+    const parameters = parametersForPhysicsProfile(physicsProfile, block.parameters);
     parameters.friction = normalizeFriction(
       options.friction != null ? options.friction : parameters.friction
     );
@@ -628,7 +658,9 @@
       rackTargetNumbers: [],
       recordMoves: [],
       deterministic: {
-        dt: PHYSICS_DT,
+        dt: physicsTimeStep(physicsProfile),
+        physicsProfile,
+        physicsVersion: PHYSICS_VERSION[physicsProfile],
         seed: Math.max(1, Math.floor(Number(block.seed) || 1)),
         parameters
       },
@@ -683,6 +715,7 @@
       : null;
     const block = {
       rules: normalizeRules(state.rules),
+      physicsProfile: normalizePhysicsProfile(state.deterministic && state.deterministic.physicsProfile),
       ballRadius: state.ballRadius,
       pocketRadius: state.pocketRadius,
       parameters: clonePlain(state.deterministic.parameters),
@@ -739,6 +772,27 @@
     clone.ending = source.ending || '';
     clone.debugMessage = source.debugMessage || '';
     return clone;
+  }
+
+  function setPhysicsProfile(source, value) {
+    if (!source) return source;
+    const profile = normalizePhysicsProfile(value);
+    const state = cloneState(source);
+    const friction = normalizeFriction(state.deterministic && state.deterministic.parameters && state.deterministic.parameters.friction);
+    state.deterministic = {
+      ...(state.deterministic || {}),
+      dt: physicsTimeStep(profile),
+      physicsProfile: profile,
+      physicsVersion: PHYSICS_VERSION[profile],
+      parameters: {
+        ...(state.deterministic && state.deterministic.parameters || {}),
+        ...(profile === 'realistic'
+          ? REALISTIC_PARAMETER_DEFAULTS
+          : { ballBallFriction: DEFAULT_PARAMETERS.ballBallFriction, cushionFriction: DEFAULT_PARAMETERS.cushionFriction }),
+        friction
+      }
+    };
+    return state;
   }
 
   function pointEdgeDistance(point, frame) {
@@ -1326,7 +1380,9 @@
     return false;
   }
 
-  function resolveWalls(ball, atlas, restitution) {
+  function resolveWalls(ball, atlas, parameters) {
+    const restitution = Math.max(0, Number(parameters && parameters.wallRestitution) || 0);
+    const cushionFriction = Math.max(0, Number(parameters && parameters.cushionFriction) || 0);
     const tile = atlas.tiles[ball.tileIndex];
     tile.frames.forEach((frame, dir) => {
       if (tile.transitions[dir]) return;
@@ -1335,7 +1391,19 @@
       ball.position = M.add2(ball.position, M.scale2(frame.inward, ball.radius - distance + EPSILON));
       const normalSpeed = M.dot2(ball.velocity, frame.inward);
       if (normalSpeed < 0) {
+        const normalImpulse = -(1 + restitution) * normalSpeed * ball.mass;
         ball.velocity = M.sub2(ball.velocity, M.scale2(frame.inward, (1 + restitution) * normalSpeed));
+        if (cushionFriction > 0 && normalImpulse > EPSILON) {
+          const tangent = { x: -frame.inward.y, y: frame.inward.x };
+          const contactTangentSpeed = M.dot2(ball.velocity, tangent) - ball.radius * ball.angularVelocity.z;
+          const inertia = (2 / 5) * ball.mass * ball.radius * ball.radius;
+          const inverseEffectiveMass = (1 / ball.mass) + (ball.radius * ball.radius / Math.max(inertia, EPSILON));
+          const requestedImpulse = -contactTangentSpeed / Math.max(inverseEffectiveMass, EPSILON);
+          const maximumImpulse = cushionFriction * normalImpulse;
+          const tangentImpulse = clamp(requestedImpulse, -maximumImpulse, maximumImpulse);
+          ball.velocity = M.add2(ball.velocity, M.scale2(tangent, tangentImpulse / ball.mass));
+          ball.angularVelocity.z -= ball.radius * tangentImpulse / Math.max(inertia, EPSILON);
+        }
       }
     });
   }
@@ -1470,15 +1538,37 @@
       const contact = closestCollisionImage(right, left, state.atlas, depth, sameCharts ? candidate.transform : null);
       if (!contact) return;
       const normal = contact.distance > EPSILON ? M.scale2(contact.delta, 1 / contact.distance) : { x: 1, y: 0 };
-      const rightVelocity = M.applyLinear(contact.transform, right.velocity);
+      let rightVelocity = M.applyLinear(contact.transform, right.velocity);
+      let rightAngularVelocity = M.applyLiftedLinear(contact.transform, right.angularVelocity);
       const relative = M.dot2(M.sub2(rightVelocity, left.velocity), normal);
       const inverseMass = (1 / left.mass) + (1 / right.mass);
+      let normalImpulse = 0;
       if (relative < 0) {
-        const impulse = -((1 + state.deterministic.parameters.restitution) * relative) / inverseMass;
-        left.velocity = M.sub2(left.velocity, M.scale2(normal, impulse / left.mass));
-        const updatedRightImage = M.add2(rightVelocity, M.scale2(normal, impulse / right.mass));
-        right.velocity = M.applyLinear(contact.inverseTransform, updatedRightImage);
+        normalImpulse = -((1 + state.deterministic.parameters.restitution) * relative) / inverseMass;
+        left.velocity = M.sub2(left.velocity, M.scale2(normal, normalImpulse / left.mass));
+        rightVelocity = M.add2(rightVelocity, M.scale2(normal, normalImpulse / right.mass));
       }
+      const ballBallFriction = Math.max(0, Number(state.deterministic.parameters.ballBallFriction) || 0);
+      if (normalImpulse > EPSILON && ballBallFriction > 0) {
+        const tangent = { x: -normal.y, y: normal.x };
+        const leftContactTangent = M.dot2(left.velocity, tangent) + left.angularVelocity.z * left.radius;
+        const rightContactTangent = M.dot2(rightVelocity, tangent) - rightAngularVelocity.z * right.radius;
+        const relativeTangent = rightContactTangent - leftContactTangent;
+        const leftInertia = (2 / 5) * left.mass * left.radius * left.radius;
+        const rightInertia = (2 / 5) * right.mass * right.radius * right.radius;
+        const inverseEffectiveMass = inverseMass
+          + (left.radius * left.radius / Math.max(leftInertia, EPSILON))
+          + (right.radius * right.radius / Math.max(rightInertia, EPSILON));
+        const requestedImpulse = -relativeTangent / Math.max(inverseEffectiveMass, EPSILON);
+        const maximumImpulse = ballBallFriction * normalImpulse;
+        const tangentImpulse = clamp(requestedImpulse, -maximumImpulse, maximumImpulse);
+        left.velocity = M.sub2(left.velocity, M.scale2(tangent, tangentImpulse / left.mass));
+        rightVelocity = M.add2(rightVelocity, M.scale2(tangent, tangentImpulse / right.mass));
+        left.angularVelocity.z -= left.radius * tangentImpulse / Math.max(leftInertia, EPSILON);
+        rightAngularVelocity.z -= right.radius * tangentImpulse / Math.max(rightInertia, EPSILON);
+      }
+      right.velocity = M.applyLinear(contact.inverseTransform, rightVelocity);
+      right.angularVelocity = M.applyLiftedLinear(contact.inverseTransform, rightAngularVelocity);
       const correction = Math.max(0, contact.target - contact.distance) / inverseMass * 0.52;
       left.position = M.sub2(left.position, M.scale2(normal, correction / left.mass));
       const correctedRightImage = M.add2(contact.position, M.scale2(normal, correction / right.mass));
@@ -1526,8 +1616,8 @@
       if (!ball.active) return;
       ball.orientation = M.integrateQuaternion(ball.orientation, ball.angularVelocity, dt);
       ball.position = M.add2(ball.position, M.scale2(ball.velocity, dt));
-      if (!canonicalizeBall(ball, state.atlas)) resolveWalls(ball, state.atlas, parameters.wallRestitution);
-      resolveWalls(ball, state.atlas, parameters.wallRestitution);
+      if (!canonicalizeBall(ball, state.atlas)) resolveWalls(ball, state.atlas, parameters);
+      resolveWalls(ball, state.atlas, parameters);
     });
     resolveBallCollisions(state);
     capturePockets(state, shotResult);
@@ -1648,7 +1738,8 @@
     const shotResult = { pocketedTargets: [], scratch: false };
     const trajectory = [];
     if (options.collectTrajectory) trajectory.push(source.balls.map((ball) => ballExport(ball, source.preset)));
-    const maxSteps = Math.ceil(state.deterministic.parameters.maxShotSeconds / PHYSICS_DT);
+    const simulationDt = Math.max(EPSILON, Number(state.deterministic.dt) || PHYSICS_DT);
+    const maxSteps = Math.ceil(state.deterministic.parameters.maxShotSeconds / simulationDt);
     return {
       done: false,
       result: null,
@@ -1659,7 +1750,9 @@
       trajectory,
       collectTrajectory: !!options.collectTrajectory,
       stepIndex: 0,
-      maxSteps
+      maxSteps,
+      dt: simulationDt,
+      trajectoryStride: Math.max(1, Math.round((1 / 30) / simulationDt))
     };
   }
 
@@ -1694,9 +1787,9 @@
     const endStep = Math.min(simulation.maxSteps, simulation.stepIndex + stepLimit);
     while (simulation.stepIndex < endStep) {
       const index = simulation.stepIndex;
-      step(simulation.state, PHYSICS_DT, simulation.shotResult);
+      step(simulation.state, simulation.dt || PHYSICS_DT, simulation.shotResult);
       simulation.stepIndex += 1;
-      if (simulation.collectTrajectory && index % 8 === 0) {
+      if (simulation.collectTrajectory && index % (simulation.trajectoryStride || 8) === 0) {
         simulation.trajectory.push(simulation.state.balls.map((ball) => ballExport(ball, simulation.state.preset)));
       }
       if (index > 12 && ballsAtRest(simulation.state)) {
@@ -1792,6 +1885,7 @@
       ...preset,
       billiards: {
         rules: source.rules,
+        physicsProfile: source.physicsProfile || (source.deterministic && source.deterministic.physicsProfile),
         ballRadius: source.ballRadius,
         pocketRadius: source.pocketRadius,
         balls,
@@ -1828,10 +1922,13 @@
     }
     state.recordMoves = clonePlain(source.recordMoves || []);
     if (source.deterministic && typeof source.deterministic === 'object') {
-      const parameters = { ...DEFAULT_PARAMETERS, ...(source.deterministic.parameters || {}) };
+      const physicsProfile = normalizePhysicsProfile(source.deterministic.physicsProfile || source.physicsProfile);
+      const parameters = parametersForPhysicsProfile(physicsProfile, source.deterministic.parameters);
       parameters.friction = normalizeFriction(parameters.friction);
       state.deterministic = {
-        dt: PHYSICS_DT,
+        dt: physicsTimeStep(physicsProfile),
+        physicsProfile,
+        physicsVersion: PHYSICS_VERSION[physicsProfile],
         seed: Math.max(1, Math.floor(Number(source.deterministic.seed) || 1)),
         parameters
       };
@@ -1992,7 +2089,7 @@
     ctx.clip();
     if (renderer && typeof renderer.sphericalSprite === 'function' && typeof renderer.drawBallBadge === 'function') {
       const fixedLabel = state.phase === 'setup' || (state.phase === 'ball-in-hand' && ball.kind === 'cue');
-      const sprite = renderer.sphericalSprite(ball, image.orientation, radius * 2, !!debugTexture, {
+      const sprite = renderer.sphericalSprite(ball, image.orientation, radius * 2 * ballSpriteRasterScale(geometry), !!debugTexture, {
         showNumberPatch: !fixedLabel
       });
       ctx.drawImage(sprite, center.x - radius, center.y - radius, radius * 2, radius * 2);
@@ -2019,6 +2116,15 @@
       ctx.fillText(label, center.x, center.y);
     }
     ctx.restore();
+  }
+
+  function ballSpriteRasterScale(geometry) {
+    const backingScale = Math.max(
+      Number(geometry && geometry.backingScaleX) || 1,
+      Number(geometry && geometry.backingScaleY) || 1
+    );
+    const deviceScale = Number(geometry && geometry.devicePixelRatio);
+    return Math.min(2, Math.max(1, Number.isFinite(deviceScale) ? deviceScale : backingScale));
   }
 
   function rayCircleDistance(origin, direction, center, radius) {
@@ -2531,17 +2637,22 @@
 
   return {
     BALL_COLORS,
+    DEFAULT_PHYSICS_PROFILE,
     DEFAULT_PARAMETERS,
     EPSILON,
     POSITION_SNAP_CSS_PX,
     DIRECTION_SNAP_STEP_DEGREES,
     DIRECTION_SNAP_TOLERANCE_DEGREES,
     PHYSICS_DT,
+    PHYSICS_VERSION,
+    REALISTIC_PARAMETER_DEFAULTS,
+    REALISTIC_PHYSICS_DT,
     TAU,
     activePocketAtClass,
     ballColor,
     ballAtPoint,
     ballExport,
+    ballSpriteRasterScale,
     begin,
     buildAtlas,
     canvasToLocal,
@@ -2562,6 +2673,7 @@
     nearestVertex,
     normalizeRules,
     normalizeFriction,
+    normalizePhysicsProfile,
     normalizeRackRecipe,
     placeBall,
     placeRack,
@@ -2579,6 +2691,7 @@
     stateExport,
     stateFromExport,
     setupInteractionPreview,
+    setPhysicsProfile,
     shotSimulationResult,
     traceAim,
     togglePocket,

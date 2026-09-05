@@ -239,7 +239,9 @@ function testPageIntegration() {
   assert.ok(setup.includes('topological_billiards_physics.js'));
   assert.ok(setup.includes('topological_billiards_renderer.js'));
   assert.ok(setup.includes('topological_billiards_native.js'));
-  assert.ok(setup.includes('topological_billiards_native.js?v=20260905-1'));
+  assert.ok(setup.includes('topological_billiards_native.js?v=20260905-3'));
+  assert.ok(html.includes('id="billiards-physics-profile"'));
+  assert.ok(html.includes('id="fullscreen-billiards-physics-profile"'));
   assert.ok(setup.includes('wrappedViewCamera().scale'), 'wrapped billiards snapping uses the visible camera scale');
   assert.ok(!html.includes('<script src="js/billiards/topological_billiards_native.js'));
   assert.ok(setup.includes('topological_billiards_simulation_worker.js'));
@@ -312,6 +314,7 @@ function testPaletteLabelsAreCenteredAndUpright() {
   const originalOffscreenCanvas = global.OffscreenCanvas;
   global.OffscreenCanvas = FakeCanvas;
   try {
+    R.__test.clearSpriteCaches();
     assert.strictEqual(R.ballLabel({ kind: 'cue', number: 0 }), '0');
     assert.strictEqual(R.ballLabel({ kind: 'target', number: 15 }), '15');
     const texture = R.makeTexture({ kind: 'cue', number: 0, color: '#f7f4e8' }, false);
@@ -350,7 +353,41 @@ function testPaletteLabelsAreCenteredAndUpright() {
       near(label.y, 32, 1e-12, `board label ${index} y`);
       assert.ok(!operations.some((entry) => ['rotate', 'scale', 'transform', 'setTransform'].includes(entry.kind)));
     });
+
+    const cacheBall = { kind: 'target', number: 7, color: N.ballColor('target', 7) };
+    const cacheOrientation = M.quaternionFromAxisAngle({ x: 1, y: 2, z: 3 }, 0.7);
+    const firstCached = R.sphericalSprite(cacheBall, cacheOrientation, 32, false);
+    const repeatedCached = R.sphericalSprite(cacheBall, cacheOrientation, 32, false);
+    assert.strictEqual(repeatedCached, firstCached, 'identical ball sprites reuse their rendered canvas');
+    const negatedOrientation = Object.fromEntries(Object.entries(cacheOrientation).map(([key, value]) => [key, -value]));
+    assert.strictEqual(
+      R.sphericalSprite(cacheBall, negatedOrientation, 32, false),
+      firstCached,
+      'equivalent negated quaternions share one cached sprite'
+    );
+    assert.notStrictEqual(
+      R.numberedBallSprite(cacheBall, cacheOrientation, 32),
+      R.sphericalSprite(cacheBall, cacheOrientation, 32, false, { showNumberPatch: false }),
+      'fixed-label palette sprites do not mutate plain gameplay sprites'
+    );
+    for (let index = 0; index < R.__test.sphereSpriteCacheLimit + 12; index += 1) {
+      R.sphericalSprite(
+        cacheBall,
+        M.quaternionFromAxisAngle({ x: 0, y: 0, z: 1 }, index / 17),
+        12,
+        false
+      );
+    }
+    assert.ok(
+      R.__test.sphereSpriteCacheSize() <= R.__test.sphereSpriteCacheLimit,
+      'the animation sprite cache remains bounded'
+    );
+    assert.ok(
+      R.__test.sphereSpriteCachePixels() <= R.__test.sphereSpriteCachePixelLimit,
+      'high-DPI sprites remain within the cache pixel budget'
+    );
   } finally {
+    R.__test.clearSpriteCaches();
     if (originalOffscreenCanvas === undefined) delete global.OffscreenCanvas;
     else global.OffscreenCanvas = originalOffscreenCanvas;
   }
@@ -444,6 +481,60 @@ function testNativeStatusRoundTrip() {
   assert.strictEqual(restored.phase, 'ready');
   assert.deepStrictEqual(N.stateExport(restored), exported);
   near(N.presetBlockFromState(restored).parameters.friction, 1.75);
+}
+
+function testNativePhysicsProfilesAndHiDpiSprites() {
+  const preset = {
+    id: 'native-physics-profiles',
+    lattice: 'square',
+    rows: 1,
+    cols: 3,
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: [],
+    billiards: {
+      ballRadius: 0.1,
+      pockets: [],
+      balls: [
+        { id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: 0.2, y: 0 } },
+        { id: '1', kind: 'target', number: 1, at: { row: 1, col: 2, x: -0.2, y: 0.08 } }
+      ],
+      parameters: {
+        maxShotSeconds: 0.6,
+        clothFriction: 0,
+        rollingResistance: 0,
+        spinResistance: 0,
+        restitution: 1
+      }
+    }
+  };
+  const legacy = N.createState(preset);
+  assert.strictEqual(legacy.deterministic.physicsProfile, 'legacy');
+  assert.strictEqual(legacy.deterministic.physicsVersion, N.PHYSICS_VERSION.legacy);
+  near(legacy.deterministic.dt, N.PHYSICS_DT);
+  near(legacy.deterministic.parameters.ballBallFriction, 0);
+  near(legacy.deterministic.parameters.cushionFriction, 0);
+
+  const realistic = N.setPhysicsProfile(legacy, 'realistic');
+  assert.strictEqual(realistic.deterministic.physicsProfile, 'realistic');
+  assert.strictEqual(realistic.deterministic.physicsVersion, N.PHYSICS_VERSION.realistic);
+  near(realistic.deterministic.dt, N.REALISTIC_PHYSICS_DT);
+  near(realistic.deterministic.parameters.ballBallFriction, N.REALISTIC_PARAMETER_DEFAULTS.ballBallFriction);
+  near(realistic.deterministic.parameters.cushionFriction, N.REALISTIC_PARAMETER_DEFAULTS.cushionFriction);
+  assert.strictEqual(N.stateFromExport(preset, N.stateExport(realistic)).deterministic.physicsProfile, 'realistic');
+
+  const legacyShot = N.resolveShot(N.begin(legacy).state, { x: 1, y: 0 }, 0.3, { x: 0, y: 0 });
+  const realisticShot = N.resolveShot(N.begin(realistic).state, { x: 1, y: 0 }, 0.3, { x: 0, y: 0 });
+  assert.strictEqual(realisticShot.simulationSteps, legacyShot.simulationSteps * 2, 'realistic profile uses twice the solver frequency');
+  assert.ok(
+    Math.abs(realisticShot.state.balls.find((ball) => ball.id === '1').angularVelocity.z) > 0.5,
+    'realistic ball-ball friction transfers tangential motion into spin'
+  );
+  near(legacyShot.state.balls.find((ball) => ball.id === '1').angularVelocity.z, 0);
+
+  near(N.ballSpriteRasterScale({ backingScaleX: 2.5, backingScaleY: 2.49, devicePixelRatio: 1.5 }), 1.5);
+  near(N.ballSpriteRasterScale({ backingScaleX: 3, backingScaleY: 3, devicePixelRatio: 3 }), 2);
+  near(N.ballSpriteRasterScale({ backingScaleX: 0.75, backingScaleY: 0.75 }), 1);
 }
 
 function testNativeFrictionControlAndStoppingTime() {
@@ -1079,6 +1170,7 @@ function run() {
   testPaletteLabelsAreCenteredAndUpright();
   testNativeAtlasesAndPocketDefaults();
   testNativeStatusRoundTrip();
+  testNativePhysicsProfilesAndHiDpiSprites();
   testNativeFrictionControlAndStoppingTime();
   testNativeSetupPaletteModelAndPocketToggle();
   testNativeBallAppearanceRoundTripsCanonically();

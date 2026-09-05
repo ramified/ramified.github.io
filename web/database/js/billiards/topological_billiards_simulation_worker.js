@@ -3,7 +3,7 @@
 importScripts(
   './topological_billiards_math.js?v=20260823-1',
   './topological_billiards_physics.js?v=20260823-1',
-  './topological_billiards_native.js?v=20260823-10'
+  './topological_billiards_native.js?v=20260905-3'
 );
 
 self.addEventListener('message', (event) => {

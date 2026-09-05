@@ -13,6 +13,11 @@
 
   const textureCache = new Map();
   const texturePixelsCache = new Map();
+  const sphereSpriteCache = new Map();
+  const SPHERE_SPRITE_CACHE_LIMIT = 160;
+  const SPHERE_SPRITE_CACHE_PIXEL_LIMIT = 8_000_000;
+  const SPHERE_ORIENTATION_KEY_SCALE = 10000;
+  let sphereSpriteCachePixels = 0;
 
   function ballLabel(ball) {
     if (ball && ball.kind === 'cue') return '0';
@@ -37,9 +42,56 @@
     return canvas;
   }
 
+  function textureKey(ball, debug, showNumberPatch) {
+    return `${debug ? 'debug' : 'pool'}:${showNumberPatch ? 'numbered' : 'plain'}:${ball.number}:${ball.color}`;
+  }
+
+  function orientationKey(orientation) {
+    const source = orientation && typeof orientation === 'object' ? orientation : {};
+    const values = ['w', 'x', 'y', 'z'].map((component, index) => {
+      const value = Number(source[component]);
+      return Number.isFinite(value) ? value : (index === 0 ? 1 : 0);
+    });
+    const firstNonZero = values.find((value) => Math.abs(value) > 1e-12);
+    const sign = firstNonZero != null && firstNonZero < 0 ? -1 : 1;
+    return values.map((value) => Math.round(value * sign * SPHERE_ORIENTATION_KEY_SCALE)).join(',');
+  }
+
+  function sphereSpriteCacheKey(ball, orientation, size, debug, showNumberPatch, fixedLabel) {
+    return `${textureKey(ball, debug, showNumberPatch)}:${fixedLabel ? 'fixed' : 'mapped'}:${size}:${orientationKey(orientation)}`;
+  }
+
+  function cachedSphereSprite(key) {
+    const sprite = sphereSpriteCache.get(key);
+    if (!sprite) return null;
+    // Refresh insertion order so active animation frames remain in the bounded cache.
+    sphereSpriteCache.delete(key);
+    sphereSpriteCache.set(key, sprite);
+    return sprite;
+  }
+
+  function cacheSphereSprite(key, sprite) {
+    sphereSpriteCache.set(key, sprite);
+    sphereSpriteCachePixels += Math.max(1, sprite.width || 1) * Math.max(1, sprite.height || 1);
+    while (sphereSpriteCache.size > SPHERE_SPRITE_CACHE_LIMIT || sphereSpriteCachePixels > SPHERE_SPRITE_CACHE_PIXEL_LIMIT) {
+      const oldestKey = sphereSpriteCache.keys().next().value;
+      const oldest = sphereSpriteCache.get(oldestKey);
+      sphereSpriteCachePixels -= Math.max(1, oldest && oldest.width || 1) * Math.max(1, oldest && oldest.height || 1);
+      sphereSpriteCache.delete(oldestKey);
+    }
+    return sprite;
+  }
+
+  function clearSpriteCaches() {
+    sphereSpriteCache.clear();
+    sphereSpriteCachePixels = 0;
+    texturePixelsCache.clear();
+    textureCache.clear();
+  }
+
   function makeTexture(ball, debug, options = {}) {
     const showNumberPatch = options.showNumberPatch !== false;
-    const key = `${debug ? 'debug' : 'pool'}:${showNumberPatch ? 'numbered' : 'plain'}:${ball.number}:${ball.color}`;
+    const key = textureKey(ball, debug, showNumberPatch);
     if (textureCache.has(key)) return textureCache.get(key);
     const width = 320;
     const height = 160;
@@ -111,11 +163,16 @@
 
   function sphericalSprite(ball, orientation, diameter, debug, options = {}) {
     const size = Math.max(12, Math.ceil(diameter));
+    const showNumberPatch = options.showNumberPatch !== false;
+    const fixedLabel = options.fixedLabel === true;
+    const cacheKey = sphereSpriteCacheKey(ball, orientation, size, debug, showNumberPatch, fixedLabel);
+    const cached = cachedSphereSprite(cacheKey);
+    if (cached) return cached;
     const canvas = canvasFactory(size, size);
     const ctx = canvas.getContext('2d');
     const image = ctx.createImageData(size, size);
     const pixels = image.data;
-    const texture = makeTexture(ball, debug, options);
+    const texture = makeTexture(ball, debug, { showNumberPatch });
     const source = texturePixels(texture);
     const inverse = M.conjugateQuaternion(orientation);
     const center = (size - 1) / 2;
@@ -146,7 +203,8 @@
       }
     }
     ctx.putImageData(image, 0, 0);
-    return canvas;
+    if (fixedLabel) drawBallBadge(ctx, { x: size / 2, y: size / 2 }, size / 2, ball);
+    return cacheSphereSprite(cacheKey, canvas);
   }
 
   function drawBallOutline(ctx, center, radius) {
@@ -189,15 +247,11 @@
     ctx.restore();
   }
 
-  function drawFixedBallLabel(canvas, ball, size) {
-    drawBallBadge(canvas.getContext('2d'), { x: size / 2, y: size / 2 }, size / 2, ball);
-    return canvas;
-  }
-
   function numberedBallSprite(ball, orientation, diameter, debug = false) {
-    const size = Math.max(12, Math.ceil(diameter));
-    const canvas = sphericalSprite(ball, orientation, size, debug, { showNumberPatch: false });
-    return drawFixedBallLabel(canvas, ball, size);
+    return sphericalSprite(ball, orientation, diameter, debug, {
+      showNumberPatch: false,
+      fixedLabel: true
+    });
   }
 
   function paletteBallSprite(ball, diameter) {
@@ -499,6 +553,19 @@
     render,
     sphericalSprite,
     surfaceToCanvas,
-    traceAim
+    traceAim,
+    __test: {
+      clearSpriteCaches,
+      orientationKey,
+      sphereSpriteCacheLimit: SPHERE_SPRITE_CACHE_LIMIT,
+      sphereSpriteCachePixelLimit: SPHERE_SPRITE_CACHE_PIXEL_LIMIT,
+      sphereSpriteCacheSize() { return sphereSpriteCache.size; },
+      sphereSpriteCachePixels() { return sphereSpriteCachePixels; },
+      sphereSpriteCacheMaxDimension() {
+        return Array.from(sphereSpriteCache.values()).reduce((maximum, sprite) => (
+          Math.max(maximum, Number(sprite && sprite.width) || 0, Number(sprite && sprite.height) || 0)
+        ), 0);
+      }
+    }
   };
 });

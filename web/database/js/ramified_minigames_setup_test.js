@@ -100,6 +100,28 @@ function testBilliardsCueGuidanceAndQuickRules() {
   assert.ok(!nativeSource.includes('view.cueHintLabel'));
 }
 
+function testBilliardsRenderPerformanceGuards() {
+  assert.strictEqual(game.__test.billiardsCueGuidanceFrameDue(0, 1000), true);
+  assert.strictEqual(game.__test.billiardsCueGuidanceFrameDue(1000, 1050), false);
+  assert.strictEqual(game.__test.billiardsCueGuidanceFrameDue(1000, 1070), true);
+  assert.strictEqual(game.__test.billiardsCueGuidanceAnimationActive(1000, 1800), true);
+  assert.strictEqual(game.__test.billiardsCueGuidanceAnimationActive(1000, 1900), false);
+
+  const writes = [];
+  const canvas = {
+    _width: 120,
+    _height: 80,
+    get width() { return this._width; },
+    set width(value) { writes.push(['width', value]); this._width = value; },
+    get height() { return this._height; },
+    set height(value) { writes.push(['height', value]); this._height = value; }
+  };
+  assert.strictEqual(game.__test.resizeCanvasBacking(canvas, 120, 80), false);
+  assert.deepStrictEqual(writes, [], 'an unchanged backing store is not reset');
+  assert.strictEqual(game.__test.resizeCanvasBacking(canvas, 180, 90), true);
+  assert.deepStrictEqual(writes, [['width', 180], ['height', 90]]);
+}
+
 function testBilliardsDisplaySpaceShotDrag() {
   const direct = game.__test.billiardsShotDragFromDisplayPoints({ x: 12, y: 10 }, { x: 2, y: 10 });
   assert.strictEqual(direct.distance, 10);
@@ -3942,8 +3964,9 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('data-i18n="setup.glueFlapTargetOnHover"'));
   assert.ok(/class="glue-flap-controls"[\s\S]*id="show-glue-flaps"[\s\S]*id="glue-flap-target-on-hover"/.test(minigameHtml));
   assert.ok(minigameHtml.indexOf('id="glue-flaps-row"') > minigameHtml.indexOf('id="gomoku-display-row"'));
-  assert.ok(minigameHtml.includes('js/i18n/ramified_minigames_locales.js?v=20260905-4'));
-  assert.ok(minigameHtml.includes('js/ramified_minigames_setup.js?v=20260905-5'));
+  assert.ok(minigameHtml.includes('js/i18n/ramified_minigames_locales.js?v=20260905-5'));
+  assert.ok(minigameHtml.includes('js/ramified_minigames_setup.js?v=20260905-9'));
+  assert.ok(minigameHtml.includes('id="billiards-physics-profile"'));
   assert.ok(minigameHtml.includes('id="go-komi-row" data-mode-control="go"'));
   assert.ok(minigameHtml.includes('id="go-komi"'));
   assert.ok(minigameHtml.includes('id="go-action-row" data-mode-control="go"'));
@@ -8590,6 +8613,7 @@ function testFullscreenSettingsPreferencesAndMarkup() {
   assert.ok(html.includes('id="fullscreen-settings-dialog" role="dialog" aria-modal="true"'));
   assert.ok(html.includes('id="fullscreen-sound-enabled"'));
   assert.ok(html.includes('id="fullscreen-wrapped-view-mode"'));
+  assert.ok(html.includes('id="fullscreen-billiards-physics-profile"'));
   assert.ok(html.includes('id="boundary-glue-wrapped-view-mode"'));
   assert.ok(html.includes('id="fullscreen-sound-volume"'));
   assert.ok(html.includes('id="fullscreen-show-action-row"'));
@@ -8812,6 +8836,7 @@ async function run() {
   testOnlinePublicPresencePreservesLocalRole();
   testBilliardsPaletteRepaintsAfterLazyLoad();
   testBilliardsCueGuidanceAndQuickRules();
+  testBilliardsRenderPerformanceGuards();
   testBilliardsDisplaySpaceShotDrag();
   testQuickRulesFadeAndHexSameTileHoverPersistence();
   testBilliardsQuickRulesAvailability();

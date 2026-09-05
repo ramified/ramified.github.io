@@ -215,6 +215,7 @@
     'access.billiardsRacks': ['Billiards rack choices', '台球球框选择'],
     'access.billiardsAssistance': ['Billiards aim assistance', '台球瞄准辅助'],
     'access.billiardsFriction': ['Billiards table friction', '台球桌面摩擦力'],
+    'access.billiardsPhysicsProfile': ['Billiards physics profile', '台球物理模式'],
     'access.tileSet': ['Tile Matching tile set', '连连看图案组'],
     'access.tileFamily': ['Tile Matching character family', '连连看字符类别'],
     'access.tileLevel': ['Tile Matching character level', '连连看字符等级'],
@@ -330,6 +331,9 @@
     'setup.move': ['Move', '移动'],
     'setup.billiardsSolo': ['solo', '单人'],
     'setup.billiardsCompetitive': ['two-player', '双人对战'],
+    'setup.billiardsPhysics': ['Physics', '物理模式'],
+    'setup.billiardsPhysicsClassic': ['classic (faster)', '经典（更流畅）'],
+    'setup.billiardsPhysicsRealistic': ['realistic (higher CPU)', '拟真（较高 CPU 占用）'],
     'setup.billiardsCueBall': ['cue ball', '母球'],
     'setup.billiardsNextTarget': ['next numbered target', '下一个编号目标球'],
     'setup.billiardsBalls': ['Balls', '球组'],
@@ -741,6 +745,8 @@
     , 'runtime.billiardsSnapGuidance': ['{{instruction}}; positions snap near tile centers or vertices and rack directions near 15° steps; hold Ctrl for free placement', '{{instruction}}；位置靠近方块中心或顶点时会吸附，球框方向靠近 15° 步进时会吸附；按住 Ctrl 可自由放置']
     , 'runtime.billiardsCueHintTitle': ['Aim from the white cue ball', '从白色母球瞄准']
     , 'runtime.billiardsCueHint': ['Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.', '点击白色母球，并向目标反方向拖动；母球会沿相反方向前进。']
+    , 'runtime.billiardsPhysicsEnabled': ['{{profile}} physics enabled', '已启用{{profile}}物理模式']
+    , 'runtime.billiardsPhysicsNextShot': ['The selected profile will be used for the next shot.', '下一杆将使用所选物理模式。']
     , 'runtime.puzzleStatus': ['{{game}} puzzle {{count}}', '{{game}}谜题第{{count}}步']
     , 'runtime.toMove': ['to move', '行棋']
     , 'runtime.toPlay': ['to play', '落子']
