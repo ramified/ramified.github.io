@@ -822,6 +822,7 @@
     refs.showBoardCoordinates = document.getElementById('show-board-coordinates');
     refs.glueFlapsRow = document.getElementById('glue-flaps-row');
     refs.showGlueFlaps = document.getElementById('show-glue-flaps');
+    refs.glueFlapTargetOnHover = document.getElementById('glue-flap-target-on-hover');
     refs.billiardsRules = document.getElementById('billiards-rules');
     refs.billiardsBallPaletteRow = document.getElementById('billiards-ball-palette-row');
     refs.billiardsBallPalette = document.getElementById('billiards-ball-palette');
@@ -1020,6 +1021,12 @@
       refreshDebugExportIfNeeded();
     });
     if (refs.showGlueFlaps) refs.showGlueFlaps.addEventListener('change', () => {
+      hoveredGlue = null;
+      if (refs.glueFlapTargetOnHover) refs.glueFlapTargetOnHover.disabled = !refs.showGlueFlaps.checked;
+      syncCanvasCursor();
+      render();
+    });
+    if (refs.glueFlapTargetOnHover) refs.glueFlapTargetOnHover.addEventListener('change', () => {
       hoveredGlue = null;
       syncCanvasCursor();
       render();
@@ -14974,6 +14981,7 @@
       const combined = straightGlueFlapGroupGeometry(geom, preset, entries);
       const groupHovered = !!hover && hover.groupKey === groupKey;
       if (combined) {
+        const showTarget = !shouldShowGlueFlapTargetOnHover() || groupHovered;
         let fillAlpha = 0.14;
         if (hover && !groupHovered) fillAlpha *= 0.55 / 0.75;
         else if (groupHovered) fillAlpha /= 0.75;
@@ -14984,10 +14992,12 @@
           flapFillAlpha: fillAlpha
         };
         drawGlueFlapShape(ctx, geom, combined.first, color, true, shapeOptions);
-        drawGlueFlapShape(ctx, geom, combined.second, color, false, shapeOptions);
+        if (showTarget) drawGlueFlapShape(ctx, geom, combined.second, color, false, shapeOptions);
         const groupLabel = String(labels[representative.pairIndex] || '').replace(/[a-z]+$/i, '');
         drawGlueFlapLabel(ctx, geom, combined.first, groupLabel, color, glueFirstArrowReversed(representative.pair));
-        drawGlueFlapLabel(ctx, geom, combined.second, groupLabel, color, glueSecondArrowReversed(representative.pair));
+        if (showTarget) {
+          drawGlueFlapLabel(ctx, geom, combined.second, groupLabel, color, glueSecondArrowReversed(representative.pair));
+        }
         return;
       }
       entries.forEach(({ pair, pairIndex }) => {
@@ -15000,7 +15010,11 @@
         const color = glueColor(pair);
         const shapeOptions = { flapStrokeScale: strokeScale, flapFillAlpha: fillAlpha };
         drawGlueFlapBoundaryEdge(ctx, geom, preset, pair.first, color, labels[pairIndex], glueFirstArrowReversed(pair), true, shapeOptions);
-        drawGlueFlapBoundaryEdge(ctx, geom, preset, pair.second, color, labels[pairIndex], glueSecondArrowReversed(pair), false, shapeOptions);
+        if (!shouldShowGlueFlapTargetOnHover() || (
+          hover && hover.groupKey === groupKey && hover.pairIndex === pairIndex
+        )) {
+          drawGlueFlapBoundaryEdge(ctx, geom, preset, pair.second, color, labels[pairIndex], glueSecondArrowReversed(pair), false, shapeOptions);
+        }
       });
     });
   }
@@ -28970,6 +28984,10 @@
     return !!(refs.showGlueFlaps && refs.showGlueFlaps.checked);
   }
 
+  function shouldShowGlueFlapTargetOnHover() {
+    return !refs.glueFlapTargetOnHover || refs.glueFlapTargetOnHover.checked;
+  }
+
   function shouldShowMoveNumberLabels(state = game) {
     return !!(supportsMoveNumberLabels(state) && refs.moveNumberLabels && refs.moveNumberLabels.checked);
   }
@@ -30719,6 +30737,9 @@
         Array.isArray(preset.gluedEdges) && preset.gluedEdges.length
       ));
     }
+    if (refs.glueFlapTargetOnHover) {
+      refs.glueFlapTargetOnHover.disabled = !shouldShowGlueFlaps();
+    }
     if (refs.moveNumberLabelRow) refs.moveNumberLabelRow.hidden = !(modeGomoku || modeConnectFour || modeGo);
     const placementRayHintsAvailable = modeGomoku || modeConnectFour;
     if (refs.placementHintHighlightRow) refs.placementHintHighlightRow.hidden = !placementRayHintsAvailable;
@@ -31523,6 +31544,13 @@
     const tolerance = Number.isFinite(options.threshold)
       ? Math.max(0, options.threshold)
       : Math.max(3, (geom.radius || 0) * 0.12);
+    const targetsOnHover = Object.prototype.hasOwnProperty.call(options, 'targetOnHover')
+      ? !!options.targetOnHover
+      : shouldShowGlueFlapTargetOnHover();
+    const activeHover = Object.prototype.hasOwnProperty.call(options, 'activeHover')
+      ? options.activeHover
+      : hoveredGlue;
+    const combinedGroups = new Set();
     let best = null;
     const consider = (flap, pairIndex, half, edge, groupKey) => {
       const score = glueFlapHitScore(point, flap, tolerance);
@@ -31542,7 +31570,10 @@
     glueFlapIndexedGroups(preset.gluedEdges).forEach((entries, groupKey) => {
       const combined = straightGlueFlapGroupGeometry(geom, preset, entries);
       if (!combined) return;
-      ['first', 'second'].forEach((half) => {
+      combinedGroups.add(groupKey);
+      const halves = ['first'];
+      if (!targetsOnHover || (activeHover && activeHover.groupKey === groupKey)) halves.push('second');
+      halves.forEach((half) => {
         const flap = combined[half];
         const score = glueFlapHitScore(point, flap, tolerance);
         if (score == null || (best && best.distance <= score)) return;
@@ -31558,10 +31589,16 @@
     });
     preset.gluedEdges.forEach((pair, pairIndex) => {
       const groupKey = gluePairGroupKey(pair, pairIndex);
-      [
-        { half: 'first', edge: pair.first, outward: true },
-        { half: 'second', edge: pair.second, outward: false }
-      ].forEach((entry) => {
+      if (combinedGroups.has(groupKey)) return;
+      const members = [{ half: 'first', edge: pair.first, outward: true }];
+      if (!targetsOnHover || (
+        activeHover
+        && activeHover.groupKey === groupKey
+        && activeHover.pairIndex === pairIndex
+      )) {
+        members.push({ half: 'second', edge: pair.second, outward: false });
+      }
+      members.forEach((entry) => {
         if (!entry.edge) return;
         consider(
           glueFlapGeometry(geom, preset, entry.edge, entry.outward),
@@ -32199,9 +32236,14 @@
       glueFlapHitScore,
       canvasBackingMetrics,
       shouldShowGlueFlaps,
+      shouldShowGlueFlapTargetOnHover,
       setGlueFlapsForTest(value) {
         refs.showGlueFlaps = refs.showGlueFlaps || {};
         refs.showGlueFlaps.checked = !!value;
+      },
+      setGlueFlapTargetOnHoverForTest(value) {
+        refs.glueFlapTargetOnHover = refs.glueFlapTargetOnHover || {};
+        refs.glueFlapTargetOnHover.checked = !!value;
       },
       wrappedHexCutoutMode,
       wrappedHexGlueContextOverlayActive,

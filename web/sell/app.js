@@ -6,6 +6,36 @@
 const SHOP_CONFIG = {
   wechatName: "XxxxXxxxx-Zzzz",
   products: [
+      {
+    id: "hair-dryer",
+    image: "hair_dryer.jpg",
+    price: 15,
+    name: { en: "Hair dryer", zh: "吹风机" },
+    description: {
+      en: "Reliable hair dryer that has been in regular use for 6 years and still works great. €15.",
+      zh: "稳定使用6年了，贼好用，15欧出。"
+    }
+  },
+  {
+    id: "barbecue-grill-plate",
+    image: "barbecue_grill_plate.jpg",
+    price: 1,
+    name: { en: "Barbecue grill plate", zh: "烧烤盘" },
+    description: {
+      en: "Bought it but never used it. €1.",
+      zh: "买来之后就没用过，1欧出。"
+    }
+  },
+  {
+    id: "esi-49-key-keyboard",
+    image: "esi_49_key_keyboard.jpg",
+    price: 15,
+    name: { en: "ESI 49-key keyboard", zh: "ESI 49键电子琴" },
+    description: {
+      en: "ESI 49-key electronic keyboard, €15.",
+      zh: "ESI 49键电子琴，15欧出。"
+    }
+  },
   // {
   //   id: "small-strainer",
   //   image: "strainer.jpg",
@@ -106,16 +136,16 @@ const SHOP_CONFIG = {
     }
   },
 
-  {
-    id: "extra-large-wmf-pot",
-    image: "extra_large_wmf_pot.jpg",
-    price: 19,
-    name: { en: "Extra-large WMF pot", zh: "特大号 WMF 锅" },
-    description: {
-      en: "Extra-large WMF cooking pot. Originally around €120, now offered for €19.",
-      zh: "特大号WMF铁锅，原价约120欧，现在19欧出。"
-    }
-  },
+  // {
+  //   id: "extra-large-wmf-pot",
+  //   image: "extra_large_wmf_pot.jpg",
+  //   price: 19,
+  //   name: { en: "Extra-large WMF pot", zh: "特大号 WMF 锅" },
+  //   description: {
+  //     en: "Extra-large WMF cooking pot. Originally around €120, now offered for €19.",
+  //     zh: "特大号WMF铁锅，原价约120欧，现在19欧出。"
+  //   }
+  // },
 
   {
     id: "heat-resistant-gloves",
@@ -162,7 +192,7 @@ const SHOP_CONFIG = {
   {
     id: "electric-grill",
     image: "electric_grill.jpg",
-    price: 29,
+    price: 28,
     name: { en: "Electric grill", zh: "电烤炉" },
     description: {
       en: "Electric grill only used once, ready for a barbecue party.",
@@ -192,23 +222,23 @@ const SHOP_CONFIG = {
   {
     id: "umeshu",
     image: "Umeshu.jpg",
-    price: 12.5,
+    price: 11.5,
     name: { en: "Umeshu", zh: "梅酒" },
     description: {
-      en: "Umeshu bottle, offered for 12.5 euros.",
-      zh: "梅酒一瓶，价格12.5欧元。"
+      en: "Umeshu bottle, offered for 11.5 euros.",
+      zh: "梅酒一瓶，价格11.5欧元。"
     }
   },
-  {
-    id: "thick-cotton-quilt",
-    image: "thick_cotton_quilt.jpg",
-    price: 35,
-    name: { en: "Thick cotton quilt", zh: "厚棉被" },
-    description: {
-      en: "A very thick, high-quality cotton quilt, newly bought and shipped from China. Never used because the apartment has heating. €35 with the cover, or €29 without the cover.",
-      zh: "非常厚、质量很好的棉被，从中国新买寄来，因为家里有暖气所以从未使用。带外套（被套）35欧，不需要外套则29欧。"
-    }
-  },
+  // {
+  //   id: "thick-cotton-quilt",
+  //   image: "thick_cotton_quilt.jpg",
+  //   price: 35,
+  //   name: { en: "Thick cotton quilt", zh: "厚棉被" },
+  //   description: {
+  //     en: "A very thick, high-quality cotton quilt, newly bought and shipped from China. Never used because the apartment has heating. €35 with the cover, or €29 without the cover.",
+  //     zh: "非常厚、质量很好的棉被，从中国新买寄来，因为家里有暖气所以从未使用。带外套（被套）35欧，不需要外套则29欧。"
+  //   }
+  // },
   {
     id: "red-sweater",
     image: "red_sweater.jpg",

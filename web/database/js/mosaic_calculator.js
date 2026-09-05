@@ -946,6 +946,7 @@
     showErrors: true,
     showCoords: false,
     showGlueFlaps: false,
+    glueFlapTargetOnHover: true,
     colorComponents: true,
     displayPick: false,
     showCusps: false,
@@ -1251,6 +1252,7 @@
     refs.showCoords = document.getElementById('show-coords');
     refs.glueFlapsRow = document.getElementById('glue-flaps-row');
     refs.showGlueFlaps = document.getElementById('show-glue-flaps');
+    refs.glueFlapTargetOnHover = document.getElementById('glue-flap-target-on-hover');
     refs.colorComponents = document.getElementById('color-components');
     refs.displayPick = document.getElementById('display-pick');
     refs.homologyKnotArrowSize = document.getElementById('homology-knot-arrow-size');
@@ -1864,7 +1866,16 @@
     if (refs.showGlueFlaps) {
       refs.showGlueFlaps.addEventListener('change', () => {
         state.showGlueFlaps = refs.showGlueFlaps.checked;
+        state.gluedHover = null;
         updateDisplayControls();
+        updateReport(false);
+        refreshExport();
+      });
+    }
+    if (refs.glueFlapTargetOnHover) {
+      refs.glueFlapTargetOnHover.addEventListener('change', () => {
+        state.glueFlapTargetOnHover = refs.glueFlapTargetOnHover.checked;
+        state.gluedHover = null;
         updateReport(false);
         refreshExport();
       });
@@ -4026,6 +4037,7 @@
     state.showErrors = true;
     state.showCoords = false;
     state.showGlueFlaps = false;
+    state.glueFlapTargetOnHover = true;
     state.colorComponents = true;
     state.displayPick = false;
     state.showCusps = false;
@@ -4066,6 +4078,7 @@
     if (refs.showErrors) refs.showErrors.checked = state.showErrors;
     if (refs.showCoords) refs.showCoords.checked = state.showCoords;
     if (refs.showGlueFlaps) refs.showGlueFlaps.checked = state.showGlueFlaps;
+    if (refs.glueFlapTargetOnHover) refs.glueFlapTargetOnHover.checked = state.glueFlapTargetOnHover !== false;
     if (refs.colorComponents) refs.colorComponents.checked = state.colorComponents;
     if (refs.displayPick) refs.displayPick.checked = state.displayPick;
     if (refs.showCusps) refs.showCusps.checked = state.showCusps;
@@ -4582,6 +4595,9 @@
       showErrors: has('showOpenEnds') ? source.showOpenEnds !== false : previous.showErrors,
       showCoords: has('showCoords') ? !!source.showCoords : previous.showCoords,
       showGlueFlaps: has('glueFlaps') ? !!source.glueFlaps : previous.showGlueFlaps,
+      glueFlapTargetOnHover: has('glueFlapTargetOnHover')
+        ? source.glueFlapTargetOnHover !== false
+        : previous.glueFlapTargetOnHover,
       colorComponents: has('colorComponents') ? source.colorComponents !== false : previous.colorComponents,
       displayPick: has('pick') ? !!source.pick : previous.displayPick,
       showCusps: has('cusps') ? !!source.cusps : previous.showCusps,
@@ -4612,6 +4628,7 @@
       showErrors: state.showErrors,
       showCoords: state.showCoords,
       showGlueFlaps: state.showGlueFlaps,
+      glueFlapTargetOnHover: state.glueFlapTargetOnHover,
       colorComponents: state.colorComponents,
       displayPick: state.displayPick,
       showCusps: state.showCusps,
@@ -4774,6 +4791,7 @@
     refs.showErrors.checked = state.showErrors;
     refs.showCoords.checked = state.showCoords;
     if (refs.showGlueFlaps) refs.showGlueFlaps.checked = state.showGlueFlaps;
+    if (refs.glueFlapTargetOnHover) refs.glueFlapTargetOnHover.checked = state.glueFlapTargetOnHover !== false;
     refs.colorComponents.checked = state.colorComponents;
     refs.displayPick.checked = state.displayPick;
     if (refs.showCusps) refs.showCusps.checked = state.showCusps;
@@ -6402,14 +6420,19 @@
   function glueFlapHoverAtBoardPoint(point, pairs = cloneGluedEdges()) {
     if (!point || !geometry || !Array.isArray(pairs)) return null;
     const tolerance = Math.max(3, geometry.radius * 0.12);
+    const targetsOnHover = state.glueFlapTargetOnHover !== false;
+    const activeHover = state.gluedHover;
+    const combinedGroups = new Set();
     let best = null;
     glueFlapIndexedGroups(pairs).forEach((entries, group) => {
       const combined = straightGlueFlapGroupGeometry(entries);
       if (!combined) return;
-      [
-        { flap: combined.first, side: 'first' },
-        { flap: combined.second, side: 'second' }
-      ].forEach(({ flap, side }) => {
+      combinedGroups.add(group);
+      const members = [{ flap: combined.first, side: 'first' }];
+      if (!targetsOnHover || (activeHover && activeHover.group === group)) {
+        members.push({ flap: combined.second, side: 'second' });
+      }
+      members.forEach(({ flap, side }) => {
         const score = glueFlapHitScore(point, flap, tolerance);
         if (score == null || (best && best.score <= score)) return;
         const nearest = entries.reduce((closest, entry) => {
@@ -6428,10 +6451,17 @@
       });
     });
     pairs.forEach((pair, pairIndex) => {
-      [
-        { edge: pair.first, outward: true },
-        { edge: pair.second, outward: false }
-      ].forEach((member) => {
+      const group = gluePairGroup(pair, pairIndex);
+      if (combinedGroups.has(group)) return;
+      const members = [{ edge: pair.first, outward: true }];
+      if (!targetsOnHover || (
+        activeHover
+        && activeHover.group === group
+        && activeHover.pairIndex === pairIndex
+      )) {
+        members.push({ edge: pair.second, outward: false });
+      }
+      members.forEach((member) => {
         const flap = glueFlapGeometry(member.edge, member.outward);
         if (!flap) return;
         const score = glueFlapHitScore(point, flap, tolerance);
@@ -6440,7 +6470,7 @@
         best = {
           edgeKey: boundaryEdgeKey(member.edge),
           pairIndex,
-          group: gluePairGroup(pair, pairIndex),
+          group,
           score
         };
       });
@@ -26208,6 +26238,7 @@
         const combined = straightGlueFlapGroupGeometry(entries);
         if (combined) {
           const groupHovered = !!hover && hover.group === group;
+          const showTarget = state.glueFlapTargetOnHover === false || groupHovered;
           let fillAlpha = 0.14;
           if (hover && !groupHovered) fillAlpha *= 0.55 / 0.75;
           else if (groupHovered) fillAlpha /= 0.75;
@@ -26217,7 +26248,7 @@
             flapFillAlpha: fillAlpha
           };
           drawGlueFlapShape(ctx, combined.first, color, true, options);
-          drawGlueFlapShape(ctx, combined.second, color, false, options);
+          if (showTarget) drawGlueFlapShape(ctx, combined.second, color, false, options);
           const representative = entries[0];
           const groupLabel = String(labels[representative.pairIndex] || '').replace(/[a-z]+$/i, '');
           drawGlueFlapLabel(
@@ -26227,13 +26258,15 @@
             color,
             gluePairFirstArrowReversed(representative.pair)
           );
-          drawGlueFlapLabel(
-            ctx,
-            combined.second,
-            groupLabel,
-            color,
-            gluePairSecondArrowReversed(representative.pair)
-          );
+          if (showTarget) {
+            drawGlueFlapLabel(
+              ctx,
+              combined.second,
+              groupLabel,
+              color,
+              gluePairSecondArrowReversed(representative.pair)
+            );
+          }
           return;
         }
         entries.forEach(({ pair, pairIndex }) => {
@@ -26249,7 +26282,12 @@
             pairIndex,
             gluedBoundaryColor(group),
             labels[pairIndex],
-            { flapStrokeScale: strokeScale, flapFillAlpha: fillAlpha }
+            {
+              flapStrokeScale: strokeScale,
+              flapFillAlpha: fillAlpha,
+              showFlapTarget: state.glueFlapTargetOnHover === false
+                || (!!hover && group === hover.group && pairIndex === hover.pairIndex)
+            }
           );
         });
       });
@@ -26271,7 +26309,9 @@
   function drawCompletedGluedBoundaryPair(ctx, pair, _pairIndex, color, label, options = {}) {
     if (state.showGlueFlaps) {
       drawGlueFlapBoundaryEdge(ctx, pair.first, color, label, gluePairFirstArrowReversed(pair), true, options);
-      drawGlueFlapBoundaryEdge(ctx, pair.second, color, label, gluePairSecondArrowReversed(pair), false, options);
+      if (options.showFlapTarget !== false) {
+        drawGlueFlapBoundaryEdge(ctx, pair.second, color, label, gluePairSecondArrowReversed(pair), false, options);
+      }
       return;
     }
     drawGluedBoundaryEdge(ctx, pair.first, color, gluePairFirstArrowReversed(pair), options);
@@ -30003,6 +30043,7 @@
         showOpenEnds: state.showErrors,
         showCoords: state.showCoords,
         glueFlaps: !!state.showGlueFlaps,
+        glueFlapTargetOnHover: state.glueFlapTargetOnHover !== false,
         colorComponents: state.colorComponents,
         pick: state.displayPick,
         cusps: state.showCusps,
@@ -30562,6 +30603,7 @@
     refs.colorComponents.checked = state.colorComponents;
     refs.displayPick.checked = state.displayPick;
     if (refs.showGlueFlaps) refs.showGlueFlaps.checked = !!state.showGlueFlaps;
+    if (refs.glueFlapTargetOnHover) refs.glueFlapTargetOnHover.checked = state.glueFlapTargetOnHover !== false;
     if (refs.showCusps) refs.showCusps.checked = state.showCusps;
     syncSeifertSurfaceControls();
     syncDualGraphInvariantVisibility();
@@ -31533,6 +31575,10 @@
     if (refs.showGlueFlaps) {
       refs.showGlueFlaps.disabled = !gluedBoundary;
       refs.showGlueFlaps.checked = !!state.showGlueFlaps;
+    }
+    if (refs.glueFlapTargetOnHover) {
+      refs.glueFlapTargetOnHover.disabled = !gluedBoundary || !state.showGlueFlaps;
+      refs.glueFlapTargetOnHover.checked = state.glueFlapTargetOnHover !== false;
     }
     if (refs.homologyKnotArrowSize) {
       refs.homologyKnotArrowSize.value = normalizeHomologyKnotArrowScale(state.homologyKnotArrowScale).toFixed(1);
@@ -32767,6 +32813,7 @@
     state.backgroundDecorationColor = normalizePresetPieceColor(options.backgroundDecorationColor || 'black') || 'black';
     state.backgroundChessPawnDirection = normalizeChessPawnDirectionChoice(options.backgroundChessPawnDirection || options.chessPawnDirection);
     state.showGlueFlaps = !!options.showGlueFlaps;
+    state.glueFlapTargetOnHover = options.glueFlapTargetOnHover !== false;
     state.tiles = Array(rows * cols).fill(null);
     state.removedTiles = importedIndexSetForTest(options.removedTiles || options.removed || [], rows, cols);
     state.inputHoles = importedIndexSetForTest(options.inputHoles || options.connectFourHoles || options.holes || [], rows, cols);

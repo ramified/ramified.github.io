@@ -3938,9 +3938,12 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('data-i18n="setup.gluedBoundary"'));
   assert.ok(minigameHtml.includes('id="show-glue-flaps" data-i18n-aria-label="access.glueFlaps"'));
   assert.ok(minigameHtml.includes('data-i18n="setup.glueFlaps"'));
+  assert.ok(minigameHtml.includes('id="glue-flap-target-on-hover" checked data-i18n-aria-label="access.glueFlapTargetOnHover"'));
+  assert.ok(minigameHtml.includes('data-i18n="setup.glueFlapTargetOnHover"'));
+  assert.ok(/class="glue-flap-controls"[\s\S]*id="show-glue-flaps"[\s\S]*id="glue-flap-target-on-hover"/.test(minigameHtml));
   assert.ok(minigameHtml.indexOf('id="glue-flaps-row"') > minigameHtml.indexOf('id="gomoku-display-row"'));
-  assert.ok(minigameHtml.includes('js/i18n/ramified_minigames_locales.js?v=20260905-1'));
-  assert.ok(minigameHtml.includes('js/ramified_minigames_setup.js?v=20260905-2'));
+  assert.ok(minigameHtml.includes('js/i18n/ramified_minigames_locales.js?v=20260905-3'));
+  assert.ok(minigameHtml.includes('js/ramified_minigames_setup.js?v=20260905-3'));
   assert.ok(minigameHtml.includes('id="go-komi-row" data-mode-control="go"'));
   assert.ok(minigameHtml.includes('id="go-komi"'));
   assert.ok(minigameHtml.includes('id="go-action-row" data-mode-control="go"'));
@@ -4822,6 +4825,7 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('show-board-coordinates'),
     makeElement('glue-flaps-row', { hidden: true }),
     makeElement('show-glue-flaps', { checked: false }),
+    makeElement('glue-flap-target-on-hover', { checked: true }),
     makeElement('placement-hint-highlight-row', { hidden: true }),
     makeElement('placement-hint-highlight', { value: 'single' }),
     makeElement('placement-hint-colors-row', { hidden: true }),
@@ -5772,8 +5776,11 @@ function testHexCoverOffsetDiagnosticsAndConnectFourWrappedView() {
   );
   assert.strictEqual(elements.get('glue-flaps-row').hidden, false);
   assert.strictEqual(elements.get('show-glue-flaps').checked, false);
+  assert.strictEqual(elements.get('glue-flap-target-on-hover').checked, true);
+  assert.strictEqual(elements.get('glue-flap-target-on-hover').disabled, true);
   elements.get('show-glue-flaps').checked = true;
   elements.get('show-glue-flaps').listeners.change();
+  assert.strictEqual(elements.get('glue-flap-target-on-hover').disabled, false);
   assert.strictEqual(elements.get('boundary-glue-wrapped-view-row').hidden, false, 'the good hex Möbius preset exposes Board view');
   assert.strictEqual(elements.get('boundary-glue-wrapped-view-mode').value, 'usual');
 
@@ -5795,6 +5802,7 @@ function testHexCoverOffsetDiagnosticsAndConnectFourWrappedView() {
   elements.get('export-state').listeners.click();
   assert.ok(!elements.get('debug-export-output').value.includes('hexCoverOffset'), 'the diagnostic is not exported');
   assert.ok(!elements.get('debug-export-output').value.includes('glueFlaps'), 'the session-only flap display is not exported');
+  assert.ok(!elements.get('debug-export-output').value.includes('glueFlapTargetOnHover'), 'the hover-target preference is not exported');
 
   elements.get('game-mode-select').value = 'go';
   elements.get('game-mode-select').listeners.change();
@@ -5807,6 +5815,7 @@ function testHexCoverOffsetDiagnosticsAndConnectFourWrappedView() {
   elements.get('boundary-glue-mode').listeners.change();
   assert.strictEqual(elements.get('boundary-glue-wrapped-view-row').hidden, false, 'RP² exposes the reflected chart view');
   assert.strictEqual(elements.get('show-glue-flaps').checked, true, 'the checkbox survives game and preset changes in this page session');
+  assert.strictEqual(elements.get('glue-flap-target-on-hover').checked, true, 'the hover-target checkbox remains session-only');
 }
 
 function testWrappedNQueensTrayAndGlueHoverInteraction() {

@@ -15,6 +15,9 @@
   const EPSILON = 1e-8;
   const CONE_ANGLE_TOLERANCE = 1e-7;
   const PHYSICS_DT = 1 / 240;
+  const POSITION_SNAP_CSS_PX = 14;
+  const DIRECTION_SNAP_STEP_DEGREES = 15;
+  const DIRECTION_SNAP_TOLERANCE_DEGREES = 3;
   const SQUARE_DIRS = ['E', 'S', 'W', 'N'];
   const HEX_DIRS = ['E', 'SE', 'SW', 'W', 'NW', 'NE'];
   const SQUARE_CORNERS = ['NW', 'NE', 'SE', 'SW'];
@@ -468,10 +471,44 @@
     return atlas.tiles[index] && !atlas.tiles[index].removed ? index : null;
   }
 
-  function ballFromPayload(source, preset, atlas, defaults, ordinal) {
-    const at = source && source.at && typeof source.at === 'object' ? source.at : source;
+  function pointFromLocationReference(at, preset, atlas) {
     const tileIndex = tileIndexFromAt(at, preset, atlas);
     if (!Number.isInteger(tileIndex)) return null;
+    const tile = atlas.tiles[tileIndex];
+    const anchor = String(at && at.anchor || '').trim().toLowerCase();
+    if (anchor === 'center') return { tileIndex, position: { x: 0, y: 0 }, anchor: { kind: 'center' } };
+    if (at && at.corner != null) {
+      const cornerName = String(at.corner).trim().toUpperCase();
+      const corner = atlas.info.cornerNames.indexOf(cornerName);
+      if (corner < 0 || !tile.polygon[corner]) return null;
+      return {
+        tileIndex,
+        position: { ...tile.polygon[corner] },
+        anchor: { kind: 'vertex', corner, cornerName: atlas.info.cornerNames[corner] }
+      };
+    }
+    return { tileIndex, position: normalizeVector2(at), anchor: null };
+  }
+
+  function locationReferenceForPoint(tileIndex, position, preset, atlas, tolerance = 1e-7) {
+    if (!Number.isInteger(tileIndex) || !atlas.tiles[tileIndex] || atlas.tiles[tileIndex].removed) return null;
+    const tile = rowCol(tileIndex, preset.cols);
+    const point = normalizeVector2(position);
+    if (M.length2(point) <= tolerance) return { row: tile.row, col: tile.col, anchor: 'center' };
+    const polygon = atlas.tiles[tileIndex].polygon;
+    for (let corner = 0; corner < polygon.length; corner += 1) {
+      if (M.length2(M.sub2(point, polygon[corner])) <= tolerance) {
+        return { row: tile.row, col: tile.col, corner: atlas.info.cornerNames[corner] };
+      }
+    }
+    return { row: tile.row, col: tile.col, x: point.x, y: point.y };
+  }
+
+  function ballFromPayload(source, preset, atlas, defaults, ordinal) {
+    const at = source && source.at && typeof source.at === 'object' ? source.at : source;
+    const location = pointFromLocationReference(at, preset, atlas);
+    if (!location) return null;
+    const tileIndex = location.tileIndex;
     const kind = String(source && source.kind || '').trim().toLowerCase() === 'cue' || String(source && source.id || '').trim().toLowerCase() === 'cue'
       ? 'cue'
       : 'target';
@@ -482,7 +519,7 @@
       number,
       color: ballColor(kind, number),
       tileIndex,
-      position: normalizeVector2(at),
+      position: { ...location.position },
       velocity: normalizeVector2(source && source.velocity),
       angularVelocity: normalizeVector3(source && source.angularVelocity),
       orientation: source && source.orientation ? normalizeQuaternion(source.orientation) : defaultBallOrientation(),
@@ -587,6 +624,8 @@
       ballInHandPlayer: '',
       lastShot: null,
       initialSetup: null,
+      rackRecipe: null,
+      rackTargetNumbers: [],
       recordMoves: [],
       deterministic: {
         dt: PHYSICS_DT,
@@ -600,6 +639,7 @@
       ending: '',
       debugMessage: ''
     };
+    if (block.rack != null) installRackRecipe(state, block.rack);
     while (state.pockets.some((pocket) => pocket.id === `p${state.nextPocketId}`)) state.nextPocketId += 1;
     return state;
   }
@@ -637,18 +677,25 @@
   }
 
   function presetBlockFromState(state, options = {}) {
+    const compactRack = intactRackRecipe(state);
+    const compactNumbers = compactRack
+      ? new Set(Array.from({ length: compactRack.count }, (_, index) => index + 1))
+      : null;
     const block = {
       rules: normalizeRules(state.rules),
       ballRadius: state.ballRadius,
       pocketRadius: state.pocketRadius,
       parameters: clonePlain(state.deterministic.parameters),
-      balls: state.balls.filter((ball) => options.activeOnly === false || ball.active).map((ball) => {
+      balls: state.balls.filter((ball) => (
+        (options.activeOnly === false || ball.active)
+        && !(compactNumbers && ball.kind === 'target' && compactNumbers.has(ball.number))
+      )).map((ball) => {
         const exported = ballExport(ball, state.preset);
         return {
           id: exported.id,
           kind: exported.kind,
           ...(exported.kind === 'target' ? { number: exported.number } : {}),
-          at: exported.at
+          at: locationReferenceForPoint(ball.tileIndex, ball.position, state.preset, state.atlas) || exported.at
         };
       }),
       pockets: state.pockets.map((pocket) => {
@@ -656,6 +703,7 @@
         return { id: exported.id, vertex: exported.vertex };
       })
     };
+    if (compactRack) block.rack = clonePlain(compactRack);
     return block;
   }
 
@@ -684,6 +732,8 @@
     clone.ballInHandPlayer = source.ballInHandPlayer || '';
     clone.lastShot = clonePlain(source.lastShot);
     clone.initialSetup = clonePlain(source.initialSetup);
+    clone.rackRecipe = clonePlain(source.rackRecipe);
+    clone.rackTargetNumbers = Array.isArray(source.rackTargetNumbers) ? source.rackTargetNumbers.slice() : [];
     clone.recordMoves = clonePlain(source.recordMoves || []);
     clone.deterministic = clonePlain(source.deterministic || clone.deterministic);
     clone.ending = source.ending || '';
@@ -933,6 +983,10 @@
     ball.angularVelocity = { x: 0, y: 0, z: 0 };
     const issue = placementIssue(next, ball, ball.id);
     if (issue) return { changed: false, state, message: issue };
+    if (ball.kind === 'target' && next.rackTargetNumbers.includes(ball.number)) {
+      next.rackRecipe = null;
+      next.rackTargetNumbers = [];
+    }
     return { changed: true, state: next, message: `${ball.kind === 'cue' ? 'cue ball' : `ball ${ball.number}`} moved` };
   }
 
@@ -947,6 +1001,10 @@
     if (bestBall) {
       next.balls = next.balls.filter((ball) => ball.id !== bestBall.ball.id);
       if (bestBall.ball.kind === 'target') {
+        if (next.rackTargetNumbers.includes(bestBall.ball.number)) {
+          next.rackRecipe = null;
+          next.rackTargetNumbers = [];
+        }
         next.targetTotal = Math.max(0, next.targetTotal - 1);
         next.nextTargetNumber = lowestMissingTargetNumber(next.balls);
       }
@@ -1109,6 +1167,86 @@
     return { rows, direction: normalizedDirection, spacing, rowSpacing, positions };
   }
 
+  function normalizeRackRecipe(source, preset, atlas) {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) throw new Error('invalid billiards rack recipe');
+    const count = Math.max(0, Math.floor(Number(source.count) || 0));
+    if (!rackRowCount(count)) throw new Error('billiards rack count must form a triangular rack');
+    const centerSource = source.center && typeof source.center === 'object' ? source.center : source.at;
+    const center = pointFromLocationReference(centerSource, preset, atlas);
+    if (!center) throw new Error('billiards rack center must reference an existing tile');
+    const angle = normalizeAngleDegrees(source.angle);
+    if (angle == null) throw new Error('billiards rack angle must be finite');
+    const centerReference = locationReferenceForPoint(center.tileIndex, center.position, preset, atlas);
+    return {
+      recipe: { count, center: centerReference, angle },
+      count,
+      tileIndex: center.tileIndex,
+      position: { ...center.position },
+      direction: directionFromAngleDegrees(angle)
+    };
+  }
+
+  function expectedRackBalls(state, recipe) {
+    const normalized = normalizeRackRecipe(recipe, state.preset, state.atlas);
+    const layout = rackLayout(normalized.count, normalized.position, normalized.direction, state.ballRadius);
+    const balls = [];
+    layout.positions.forEach((rackPosition, index) => {
+      const number = index + 1;
+      const ball = ballFromPayload({
+        id: String(number),
+        kind: 'target',
+        number,
+        at: { tileIndex: normalized.tileIndex, ...rackPosition }
+      }, state.preset, state.atlas, state, number);
+      if (!ball || !canonicalizeBall(ball, state.atlas)) throw new Error('billiards rack does not fit on this surface');
+      balls.push(ball);
+    });
+    return { normalized, balls };
+  }
+
+  function installRackRecipe(state, source) {
+    const expected = expectedRackBalls(state, source);
+    const generatedNumbers = new Set(Array.from({ length: expected.normalized.count }, (_, index) => index + 1));
+    const conflicting = state.balls.find((ball) => ball.kind === 'target' && generatedNumbers.has(ball.number));
+    if (conflicting) throw new Error(`billiards rack conflicts with explicit ball ${conflicting.number}`);
+    const usedIds = new Set(state.balls.map((ball) => String(ball.id)));
+    const placementState = { ...state, balls: state.balls.slice() };
+    expected.balls.forEach((ball) => {
+      if (usedIds.has(String(ball.id))) throw new Error(`billiards rack conflicts with explicit ball id ${ball.id}`);
+      const issue = placementIssue(placementState, ball, ball.id);
+      if (issue) throw new Error(`billiards rack does not fit: ${issue}`);
+      usedIds.add(String(ball.id));
+      placementState.balls.push(ball);
+    });
+    state.balls = placementState.balls;
+    state.rackRecipe = clonePlain(expected.normalized.recipe);
+    state.rackTargetNumbers = Array.from(generatedNumbers);
+    state.targetTotal = state.balls.filter((ball) => ball.kind === 'target').length;
+    state.nextTargetNumber = lowestMissingTargetNumber(state.balls);
+    return state;
+  }
+
+  function rackRecipeFromPlacement(state, count, tileIndex, position, direction) {
+    let angle = angleDegreesFromDirection(direction);
+    if (angle == null) return null;
+    const nearestStep = normalizeAngleDegrees(Math.round(angle / DIRECTION_SNAP_STEP_DEGREES) * DIRECTION_SNAP_STEP_DEGREES);
+    if (Math.abs(modulo(angle - nearestStep + 180, 360) - 180) <= 1e-10) angle = nearestStep;
+    const center = locationReferenceForPoint(tileIndex, position, state.preset, state.atlas);
+    return center ? { count, center, angle } : null;
+  }
+
+  function intactRackRecipe(state) {
+    if (!state || !state.rackRecipe) return null;
+    let expected;
+    try { expected = expectedRackBalls(state, state.rackRecipe); } catch (_) { return null; }
+    const tolerance = 1e-7;
+    for (const wanted of expected.balls) {
+      const actual = state.balls.find((ball) => ball.active && ball.kind === 'target' && ball.number === wanted.number);
+      if (!actual || actual.tileIndex !== wanted.tileIndex || M.length2(M.sub2(actual.position, wanted.position)) > tolerance) return null;
+    }
+    return clonePlain(expected.normalized.recipe);
+  }
+
   function rackPreviewEntries(state, count, tileIndex, center, direction) {
     const layout = rackLayout(count, center, direction, state.ballRadius);
     if (!layout.rows || !Number.isInteger(tileIndex)) return [];
@@ -1151,6 +1289,8 @@
     }
     next.targetTotal = normalizedCount;
     next.nextTargetNumber = lowestMissingTargetNumber(next.balls);
+    next.rackRecipe = rackRecipeFromPlacement(next, normalizedCount, tileIndex, position, layout.direction);
+    next.rackTargetNumbers = Array.from({ length: normalizedCount }, (_, index) => index + 1);
     return { changed: true, state: next, message: `${normalizedCount}-ball rack placed` };
   }
 
@@ -1628,6 +1768,8 @@
       nextPocketId: state.nextPocketId,
       lastShot: clonePlain(state.lastShot),
       initialSetup: clonePlain(state.initialSetup),
+      rackRecipe: clonePlain(state.rackRecipe),
+      rackTargetNumbers: Array.isArray(state.rackTargetNumbers) ? state.rackTargetNumbers.slice() : [],
       recordMoves: clonePlain(state.recordMoves),
       deterministic: clonePlain(state.deterministic)
     };
@@ -1673,6 +1815,17 @@
     state.nextPocketId = Math.max(1, Math.floor(Number(source.nextPocketId) || state.nextPocketId));
     state.lastShot = clonePlain(source.lastShot || null);
     state.initialSetup = clonePlain(source.initialSetup || null);
+    if (source.rackRecipe && typeof source.rackRecipe === 'object') {
+      try {
+        state.rackRecipe = normalizeRackRecipe(source.rackRecipe, preset, state.atlas).recipe;
+        state.rackTargetNumbers = Array.isArray(source.rackTargetNumbers)
+          ? source.rackTargetNumbers.map((number) => Math.max(1, Math.floor(Number(number) || 1)))
+          : Array.from({ length: state.rackRecipe.count }, (_, index) => index + 1);
+      } catch (_) {
+        state.rackRecipe = null;
+        state.rackTargetNumbers = [];
+      }
+    }
     state.recordMoves = clonePlain(source.recordMoves || []);
     if (source.deterministic && typeof source.deterministic === 'object') {
       const parameters = { ...DEFAULT_PARAMETERS, ...(source.deterministic.parameters || {}) };
@@ -1707,6 +1860,87 @@
       if (!best || distance < best.distance) best = { tileIndex: tile.index, position: local, distance };
     });
     return best;
+  }
+
+  function magneticSnapPoint(atlas, tileIndex, position, geometry, options = {}) {
+    const point = normalizeVector2(position);
+    const base = { tileIndex, position: point, snapped: false, anchor: null, distanceCss: Infinity };
+    const tile = atlas && atlas.tiles && atlas.tiles[tileIndex];
+    if (!tile || tile.removed || options.disabled || !geometry) return base;
+    const sourceCanvas = localToCanvas(tileIndex, point, geometry, atlas);
+    if (!sourceCanvas) return base;
+    const scaleX = Number.isFinite(Number(options.cssScaleX)) && Number(options.cssScaleX) > 0 ? Number(options.cssScaleX) : 1;
+    const scaleY = Number.isFinite(Number(options.cssScaleY)) && Number(options.cssScaleY) > 0 ? Number(options.cssScaleY) : scaleX;
+    const threshold = Number.isFinite(Number(options.thresholdCss))
+      ? Math.max(0, Number(options.thresholdCss))
+      : POSITION_SNAP_CSS_PX;
+    const candidates = [
+      { position: { x: 0, y: 0 }, anchor: { kind: 'center' }, order: 0 },
+      ...tile.polygon.map((cornerPoint, corner) => ({
+        position: { ...cornerPoint },
+        anchor: { kind: 'vertex', corner, cornerName: atlas.info.cornerNames[corner] },
+        order: corner + 1
+      }))
+    ];
+    let best = null;
+    candidates.forEach((candidate) => {
+      const canvas = localToCanvas(tileIndex, candidate.position, geometry, atlas);
+      if (!canvas) return;
+      const distanceCss = Math.hypot(
+        (canvas.x - sourceCanvas.x) * scaleX,
+        (canvas.y - sourceCanvas.y) * scaleY
+      );
+      if (!best || distanceCss < best.distanceCss - EPSILON || (
+        Math.abs(distanceCss - best.distanceCss) <= EPSILON && candidate.order < best.order
+      )) best = { ...candidate, distanceCss };
+    });
+    if (!best || best.distanceCss > threshold + EPSILON) return base;
+    return {
+      tileIndex,
+      position: { ...best.position },
+      snapped: true,
+      anchor: { ...best.anchor },
+      distanceCss: best.distanceCss
+    };
+  }
+
+  function normalizeAngleDegrees(value) {
+    const angle = Number(value);
+    return Number.isFinite(angle) ? modulo(angle, 360) : null;
+  }
+
+  function directionFromAngleDegrees(angle) {
+    const normalized = normalizeAngleDegrees(angle);
+    if (normalized == null) return null;
+    const radians = normalized * Math.PI / 180;
+    return { x: Math.cos(radians), y: Math.sin(radians) };
+  }
+
+  function angleDegreesFromDirection(direction) {
+    const vector = normalizedRackDirection(direction, null);
+    return vector ? normalizeAngleDegrees(Math.atan2(vector.y, vector.x) * 180 / Math.PI) : null;
+  }
+
+  function magneticSnapDirection(direction, options = {}) {
+    const angle = angleDegreesFromDirection(direction);
+    if (angle == null) return null;
+    const base = { direction: directionFromAngleDegrees(angle), angle, snapped: false, deltaDegrees: Infinity };
+    if (options.disabled) return base;
+    const step = Number.isFinite(Number(options.stepDegrees)) && Number(options.stepDegrees) > 0
+      ? Number(options.stepDegrees)
+      : DIRECTION_SNAP_STEP_DEGREES;
+    const tolerance = Number.isFinite(Number(options.toleranceDegrees))
+      ? Math.max(0, Number(options.toleranceDegrees))
+      : DIRECTION_SNAP_TOLERANCE_DEGREES;
+    const snappedAngle = normalizeAngleDegrees(Math.round(angle / step) * step);
+    const delta = Math.abs(modulo(angle - snappedAngle + 180, 360) - 180);
+    if (delta > tolerance + EPSILON) return { ...base, deltaDegrees: delta };
+    return {
+      direction: directionFromAngleDegrees(snappedAngle),
+      angle: snappedAngle,
+      snapped: true,
+      deltaDegrees: delta
+    };
   }
 
   function drawPocketWedges(ctx, geometry, state) {
@@ -2112,6 +2346,40 @@
     return point;
   }
 
+  function drawCompleteSetupHoverBall(ctx, geometry, state, tileIndex, position, radius, color, valid) {
+    const primary = localToCanvas(tileIndex, position, geometry, state.atlas);
+    if (!primary) return null;
+    const scale = state.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
+    const drawCircle = (center, clippedTileIndex = null) => {
+      ctx.save();
+      if (Number.isInteger(clippedTileIndex) && !clipToTile(ctx, geometry, state, clippedTileIndex)) {
+        ctx.restore();
+        return;
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(2, scale * 0.026);
+      ctx.setLineDash([Math.max(4, scale * 0.10), Math.max(3, scale * 0.075)]);
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, Math.max(2, radius * scale), 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    };
+    if (valid === false) {
+      drawCircle(primary);
+      return primary;
+    }
+    const images = aimGuideImages(state, tileIndex, position, radius);
+    if (!images.length) {
+      drawCircle(primary);
+      return primary;
+    }
+    images.forEach((image) => {
+      const center = localToCanvas(image.tileIndex, image.position, geometry, state.atlas);
+      if (center) drawCircle(center, image.tileIndex);
+    });
+    return primary;
+  }
+
   function drawSetupHoverLabel(ctx, point, label, color) {
     if (!point || !label) return;
     const text = String(label);
@@ -2147,7 +2415,11 @@
       const point = hover.image || hover.vertex || hover;
       const targetTile = Number.isInteger(point.tileIndex) ? point.tileIndex : hover.tileIndex;
       const targetPosition = point.position && typeof point.position === 'object' ? point.position : hover.position;
-      if (targetPosition) labelPoint = drawSetupHoverCircle(ctx, geometry, state, targetTile, targetPosition, radius, color);
+      if (targetPosition) {
+        labelPoint = hover.type === 'ball'
+          ? drawCompleteSetupHoverBall(ctx, geometry, state, targetTile, targetPosition, radius, color, hover.valid)
+          : drawSetupHoverCircle(ctx, geometry, state, targetTile, targetPosition, radius, color);
+      }
     }
     drawSetupHoverLabel(ctx, labelPoint, hover.label, color);
   }
@@ -2261,6 +2533,9 @@
     BALL_COLORS,
     DEFAULT_PARAMETERS,
     EPSILON,
+    POSITION_SNAP_CSS_PX,
+    DIRECTION_SNAP_STEP_DEGREES,
+    DIRECTION_SNAP_TOLERANCE_DEGREES,
     PHYSICS_DT,
     TAU,
     activePocketAtClass,
@@ -2278,11 +2553,15 @@
     indexOf,
     latticeInfo,
     localToCanvas,
+    locationReferenceForPoint,
+    magneticSnapDirection,
+    magneticSnapPoint,
     moveBall,
     nearbyImages,
     nearestVertex,
     normalizeRules,
     normalizeFriction,
+    normalizeRackRecipe,
     placeBall,
     placeRack,
     placeCueBallInHand,

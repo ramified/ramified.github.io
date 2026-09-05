@@ -43,6 +43,7 @@ function setSquareBoard(options = {}) {
     lattice: 'square',
     boundary: 'glued',
     showGlueFlaps: options.showGlueFlaps !== false,
+    glueFlapTargetOnHover: options.glueFlapTargetOnHover !== false,
     gluedEdges: [{
       group: 9,
       first: { row: 1, col: 2, dir: 0 },
@@ -131,12 +132,23 @@ function testFlapRenderingAndDirectedLabels() {
   const labels = enabled.calls.filter((call) => call.method === 'fillText');
   const rotations = enabled.calls.filter((call) => call.method === 'rotate');
   const dashed = enabled.calls.filter((call) => call.method === 'setLineDash' && call.args[0].length > 0);
-  assert.deepStrictEqual(labels.map((call) => call.args[0]), ['1', '1']);
-  assert.strictEqual(rotations.length, 2);
+  assert.deepStrictEqual(labels.map((call) => call.args[0]), ['1']);
+  assert.strictEqual(rotations.length, 1);
   assert.ok(nearlyEqual(rotations[0].args[0], Math.PI / 2));
-  assert.ok(nearlyEqual(rotations[1].args[0], Math.PI / 2));
-  assert.strictEqual(dashed.length, 1);
+  assert.strictEqual(dashed.length, 0);
   assert.strictEqual(enabled.calls.filter((call) => call.method === 'strokeText').length, 0);
+
+  const pair = mosaic.state.gluedEdges[0];
+  mosaic.state.gluedHover = {
+    edgeKey: `${pair.first.index}:${pair.first.dir}`,
+    pairIndex: 0,
+    group: pair.group
+  };
+  const hovered = makeContext();
+  mosaic.drawGluedBoundaryPairs(hovered.context);
+  assert.deepStrictEqual(hovered.calls.filter((call) => call.method === 'fillText').map((call) => call.args[0]), ['1', '1']);
+  assert.strictEqual(hovered.calls.filter((call) => call.method === 'setLineDash' && call.args[0].length > 0).length, 1);
+  mosaic.clearGluedBoundaryHover();
 }
 
 function testWholeTrapezoidHoverHitArea() {
@@ -145,9 +157,11 @@ function testWholeTrapezoidHoverHitArea() {
   const outward = mosaic.glueFlapGeometry(pair.first, true);
   const inward = mosaic.glueFlapGeometry(pair.second, false);
   const outwardHit = mosaic.glueFlapHoverAtBoardPoint(outward.labelPoint);
-  const inwardHit = mosaic.glueFlapHoverAtBoardPoint(inward.labelPoint);
   assert.strictEqual(outwardHit.pairIndex, 0);
   assert.strictEqual(outwardHit.edgeKey, `${pair.first.index}:${pair.first.dir}`);
+  assert.strictEqual(mosaic.glueFlapHoverAtBoardPoint(inward.labelPoint), null, 'a hidden target has no invisible hit area');
+  mosaic.state.gluedHover = outwardHit;
+  const inwardHit = mosaic.glueFlapHoverAtBoardPoint(inward.labelPoint);
   assert.strictEqual(inwardHit.pairIndex, 0);
   assert.strictEqual(inwardHit.edgeKey, `${pair.second.index}:${pair.second.dir}`);
   const nearOutline = {
@@ -155,6 +169,7 @@ function testWholeTrapezoidHoverHitArea() {
     y: outward.labelPoint.y + (outward.normal.y * outward.depth * 0.62)
   };
   assert.strictEqual(mosaic.glueFlapHoverAtBoardPoint(nearOutline).pairIndex, 0);
+  mosaic.clearGluedBoundaryHover();
 }
 
 function testStrokeOnlyHoverTiers() {
@@ -164,6 +179,7 @@ function testStrokeOnlyHoverTiers() {
     lattice: 'square',
     boundary: 'glued',
     showGlueFlaps: true,
+    glueFlapTargetOnHover: false,
     gluedEdges: [
       {
         group: 9,
@@ -269,22 +285,29 @@ function testStraightSquareGroupsUseCombinedTrapezoids() {
 
   const rendered = makeContext();
   mosaic.drawGluedBoundaryPairs(rendered.context);
-  assert.strictEqual(rendered.calls.filter((call) => call.method === 'stroke').length, 2);
+  assert.strictEqual(rendered.calls.filter((call) => call.method === 'stroke').length, 1);
   assert.strictEqual(rendered.calls.filter((call) => call.method === 'fill').length, 1);
   assert.deepStrictEqual(
     rendered.calls.filter((call) => call.method === 'fillText').map((call) => call.args[0]),
-    ['1', '1']
+    ['1']
   );
   const labelTranslations = rendered.calls.filter((call) => call.method === 'translate');
-  assert.strictEqual(labelTranslations.length, 2);
+  assert.strictEqual(labelTranslations.length, 1);
   assert.ok(nearlyEqual(labelTranslations[0].args[0], combined.first.labelPoint.x));
   assert.ok(nearlyEqual(labelTranslations[0].args[1], combined.first.labelPoint.y));
-  assert.ok(nearlyEqual(labelTranslations[1].args[0], combined.second.labelPoint.x));
-  assert.ok(nearlyEqual(labelTranslations[1].args[1], combined.second.labelPoint.y));
 
   const bridgeHit = mosaic.glueFlapHoverAtBoardPoint(combined.first.labelPoint);
   assert.ok(bridgeHit);
   assert.strictEqual(bridgeHit.group, 17);
+  mosaic.state.gluedHover = bridgeHit;
+  const hovered = makeContext();
+  mosaic.drawGluedBoundaryPairs(hovered.context);
+  const hoveredTranslations = hovered.calls.filter((call) => call.method === 'translate');
+  assert.strictEqual(hovered.calls.filter((call) => call.method === 'stroke').length, 2);
+  assert.strictEqual(hoveredTranslations.length, 2);
+  assert.ok(nearlyEqual(hoveredTranslations[1].args[0], combined.second.labelPoint.x));
+  assert.ok(nearlyEqual(hoveredTranslations[1].args[1], combined.second.labelPoint.y));
+  mosaic.clearGluedBoundaryHover();
 
   mosaic.setTestBoard({
     rows: 2,
@@ -328,7 +351,7 @@ function testCssPixelLabelCutoffAndArrowFallback() {
   mosaic.setTestGeometry({ ...geometry, cssScale: 1.25 });
   const enlarged = makeContext();
   mosaic.drawGluedBoundaryPairs(enlarged.context);
-  assert.strictEqual(enlarged.calls.filter((call) => call.method === 'fillText').length, 2);
+  assert.strictEqual(enlarged.calls.filter((call) => call.method === 'fillText').length, 1);
 
   mosaic.setTestGeometry({ ...geometry, cssScale: 0.65 });
   const reduced = makeContext();
@@ -364,6 +387,7 @@ function testDisplayImportMerging() {
     showErrors: true,
     showCoords: true,
     showGlueFlaps: true,
+    glueFlapTargetOnHover: true,
     colorComponents: false,
     displayPick: true,
     showCusps: true,
@@ -378,6 +402,10 @@ function testDisplayImportMerging() {
     mosaic.importedDisplaySettings({ glueFlaps: false, showCoords: false }, previous),
     { ...previous, showGlueFlaps: false, showCoords: false }
   );
+  assert.deepStrictEqual(
+    mosaic.importedDisplaySettings({ glueFlapTargetOnHover: false }, previous),
+    { ...previous, glueFlapTargetOnHover: false }
+  );
   assert.strictEqual(mosaic.importedWrappedViewMode({}, 'single'), 'single');
   assert.strictEqual(mosaic.importedWrappedViewMode({ wrappedViewMode: 'periodic' }, 'single'), 'periodic');
 }
@@ -386,12 +414,15 @@ function testDisplayExportAndMarkup() {
   setSquareBoard({ showGlueFlaps: true });
   const display = mosaic.buildFullExport().display;
   assert.strictEqual(display.glueFlaps, true);
+  assert.strictEqual(display.glueFlapTargetOnHover, true);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(display, 'glueFlapBaseAngle'), false);
 
   const html = fs.readFileSync(require.resolve('../mosaic_calculator.html'), 'utf8');
   assert.ok(html.includes('id="show-glue-flaps"'));
+  assert.ok(html.includes('id="glue-flap-target-on-hover" checked'));
+  assert.ok(/class="glue-flap-controls"[\s\S]*id="show-glue-flaps"[\s\S]*id="glue-flap-target-on-hover"/.test(html));
   assert.ok(!html.includes('id="glue-flap-base-angle"'));
-  assert.ok(html.includes('js/mosaic_calculator.js?v=glue-flaps-4'));
+  assert.ok(html.includes('js/mosaic_calculator.js?v=glue-flaps-5'));
 }
 
 testLatticeDerivedGeometry();

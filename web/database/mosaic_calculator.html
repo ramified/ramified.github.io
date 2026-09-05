@@ -269,6 +269,19 @@
       white-space: nowrap;
     }
 
+    .glue-flap-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .glue-flap-controls .opt-row {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
     .input-mode-panel[hidden],
     .mosaic-inline-row[hidden],
     .mosaic-view-row[hidden] {
@@ -1955,7 +1968,10 @@
         <label class="opt-row"><input type="checkbox" id="show-coords"> Show coordinates</label>
         <div class="mosaic-inline-row" id="glue-flaps-row" hidden>
           <span class="input-label">Glued boundary</span>
-          <label class="opt-row"><input type="checkbox" id="show-glue-flaps"> Glue flaps</label>
+          <span class="glue-flap-controls">
+            <label class="opt-row"><input type="checkbox" id="show-glue-flaps"> Glue flaps</label>
+            <label class="opt-row"><input type="checkbox" id="glue-flap-target-on-hover" checked> On hover</label>
+          </span>
         </div>
         <div class="mosaic-opt-pair">
           <label class="opt-row"><input type="checkbox" id="color-components" checked> Color components</label>
@@ -2103,7 +2119,7 @@
 <script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_native.js?v=20260825-1"></script>
-<script src="js/mosaic_calculator.js?v=glue-flaps-4"></script>
+<script src="js/mosaic_calculator.js?v=glue-flaps-5"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260826-1"></script>
 <script>
