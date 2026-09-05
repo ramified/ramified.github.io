@@ -329,16 +329,16 @@ const SHOP_CONFIG = {
       zh: "弹性床单，2欧。购买其他物品总价超过8欧可免费赠送。"
     }
   },
-  {
-    id: "blanket",
-    image: "blanket.jpg",
-    price: 2,
-    name: { en: "Blanket", zh: "毛毯" },
-    description: {
-      en: "Blanket, €2, or free if your other items total more than €15.",
-      zh: "毛毯，2欧。购买其他物品总价超过15欧可免费赠送。"
-    }
-  },
+  // {
+  //   id: "blanket",
+  //   image: "blanket.jpg",
+  //   price: 2,
+  //   name: { en: "Blanket", zh: "毛毯" },
+  //   description: {
+  //     en: "Blanket, €2, or free if your other items total more than €15.",
+  //     zh: "毛毯，2欧。购买其他物品总价超过15欧可免费赠送。"
+  //   }
+  // },
   ]
 };
 
