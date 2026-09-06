@@ -239,7 +239,7 @@ function testPageIntegration() {
   assert.ok(setup.includes('topological_billiards_physics.js'));
   assert.ok(setup.includes('topological_billiards_renderer.js'));
   assert.ok(setup.includes('topological_billiards_native.js'));
-  assert.ok(setup.includes('topological_billiards_native.js?v=20260905-3'));
+  assert.ok(setup.includes('topological_billiards_native.js?v=20260906-1'));
   assert.ok(html.includes('id="billiards-physics-profile"'));
   assert.ok(html.includes('id="fullscreen-billiards-physics-profile"'));
   assert.ok(setup.includes('wrappedViewCamera().scale'), 'wrapped billiards snapping uses the visible camera scale');
@@ -265,6 +265,31 @@ function testPageIntegration() {
   assert.ok(setup.includes('function billiardsPlacementLocalFromEvent'));
   assert.ok(setup.includes('function updateBilliardsSnapModifier'));
   assert.ok(setup.includes("runtime.billiardsSnapGuidance"));
+}
+
+function testLegacyV1BaselineFixture() {
+  const fixture = JSON.parse(fs.readFileSync(require.resolve('./fixtures/legacy_v1_baseline.json'), 'utf8'));
+  const ready = N.begin(N.createState(fixture.preset)).state;
+  const result = N.resolveShot(
+    ready,
+    fixture.shot.aim,
+    fixture.shot.power,
+    fixture.shot.contact,
+    { shooter: fixture.shot.shooter }
+  );
+  assert.strictEqual(result.state.deterministic.physicsVersion, fixture.physicsVersion);
+  assert.strictEqual(result.simulationSteps, fixture.expected.simulationSteps);
+  const compareBall = (ball, expected) => {
+    assert.strictEqual(ball.tileIndex, expected.tileIndex);
+    near(ball.position.x, expected.position.x, 1e-12);
+    near(ball.position.y, expected.position.y, 1e-12);
+    near(ball.angularVelocity.x, expected.angularVelocity.x, 1e-12);
+    near(ball.angularVelocity.y, expected.angularVelocity.y, 1e-12);
+    near(ball.angularVelocity.z, expected.angularVelocity.z, 1e-12);
+    assert.strictEqual(ball.crossings, expected.crossings);
+  };
+  compareBall(result.state.balls.find((ball) => ball.kind === 'cue'), fixture.expected.cue);
+  compareBall(result.state.balls.find((ball) => ball.kind === 'target'), fixture.expected.target);
 }
 
 function testPaletteLabelsAreCenteredAndUpright() {
@@ -523,14 +548,57 @@ function testNativePhysicsProfilesAndHiDpiSprites() {
   near(realistic.deterministic.parameters.cushionFriction, N.REALISTIC_PARAMETER_DEFAULTS.cushionFriction);
   assert.strictEqual(N.stateFromExport(preset, N.stateExport(realistic)).deterministic.physicsProfile, 'realistic');
 
+  const research = N.setPhysicsProfile(legacy, 'research');
+  assert.strictEqual(research.deterministic.physicsVersion, N.PHYSICS_VERSION.research);
+  assert.strictEqual(research.deterministic.solverTolerancesVersion, N.SOLVER_TOLERANCES_VERSION);
+  near(research.deterministic.dt, N.RESEARCH_PHYSICS_DT);
+  assert.ok(research.deterministic.parameters.collisionIterations > realistic.deterministic.parameters.collisionIterations);
+  const chineseEquipment = N.setEquipmentProfile(research, 'chinese-8ball');
+  assert.strictEqual(chineseEquipment.deterministic.equipmentProfileId, 'chinese-8ball');
+  assert.strictEqual(chineseEquipment.deterministic.equipmentVersion, N.EQUIPMENT_PROFILES['chinese-8ball'].version);
+  assert.ok(chineseEquipment.balls.every((ball) => ball.physicalMassKg === N.EQUIPMENT_PROFILES['chinese-8ball'].ballMassKg));
+  const oldExport = N.stateExport(legacy);
+  delete oldExport.deterministic.physicsProfile;
+  delete oldExport.deterministic.physicsVersion;
+  delete oldExport.deterministic.equipmentProfileId;
+  assert.strictEqual(N.stateFromExport(preset, oldExport).deterministic.physicsProfile, 'legacy', 'old states migrate to Classic');
+  const incompatible = N.stateExport(research);
+  incompatible.deterministic.physicsVersion = 'research-obsolete';
+  assert.throws(() => N.stateFromExport(preset, incompatible), /Unsupported Billiards physics version/, 'versioned advanced states are never silently reinterpreted');
+
   const legacyShot = N.resolveShot(N.begin(legacy).state, { x: 1, y: 0 }, 0.3, { x: 0, y: 0 });
   const realisticShot = N.resolveShot(N.begin(realistic).state, { x: 1, y: 0 }, 0.3, { x: 0, y: 0 });
+  near(realisticShot.shot.cueSpeedMps, 0.3 * N.EQUIPMENT_PROFILES['pool-9ft'].cueSpeedMaxMps, 1e-12, 'versioned legacy power conversion');
+  assert.strictEqual(realisticShot.shot.cueInputVersion, N.CUE_INPUT_VERSION);
   assert.strictEqual(realisticShot.simulationSteps, legacyShot.simulationSteps * 2, 'realistic profile uses twice the solver frequency');
   assert.ok(
     Math.abs(realisticShot.state.balls.find((ball) => ball.id === '1').angularVelocity.z) > 0.5,
     'realistic ball-ball friction transfers tangential motion into spin'
   );
   near(legacyShot.state.balls.find((ball) => ball.id === '1').angularVelocity.z, 0);
+
+  const elevatedOptions = {
+    cueSpeedMps: 4.2,
+    tipOffset: { x: 0.2, y: -0.2 },
+    elevationRad: 32 * Math.PI / 180,
+    cueProfileId: 'jump',
+    tipProfileId: 'hard',
+    strokePresetId: 'jump',
+    collectTrajectory: true
+  };
+  const elevatedSource = N.begin(research).state;
+  const elevated = N.resolveShot(elevatedSource, { x: 1, y: 0 }, 0.5, { x: 0.2, y: -0.2 }, elevatedOptions);
+  assert.strictEqual(elevated.shot.cueProfileId, 'jump');
+  assert.strictEqual(elevated.shot.tipProfileId, 'hard');
+  near(elevated.shot.cueSpeedMps, 4.2);
+  assert.ok(elevated.trajectory.some((frame) => frame.some((ball) => (ball.height || 0) > 0)), 'elevated shots enter the local 3D flight state');
+  assert.strictEqual(elevated.telemetry.solver, 'research-event');
+  assert.ok(elevated.telemetry.events >= 0);
+  assert.ok(Array.isArray(elevated.telemetry.warnings));
+  assert.ok(Array.isArray(elevated.telemetry.orderedEvents));
+  assert.ok(elevated.telemetry.finalEnergyJ <= elevated.telemetry.initialEnergyJ + 1e-7, 'passive dynamics do not add energy');
+  const repeatedElevated = N.resolveShot(elevatedSource, { x: 1, y: 0 }, 0.5, { x: 0.2, y: -0.2 }, elevatedOptions);
+  assert.deepStrictEqual(N.stateExport(repeatedElevated.state), N.stateExport(elevated.state), 'Research direct execution is deterministic');
 
   near(N.ballSpriteRasterScale({ backingScaleX: 2.5, backingScaleY: 2.49, devicePixelRatio: 1.5 }), 1.5);
   near(N.ballSpriteRasterScale({ backingScaleX: 3, backingScaleY: 3, devicePixelRatio: 3 }), 2);
@@ -571,6 +639,28 @@ function testNativeFrictionControlAndStoppingTime() {
   near(N.normalizeFriction(null), 1);
   near(N.normalizeFriction(0), 0.5);
   near(N.normalizeFriction(4), 2.5);
+}
+
+function testNativeEventCcdAtExtremeSpeed() {
+  const preset = {
+    id: 'native-event-ccd-stress', lattice: 'square', rows: 1, cols: 1,
+    removedTiles: [], cutEdges: [], gluedEdges: [],
+    billiards: {
+      ballRadius: 0.1, pockets: [],
+      balls: [
+        { id: 'cue', kind: 'cue', at: { row: 1, col: 1, x: -0.3, y: 0 } },
+        { id: '1', kind: 'target', number: 1, at: { row: 1, col: 1, x: 0.2, y: 0 } }
+      ]
+    }
+  };
+  const state = N.setPhysicsProfile(N.createState(preset), 'realistic');
+  const cue = state.balls.find((ball) => ball.kind === 'cue');
+  const target = state.balls.find((ball) => ball.kind === 'target');
+  cue.velocity = { x: 200, y: 0, z: 0 };
+  target.velocity = { x: 0, y: 0, z: 0 };
+  N.stepPhysics(state, state.deterministic.dt, { pocketedTargets: [], scratch: false });
+  assert.ok(target.velocity.x > 100, 'event CCD resolves an impact that a discrete overlap test would tunnel through');
+  assert.ok(target.position.x - cue.position.x >= cue.radius + target.radius - 1e-5, 'the extreme-speed pair is not left interpenetrating');
 }
 
 function testNativeSetupPaletteModelAndPocketToggle() {
@@ -1172,6 +1262,7 @@ function run() {
   testNativeStatusRoundTrip();
   testNativePhysicsProfilesAndHiDpiSprites();
   testNativeFrictionControlAndStoppingTime();
+  testNativeEventCcdAtExtremeSpeed();
   testNativeSetupPaletteModelAndPocketToggle();
   testNativeBallAppearanceRoundTripsCanonically();
   testNativeBeginnerAimTracing();
@@ -1182,6 +1273,7 @@ function run() {
   testCompleteSetupHoverCircle();
   testControllerStatusAndRecordIntegration();
   testPageIntegration();
+  testLegacyV1BaselineFixture();
   console.log('topological_billiards_test: all tests passed');
 }
 

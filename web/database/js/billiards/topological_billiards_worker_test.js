@@ -7,7 +7,7 @@ const M = require('./topological_billiards_math.js');
 const P = require('./topological_billiards_physics.js');
 const N = require('./topological_billiards_native.js');
 
-function testBrowserSimulationWorker() {
+async function testBrowserSimulationWorker() {
   let messageHandler = null;
   const messages = [];
   const workerScope = {
@@ -21,6 +21,8 @@ function testBrowserSimulationWorker() {
   const context = vm.createContext({
     self: workerScope,
     performance,
+    setTimeout,
+    clearTimeout,
     importScripts() {
       workerScope.TopologicalBilliardsMath = M;
       workerScope.TopologicalBilliardsPhysics = P;
@@ -65,6 +67,30 @@ function testBrowserSimulationWorker() {
   assert.strictEqual(messages[0].state.shots, 1);
   assert.ok(messages[0].simulationSteps > 0);
   assert.ok(messages[0].trajectory.length >= 2);
+
+  const researchState = N.setPhysicsProfile(state, 'research');
+  researchState.deterministic.parameters.maxShotSeconds = 2;
+  messageHandler({
+    data: {
+      id: 18,
+      preset,
+      state: N.stateExport(researchState),
+      aim: { x: 1, y: 0 },
+      power: 0.5,
+      contact: { x: 0, y: -0.2 },
+      cueSpeedMps: 4,
+      elevationRad: 0.2,
+      cueProfileId: 'playing',
+      tipProfileId: 'medium',
+      strokePresetId: 'custom',
+      shooter: 'player-1',
+      collectTrajectory: true
+    }
+  });
+  assert.ok(messages.some((message) => message.id === 18 && message.type === 'progress'), 'Research reports progress before completion');
+  messageHandler({ data: { type: 'cancel', id: 18 } });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.ok(messages.some((message) => message.id === 18 && message.type === 'cancelled'), 'Research cancellation is acknowledged');
 }
 
 function testRackPlacement() {
@@ -265,7 +291,7 @@ async function testHexRoomPieSwap(worker) {
 }
 
 async function run() {
-  testBrowserSimulationWorker();
+  await testBrowserSimulationWorker();
   testRackPlacement();
   testSetupInteractionPreview();
   const worker = await import('../../cloudflare/ramified-chess.worker.js');
@@ -303,6 +329,41 @@ async function run() {
   };
   assert.strictEqual(worker.billiardsTurnIssue(['player-1'], shot, current, retained), '');
   assert.match(worker.billiardsTurnIssue([], shot, current, retained), /player-1 to play/);
+
+  const deterministic = {
+    physicsProfile: 'research', physicsVersion: 'research-v1-event',
+    equipmentProfileId: 'pool-9ft', equipmentVersion: 'wpa-9ft-v1',
+    solverTolerancesVersion: 'event-toi-v1'
+  };
+  const physicalShot = worker.normalizeAction({
+    ...shot,
+    physicsVersion: deterministic.physicsVersion,
+    equipmentVersion: deterministic.equipmentVersion,
+    cueSpeedMps: 4.2,
+    elevationRad: 0.2,
+    tipOffset: { x: 0.2, y: -0.1 },
+    cueProfileId: 'low-deflection',
+    tipProfileId: 'soft'
+  });
+  const physicalCurrent = { ...current, deterministic };
+  const physicalRetained = {
+    ...retained,
+    deterministic,
+    lastShot: {
+      ...retained.lastShot,
+      cueSpeedMps: 4.2,
+      elevationRad: 0.2,
+      tipOffset: { x: 0.2, y: -0.1 },
+      cueProfileId: 'low-deflection',
+      tipProfileId: 'soft'
+    }
+  };
+  assert.strictEqual(worker.billiardsTurnIssue(['player-1'], physicalShot, physicalCurrent, physicalRetained), '');
+  assert.match(worker.billiardsTurnIssue(['player-1'], { ...physicalShot, cueSpeedMps: 8 }, physicalCurrent, physicalRetained), /at most 7.5/);
+  assert.match(worker.billiardsTurnIssue(['player-1'], physicalShot, physicalCurrent, {
+    ...physicalRetained,
+    deterministic: { ...deterministic, equipmentVersion: 'other' }
+  }), /equipmentVersion cannot change/);
 
   const passed = {
     ...retained,

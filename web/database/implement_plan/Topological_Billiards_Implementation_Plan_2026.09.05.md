@@ -2,7 +2,7 @@
 
 **Revision:** Realism-First Rewrite  
 **Date:** 2026-09-05  
-**Status:** Proposed replacement for the previous implementation plan  
+**Status:** Implementation in progress
 **Primary goal:** Preserve the project's topological mechanics while making the billiards simulation approach real-world cue sports as closely as practical in a deterministic browser game.
 
 ---
@@ -13,15 +13,14 @@ The current game already has a strong topological foundation: finite-radius ball
 
 However, its billiards physics are still closer to a stylized 2.5D simulation than a high-fidelity cue-sports simulator. In particular:
 
-- the production/native solver does not yet use continuous collision detection (CCD);
-- ball-ball collision response is essentially normal-impulse-only;
-- ball-ball tangential friction and spin-induced/cut-induced throw are missing;
-- cushion impact lacks a detailed spin/friction/compliance model;
+- the frozen Classic path still uses overlap repair, while Realistic and Research now use an initial event-driven CCD kernel that has not yet passed the full production stress gate;
+- Realistic and Research now include normal and tangential ball-ball impulses plus angular-velocity updates, but calibrated cut/spin throw remains incomplete;
+- cushion impact now includes a basic tangential impulse and spin transfer, but nose-height geometry, compliant response, and measured speed dependence are still missing;
 - pockets are capture regions rather than geometric jaws/throats/shelves;
-- cue input is reduced mainly to aim, power, and contact point;
-- there is no cue elevation, genuine swerve/jump/masse physics, or airborne ball state;
-- "stroke styles" such as 推、打、点、搓 are not physically distinct inputs;
-- the production physics code and the more advanced reference physics path have diverged.
+- Realistic and Research accept cue speed, two-dimensional tip offset, elevation, cue ID, tip ID, and stroke-preset ID; their impact coefficients still require measurement-based calibration;
+- a preliminary local-height, gravity, airborne collision, landing, swerve, jump, masse, and airborne-seam path exists, but R7 has not passed quantitative acceptance;
+- stroke styles such as 推、打、点、搓 only populate continuous physical inputs and do not apply post-impact bonuses;
+- live play, Worker execution, replay, and tests now enter through the same native simulation scheduler; prediction still uses the cheaper geometric aim trace and is not yet an authoritative full-shot prediction.
 
 This revision changes the project philosophy:
 
@@ -41,6 +40,74 @@ The implementation should still remain incremental. The recommended order is:
 10. expose the complexity through layered UI rather than fake "magic stroke" modifiers.
 
 The ordinary rectangular-table limit should become a serious billiards simulator. The topological game should then inherit that same local physics without special-casing seams.
+
+---
+
+## Implementation Status as of 2026-09-06
+
+Status words in this ledger are deliberately strict:
+
+- **Not started** means no production implementation exists.
+- **Partially implemented** means an interface or usable model exists, but one or more milestone tasks or quantitative gates remain open.
+- **Implemented** means every milestone task is present but quantitative acceptance is not yet complete.
+- **Verified** means all milestone exit gates have passed with recorded evidence.
+
+No R0–R9 milestone is marked Verified in this update.
+
+### Delivered in this implementation
+
+- **Three deterministic profiles and compatibility migration:** `legacy` remains the default at `legacy-v1`; `realistic` is `realistic-v2-event`; `research` is `research-v1-event`. Missing profile/equipment/height/elevation fields migrate to Classic, `pool-9ft`, and zero respectively. The solver tolerance schema is `event-toi-v1`.
+- **Shared scheduler:** live simulation, browser Worker execution, record replay, deterministic tests, and the main-thread time-sliced fallback all call `createShotSimulation`, `advanceShotSimulation`, and `shotSimulationResult` in `js/billiards/topological_billiards_native.js`. The frozen Classic resolver remains a compatibility branch selected by the dispatcher.
+- **Initial event kernel:** Realistic and Research find ball-ball, seam, physical boundary, landing, and pocket events inside each outer interval. Ties use event time, fixed event priority, and canonical IDs. Event and iteration caps emit explicit telemetry warnings. A physical ball has one canonical state; cover images are query/render artifacts and pair search never creates self pairs.
+- **Initial high-fidelity contacts:** state-based cloth sliding/rolling/spinning, ball-ball tangential impulse, angular updates, basic cushion tangential impulse/spin transfer, speed/angle-sensitive pocket acceptance/rejection, and a passive-energy assertion are present. These are engineering starting models, not measurement-validated releases.
+- **Physical cue input:** advanced profiles store cue speed in m/s, tip offset, cue elevation, cue/tip IDs, shooter, miscue state, impulse, delivered speed, and squirt. Presets only fill these continuous fields. Classic retains and records the frozen `power` conversion.
+- **Preliminary local 3D:** balls store local height, vertical velocity, angular velocity, and motion state. Advanced simulation includes gravity, landing events, 3D sphere TOI, elevated-cue launch, swerve, airborne seam transport, and raised-ball rendering with a ground shadow. This is not yet R7-calibrated.
+- **Equipment and network version gates:** `pool-9ft` and `chinese-8ball` carry versioned dimensions and provenance. Online shots reject physics, equipment, solver-tolerance, or physical-input mismatches.
+- **Billiards Game Tools:** normal setup and fit-viewport/fullscreen tools share cue speed, exact-speed lock, numeric tip coordinates, keyboard/touch/mouse tip control, centering, elevation, stroke/cue/tip selectors, prediction assistance, equipment, and profile state. Research exposes progress/cancel plus solver phase, simulation time, event/iteration counts, energy drift, contact, and localized warnings. Shot parameters lock while calculation or playback is active.
+- **Responsiveness and resolution:** simulations use a Worker when available; Research yields progress between chunks and honors cancellation without committing state. The prior high-DPI backing-store and cached ball-sprite changes remain active, and trajectory playback now uses its actual 30 Hz recording cadence for every physics profile.
+- **English and Simplified Chinese:** all new static, accessibility, and dynamic Game Tools text has explicit locale keys.
+
+### Still gated or not implemented
+
+- The CCD kernel has a deterministic extreme-speed unit case, but the required randomized maximum-speed suite, grouped simultaneous-contact solver, conservative acceleration handling, and full chart-independence acceptance set are not complete. It is therefore not yet “production-grade CCD.”
+- The engine converts between atlas distance and SI values for energy, gravity, cue impact, and equipment, but canonical positions/velocities are still stored in atlas units. Full SI-native state and measured cloth/static-friction calibration are not complete.
+- Ball-ball throw and cushion behavior are not calibrated against reference shots. Cushion nose-height contact, circular jaw geometry, velocity-dependent restitution, and a compliant cushion model are not implemented.
+- Pocket rejection is currently a deterministic speed/alignment model around the canonical capture region. Physical mouth, facing arcs, shelf, throat, rattle contacts, and corner/side geometry are not implemented.
+- Local 3D has no calibrated cloth re-contact impulse, full masse integration, or validated airborne seam/ball benchmark set. The current jump/masse behavior must remain experimental.
+- Equipment dimensions have source notes, but cloth/contact coefficients are provisional `calibration-v1` values. There is no parameter-fitting tool or documented measured reference-shot dataset yet.
+- Research currently uses the authoritative event kernel at 960 Hz, tighter event tolerance, a larger event budget, and richer diagnostics. Adaptive integration, iterative frictional contact clusters, compliant rails, uncertainty propagation, and diagnostic export are not implemented.
+- Full-shot trajectory prediction still differs from authoritative live simulation; the UI’s existing aim assistance is geometric and must be labelled/treated as approximate until the predictor is migrated.
+
+### Milestone ledger
+
+| Milestone | Status | Evidence in this revision | Open exit gate |
+|---|---|---|---|
+| R0 | Partially implemented | frozen Classic branch/version, machine-readable `legacy-v1` baseline fixture, legacy regression tests, state/replay metadata, energy and ordered-event telemetry | broaden the representative replay fixture set and complete parameter documentation |
+| R1 | Partially implemented | authoritative dispatcher; Worker/replay/direct APIs; ball, seam, wall, landing and pocket TOI; deterministic ordering; extreme-speed CCD test | randomized stress suite, simultaneous clusters, predictor migration, full topology equivalence gate |
+| R2 | Partially implemented | explicit contact slip, sliding/rolling/spinning/sleep states, SI conversion for forces/energy | static-friction constraint and measurement-calibrated cloth reference set |
+| R3 | Partially implemented | tangential ball-ball impulse and angular update | material-point 3D tangential model and calibrated throw signs/trends/reference shots |
+| R4 | Partially implemented | cushion tangential impulse and basic spin transfer | nose height, line/arc jaw contacts, speed fit, compliant Research rail, bank/kick suite |
+| R5 | Partially implemented | cue m/s, effective mass, tip friction/envelope, miscues, squirt, elevation and advanced controls | cue/tip geometry/contact-duration calibration and continuity/reference-shot gates |
+| R6 | Partially implemented | deterministic canonical pocket/drop and speed/alignment rejection; topology fallback retained | physical mouths, jaws, shelf/throat and rattle solver |
+| R7 | Partially implemented | local height/vz/gravity, landing, 3D sphere TOI, elevated launch, swerve, airborne seam transport, jump/masse presets | calibrated full 3D contacts and complete airborne/jump/masse acceptance suite |
+| R8 | Partially implemented | versioned pool-9ft and Chinese-8-ball selectors, replay/network metadata, bilingual accessible controls | measured calibration datasets, fit tooling and ordinary-table comparison report |
+| R9 | Partially implemented | separate Research version/tolerances, 960 Hz event execution, Worker progress/cancel, detailed telemetry | adaptive/iterative/compliant reference models, uncertainty and diagnostic export |
+
+### Test and benchmark record
+
+- `node js/billiards/topological_billiards_test.js`: passed, including the frozen `fixtures/legacy_v1_baseline.json` result, legacy determinism, topology/spin transport, no-self-image collision, Research/equipment migration, elevated local-3D trajectory, passive-energy assertion, and a 200 atlas-unit/s no-tunneling CCD case.
+- `node js/billiards/topological_billiards_worker_test.js`: passed, including Worker trajectory execution, Research progress/cancel, physical online shot validation, and version mismatch rejection.
+- `node js/ramified_minigames_i18n_test.js`: passed with 297 referenced keys and 792 catalog entries.
+- `node js/ramified_minigames_import_export_test.js` and `node js/ramified_minigames_glue_flap_test.js`: passed.
+- `node js/ramified_minigames_setup_test.js`: the broad suite remains blocked at its pre-existing Hex same-tile hover dwell assertion (line 161). This is recorded separately so it does not conceal the passing billiards suites.
+- Local Node benchmark, five runs, median, 15-ball 3×5 atlas, 1.5 simulated seconds: Classic 28.70 ms / 360 steps; Realistic 35.69 ms / 720 steps / 57 events; Research 57.98 ms / 1440 steps / 50 events. Both advanced runs correctly reported residual-motion settlement at the deliberately short benchmark cap. Browser profiles normally run in a Worker, so these numbers are solver comparisons rather than main-thread blocking measurements.
+
+### Calibration provenance and deferred data
+
+- `pool-9ft` uses a 2.54 m × 1.27 m playing surface and 57.15 mm balls as its WPA-style baseline. Its friction/contact coefficients remain provisional.
+- `chinese-8ball` uses the 2025 WPA Rules of Heyball dimensions (2.54 m × 1.26 m, 57.15 mm balls, 156–170 g allowed mass); the code’s 0.163 kg mass is the midpoint and its cloth/contact coefficients remain provisional.
+- Humidity, cloth wear, ball cleanliness, detailed cue-shaft dynamics, and parameter uncertainty remain disabled because no project calibration dataset justifies them.
+- On every future milestone completion, append the benchmark result, physics version, calibration sources, unresolved numerical warnings, and data-limited deferrals here before changing a status to Verified.
 
 ---
 
@@ -214,18 +281,18 @@ Important realism gaps remain.
 
 ## 3.1 Production CCD gap
 
-The advanced/reference physics path contains continuous-collision ideas, but the production native path still advances a full fixed step and then resolves overlap.
+This audit statement is superseded for advanced profiles. Realistic and Research now use an event-driven production path with analytic constant-velocity TOI for ball-ball, seam, boundary, landing, and pocket events. Classic intentionally retains the old fixed-step overlap behavior.
 
-High-speed tunneling therefore remains a correctness risk.
+High-speed tunneling remains an acceptance risk until the complete randomized, accelerated-motion, simultaneous-contact, and topology stress suites pass.
 
 ## 3.2 Ball-ball collision gap
 
-Current production response is primarily a normal impulse.
+Classic remains primarily normal-impulse based. Realistic and Research now add a clamped tangential impulse and angular-velocity updates.
 
 Missing or incomplete:
 
-- tangential contact impulse;
-- angular-velocity update from ball-ball friction;
+- a calibrated material-point tangential-contact model beyond the current basic impulse;
+- validated angular-velocity/throw response from ball-ball friction;
 - cut-induced throw;
 - spin-induced throw;
 - realistic speed dependence of throw;
@@ -233,15 +300,15 @@ Missing or incomplete:
 
 ## 3.3 Cushion gap
 
-Current rail response is essentially:
+Classic rail response is essentially:
 
 - positional correction;
 - normal-velocity reflection;
 - restitution.
 
-Missing:
+Realistic and Research add a basic tangential cushion impulse and spin transfer. Still missing:
 
-- tangential friction;
+- calibrated tangential friction;
 - contact-height effects;
 - spin transfer;
 - rail-induced throw;
@@ -251,7 +318,7 @@ Missing:
 
 ## 3.4 Cue-impact gap
 
-Current cue input is roughly:
+Classic cue input remains roughly:
 
 ```text
 aim
@@ -260,23 +327,18 @@ contact.x
 contact.y
 ```
 
-Missing:
+Realistic and Research now carry cue speed, two-dimensional offset, elevation, cue/tip IDs, miscues, a friction limit, squirt, and vertical launch. Still missing:
 
-- cue elevation;
-- cue velocity as a physical unit;
-- cue/tip mass and geometry;
-- miscues;
-- tip friction/friction cone;
-- cue deflection/squirt;
-- elevated-cue vertical impulse;
-- swerve;
-- jump;
-- masse;
+- measurement-calibrated cue/tip mass, geometry, compliance, and contact duration;
+- validated miscue boundary and squirt response;
+- calibrated swerve, jump, and masse trajectories;
 - dynamic delivery data.
 
 ## 3.5 Pocket gap
 
 Current pockets behave approximately as capture zones.
+
+The advanced path now adds deterministic speed/alignment-sensitive acceptance and rejection, but this is not a substitute for physical geometry.
 
 Missing:
 
@@ -2167,6 +2229,8 @@ Show the actual parameters so advanced players can understand what the preset me
 
 ## R0 — Freeze and Measure the Current Engine
 
+**Implementation status:** Partially implemented (2026-09-06)
+
 **Goal:** Create a safe baseline before changing physics.
 
 Tasks:
@@ -2187,6 +2251,8 @@ Exit gate:
 ---
 
 ## R1 — One Physics Kernel + Production CCD
+
+**Implementation status:** Partially implemented (2026-09-06)
 
 **Priority:** P0
 
@@ -2211,6 +2277,8 @@ Exit gate:
 
 ## R2 — Calibrated Cloth Motion
 
+**Implementation status:** Partially implemented (2026-09-06)
+
 **Priority:** P0/P1
 
 Tasks:
@@ -2232,6 +2300,8 @@ Exit gate:
 ---
 
 ## R3 — Frictional Ball-Ball Contact and Throw
+
+**Implementation status:** Partially implemented (2026-09-06)
 
 **Priority:** P1
 
@@ -2255,6 +2325,8 @@ Exit gate:
 
 ## R4 — Realistic Cushions and Jaws
 
+**Implementation status:** Partially implemented (2026-09-06)
+
 **Priority:** P1
 
 Tasks:
@@ -2276,6 +2348,8 @@ Exit gate:
 ---
 
 ## R5 — Real Cue Impact
+
+**Implementation status:** Partially implemented (2026-09-06)
 
 **Priority:** P1/P2
 
@@ -2302,6 +2376,8 @@ Exit gate:
 
 ## R6 — Physical Pockets and Rules Integration
 
+**Implementation status:** Partially implemented (2026-09-06)
+
 **Priority:** P2
 
 Tasks:
@@ -2322,6 +2398,8 @@ Exit gate:
 ---
 
 ## R7 — Elevated Cue, Swerve, Jump, and Masse
+
+**Implementation status:** Partially implemented (2026-09-06)
 
 **Priority:** P2/P3
 
@@ -2350,6 +2428,8 @@ Exit gate:
 
 ## R8 — Calibration, Equipment Profiles, and Competitive Polish
 
+**Implementation status:** Partially implemented (2026-09-06)
+
 **Priority:** P2
 
 Tasks:
@@ -2370,6 +2450,8 @@ Exit gate:
 ---
 
 ## R9 — Research-Grade Refinement
+
+**Implementation status:** Partially implemented (2026-09-06)
 
 Optional but consistent with the "as realistic as practical" target.
 

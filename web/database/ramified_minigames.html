@@ -63,8 +63,8 @@
     #billiards-spin-pad,
     #fullscreen-billiards-spin-pad {
       display: block;
-      width: 104px;
-      height: 104px;
+      width: 104px !important;
+      height: 104px !important;
       cursor: crosshair;
       touch-action: none;
     }
@@ -84,7 +84,7 @@
       right: 14px;
       bottom: 14px;
       display: none;
-      grid-template-columns: 84px minmax(0, 110px);
+      grid-template-columns: minmax(250px, 310px);
       gap: 8px;
       align-items: center;
       padding: 8px;
@@ -93,9 +93,12 @@
       background: rgba(255, 253, 248, 0.9);
       box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
       pointer-events: auto;
+      max-height: calc(100% - 28px);
+      overflow: auto;
     }
 
-    body.canvas-fullscreen-active .fullscreen-billiards-spin:not([hidden]) {
+    body.canvas-fullscreen-active .fullscreen-billiards-spin:not([hidden]),
+    body.canvas-fit-viewport .fullscreen-billiards-spin:not([hidden]) {
       display: grid;
     }
 
@@ -104,8 +107,85 @@
     }
 
     #fullscreen-billiards-spin-pad {
-      width: 84px;
-      height: 84px;
+      width: 84px !important;
+      height: 84px !important;
+    }
+
+    .billiards-tools-header,
+    .billiards-tools-contact,
+    .billiards-tools-line,
+    .billiards-tools-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .billiards-tools-header {
+      justify-content: space-between;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .billiards-tools-contact {
+      align-items: flex-start;
+    }
+
+    .billiards-tools-readout,
+    .billiards-telemetry-output {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.35;
+    }
+
+    .billiards-telemetry-output {
+      display: block;
+      white-space: pre-wrap;
+    }
+
+    .billiards-tools-line {
+      display: grid;
+      grid-template-columns: 74px minmax(0, 1fr) auto;
+      margin-top: 6px;
+      font-size: 0.72rem;
+    }
+
+    .billiards-tools-line input[type="range"],
+    .billiards-tools-line select {
+      min-width: 0;
+      width: 100%;
+    }
+
+    .billiards-tools-advanced,
+    .billiards-research-telemetry {
+      margin-top: 7px;
+      border-top: 1px dotted var(--border);
+      padding-top: 6px;
+    }
+
+    .billiards-tools-advanced summary,
+    .billiards-research-telemetry summary {
+      cursor: pointer;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+
+    .billiards-tools-actions {
+      justify-content: flex-end;
+      margin-top: 6px;
+    }
+
+    .billiards-profile-badge {
+      border: 1px solid rgba(31, 122, 140, 0.35);
+      border-radius: 999px;
+      padding: 2px 7px;
+      color: var(--accent2);
+      background: rgba(31, 122, 140, 0.08);
+    }
+
+    .billiards-advanced-row[hidden],
+    .billiards-research-row[hidden] {
+      display: none !important;
     }
 
     .billiards-debug-options {
@@ -1973,8 +2053,45 @@
         </button>
       </div>
       <div class="fullscreen-billiards-spin" id="fullscreen-billiards-spin" data-i18n-aria-label="access.billiardsCueContact" aria-label="Cue ball contact point" hidden>
-        <canvas id="fullscreen-billiards-spin-pad" width="84" height="84" data-i18n-aria-label="access.billiardsCueContact" aria-label="Cue ball contact point"></canvas>
-        <output id="fullscreen-billiards-spin-label" data-i18n="setup.billiardsCenter">center</output>
+        <div class="billiards-tools-header">
+          <span data-i18n="billiards.tools.title">Billiards tools</span>
+          <span class="billiards-profile-badge" id="fullscreen-billiards-profile-badge">classic</span>
+        </div>
+        <div class="billiards-tools-contact">
+          <canvas id="fullscreen-billiards-spin-pad" width="84" height="84" tabindex="0" data-i18n-aria-label="access.billiardsCueContact" aria-label="Cue ball contact point"></canvas>
+          <div>
+            <output id="fullscreen-billiards-spin-label" data-i18n="setup.billiardsCenter">center</output>
+            <div class="billiards-tools-readout" id="fullscreen-billiards-contact-readout">x 0.00 · y 0.00</div>
+            <button class="btn" id="fullscreen-billiards-center-contact" type="button" data-i18n="billiards.tools.center">center</button>
+          </div>
+        </div>
+        <div class="billiards-tools-line">
+          <label for="fullscreen-billiards-cue-speed" data-i18n="billiards.tools.cueSpeed">Cue speed</label>
+          <input id="fullscreen-billiards-cue-speed" type="range" min="0.1" max="7.5" step="0.1" value="3" data-i18n-aria-label="access.billiardsCueSpeed" aria-label="Cue speed">
+          <output id="fullscreen-billiards-cue-speed-value">3.0 m/s</output>
+        </div>
+        <label class="billiards-tools-line" for="fullscreen-billiards-speed-lock">
+          <span data-i18n="billiards.tools.exactSpeed">Exact speed</span>
+          <span><input id="fullscreen-billiards-speed-lock" type="checkbox"> <span data-i18n="billiards.tools.lock">lock</span></span>
+          <span></span>
+        </label>
+        <div class="billiards-tools-line billiards-advanced-row" id="fullscreen-billiards-elevation-row">
+          <label for="fullscreen-billiards-elevation" data-i18n="billiards.tools.elevation">Elevation</label>
+          <input id="fullscreen-billiards-elevation" type="range" min="0" max="75" step="1" value="0" data-i18n-aria-label="access.billiardsElevation" aria-label="Cue elevation">
+          <output id="fullscreen-billiards-elevation-value">0°</output>
+        </div>
+        <details class="billiards-tools-advanced">
+          <summary data-i18n="billiards.tools.advanced">Advanced</summary>
+          <div class="billiards-tools-line"><label for="fullscreen-billiards-stroke-preset" data-i18n="billiards.tools.stroke">Stroke</label><select id="fullscreen-billiards-stroke-preset" data-i18n-aria-label="access.billiardsStroke" aria-label="Stroke preset"></select><span></span></div>
+          <div class="billiards-tools-line"><label for="fullscreen-billiards-cue-profile" data-i18n="billiards.tools.cue">Cue</label><select id="fullscreen-billiards-cue-profile" data-i18n-aria-label="access.billiardsCueProfile" aria-label="Cue profile"></select><span></span></div>
+          <div class="billiards-tools-line"><label for="fullscreen-billiards-tip-profile" data-i18n="billiards.tools.tip">Tip</label><select id="fullscreen-billiards-tip-profile" data-i18n-aria-label="access.billiardsTipProfile" aria-label="Cue tip profile"></select><span></span></div>
+          <div class="billiards-tools-line"><label for="fullscreen-billiards-assistance" data-i18n="setup.assistance">Assistance</label><select id="fullscreen-billiards-assistance" data-i18n-aria-label="access.billiardsAssistance" aria-label="Billiards aim assistance"><option value="beginner" data-i18n="setup.billiardsBeginner">beginner</option><option value="normal" data-i18n="setup.billiardsNormal">normal</option><option value="expert" data-i18n="setup.billiardsExpert">expert</option></select><span></span></div>
+        </details>
+        <details class="billiards-research-telemetry" id="fullscreen-billiards-research-telemetry" hidden>
+          <summary data-i18n="billiards.tools.telemetry">Research telemetry</summary>
+          <output class="billiards-telemetry-output" id="fullscreen-billiards-telemetry-output">idle</output>
+          <div class="billiards-tools-actions"><button class="btn" id="fullscreen-billiards-cancel" type="button" data-i18n="common.cancel" disabled>cancel</button></div>
+        </details>
       </div>
       <div class="fullscreen-action-shell" id="fullscreen-action-shell" data-placement="top" data-i18n-aria-label="access.fullscreenControls" aria-label="Fullscreen action controls" hidden>
         <button class="fullscreen-settings-button" id="fullscreen-settings-open" type="button" data-i18n-aria-label="access.openFullscreenSettings" aria-label="Open fullscreen settings" aria-haspopup="dialog" aria-controls="fullscreen-settings-overlay" aria-expanded="false" data-i18n-title="fullscreen.settings" title="Settings">
@@ -2043,6 +2160,14 @@
                 <select id="fullscreen-billiards-physics-profile" data-i18n-aria-label="access.billiardsPhysicsProfile" aria-label="Billiards physics profile">
                   <option value="legacy" selected data-i18n="setup.billiardsPhysicsClassic">classic (faster)</option>
                   <option value="realistic" data-i18n="setup.billiardsPhysicsRealistic">realistic (higher CPU)</option>
+                  <option value="research" data-i18n="setup.billiardsPhysicsResearch">research (reference)</option>
+                </select>
+              </div>
+              <div class="fullscreen-setting-row" id="fullscreen-billiards-equipment-row" hidden>
+                <label for="fullscreen-billiards-equipment" data-i18n="billiards.tools.equipment">Equipment</label>
+                <select id="fullscreen-billiards-equipment" data-i18n-aria-label="access.billiardsEquipment" aria-label="Billiards equipment profile">
+                  <option value="pool-9ft" selected data-i18n="billiards.equipment.pool9">9-foot pool</option>
+                  <option value="chinese-8ball" data-i18n="billiards.equipment.chinese8">Chinese 8-ball</option>
                 </select>
               </div>
               <label class="fullscreen-setting-row" for="fullscreen-sound-enabled">
@@ -2226,6 +2351,14 @@
           <select id="billiards-physics-profile" data-i18n-aria-label="access.billiardsPhysicsProfile" aria-label="Billiards physics profile">
             <option value="legacy" selected data-i18n="setup.billiardsPhysicsClassic">classic (faster)</option>
             <option value="realistic" data-i18n="setup.billiardsPhysicsRealistic">realistic (higher CPU)</option>
+            <option value="research" data-i18n="setup.billiardsPhysicsResearch">research (reference)</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-equipment-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.equipment">Equipment</span>
+          <select id="billiards-equipment" data-i18n-aria-label="access.billiardsEquipment" aria-label="Billiards equipment profile">
+            <option value="pool-9ft" selected data-i18n="billiards.equipment.pool9">9-foot pool</option>
+            <option value="chinese-8ball" data-i18n="billiards.equipment.chinese8">Chinese 8-ball</option>
           </select>
         </div>
         <div class="mosaic-inline-row billiards-ball-palette-row" id="billiards-ball-palette-row" data-mode-control="billiards" hidden>
@@ -2250,9 +2383,42 @@
         <div class="billiards-spin-row" id="billiards-spin-row" data-mode-control="billiards" hidden>
           <span class="input-label" data-i18n="setup.cueContact">Cue contact</span>
           <span class="billiards-spin-control">
-            <canvas id="billiards-spin-pad" width="104" height="104" data-i18n-aria-label="access.billiardsCueContact" aria-label="Cue ball contact point"></canvas>
+            <canvas id="billiards-spin-pad" width="104" height="104" tabindex="0" data-i18n-aria-label="access.billiardsCueContact" aria-label="Cue ball contact point"></canvas>
             <output id="billiards-spin-label" data-i18n="setup.billiardsCenter">center</output>
+            <output class="billiards-tools-readout" id="billiards-contact-readout">x 0.00 · y 0.00</output>
+            <button class="btn" id="billiards-center-contact" type="button" data-i18n="billiards.tools.center">center</button>
           </span>
+        </div>
+        <div class="mosaic-inline-row billiards-advanced-row" id="billiards-cue-speed-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.cueSpeed">Cue speed</span>
+          <span class="background-slider-controls">
+            <input id="billiards-cue-speed" type="range" min="0.1" max="7.5" step="0.1" value="3" data-i18n-aria-label="access.billiardsCueSpeed" aria-label="Cue speed">
+            <output id="billiards-cue-speed-value">3.0 m/s</output>
+            <label class="opt-row"><input id="billiards-speed-lock" type="checkbox"> <span data-i18n="billiards.tools.lock">lock</span></label>
+          </span>
+        </div>
+        <div class="mosaic-inline-row billiards-advanced-row" id="billiards-elevation-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.elevation">Elevation</span>
+          <span class="background-slider-controls">
+            <input id="billiards-elevation" type="range" min="0" max="75" step="1" value="0" data-i18n-aria-label="access.billiardsElevation" aria-label="Cue elevation">
+            <output id="billiards-elevation-value">0°</output>
+          </span>
+        </div>
+        <div class="mosaic-inline-row billiards-advanced-row" id="billiards-stroke-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.stroke">Stroke</span>
+          <select id="billiards-stroke-preset" data-i18n-aria-label="access.billiardsStroke" aria-label="Stroke preset"></select>
+        </div>
+        <div class="mosaic-inline-row billiards-advanced-row" id="billiards-cue-profile-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.cue">Cue</span>
+          <select id="billiards-cue-profile" data-i18n-aria-label="access.billiardsCueProfile" aria-label="Cue profile"></select>
+        </div>
+        <div class="mosaic-inline-row billiards-advanced-row" id="billiards-tip-profile-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.tip">Tip</span>
+          <select id="billiards-tip-profile" data-i18n-aria-label="access.billiardsTipProfile" aria-label="Cue tip profile"></select>
+        </div>
+        <div class="mosaic-inline-row billiards-research-row" id="billiards-telemetry-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.telemetry">Research telemetry</span>
+          <span><output class="billiards-telemetry-output" id="billiards-telemetry-output">idle</output> <button class="btn" id="billiards-cancel" type="button" data-i18n="common.cancel" disabled>cancel</button></span>
         </div>
         <div class="mosaic-inline-row" id="billiards-power-row" data-mode-control="billiards" hidden>
           <span class="input-label" data-i18n="setup.power">Power</span>
@@ -2800,13 +2966,13 @@
 <script src="js/calculator_input_settings.js?v=20260903-1"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260905-5"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260906-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
-<script src="js/ramified_minigames_setup.js?v=20260905-9"></script>
+<script src="js/ramified_minigames_setup.js?v=20260906-2"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
 </body>
 </html>

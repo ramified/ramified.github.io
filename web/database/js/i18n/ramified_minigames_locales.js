@@ -17,6 +17,7 @@
     'common.fullscreen': ['fullscreen', '全屏'],
     'common.actions': ['Actions', '操作'],
     'common.close': ['Close', '关闭'],
+    'common.cancel': ['cancel', '取消'],
     'common.undo': ['undo', '撤销'],
     'common.redo': ['redo', '重做'],
     'common.preview': ['preview', '预览'],
@@ -216,6 +217,12 @@
     'access.billiardsAssistance': ['Billiards aim assistance', '台球瞄准辅助'],
     'access.billiardsFriction': ['Billiards table friction', '台球桌面摩擦力'],
     'access.billiardsPhysicsProfile': ['Billiards physics profile', '台球物理模式'],
+    'access.billiardsEquipment': ['Billiards equipment profile', '台球器材配置'],
+    'access.billiardsCueSpeed': ['Cue speed in metres per second', '球杆速度（米每秒）'],
+    'access.billiardsElevation': ['Cue elevation angle', '球杆仰角'],
+    'access.billiardsStroke': ['Stroke preset', '杆法预设'],
+    'access.billiardsCueProfile': ['Cue profile', '球杆配置'],
+    'access.billiardsTipProfile': ['Cue tip profile', '杆头配置'],
     'access.tileSet': ['Tile Matching tile set', '连连看图案组'],
     'access.tileFamily': ['Tile Matching character family', '连连看字符类别'],
     'access.tileLevel': ['Tile Matching character level', '连连看字符等级'],
@@ -334,6 +341,41 @@
     'setup.billiardsPhysics': ['Physics', '物理模式'],
     'setup.billiardsPhysicsClassic': ['classic (faster)', '经典（更流畅）'],
     'setup.billiardsPhysicsRealistic': ['realistic (higher CPU)', '拟真（较高 CPU 占用）'],
+    'setup.billiardsPhysicsResearch': ['research (reference-grade)', '研究（参考级）'],
+    'billiards.tools.title': ['Billiards tools', '台球工具'],
+    'billiards.tools.center': ['center', '居中'],
+    'billiards.tools.cueSpeed': ['Cue speed', '球杆速度'],
+    'billiards.tools.exactSpeed': ['Exact speed', '精确速度'],
+    'billiards.tools.lock': ['lock', '锁定'],
+    'billiards.tools.elevation': ['Elevation', '仰角'],
+    'billiards.tools.advanced': ['Advanced', '高级'],
+    'billiards.tools.stroke': ['Stroke', '杆法'],
+    'billiards.tools.cue': ['Cue', '球杆'],
+    'billiards.tools.tip': ['Tip', '杆头'],
+    'billiards.tools.telemetry': ['Research telemetry', '研究遥测'],
+    'billiards.tools.equipment': ['Equipment', '器材'],
+    'billiards.tools.classicDisabled': ['Advanced physics controls require Realistic or Research.', '高级物理控制仅适用于拟真或研究模式。'],
+    'billiards.equipment.pool9': ['9-foot American pool', '九英尺美式球桌'],
+    'billiards.equipment.chinese8': ['Chinese 8-ball', '中式八球'],
+    'billiards.stroke.custom': ['custom', '自定义'],
+    'billiards.stroke.center': ['center', '中杆'],
+    'billiards.stroke.follow': ['follow', '跟球'],
+    'billiards.stroke.draw': ['draw', '拉球'],
+    'billiards.stroke.stun': ['stun', '登杆'],
+    'billiards.stroke.left': ['left english', '左塞'],
+    'billiards.stroke.right': ['right english', '右塞'],
+    'billiards.stroke.spinHeavy': ['spin-heavy / cuo', '搓'],
+    'billiards.stroke.smooth': ['smooth / tui', '推'],
+    'billiards.stroke.punch': ['punch / da', '打'],
+    'billiards.stroke.short': ['short / dian', '点'],
+    'billiards.stroke.masse': ['masse / zha', '扎'],
+    'billiards.stroke.jump': ['jump', '跳球'],
+    'billiards.cue.playing': ['playing cue', '打杆'],
+    'billiards.cue.lowDeflection': ['low-deflection cue', '低偏移球杆'],
+    'billiards.cue.jump': ['jump cue', '跳杆'],
+    'billiards.tip.medium': ['medium tip', '中等杆头'],
+    'billiards.tip.soft': ['soft tip', '软杆头'],
+    'billiards.tip.hard': ['hard tip', '硬杆头'],
     'setup.billiardsCueBall': ['cue ball', '母球'],
     'setup.billiardsNextTarget': ['next numbered target', '下一个编号目标球'],
     'setup.billiardsBalls': ['Balls', '球组'],
@@ -747,6 +789,26 @@
     , 'runtime.billiardsCueHint': ['Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.', '点击白色母球，并向目标反方向拖动；母球会沿相反方向前进。']
     , 'runtime.billiardsPhysicsEnabled': ['{{profile}} physics enabled', '已启用{{profile}}物理模式']
     , 'runtime.billiardsPhysicsNextShot': ['The selected profile will be used for the next shot.', '下一杆将使用所选物理模式。']
+    , 'runtime.billiardsConfigurationRestart': ['Changing physics or equipment restarts the current game. Continue?', '更换物理模式或器材会重新开始当前游戏。是否继续？']
+    , 'runtime.billiardsEquipmentEnabled': ['{{equipment}} equipment enabled', '已启用{{equipment}}器材配置']
+    , 'runtime.billiardsEquipmentRestartHint': ['Equipment remains fixed after the game begins.', '游戏开始后器材配置保持固定。']
+    , 'runtime.billiardsResearchCancelled': ['research calculation cancelled', '已取消研究模式计算']
+    , 'runtime.billiardsResearchCancelledHint': ['The game state was not changed.', '游戏和录像状态均未改变。']
+    , 'billiards.telemetry.idle': ['idle', '空闲']
+    , 'billiards.telemetry.cancelled': ['cancelled', '已取消']
+    , 'billiards.telemetry.summary': ['{{phase}} · {{progress}}%\n{{time}} s simulated · {{events}} events · {{iterations}} iterations\nenergy drift {{energy}} J · contact {{contact}}\nwarning: {{warning}}', '{{phase}} · {{progress}}%\n已模拟 {{time}} 秒 · {{events}} 个事件 · {{iterations}} 次迭代\n能量漂移 {{energy}} J · 接触 {{contact}}\n数值警告：{{warning}}']
+    , 'billiards.telemetry.none': ['none', '无']
+    , 'billiards.telemetry.warningEventCap': ['event iteration cap reached', '达到事件迭代上限']
+    , 'billiards.telemetry.warningDuration': ['maximum simulation duration reached; residual motion was settled', '达到最长模拟时限；剩余运动已稳定化处理']
+    , 'billiards.telemetry.contact.ballBall': ['ball-ball', '球—球']
+    , 'billiards.telemetry.contact.wall': ['cushion', '库边']
+    , 'billiards.telemetry.contact.seam': ['seam transport', '接缝运输']
+    , 'billiards.telemetry.contact.pocket': ['pocket', '入袋']
+    , 'billiards.telemetry.contact.pocketReject': ['pocket rejection', '袋口拒球']
+    , 'billiards.telemetry.contact.landing': ['landing', '落台']
+    , 'billiards.telemetry.phase.idle': ['idle', '空闲']
+    , 'billiards.telemetry.phase.simulating': ['simulating', '模拟中']
+    , 'billiards.telemetry.phase.complete': ['complete', '完成']
     , 'runtime.puzzleStatus': ['{{game}} puzzle {{count}}', '{{game}}谜题第{{count}}步']
     , 'runtime.toMove': ['to move', '行棋']
     , 'runtime.toPlay': ['to play', '落子']

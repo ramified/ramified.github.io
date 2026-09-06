@@ -1,0 +1,44 @@
+{
+  "physicsVersion": "legacy-v1",
+  "preset": {
+    "id": "legacy-v1-baseline",
+    "lattice": "square",
+    "rows": 1,
+    "cols": 3,
+    "removedTiles": [],
+    "cutEdges": [],
+    "gluedEdges": [],
+    "billiards": {
+      "rules": "solo",
+      "ballRadius": 0.1,
+      "pocketRadius": 0.2,
+      "pockets": [],
+      "parameters": { "maxShotSeconds": 0.6, "friction": 1 },
+      "balls": [
+        { "id": "cue", "kind": "cue", "at": { "row": 1, "col": 1, "x": 0.2, "y": 0 } },
+        { "id": "1", "kind": "target", "number": 1, "at": { "row": 1, "col": 2, "x": -0.2, "y": 0.08 } }
+      ]
+    }
+  },
+  "shot": {
+    "aim": { "x": 1, "y": 0 },
+    "power": 0.3,
+    "contact": { "x": 0.18, "y": -0.22 },
+    "shooter": "player-1"
+  },
+  "expected": {
+    "simulationSteps": 144,
+    "cue": {
+      "tileIndex": 1,
+      "position": { "x": -0.2966889540558739, "y": -0.14475434431158526 },
+      "angularVelocity": { "x": 1.2652763719276128, "y": 8.171852317015965, "z": -4.5189052309026305 },
+      "crossings": 1
+    },
+    "target": {
+      "tileIndex": 1,
+      "position": { "x": 0.133577125820219, "y": 0.2261227252295355 },
+      "angularVelocity": { "x": -0.9278673784603995, "y": 2.118187521913259, "z": 0 },
+      "crossings": 0
+    }
+  }
+}

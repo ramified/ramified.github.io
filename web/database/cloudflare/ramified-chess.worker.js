@@ -1711,6 +1711,9 @@ export function normalizeAction(action) {
   if (source.contact && typeof source.contact === 'object' && !Array.isArray(source.contact)) {
     result.contact = finiteCoordinatePair(source.contact);
   }
+  if (source.tipOffset && typeof source.tipOffset === 'object' && !Array.isArray(source.tipOffset)) {
+    result.tipOffset = finiteCoordinatePair(source.tipOffset);
+  }
   if (source.at && typeof source.at === 'object' && !Array.isArray(source.at)) {
     result.at = {
       row: finiteNumberOrNull(source.at.row),
@@ -2037,6 +2040,12 @@ function normalizeRoomCode(value) {
 export function billiardsTurnIssue(owned, action, currentSnapshot, nextSnapshot) {
   const current = currentSnapshot && typeof currentSnapshot === 'object' ? currentSnapshot : {};
   const next = nextSnapshot && typeof nextSnapshot === 'object' ? nextSnapshot : {};
+  const currentPhysics = current.deterministic && typeof current.deterministic === 'object' ? current.deterministic : {};
+  const nextPhysics = next.deterministic && typeof next.deterministic === 'object' ? next.deterministic : {};
+  for (const key of ['physicsProfile', 'physicsVersion', 'equipmentProfileId', 'equipmentVersion', 'solverTolerancesVersion', 'cueInputVersion']) {
+    if (currentPhysics[key] && nextPhysics[key] !== currentPhysics[key]) return `Billiards ${key} cannot change during an online game.`;
+    if (action && action[key] && currentPhysics[key] && action[key] !== currentPhysics[key]) return `Billiards action ${key} does not match the room.`;
+  }
   const expected = normalizeRole(current.ballInHandPlayer || current.turn);
   if (!expected || !['player-1', 'player-2'].includes(expected)) return 'Billiards snapshot has no valid active player.';
   if (!owned.includes(expected)) return `${expected} to play.`;
@@ -2068,6 +2077,27 @@ export function billiardsTurnIssue(owned, action, currentSnapshot, nextSnapshot)
   if (!Number.isFinite(contact.x) || !Number.isFinite(contact.y) || Math.hypot(contact.x, contact.y) > 0.861) {
     return 'Billiards cue contact must lie on the cue-ball contact control.';
   }
+  const advancedPhysics = currentPhysics.physicsProfile === 'realistic' || currentPhysics.physicsProfile === 'research';
+  const tipOffset = action.tipOffset && typeof action.tipOffset === 'object' ? action.tipOffset : contact;
+  if (advancedPhysics) {
+    const cueSpeedMps = Number(action.cueSpeedMps);
+    const elevationRad = Number(action.elevationRad);
+    if (!Number.isFinite(cueSpeedMps) || cueSpeedMps <= 0 || cueSpeedMps > 7.5) {
+      return 'Advanced Billiards cue speed must be greater than zero and at most 7.5 m/s.';
+    }
+    if (!Number.isFinite(elevationRad) || elevationRad < 0 || elevationRad > Math.PI * 75 / 180) {
+      return 'Advanced Billiards cue elevation must be between 0 and 75 degrees.';
+    }
+    if (!Number.isFinite(tipOffset.x) || !Number.isFinite(tipOffset.y) || Math.hypot(tipOffset.x, tipOffset.y) > 0.861) {
+      return 'Advanced Billiards tip offset must lie on the cue-ball contact control.';
+    }
+    if (!['playing', 'low-deflection', 'jump'].includes(String(action.cueProfileId || ''))) {
+      return 'Advanced Billiards action has an unsupported cue profile.';
+    }
+    if (!['medium', 'soft', 'hard'].includes(String(action.tipProfileId || ''))) {
+      return 'Advanced Billiards action has an unsupported tip profile.';
+    }
+  }
   const lastShot = next.lastShot && typeof next.lastShot === 'object' ? next.lastShot : {};
   if (normalizeRole(lastShot.shooter) !== shooter) return 'Resulting Billiards snapshot has the wrong shooter.';
   const lastAim = lastShot.aim && typeof lastShot.aim === 'object' ? lastShot.aim : {};
@@ -2076,6 +2106,17 @@ export function billiardsTurnIssue(owned, action, currentSnapshot, nextSnapshot)
     || !sameBilliardsNumber(lastShot.power, power)
     || !sameBilliardsNumber(lastContact.x, contact.x) || !sameBilliardsNumber(lastContact.y, contact.y)) {
     return 'Resulting Billiards snapshot does not match the submitted shot parameters.';
+  }
+  if (advancedPhysics) {
+    const lastTipOffset = lastShot.tipOffset && typeof lastShot.tipOffset === 'object' ? lastShot.tipOffset : lastContact;
+    if (!sameBilliardsNumber(lastShot.cueSpeedMps, Number(action.cueSpeedMps))
+      || !sameBilliardsNumber(lastShot.elevationRad, Number(action.elevationRad))
+      || !sameBilliardsNumber(lastTipOffset.x, tipOffset.x)
+      || !sameBilliardsNumber(lastTipOffset.y, tipOffset.y)
+      || String(lastShot.cueProfileId || '') !== String(action.cueProfileId || '')
+      || String(lastShot.tipProfileId || '') !== String(action.tipProfileId || '')) {
+      return 'Resulting Billiards snapshot does not match the submitted physical cue input.';
+    }
   }
   if (Math.max(0, Math.floor(Number(next.shots) || 0)) !== Math.max(0, Math.floor(Number(current.shots) || 0)) + 1) {
     return 'A Billiards shot must increment the shot count exactly once.';

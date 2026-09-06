@@ -16,10 +16,15 @@
   const CONE_ANGLE_TOLERANCE = 1e-7;
   const PHYSICS_DT = 1 / 240;
   const REALISTIC_PHYSICS_DT = 1 / 480;
+  const RESEARCH_PHYSICS_DT = 1 / 960;
   const DEFAULT_PHYSICS_PROFILE = 'legacy';
+  const DEFAULT_EQUIPMENT_PROFILE = 'pool-9ft';
+  const SOLVER_TOLERANCES_VERSION = 'event-toi-v1';
+  const CUE_INPUT_VERSION = 'power-to-cue-speed-v1';
   const PHYSICS_VERSION = Object.freeze({
     legacy: 'legacy-v1',
-    realistic: 'realistic-v1'
+    realistic: 'realistic-v2-event',
+    research: 'research-v1-event'
   });
   const POSITION_SNAP_CSS_PX = 14;
   const DIRECTION_SNAP_STEP_DEGREES = 15;
@@ -50,11 +55,87 @@
     maxShotSeconds: 28,
     localCoverDepth: 3,
     ballBallFriction: 0,
-    cushionFriction: 0
+    cushionFriction: 0,
+    collisionIterations: 12,
+    eventTimeEpsilon: 1e-7,
+    swerveCoefficient: 0,
+    pocketAcceptanceSpeed: 1e9
   });
   const REALISTIC_PARAMETER_DEFAULTS = Object.freeze({
     ballBallFriction: 0.055,
-    cushionFriction: 0.18
+    cushionFriction: 0.18,
+    collisionIterations: 24,
+    eventTimeEpsilon: 2e-7,
+    swerveCoefficient: 0.0018,
+    pocketAcceptanceSpeed: 2.8
+  });
+  const RESEARCH_PARAMETER_DEFAULTS = Object.freeze({
+    ballBallFriction: 0.06,
+    cushionFriction: 0.2,
+    collisionIterations: 64,
+    eventTimeEpsilon: 5e-9,
+    swerveCoefficient: 0.0018,
+    pocketAcceptanceSpeed: 2.65
+  });
+  const EQUIPMENT_PROFILES = Object.freeze({
+    'pool-9ft': Object.freeze({
+      id: 'pool-9ft',
+      version: 'wpa-9ft-v1',
+      label: '9-foot pool',
+      tableLengthM: 2.54,
+      tableWidthM: 1.27,
+      ballDiameterM: 0.05715,
+      ballMassKg: 0.17,
+      gravityMps2: 9.80665,
+      cueSpeedMaxMps: 7.5,
+      cushionNoseHeightM: 0.0366,
+      cornerPocketMouthM: 0.114,
+      sidePocketMouthM: 0.127,
+      clothKineticFriction: 0.20,
+      clothRollingResistance: 0.012,
+      provenance: 'WPA dimensions; contact coefficients are calibration-v1'
+    }),
+    'chinese-8ball': Object.freeze({
+      id: 'chinese-8ball',
+      version: 'wpa-heyball-2025-v1',
+      label: 'Chinese 8-ball',
+      tableLengthM: 2.54,
+      tableWidthM: 1.26,
+      ballDiameterM: 0.05715,
+      ballMassKg: 0.163,
+      gravityMps2: 9.80665,
+      cueSpeedMaxMps: 7.5,
+      cushionNoseHeightM: 0.0366,
+      cornerPocketMouthM: 0.085,
+      sidePocketMouthM: 0.088,
+      clothKineticFriction: 0.22,
+      clothRollingResistance: 0.014,
+      provenance: 'WPA Rules of Heyball 2025 dimensions; contact coefficients are calibration-v1'
+    })
+  });
+  const CUE_PROFILES = Object.freeze({
+    playing: Object.freeze({ id: 'playing', effectiveMassKg: 0.45, restitution: 0.72, squirtCoefficient: 0.018 }),
+    'low-deflection': Object.freeze({ id: 'low-deflection', effectiveMassKg: 0.40, restitution: 0.72, squirtCoefficient: 0.009 }),
+    jump: Object.freeze({ id: 'jump', effectiveMassKg: 0.32, restitution: 0.68, squirtCoefficient: 0.014 })
+  });
+  const TIP_PROFILES = Object.freeze({
+    medium: Object.freeze({ id: 'medium', radiusM: 0.0065, friction: 0.62, maxOffset: 0.82 }),
+    soft: Object.freeze({ id: 'soft', radiusM: 0.0065, friction: 0.70, maxOffset: 0.86 }),
+    hard: Object.freeze({ id: 'hard', radiusM: 0.0065, friction: 0.54, maxOffset: 0.76 })
+  });
+  const STROKE_PRESETS = Object.freeze({
+    center: Object.freeze({ tipOffset: { x: 0, y: 0 }, elevationDeg: 0 }),
+    follow: Object.freeze({ tipOffset: { x: 0, y: 0.38 }, elevationDeg: 0 }),
+    draw: Object.freeze({ tipOffset: { x: 0, y: -0.38 }, elevationDeg: 0 }),
+    stun: Object.freeze({ tipOffset: { x: 0, y: -0.14 }, elevationDeg: 0 }),
+    left: Object.freeze({ tipOffset: { x: -0.4, y: 0 }, elevationDeg: 0 }),
+    right: Object.freeze({ tipOffset: { x: 0.4, y: 0 }, elevationDeg: 0 }),
+    spinHeavy: Object.freeze({ tipOffset: { x: 0.56, y: 0.2 }, elevationDeg: 2 }),
+    smooth: Object.freeze({ tipOffset: { x: 0, y: 0.2 }, elevationDeg: 0 }),
+    punch: Object.freeze({ tipOffset: { x: 0, y: -0.08 }, elevationDeg: 0 }),
+    short: Object.freeze({ tipOffset: { x: 0, y: 0 }, elevationDeg: 0 }),
+    masse: Object.freeze({ tipOffset: { x: -0.48, y: -0.18 }, elevationDeg: 55 }),
+    jump: Object.freeze({ tipOffset: { x: 0, y: -0.24 }, elevationDeg: 32, cueProfileId: 'jump' })
   });
 
   function clonePlain(value) {
@@ -77,11 +158,14 @@
   }
 
   function normalizePhysicsProfile(value) {
-    return String(value || '').trim().toLowerCase() === 'realistic' ? 'realistic' : DEFAULT_PHYSICS_PROFILE;
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized === 'realistic' || normalized === 'research' ? normalized : DEFAULT_PHYSICS_PROFILE;
   }
 
   function physicsTimeStep(profile) {
-    return normalizePhysicsProfile(profile) === 'realistic' ? REALISTIC_PHYSICS_DT : PHYSICS_DT;
+    const normalized = normalizePhysicsProfile(profile);
+    if (normalized === 'research') return RESEARCH_PHYSICS_DT;
+    return normalized === 'realistic' ? REALISTIC_PHYSICS_DT : PHYSICS_DT;
   }
 
   function parametersForPhysicsProfile(profile, overrides = {}) {
@@ -89,8 +173,28 @@
     return {
       ...DEFAULT_PARAMETERS,
       ...(normalized === 'realistic' ? REALISTIC_PARAMETER_DEFAULTS : {}),
+      ...(normalized === 'research' ? RESEARCH_PARAMETER_DEFAULTS : {}),
       ...(overrides || {})
     };
+  }
+
+  function normalizeEquipmentProfile(value) {
+    const id = String(value || '').trim().toLowerCase();
+    return Object.prototype.hasOwnProperty.call(EQUIPMENT_PROFILES, id) ? id : DEFAULT_EQUIPMENT_PROFILE;
+  }
+
+  function equipmentProfile(value) {
+    return EQUIPMENT_PROFILES[normalizeEquipmentProfile(value)];
+  }
+
+  function cueProfile(value) {
+    const id = String(value || '').trim();
+    return CUE_PROFILES[id] || CUE_PROFILES.playing;
+  }
+
+  function tipProfile(value) {
+    const id = String(value || '').trim();
+    return TIP_PROFILES[id] || TIP_PROFILES.medium;
   }
 
   function normalizeLattice(value) {
@@ -481,6 +585,12 @@
     };
   }
 
+  function normalizeMotionState(value, active = true) {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (['sliding', 'rolling', 'spinning', 'airborne', 'pocket-fall', 'sleeping', 'pocketed'].includes(normalized)) return normalized;
+    return active ? 'sleeping' : 'pocketed';
+  }
+
   function ballColor(kind, number) {
     if (kind === 'cue') return '#f7f4e9';
     const normalized = Math.max(1, Math.floor(Number(number) || 1));
@@ -542,6 +652,8 @@
       ? 'cue'
       : 'target';
     const number = kind === 'target' ? Math.max(1, Math.floor(Number(source && source.number) || ordinal || 1)) : 0;
+    const active = source && Object.prototype.hasOwnProperty.call(source, 'active') ? !!source.active : true;
+    const velocity = normalizeVector2(source && source.velocity);
     return {
       id: String(source && source.id || (kind === 'cue' ? 'cue' : number)),
       kind,
@@ -549,12 +661,16 @@
       color: ballColor(kind, number),
       tileIndex,
       position: { ...location.position },
-      velocity: normalizeVector2(source && source.velocity),
+      height: Math.max(0, Number(source && source.height) || 0),
+      velocity: { ...velocity, z: Number(source && source.velocity && source.velocity.z) || 0 },
       angularVelocity: normalizeVector3(source && source.angularVelocity),
       orientation: source && source.orientation ? normalizeQuaternion(source.orientation) : defaultBallOrientation(),
       radius: normalizeRadius(source && source.radius, defaults.ballRadius, 0.05, 0.45),
       mass: normalizeRadius(source && source.mass, 1, 0.05, 20),
-      active: source && Object.prototype.hasOwnProperty.call(source, 'active') ? !!source.active : true,
+      physicalMassKg: Math.max(0.01, Number(source && source.physicalMassKg) || Number(defaults.physicalMassKg) || 0.17),
+      active,
+      motionState: normalizeMotionState(source && source.motionState, active),
+      pocketedAt: String(source && source.pocketedAt || ''),
       crossings: Math.max(0, Math.floor(Number(source && source.crossings) || 0))
     };
   }
@@ -620,9 +736,11 @@
       ? preset.billiards
       : {};
     const rules = normalizeRules(options.rules || block.rules);
+    const equipmentProfileId = normalizeEquipmentProfile(options.equipmentProfileId || block.equipmentProfileId);
+    const equipment = equipmentProfile(equipmentProfileId);
     const ballRadius = normalizeRadius(block.ballRadius, 0.22, 0.05, 0.45);
     const pocketRadius = normalizeRadius(block.pocketRadius, 0.34, 0.08, 0.75);
-    const defaults = { ballRadius, pocketRadius };
+    const defaults = { ballRadius, pocketRadius, physicalMassKg: equipment.ballMassKg };
     const ballSources = Array.isArray(block.balls) ? block.balls : [];
     const balls = ballSources.map((source, index) => ballFromPayload(source, preset, atlas, defaults, index + 1)).filter(Boolean);
     const physicsProfile = normalizePhysicsProfile(options.physicsProfile || block.physicsProfile);
@@ -661,8 +779,13 @@
         dt: physicsTimeStep(physicsProfile),
         physicsProfile,
         physicsVersion: PHYSICS_VERSION[physicsProfile],
+        equipmentProfileId,
+        equipmentVersion: equipment.version,
+        solverTolerancesVersion: physicsProfile === 'legacy' ? 'legacy-fixed-step-v1' : SOLVER_TOLERANCES_VERSION,
+        cueInputVersion: CUE_INPUT_VERSION,
         seed: Math.max(1, Math.floor(Number(block.seed) || 1)),
-        parameters
+        parameters,
+        telemetry: null
       },
       removed: new Set(atlas.removed),
       boxes: [],
@@ -687,11 +810,15 @@
       tileIndex: ball.tileIndex,
       position: { ...ball.position },
       velocity: { ...ball.velocity },
+      height: Math.max(0, Number(ball.height) || 0),
       angularVelocity: { ...ball.angularVelocity },
       orientation: { ...ball.orientation },
       radius: ball.radius,
       mass: ball.mass,
+      physicalMassKg: Math.max(0.01, Number(ball.physicalMassKg) || 0.17),
       active: !!ball.active,
+      motionState: normalizeMotionState(ball.motionState, ball.active),
+      pocketedAt: String(ball.pocketedAt || ''),
       crossings: ball.crossings || 0
     };
   }
@@ -716,6 +843,7 @@
     const block = {
       rules: normalizeRules(state.rules),
       physicsProfile: normalizePhysicsProfile(state.deterministic && state.deterministic.physicsProfile),
+      equipmentProfileId: normalizeEquipmentProfile(state.deterministic && state.deterministic.equipmentProfileId),
       ballRadius: state.ballRadius,
       pocketRadius: state.pocketRadius,
       parameters: clonePlain(state.deterministic.parameters),
@@ -784,14 +912,39 @@
       dt: physicsTimeStep(profile),
       physicsProfile: profile,
       physicsVersion: PHYSICS_VERSION[profile],
+      solverTolerancesVersion: profile === 'legacy' ? 'legacy-fixed-step-v1' : SOLVER_TOLERANCES_VERSION,
+      cueInputVersion: CUE_INPUT_VERSION,
       parameters: {
         ...(state.deterministic && state.deterministic.parameters || {}),
-        ...(profile === 'realistic'
-          ? REALISTIC_PARAMETER_DEFAULTS
-          : { ballBallFriction: DEFAULT_PARAMETERS.ballBallFriction, cushionFriction: DEFAULT_PARAMETERS.cushionFriction }),
+        ...(profile === 'realistic' ? REALISTIC_PARAMETER_DEFAULTS : {}),
+        ...(profile === 'research' ? RESEARCH_PARAMETER_DEFAULTS : {}),
+        ...(profile === 'legacy' ? {
+          ballBallFriction: DEFAULT_PARAMETERS.ballBallFriction,
+          cushionFriction: DEFAULT_PARAMETERS.cushionFriction,
+          collisionIterations: DEFAULT_PARAMETERS.collisionIterations,
+          eventTimeEpsilon: DEFAULT_PARAMETERS.eventTimeEpsilon,
+          swerveCoefficient: DEFAULT_PARAMETERS.swerveCoefficient,
+          pocketAcceptanceSpeed: DEFAULT_PARAMETERS.pocketAcceptanceSpeed
+        } : {}),
         friction
-      }
+      },
+      telemetry: null
     };
+    return state;
+  }
+
+  function setEquipmentProfile(source, value) {
+    if (!source) return source;
+    const state = cloneState(source);
+    const id = normalizeEquipmentProfile(value);
+    const equipment = equipmentProfile(id);
+    state.deterministic = {
+      ...(state.deterministic || {}),
+      equipmentProfileId: id,
+      equipmentVersion: equipment.version,
+      telemetry: null
+    };
+    state.balls.forEach((ball) => { ball.physicalMassKg = equipment.ballMassKg; });
     return state;
   }
 
@@ -1606,11 +1759,481 @@
     const parameters = state.deterministic.parameters;
     return state.balls.filter((ball) => ball.active).every((ball) => (
       M.length2(ball.velocity) <= parameters.stopSpeed
+      && Math.abs(Number(ball.velocity.z) || 0) <= parameters.stopSpeed
+      && Math.max(0, Number(ball.height) || 0) <= EPSILON
       && Math.hypot(ball.angularVelocity.x, ball.angularVelocity.y, ball.angularVelocity.z) <= parameters.stopSpin
     ));
   }
 
+  function usesEventSolver(state) {
+    return normalizePhysicsProfile(state && state.deterministic && state.deterministic.physicsProfile) !== 'legacy';
+  }
+
+  function localMetersPerUnit(state) {
+    const equipment = equipmentProfile(state && state.deterministic && state.deterministic.equipmentProfileId);
+    return equipment.ballDiameterM / Math.max(EPSILON, 2 * Number(state && state.ballRadius || 0.22));
+  }
+
+  function totalKineticEnergy(state) {
+    const metersPerUnit = localMetersPerUnit(state);
+    const equipment = equipmentProfile(state && state.deterministic && state.deterministic.equipmentProfileId);
+    const radiusM = equipment.ballDiameterM / 2;
+    return state.balls.filter((ball) => ball.active).reduce((sum, ball) => {
+      const mass = Math.max(0.01, Number(ball.physicalMassKg) || equipment.ballMassKg);
+      const vx = (Number(ball.velocity.x) || 0) * metersPerUnit;
+      const vy = (Number(ball.velocity.y) || 0) * metersPerUnit;
+      const vz = (Number(ball.velocity.z) || 0) * metersPerUnit;
+      const inertia = (2 / 5) * mass * radiusM * radiusM;
+      const omega2 = (ball.angularVelocity.x ** 2) + (ball.angularVelocity.y ** 2) + (ball.angularVelocity.z ** 2);
+      return sum + 0.5 * mass * (vx * vx + vy * vy + vz * vz) + 0.5 * inertia * omega2;
+    }, 0);
+  }
+
+  function createPhysicsTelemetry(state) {
+    return {
+      solver: normalizePhysicsProfile(state.deterministic.physicsProfile) === 'research' ? 'research-event' : 'realistic-event',
+      phase: 'simulating',
+      events: 0,
+      eventCounts: {},
+      orderedEvents: [],
+      iterations: 0,
+      simulatedTime: 0,
+      initialEnergyJ: totalKineticEnergy(state),
+      finalEnergyJ: 0,
+      energyDriftJ: 0,
+      warnings: [],
+      contacts: []
+    };
+  }
+
+  function recordPhysicsEvent(telemetry, type, details = {}) {
+    if (!telemetry) return;
+    telemetry.events += 1;
+    telemetry.eventCounts[type] = (telemetry.eventCounts[type] || 0) + 1;
+    const event = {
+      sequence: telemetry.events,
+      time: Number(telemetry.currentEventTime) || 0,
+      type,
+      ...clonePlain(details)
+    };
+    if (telemetry.orderedEvents.length < 2048) telemetry.orderedEvents.push(event);
+    if (telemetry.contacts.length < 256) telemetry.contacts.push(event);
+  }
+
+  function warnPhysics(telemetry, warning) {
+    if (!telemetry || telemetry.warnings.includes(warning)) return;
+    telemetry.warnings.push(warning);
+  }
+
+  function collisionTime3(relativePosition, relativeVelocity, radius, maximumTime, epsilon) {
+    const a = relativeVelocity.x ** 2 + relativeVelocity.y ** 2 + relativeVelocity.z ** 2;
+    const b = 2 * (
+      relativePosition.x * relativeVelocity.x
+      + relativePosition.y * relativeVelocity.y
+      + relativePosition.z * relativeVelocity.z
+    );
+    const c = relativePosition.x ** 2 + relativePosition.y ** 2 + relativePosition.z ** 2 - radius ** 2;
+    if (c <= epsilon) return b < -epsilon ? 0 : null;
+    if (a <= epsilon || b >= 0) return null;
+    const discriminant = b * b - 4 * a * c;
+    if (discriminant < -epsilon) return null;
+    const time = (-b - Math.sqrt(Math.max(0, discriminant))) / (2 * a);
+    return time >= -epsilon && time <= maximumTime + epsilon ? Math.max(0, time) : null;
+  }
+
+  function eventOrder(left, right, epsilon) {
+    if (Math.abs(left.time - right.time) > epsilon) return left.time - right.time;
+    const priority = { pocket: 0, 'ball-ball': 1, landing: 2, wall: 3, seam: 4 };
+    return (priority[left.type] ?? 9) - (priority[right.type] ?? 9)
+      || String(left.key || '').localeCompare(String(right.key || ''));
+  }
+
+  function earliestBallBallEvent(state, maximumTime) {
+    const balls = state.balls.filter((ball) => ball.active);
+    const depth = state.deterministic.parameters.localCoverDepth;
+    const epsilon = state.deterministic.parameters.eventTimeEpsilon;
+    let earliest = null;
+    for (let leftIndex = 0; leftIndex < balls.length; leftIndex += 1) {
+      const left = balls[leftIndex];
+      for (let rightIndex = leftIndex + 1; rightIndex < balls.length; rightIndex += 1) {
+        const right = balls[rightIndex];
+        const charts = chartTransformsFromTile(state.atlas, right.tileIndex, depth).byTile.get(left.tileIndex) || [];
+        charts.forEach((chart) => {
+          const rightPosition = M.applyAffine(chart.transform, right.position);
+          const rightVelocity = M.applyLinear(chart.transform, right.velocity);
+          const time = collisionTime3({
+            x: rightPosition.x - left.position.x,
+            y: rightPosition.y - left.position.y,
+            z: (Number(right.height) || 0) - (Number(left.height) || 0)
+          }, {
+            x: rightVelocity.x - left.velocity.x,
+            y: rightVelocity.y - left.velocity.y,
+            z: (Number(right.velocity.z) || 0) - (Number(left.velocity.z) || 0)
+          }, left.radius + right.radius, maximumTime, epsilon);
+          if (time == null) return;
+          const candidate = {
+            type: 'ball-ball',
+            time,
+            key: `${left.id}:${right.id}:${chart.path}`,
+            left,
+            right,
+            transform: chart.transform,
+            inverseTransform: chart.inverseTransform
+          };
+          if (!earliest || eventOrder(candidate, earliest, epsilon) < 0) earliest = candidate;
+        });
+      }
+    }
+    return earliest;
+  }
+
+  function earliestBoundaryEvent(state, maximumTime) {
+    const epsilon = state.deterministic.parameters.eventTimeEpsilon;
+    let earliest = null;
+    state.balls.filter((ball) => ball.active).forEach((ball) => {
+      const tile = state.atlas.tiles[ball.tileIndex];
+      tile.frames.forEach((frame, dir) => {
+        const transition = tile.transitions[dir];
+        const threshold = transition ? 0 : ball.radius;
+        const distance = pointEdgeDistance(ball.position, frame);
+        const normalSpeed = M.dot2(ball.velocity, frame.inward);
+        if (normalSpeed >= -epsilon || distance < threshold - epsilon) return;
+        const time = (threshold - distance) / normalSpeed;
+        if (time < -epsilon || time > maximumTime + epsilon) return;
+        const candidate = {
+          type: transition ? 'seam' : 'wall',
+          time: Math.max(0, time),
+          key: `${ball.id}:${dir}`,
+          ball,
+          frame,
+          dir,
+          transition
+        };
+        if (!earliest || eventOrder(candidate, earliest, epsilon) < 0) earliest = candidate;
+      });
+    });
+    return earliest;
+  }
+
+  function earliestPocketEvent(state, maximumTime) {
+    if (!state.pockets.length) return null;
+    const epsilon = state.deterministic.parameters.eventTimeEpsilon;
+    let earliest = null;
+    state.balls.filter((ball) => ball.active && (Number(ball.height) || 0) <= ball.radius * 0.12).forEach((ball) => {
+      state.pockets.forEach((pocket) => {
+        const vertexClass = state.atlas.vertexClasses[pocket.classIndex];
+        if (!vertexClass) return;
+        vertexClass.incidences.filter((entry) => entry.tileIndex === ball.tileIndex).forEach((incidence) => {
+          const relative = M.sub2(ball.position, incidence.point);
+          const time = collisionTime3(
+            { x: relative.x, y: relative.y, z: 0 },
+            { x: ball.velocity.x, y: ball.velocity.y, z: 0 },
+            pocketCaptureRadius(ball, pocket),
+            maximumTime,
+            epsilon
+          );
+          if (time == null) return;
+          const candidate = {
+            type: 'pocket',
+            time,
+            key: `${pocket.id}:${ball.id}:${incidence.tileIndex}:${incidence.corner}`,
+            ball,
+            pocket,
+            incidence,
+            vertexClass
+          };
+          if (!earliest || eventOrder(candidate, earliest, epsilon) < 0) earliest = candidate;
+        });
+      });
+    });
+    return earliest;
+  }
+
+  function earliestLandingEvent(state, maximumTime) {
+    const equipment = equipmentProfile(state.deterministic.equipmentProfileId);
+    const gravity = equipment.gravityMps2 / localMetersPerUnit(state);
+    const epsilon = state.deterministic.parameters.eventTimeEpsilon;
+    let earliest = null;
+    state.balls.filter((ball) => ball.active).forEach((ball) => {
+      const height = Math.max(0, Number(ball.height) || 0);
+      const verticalSpeed = Number(ball.velocity.z) || 0;
+      if (height <= epsilon && verticalSpeed <= epsilon) return;
+      const discriminant = verticalSpeed * verticalSpeed + 2 * gravity * height;
+      const time = (verticalSpeed + Math.sqrt(Math.max(0, discriminant))) / gravity;
+      if (time <= epsilon || time > maximumTime + epsilon) return;
+      const candidate = { type: 'landing', time, key: String(ball.id), ball };
+      if (!earliest || eventOrder(candidate, earliest, epsilon) < 0) earliest = candidate;
+    });
+    return earliest;
+  }
+
+  function earliestPhysicsEvent(state, maximumTime) {
+    const epsilon = state.deterministic.parameters.eventTimeEpsilon;
+    return [
+      earliestPocketEvent(state, maximumTime),
+      earliestBallBallEvent(state, maximumTime),
+      earliestBoundaryEvent(state, maximumTime),
+      earliestLandingEvent(state, maximumTime)
+    ].filter(Boolean).sort((left, right) => eventOrder(left, right, epsilon))[0] || null;
+  }
+
+  function advancePhysicalBalls(state, dt) {
+    if (dt <= 0) return;
+    const equipment = equipmentProfile(state.deterministic.equipmentProfileId);
+    const gravity = equipment.gravityMps2 / localMetersPerUnit(state);
+    state.balls.forEach((ball) => {
+      if (!ball.active) return;
+      ball.position = M.add2(ball.position, M.scale2(ball.velocity, dt));
+      ball.orientation = M.integrateQuaternion(ball.orientation, ball.angularVelocity, dt);
+      const height = Math.max(0, Number(ball.height) || 0);
+      const verticalSpeed = Number(ball.velocity.z) || 0;
+      if (height > 0 || verticalSpeed > 0) {
+        ball.height = Math.max(0, height + verticalSpeed * dt - 0.5 * gravity * dt * dt);
+        ball.velocity.z = verticalSpeed - gravity * dt;
+        ball.motionState = 'airborne';
+      } else {
+        ball.height = 0;
+        ball.velocity.z = 0;
+      }
+    });
+  }
+
+  function resolveEventBallCollision(state, event, telemetry) {
+    const left = event.left;
+    const right = event.right;
+    const rightPosition = M.applyAffine(event.transform, right.position);
+    let rightVelocity = M.applyLinear(event.transform, right.velocity);
+    let rightAngularVelocity = M.applyLiftedLinear(event.transform, right.angularVelocity);
+    const delta3 = {
+      x: rightPosition.x - left.position.x,
+      y: rightPosition.y - left.position.y,
+      z: (Number(right.height) || 0) - (Number(left.height) || 0)
+    };
+    const distance = Math.hypot(delta3.x, delta3.y, delta3.z) || 1;
+    const normal3 = { x: delta3.x / distance, y: delta3.y / distance, z: delta3.z / distance };
+    const relative3 = {
+      x: rightVelocity.x - left.velocity.x,
+      y: rightVelocity.y - left.velocity.y,
+      z: (Number(right.velocity.z) || 0) - (Number(left.velocity.z) || 0)
+    };
+    const relativeNormal = relative3.x * normal3.x + relative3.y * normal3.y + relative3.z * normal3.z;
+    if (relativeNormal >= 0) return;
+    const inverseMass = (1 / left.mass) + (1 / right.mass);
+    const normalImpulse = -((1 + state.deterministic.parameters.restitution) * relativeNormal) / inverseMass;
+    left.velocity.x -= normal3.x * normalImpulse / left.mass;
+    left.velocity.y -= normal3.y * normalImpulse / left.mass;
+    left.velocity.z = (Number(left.velocity.z) || 0) - normal3.z * normalImpulse / left.mass;
+    rightVelocity.x += normal3.x * normalImpulse / right.mass;
+    rightVelocity.y += normal3.y * normalImpulse / right.mass;
+    right.velocity.z = (Number(right.velocity.z) || 0) + normal3.z * normalImpulse / right.mass;
+    const tangentRaw = {
+      x: relative3.x - relativeNormal * normal3.x,
+      y: relative3.y - relativeNormal * normal3.y
+    };
+    const tangentSpeed = M.length2(tangentRaw);
+    let tangentImpulse = 0;
+    if (tangentSpeed > EPSILON) {
+      const tangent = M.scale2(tangentRaw, 1 / tangentSpeed);
+      const spinSlip = tangentSpeed
+        - left.angularVelocity.z * left.radius
+        - rightAngularVelocity.z * right.radius;
+      const leftInertia = (2 / 5) * left.mass * left.radius * left.radius;
+      const rightInertia = (2 / 5) * right.mass * right.radius * right.radius;
+      const inverseEffectiveMass = inverseMass
+        + left.radius * left.radius / leftInertia
+        + right.radius * right.radius / rightInertia;
+      const requested = -spinSlip / inverseEffectiveMass;
+      const maximum = Math.max(0, state.deterministic.parameters.ballBallFriction) * normalImpulse;
+      tangentImpulse = clamp(requested, -maximum, maximum);
+      left.velocity = { ...left.velocity, ...M.sub2(left.velocity, M.scale2(tangent, tangentImpulse / left.mass)) };
+      rightVelocity = M.add2(rightVelocity, M.scale2(tangent, tangentImpulse / right.mass));
+      left.angularVelocity.z -= left.radius * tangentImpulse / leftInertia;
+      rightAngularVelocity.z -= right.radius * tangentImpulse / rightInertia;
+    }
+    right.velocity = { ...right.velocity, ...M.applyLinear(event.inverseTransform, rightVelocity) };
+    right.angularVelocity = M.applyLiftedLinear(event.inverseTransform, rightAngularVelocity);
+    const separation = state.deterministic.parameters.eventTimeEpsilon * 8;
+    left.position = M.sub2(left.position, { x: normal3.x * separation, y: normal3.y * separation });
+    right.position = M.applyAffine(event.inverseTransform, {
+      x: rightPosition.x + normal3.x * separation,
+      y: rightPosition.y + normal3.y * separation
+    });
+    recordPhysicsEvent(telemetry, 'ball-ball', {
+      leftId: left.id,
+      rightId: right.id,
+      normalImpulse,
+      tangentImpulse
+    });
+  }
+
+  function resolveEventWall(state, event, telemetry) {
+    const ball = event.ball;
+    const frame = event.frame;
+    const normalSpeed = M.dot2(ball.velocity, frame.inward);
+    if (normalSpeed >= 0) return;
+    const restitution = Math.max(0, Number(state.deterministic.parameters.wallRestitution) || 0);
+    const normalImpulse = -(1 + restitution) * normalSpeed * ball.mass;
+    ball.velocity = { ...ball.velocity, ...M.sub2(ball.velocity, M.scale2(frame.inward, (1 + restitution) * normalSpeed)) };
+    const tangent = { x: -frame.inward.y, y: frame.inward.x };
+    const contactSpeed = M.dot2(ball.velocity, tangent) - ball.radius * ball.angularVelocity.z;
+    const inertia = (2 / 5) * ball.mass * ball.radius * ball.radius;
+    const requested = -contactSpeed / ((1 / ball.mass) + ball.radius * ball.radius / inertia);
+    const maximum = Math.max(0, state.deterministic.parameters.cushionFriction) * normalImpulse;
+    const tangentImpulse = clamp(requested, -maximum, maximum);
+    ball.velocity = { ...ball.velocity, ...M.add2(ball.velocity, M.scale2(tangent, tangentImpulse / ball.mass)) };
+    ball.angularVelocity.z -= ball.radius * tangentImpulse / inertia;
+    ball.position = M.add2(ball.position, M.scale2(frame.inward, state.deterministic.parameters.eventTimeEpsilon * 8));
+    recordPhysicsEvent(telemetry, 'wall', { ballId: ball.id, normalImpulse, tangentImpulse });
+  }
+
+  function resolveEventSeam(event, telemetry) {
+    const ball = event.ball;
+    const transition = event.transition;
+    ball.position = M.applyAffine(transition.transform, ball.position);
+    const verticalSpeed = Number(ball.velocity.z) || 0;
+    ball.velocity = { ...M.applyLinear(transition.transform, ball.velocity), z: verticalSpeed };
+    ball.angularVelocity = M.applyLiftedLinear(transition.transform, ball.angularVelocity);
+    ball.orientation = M.transportOrientation(ball.orientation, transition.transform);
+    ball.tileIndex = transition.tileIndex;
+    ball.crossings = (ball.crossings || 0) + 1;
+    ball.position = M.add2(ball.position, M.scale2(ball.velocity, 1e-8));
+    recordPhysicsEvent(telemetry, 'seam', { ballId: ball.id, fromDirection: event.dir, tileIndex: ball.tileIndex });
+  }
+
+  function resolveEventPocket(state, event, shotResult, telemetry) {
+    const ball = event.ball;
+    const radial = M.sub2(ball.position, event.incidence.point);
+    const radialDirection = M.normalize2(radial, { x: 1, y: 0 });
+    const speedLocal = M.length2(ball.velocity);
+    const speedMps = speedLocal * localMetersPerUnit(state);
+    const alignment = speedLocal > EPSILON ? -M.dot2(M.scale2(ball.velocity, 1 / speedLocal), radialDirection) : 1;
+    const physical = Math.abs(event.vertexClass.coneAngle - Math.PI / 2) < 0.25
+      || Math.abs(event.vertexClass.coneAngle - Math.PI) < 0.25;
+    const accepted = !physical
+      || speedMps <= state.deterministic.parameters.pocketAcceptanceSpeed
+      || alignment >= 0.72;
+    if (accepted) {
+      ball.active = false;
+      ball.motionState = 'pocketed';
+      ball.pocketedAt = event.pocket.id;
+      ball.height = 0;
+      ball.velocity = { x: 0, y: 0, z: 0 };
+      ball.angularVelocity = { x: 0, y: 0, z: 0 };
+      if (ball.kind === 'cue') shotResult.scratch = true;
+      else if (!shotResult.pocketedTargets.includes(ball.id)) shotResult.pocketedTargets.push(ball.id);
+      recordPhysicsEvent(telemetry, 'pocket', { ballId: ball.id, pocketId: event.pocket.id, accepted: true, speedMps });
+      return;
+    }
+    const towardPocket = M.dot2(ball.velocity, radialDirection);
+    if (towardPocket < 0) {
+      ball.velocity = { ...ball.velocity, ...M.sub2(ball.velocity, M.scale2(radialDirection, 1.45 * towardPocket)) };
+    }
+    ball.position = M.add2(ball.position, M.scale2(radialDirection, state.deterministic.parameters.eventTimeEpsilon * 16));
+    recordPhysicsEvent(telemetry, 'pocket-reject', { ballId: ball.id, pocketId: event.pocket.id, accepted: false, speedMps });
+  }
+
+  function resolveEventLanding(state, event, telemetry) {
+    const ball = event.ball;
+    const impactSpeed = Math.abs(Number(ball.velocity.z) || 0);
+    ball.height = 0;
+    ball.velocity.z = 0;
+    ball.motionState = M.length2(ball.velocity) > state.deterministic.parameters.stopSpeed ? 'sliding' : 'spinning';
+    recordPhysicsEvent(telemetry, 'landing', { ballId: ball.id, impactSpeed });
+  }
+
+  function applyAdvancedCloth(state, ball, dt) {
+    if (!ball.active || (Number(ball.height) || 0) > EPSILON) return;
+    const parameters = state.deterministic.parameters;
+    const equipment = equipmentProfile(state.deterministic.equipmentProfileId);
+    const scale = localMetersPerUnit(state);
+    const frictionScale = normalizeFriction(parameters.friction);
+    const radius = ball.radius;
+    const slip = {
+      x: ball.velocity.x - radius * ball.angularVelocity.y,
+      y: ball.velocity.y + radius * ball.angularVelocity.x
+    };
+    const slipSpeed = M.length2(slip);
+    const slidingAcceleration = equipment.clothKineticFriction * equipment.gravityMps2 * frictionScale / scale;
+    if (slipSpeed > Math.max(parameters.stopSpeed, 1e-5)) {
+      const slipReduction = Math.min(slipSpeed, 3.5 * slidingAcceleration * dt);
+      const direction = M.scale2(slip, -1 / slipSpeed);
+      ball.velocity = { ...ball.velocity, ...M.add2(ball.velocity, M.scale2(direction, slipReduction * (2 / 7))) };
+      ball.angularVelocity.x += direction.y * slipReduction * (5 / 7) / radius;
+      ball.angularVelocity.y -= direction.x * slipReduction * (5 / 7) / radius;
+      ball.motionState = 'sliding';
+    } else {
+      const speed = M.length2(ball.velocity);
+      const decrement = equipment.clothRollingResistance * equipment.gravityMps2 * frictionScale * dt / scale;
+      if (speed > parameters.stopSpeed) {
+        const nextSpeed = Math.max(0, speed - decrement);
+        ball.velocity = { ...ball.velocity, ...M.scale2(ball.velocity, nextSpeed / speed) };
+        ball.angularVelocity.x = -ball.velocity.y / radius;
+        ball.angularVelocity.y = ball.velocity.x / radius;
+        ball.motionState = nextSpeed > parameters.stopSpeed ? 'rolling' : 'spinning';
+      }
+    }
+    const speed = M.length2(ball.velocity);
+    if (speed > parameters.stopSpeed && Math.abs(ball.angularVelocity.z) > parameters.stopSpin) {
+      const turn = parameters.swerveCoefficient * ball.angularVelocity.z * dt;
+      const cos = Math.cos(turn);
+      const sin = Math.sin(turn);
+      ball.velocity = { ...ball.velocity, x: ball.velocity.x * cos - ball.velocity.y * sin, y: ball.velocity.x * sin + ball.velocity.y * cos };
+    }
+    ball.angularVelocity.z *= Math.max(0, 1 - Math.max(0, parameters.spinResistance) * frictionScale * dt);
+    if (M.length2(ball.velocity) <= parameters.stopSpeed) ball.velocity = { ...ball.velocity, x: 0, y: 0 };
+    if (M.length2(ball.velocity) <= parameters.stopSpeed && Math.hypot(ball.angularVelocity.x, ball.angularVelocity.y, ball.angularVelocity.z) <= parameters.stopSpin) {
+      ball.angularVelocity = { x: 0, y: 0, z: 0 };
+      ball.motionState = 'sleeping';
+    }
+  }
+
+  function stepEventDriven(state, dt, shotResult, telemetry) {
+    let remaining = dt;
+    let elapsed = 0;
+    let iterations = 0;
+    const parameters = state.deterministic.parameters;
+    const epsilon = Math.max(1e-10, Number(parameters.eventTimeEpsilon) || 1e-7);
+    const cap = Math.max(4, Math.floor(Number(parameters.collisionIterations) || 16));
+    while (remaining > epsilon && iterations < cap) {
+      const event = earliestPhysicsEvent(state, remaining);
+      if (!event) {
+        advancePhysicalBalls(state, remaining);
+        elapsed += remaining;
+        remaining = 0;
+        break;
+      }
+      if (event.time > epsilon) {
+        advancePhysicalBalls(state, event.time);
+        elapsed += event.time;
+      }
+      if (telemetry) telemetry.currentEventTime = telemetry.simulatedTime + elapsed;
+      if (event.type === 'ball-ball') resolveEventBallCollision(state, event, telemetry);
+      else if (event.type === 'wall') resolveEventWall(state, event, telemetry);
+      else if (event.type === 'seam') resolveEventSeam(event, telemetry);
+      else if (event.type === 'pocket') resolveEventPocket(state, event, shotResult, telemetry);
+      else if (event.type === 'landing') resolveEventLanding(state, event, telemetry);
+      const consumed = Math.max(event.time, epsilon);
+      remaining = Math.max(0, remaining - consumed);
+      if (event.time <= epsilon) elapsed += consumed;
+      iterations += 1;
+    }
+    if (remaining > epsilon) {
+      advancePhysicalBalls(state, remaining);
+      warnPhysics(telemetry, 'event iteration cap reached');
+    }
+    state.balls.forEach((ball) => applyAdvancedCloth(state, ball, dt));
+    if (telemetry) {
+      delete telemetry.currentEventTime;
+      telemetry.iterations += iterations;
+      telemetry.simulatedTime += dt;
+    }
+  }
+
   function step(state, dt, shotResult) {
+    if (usesEventSolver(state)) {
+      stepEventDriven(state, dt, shotResult, state.deterministic.telemetry);
+      return;
+    }
     const parameters = state.deterministic.parameters;
     state.balls.forEach((ball) => {
       if (!ball.active) return;
@@ -1632,23 +2255,48 @@
     });
   }
 
-  function shotPayload(aim, power, contact, shooter) {
+  function shotPayload(aim, power, contact, shooter, options = {}, source = null) {
+    const equipment = equipmentProfile(source && source.deterministic && source.deterministic.equipmentProfileId);
+    const normalizedPower = clamp(Number(power) || 0, 0, 1);
+    const tipOffset = options.tipOffset && typeof options.tipOffset === 'object' ? options.tipOffset : contact;
+    const elevationRad = clamp(Number(options.elevationRad) || 0, 0, Math.PI * 75 / 180);
     return {
       action: 'billiards-shot',
       type: 'billiards-shot',
       shooter,
       aim: M.normalize2(normalizeVector2(aim)),
-      power: clamp(Number(power) || 0, 0, 1),
+      power: normalizedPower,
+      legacyPower: normalizedPower,
+      cueSpeedMps: clamp(
+        Number.isFinite(Number(options.cueSpeedMps)) ? Number(options.cueSpeedMps) : normalizedPower * equipment.cueSpeedMaxMps,
+        0,
+        equipment.cueSpeedMaxMps
+      ),
+      elevationRad,
+      cueProfileId: cueProfile(options.cueProfileId).id,
+      tipProfileId: tipProfile(options.tipProfileId).id,
+      strokePresetId: String(options.strokePresetId || 'custom'),
       contact: {
-        x: clamp(Number(contact && contact.x) || 0, -0.86, 0.86),
-        y: clamp(Number(contact && contact.y) || 0, -0.86, 0.86)
-      }
+        x: clamp(Number(tipOffset && tipOffset.x) || 0, -0.86, 0.86),
+        y: clamp(Number(tipOffset && tipOffset.y) || 0, -0.86, 0.86)
+      },
+      tipOffset: {
+        x: clamp(Number(tipOffset && tipOffset.x) || 0, -0.86, 0.86),
+        y: clamp(Number(tipOffset && tipOffset.y) || 0, -0.86, 0.86)
+      },
+      physicsProfile: source && source.deterministic && source.deterministic.physicsProfile || DEFAULT_PHYSICS_PROFILE,
+      physicsVersion: source && source.deterministic && source.deterministic.physicsVersion || PHYSICS_VERSION.legacy,
+      equipmentProfileId: source && source.deterministic && source.deterministic.equipmentProfileId || DEFAULT_EQUIPMENT_PROFILE,
+      equipmentVersion: source && source.deterministic && source.deterministic.equipmentVersion || equipment.version,
+      solverTolerancesVersion: source && source.deterministic && source.deterministic.solverTolerancesVersion || 'legacy-fixed-step-v1',
+      cueInputVersion: CUE_INPUT_VERSION
     };
   }
 
   function applyCueImpulse(state, shot) {
     const cue = state.balls.find((ball) => ball.active && ball.kind === 'cue');
     if (!cue) return false;
+    if (usesEventSolver(state)) return applyPhysicalCueImpulse(state, cue, shot);
     const speed = state.deterministic.parameters.shotSpeed * shot.power;
     if (speed <= state.deterministic.parameters.stopSpeed * 4) return false;
     cue.velocity = M.scale2(shot.aim, speed);
@@ -1668,6 +2316,76 @@
     cue.angularVelocity.x += torque.x / inertia;
     cue.angularVelocity.y += torque.y / inertia;
     cue.angularVelocity.z += torque.z / inertia;
+    return true;
+  }
+
+  function applyPhysicalCueImpulse(state, cue, shot) {
+    const equipment = equipmentProfile(state.deterministic.equipmentProfileId);
+    const selectedCue = cueProfile(shot.cueProfileId);
+    const selectedTip = tipProfile(shot.tipProfileId);
+    const speedMps = clamp(Number(shot.cueSpeedMps) || 0, 0, equipment.cueSpeedMaxMps);
+    if (speedMps <= 0.03) return false;
+    const offset = normalizeVector2(shot.tipOffset || shot.contact);
+    const offsetRadius = Math.hypot(offset.x, offset.y);
+    const usableOffset = Math.min(selectedTip.maxOffset, offsetRadius);
+    const offsetScale = offsetRadius > EPSILON ? usableOffset / offsetRadius : 0;
+    const usable = { x: offset.x * offsetScale, y: offset.y * offsetScale };
+    const miscue = offsetRadius > selectedTip.maxOffset + 1e-9;
+    const elevation = clamp(Number(shot.elevationRad) || 0, 0, Math.PI * 75 / 180);
+    const squirt = selectedCue.squirtCoefficient * usable.x * (0.55 + speedMps / equipment.cueSpeedMaxMps);
+    const cosSquirt = Math.cos(squirt);
+    const sinSquirt = Math.sin(squirt);
+    const aim = {
+      x: shot.aim.x * cosSquirt - shot.aim.y * sinSquirt,
+      y: shot.aim.x * sinSquirt + shot.aim.y * cosSquirt
+    };
+    const mass = Math.max(0.01, Number(cue.physicalMassKg) || equipment.ballMassKg);
+    const normalImpulse = (1 + selectedCue.restitution) * speedMps
+      / ((1 / mass) + (1 / selectedCue.effectiveMassKg));
+    const contactDemand = usableOffset;
+    const frictionLimit = selectedTip.friction * normalImpulse;
+    const tangentImpulse = Math.min(frictionLimit, normalImpulse * contactDemand * 0.72);
+    const deliveredScale = miscue ? 0.58 : 1;
+    const horizontalSpeedMps = normalImpulse * deliveredScale * Math.cos(elevation) / mass;
+    const scale = localMetersPerUnit(state);
+    cue.velocity = {
+      x: aim.x * horizontalSpeedMps / scale,
+      y: aim.y * horizontalSpeedMps / scale,
+      z: Math.max(0, normalImpulse * deliveredScale * Math.sin(elevation) * 0.24 / mass / scale)
+    };
+    cue.height = 0;
+    const radiusM = equipment.ballDiameterM / 2;
+    const inertia = (2 / 5) * mass * radiusM * radiusM;
+    const lateral = { x: -aim.y, y: aim.x };
+    const horizontalOffsetM = usable.x * radiusM;
+    const verticalOffsetM = -usable.y * radiusM;
+    const tangentDirection = tangentImpulse * (offsetRadius > EPSILON ? 1 / offsetRadius : 0);
+    const impulse3 = {
+      x: aim.x * normalImpulse * deliveredScale + lateral.x * usable.x * tangentDirection,
+      y: aim.y * normalImpulse * deliveredScale + lateral.y * usable.x * tangentDirection,
+      z: -normalImpulse * Math.sin(elevation)
+    };
+    const reachM = Math.sqrt(Math.max(0, radiusM * radiusM - horizontalOffsetM ** 2 - verticalOffsetM ** 2));
+    const contactVector = {
+      x: -reachM * aim.x + horizontalOffsetM * lateral.x,
+      y: -reachM * aim.y + horizontalOffsetM * lateral.y,
+      z: verticalOffsetM
+    };
+    const torque = M.cross3(contactVector, impulse3);
+    cue.angularVelocity.x += torque.x / inertia;
+    cue.angularVelocity.y += torque.y / inertia;
+    cue.angularVelocity.z += torque.z / inertia;
+    cue.motionState = cue.velocity.z > state.deterministic.parameters.stopSpeed ? 'airborne' : 'sliding';
+    shot.aim = aim;
+    shot.miscue = miscue;
+    shot.miscueMargin = selectedTip.maxOffset - offsetRadius;
+    shot.impact = {
+      impulseNs: normalImpulse * deliveredScale,
+      tangentImpulseNs: tangentImpulse,
+      squirtRad: squirt,
+      deliveredSpeedMps: horizontalSpeedMps,
+      verticalSpeedMps: cue.velocity.z * scale
+    };
     return true;
   }
 
@@ -1729,12 +2447,13 @@
       return { done: true, result, stepIndex: 0, maxSteps: 0 };
     }
     const state = cloneState(source);
-    const shot = shotPayload(aim, power, contact, shooter);
+    const shot = shotPayload(aim, power, contact, shooter, options, state);
     if (!applyCueImpulse(state, shot)) {
       const result = { changed: false, state: source, message: 'pull farther to shoot', simulationSteps: 0 };
       return { done: true, result, stepIndex: 0, maxSteps: 0 };
     }
     state.phase = 'moving';
+    state.deterministic.telemetry = usesEventSolver(state) ? createPhysicsTelemetry(state) : null;
     const shotResult = { pocketedTargets: [], scratch: false };
     const trajectory = [];
     if (options.collectTrajectory) trajectory.push(source.balls.map((ball) => ballExport(ball, source.preset)));
@@ -1759,11 +2478,22 @@
   function finishShotSimulation(simulation) {
     if (simulation.done) return simulation.result;
     const { state, shot, shotResult, trajectory } = simulation;
+    const telemetry = state.deterministic.telemetry;
+    if (telemetry) {
+      telemetry.phase = 'complete';
+      telemetry.finalEnergyJ = totalKineticEnergy(state);
+      telemetry.energyDriftJ = telemetry.finalEnergyJ - telemetry.initialEnergyJ;
+      if (simulation.stepIndex >= simulation.maxSteps && !ballsAtRest(state)) {
+        warnPhysics(telemetry, 'maximum simulation duration reached; residual motion was settled');
+      }
+    }
     state.balls.forEach((ball) => {
-      ball.velocity = { x: 0, y: 0 };
+      ball.height = 0;
+      ball.velocity = { x: 0, y: 0, z: 0 };
       if (Math.hypot(ball.angularVelocity.x, ball.angularVelocity.y, ball.angularVelocity.z) < state.deterministic.parameters.stopSpin * 2) {
         ball.angularVelocity = { x: 0, y: 0, z: 0 };
       }
+      if (ball.active) ball.motionState = 'sleeping';
     });
     finishShot(state, shot, shotResult);
     if (simulation.collectTrajectory) trajectory.push(state.balls.map((ball) => ballExport(ball, state.preset)));
@@ -1774,6 +2504,7 @@
       shot: state.lastShot,
       trajectory,
       simulationSteps: simulation.stepIndex,
+      telemetry: clonePlain(state.deterministic.telemetry),
       message: shotResult.scratch
         ? 'scratch: ball in hand'
         : `${shotResult.pocketedTargets.length} target${shotResult.pocketedTargets.length === 1 ? '' : 's'} pocketed`
@@ -1801,6 +2532,18 @@
     return simulation;
   }
 
+  function shotSimulationProgress(simulation) {
+    if (!simulation) return { phase: 'idle', progress: 0, stepIndex: 0, maxSteps: 0, telemetry: null };
+    return {
+      phase: simulation.done ? 'complete' : 'simulating',
+      progress: simulation.maxSteps ? clamp(simulation.stepIndex / simulation.maxSteps, 0, 1) : 1,
+      stepIndex: simulation.stepIndex,
+      maxSteps: simulation.maxSteps,
+      simulatedTime: simulation.stepIndex * (simulation.dt || PHYSICS_DT),
+      telemetry: clonePlain(simulation.state && simulation.state.deterministic && simulation.state.deterministic.telemetry)
+    };
+  }
+
   function shotSimulationResult(simulation) {
     return simulation && simulation.done ? simulation.result : null;
   }
@@ -1823,8 +2566,11 @@
     cue.active = true;
     cue.tileIndex = tileIndex;
     cue.position = { ...position };
-    cue.velocity = { x: 0, y: 0 };
+    cue.height = 0;
+    cue.velocity = { x: 0, y: 0, z: 0 };
     cue.angularVelocity = { x: 0, y: 0, z: 0 };
+    cue.motionState = 'sleeping';
+    cue.pocketedAt = null;
     const issue = placementIssue(state, cue, cue.id);
     if (issue) return { changed: false, state: source, message: issue };
     state.ballInHand = false;
@@ -1886,6 +2632,7 @@
       billiards: {
         rules: source.rules,
         physicsProfile: source.physicsProfile || (source.deterministic && source.deterministic.physicsProfile),
+        equipmentProfileId: source.equipmentProfileId || (source.deterministic && source.deterministic.equipmentProfileId),
         ballRadius: source.ballRadius,
         pocketRadius: source.pocketRadius,
         balls,
@@ -1923,14 +2670,34 @@
     state.recordMoves = clonePlain(source.recordMoves || []);
     if (source.deterministic && typeof source.deterministic === 'object') {
       const physicsProfile = normalizePhysicsProfile(source.deterministic.physicsProfile || source.physicsProfile);
+      const equipmentProfileId = normalizeEquipmentProfile(source.deterministic.equipmentProfileId || source.equipmentProfileId);
+      const currentEquipment = equipmentProfile(equipmentProfileId);
+      if (source.deterministic.physicsVersion && source.deterministic.physicsVersion !== PHYSICS_VERSION[physicsProfile]) {
+        throw new Error(`Unsupported Billiards physics version ${source.deterministic.physicsVersion}; expected ${PHYSICS_VERSION[physicsProfile]}.`);
+      }
+      const expectedToleranceVersion = physicsProfile === 'legacy' ? 'legacy-fixed-step-v1' : SOLVER_TOLERANCES_VERSION;
+      if (source.deterministic.solverTolerancesVersion && source.deterministic.solverTolerancesVersion !== expectedToleranceVersion) {
+        throw new Error(`Unsupported Billiards solver tolerance version ${source.deterministic.solverTolerancesVersion}.`);
+      }
+      if (source.deterministic.equipmentVersion && source.deterministic.equipmentVersion !== currentEquipment.version) {
+        throw new Error(`Unsupported Billiards equipment version ${source.deterministic.equipmentVersion}; expected ${currentEquipment.version}.`);
+      }
+      if (source.deterministic.cueInputVersion && source.deterministic.cueInputVersion !== CUE_INPUT_VERSION) {
+        throw new Error(`Unsupported Billiards cue input version ${source.deterministic.cueInputVersion}.`);
+      }
       const parameters = parametersForPhysicsProfile(physicsProfile, source.deterministic.parameters);
       parameters.friction = normalizeFriction(parameters.friction);
       state.deterministic = {
         dt: physicsTimeStep(physicsProfile),
         physicsProfile,
         physicsVersion: PHYSICS_VERSION[physicsProfile],
+        equipmentProfileId,
+        equipmentVersion: currentEquipment.version,
+        solverTolerancesVersion: expectedToleranceVersion,
+        cueInputVersion: CUE_INPUT_VERSION,
         seed: Math.max(1, Math.floor(Number(source.deterministic.seed) || 1)),
-        parameters
+        parameters,
+        telemetry: clonePlain(source.deterministic.telemetry || null)
       };
     }
     return state;
@@ -2073,10 +2840,12 @@
   }
 
   function drawBall(ctx, geometry, state, ball, image, renderer, debugTexture) {
-    const center = localToCanvas(image.tileIndex, image.position, geometry, state.atlas);
-    if (!center) return;
+    const groundCenter = localToCanvas(image.tileIndex, image.position, geometry, state.atlas);
+    if (!groundCenter) return;
     const scale = state.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
     const radius = ball.radius * scale;
+    const lift = Math.max(0, Number(ball.height) || 0) * scale;
+    const center = { x: groundCenter.x, y: groundCenter.y - lift };
     const tile = state.atlas.tiles[image.tileIndex];
     ctx.save();
     const polygon = tile.polygon.map((point) => localToCanvas(tile.index, point, geometry, state.atlas));
@@ -2087,6 +2856,13 @@
     });
     ctx.closePath();
     ctx.clip();
+    if (lift > 0.5) {
+      const shadowScale = clamp(1 - lift / Math.max(radius * 8, 1), 0.35, 0.95);
+      ctx.fillStyle = `rgba(0,0,0,${clamp(0.28 - lift / Math.max(radius * 40, 1), 0.08, 0.28)})`;
+      ctx.beginPath();
+      ctx.ellipse(groundCenter.x, groundCenter.y + radius * 0.16, radius * shadowScale, radius * 0.32 * shadowScale, 0, 0, TAU);
+      ctx.fill();
+    }
     if (renderer && typeof renderer.sphericalSprite === 'function' && typeof renderer.drawBallBadge === 'function') {
       const fixedLabel = state.phase === 'setup' || (state.phase === 'ball-in-hand' && ball.kind === 'cue');
       const sprite = renderer.sphericalSprite(ball, image.orientation, radius * 2 * ballSpriteRasterScale(geometry), !!debugTexture, {
@@ -2637,17 +3413,26 @@
 
   return {
     BALL_COLORS,
+    CUE_PROFILES,
+    CUE_INPUT_VERSION,
+    DEFAULT_EQUIPMENT_PROFILE,
     DEFAULT_PHYSICS_PROFILE,
     DEFAULT_PARAMETERS,
+    EQUIPMENT_PROFILES,
     EPSILON,
     POSITION_SNAP_CSS_PX,
     DIRECTION_SNAP_STEP_DEGREES,
     DIRECTION_SNAP_TOLERANCE_DEGREES,
     PHYSICS_DT,
     PHYSICS_VERSION,
+    RESEARCH_PARAMETER_DEFAULTS,
+    RESEARCH_PHYSICS_DT,
     REALISTIC_PARAMETER_DEFAULTS,
     REALISTIC_PHYSICS_DT,
+    SOLVER_TOLERANCES_VERSION,
+    STROKE_PRESETS,
     TAU,
+    TIP_PROFILES,
     activePocketAtClass,
     ballColor,
     ballAtPoint,
@@ -2673,6 +3458,7 @@
     nearestVertex,
     normalizeRules,
     normalizeFriction,
+    normalizeEquipmentProfile,
     normalizePhysicsProfile,
     normalizeRackRecipe,
     placeBall,
@@ -2690,8 +3476,12 @@
     setupIssue,
     stateExport,
     stateFromExport,
+    stepPhysics: step,
     setupInteractionPreview,
     setPhysicsProfile,
+    setEquipmentProfile,
+    shotSimulationProgress,
+    totalKineticEnergy,
     shotSimulationResult,
     traceAim,
     togglePocket,

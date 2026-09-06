@@ -374,7 +374,7 @@
   const BILLIARDS_SQUARE_BOARD_SIZE = 4;
   const BILLIARDS_RECTANGLE_ROWS = 3;
   const BILLIARDS_RECTANGLE_COLS = 5;
-  const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20260905-2';
+  const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20260906-1';
   const HEX_HOMOLOGY_WORKER_URL = 'js/hex_homology_worker.js?v=20260827-1';
   const BILLIARDS_FALLBACK_FRAME_BUDGET_MS = 8;
   const BILLIARDS_FALLBACK_STEP_CHUNK = 8;
@@ -524,7 +524,7 @@
       'js/billiards/topological_billiards_math.js?v=20260823-1',
       'js/billiards/topological_billiards_physics.js?v=20260823-1',
       'js/billiards/topological_billiards_renderer.js?v=20260905-3',
-      'js/billiards/topological_billiards_native.js?v=20260905-3'
+      'js/billiards/topological_billiards_native.js?v=20260906-1'
     ]),
     [GAME_MODES.LIANLIANKAN]: Object.freeze([
       'lianliankan/lianliankan_engine.js?v=20260830-1',
@@ -714,6 +714,13 @@
   let billiardsAim = { x: 1, y: 0 };
   let billiardsDragPower = 0;
   let billiardsSpinContact = { x: 0, y: 0 };
+  let billiardsCueSpeedMps = 3;
+  let billiardsExactSpeedLocked = false;
+  let billiardsElevationDeg = 0;
+  let billiardsStrokePresetId = 'custom';
+  let billiardsCueProfileId = 'playing';
+  let billiardsTipProfileId = 'medium';
+  let billiardsTelemetry = null;
   let billiardsSetupHover = null;
   let billiardsSnapBypass = false;
   let billiardsLastPointerClient = null;
@@ -831,9 +838,11 @@
     refs.glueFlapTargetOnHover = document.getElementById('glue-flap-target-on-hover');
     refs.billiardsRules = document.getElementById('billiards-rules');
     refs.billiardsPhysicsProfile = document.getElementById('billiards-physics-profile');
+    refs.billiardsEquipment = document.getElementById('billiards-equipment');
     refs.billiardsBallPaletteRow = document.getElementById('billiards-ball-palette-row');
     refs.billiardsBallPalette = document.getElementById('billiards-ball-palette');
     refs.billiardsAssistance = document.getElementById('billiards-assistance');
+    refs.fullscreenBilliardsAssistance = document.getElementById('fullscreen-billiards-assistance');
     refs.billiardsFriction = document.getElementById('billiards-friction');
     refs.billiardsFrictionValue = document.getElementById('billiards-friction-value');
     refs.billiardsSpinPad = document.getElementById('billiards-spin-pad');
@@ -843,6 +852,35 @@
     refs.fullscreenBilliardsSpinLabel = document.getElementById('fullscreen-billiards-spin-label');
     refs.fullscreenBilliardsPhysicsRow = document.getElementById('fullscreen-billiards-physics-row');
     refs.fullscreenBilliardsPhysicsProfile = document.getElementById('fullscreen-billiards-physics-profile');
+    refs.fullscreenBilliardsEquipmentRow = document.getElementById('fullscreen-billiards-equipment-row');
+    refs.fullscreenBilliardsEquipment = document.getElementById('fullscreen-billiards-equipment');
+    refs.billiardsContactReadout = document.getElementById('billiards-contact-readout');
+    refs.fullscreenBilliardsContactReadout = document.getElementById('fullscreen-billiards-contact-readout');
+    refs.billiardsCenterContact = document.getElementById('billiards-center-contact');
+    refs.fullscreenBilliardsCenterContact = document.getElementById('fullscreen-billiards-center-contact');
+    refs.billiardsCueSpeed = document.getElementById('billiards-cue-speed');
+    refs.fullscreenBilliardsCueSpeed = document.getElementById('fullscreen-billiards-cue-speed');
+    refs.billiardsCueSpeedValue = document.getElementById('billiards-cue-speed-value');
+    refs.fullscreenBilliardsCueSpeedValue = document.getElementById('fullscreen-billiards-cue-speed-value');
+    refs.billiardsSpeedLock = document.getElementById('billiards-speed-lock');
+    refs.fullscreenBilliardsSpeedLock = document.getElementById('fullscreen-billiards-speed-lock');
+    refs.billiardsElevation = document.getElementById('billiards-elevation');
+    refs.fullscreenBilliardsElevation = document.getElementById('fullscreen-billiards-elevation');
+    refs.billiardsElevationValue = document.getElementById('billiards-elevation-value');
+    refs.fullscreenBilliardsElevationValue = document.getElementById('fullscreen-billiards-elevation-value');
+    refs.billiardsStrokePreset = document.getElementById('billiards-stroke-preset');
+    refs.fullscreenBilliardsStrokePreset = document.getElementById('fullscreen-billiards-stroke-preset');
+    refs.billiardsCueProfile = document.getElementById('billiards-cue-profile');
+    refs.fullscreenBilliardsCueProfile = document.getElementById('fullscreen-billiards-cue-profile');
+    refs.billiardsTipProfile = document.getElementById('billiards-tip-profile');
+    refs.fullscreenBilliardsTipProfile = document.getElementById('fullscreen-billiards-tip-profile');
+    refs.billiardsTelemetryOutput = document.getElementById('billiards-telemetry-output');
+    refs.fullscreenBilliardsTelemetryOutput = document.getElementById('fullscreen-billiards-telemetry-output');
+    refs.billiardsTelemetryRow = document.getElementById('billiards-telemetry-row');
+    refs.fullscreenBilliardsResearchTelemetry = document.getElementById('fullscreen-billiards-research-telemetry');
+    refs.billiardsCancel = document.getElementById('billiards-cancel');
+    refs.fullscreenBilliardsCancel = document.getElementById('fullscreen-billiards-cancel');
+    refs.fullscreenBilliardsProfileBadge = document.getElementById('fullscreen-billiards-profile-badge');
     refs.billiardsPower = document.getElementById('billiards-power');
     refs.billiardsDebug = document.getElementById('billiards-debug');
     refs.billiardsDebugTexture = document.getElementById('billiards-debug-texture');
@@ -1044,7 +1082,38 @@
     [refs.billiardsPhysicsProfile, refs.fullscreenBilliardsPhysicsProfile].filter(Boolean).forEach((control) => {
       control.addEventListener('change', handleBilliardsPhysicsProfileChange);
     });
-    if (refs.billiardsAssistance) refs.billiardsAssistance.addEventListener('change', render);
+    [refs.billiardsEquipment, refs.fullscreenBilliardsEquipment].filter(Boolean).forEach((control) => {
+      control.addEventListener('change', handleBilliardsEquipmentChange);
+    });
+    [refs.billiardsCueSpeed, refs.fullscreenBilliardsCueSpeed].filter(Boolean).forEach((control) => {
+      control.addEventListener('input', handleBilliardsCueSpeedChange);
+      control.addEventListener('change', handleBilliardsCueSpeedChange);
+    });
+    [refs.billiardsSpeedLock, refs.fullscreenBilliardsSpeedLock].filter(Boolean).forEach((control) => {
+      control.addEventListener('change', handleBilliardsSpeedLockChange);
+    });
+    [refs.billiardsElevation, refs.fullscreenBilliardsElevation].filter(Boolean).forEach((control) => {
+      control.addEventListener('input', handleBilliardsElevationChange);
+      control.addEventListener('change', handleBilliardsElevationChange);
+    });
+    [refs.billiardsStrokePreset, refs.fullscreenBilliardsStrokePreset].filter(Boolean).forEach((control) => {
+      control.addEventListener('change', handleBilliardsStrokePresetChange);
+    });
+    [refs.billiardsCueProfile, refs.fullscreenBilliardsCueProfile].filter(Boolean).forEach((control) => {
+      control.addEventListener('change', handleBilliardsCueProfileChange);
+    });
+    [refs.billiardsTipProfile, refs.fullscreenBilliardsTipProfile].filter(Boolean).forEach((control) => {
+      control.addEventListener('change', handleBilliardsTipProfileChange);
+    });
+    [refs.billiardsCenterContact, refs.fullscreenBilliardsCenterContact].filter(Boolean).forEach((control) => {
+      control.addEventListener('click', centerBilliardsContact);
+    });
+    [refs.billiardsCancel, refs.fullscreenBilliardsCancel].filter(Boolean).forEach((control) => {
+      control.addEventListener('click', cancelBilliardsShotSimulation);
+    });
+    [refs.billiardsAssistance, refs.fullscreenBilliardsAssistance].filter(Boolean).forEach((control) => {
+      control.addEventListener('change', handleBilliardsAssistanceChange);
+    });
     if (refs.billiardsFriction) {
       refs.billiardsFriction.addEventListener('input', handleBilliardsFrictionChange);
       refs.billiardsFriction.addEventListener('change', handleBilliardsFrictionChange);
@@ -1063,8 +1132,15 @@
         if (event.buttons) handleBilliardsSpinPointer(event);
       });
     }
-    if (typeof document !== 'undefined') document.addEventListener('site-language-change', syncBilliardsBallPalette);
+    [refs.billiardsSpinPad, refs.fullscreenBilliardsSpinPad].filter(Boolean).forEach((pad) => {
+      pad.addEventListener('keydown', handleBilliardsSpinKey);
+    });
+    if (typeof document !== 'undefined') document.addEventListener('site-language-change', () => {
+      syncBilliardsBallPalette();
+      buildBilliardsToolOptions();
+    });
     buildBilliardsBallPalette();
+    buildBilliardsToolOptions();
     drawBilliardsSpinPad();
     syncBilliardsFriction();
     if (refs.moveNumberLabels) refs.moveNumberLabels.addEventListener('change', render);
@@ -3411,6 +3487,8 @@
       billiardsBallSelection = { kind: 'cue', number: 0 };
       billiardsRackSelection = 0;
       billiardsRackCenter = null;
+      billiardsTelemetry = null;
+      if (selectedBilliardsPhysicsProfile(game.deterministic && game.deterministic.physicsProfile) === 'legacy') billiardsElevationDeg = 0;
       ensureBilliardsBallSelection(true);
     }
     clearUndoHistory();
@@ -4941,9 +5019,35 @@
   }
 
   function billiardsPhysicsProfileLabel(profile) {
-    return selectedBilliardsPhysicsProfile(profile) === 'realistic'
+    const normalized = selectedBilliardsPhysicsProfile(profile);
+    if (normalized === 'research') return tk('setup.billiardsPhysicsResearch', 'research (reference)');
+    return normalized === 'realistic'
       ? tk('setup.billiardsPhysicsRealistic', 'realistic (higher CPU)')
       : tk('setup.billiardsPhysicsClassic', 'classic (faster)');
+  }
+
+  function selectedBilliardsEquipment(value = null) {
+    const source = value != null ? value : (refs.billiardsEquipment ? refs.billiardsEquipment.value : 'pool-9ft');
+    return Billiards && typeof Billiards.normalizeEquipmentProfile === 'function'
+      ? Billiards.normalizeEquipmentProfile(source)
+      : (source === 'chinese-8ball' ? 'chinese-8ball' : 'pool-9ft');
+  }
+
+  function syncBilliardsEquipment(sourceState = game) {
+    const value = isBilliardsGame(sourceState) && sourceState.deterministic
+      ? selectedBilliardsEquipment(sourceState.deterministic.equipmentProfileId)
+      : selectedBilliardsEquipment();
+    [refs.billiardsEquipment, refs.fullscreenBilliardsEquipment].filter(Boolean).forEach((control) => { control.value = value; });
+    return value;
+  }
+
+  function confirmBilliardsConfigurationRestart() {
+    if (!isBilliardsGame(game) || game.phase === 'setup') return true;
+    if (typeof window === 'undefined' || typeof window.confirm !== 'function') return false;
+    return window.confirm(tk(
+      'runtime.billiardsConfigurationRestart',
+      'Changing physics or equipment restarts the current game. Continue?'
+    ));
   }
 
   function syncBilliardsPhysicsProfile(sourceState = game) {
@@ -4968,6 +5072,15 @@
       syncBilliardsPhysicsProfile();
       return;
     }
+    if (!confirmBilliardsConfigurationRestart()) {
+      syncBilliardsPhysicsProfile();
+      return;
+    }
+    if (game.phase !== 'setup') {
+      [refs.billiardsPhysicsProfile, refs.fullscreenBilliardsPhysicsProfile].filter(Boolean).forEach((control) => { control.value = requested; });
+      resetToPreview();
+      return;
+    }
     game = Billiards.setPhysicsProfile(game, requested);
     syncBilliardsPhysicsProfile();
     syncStatus(
@@ -4980,6 +5093,171 @@
     render();
     syncControls();
     refreshDebugExportIfNeeded();
+  }
+
+  function handleBilliardsEquipmentChange(event) {
+    const requested = selectedBilliardsEquipment(event && event.target ? event.target.value : null);
+    if (!isBilliardsGame(game) || !Billiards || typeof Billiards.setEquipmentProfile !== 'function' || onlineIsInRoom() || billiardsShotPending || currentAnimation) {
+      syncBilliardsEquipment();
+      return;
+    }
+    if (!confirmBilliardsConfigurationRestart()) {
+      syncBilliardsEquipment();
+      return;
+    }
+    if (game.phase !== 'setup') {
+      [refs.billiardsEquipment, refs.fullscreenBilliardsEquipment].filter(Boolean).forEach((control) => { control.value = requested; });
+      resetToPreview();
+      return;
+    }
+    game = Billiards.setEquipmentProfile(game, requested);
+    syncBilliardsEquipment();
+    syncBilliardsToolControls();
+    syncStatus(
+      tk('runtime.billiardsEquipmentEnabled', '{{equipment}} equipment enabled', {
+        equipment: requested === 'chinese-8ball'
+          ? tk('billiards.equipment.chinese8', 'Chinese 8-ball')
+          : tk('billiards.equipment.pool9', '9-foot pool')
+      }),
+      tk('runtime.billiardsEquipmentRestartHint', 'Equipment remains fixed after the game begins.'),
+      'setup'
+    );
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
+  const BILLIARDS_STROKE_OPTIONS = [
+    ['custom', 'billiards.stroke.custom', 'custom'],
+    ['center', 'billiards.stroke.center', 'center'],
+    ['follow', 'billiards.stroke.follow', 'follow'],
+    ['draw', 'billiards.stroke.draw', 'draw'],
+    ['stun', 'billiards.stroke.stun', 'stun'],
+    ['left', 'billiards.stroke.left', 'left english'],
+    ['right', 'billiards.stroke.right', 'right english'],
+    ['spinHeavy', 'billiards.stroke.spinHeavy', 'spin-heavy / cuo'],
+    ['smooth', 'billiards.stroke.smooth', 'smooth / tui'],
+    ['punch', 'billiards.stroke.punch', 'punch / da'],
+    ['short', 'billiards.stroke.short', 'short / dian'],
+    ['masse', 'billiards.stroke.masse', 'masse / zha'],
+    ['jump', 'billiards.stroke.jump', 'jump']
+  ];
+
+  function buildBilliardsSelectOptions(controls, entries) {
+    controls.filter(Boolean).forEach((control) => {
+      control.textContent = '';
+      entries.forEach(([value, key, fallback]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = tk(key, fallback);
+        control.appendChild(option);
+      });
+    });
+  }
+
+  function buildBilliardsToolOptions() {
+    buildBilliardsSelectOptions([refs.billiardsStrokePreset, refs.fullscreenBilliardsStrokePreset], BILLIARDS_STROKE_OPTIONS);
+    buildBilliardsSelectOptions([refs.billiardsCueProfile, refs.fullscreenBilliardsCueProfile], [
+      ['playing', 'billiards.cue.playing', 'playing cue'],
+      ['low-deflection', 'billiards.cue.lowDeflection', 'low-deflection cue'],
+      ['jump', 'billiards.cue.jump', 'jump cue']
+    ]);
+    buildBilliardsSelectOptions([refs.billiardsTipProfile, refs.fullscreenBilliardsTipProfile], [
+      ['medium', 'billiards.tip.medium', 'medium tip'],
+      ['soft', 'billiards.tip.soft', 'soft tip'],
+      ['hard', 'billiards.tip.hard', 'hard tip']
+    ]);
+    syncBilliardsToolControls();
+  }
+
+  function handleBilliardsCueSpeedChange(event) {
+    billiardsCueSpeedMps = clampNumber(Number(event && event.target && event.target.value), 0.1, 7.5, 3);
+    billiardsStrokePresetId = 'custom';
+    syncBilliardsToolControls();
+  }
+
+  function handleBilliardsSpeedLockChange(event) {
+    billiardsExactSpeedLocked = !!(event && event.target && event.target.checked);
+    syncBilliardsToolControls();
+  }
+
+  function handleBilliardsElevationChange(event) {
+    if (selectedBilliardsPhysicsProfile() === 'legacy') {
+      billiardsElevationDeg = 0;
+    } else {
+      billiardsElevationDeg = clampNumber(Number(event && event.target && event.target.value), 0, 75, 0);
+      billiardsStrokePresetId = 'custom';
+    }
+    syncBilliardsToolControls();
+  }
+
+  function handleBilliardsStrokePresetChange(event) {
+    const id = String(event && event.target && event.target.value || 'custom');
+    billiardsStrokePresetId = id;
+    const preset = Billiards && Billiards.STROKE_PRESETS ? Billiards.STROKE_PRESETS[id] : null;
+    if (preset) {
+      billiardsSpinContact = { ...preset.tipOffset };
+      billiardsElevationDeg = selectedBilliardsPhysicsProfile() === 'legacy' ? 0 : Number(preset.elevationDeg) || 0;
+      if (preset.cueProfileId) billiardsCueProfileId = preset.cueProfileId;
+      drawBilliardsSpinPad();
+    }
+    syncBilliardsToolControls();
+    render();
+  }
+
+  function handleBilliardsCueProfileChange(event) {
+    billiardsCueProfileId = String(event && event.target && event.target.value || 'playing');
+    billiardsStrokePresetId = 'custom';
+    syncBilliardsToolControls();
+  }
+
+  function handleBilliardsTipProfileChange(event) {
+    billiardsTipProfileId = String(event && event.target && event.target.value || 'medium');
+    billiardsStrokePresetId = 'custom';
+    syncBilliardsToolControls();
+  }
+
+  function handleBilliardsAssistanceChange(event) {
+    const value = ['beginner', 'normal', 'expert'].includes(String(event && event.target && event.target.value))
+      ? String(event.target.value)
+      : 'beginner';
+    [refs.billiardsAssistance, refs.fullscreenBilliardsAssistance].filter(Boolean).forEach((control) => { control.value = value; });
+    render();
+  }
+
+  function centerBilliardsContact() {
+    billiardsSpinContact = { x: 0, y: 0 };
+    billiardsStrokePresetId = 'center';
+    drawBilliardsSpinPad();
+    syncBilliardsToolControls();
+    render();
+  }
+
+  function handleBilliardsSpinKey(event) {
+    if (!event) return;
+    const delta = event.shiftKey ? 0.02 : 0.06;
+    let handled = true;
+    if (event.key === 'ArrowLeft') billiardsSpinContact.x -= delta;
+    else if (event.key === 'ArrowRight') billiardsSpinContact.x += delta;
+    else if (event.key === 'ArrowUp') billiardsSpinContact.y -= delta;
+    else if (event.key === 'ArrowDown') billiardsSpinContact.y += delta;
+    else if (event.key === 'Home' || event.key === '0') billiardsSpinContact = { x: 0, y: 0 };
+    else handled = false;
+    if (!handled) return;
+    const length = Math.hypot(billiardsSpinContact.x, billiardsSpinContact.y);
+    if (length > 0.86) billiardsSpinContact = {
+      x: billiardsSpinContact.x * 0.86 / length,
+      y: billiardsSpinContact.y * 0.86 / length
+    };
+    billiardsSpinContact = {
+      x: clampNumber(billiardsSpinContact.x, -0.86, 0.86, 0),
+      y: clampNumber(billiardsSpinContact.y, -0.86, 0.86, 0)
+    };
+    billiardsStrokePresetId = 'custom';
+    drawBilliardsSpinPad();
+    syncBilliardsToolControls();
+    render();
+    if (event.preventDefault) event.preventDefault();
   }
 
   function handleBilliardsFrictionChange() {
@@ -5586,7 +5864,12 @@
       refs.fideChessPuzzleAttackBorders.checked = normalizeBooleanSetting(attackBorders, true);
     }
     if (refs.billiardsRules && isBilliardsGame(imported.state)) refs.billiardsRules.value = imported.state.rules;
-    if (isBilliardsGame(imported.state)) syncBilliardsPhysicsProfile(imported.state);
+    if (isBilliardsGame(imported.state)) {
+      syncBilliardsPhysicsProfile(imported.state);
+      syncBilliardsEquipment(imported.state);
+      billiardsTelemetry = imported.state.deterministic && imported.state.deterministic.telemetry || null;
+      syncBilliardsToolControls();
+    }
     if (refs.billiardsFriction && isBilliardsGame(imported.state)) syncBilliardsFriction();
   }
 
@@ -6577,7 +6860,9 @@
           if (drag.aim) billiardsAim = drag.aim;
           const scale = game.atlas.info.shape === 'hex' ? geometry.radius : geometry.size;
           billiardsDragPower = clampNumber(drag.distance / Math.max(1, scale * 2.2), 0, 1, 0);
+          if (!billiardsExactSpeedLocked) billiardsCueSpeedMps = Math.max(0.1, billiardsDragPower * 7.5);
           syncBilliardsPower();
+          syncBilliardsToolControls();
           render();
         }
       }
@@ -6636,12 +6921,34 @@
 
   function cancelBilliardsShotSimulation() {
     if (!billiardsShotPending && !billiardsSimulationWorker) return;
+    const cancelledToken = billiardsShotPending && billiardsShotPending.token;
+    const gracefulResearchCancel = !!(
+      billiardsSimulationWorker
+      && cancelledToken != null
+      && billiardsShotPending
+      && selectedBilliardsPhysicsProfile(
+        billiardsShotPending.source
+        && billiardsShotPending.source.deterministic
+        && billiardsShotPending.source.deterministic.physicsProfile
+      ) === 'research'
+    );
+    if (gracefulResearchCancel) {
+      try { billiardsSimulationWorker.postMessage({ type: 'cancel', id: cancelledToken }); } catch (_) {}
+    }
     billiardsSimulationSerial += 1;
     billiardsShotPending = null;
-    if (billiardsSimulationWorker) {
+    if (billiardsSimulationWorker && !gracefulResearchCancel) {
       try { billiardsSimulationWorker.terminate(); } catch (_) {}
+      billiardsSimulationWorker = null;
     }
-    billiardsSimulationWorker = null;
+    billiardsTelemetry = { phase: 'cancelled', progress: 0, cancelled: true };
+    syncStatus(
+      tk('runtime.billiardsResearchCancelled', 'research calculation cancelled'),
+      tk('runtime.billiardsResearchCancelledHint', 'The game state was not changed.'),
+      'ready'
+    );
+    render();
+    syncControls();
   }
 
   function scheduleBilliardsFallbackSlice(callback) {
@@ -6652,14 +6959,15 @@
     }
   }
 
-  function simulateBilliardsShotFallback(source, aim, power, contact, shooter, token) {
+  function simulateBilliardsShotFallback(source, aim, power, contact, shooter, token, shotInput = {}) {
     return new Promise((resolve) => {
       const startedAt = now();
       let simulation;
       try {
         simulation = Billiards.createShotSimulation(source, aim, power, contact, {
           shooter,
-          collectTrajectory: true
+          collectTrajectory: true,
+          ...shotInput
         });
       } catch (error) {
         resolve({ changed: false, state: source, message: error && error.message ? error.message : 'Billiards simulation failed.' });
@@ -6674,6 +6982,10 @@
         do {
           Billiards.advanceShotSimulation(simulation, BILLIARDS_FALLBACK_STEP_CHUNK);
         } while (!simulation.done && now() - sliceStartedAt < BILLIARDS_FALLBACK_FRAME_BUDGET_MS);
+        if (!simulation.done && selectedBilliardsPhysicsProfile(source.deterministic && source.deterministic.physicsProfile) === 'research') {
+          billiardsTelemetry = Billiards.shotSimulationProgress(simulation);
+          syncBilliardsTelemetry();
+        }
         if (simulation.done) {
           resolve({
             ...Billiards.shotSimulationResult(simulation),
@@ -6688,9 +7000,9 @@
     });
   }
 
-  function simulateBilliardsShotInWorker(source, aim, power, contact, shooter, token) {
+  function simulateBilliardsShotInWorker(source, aim, power, contact, shooter, token, shotInput = {}) {
     if (typeof Worker !== 'function') {
-      return simulateBilliardsShotFallback(source, aim, power, contact, shooter, token);
+      return simulateBilliardsShotFallback(source, aim, power, contact, shooter, token, shotInput);
     }
     return new Promise((resolve) => {
       let worker;
@@ -6706,7 +7018,7 @@
         if (settled) return;
         settled = true;
         cleanup();
-        resolve(simulateBilliardsShotFallback(source, aim, power, contact, shooter, token));
+        resolve(simulateBilliardsShotFallback(source, aim, power, contact, shooter, token, shotInput));
       };
       try {
         worker = new Worker(BILLIARDS_SIMULATION_WORKER_URL);
@@ -6714,6 +7026,17 @@
         worker.onmessage = (event) => {
           const payload = event && event.data && typeof event.data === 'object' ? event.data : {};
           if (payload.id !== token || settled) return;
+          if (payload.type === 'progress') {
+            billiardsTelemetry = payload;
+            syncBilliardsTelemetry();
+            return;
+          }
+          if (payload.type === 'cancelled' || payload.cancelled) {
+            settled = true;
+            cleanup();
+            resolve(null);
+            return;
+          }
           if (!payload.ok) {
             useFallback();
             return;
@@ -6726,13 +7049,14 @@
               state: payload.changed ? Billiards.stateFromExport(source.preset, payload.state) : source,
               shot: payload.shot || null,
               trajectory: Array.isArray(payload.trajectory) ? payload.trajectory : [],
+              telemetry: payload.telemetry || null,
               message: payload.message || '',
               simulationSteps: Math.max(0, Number(payload.simulationSteps) || 0),
               elapsedMs: Math.max(0, Number(payload.elapsedMs) || 0),
               simulationThread: 'worker'
             });
           } catch (_) {
-            simulateBilliardsShotFallback(source, aim, power, contact, shooter, token).then(resolve);
+            simulateBilliardsShotFallback(source, aim, power, contact, shooter, token, shotInput).then(resolve);
           }
         };
         worker.onerror = (event) => {
@@ -6747,7 +7071,8 @@
           power,
           contact,
           shooter,
-          collectTrajectory: true
+          collectTrajectory: true,
+          ...shotInput
         });
       } catch (_) {
         useFallback();
@@ -6768,6 +7093,7 @@
     }
     pushUndoSnapshot(`Billiards shot ${source.shots + 1}`);
     game = result.state;
+    billiardsTelemetry = result.telemetry || (game.deterministic && game.deterministic.telemetry) || null;
     billiardsCueGuidanceDismissed = true;
     billiardsCueHintUntil = 0;
     if (options.expectedSnapshot) {
@@ -6789,6 +7115,18 @@
         aim: result.shot.aim,
         power: result.shot.power,
         contact: result.shot.contact,
+        cueSpeedMps: result.shot.cueSpeedMps,
+        tipOffset: result.shot.tipOffset,
+        elevationRad: result.shot.elevationRad,
+        cueProfileId: result.shot.cueProfileId,
+        tipProfileId: result.shot.tipProfileId,
+        strokePresetId: result.shot.strokePresetId,
+        physicsProfile: game.deterministic && game.deterministic.physicsProfile,
+        physicsVersion: game.deterministic && game.deterministic.physicsVersion,
+        equipmentProfileId: game.deterministic && game.deterministic.equipmentProfileId,
+        equipmentVersion: game.deterministic && game.deterministic.equipmentVersion,
+        solverTolerancesVersion: game.deterministic && game.deterministic.solverTolerancesVersion,
+        cueInputVersion: game.deterministic && game.deterministic.cueInputVersion,
         resultingTurn: game.turn
       });
     }
@@ -6809,15 +7147,29 @@
     const aim = options.aim || billiardsAim;
     const power = options.power != null ? options.power : billiardsDragPower;
     const contact = options.contact || billiardsSpinContact;
+    const advanced = selectedBilliardsPhysicsProfile(game.deterministic && game.deterministic.physicsProfile) !== 'legacy';
+    const shotInput = advanced ? {
+      cueSpeedMps: options.cueSpeedMps != null
+        ? options.cueSpeedMps
+        : (billiardsExactSpeedLocked ? billiardsCueSpeedMps : Math.max(0.1, power * 7.5)),
+      tipOffset: options.tipOffset || contact,
+      elevationRad: options.elevationRad != null ? options.elevationRad : billiardsElevationDeg * Math.PI / 180,
+      cueProfileId: options.cueProfileId || billiardsCueProfileId,
+      tipProfileId: options.tipProfileId || billiardsTipProfileId,
+      strokePresetId: options.strokePresetId || billiardsStrokePresetId
+    } : {};
     const source = game;
     const token = ++billiardsSimulationSerial;
     billiardsShotPending = { token, source };
+    billiardsTelemetry = selectedBilliardsPhysicsProfile(game.deterministic && game.deterministic.physicsProfile) === 'research'
+      ? { phase: 'simulating', progress: 0, events: 0, energyDriftJ: 0 }
+      : null;
     billiardsDragPower = 0;
     syncBilliardsPower();
     syncStatus('calculating shot', 'deterministic physics is running', 'step');
     render();
     syncControls();
-    simulateBilliardsShotInWorker(source, aim, power, contact, shooter, token)
+    simulateBilliardsShotInWorker(source, aim, power, contact, shooter, token, shotInput)
       .then((result) => finishBilliardsShotSimulation(result, source, options, token))
       .catch((error) => finishBilliardsShotSimulation({
         changed: false,
@@ -6831,7 +7183,9 @@
     const frames = Array.isArray(trajectory) ? trajectory.filter(Array.isArray) : [];
     if (frames.length < 2) return false;
     stopPlayback();
-    const sampleDuration = (Billiards.PHYSICS_DT || (1 / 240)) * 8 * 1000;
+    // Every physics profile records trajectory frames at 30 Hz, even though
+    // their internal timesteps and frame strides differ.
+    const sampleDuration = 1000 / 30;
     currentAnimation = {
       event: { kind: 'billiardsShot' },
       startedAt: now(),
@@ -7018,7 +7372,9 @@
       y *= 0.86 / length;
     }
     billiardsSpinContact = { x, y };
+    billiardsStrokePresetId = 'custom';
     drawBilliardsSpinPad();
+    syncBilliardsToolControls();
     if (event.preventDefault) event.preventDefault();
   }
 
@@ -7055,6 +7411,111 @@
     const label = tk(billiardsSpinContactLabelKey(), 'center');
     if (refs.billiardsSpinLabel) refs.billiardsSpinLabel.textContent = label;
     if (refs.fullscreenBilliardsSpinLabel) refs.fullscreenBilliardsSpinLabel.textContent = label;
+    const readout = `x ${billiardsSpinContact.x.toFixed(2)} · y ${billiardsSpinContact.y.toFixed(2)}`;
+    if (refs.billiardsContactReadout) refs.billiardsContactReadout.textContent = readout;
+    if (refs.fullscreenBilliardsContactReadout) refs.fullscreenBilliardsContactReadout.textContent = readout;
+  }
+
+  function billiardsTelemetryText(value = billiardsTelemetry) {
+    if (!value) return tk('billiards.telemetry.idle', 'idle');
+    if (value.cancelled) return tk('billiards.telemetry.cancelled', 'cancelled');
+    const telemetry = value.telemetry || value;
+    const progress = Math.round(clampNumber(value.progress, 0, 1, value.phase === 'complete' ? 1 : 0) * 100);
+    const phase = value.phase || telemetry.phase || 'idle';
+    const phaseText = phase === 'simulating'
+      ? tk('billiards.telemetry.phase.simulating', 'simulating')
+      : (phase === 'complete'
+        ? tk('billiards.telemetry.phase.complete', 'complete')
+        : tk('billiards.telemetry.phase.idle', 'idle'));
+    const warnings = Array.isArray(telemetry.warnings) ? telemetry.warnings.map((warning) => {
+      if (warning === 'event iteration cap reached') return tk('billiards.telemetry.warningEventCap', 'event iteration cap reached');
+      if (warning === 'maximum simulation duration reached; residual motion was settled') {
+        return tk('billiards.telemetry.warningDuration', 'maximum simulation duration reached; residual motion was settled');
+      }
+      return String(warning);
+    }) : [];
+    const contacts = Array.isArray(telemetry.contacts) ? telemetry.contacts : [];
+    const lastContact = contacts.length ? contacts[contacts.length - 1] : null;
+    const contactType = lastContact && ({
+      'ball-ball': tk('billiards.telemetry.contact.ballBall', 'ball-ball'),
+      wall: tk('billiards.telemetry.contact.wall', 'cushion'),
+      seam: tk('billiards.telemetry.contact.seam', 'seam transport'),
+      pocket: tk('billiards.telemetry.contact.pocket', 'pocket'),
+      'pocket-reject': tk('billiards.telemetry.contact.pocketReject', 'pocket rejection'),
+      landing: tk('billiards.telemetry.contact.landing', 'landing')
+    }[lastContact.type] || String(lastContact.type || ''));
+    const contact = lastContact
+      ? [contactType, lastContact.leftId || lastContact.ballId || '', lastContact.rightId || lastContact.pocketId || ''].filter(Boolean).join(' ')
+      : tk('billiards.telemetry.none', 'none');
+    return tk(
+      'billiards.telemetry.summary',
+      '{{phase}} · {{progress}}%\n{{time}} s simulated · {{events}} events · {{iterations}} iterations\nenergy drift {{energy}} J · contact {{contact}}\nwarning: {{warning}}',
+      {
+        phase: phaseText,
+        progress,
+        time: Number(value.simulatedTime != null ? value.simulatedTime : telemetry.simulatedTime || 0).toFixed(3),
+        events: Math.max(0, Number(telemetry.events) || 0),
+        iterations: Math.max(0, Number(telemetry.iterations) || 0),
+        energy: Number(telemetry.energyDriftJ || 0).toExponential(2),
+        contact,
+        warning: warnings.length ? warnings.join('; ') : tk('billiards.telemetry.none', 'none')
+      }
+    );
+  }
+
+  function syncBilliardsTelemetry() {
+    const text = billiardsTelemetryText();
+    [refs.billiardsTelemetryOutput, refs.fullscreenBilliardsTelemetryOutput].filter(Boolean).forEach((output) => {
+      output.textContent = text;
+    });
+  }
+
+  function syncBilliardsToolControls() {
+    const profile = isBilliardsGame(game) && game.deterministic
+      ? selectedBilliardsPhysicsProfile(game.deterministic.physicsProfile)
+      : selectedBilliardsPhysicsProfile();
+    const advanced = profile !== 'legacy';
+    const research = profile === 'research';
+    const busy = !!billiardsShotPending || !!currentAnimation || !isBilliardsGame(game) || !['setup', 'ready', 'ball-in-hand'].includes(game.phase);
+    const speedText = `${billiardsCueSpeedMps.toFixed(1)} m/s`;
+    [refs.billiardsCueSpeed, refs.fullscreenBilliardsCueSpeed].filter(Boolean).forEach((control) => {
+      control.value = String(billiardsCueSpeedMps);
+      control.disabled = busy || !advanced;
+    });
+    [refs.billiardsCueSpeedValue, refs.fullscreenBilliardsCueSpeedValue].filter(Boolean).forEach((output) => { output.textContent = speedText; });
+    [refs.billiardsSpeedLock, refs.fullscreenBilliardsSpeedLock].filter(Boolean).forEach((control) => {
+      control.checked = billiardsExactSpeedLocked;
+      control.disabled = busy || !advanced;
+    });
+    [refs.billiardsElevation, refs.fullscreenBilliardsElevation].filter(Boolean).forEach((control) => {
+      control.value = String(advanced ? billiardsElevationDeg : 0);
+      control.disabled = busy || !advanced;
+      control.title = advanced ? '' : tk('billiards.tools.classicDisabled', 'Advanced physics controls require Realistic or Research.');
+    });
+    [refs.billiardsElevationValue, refs.fullscreenBilliardsElevationValue].filter(Boolean).forEach((output) => {
+      output.textContent = `${advanced ? Math.round(billiardsElevationDeg) : 0}°`;
+    });
+    [refs.billiardsStrokePreset, refs.fullscreenBilliardsStrokePreset].filter(Boolean).forEach((control) => {
+      control.value = BILLIARDS_STROKE_OPTIONS.some((entry) => entry[0] === billiardsStrokePresetId) ? billiardsStrokePresetId : 'custom';
+      control.disabled = busy || !advanced;
+    });
+    [refs.billiardsCueProfile, refs.fullscreenBilliardsCueProfile].filter(Boolean).forEach((control) => {
+      control.value = billiardsCueProfileId;
+      control.disabled = busy || !advanced;
+    });
+    [refs.billiardsTipProfile, refs.fullscreenBilliardsTipProfile].filter(Boolean).forEach((control) => {
+      control.value = billiardsTipProfileId;
+      control.disabled = busy || !advanced;
+    });
+    if (refs.fullscreenBilliardsAssistance && refs.billiardsAssistance) {
+      refs.fullscreenBilliardsAssistance.value = refs.billiardsAssistance.value;
+    }
+    [refs.billiardsCenterContact, refs.fullscreenBilliardsCenterContact].filter(Boolean).forEach((control) => { control.disabled = busy; });
+    if (refs.billiardsTelemetryRow) refs.billiardsTelemetryRow.hidden = !research;
+    if (refs.fullscreenBilliardsResearchTelemetry) refs.fullscreenBilliardsResearchTelemetry.hidden = !research;
+    [refs.billiardsCancel, refs.fullscreenBilliardsCancel].filter(Boolean).forEach((control) => { control.disabled = !billiardsShotPending; });
+    if (refs.fullscreenBilliardsProfileBadge) refs.fullscreenBilliardsProfileBadge.textContent = billiardsPhysicsProfileLabel(profile);
+    syncBilliardsTelemetry();
   }
 
   function billiardsSpinContactLabelKey() {
@@ -11067,6 +11528,10 @@
       settings.friction = Billiards
         ? Billiards.normalizeFriction(state.deterministic && state.deterministic.parameters && state.deterministic.parameters.friction)
         : 1;
+      settings.physicsProfile = state.deterministic && state.deterministic.physicsProfile || 'legacy';
+      settings.physicsVersion = state.deterministic && state.deterministic.physicsVersion || 'legacy-v1';
+      settings.equipmentProfileId = state.deterministic && state.deterministic.equipmentProfileId || 'pool-9ft';
+      settings.equipmentVersion = state.deterministic && state.deterministic.equipmentVersion || '';
     }
     if (isPlacementGame(state)) {
       settings.pieceRadiusPercent = selectedPlacementPieceRadiusPercent(gameModeValue(state));
@@ -12568,7 +13033,12 @@
   function beginRecordGame(mode, preset, settings = {}) {
     if (mode === GAME_MODES.BILLIARDS) {
       if (!Billiards) throw new Error('Billiard module is unavailable');
-      const created = Billiards.createState(preset, { rules: settings.rules, friction: settings.friction });
+      const created = Billiards.createState(preset, {
+        rules: settings.rules,
+        friction: settings.friction,
+        physicsProfile: settings.physicsProfile,
+        equipmentProfileId: settings.equipmentProfileId
+      });
       const result = Billiards.begin(created);
       if (!result.changed) throw new Error(`record Billiards setup is invalid: ${result.message}`);
       return result.state;
@@ -12605,7 +13075,15 @@
     const label = `record move ${ordinal}`;
     if (isBilliardsGame(state)) {
       if (action === 'billiards-shot' || action === 'shot') {
-        const result = Billiards.resolveShot(state, move.aim, move.power, move.contact, { shooter: move.shooter || state.turn });
+        const result = Billiards.resolveShot(state, move.aim, move.power, move.contact, {
+          shooter: move.shooter || state.turn,
+          cueSpeedMps: move.cueSpeedMps,
+          tipOffset: move.tipOffset || move.contact,
+          elevationRad: move.elevationRad,
+          cueProfileId: move.cueProfileId,
+          tipProfileId: move.tipProfileId,
+          strokePresetId: move.strokePresetId
+        });
         return changedRecordState(result, label);
       }
       if (action === 'billiards-place-cue' || action === 'place-cue') {
@@ -29422,6 +29900,7 @@
         ? Billiards.normalizeRules(refs.billiardsRules ? refs.billiardsRules.value : 'solo')
         : 'solo';
       options.physicsProfile = selectedBilliardsPhysicsProfile();
+      options.equipmentProfileId = selectedBilliardsEquipment();
     }
     if (selectedGameMode() === GAME_MODES.LIANLIANKAN) options.symbols = lianliankanSymbolsForTileSet();
     return options;
@@ -31008,6 +31487,7 @@
     }
     if (refs.billiardsRules) refs.billiardsRules.disabled = !modeBilliards || !!(game && game.phase !== 'setup') || onlineRoomActive || !!billiardsShotPending;
     if (refs.fullscreenBilliardsPhysicsRow) refs.fullscreenBilliardsPhysicsRow.hidden = !modeBilliards;
+    if (refs.fullscreenBilliardsEquipmentRow) refs.fullscreenBilliardsEquipmentRow.hidden = !modeBilliards;
     const billiardsPhysicsLocked = !modeBilliards
       || !game
       || !['setup', 'ready', 'ball-in-hand'].includes(game.phase)
@@ -31018,13 +31498,19 @@
       control.disabled = billiardsPhysicsLocked;
     });
     syncBilliardsPhysicsProfile();
+    [refs.billiardsEquipment, refs.fullscreenBilliardsEquipment].filter(Boolean).forEach((control) => {
+      control.disabled = billiardsPhysicsLocked;
+    });
+    syncBilliardsEquipment();
     if (refs.lianliankanTileSet) refs.lianliankanTileSet.disabled = !modeLianliankan || !game || game.phase !== 'setup' || onlineRoomActive;
     syncLianliankanTileLevelControl(modeLianliankan);
     if (refs.lianliankanTileLevel) refs.lianliankanTileLevel.disabled = !modeLianliankan || !game || game.phase !== 'setup' || onlineRoomActive;
     if (refs.lianliankanIpaAudioNote) refs.lianliankanIpaAudioNote.hidden = !modeLianliankan || !refs.lianliankanTileSet || refs.lianliankanTileSet.value !== 'ipa';
     if (refs.billiardsBallPaletteRow) refs.billiardsBallPaletteRow.hidden = !modeBilliards || !game || game.phase !== 'setup';
     syncBilliardsBallPalette();
-    if (refs.billiardsAssistance) refs.billiardsAssistance.disabled = !modeBilliards || !!billiardsShotPending;
+    [refs.billiardsAssistance, refs.fullscreenBilliardsAssistance].filter(Boolean).forEach((control) => {
+      control.disabled = !modeBilliards || !!billiardsShotPending || !!currentAnimation;
+    });
     if (refs.billiardsFriction) {
       refs.billiardsFriction.disabled = !modeBilliards
         || !game
@@ -31035,10 +31521,15 @@
     syncBilliardsFriction();
     const billiardsSpinEnabled = modeBilliards && game && game.phase === 'ready' && !billiardsShotPending && !currentAnimation;
     if (refs.billiardsSpinPad) refs.billiardsSpinPad.style.pointerEvents = billiardsSpinEnabled ? '' : 'none';
-    if (refs.fullscreenBilliardsSpin) refs.fullscreenBilliardsSpin.hidden = !billiardsSpinEnabled || !currentFullscreenElement();
+    const billiardsToolsVisible = modeBilliards
+      && (!!currentFullscreenElement() || !!(document.body && document.body.classList.contains('canvas-fit-viewport')))
+      && fullscreenPreferences.showGameTools
+      && (billiardsSpinEnabled || !!billiardsShotPending);
+    if (refs.fullscreenBilliardsSpin) refs.fullscreenBilliardsSpin.hidden = !billiardsToolsVisible;
     if (refs.fullscreenBilliardsSpinPad) refs.fullscreenBilliardsSpinPad.style.pointerEvents = billiardsSpinEnabled ? '' : 'none';
     syncBilliardsPower();
     drawBilliardsSpinPad();
+    syncBilliardsToolControls();
     syncPlacementPieceSizeOutput();
     if (refs.connectFourFall) refs.connectFourFall.disabled = modeConnectFour && game && game.phase !== 'setup';
     syncGoScoringControls(modeGo);
@@ -31731,7 +32222,7 @@
 
   function gluedEdgeKeySet(preset) {
     const keys = new Set();
-    preset.gluedEdges.forEach((pair) => {
+    (preset && Array.isArray(preset.gluedEdges) ? preset.gluedEdges : []).forEach((pair) => {
       keys.add(boundaryEdgeKey(pair.first, preset.cols));
       keys.add(boundaryEdgeKey(pair.second, preset.cols));
     });
@@ -31740,7 +32231,7 @@
 
   function cutEdgeKeySet(preset) {
     const keys = new Set();
-    preset.cutEdges.forEach((edge) => {
+    (preset && Array.isArray(preset.cutEdges) ? preset.cutEdges : []).forEach((edge) => {
       keys.add(cutKey(indexOf(edge.left.row, edge.left.col, preset.cols), indexOf(edge.right.row, edge.right.col, preset.cols)));
     });
     return keys;

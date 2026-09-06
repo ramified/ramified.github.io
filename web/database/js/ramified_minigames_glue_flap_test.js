@@ -31,8 +31,8 @@ function testSessionOnlyDisplayControlMarkup() {
   assert.ok(!/<input[^>]+id="show-glue-flaps"[^>]+checked/.test(html));
   assert.ok(html.includes('id="glue-flap-target-on-hover" checked data-i18n-aria-label="access.glueFlapTargetOnHover"'));
   assert.ok(/class="glue-flap-controls"[\s\S]*id="show-glue-flaps"[\s\S]*id="glue-flap-target-on-hover"/.test(html));
-  assert.ok(html.includes('js/i18n/ramified_minigames_locales.js?v=20260905-4'));
-  assert.ok(html.includes('js/ramified_minigames_setup.js?v=20260905-5'));
+  assert.ok(html.includes('js/i18n/ramified_minigames_locales.js?v=20260906-1'));
+  assert.ok(html.includes('js/ramified_minigames_setup.js?v=20260906-2'));
   assert.ok(source.indexOf("'glue-flaps-row'") > source.indexOf("'gomoku-display-row'"));
   assert.ok(locales.includes("'access.glueFlaps': ['Show glue flaps', '显示粘合片']"));
   assert.ok(locales.includes("'setup.gluedBoundary': ['Glued boundary', '粘合边界']"));
