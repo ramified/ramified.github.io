@@ -29677,6 +29677,7 @@
       maps: [],
       quotients: [],
       display: '',
+      snakeLayout: null,
       editingId: null,
       presetId: null,
       lengthMode: 'objects',
@@ -29964,6 +29965,15 @@
     return raw;
   }
 
+  function normalizeComplexChartSnakeLayout(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const startIndex = Number(value.startIndex);
+    const firstRowSize = Number(value.firstRowSize);
+    if (!Number.isInteger(startIndex) || startIndex < 0 || startIndex > MAX_COMPLEX_CHART_LENGTH * 2) return null;
+    if (firstRowSize !== 3 && firstRowSize !== 4) return null;
+    return { startIndex, firstRowSize };
+  }
+
   function normalizeComplexChartEntry(raw = {}, options = {}) {
     const kind = normalizeComplexChartKind(raw.kind);
     const fallbackLength = Array.isArray(raw.objects) && raw.objects.length ? raw.objects.length : 3;
@@ -29988,6 +29998,7 @@
       || (options.requireId === false ? null : `complex-chart-${hashString(stableJson({ kind, length, objects, maps, quotients, display: raw.display }))}`);
     const selected = raw.selected !== false;
     const display = kind === 'chain-complex' && raw.display === 'snake-les' ? 'snake-les' : '';
+    const snakeLayout = display ? normalizeComplexChartSnakeLayout(raw.snakeLayout) : null;
     const entry = compactSerializable({
       id,
       kind,
@@ -29995,7 +30006,8 @@
       objects,
       maps,
       quotients,
-      display
+      display,
+      snakeLayout
     });
     if (!selected) entry.selected = false;
     return entry;
@@ -30010,6 +30022,7 @@
       maps: editor.maps || [],
       quotients: editor.quotients || [],
       display: editor.kind === 'chain-complex' ? editor.display : '',
+      snakeLayout: editor.snakeLayout,
       selected: true
     }, options);
   }
@@ -30135,19 +30148,40 @@
   function complexChartSnakeRows(entry) {
     const objects = entry.objects || [];
     const rows = [];
-    let index = 0;
-    const firstRowSize = complexChartObjectIsZero(objects[0]) && objects.length > 4 ? 4 : 3;
-    while (index < objects.length) {
-      const size = rows.length === 0 ? firstRowSize : 3;
-      rows.push({
-        start: index,
-        end: Math.min(objects.length - 1, index + size - 1),
-        hasLeadingZero: index === 0 && firstRowSize === 4,
-        degree: rows.length
-      });
-      index += size;
+    const provenance = complexChartSnakeLayoutProvenance(entry);
+    const globalStart = provenance.startIndex;
+    const globalEnd = globalStart + objects.length - 1;
+    let originalRowStart = 0;
+    let originalRowSize = provenance.firstRowSize;
+    while (originalRowStart <= globalEnd) {
+      const originalRowEnd = originalRowStart + originalRowSize - 1;
+      const visibleStart = Math.max(globalStart, originalRowStart);
+      const visibleEnd = Math.min(globalEnd, originalRowEnd);
+      if (visibleStart <= visibleEnd) {
+        const firstColumn = provenance.firstRowSize === 4 && originalRowStart === 0
+          ? (visibleStart - originalRowStart) * 2 + 1
+          : (visibleStart - originalRowStart) * 2 + 3;
+        rows.push({
+          start: visibleStart - globalStart,
+          end: visibleEnd - globalStart,
+          firstColumn,
+          degree: rows.length
+        });
+      }
+      originalRowStart += originalRowSize;
+      originalRowSize = 3;
     }
     return rows;
+  }
+
+  function complexChartSnakeLayoutProvenance(entry) {
+    const stored = normalizeComplexChartSnakeLayout(entry?.snakeLayout);
+    if (stored) return stored;
+    const objects = entry?.objects || [];
+    return {
+      startIndex: 0,
+      firstRowSize: complexChartObjectIsZero(objects[0]) && objects.length > 4 ? 4 : 3
+    };
   }
 
 
@@ -30224,6 +30258,7 @@
       objectWidths,
       labelWidths,
       columnStep,
+      sidePadding,
       turnLaneWidth,
       rightPadding,
       width,
@@ -30345,6 +30380,7 @@
     const paths = [];
     const labels = [];
     const markerId = `les-fast-arrow-${hashString(stableJson({ objects: entry.objects || [], maps: entry.maps || [] }))}`;
+    const selectedMarkerId = `${markerId}-selected`;
     (entry.maps || []).forEach((mapLatex, index) => {
       const geometry = complexChartSnakeArrowGeometry(layout, index);
       if (!geometry) return;
@@ -30353,9 +30389,14 @@
         ? ` data-complex-chart-map-entry="${escapeHtml(options.entryId || '')}" data-complex-chart-map-index="${index}"`
         : '';
       const layoutAttrs = ` data-sheaf-les-map-index="${index}"`;
-      paths.push(`<path class="sheaf-complex-snake-fast-arrow${selected ? ' is-selected' : ''}" marker-end="url(#${escapeHtml(markerId)})"${layoutAttrs}${mapAttrs} d="${geometry.path}"></path>`);
+      const arrowMarkerId = selected ? selectedMarkerId : markerId;
+      paths.push(`<path class="sheaf-complex-snake-fast-arrow${selected ? ' is-selected' : ''}" marker-end="url(#${escapeHtml(arrowMarkerId)})"${layoutAttrs}${mapAttrs} d="${geometry.path}"></path>`);
       if (options.clickableMaps) paths.push(`<path class="sheaf-complex-snake-fast-arrow-hit"${layoutAttrs}${mapAttrs} d="${geometry.path}"></path>`);
-      if (mapLatex) labels.push(complexChartSnakeFastLabelHtml(mapLatex, index, geometry.labelX, geometry.labelY, layout.width, layout.height));
+      if (mapLatex) labels.push(complexChartSnakeFastLabelHtml(mapLatex, index, geometry.labelX, geometry.labelY, layout.width, layout.height, {
+        clickable: options.clickableMaps,
+        entryId: options.entryId,
+        selected
+      }));
     });
     const objects = (entry.objects || []).map((objectLatex, index) => {
       const point = layout.coordByIndex.get(index);
@@ -30376,8 +30417,11 @@
         <span class="sheaf-complex-snake-fast-display" data-sheaf-les-fast-entry="true" data-sheaf-les-layout-width="${layout.width}" data-sheaf-les-layout-height="${layout.height}" data-sheaf-les-scale="1" style="--les-fast-width:${layout.width}px;--les-fast-ratio:${layout.width} / ${layout.height};">
           <svg class="sheaf-complex-snake-fast-svg" viewBox="0 0 ${layout.width} ${layout.height}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
             <defs>
-              <marker id="${escapeHtml(markerId)}" markerWidth="10" markerHeight="10" refX="8.7" refY="5" orient="auto" markerUnits="strokeWidth">
+              <marker id="${escapeHtml(markerId)}" markerWidth="10" markerHeight="10" refX="8.7" refY="5" orient="auto" markerUnits="userSpaceOnUse">
                 <path class="sheaf-complex-snake-fast-marker" d="M 1.1 1.2 C 3.9 2.6 6.4 4.2 8.6 5 C 6.4 5.8 3.9 7.4 1.1 8.8"></path>
+              </marker>
+              <marker id="${escapeHtml(selectedMarkerId)}" markerWidth="10" markerHeight="10" refX="8.7" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                <path class="sheaf-complex-snake-fast-marker is-selected" d="M 1.1 1.2 C 3.9 2.6 6.4 4.2 8.6 5 C 6.4 5.8 3.9 7.4 1.1 8.8"></path>
               </marker>
             </defs>
             ${paths.join('')}
@@ -30389,11 +30433,16 @@
     `;
   }
 
-  function complexChartSnakeFastLabelHtml(mapLatex, index, x, y, width, height) {
+  function complexChartSnakeFastLabelHtml(mapLatex, index, x, y, width, height, options = {}) {
+    const tag = options.clickable ? 'button' : 'span';
+    const selected = options.selected ? ' is-selected' : '';
+    const attrs = options.clickable
+      ? ` type="button" data-complex-chart-map-entry="${escapeHtml(options.entryId || '')}" data-complex-chart-map-index="${index}" title="toggle truncation at arrow ${index + 1}" aria-label="toggle truncation at arrow ${index + 1}: ${escapeHtml(latexToPlain(mapLatex))}"`
+      : '';
     return `
-      <span class="sheaf-complex-snake-fast-label" data-sheaf-les-label-index="${index}" style="left:${formatSvgNumber((x / width) * 100)}%;top:${formatSvgNumber((y / height) * 100)}%;">
+      <${tag} class="sheaf-complex-snake-fast-label${options.clickable ? ' sheaf-complex-snake-fast-button' : ''}${selected}" data-sheaf-les-label-index="${index}" style="left:${formatSvgNumber((x / width) * 100)}%;top:${formatSvgNumber((y / height) * 100)}%;"${attrs}>
         \\(${escapeHtml(mapLatex)}\\)
-      </span>
+      </${tag}>
     `;
   }
 
@@ -30532,7 +30581,7 @@
   }
 
   function complexChartSnakeColumn(row, index) {
-    return row.hasLeadingZero ? ((index - row.start) * 2 + 1) : ((index - row.start) * 2 + 3);
+    return row.firstColumn + (index - row.start) * 2;
   }
 
   function formatTikzCoord(value) {
@@ -30560,7 +30609,7 @@
     visualRows.forEach((row, visualIndex) => {
       const cells = Array.from({ length: columnCount }, () => '{}');
       for (let index = row.start; index <= row.end; index += 1) {
-        const col = row.hasLeadingZero ? index - row.start + 1 : index - row.start + 2;
+        const col = (complexChartSnakeColumn(row, index) + 1) / 2;
         cells[col - 1] = complexChartTikzcdObject(entry.objects?.[index] || '');
         coordByIndex.set(index, { row: visualIndex + 1, col });
       }
@@ -30987,26 +31036,31 @@
   function complexChartLesRangeTruncationEntry(entry, startEndpoint, endEndpoint, fiberNames = {}) {
     const objects = entry.objects || [];
     const maps = entry.maps || [];
+    const sourceLayout = complexChartSnakeLayoutProvenance(entry);
     const start = normalizeComplexChartLesRangeEndpoint(startEndpoint, entry.length);
     const end = normalizeComplexChartLesRangeEndpoint(endEndpoint, entry.length);
     if (!start || !end || complexChartLesRangeEndpointPosition(end) < complexChartLesRangeEndpointPosition(start)) return null;
     const pieceObjects = [];
     const pieceMaps = [];
     let firstOriginalIndex = 0;
+    let pieceStartIndex = sourceLayout.startIndex;
     if (start.kind === 'map') {
       const startMapLatex = maps[start.index] || '';
       pieceObjects.push('0');
       if (complexChartMapIsZero(startMapLatex)) {
         pieceMaps.push('');
+        pieceStartIndex += start.index;
       } else {
         pieceObjects.push(complexChartTruncatedMapFiberObject(startMapLatex, start.index, fiberNames));
         pieceMaps.push('', complexChartOverlineMapLatex(startMapLatex));
+        pieceStartIndex += Math.max(0, start.index - 1);
       }
       pieceObjects.push(objects[start.index + 1] || '');
       firstOriginalIndex = start.index + 1;
     } else {
       pieceObjects.push(objects[start.index] || '');
       firstOriginalIndex = start.index;
+      pieceStartIndex += start.index;
     }
     const lastOriginalIndex = end.kind === 'map' ? end.index : end.index;
     for (let index = firstOriginalIndex + 1; index <= lastOriginalIndex; index += 1) {
@@ -31030,7 +31084,11 @@
       length: pieceObjects.length,
       objects: pieceObjects,
       maps: pieceMaps,
-      display: 'snake-les'
+      display: 'snake-les',
+      snakeLayout: {
+        startIndex: pieceStartIndex,
+        firstRowSize: sourceLayout.firstRowSize
+      }
     }, { requireId: false });
   }
 
@@ -31994,6 +32052,7 @@
       maps: [...(normalized?.maps || [])],
       quotients: [...(normalized?.quotients || [])],
       display: normalized?.display || '',
+      snakeLayout: normalized?.snakeLayout || null,
       editingId: normalized?.id || null,
       presetId: null,
       lengthMode: 'objects',
@@ -40896,27 +40955,18 @@
     const genus = hasCurveGenus ? genusLatex(geometry.symmetricProductGenus ?? geometry.genus) : 'g';
     const plainGenus = hasCurveGenus ? genusPlain(geometry.symmetricProductGenus ?? geometry.genus) : 'g';
     const curveLatex = geometry.labelLatex || 'C';
-    const curvePlain = geometry.labelPlain || 'C';
-    const h0T = {
-      latex: `\\begin{cases}3,&${genus}=0\\\\1,&${genus}=1\\\\0,&${genus}\\ge 2\\end{cases}`,
-      plain: `piecewise h^0(T_${curvePlain}): 3 if ${plainGenus}=0; 1 if ${plainGenus}=1; 0 if ${plainGenus}>=2`
-    };
-    const h1T = {
-      latex: `\\begin{cases}0,&${genus}=0\\\\1,&${genus}=1\\\\3${genus}-3,&${genus}\\ge 2\\end{cases}`,
-      plain: `piecewise h^1(T_${curvePlain}): 0 if ${plainGenus}=0; 1 if ${plainGenus}=1; 3*${plainGenus}-3 if ${plainGenus}>=2`
-    };
     return {
       entries: [
         [
           { latex: '1', plain: '1' },
-          h0T
+          { latex: '0', plain: '0' }
         ],
         [
           { latex: genus, plain: plainGenus },
-          h1T
+          { latex: `3${genus}-3`, plain: `3*${plainGenus}-3` }
         ]
       ],
-      message: `Curve polyvectors use the genus-piecewise dimensions of H^0(T_${curveLatex}) and H^1(T_${curveLatex}).`,
+      message: `Curve polyvectors use the genus-piecewise dimensions of H^0(T_${curveLatex}) and H^1(T_${curveLatex}). Shown for ${plainGenus}>=2; the T_${curveLatex} column is (1, 1) for ${plainGenus}=1 and (3, 0) for ${plainGenus}=0.`,
       symbolic: true
     };
   }
@@ -44043,6 +44093,7 @@
       maps: Array.isArray(item.maps) ? item.maps : [],
       quotients: Array.isArray(item.quotients) ? item.quotients : [],
       display: item.display,
+      snakeLayout: item.snakeLayout,
       selected: item.unselected === true ? false : item.selected !== false
     }, { fallbackId });
   }
@@ -44057,6 +44108,8 @@
       objects: Array.isArray(editor.objects) ? editor.objects : [],
       maps: Array.isArray(editor.maps) ? editor.maps : [],
       quotients: Array.isArray(editor.quotients) ? editor.quotients : [],
+      display: editor.display,
+      snakeLayout: editor.snakeLayout,
       editingId: sanitizePresetId(editor.editingId),
       presetId: sanitizePresetId(editor.presetId),
       lengthMode: sanitizePresetEnum(editor.lengthMode, ['objects', COMPLEX_CHART_DERHAM_LENGTH_MODE], 'objects'),
@@ -44071,6 +44124,8 @@
       objects: normalized.objects,
       maps: normalized.maps || [],
       quotients: normalized.quotients || [],
+      display: normalized.display,
+      snakeLayout: normalized.snakeLayout,
       editingId: draft.editingId,
       presetId: draft.presetId,
       lengthMode: draft.lengthMode === 'objects' ? null : draft.lengthMode,
@@ -44847,6 +44902,7 @@
       maps: normalized.maps || [],
       quotients: normalized.quotients || [],
       display: normalized.display,
+      snakeLayout: normalized.snakeLayout,
       unselected: normalized.selected === false
     });
   }
@@ -44869,6 +44925,8 @@
       objects: normalized.objects || [],
       maps: normalized.maps || [],
       quotients: normalized.quotients || [],
+      display: normalized.display,
+      snakeLayout: normalized.snakeLayout,
       editingId: draft.editingId || null,
       presetId: draft.presetId || null,
       lengthMode: draft.lengthMode === 'objects' ? null : draft.lengthMode,

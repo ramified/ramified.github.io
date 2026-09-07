@@ -755,6 +755,19 @@
   let activeHexVerticalKey = null;
   let chineseCheckersSelectedPlayers = null;
   let chineseCheckersSelectedPlayersPresetKey = '';
+  const LOCAL_AI_CONTROLLER = 'local-ai-challenging';
+  const HUMAN_CONTROLLER = 'human';
+  const HIDDEN_CONTROLLER = 'hidden';
+  const chineseCheckersControllers = new Map();
+  let chineseCheckersControllerPresetKey = '';
+  let localAiWorker = null;
+  let localAiRequestSerial = 0;
+  let localAiRevision = 0;
+  let localAiTimer = null;
+  let localAiThinking = false;
+  let localAiPaused = false;
+  let localAiDiagnostics = null;
+  const localAiSeed = Math.floor(Math.random() * 0xffffffff) >>> 0;
   let canvasDisplayMode = 'normal';
   let fullscreenReturnMode = 'normal';
   let fullscreenPreferences = { ...FULLSCREEN_SETTINGS_DEFAULTS };
@@ -897,6 +910,8 @@
     refs.placementPieceSizeValue = document.getElementById('placement-piece-size-value');
     refs.gomokuSizeRow = document.getElementById('gomoku-size-row');
     refs.gomokuSize = document.getElementById('gomoku-board-size');
+    refs.gomokuBlackController = document.getElementById('gomoku-black-controller');
+    refs.gomokuWhiteController = document.getElementById('gomoku-white-controller');
     refs.hexPieRule = document.getElementById('hex-pie-rule');
     refs.hexPieSwap = document.getElementById('hex-pie-swap');
     refs.boundaryGlueModeRow = document.getElementById('boundary-glue-mode-row');
@@ -922,6 +937,8 @@
     refs.connectFourFall = document.getElementById('connect-four-fall-dir');
     refs.connectFourAlignFall = document.getElementById('connect-four-align-fall');
     refs.connectFourHoleEdit = document.getElementById('connect-four-hole-edit');
+    refs.connectFourRedController = document.getElementById('connect-four-red-controller');
+    refs.connectFourYellowController = document.getElementById('connect-four-yellow-controller');
     refs.chineseCheckersMoveTime = document.getElementById('chinese-checkers-move-time');
     refs.chineseCheckersMoveTimeValue = document.getElementById('chinese-checkers-move-time-value');
     refs.chineseCheckersJumpPause = document.getElementById('chinese-checkers-jump-pause');
@@ -931,6 +948,8 @@
     refs.chineseCheckersPlayerOptions = document.getElementById('chinese-checkers-player-options');
     refs.chineseCheckersEndJumpRow = document.getElementById('chinese-checkers-end-jump-row');
     refs.chineseCheckersEndJump = document.getElementById('chinese-checkers-end-jump');
+    refs.localAiPauseRow = document.getElementById('local-ai-pause-row');
+    refs.localAiPause = document.getElementById('local-ai-pause');
     refs.fideChessPieceDisplay = document.getElementById('fide-chess-piece-display');
     refs.lianliankanTileSet = document.getElementById('lianliankan-tile-set');
     refs.lianliankanTileLevelRow = document.getElementById('lianliankan-tile-level-row');
@@ -1181,12 +1200,16 @@
     if (refs.connectFourFall) refs.connectFourFall.addEventListener('change', handleConnectFourFallChange);
     if (refs.connectFourAlignFall) refs.connectFourAlignFall.addEventListener('change', handleConnectFourAlignFallChange);
     if (refs.connectFourHoleEdit) refs.connectFourHoleEdit.addEventListener('change', handleConnectFourHoleEditChange);
+    [refs.gomokuBlackController, refs.gomokuWhiteController, refs.connectFourRedController, refs.connectFourYellowController]
+      .filter(Boolean)
+      .forEach((control) => control.addEventListener('change', handleLocalAiControllerChange));
     if (refs.chineseCheckersMoveTime) refs.chineseCheckersMoveTime.addEventListener('input', syncChineseCheckersTimingOutput);
     if (refs.chineseCheckersJumpPause) refs.chineseCheckersJumpPause.addEventListener('input', syncChineseCheckersTimingOutput);
     if (refs.chineseCheckersFullHints) refs.chineseCheckersFullHints.addEventListener('change', handleChineseCheckersFullHintsChange);
     if (refs.chineseCheckersJumpRule) refs.chineseCheckersJumpRule.addEventListener('change', handleChineseCheckersJumpRuleChange);
     if (refs.chineseCheckersPlayerOptions) refs.chineseCheckersPlayerOptions.addEventListener('change', handleChineseCheckersPlayerOptionsChange);
     if (refs.chineseCheckersEndJump) refs.chineseCheckersEndJump.addEventListener('click', endChineseCheckersJumpFromUi);
+    if (refs.localAiPause) refs.localAiPause.addEventListener('click', toggleLocalAiPaused);
     if (refs.boxStyle) refs.boxStyle.addEventListener('change', render);
     if (refs.keepNumbersUpright) refs.keepNumbersUpright.addEventListener('change', render);
     if (refs.highlightNewBoxes) refs.highlightNewBoxes.addEventListener('change', render);
@@ -3455,6 +3478,7 @@
   }
 
   function resetToPreview() {
+    cancelLocalAiWork();
     cancelHexHomologyRequest();
     clearHexNeighborHint(false);
     hideCanvasStartPrompt();
@@ -3473,6 +3497,8 @@
       return;
     }
     stopPlayback();
+    cancelLocalAiWork();
+    localAiPaused = false;
     resetSwipeGesture();
     resetFideChessDrag();
     clearFideChessPendingPromotion({ render: false });
@@ -4509,6 +4535,8 @@
       }
     }
     stopPlayback();
+    cancelLocalAiWork();
+    localAiPaused = false;
     resetSwipeGesture();
     resetFideChessDrag();
     clearFideChessPendingPromotion({ render: false });
@@ -4567,9 +4595,12 @@
     }
     syncControls();
     if (refs.canvas) refs.canvas.focus();
+    syncLocalAiAfterStableTurn();
   }
 
   function stopGameFromUi() {
+    cancelLocalAiWork();
+    localAiPaused = false;
     const previous = game;
     hideCanvasStartPrompt();
     clearCanvasStartPromptTimer();
@@ -4607,6 +4638,7 @@
 
   function resetCurrentGameFromShortcut() {
     if (!game) return false;
+    cancelLocalAiWork();
     if (onlineIsInRoom()) {
       syncStatus('restart unavailable online', 'leave the room before restarting', 'warn');
       syncOnlineStatus('Restart is disabled while an online room is active.', 'error');
@@ -4670,6 +4702,7 @@
     syncControls();
     refreshDebugExportIfNeeded();
     if (refs.canvas) refs.canvas.focus();
+    syncLocalAiAfterStableTurn();
     return true;
   }
 
@@ -4684,6 +4717,7 @@
   }
 
   function handleGameModeChange() {
+    syncRememberedAiControllersToHuman();
     if (refs.gameMode && refs.gameMode.value === RANDOM_GAME_MODE_CHOICE_ID) {
       resolveRandomSetupFromUi();
       return;
@@ -5360,6 +5394,7 @@
   }
 
   function handlePresetSelectChange() {
+    syncRememberedAiControllersToHuman();
     if (refs.select && refs.select.value === RANDOM_PRESET_CHOICE_ID) {
       resolveRandomPresetFromUi();
       return;
@@ -5497,6 +5532,7 @@
   }
 
   function applyPreparedImport(prepared) {
+    syncRememberedAiControllersToHuman();
     clearLianliankanHint();
     clearLianliankanMatchEffects();
     clearPlacementReachAssist();
@@ -8611,6 +8647,7 @@
       syncControls();
       refreshDebugExportIfNeeded();
       flushQueuedOnlineStateMessages();
+      syncLocalAiAfterStableTurn();
       return;
     }
     if (event.kind !== 'spawn') applyEvent(game, event);
@@ -10189,7 +10226,7 @@
       refs.canvas.style.cursor = 'pointer';
     } else if (isHexGame(game) && Number.isInteger(hoveredHexIndex)) {
       refs.canvas.style.cursor = 'pointer';
-    } else if (onlineBoardMoveBlockedForCursor()) {
+    } else if (localAiThinking || localAiOwnsCurrentTurn() || onlineBoardMoveBlockedForCursor()) {
       refs.canvas.style.cursor = 'not-allowed';
     } else {
       refs.canvas.style.cursor = '';
@@ -10201,6 +10238,7 @@
     if (game.phase === 'gameover') {
       return;
     }
+    if (localAiThinking || localAiOwnsCurrentTurn()) return;
     if (rejectOnlineLocalAction('online Gomoku turn blocked')) return;
     const target = tileFromCanvasEvent(event);
     if (!target) return;
@@ -10209,7 +10247,7 @@
       syncStatus('Gomoku move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
       return;
     }
-    pushUndoSnapshot(`Gomoku ${result.stone.color} at ${target.label}`);
+    pushUndoSnapshot(`Gomoku ${result.stone.color} at ${target.label}`, { actor: 'human' });
     game = result.state;
     if (game.phase === 'gameover') {
       if (game.winner) syncStatus(`${gomokuColorLabel(game.winner)} wins`, `${game.round} move${game.round === 1 ? '' : 's'}`, 'over');
@@ -10227,6 +10265,7 @@
       index: target.index,
       label: target.label
     });
+    syncLocalAiAfterStableTurn();
   }
 
   function handleHexCanvasClick(event) {
@@ -10285,6 +10324,7 @@
     if (game.phase === 'gameover') {
       return;
     }
+    if (localAiThinking || localAiOwnsCurrentTurn()) return;
     if (rejectOnlineLocalAction('online Connect Four turn blocked')) return;
     const target = tileFromCanvasEvent(event);
     if (!target) return;
@@ -10304,7 +10344,7 @@
       return;
     }
     clearSetupAlert();
-    pushUndoSnapshot(`Connect Four ${result.token.color} from ${target.label}`);
+    pushUndoSnapshot(`Connect Four ${result.token.color} from ${target.label}`, { actor: 'human' });
     game = result.state;
     startConnectFourDropAnimation(result);
     if (game.phase === 'gameover') {
@@ -10568,6 +10608,7 @@
     if (game.phase === 'gameover') {
       return;
     }
+    if (localAiThinking || localAiOwnsCurrentTurn()) return;
     const target = tileFromCanvasEvent(event);
     const marble = target ? chineseCheckerMarbleAt(game, target.index) : null;
     if (onlineIsInRoom() && isChineseCheckersGame(game)) {
@@ -10657,7 +10698,7 @@
       syncStatus('Chinese Checkers move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
       return;
     }
-    pushUndoSnapshot(`Chinese Checkers ${game.turn} move`);
+    pushUndoSnapshot(`Chinese Checkers ${game.turn} move`, { actor: 'human' });
     game = result.state;
     startChineseCheckersMoveAnimation(result);
     syncStatusForCurrentGame();
@@ -11254,7 +11295,7 @@
     });
   }
 
-  function createHistorySnapshot(label) {
+  function createHistorySnapshot(label, metadata = {}) {
     if (!game) return null;
     return {
       label: label || 'step',
@@ -11263,7 +11304,8 @@
       eventIndex,
       sokobanMoveSession: clonePlain(sokobanMoveSession),
       stepPaused,
-      status: statusSnapshot()
+      status: statusSnapshot(),
+      actor: metadata.actor || ''
     };
   }
 
@@ -11271,8 +11313,8 @@
     if (Number.isFinite(UNDO_LIMIT) && stack.length > UNDO_LIMIT) stack.splice(0, stack.length - UNDO_LIMIT);
   }
 
-  function pushUndoSnapshot(label) {
-    const snapshot = createHistorySnapshot(label);
+  function pushUndoSnapshot(label, metadata = {}) {
+    const snapshot = createHistorySnapshot(label, metadata);
     if (!snapshot) return;
     undoStack.push(snapshot);
     trimHistoryStack(undoStack);
@@ -11280,16 +11322,16 @@
     syncControls();
   }
 
-  function pushRedoSnapshot(label) {
-    const snapshot = createHistorySnapshot(label);
+  function pushRedoSnapshot(label, metadata = {}) {
+    const snapshot = createHistorySnapshot(label, metadata);
     if (!snapshot) return;
     redoStack.push(snapshot);
     trimHistoryStack(redoStack);
     syncControls();
   }
 
-  function pushUndoSnapshotForRedo(label) {
-    const snapshot = createHistorySnapshot(label);
+  function pushUndoSnapshotForRedo(label, metadata = {}) {
+    const snapshot = createHistorySnapshot(label, metadata);
     if (!snapshot) return;
     undoStack.push(snapshot);
     trimHistoryStack(undoStack);
@@ -11333,12 +11375,30 @@
       requestOnlineHistoryChange('undo');
       return;
     }
+    const localAiHistory = !options.onlineApproved && localAiConfigured();
+    if (localAiHistory) cancelLocalAiWork({ pause: true });
     const snapshot = undoStack.pop();
     if (!snapshot) {
       syncControls();
       return;
     }
-    pushRedoSnapshot(snapshot.label || 'previous step');
+    let beforeHumanIndex = -1;
+    if (localAiHistory && snapshot.actor === 'ai' && localAiHasHumanController()) {
+      for (let index = undoStack.length - 1; index >= 0; index -= 1) {
+        if (undoStack[index].actor === 'human') { beforeHumanIndex = index; break; }
+      }
+    }
+    if (beforeHumanIndex >= 0) {
+      const beforeHuman = undoStack.splice(beforeHumanIndex)[0];
+      const redo = createHistorySnapshot(snapshot.label || 'local AI exchange', { actor: 'ai-group' });
+      if (redo) {
+        redoStack.push(redo);
+        trimHistoryStack(redoStack);
+      }
+      restoreHistorySnapshot(beforeHuman, 'undo complete', tk('ai.undoExchange', 'restored before the human and Local AI exchange'));
+      return;
+    }
+    pushRedoSnapshot(snapshot.label || 'previous step', { actor: snapshot.actor === 'ai-group' ? 'ai-group' : snapshot.actor });
     restoreHistorySnapshot(
       snapshot,
       'undo complete',
@@ -11365,7 +11425,8 @@
       syncControls();
       return;
     }
-    pushUndoSnapshotForRedo(snapshot.label || 'previous step');
+    if (!options.onlineApproved && localAiConfigured()) cancelLocalAiWork({ pause: true });
+    pushUndoSnapshotForRedo(snapshot.label || 'previous step', { actor: snapshot.actor === 'ai-group' ? 'ai-group' : snapshot.actor });
     restoreHistorySnapshot(
       snapshot,
       'redo complete',
@@ -11839,6 +11900,7 @@
   }
 
   function applyImportedDebugState(imported, options = {}) {
+    syncRememberedAiControllersToHuman();
     clearCanvasStartPromptTimer();
     hideCanvasStartPrompt();
     resetLocalResultPromptDismissal();
@@ -31384,6 +31446,7 @@
     const boundaryGlueBoard = catalogAvailable && selectedPresetIsBoundaryGlueBoard();
     const boundaryRectangle = boundaryGlueBoard && selectedBoundaryGlueShape() === 'rectangle';
     const onlineRoomActive = onlineIsInRoom();
+    if (onlineRoomActive && localAiThinking) cancelLocalAiWork();
     const hexTopologyPending = modeHex && isHexGame(game) && game.hexTopologyState === 'pending';
     syncConnectFourFallOptions();
     if (refs.begin) {
@@ -31534,6 +31597,7 @@
     if (refs.connectFourFall) refs.connectFourFall.disabled = modeConnectFour && game && game.phase !== 'setup';
     syncGoScoringControls(modeGo);
     syncChineseCheckersControls(modeChineseCheckers);
+    syncLocalAiControls();
     syncSokobanObjectSizeOutput();
     syncSokobanEnergyGlowOutput();
     syncSokobanBeamOutput();
@@ -31926,6 +31990,7 @@
     // registry shell intentionally has no board geometry or removed tiles.
     if (!preset || preset.__lazyPreset) return;
     const available = chineseCheckersAvailablePlayerColors(preset);
+    ensureChineseCheckersControllerPreset(preset, available);
     const selected = isChineseCheckersGame(game)
       ? chineseCheckersPlayerColors(game)
       : selectedChineseCheckersPlayerColors(preset);
@@ -31933,14 +31998,25 @@
     const setupEditable = !game || (isChineseCheckersGame(game) && game.phase === 'setup');
     available.forEach((color) => {
       const label = document.createElement('label');
-      label.className = 'opt-row';
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.value = color;
-      input.checked = selectedSet.has(color);
-      input.disabled = !setupEditable || (input.checked && selectedSet.size <= 1);
-      label.appendChild(input);
-      label.appendChild(document.createTextNode(chineseCheckersColorLabel(color)));
+      label.className = 'local-ai-player-option';
+      const colorName = chineseCheckersColorLabel(color);
+      label.appendChild(document.createTextNode(colorName));
+      const select = document.createElement('select');
+      select.dataset.color = color;
+      select.setAttribute('aria-label', tk('ai.access.colorController', '{{side}} controller', { side: colorName }));
+      [
+        [HUMAN_CONTROLLER, tk('ai.human', 'Human')],
+        [LOCAL_AI_CONTROLLER, tk('ai.localChallenging', 'Local AI — Challenging')],
+        [HIDDEN_CONTROLLER, tk('ai.hidden', 'Not shown')]
+      ].forEach(([value, text]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        select.appendChild(option);
+      });
+      select.value = selectedSet.has(color) ? chineseCheckersControllerForColor(color) : HIDDEN_CONTROLLER;
+      select.disabled = !setupEditable || onlineIsInRoom();
+      label.appendChild(select);
       refs.chineseCheckersPlayerOptions.appendChild(label);
     });
   }
@@ -31979,18 +32055,23 @@
     }
     const available = chineseCheckersAvailablePlayerColors(selectedPreset());
     const inputs = refs.chineseCheckersPlayerOptions
-      ? Array.from(refs.chineseCheckersPlayerOptions.querySelectorAll('input[type=checkbox]'))
+      ? Array.from(refs.chineseCheckersPlayerOptions.querySelectorAll('select[data-color]'))
       : [];
-    let selected = inputs.filter((input) => input.checked).map((input) => normalizePlacementColor(input.value)).filter(Boolean);
+    let selected = inputs.filter((input) => input.value !== HIDDEN_CONTROLLER).map((input) => normalizePlacementColor(input.dataset.color)).filter(Boolean);
     selected = selected.filter((color, index) => available.includes(color) && selected.indexOf(color) === index);
     if (!selected.length) {
-      if (event && event.target && event.target.type === 'checkbox') event.target.checked = true;
+      if (event && event.target && event.target.matches('select[data-color]')) event.target.value = HUMAN_CONTROLLER;
       selected = selectedChineseCheckersPlayerColors(selectedPreset());
-      syncStatus('player required', 'leave at least one Chinese Checkers player active', 'warn');
+      syncStatus(tk('ai.playerRequired', 'Keep at least one Chinese Checkers color visible.'), previewInfo(selectedPreset()), 'warn');
       syncChineseCheckersPlayerOptions(true);
       return;
     }
+    inputs.forEach((input) => {
+      const color = normalizePlacementColor(input.dataset.color);
+      if (color) chineseCheckersControllers.set(color, input.value === LOCAL_AI_CONTROLLER ? LOCAL_AI_CONTROLLER : HUMAN_CONTROLLER);
+    });
     setChineseCheckersSelectedPlayers(selected, selectedPreset());
+    cancelLocalAiWork();
     if (isChineseCheckersGame(game) && game.phase === 'setup') {
       game = createSelectedGameState(selectedPreset(), selectedGameOptions({ glueRng: Math.random }));
       game.phase = 'setup';
@@ -32013,6 +32094,7 @@
 
   function selectedChineseCheckersPlayerColors(preset) {
     const available = chineseCheckersAvailablePlayerColors(preset);
+    ensureChineseCheckersControllerPreset(preset, available);
     const key = chineseCheckersPlayerSelectionKey(preset, available);
     if (chineseCheckersSelectedPlayers && chineseCheckersSelectedPlayersPresetKey === key) {
       const selected = chineseCheckersSelectedPlayers.filter((color) => available.includes(color));
@@ -32023,6 +32105,7 @@
 
   function setChineseCheckersSelectedPlayers(colors, preset) {
     const available = chineseCheckersAvailablePlayerColors(preset);
+    ensureChineseCheckersControllerPreset(preset, available);
     const selected = colors
       .map(normalizePlacementColor)
       .filter((color, index, list) => color && available.includes(color) && list.indexOf(color) === index);
@@ -32036,6 +32119,269 @@
 
   function shouldHighlightNewBoxes() {
     return !refs.highlightNewBoxes || !!refs.highlightNewBoxes.checked;
+  }
+
+  function ensureChineseCheckersControllerPreset(preset, available = chineseCheckersAvailablePlayerColors(preset)) {
+    const key = chineseCheckersPlayerSelectionKey(preset, available);
+    if (chineseCheckersControllerPresetKey === key) return;
+    chineseCheckersControllers.clear();
+    available.forEach((color) => chineseCheckersControllers.set(color, HUMAN_CONTROLLER));
+    chineseCheckersControllerPresetKey = key;
+  }
+
+  function chineseCheckersControllerForColor(color) {
+    return chineseCheckersControllers.get(normalizePlacementColor(color)) || HUMAN_CONTROLLER;
+  }
+
+  function localAiControllerForColor(state, color) {
+    if (!state) return HUMAN_CONTROLLER;
+    if (isGomokuGame(state)) {
+      const control = color === 'white' ? refs.gomokuWhiteController : refs.gomokuBlackController;
+      return control && control.value === LOCAL_AI_CONTROLLER ? LOCAL_AI_CONTROLLER : HUMAN_CONTROLLER;
+    }
+    if (isConnectFourGame(state)) {
+      const control = color === 'yellow' ? refs.connectFourYellowController : refs.connectFourRedController;
+      return control && control.value === LOCAL_AI_CONTROLLER ? LOCAL_AI_CONTROLLER : HUMAN_CONTROLLER;
+    }
+    if (isChineseCheckersGame(state)) return chineseCheckersControllerForColor(color);
+    return HUMAN_CONTROLLER;
+  }
+
+  function localAiSupportedState(state = game) {
+    return !!(state && (isGomokuGame(state) || isConnectFourGame(state) || isChineseCheckersGame(state)));
+  }
+
+  function localAiConfigured(state = game) {
+    if (!localAiSupportedState(state)) return false;
+    if (isGomokuGame(state)) return ['black', 'white'].some((color) => localAiControllerForColor(state, color) === LOCAL_AI_CONTROLLER);
+    if (isConnectFourGame(state)) return ['red', 'yellow'].some((color) => localAiControllerForColor(state, color) === LOCAL_AI_CONTROLLER);
+    return chineseCheckersPlayerColors(state).some((color) => localAiControllerForColor(state, color) === LOCAL_AI_CONTROLLER);
+  }
+
+  function localAiHasHumanController(state = game) {
+    if (!localAiSupportedState(state)) return true;
+    const colors = isGomokuGame(state) ? ['black', 'white']
+      : (isConnectFourGame(state) ? ['red', 'yellow'] : chineseCheckersPlayerColors(state));
+    return colors.some((color) => localAiControllerForColor(state, color) === HUMAN_CONTROLLER);
+  }
+
+  function localAiOwnsCurrentTurn(state = game) {
+    return !!(localAiSupportedState(state)
+      && state.phase !== 'setup'
+      && state.phase !== 'gameover'
+      && localAiControllerForColor(state, state.turn) === LOCAL_AI_CONTROLLER);
+  }
+
+  function localAiPositionHash(state = game) {
+    const ai = typeof window !== 'undefined' ? window.RamifiedMinigamesAI : null;
+    return ai && typeof ai.positionHash === 'function' && state ? ai.positionHash(state) : '';
+  }
+
+  function handleLocalAiControllerChange() {
+    if (game && game.phase !== 'setup') {
+      syncLocalAiControls();
+      return;
+    }
+    cancelLocalAiWork();
+    localAiPaused = false;
+    syncControls();
+  }
+
+  function toggleLocalAiPaused() {
+    if (!localAiConfigured()) return;
+    if (localAiPaused) {
+      localAiPaused = false;
+      syncLocalAiAfterStableTurn();
+    } else {
+      cancelLocalAiWork({ pause: true });
+      syncStatus(tk('ai.paused', 'Local AI paused'), localAiSupportedState() ? localizedGameName(gameModeValue(game)) : '', 'ready');
+    }
+    syncControls();
+  }
+
+  function syncLocalAiControls() {
+    const supported = localAiSupportedState();
+    const setupEditable = !!(game && game.phase === 'setup' && !onlineIsInRoom());
+    [refs.gomokuBlackController, refs.gomokuWhiteController].filter(Boolean).forEach((control) => {
+      control.disabled = !setupEditable || !isGomokuGame(game);
+    });
+    [refs.connectFourRedController, refs.connectFourYellowController].filter(Boolean).forEach((control) => {
+      control.disabled = !setupEditable || !isConnectFourGame(game);
+    });
+    const configured = supported && localAiConfigured();
+    if (refs.localAiPauseRow) refs.localAiPauseRow.hidden = !configured || !game || game.phase === 'setup' || game.phase === 'gameover' || onlineIsInRoom();
+    if (refs.localAiPause) {
+      refs.localAiPause.disabled = !configured || !!currentAnimation;
+      refs.localAiPause.textContent = localAiPaused ? tk('ai.resume', 'Resume AI') : tk('ai.pause', 'Pause AI');
+    }
+  }
+
+  function cancelLocalAiWork(options = {}) {
+    localAiRevision += 1;
+    localAiRequestSerial += 1;
+    if (localAiTimer != null && typeof window !== 'undefined') window.clearTimeout(localAiTimer);
+    localAiTimer = null;
+    localAiThinking = false;
+    if (options.pause) localAiPaused = true;
+  }
+
+  function ensureLocalAiWorker() {
+    if (localAiWorker) return localAiWorker;
+    if (typeof Worker === 'undefined') return null;
+    try {
+      localAiWorker = new Worker('js/ramified_minigames_ai_worker.js?v=20260908-1');
+      localAiWorker.addEventListener('message', handleLocalAiWorkerMessage);
+      localAiWorker.addEventListener('error', () => failLocalAiMove());
+      return localAiWorker;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function syncThinkingStatus() {
+    if (!game) return;
+    syncStatus(
+      tk('ai.thinking', 'Local AI is thinking…'),
+      tk('ai.moveInfo', '{{side}} is choosing a move locally', { side: localizedRoleLabel(game.turn) }),
+      'moving'
+    );
+  }
+
+  function syncThinkingControls() {
+    syncCanvasCursor();
+    syncLocalAiControls();
+  }
+
+  function scheduleLocalAiTurn(delay = 80) {
+    if (!game || currentAnimation || localAiPaused || localAiThinking || onlineIsInRoom() || !localAiOwnsCurrentTurn()) return;
+    const requestId = ++localAiRequestSerial;
+    const revision = localAiRevision;
+    const hash = localAiPositionHash(game);
+    localAiThinking = true;
+    syncThinkingStatus();
+    syncThinkingControls();
+    const run = () => {
+      localAiTimer = null;
+      if (requestId !== localAiRequestSerial || revision !== localAiRevision || !localAiOwnsCurrentTurn() || localAiPaused) {
+        localAiThinking = false;
+        syncControls();
+        return;
+      }
+      const request = {
+        type: 'choose-move',
+        requestId,
+        revision,
+        positionHash: hash,
+        seed: (localAiSeed ^ fnvHashForLocalAi(hash)) >>> 0,
+        state: cloneGameState(game)
+      };
+      const worker = ensureLocalAiWorker();
+      if (worker) {
+        worker.postMessage(request);
+        return;
+      }
+      const ai = typeof window !== 'undefined' ? window.RamifiedMinigamesAI : null;
+      if (!ai || typeof ai.chooseMove !== 'function') {
+        failLocalAiMove();
+        return;
+      }
+      window.setTimeout(() => {
+        try {
+          handleLocalAiWorkerMessage({ data: { ...request, type: 'move-result', result: ai.chooseMove(request.state, { rules: api, seed: request.seed }) } });
+        } catch (_) {
+          failLocalAiMove();
+        }
+      }, 0);
+    };
+    localAiTimer = window.setTimeout(run, Math.max(0, delay));
+  }
+
+  function fnvHashForLocalAi(text) {
+    let hash = 2166136261;
+    String(text || '').split('').forEach((character) => {
+      hash ^= character.charCodeAt(0);
+      hash = Math.imul(hash, 16777619);
+    });
+    return hash >>> 0;
+  }
+
+  function handleLocalAiWorkerMessage(event) {
+    const message = event && event.data || {};
+    if (message.type === 'move-error') {
+      if (message.requestId === localAiRequestSerial) failLocalAiMove();
+      return;
+    }
+    if (message.type !== 'move-result'
+      || message.requestId !== localAiRequestSerial
+      || message.revision !== localAiRevision
+      || message.positionHash !== localAiPositionHash(game)
+      || !localAiOwnsCurrentTurn()
+      || localAiPaused) return;
+    localAiThinking = false;
+    localAiDiagnostics = message.result && message.result.diagnostics || null;
+    const move = message.result && message.result.move;
+    if (!move || !commitLocalAiMove(move)) {
+      failLocalAiMove();
+      return;
+    }
+    syncControls();
+  }
+
+  function failLocalAiMove() {
+    cancelLocalAiWork({ pause: true });
+    syncStatus(tk('ai.unavailable', 'Local AI unavailable'), tk('ai.errorInfo', 'The AI was paused; the current game is unchanged.'), 'warn');
+    syncControls();
+  }
+
+  function commitLocalAiMove(move) {
+    if (!game || onlineIsInRoom() || !localAiOwnsCurrentTurn()) return false;
+    if (isGomokuGame(game)) {
+      const result = placeGomokuStone(game, move.index);
+      if (!result.changed) return false;
+      pushUndoSnapshot(`Local AI Gomoku ${result.stone.color}`, { actor: 'ai' });
+      game = result.state;
+      syncStatusForCurrentGame();
+      render();
+      refreshDebugExportIfNeeded();
+      if (game.phase !== 'gameover') scheduleLocalAiTurn();
+      return true;
+    }
+    if (isConnectFourGame(game)) {
+      const result = placeConnectFourToken(game, move.index);
+      if (!result.changed) return false;
+      pushUndoSnapshot(`Local AI Connect Four ${result.token.color}`, { actor: 'ai' });
+      game = result.state;
+      startConnectFourDropAnimation(result);
+      syncStatusForCurrentGame();
+      render();
+      refreshDebugExportIfNeeded();
+      return true;
+    }
+    if (isChineseCheckersGame(game)) {
+      const result = moveChineseCheckerMarble(game, move.from, move.to, { stepwise: false });
+      if (!result.changed) return false;
+      pushUndoSnapshot(`Local AI Chinese Checkers ${result.marble.color}`, { actor: 'ai' });
+      game = result.state;
+      startChineseCheckersMoveAnimation(result);
+      syncStatusForCurrentGame();
+      render();
+      refreshDebugExportIfNeeded();
+      return true;
+    }
+    return false;
+  }
+
+  function syncRememberedAiControllersToHuman() {
+    [refs.gomokuBlackController, refs.gomokuWhiteController, refs.connectFourRedController, refs.connectFourYellowController]
+      .filter(Boolean)
+      .forEach((control) => { control.value = HUMAN_CONTROLLER; });
+    chineseCheckersControllers.forEach((_value, color) => chineseCheckersControllers.set(color, HUMAN_CONTROLLER));
+    localAiPaused = false;
+    cancelLocalAiWork();
+  }
+
+  function syncLocalAiAfterStableTurn() {
+    if (!currentAnimation && !onlineIsInRoom()) scheduleLocalAiTurn();
   }
 
   function shouldKeepNumbersUpright() {
@@ -32859,6 +33205,7 @@
     explosionModeDirections,
     findGomokuWin,
     findConnectFourWin,
+    gomokuDiagonalStepCandidates,
     fullBoardWithoutAdjacentMerge,
     generateBoundaryGlueBoardPreset,
     generateTorusBoundaryGlue,
@@ -32957,6 +33304,16 @@
       updateOnlineRoomMetaFromMessage,
       setOnlineState(value) { onlineState = value; },
       getOnlineState() { return onlineState; },
+      getLocalAiDiagnostics() { return localAiDiagnostics ? cloneValue(localAiDiagnostics) : null; },
+      getLocalAiRuntimeState() {
+        return {
+          paused: localAiPaused,
+          thinking: localAiThinking,
+          revision: localAiRevision,
+          requestId: localAiRequestSerial,
+          positionHash: game ? localAiPositionHash(game) : ''
+        };
+      },
       lianliankanTilesMatch,
       placementHoverPreview,
       placementHintDirectionDescriptors,
@@ -33071,6 +33428,7 @@
   };
 
   if (typeof window !== 'undefined') window.RamifiedMinigames = api;
+  else if (typeof globalThis !== 'undefined' && typeof importScripts === 'function') globalThis.RamifiedMinigames = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', init);
 })();

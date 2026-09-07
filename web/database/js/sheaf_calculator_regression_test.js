@@ -305,7 +305,7 @@ function testSheafComplexCalculatorPageAndPrototypeLink() {
   assert(html.includes('id="complex-chart-operations-panel"'));
   assert(html.indexOf('id="complex-chart-add"') < html.indexOf('id="complex-chart-operations"'));
   assert(html.indexOf('id="complex-chart-operations"') < html.indexOf('id="complex-chart-export"'));
-  assert(html.includes('<script src="js/sheaf_complex_calculator.js?v=complex-chart-38"></script>'));
+  assert(html.includes('<script src="js/sheaf_complex_calculator.js?v=complex-chart-41"></script>'));
   assert(html.includes('id="complex-chart-length-label"'));
   assert(!html.includes('id="complex-chart-kind"'));
   assert(html.indexOf('id="complex-chart-saved"') < html.indexOf('id="complex-chart-add-panel"'));
@@ -866,6 +866,82 @@ function testComplexChartLesTruncationUsesClickableNoTikzEndpoints() {
   assert.strictEqual(api.state.complexChart.operations.candidates.length, 1);
   operationHtml = api.renderComplexChartOperationsPanelHtml();
   assert(operationHtml.includes('data-complex-chart-operation-candidate="les-range-object:1-map:3"'));
+  assert(operationHtml.includes('class="sheaf-complex-snake-fast-label sheaf-complex-snake-fast-button is-selected" data-sheaf-les-label-index="3"'));
+  assert(operationHtml.includes('data-complex-chart-map-entry="les_source" data-complex-chart-map-index="3"'));
+  assert(operationHtml.includes('les-fast-arrow-') && operationHtml.includes('-selected'));
+}
+
+function testComplexChartLesTruncationPreservesOriginalSnakeSlots() {
+  const source = {
+    id: 'les_layout_source',
+    kind: 'chain-complex',
+    length: 10,
+    objects: ['0', 'A_0', 'B_0', 'C_0', 'A_1', 'B_1', 'C_1', 'A_2', 'B_2', 'C_2'],
+    maps: ['', 'f_0', 'g_0', '\\delta^0', 'f_1', 'g_1', '\\delta^1', 'f_2', 'g_2'],
+    display: 'snake-les'
+  };
+  const api = loadComplexCalculator();
+  api.upsertComplexChartEntries([source]);
+  api.openComplexChartOperations('les_layout_source', 'truncate');
+  api.toggleComplexChartOperationCut('les_layout_source', 2);
+  api.toggleComplexChartOperationCut('les_layout_source', 5);
+  let candidate = api.state.complexChart.operations.candidates[0].entry;
+  assert.deepStrictEqual({ ...candidate.snakeLayout }, { startIndex: 2, firstRowSize: 4 });
+  let layout = api.complexChartSnakeLayout(candidate);
+  assert.strictEqual(layout.coordByIndex.get(0).x, layout.sidePadding + 4 * layout.columnStep);
+  assert.strictEqual(layout.coordByIndex.get(1).x, layout.sidePadding + 6 * layout.columnStep);
+  assert.strictEqual(layout.coordByIndex.get(2).x, layout.sidePadding + 2 * layout.columnStep);
+  assert.strictEqual(layout.coordByIndex.get(0).y, layout.coordByIndex.get(1).y);
+  assert(layout.coordByIndex.get(2).y < layout.coordByIndex.get(1).y);
+
+  api.setComplexChartOperationTarget('les_layout_source');
+  api.toggleComplexChartOperationCut('les_layout_source', 4);
+  api.toggleComplexChartOperationCut('les_layout_source', 6);
+  candidate = api.state.complexChart.operations.candidates[0].entry;
+  assert.deepStrictEqual({ ...candidate.snakeLayout }, { startIndex: 4, firstRowSize: 4 });
+  layout = api.complexChartSnakeLayout(candidate);
+  assert.strictEqual(layout.coordByIndex.get(0).x, layout.sidePadding + 2 * layout.columnStep);
+  assert.strictEqual(layout.coordByIndex.get(1).x, layout.sidePadding + 4 * layout.columnStep);
+  assert.strictEqual(layout.coordByIndex.get(2).x, layout.sidePadding + 6 * layout.columnStep);
+  assert.strictEqual(layout.coordByIndex.get(0).y, layout.coordByIndex.get(2).y);
+
+  api.setComplexChartOperationTarget('les_layout_source');
+  api.toggleComplexChartOperationMapCut('les_layout_source', 3);
+  api.toggleComplexChartOperationCut('les_layout_source', 6);
+  candidate = api.state.complexChart.operations.candidates[0].entry;
+  assert.deepStrictEqual({ ...candidate.snakeLayout }, { startIndex: 2, firstRowSize: 4 });
+  layout = api.complexChartSnakeLayout(candidate);
+  assert.strictEqual(layout.coordByIndex.get(0).x, layout.sidePadding + 4 * layout.columnStep);
+  assert.strictEqual(layout.coordByIndex.get(1).x, layout.sidePadding + 6 * layout.columnStep);
+  assert.strictEqual(layout.coordByIndex.get(2).x, layout.sidePadding + 2 * layout.columnStep);
+
+  assert.strictEqual(api.addSelectedComplexChartOperationCandidates(), true);
+  const generated = api.state.complexChart.entries.find((entry) => entry.id !== source.id);
+  assert.deepStrictEqual({ ...generated.snakeLayout }, { startIndex: 2, firstRowSize: 4 });
+  const exported = api.exportComplexChartEntries('preset-json');
+  const restored = loadComplexCalculator();
+  restored.importComplexChartFromText(exported);
+  const restoredGenerated = restored.state.complexChart.entries.find((entry) => entry.snakeLayout?.startIndex === 2);
+  assert(restoredGenerated);
+  assert.deepStrictEqual({ ...restoredGenerated.snakeLayout }, { startIndex: 2, firstRowSize: 4 });
+
+  restored.openComplexChartOperations(restoredGenerated.id, 'truncate');
+  restored.toggleComplexChartOperationCut(restoredGenerated.id, 1);
+  restored.toggleComplexChartOperationCut(restoredGenerated.id, 3);
+  assert.deepStrictEqual({ ...restored.state.complexChart.operations.candidates[0].entry.snakeLayout }, {
+    startIndex: 3,
+    firstRowSize: 4
+  });
+}
+
+function testComplexChartSelectedArrowStylingIsProminent() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'sheaf_complex_calculator.html'), 'utf8');
+  assert(/\.sheaf-complex-snake-fast-arrow\.is-selected\s*\{[^}]*color:\s*#2563c7[^}]*stroke-width:\s*3\.8/s.test(html));
+  assert(/\.sheaf-complex-snake-fast-marker\s*\{[^}]*stroke-width:\s*1\.7/s.test(html));
+  assert(/\.sheaf-complex-snake-fast-marker\.is-selected\s*\{[^}]*color:\s*#2563c7[^}]*stroke-width:\s*3\.8/s.test(html));
+  assert(/\.sheaf-complex-snake-fast-label\.sheaf-complex-snake-fast-button\.is-selected\s*\{[^}]*color:\s*#2563c7/s.test(html));
+  const js = fs.readFileSync(path.join(__dirname, 'sheaf_complex_calculator.js'), 'utf8');
+  assert.strictEqual((js.match(/markerUnits="userSpaceOnUse"/g) || []).length, 2);
 }
 
 function testComplexChartLesFunctorCatalogAndPersistence() {
@@ -2207,6 +2283,24 @@ function testSymbolicCurvePolyvectorParallelogramIsPiecewise() {
   assert(polyvector.entries[0][1].plain.includes('1 if g=1'), polyvector.entries[0][1].plain);
   assert(polyvector.entries[1][1].plain.includes('1 if g=1'), polyvector.entries[1][1].plain);
   assert(polyvector.entries[1][1].plain.includes('3*g-3 if g>=2'), polyvector.entries[1][1].plain);
+}
+
+function testComplexSymbolicCurvePolyvectorParallelogramIsConcise() {
+  const api = loadComplexCalculator();
+  const geometry = api.geometryFromVariety({ id: 'C', type: 'curve', genus: 'g', name: 'C' });
+  const hodge = api.buildHodgeNumbers(geometry);
+  const polyvector = api.buildPolyvectorParallelogram({ geometry, hodge });
+  assert(polyvector);
+  assert(polyvector.symbolic);
+  assert.deepStrictEqual([
+    polyvector.entries[0][0].plain,
+    polyvector.entries[0][1].plain,
+    polyvector.entries[1][0].plain,
+    polyvector.entries[1][1].plain
+  ], ['1', '0', 'g', '3*g-3']);
+  assert(polyvector.message.includes('Shown for g>=2'), polyvector.message);
+  assert(polyvector.message.includes('(1, 1) for g=1'), polyvector.message);
+  assert(polyvector.message.includes('(3, 0) for g=0'), polyvector.message);
 }
 
 function testPolyvectorParallelogramForProductOfKnownFactors() {
@@ -7827,6 +7921,8 @@ testComplexChartOperationTruncationModel();
 testComplexChartKernelCokernelExtensionModel();
 testComplexChartOperationUiAndAddSelectedModel();
 testComplexChartLesTruncationUsesClickableNoTikzEndpoints();
+testComplexChartLesTruncationPreservesOriginalSnakeSlots();
+testComplexChartSelectedArrowStylingIsProminent();
 testComplexChartLesFunctorCatalogAndPersistence();
 testComplexChartSeparateJsonImportExport();
 testComplexChartFullPresetRoundTripAndOldSchemaImport();
@@ -7847,6 +7943,7 @@ testPolyvectorParallelogramForProjectiveSpace();
 testPolyvectorParallelogramForAbelianVariety();
 testPolyvectorParallelogramForCurves();
 testSymbolicCurvePolyvectorParallelogramIsPiecewise();
+testComplexSymbolicCurvePolyvectorParallelogramIsConcise();
 testPolyvectorParallelogramForProductOfKnownFactors();
 testPolyvectorParallelogramForProductWithAbelianFactor();
 testPolyvectorParallelogramForProductWithUnknownFactorIsSymbolic();

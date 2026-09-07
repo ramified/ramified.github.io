@@ -1655,8 +1655,8 @@
     }
 
     .sheaf-complex-snake-fast-arrow.is-selected {
-      color: var(--accent);
-      stroke-width: 2.25;
+      color: #2563c7;
+      stroke-width: 3.8;
     }
 
     .sheaf-complex-snake-fast-arrow[data-complex-chart-map-entry] {
@@ -1677,9 +1677,14 @@
     .sheaf-complex-snake-fast-marker {
       fill: none;
       stroke: currentColor;
-      stroke-width: 1.25;
+      stroke-width: 1.7;
       stroke-linecap: round;
       stroke-linejoin: round;
+    }
+
+    .sheaf-complex-snake-fast-marker.is-selected {
+      color: #2563c7;
+      stroke-width: 3.8;
     }
 
     .sheaf-complex-snake-fast-object,
@@ -1705,6 +1710,12 @@
     .sheaf-complex-snake-fast-button.is-selected {
       border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
       color: var(--accent);
+    }
+
+    .sheaf-complex-snake-fast-label.sheaf-complex-snake-fast-button:hover,
+    .sheaf-complex-snake-fast-label.sheaf-complex-snake-fast-button.is-selected {
+      border-color: color-mix(in srgb, #2563c7 62%, var(--border));
+      color: #2563c7;
     }
 
     .sheaf-complex-snake-fast-label {
@@ -4189,7 +4200,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js?v=20260903-1"></script>
 <script src="js/calculator_input_settings.js?v=20260903-1"></script>
-<script src="js/sheaf_complex_calculator.js?v=complex-chart-38"></script>
+<script src="js/sheaf_complex_calculator.js?v=complex-chart-41"></script>
 <script src="js/calculator_input_profiles.js?v=20260903-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260821-9"></script>

@@ -3964,8 +3964,8 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('data-i18n="setup.glueFlapTargetOnHover"'));
   assert.ok(/class="glue-flap-controls"[\s\S]*id="show-glue-flaps"[\s\S]*id="glue-flap-target-on-hover"/.test(minigameHtml));
   assert.ok(minigameHtml.indexOf('id="glue-flaps-row"') > minigameHtml.indexOf('id="gomoku-display-row"'));
-  assert.ok(minigameHtml.includes('js/i18n/ramified_minigames_locales.js?v=20260906-1'));
-  assert.ok(minigameHtml.includes('js/ramified_minigames_setup.js?v=20260906-2'));
+  assert.ok(minigameHtml.includes('js/i18n/ramified_minigames_locales.js?v=20260908-1'));
+  assert.ok(minigameHtml.includes('js/ramified_minigames_setup.js?v=20260908-1'));
   assert.ok(minigameHtml.includes('id="billiards-physics-profile"'));
   assert.ok(minigameHtml.includes('id="go-komi-row" data-mode-control="go"'));
   assert.ok(minigameHtml.includes('id="go-komi"'));
@@ -4683,6 +4683,9 @@ function makeElement(id, extra = {}) {
     getAttribute(name) {
       return this.attributes[name] || null;
     },
+    matches(selector) {
+      return selector === 'select[data-color]' && this.tagName === 'SELECT' && !!this.dataset.color;
+    },
     addEventListener(type, handler) {
       this.listeners[type] = handler;
     },
@@ -4707,6 +4710,7 @@ function makeElement(id, extra = {}) {
         ) {
           matches.push(node);
         }
+        if (selector === 'select[data-color]' && node.tagName === 'SELECT' && node.dataset.color) matches.push(node);
         (node.children || []).forEach(visit);
       };
       this.children.forEach(visit);
@@ -4842,6 +4846,8 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('boundary-glue-rows', { value: '15' }),
     makeElement('boundary-glue-cols', { value: '15' }),
     makeElement('gomoku-board-size', { value: '15' }),
+    makeElement('gomoku-black-controller', { value: 'human' }),
+    makeElement('gomoku-white-controller', { value: 'human' }),
     makeElement('display-card-body'),
     makeElement('gomoku-display-row'),
     makeElement('gomoku-display-style', { value: 'vertex' }),
@@ -4864,6 +4870,10 @@ function createHeadlessDomHarness(options = {}) {
       options: ['S', 'E', 'W', 'N', 'SE', 'SW', 'NW', 'NE'].map((value) => ({ value, textContent: '', hidden: false, disabled: false }))
     }),
     makeElement('connect-four-align-fall', { checked: true }),
+    makeElement('connect-four-red-controller', { value: 'human' }),
+    makeElement('connect-four-yellow-controller', { value: 'human' }),
+    makeElement('local-ai-pause-row', { hidden: true }),
+    makeElement('local-ai-pause'),
     makeElement('sokoban-object-size', { value: '70' }),
     makeElement('sokoban-object-size-value'),
     makeElement('sokoban-glow-inner', { value: '55' }),
@@ -6406,7 +6416,7 @@ async function testChineseCheckersLazyPresetModeSwitch() {
   const localGame = harness.context.module.exports;
   assert.strictEqual(harness.elements.get('surface-preset-select').value, 'octahedron-with-square-holes');
   assert.ok(
-    harness.elements.get('chinese-checkers-player-options').querySelectorAll('input[type=checkbox]').length > 0,
+    harness.elements.get('chinese-checkers-player-options').querySelectorAll('select[data-color]').length > 0,
     'Chinese Checkers player options are populated after the lazy preset loads'
   );
 
