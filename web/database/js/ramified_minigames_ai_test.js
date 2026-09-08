@@ -222,10 +222,80 @@ function testControllerUiAndStrategyContract() {
   assert.ok(html.includes('id="connect-four-yellow-controller"'));
   assert.ok(html.includes('id="local-ai-pause"'));
   assert.ok(html.includes('value="local-ai-challenging"'));
+  assert.ok(html.includes('id="chinese-checkers-ai-sight-style"'));
+  assert.ok(html.includes('id="chinese-checkers-ai-sight-duration"'));
+  assert.ok(html.includes('id="chinese-checkers-ai-sight-preview"'));
+  assert.ok(html.includes('<option value="rings" selected'));
+  assert.ok(html.includes('id="chinese-checkers-ai-sight-duration" min="200" max="1000" step="50" value="1000"'));
   const strategy = fs.readFileSync(require.resolve('../analysis/ramified_minigames_local_ai_strategy.md'), 'utf8');
   assert.ok(strategy.includes('routes are **not FIFO queues**'));
   assert.ok(strategy.includes('earliest occupied route position'));
   assert.ok(strategy.includes('No geometric-center or legal-hole-count bonus is permitted'));
+}
+
+function testChineseCheckersAiSightAndPauseReasonContract() {
+  const geom = { radius: 20, cells: [{ x: 10, y: 15 }, { x: 50, y: 15 }] };
+  const event = {
+    kind: 'chineseCheckersMove',
+    actor: 'ai',
+    color: 'red',
+    from: 0,
+    to: 1,
+    path: [0, 1],
+    segments: [{ from: 0, to: 1, path: [0, 1], transitions: [] }],
+    moveTime: 100,
+    jumpPause: 0,
+    leadInDuration: 1000,
+    duration: 1100
+  };
+  const leadIn = game.__test.chineseCheckersMoveAnimationFrame(geom, event, 0.5);
+  assert.strictEqual(leadIn.kind, 'lead-in');
+  assert.deepStrictEqual(leadIn.point, { x: 10, y: 15 });
+  const travel = game.__test.chineseCheckersMoveAnimationFrame(geom, event, 0.95);
+  assert.notStrictEqual(travel.kind, 'lead-in');
+  const humanFrame = game.__test.chineseCheckersMoveAnimationFrame(geom, { ...event, actor: 'human', leadInDuration: 0, duration: 100 }, 0.1);
+  assert.notStrictEqual(humanFrame.kind, 'lead-in', 'human Chinese Checkers moves do not receive an AI sight hold');
+  ['crosshair', 'corners', 'rings'].forEach((style) => {
+    const sight = game.__test.chineseCheckersAiSightGeometry({ x: 10, y: 15 }, 12, style, 0.25);
+    assert.strictEqual(sight.style, style);
+    assert.ok(sight.lines.length + sight.circles.length >= 4);
+  });
+  const sightAt = (progress, reducedMotion = false) => game.__test.chineseCheckersAiSightGeometry(
+    { x: 10, y: 15 },
+    12,
+    'rings',
+    progress,
+    reducedMotion
+  );
+  const near = (actual, expected, label) => assert.ok(Math.abs(actual - expected) < 0.001, `${label}: ${actual}`);
+  near(sightAt(0).scale, 1.95, 'sight begins large');
+  near(sightAt(0).alpha, 0, 'sight begins transparent');
+  near(sightAt(0.22).scale, 1.213, 'sight shrinks during fade-in');
+  near(sightAt(0.22).alpha, 0.88, 'sight reaches full opacity');
+  near(sightAt(0.56).scale, 1, 'sight settles at its normal size');
+  near(sightAt(0.82).scale, 1, 'sight holds at its normal size');
+  near(sightAt(0.91).scale, 0.9825, 'sight tightens slightly during fade-out');
+  near(sightAt(0.91).alpha, 0.44, 'sight fades evenly before travel');
+  near(sightAt(1).scale, 0.965, 'sight ends with a slight tightening');
+  near(sightAt(1).alpha, 0, 'sight is transparent when travel begins');
+  near(sightAt(0.22, true).scale, 1, 'reduced motion disables the shrink');
+  const settledRings = sightAt(0.56);
+  near(settledRings.circles[0].radius, 12 * 0.84, 'settled inner ring preserves its geometry');
+  near(settledRings.circles[1].radius, 12 * 1.26, 'settled outer ring preserves its geometry');
+  assert.strictEqual(game.__test.normalizeChineseCheckersAiSightStyle('unknown'), 'rings');
+  assert.strictEqual(game.__test.normalizeChineseCheckersAiSightDuration(100), 200);
+  assert.strictEqual(game.__test.normalizeChineseCheckersAiSightDuration(524), 500);
+  assert.strictEqual(game.__test.normalizeChineseCheckersAiSightDuration(1200), 1000);
+  assert.ok(game.__test.chineseCheckersMovingInfo({ color: 'red' }).includes('moving'));
+  game.__test.setLocalAiPauseReasonForTest('history');
+  assert.strictEqual(game.__test.resumeLocalAiAfterReplacementHumanMove(), true);
+  assert.strictEqual(game.__test.getLocalAiRuntimeState().pauseReason, '');
+  game.__test.setLocalAiPauseReasonForTest('manual');
+  assert.strictEqual(game.__test.resumeLocalAiAfterReplacementHumanMove(), false);
+  assert.strictEqual(game.__test.getLocalAiRuntimeState().pauseReason, 'manual');
+  game.__test.setLocalAiPauseReasonForTest('error');
+  assert.strictEqual(game.__test.resumeLocalAiAfterReplacementHumanMove(), false);
+  game.__test.setLocalAiPauseReasonForTest('');
 }
 
 function run() {
@@ -239,6 +309,7 @@ function run() {
   testConnectFourForcedWinAndCompleteDefense();
   testBundledPresetMoveLegality();
   testControllerUiAndStrategyContract();
+  testChineseCheckersAiSightAndPauseReasonContract();
   console.log('ramified_minigames_ai_test: all tests passed');
 }
 

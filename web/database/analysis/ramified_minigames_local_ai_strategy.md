@@ -136,3 +136,5 @@ Any later weight or pruning change must update this document and add a dated tun
 ### Tuning log
 
 - 2026-09-08: Initial challenging profile. Replaced the rejected FIFO Connect Four model with fixed transported routes and earliest-blocker pointers; removed center and shared-hole-count bonuses; added current, latent, poisoned, and unreachable threat classes.
+- 2026-09-08: Chinese Checkers AI moves now use a session-configurable source sight before travel. Animation status names the moving color until travel completes. History-induced pauses clear only after a successful replacement human move; manual and error pauses remain explicit.
+- 2026-09-08: The default Chinese Checkers AI source sight is now a 1000 ms concentric-target “soft lock-on”: it fades in while shrinking from 1.95× to its settled size, holds, then fades before travel. Reduced-motion rendering retains the fade but removes scaling. A completed placement-hint long press now commits its original tile on release and suppresses only the duplicate compatibility click.

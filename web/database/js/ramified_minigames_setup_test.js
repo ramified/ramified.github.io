@@ -3964,8 +3964,8 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('data-i18n="setup.glueFlapTargetOnHover"'));
   assert.ok(/class="glue-flap-controls"[\s\S]*id="show-glue-flaps"[\s\S]*id="glue-flap-target-on-hover"/.test(minigameHtml));
   assert.ok(minigameHtml.indexOf('id="glue-flaps-row"') > minigameHtml.indexOf('id="gomoku-display-row"'));
-  assert.ok(minigameHtml.includes('js/i18n/ramified_minigames_locales.js?v=20260908-1'));
-  assert.ok(minigameHtml.includes('js/ramified_minigames_setup.js?v=20260908-1'));
+  assert.ok(minigameHtml.includes('js/i18n/ramified_minigames_locales.js?v=20260908-2'));
+  assert.ok(minigameHtml.includes('js/ramified_minigames_setup.js?v=20260908-2'));
   assert.ok(minigameHtml.includes('id="billiards-physics-profile"'));
   assert.ok(minigameHtml.includes('id="go-komi-row" data-mode-control="go"'));
   assert.ok(minigameHtml.includes('id="go-komi"'));
@@ -5639,12 +5639,63 @@ async function testTimedPlacementReachAssistInteractions() {
   canvas.listeners.click(shortClick);
   assert.strictEqual(shortClick.defaultPrevented, false, 'a short press must retain normal clicks');
 
-  canvas.listeners.pointerdown(pointerEvent(144, 144));
+  canvas.listeners.pointerdown(pointerEvent(57, 57));
   advanceTimers(500);
-  canvas.listeners.pointerup(pointerEvent(144, 144));
-  const heldClick = pointerEvent(144, 144);
+  const heldRelease = pointerEvent(57, 57);
+  canvas.listeners.pointerup(heldRelease);
+  assert.strictEqual(heldRelease.defaultPrevented, true, 'a completed Go dwell commits its release directly');
+  elements.get('export-state').listeners.click();
+  const afterHeldRelease = JSON.parse(elements.get('debug-export-output').value);
+  assert.strictEqual(afterHeldRelease.stones.length, exported.stones.length + 1, 'long-press release places the Go stone');
+  assert.ok(afterHeldRelease.stones.some((stone) => stone.row === 1 && stone.col === 1 && stone.color === 'white'));
+  const heldClick = pointerEvent(57, 57);
   canvas.listeners.click(heldClick);
-  assert.strictEqual(heldClick.defaultPrevented, true, 'a completed press dwell suppresses its follow-up click');
+  assert.strictEqual(heldClick.defaultPrevented, true, 'the compatibility click after a committed dwell is suppressed');
+  elements.get('export-state').listeners.click();
+  assert.strictEqual(JSON.parse(elements.get('debug-export-output').value).stones.length, afterHeldRelease.stones.length, 'release placement is committed exactly once');
+
+  const gomokuHarness = createHeadlessDomHarness();
+  importHeadlessStatus(gomokuHarness.elements, {
+    gameMode: 'gomoku',
+    preset: {
+      label: 'long press Gomoku input', lattice: 'square', rows: 3, cols: 3, surface: 'test',
+      removedTiles: [], cutEdges: [], gluedEdges: []
+    },
+    phase: 'ready', turn: 'black', round: 0, nextStoneId: 1,
+    stones: [], removed: [], queue: { eventIndex: 0, stepPaused: false, events: [] }
+  });
+  for (let index = 0; index < 5; index += 1) await new Promise((resolve) => setImmediate(resolve));
+  gomokuHarness.canvas.listeners.pointerdown(pointerEvent(144, 144));
+  gomokuHarness.advanceTimers(500);
+  const gomokuRelease = pointerEvent(144, 144);
+  gomokuHarness.canvas.listeners.pointerup(gomokuRelease);
+  gomokuHarness.elements.get('export-state').listeners.click();
+  const gomokuExport = JSON.parse(gomokuHarness.elements.get('debug-export-output').value);
+  assert.strictEqual(gomokuRelease.defaultPrevented, true, 'a completed Gomoku dwell commits its release directly');
+  assert.strictEqual(gomokuExport.stones.length, 1, 'long-press release places the Gomoku stone');
+  assert.strictEqual(gomokuExport.stones[0].color, 'black');
+
+  const connectFourHarness = createHeadlessDomHarness();
+  importHeadlessStatus(connectFourHarness.elements, {
+    gameMode: 'connect-four',
+    preset: {
+      label: 'long press Connect Four input', lattice: 'square', rows: 3, cols: 3, surface: 'test',
+      removedTiles: [], cutEdges: [], gluedEdges: [], connectFourHoles: [{ row: 1, col: 2 }]
+    },
+    phase: 'ready', turn: 'red', round: 0, nextTokenId: 1, fallDirName: 'S',
+    holes: [{ row: 1, col: 2 }], tokens: [],
+    removed: [], queue: { eventIndex: 0, stepPaused: false, events: [] }
+  });
+  for (let index = 0; index < 5; index += 1) await new Promise((resolve) => setImmediate(resolve));
+  connectFourHarness.canvas.listeners.pointerdown(pointerEvent(144, 57));
+  connectFourHarness.advanceTimers(500);
+  const connectFourRelease = pointerEvent(144, 57);
+  connectFourHarness.canvas.listeners.pointerup(connectFourRelease);
+  connectFourHarness.elements.get('export-state').listeners.click();
+  const connectFourExport = JSON.parse(connectFourHarness.elements.get('debug-export-output').value);
+  assert.strictEqual(connectFourRelease.defaultPrevented, true, 'a completed Connect Four dwell commits its release directly');
+  assert.strictEqual(connectFourExport.tokens.length, 1, 'long-press release drops the Connect Four token');
+  assert.strictEqual(connectFourExport.tokens[0].color, 'red');
 }
 
 async function testAnimatedPlacementRayHintInteractions() {

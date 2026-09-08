@@ -451,6 +451,9 @@
   const CHINESE_CHECKERS_JUMP_RULE_DEFAULT = CHINESE_CHECKERS_JUMP_RULES.UNLIMITED;
   const CHINESE_CHECKERS_MOVE_TIME_DEFAULT = 100;
   const CHINESE_CHECKERS_JUMP_PAUSE_DEFAULT = 120;
+  const CHINESE_CHECKERS_AI_SIGHT_DURATION_DEFAULT = 1000;
+  const CHINESE_CHECKERS_AI_SIGHT_STYLES = new Set(['crosshair', 'corners', 'rings']);
+  const LOCAL_AI_PAUSE_REASONS = Object.freeze({ MANUAL: 'manual', HISTORY: 'history', ERROR: 'error' });
   const REVERSI_INVALID_MARK_DURATION = 460;
   const ONLINE_TURN_FEEDBACK_DURATION_DEFAULT = 1000;
   const ONLINE_TURN_FEEDBACK_DURATION_MIN = 600;
@@ -765,8 +768,10 @@
   let localAiRevision = 0;
   let localAiTimer = null;
   let localAiThinking = false;
-  let localAiPaused = false;
+  let localAiPauseReason = '';
   let localAiDiagnostics = null;
+  let chineseCheckersAiSightPreview = null;
+  let chineseCheckersAiSightPreviewFrame = null;
   const localAiSeed = Math.floor(Math.random() * 0xffffffff) >>> 0;
   let canvasDisplayMode = 'normal';
   let fullscreenReturnMode = 'normal';
@@ -943,6 +948,10 @@
     refs.chineseCheckersMoveTimeValue = document.getElementById('chinese-checkers-move-time-value');
     refs.chineseCheckersJumpPause = document.getElementById('chinese-checkers-jump-pause');
     refs.chineseCheckersJumpPauseValue = document.getElementById('chinese-checkers-jump-pause-value');
+    refs.chineseCheckersAiSightStyle = document.getElementById('chinese-checkers-ai-sight-style');
+    refs.chineseCheckersAiSightDuration = document.getElementById('chinese-checkers-ai-sight-duration');
+    refs.chineseCheckersAiSightDurationValue = document.getElementById('chinese-checkers-ai-sight-duration-value');
+    refs.chineseCheckersAiSightPreview = document.getElementById('chinese-checkers-ai-sight-preview');
     refs.chineseCheckersFullHints = document.getElementById('chinese-checkers-full-hints');
     refs.chineseCheckersJumpRule = document.getElementById('chinese-checkers-jump-rule');
     refs.chineseCheckersPlayerOptions = document.getElementById('chinese-checkers-player-options');
@@ -1205,6 +1214,9 @@
       .forEach((control) => control.addEventListener('change', handleLocalAiControllerChange));
     if (refs.chineseCheckersMoveTime) refs.chineseCheckersMoveTime.addEventListener('input', syncChineseCheckersTimingOutput);
     if (refs.chineseCheckersJumpPause) refs.chineseCheckersJumpPause.addEventListener('input', syncChineseCheckersTimingOutput);
+    if (refs.chineseCheckersAiSightDuration) refs.chineseCheckersAiSightDuration.addEventListener('input', syncChineseCheckersAiSightOutput);
+    if (refs.chineseCheckersAiSightStyle) refs.chineseCheckersAiSightStyle.addEventListener('change', render);
+    if (refs.chineseCheckersAiSightPreview) refs.chineseCheckersAiSightPreview.addEventListener('click', previewChineseCheckersAiSight);
     if (refs.chineseCheckersFullHints) refs.chineseCheckersFullHints.addEventListener('change', handleChineseCheckersFullHintsChange);
     if (refs.chineseCheckersJumpRule) refs.chineseCheckersJumpRule.addEventListener('change', handleChineseCheckersJumpRuleChange);
     if (refs.chineseCheckersPlayerOptions) refs.chineseCheckersPlayerOptions.addEventListener('change', handleChineseCheckersPlayerOptionsChange);
@@ -1367,6 +1379,7 @@
     syncSokobanEnergyGlowOutput();
     syncSokobanBeamOutput();
     syncChineseCheckersTimingOutput();
+    syncChineseCheckersAiSightOutput();
     syncPlacementPieceSizeOutput();
     syncOnlineTurnFeedbackDurationOutput();
     syncHexNeighborHintOutputs();
@@ -3479,6 +3492,7 @@
 
   function resetToPreview() {
     cancelLocalAiWork();
+    clearChineseCheckersAiSightPreview();
     cancelHexHomologyRequest();
     clearHexNeighborHint(false);
     hideCanvasStartPrompt();
@@ -3498,7 +3512,7 @@
     }
     stopPlayback();
     cancelLocalAiWork();
-    localAiPaused = false;
+    localAiPauseReason = '';
     resetSwipeGesture();
     resetFideChessDrag();
     clearFideChessPendingPromotion({ render: false });
@@ -4536,7 +4550,7 @@
     }
     stopPlayback();
     cancelLocalAiWork();
-    localAiPaused = false;
+    localAiPauseReason = '';
     resetSwipeGesture();
     resetFideChessDrag();
     clearFideChessPendingPromotion({ render: false });
@@ -4600,7 +4614,7 @@
 
   function stopGameFromUi() {
     cancelLocalAiWork();
-    localAiPaused = false;
+    localAiPauseReason = '';
     const previous = game;
     hideCanvasStartPrompt();
     clearCanvasStartPromptTimer();
@@ -6227,8 +6241,14 @@
   function endPlacementReachPress(event) {
     if (!placementReachCandidate || placementReachCandidate.pointerId !== event.pointerId) return;
     const completedDwell = placementReachSuppressClick;
+    const pressedIndex = placementReachCandidate.index;
+    const releaseTarget = completedDwell ? placementReachTargetAtEvent(event) : null;
+    const shouldCommit = !!releaseTarget && releaseTarget.index === pressedIndex;
     clearPlacementReachAssist(true);
-    if (completedDwell) suppressUpcomingCanvasClick();
+    if (!completedDwell) return;
+    if (shouldCommit) dispatchCanvasClick(event);
+    suppressUpcomingCanvasClick();
+    if (event.preventDefault) event.preventDefault();
   }
 
   function clearPlacementReachTimers() {
@@ -8340,11 +8360,14 @@
     placementFeedbackFrameId = null;
   }
 
-  function startChineseCheckersMoveAnimation(result) {
+  function startChineseCheckersMoveAnimation(result, options = {}) {
     if (!result || !result.changed || !result.marble || !result.move) return;
+    clearChineseCheckersAiSightPreview();
     const segments = cloneChineseCheckerMoveSegments(result.move.segments);
+    const actor = options.actor === 'ai' ? 'ai' : 'human';
     const event = {
       kind: 'chineseCheckersMove',
+      actor,
       marbleId: result.marble.id,
       color: result.marble.color,
       from: result.marble.from,
@@ -8352,7 +8375,9 @@
       path: (result.move.path || [result.marble.from, result.marble.index]).slice(),
       segments,
       moveTime: selectedChineseCheckersMoveTime(),
-      jumpPause: selectedChineseCheckersJumpPause()
+      jumpPause: selectedChineseCheckersJumpPause(),
+      leadInDuration: actor === 'ai' ? selectedChineseCheckersAiSightDuration() : 0,
+      sightStyle: selectedChineseCheckersAiSightStyle()
     };
     event.duration = eventDuration(event);
     currentAnimation = {
@@ -8642,6 +8667,7 @@
       || event.kind === 'billiardsShot'
     ) {
       currentAnimation = null;
+      if (event.kind === 'chineseCheckersMove') syncStatusForCurrentGame();
       render();
       showLocalReplayPrompt();
       syncControls();
@@ -9905,6 +9931,10 @@
       if (event.preventDefault) event.preventDefault();
       return;
     }
+    dispatchCanvasClick(event);
+  }
+
+  function dispatchCanvasClick(event) {
     clearPlacementReachAssist();
     if (handleSetupCanvasStartClick(event)) return;
     if (isBilliardsGame(game)) {
@@ -10249,6 +10279,7 @@
     }
     pushUndoSnapshot(`Gomoku ${result.stone.color} at ${target.label}`, { actor: 'human' });
     game = result.state;
+    resumeLocalAiAfterReplacementHumanMove();
     if (game.phase === 'gameover') {
       if (game.winner) syncStatus(`${gomokuColorLabel(game.winner)} wins`, `${game.round} move${game.round === 1 ? '' : 's'}`, 'over');
       else syncStatus('Gomoku draw', `${game.round} moves`, 'over');
@@ -10346,6 +10377,7 @@
     clearSetupAlert();
     pushUndoSnapshot(`Connect Four ${result.token.color} from ${target.label}`, { actor: 'human' });
     game = result.state;
+    resumeLocalAiAfterReplacementHumanMove();
     startConnectFourDropAnimation(result);
     if (game.phase === 'gameover') {
       if (game.winner) syncStatus(`${connectFourColorLabel(game.winner)} wins`, `${game.round} drop${game.round === 1 ? '' : 's'}`, 'over');
@@ -10700,6 +10732,7 @@
     }
     pushUndoSnapshot(`Chinese Checkers ${game.turn} move`, { actor: 'human' });
     game = result.state;
+    resumeLocalAiAfterReplacementHumanMove();
     startChineseCheckersMoveAnimation(result);
     syncStatusForCurrentGame();
     render();
@@ -10984,8 +11017,9 @@
       syncStatus('Chinese Checkers jump rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
       return;
     }
-    pushUndoSnapshot(`Chinese Checkers ${game.turn} jump`);
+    pushUndoSnapshot(`Chinese Checkers ${game.turn} jump`, { actor: 'human' });
     game = result.state;
+    resumeLocalAiAfterReplacementHumanMove();
     startChineseCheckersMoveAnimation(result);
     syncStatusForCurrentGame();
     render();
@@ -11340,6 +11374,7 @@
 
   function restoreHistorySnapshot(snapshot, status, info) {
     stopPlayback();
+    clearChineseCheckersAiSightPreview();
     resetLocalResultPromptDismissal();
     clearLianliankanHint();
     clearLianliankanMatchEffects();
@@ -11376,7 +11411,7 @@
       return;
     }
     const localAiHistory = !options.onlineApproved && localAiConfigured();
-    if (localAiHistory) cancelLocalAiWork({ pause: true });
+    if (localAiHistory) cancelLocalAiWork({ pauseReason: LOCAL_AI_PAUSE_REASONS.HISTORY });
     const snapshot = undoStack.pop();
     if (!snapshot) {
       syncControls();
@@ -11425,7 +11460,7 @@
       syncControls();
       return;
     }
-    if (!options.onlineApproved && localAiConfigured()) cancelLocalAiWork({ pause: true });
+    if (!options.onlineApproved && localAiConfigured()) cancelLocalAiWork({ pauseReason: LOCAL_AI_PAUSE_REASONS.HISTORY });
     pushUndoSnapshotForRedo(snapshot.label || 'previous step', { actor: snapshot.actor === 'ai-group' ? 'ai-group' : snapshot.actor });
     restoreHistorySnapshot(
       snapshot,
@@ -14183,6 +14218,16 @@
       return;
     }
     if (isChineseCheckersGame(game)) {
+      const movingEvent = currentAnimation && currentAnimation.event && currentAnimation.event.kind === 'chineseCheckersMove'
+        ? currentAnimation.event : null;
+      if (movingEvent) {
+        syncStatus(
+          localizedMoveStatus(game, game.round || 0),
+          chineseCheckersMovingInfo(movingEvent),
+          'moving'
+        );
+        return;
+      }
       if (game.phase === 'setup') {
         syncStatus(localizedPreviewTitle(game.preset, GAME_MODES.CHINESE_CHECKERS), previewInfo(game.preset), 'setup');
         return;
@@ -19716,6 +19761,7 @@
   }
 
   function drawPlacementAnimationOverlays(ctx, geom) {
+    drawChineseCheckersAiSightPreview(ctx, geom);
     if (!currentAnimation || !currentAnimation.event) return;
     const event = currentAnimation.event;
     if (event.kind === 'reversiFlip') {
@@ -20051,6 +20097,11 @@
       index: event.to,
       color: event.color
     };
+    if (frame.kind === 'lead-in') {
+      drawPlacementPieceAtPoint(ctx, geom, frame.point, piece);
+      drawChineseCheckersAiSight(ctx, geom, frame.point, event.color, event.sightStyle, frame.sightProgress);
+      return;
+    }
     if (frame.kind === 'glued') {
       drawGluedPlacementPiece(ctx, geom, frame.transition, frame.progress, piece);
       return;
@@ -20144,6 +20195,15 @@
       ? event.duration
       : eventDuration(event);
     let cursor = progress * totalDuration;
+    const leadInDuration = Number.isFinite(event.leadInDuration) ? Math.max(0, event.leadInDuration) : 0;
+    if (leadInDuration > 0 && cursor < leadInDuration) {
+      return {
+        kind: 'lead-in',
+        point: placementPiecePoint(geom, event.from),
+        sightProgress: Math.max(0, Math.min(1, cursor / leadInDuration))
+      };
+    }
+    cursor = Math.max(0, cursor - leadInDuration);
     for (let index = 0; index < segments.length; index += 1) {
       const travel = Math.max(1, chineseCheckersSegmentTransitionCount(segments[index]) * moveTime);
       if (cursor <= travel || index === segments.length - 1) {
@@ -20165,6 +20225,109 @@
       }
     }
     return null;
+  }
+
+  function chineseCheckersAiSightGeometry(point, radius, style, rawProgress = 0, reducedMotion = false) {
+    if (!point || !Number.isFinite(radius) || radius <= 0) return null;
+    const normalizedStyle = normalizeChineseCheckersAiSightStyle(style);
+    const progress = Math.max(0, Math.min(1, rawProgress || 0));
+    const enter = Math.max(0, Math.min(1, progress / 0.56));
+    const exit = Math.max(0, Math.min(1, (progress - 0.82) / 0.18));
+    const scale = reducedMotion
+      ? 1
+      : 1 + 0.95 * (1 - easeOut(enter)) - 0.035 * easeInOut(exit);
+    const alpha = 0.88
+      * easeInOut(Math.max(0, Math.min(1, progress / 0.22)))
+      * (1 - easeInOut(exit));
+    const outer = radius * 1.46;
+    const inner = radius * 0.88;
+    const lines = [];
+    const circles = [];
+    if (normalizedStyle === 'crosshair') {
+      circles.push({ radius: radius * 1.02 });
+      for (let arm = 0; arm < 4; arm += 1) {
+        const angle = arm * Math.PI / 2;
+        lines.push({
+          x1: point.x + Math.cos(angle) * inner,
+          y1: point.y + Math.sin(angle) * inner,
+          x2: point.x + Math.cos(angle) * outer,
+          y2: point.y + Math.sin(angle) * outer
+        });
+      }
+    } else if (normalizedStyle === 'corners') {
+      const corner = radius * 1.12;
+      const arm = radius * 0.42;
+      [-1, 1].forEach((sx) => [-1, 1].forEach((sy) => {
+        lines.push({ x1: point.x + sx * corner, y1: point.y + sy * corner, x2: point.x + sx * (corner - arm), y2: point.y + sy * corner });
+        lines.push({ x1: point.x + sx * corner, y1: point.y + sy * corner, x2: point.x + sx * corner, y2: point.y + sy * (corner - arm) });
+      }));
+    } else {
+      circles.push({ radius: radius * 0.84 });
+      circles.push({ radius: radius * 1.26 });
+      for (let tick = 0; tick < 4; tick += 1) {
+        const angle = tick * Math.PI / 2;
+        lines.push({
+          x1: point.x + Math.cos(angle) * radius * 1.05,
+          y1: point.y + Math.sin(angle) * radius * 1.05,
+          x2: point.x + Math.cos(angle) * radius * 1.42,
+          y2: point.y + Math.sin(angle) * radius * 1.42
+        });
+      }
+    }
+    const scaledLines = lines.map((line) => ({
+      x1: point.x + (line.x1 - point.x) * scale,
+      y1: point.y + (line.y1 - point.y) * scale,
+      x2: point.x + (line.x2 - point.x) * scale,
+      y2: point.y + (line.y2 - point.y) * scale
+    }));
+    return {
+      style: normalizedStyle,
+      point: { x: point.x, y: point.y },
+      progress,
+      scale,
+      alpha,
+      lines: scaledLines,
+      circles: circles.map((circle) => ({ radius: circle.radius * scale }))
+    };
+  }
+
+  function drawChineseCheckersAiSight(ctx, geom, point, color, style, progress) {
+    const geometry = chineseCheckersAiSightGeometry(
+      point,
+      placementPieceBaseRadius(geom),
+      style,
+      progress,
+      placementReachReducedMotion()
+    );
+    if (!geometry) return;
+    const colors = placementPieceColors(color);
+    ctx.save();
+    ctx.globalAlpha *= geometry.alpha;
+    ctx.strokeStyle = colors.fallback;
+    ctx.lineWidth = Math.max(2.25, geom.radius * 0.075);
+    ctx.lineCap = 'round';
+    ctx.shadowColor = colors.stroke;
+    ctx.shadowBlur = Math.max(3, geom.radius * 0.14);
+    geometry.circles.forEach((circle) => {
+      ctx.beginPath();
+      ctx.arc(geometry.point.x, geometry.point.y, circle.radius, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+    geometry.lines.forEach((line) => {
+      ctx.beginPath();
+      ctx.moveTo(line.x1, line.y1);
+      ctx.lineTo(line.x2, line.y2);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function drawChineseCheckersAiSightPreview(ctx, geom) {
+    const preview = chineseCheckersAiSightPreview;
+    if (!preview || !isChineseCheckersGame(game)) return;
+    const point = placementPiecePoint(geom, preview.index);
+    const progress = Math.max(0, Math.min(1, (now() - preview.startedAt) / Math.max(1, preview.duration)));
+    drawChineseCheckersAiSight(ctx, geom, point, preview.color, preview.style, progress);
   }
 
   function drawChineseCheckersPauseMarker(ctx, geom, point, rawProgress) {
@@ -27915,6 +28078,12 @@
     return localizedRoleLabel(normalizePlacementColor(color) || 'unknown');
   }
 
+  function chineseCheckersMovingInfo(event) {
+    return tk('runtime.checkersMoving', '{{side}} is moving', {
+      side: chineseCheckersColorLabel(event && event.color)
+    });
+  }
+
   function chineseCheckersTurnLabel(state) {
     if (isChineseCheckersJumping(state)) {
       return onlineRolePlayerLabel(state.turn, chineseCheckersColorLabel(state.turn));
@@ -27975,8 +28144,9 @@
     if (!isChineseCheckersGame(game) || !isChineseCheckersJumping(game) || currentAnimation) return;
     if (rejectOnlineLocalAction('online Chinese Checkers end jump blocked')) return;
     const role = game.turn;
-    pushUndoSnapshot(`Chinese Checkers ${game.turn} end jump`);
+    pushUndoSnapshot(`Chinese Checkers ${game.turn} end jump`, { actor: 'human' });
     game = finishChineseCheckersJump(game);
+    resumeLocalAiAfterReplacementHumanMove();
     syncStatusForCurrentGame();
     render();
     syncControls();
@@ -27987,6 +28157,7 @@
       role
     });
     if (refs.canvas) refs.canvas.focus();
+    syncLocalAiAfterStableTurn();
   }
 
   function finishChineseCheckersJump(sourceState) {
@@ -31970,6 +32141,7 @@
 
   function syncChineseCheckersControls(modeChineseCheckers) {
     syncChineseCheckersTimingOutput();
+    syncChineseCheckersAiSightOutput();
     syncChineseCheckersPlayerOptions(modeChineseCheckers);
     if (refs.chineseCheckersJumpRule) {
       if (isChineseCheckersGame(game)) refs.chineseCheckersJumpRule.value = normalizeChineseCheckersJumpRule(game.jumpRule);
@@ -31979,6 +32151,11 @@
     if (refs.chineseCheckersEndJumpRow) refs.chineseCheckersEndJumpRow.hidden = !modeChineseCheckers || !activeJump;
     if (refs.chineseCheckersEndJump) refs.chineseCheckersEndJump.disabled = !modeChineseCheckers || !activeJump || !!currentAnimation;
     if (refs.chineseCheckersFullHints) refs.chineseCheckersFullHints.disabled = !!activeJump;
+    if (refs.chineseCheckersAiSightStyle) refs.chineseCheckersAiSightStyle.disabled = !modeChineseCheckers || !!currentAnimation;
+    if (refs.chineseCheckersAiSightDuration) refs.chineseCheckersAiSightDuration.disabled = !modeChineseCheckers || !!currentAnimation;
+    if (refs.chineseCheckersAiSightPreview) {
+      refs.chineseCheckersAiSightPreview.disabled = !modeChineseCheckers || !!currentAnimation || !game || !(game.marbles || []).length;
+    }
   }
 
   function syncChineseCheckersPlayerOptions(modeChineseCheckers) {
@@ -32121,6 +32298,68 @@
     return !refs.highlightNewBoxes || !!refs.highlightNewBoxes.checked;
   }
 
+  function normalizeChineseCheckersAiSightStyle(value) {
+    const style = String(value || '').trim().toLowerCase();
+    return CHINESE_CHECKERS_AI_SIGHT_STYLES.has(style) ? style : 'rings';
+  }
+
+  function selectedChineseCheckersAiSightStyle() {
+    return normalizeChineseCheckersAiSightStyle(refs.chineseCheckersAiSightStyle && refs.chineseCheckersAiSightStyle.value);
+  }
+
+  function selectedChineseCheckersAiSightDuration() {
+    return normalizeChineseCheckersAiSightDuration(
+      refs.chineseCheckersAiSightDuration ? Number(refs.chineseCheckersAiSightDuration.value) : CHINESE_CHECKERS_AI_SIGHT_DURATION_DEFAULT
+    );
+  }
+
+  function normalizeChineseCheckersAiSightDuration(value) {
+    const clamped = clampInteger(value, 200, 1000, CHINESE_CHECKERS_AI_SIGHT_DURATION_DEFAULT);
+    return Math.max(200, Math.min(1000, Math.round(clamped / 50) * 50));
+  }
+
+  function syncChineseCheckersAiSightOutput() {
+    if (refs.chineseCheckersAiSightStyle) refs.chineseCheckersAiSightStyle.value = selectedChineseCheckersAiSightStyle();
+    if (refs.chineseCheckersAiSightDuration && refs.chineseCheckersAiSightDurationValue) {
+      refs.chineseCheckersAiSightDuration.value = String(selectedChineseCheckersAiSightDuration());
+      refs.chineseCheckersAiSightDurationValue.textContent = `${refs.chineseCheckersAiSightDuration.value} ms`;
+    }
+  }
+
+  function clearChineseCheckersAiSightPreview(shouldRender = false) {
+    chineseCheckersAiSightPreview = null;
+    if (chineseCheckersAiSightPreviewFrame != null) cancelFrame(chineseCheckersAiSightPreviewFrame);
+    chineseCheckersAiSightPreviewFrame = null;
+    if (shouldRender) render();
+  }
+
+  function previewChineseCheckersAiSight() {
+    if (!isChineseCheckersGame(game) || currentAnimation) return;
+    const marble = (game.marbles || []).find((item) => item.color === game.turn) || (game.marbles || [])[0];
+    if (!marble) return;
+    clearChineseCheckersAiSightPreview();
+    chineseCheckersAiSightPreview = {
+      index: marble.index,
+      color: marble.color,
+      style: selectedChineseCheckersAiSightStyle(),
+      duration: selectedChineseCheckersAiSightDuration(),
+      startedAt: now()
+    };
+    tickChineseCheckersAiSightPreview();
+  }
+
+  function tickChineseCheckersAiSightPreview() {
+    chineseCheckersAiSightPreviewFrame = null;
+    if (!chineseCheckersAiSightPreview) return;
+    const elapsed = now() - chineseCheckersAiSightPreview.startedAt;
+    if (elapsed >= chineseCheckersAiSightPreview.duration) {
+      clearChineseCheckersAiSightPreview(true);
+      return;
+    }
+    render();
+    chineseCheckersAiSightPreviewFrame = requestFrame(tickChineseCheckersAiSightPreview);
+  }
+
   function ensureChineseCheckersControllerPreset(preset, available = chineseCheckersAvailablePlayerColors(preset)) {
     const key = chineseCheckersPlayerSelectionKey(preset, available);
     if (chineseCheckersControllerPresetKey === key) return;
@@ -32183,20 +32422,26 @@
       return;
     }
     cancelLocalAiWork();
-    localAiPaused = false;
+    localAiPauseReason = '';
     syncControls();
   }
 
   function toggleLocalAiPaused() {
     if (!localAiConfigured()) return;
-    if (localAiPaused) {
-      localAiPaused = false;
+    if (localAiPauseReason) {
+      localAiPauseReason = '';
       syncLocalAiAfterStableTurn();
     } else {
-      cancelLocalAiWork({ pause: true });
+      cancelLocalAiWork({ pauseReason: LOCAL_AI_PAUSE_REASONS.MANUAL });
       syncStatus(tk('ai.paused', 'Local AI paused'), localAiSupportedState() ? localizedGameName(gameModeValue(game)) : '', 'ready');
     }
     syncControls();
+  }
+
+  function resumeLocalAiAfterReplacementHumanMove() {
+    if (localAiPauseReason !== LOCAL_AI_PAUSE_REASONS.HISTORY) return false;
+    localAiPauseReason = '';
+    return true;
   }
 
   function syncLocalAiControls() {
@@ -32212,7 +32457,7 @@
     if (refs.localAiPauseRow) refs.localAiPauseRow.hidden = !configured || !game || game.phase === 'setup' || game.phase === 'gameover' || onlineIsInRoom();
     if (refs.localAiPause) {
       refs.localAiPause.disabled = !configured || !!currentAnimation;
-      refs.localAiPause.textContent = localAiPaused ? tk('ai.resume', 'Resume AI') : tk('ai.pause', 'Pause AI');
+      refs.localAiPause.textContent = localAiPauseReason ? tk('ai.resume', 'Resume AI') : tk('ai.pause', 'Pause AI');
     }
   }
 
@@ -32222,7 +32467,12 @@
     if (localAiTimer != null && typeof window !== 'undefined') window.clearTimeout(localAiTimer);
     localAiTimer = null;
     localAiThinking = false;
-    if (options.pause) localAiPaused = true;
+    if (options.pauseReason) {
+      const preserveExisting = options.pauseReason === LOCAL_AI_PAUSE_REASONS.HISTORY
+        && localAiPauseReason
+        && localAiPauseReason !== LOCAL_AI_PAUSE_REASONS.HISTORY;
+      if (!preserveExisting) localAiPauseReason = options.pauseReason;
+    }
   }
 
   function ensureLocalAiWorker() {
@@ -32253,7 +32503,7 @@
   }
 
   function scheduleLocalAiTurn(delay = 80) {
-    if (!game || currentAnimation || localAiPaused || localAiThinking || onlineIsInRoom() || !localAiOwnsCurrentTurn()) return;
+    if (!game || currentAnimation || localAiPauseReason || localAiThinking || onlineIsInRoom() || !localAiOwnsCurrentTurn()) return;
     const requestId = ++localAiRequestSerial;
     const revision = localAiRevision;
     const hash = localAiPositionHash(game);
@@ -32262,7 +32512,7 @@
     syncThinkingControls();
     const run = () => {
       localAiTimer = null;
-      if (requestId !== localAiRequestSerial || revision !== localAiRevision || !localAiOwnsCurrentTurn() || localAiPaused) {
+      if (requestId !== localAiRequestSerial || revision !== localAiRevision || !localAiOwnsCurrentTurn() || localAiPauseReason) {
         localAiThinking = false;
         syncControls();
         return;
@@ -32316,7 +32566,7 @@
       || message.revision !== localAiRevision
       || message.positionHash !== localAiPositionHash(game)
       || !localAiOwnsCurrentTurn()
-      || localAiPaused) return;
+      || localAiPauseReason) return;
     localAiThinking = false;
     localAiDiagnostics = message.result && message.result.diagnostics || null;
     const move = message.result && message.result.move;
@@ -32328,7 +32578,7 @@
   }
 
   function failLocalAiMove() {
-    cancelLocalAiWork({ pause: true });
+    cancelLocalAiWork({ pauseReason: LOCAL_AI_PAUSE_REASONS.ERROR });
     syncStatus(tk('ai.unavailable', 'Local AI unavailable'), tk('ai.errorInfo', 'The AI was paused; the current game is unchanged.'), 'warn');
     syncControls();
   }
@@ -32362,7 +32612,7 @@
       if (!result.changed) return false;
       pushUndoSnapshot(`Local AI Chinese Checkers ${result.marble.color}`, { actor: 'ai' });
       game = result.state;
-      startChineseCheckersMoveAnimation(result);
+      startChineseCheckersMoveAnimation(result, { actor: 'ai' });
       syncStatusForCurrentGame();
       render();
       refreshDebugExportIfNeeded();
@@ -32376,7 +32626,7 @@
       .filter(Boolean)
       .forEach((control) => { control.value = HUMAN_CONTROLLER; });
     chineseCheckersControllers.forEach((_value, color) => chineseCheckersControllers.set(color, HUMAN_CONTROLLER));
-    localAiPaused = false;
+    localAiPauseReason = '';
     cancelLocalAiWork();
   }
 
@@ -32413,10 +32663,11 @@
     if (event.kind === 'chineseCheckersMove') {
       const moveTime = Number.isFinite(event.moveTime) ? event.moveTime : selectedChineseCheckersMoveTime();
       const jumpPause = Number.isFinite(event.jumpPause) ? event.jumpPause : selectedChineseCheckersJumpPause();
+      const leadInDuration = Number.isFinite(event.leadInDuration) ? Math.max(0, event.leadInDuration) : 0;
       const segments = Array.isArray(event.segments) && event.segments.length ? event.segments : [];
       const steps = chineseCheckersMoveTransitionCount(segments);
       const pauses = Math.max(0, segments.length - 1);
-      return Math.max(80, (Math.max(1, steps) * moveTime) + (pauses * jumpPause));
+      return Math.max(80, leadInDuration + (Math.max(1, steps) * moveTime) + (pauses * jumpPause));
     }
     if (event.kind === 'fideChessMove') {
       const steps = fideChessAnimationStepCount(event);
@@ -33307,13 +33558,23 @@
       getLocalAiDiagnostics() { return localAiDiagnostics ? cloneValue(localAiDiagnostics) : null; },
       getLocalAiRuntimeState() {
         return {
-          paused: localAiPaused,
+          paused: !!localAiPauseReason,
+          pauseReason: localAiPauseReason,
           thinking: localAiThinking,
           revision: localAiRevision,
           requestId: localAiRequestSerial,
           positionHash: game ? localAiPositionHash(game) : ''
         };
       },
+      setLocalAiPauseReasonForTest(value) {
+        localAiPauseReason = Object.values(LOCAL_AI_PAUSE_REASONS).includes(value) ? value : '';
+      },
+      resumeLocalAiAfterReplacementHumanMove,
+      chineseCheckersMovingInfo,
+      chineseCheckersMoveAnimationFrame,
+      chineseCheckersAiSightGeometry,
+      normalizeChineseCheckersAiSightStyle,
+      normalizeChineseCheckersAiSightDuration,
       lianliankanTilesMatch,
       placementHoverPreview,
       placementHintDirectionDescriptors,

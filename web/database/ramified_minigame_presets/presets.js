@@ -127,7 +127,8 @@
       "gameTypes": [
         "2048",
         "Tile Matching",
-        "Billiard"
+        "Billiard",
+        "Reversi"
         ],
       "id": "rubik-s-cube-2-2-2",
       "label": "Rubik's Cube 2*2*2",
