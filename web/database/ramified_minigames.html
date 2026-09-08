@@ -2490,8 +2490,8 @@
         <div class="mosaic-inline-row" id="gomoku-controllers-row" data-mode-control="gomoku" hidden>
           <span class="input-label" data-i18n="ai.players">Players</span>
           <span class="local-ai-player-options">
-            <label class="local-ai-player-option"><span data-i18n="status.black">Black</span><select id="gomoku-black-controller" data-i18n-aria-label="ai.access.blackController" aria-label="Black controller"><option value="human" data-i18n="ai.human">Human</option><option value="local-ai-challenging" data-i18n="ai.localChallenging">Local AI — Challenging</option></select></label>
-            <label class="local-ai-player-option"><span data-i18n="status.white">White</span><select id="gomoku-white-controller" data-i18n-aria-label="ai.access.whiteController" aria-label="White controller"><option value="human" data-i18n="ai.human">Human</option><option value="local-ai-challenging" data-i18n="ai.localChallenging">Local AI — Challenging</option></select></label>
+            <label class="local-ai-player-option"><span data-i18n="status.black">Black</span><select id="gomoku-black-controller" data-i18n-aria-label="ai.access.blackController" aria-label="Black controller"><option value="human" data-i18n="ai.human">Human</option><option value="local-ai-challenging" data-i18n="ai.localChallenging">Local AI — Challenging</option><option value="local-ai-aggressive" data-i18n="ai.localAggressive">Local AI — Aggressive</option></select></label>
+            <label class="local-ai-player-option"><span data-i18n="status.white">White</span><select id="gomoku-white-controller" data-i18n-aria-label="ai.access.whiteController" aria-label="White controller"><option value="human" data-i18n="ai.human">Human</option><option value="local-ai-challenging" data-i18n="ai.localChallenging">Local AI — Challenging</option><option value="local-ai-aggressive" data-i18n="ai.localAggressive">Local AI — Aggressive</option></select></label>
           </span>
         </div>
         <div class="mosaic-inline-row" id="boundary-glue-rect-row" hidden>
@@ -2666,29 +2666,18 @@
             <label class="opt-row"><input type="checkbox" id="step-mode"> step-by-step</label>
             <button class="btn" id="next-step" type="button" disabled>next step</button>
           </div>
-          <div class="mosaic-inline-row" id="online-turn-feedback-row">
-            <span class="input-label">Turn notice</span>
-            <span class="background-slider-controls">
-              <input type="range" id="online-turn-feedback-duration" min="600" max="2400" step="100" value="1000" aria-label="Online turn notice duration">
-              <output id="online-turn-feedback-duration-value">1000 ms</output>
-            </span>
-            <button class="btn" id="online-turn-feedback-preview" type="button">preview</button>
+          <div class="mosaic-debug-step-row" id="gomoku-five-path-count-row" data-mode-control="gomoku" hidden>
+            <label class="opt-row"><input type="checkbox" id="gomoku-five-path-counts" data-i18n-aria-label="ai.access.showFivePathCounts" aria-label="Show Gomoku five-path counts"> <span data-i18n="ai.showFivePathCounts">show five-path counts</span></label>
           </div>
-          <div class="mosaic-inline-row" id="chinese-checkers-ai-sight-style-row" data-mode-control="chinese-checkers" hidden>
-            <span class="input-label" data-i18n="ai.sightStyle">AI sight</span>
-            <select id="chinese-checkers-ai-sight-style" data-i18n-aria-label="ai.access.sightStyle" aria-label="Chinese Checkers AI sight style">
-              <option value="crosshair" data-i18n="ai.sightCrosshair">Classic crosshair</option>
-              <option value="corners" data-i18n="ai.sightCorners">Corner brackets</option>
-              <option value="rings" selected data-i18n="ai.sightRings">Concentric target</option>
-            </select>
-            <button class="btn" id="chinese-checkers-ai-sight-preview" type="button" data-i18n="ai.sightPreview">preview</button>
-          </div>
-          <div class="mosaic-inline-row" id="chinese-checkers-ai-sight-duration-row" data-mode-control="chinese-checkers" hidden>
-            <span class="input-label" data-i18n="ai.sightDuration">Sight duration</span>
+          <div class="mosaic-inline-row" id="gomoku-ai-think-time-row" data-mode-control="gomoku" hidden>
+            <span class="input-label" data-i18n="ai.challengingThinkTime">Challenging AI think time</span>
             <span class="background-slider-controls">
-              <input type="range" id="chinese-checkers-ai-sight-duration" min="200" max="1000" step="50" value="1000" data-i18n-aria-label="ai.access.sightDuration" aria-label="Chinese Checkers AI sight duration">
-              <output id="chinese-checkers-ai-sight-duration-value">1000 ms</output>
+              <input type="range" id="gomoku-ai-think-time" min="100" max="3000" step="100" value="1000" data-i18n-aria-label="ai.access.challengingThinkTime" aria-label="Gomoku Challenging AI think time">
+              <output id="gomoku-ai-think-time-value">1000 ms</output>
             </span>
+          </div>
+          <div class="mosaic-debug-step-row" id="gomoku-safe-pruning-row" data-mode-control="gomoku" hidden>
+            <label class="opt-row"><input type="checkbox" id="gomoku-safe-pruning" data-i18n-aria-label="ai.access.safePruning" aria-label="Use Gomoku pruning safety fallback"> <span data-i18n="ai.safePruning">pruning safety fallback</span></label>
           </div>
           <div class="mosaic-inline-row" id="hex-neighbor-delay-row" data-mode-control="hex" hidden>
             <span class="input-label" data-i18n="setup.hexNeighborDelay">Neighbor delay</span>
@@ -3015,14 +3004,14 @@
 <script src="js/calculator_input_settings.js?v=20260903-1"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260908-2"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260908-3"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
-<script src="js/ramified_minigames_setup.js?v=20260908-2"></script>
-<script src="js/ramified_minigames_ai.js?v=20260908-1"></script>
+<script src="js/ramified_minigames_setup.js?v=20260908-4"></script>
+<script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
 </body>
 </html>

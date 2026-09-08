@@ -1,8 +1,8 @@
 'use strict';
 
 importScripts(
-  'ramified_minigames_setup.js?v=20260908-1',
-  'ramified_minigames_ai.js?v=20260908-1'
+  'ramified_minigames_setup.js?v=20260908-3',
+  'ramified_minigames_ai.js?v=20260908-3'
 );
 
 self.addEventListener('message', (event) => {
@@ -12,6 +12,8 @@ self.addEventListener('message', (event) => {
     const result = self.RamifiedMinigamesAI.chooseMove(request.state, {
       rules: self.RamifiedMinigames,
       seed: request.seed,
+      profile: request.profile,
+      safePruning: request.safePruning,
       softBudgetMs: request.softBudgetMs,
       hardBudgetMs: request.hardBudgetMs
     });

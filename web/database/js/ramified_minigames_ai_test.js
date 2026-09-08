@@ -17,6 +17,20 @@ function stripPreset(cols = 4) {
   };
 }
 
+function plainGomokuPreset(size = 15) {
+  return {
+    id: `plain-gomoku-${size}`,
+    label: `Plain Gomoku ${size}`,
+    lattice: 'square',
+    rows: size,
+    cols: size,
+    surface: 'test',
+    removedTiles: [],
+    cutEdges: [],
+    gluedEdges: []
+  };
+}
+
 function connectState(preset, holes, tokens = [], fallDir = game.DIRS.E) {
   const state = game.beginConnectFourGame(preset, { holes, fallDir });
   state.tokens = tokens.map((index, offset) => ({ id: offset + 1, index, color: offset % 2 ? 'yellow' : 'red' }));
@@ -166,12 +180,201 @@ function testForcedWinsAndChineseCheckersMove() {
   assert.ok(game.placeChineseCheckerMarble(checkers, checkersMove.move.from, checkersMove.move.to, { stepwise: false }).changed);
 }
 
+function testGomokuProfilesAndStaticPathCounts() {
+  const plain = game.beginGomokuGame(plainGomokuPreset(15));
+  const counts = ai.gomokuFivePathCounts(plain, { rules: game });
+  assert.strictEqual(counts[0], 3, 'a plain-board corner belongs to three five-paths');
+  assert.strictEqual(counts[112], 20, 'a plain-board center belongs to twenty five-paths');
+
+  const wrapped = game.beginGomokuGame('boundary-glue-board');
+  const wrappedCounts = ai.gomokuFivePathCounts(wrapped, { rules: game });
+  assert.ok(wrappedCounts.every((count) => count === 20), 'the wrapped 15x15 board has twenty five-paths at every tile');
+
+  const repeated = game.beginGomokuGame('gomoku-tic-tac-toe');
+  const repeatedCounts = ai.gomokuFivePathCounts(repeated, { rules: game });
+  assert.ok(repeatedCounts.every((count) => count === 12), 'the 3x3 torus counts distinct paths rather than tile multiplicity');
+
+  const rubik = game.beginGomokuGame('rubiks-cube-3x3x3');
+  const rubikCounts = ai.gomokuFivePathCounts(rubik, { rules: game });
+  const rubikFaceCenters = [16, 49, 52, 55, 58, 88];
+  assert.deepStrictEqual(
+    rubikFaceCenters.map((index) => rubikCounts[index]),
+    [34, 34, 34, 34, 34, 34],
+    'all six symmetric Rubik cube face centers have the same complete five-path count'
+  );
+  const rubikTopology = ai.__test.buildTopology(rubik, game);
+  assert.strictEqual(
+    ai.__test.winningWindows(rubik, rubikTopology, game, 5).incident.get(16).length,
+    12,
+    'the legacy Aggressive topology remains unchanged'
+  );
+
+  const forced = game.beginGomokuGame({ ...stripPreset(5), rows: 5, id: 'profile-forced' });
+  forced.stones = [0, 1, 2, 3].map((index, offset) => ({ id: offset + 1, index, color: 'black' }));
+  forced.nextStoneId = 5;
+  forced.round = 4;
+  forced.turn = 'black';
+  const legacyDefault = ai.chooseMove(forced, { rules: game, seed: 31, softBudgetMs: 20, hardBudgetMs: 40 });
+  const aggressive = ai.chooseMove(forced, { rules: game, profile: 'aggressive', seed: 31, softBudgetMs: 20, hardBudgetMs: 40 });
+  const challenging = ai.chooseMove(forced, { rules: game, profile: 'challenging', seed: 31, softBudgetMs: 40, hardBudgetMs: 80 });
+  assert.deepStrictEqual(legacyDefault.move, aggressive.move, 'omitting the profile preserves the legacy Aggressive move');
+  assert.strictEqual(legacyDefault.diagnostics.reason, aggressive.diagnostics.reason);
+  assert.strictEqual(aggressive.diagnostics.profile, 'aggressive');
+  assert.strictEqual(challenging.diagnostics.profile, 'challenging');
+  assert.strictEqual(challenging.move.index, 4);
+  assert.strictEqual(challenging.diagnostics.pruningTier, 1);
+
+  const defense = game.beginGomokuGame({ ...stripPreset(5), rows: 5, id: 'profile-defense' });
+  defense.stones = [0, 1, 2, 3].map((index, offset) => ({ id: offset + 1, index, color: 'white' }));
+  defense.nextStoneId = 5;
+  defense.round = 4;
+  defense.turn = 'black';
+  const challengingDefense = ai.chooseMove(defense, {
+    rules: game,
+    profile: 'challenging',
+    seed: 37,
+    softBudgetMs: 40,
+    hardBudgetMs: 80
+  });
+  assert.strictEqual(challengingDefense.move.index, 4);
+  assert.strictEqual(challengingDefense.diagnostics.pruningTier, 2);
+}
+
+function testIncrementalGomokuPositionAndThreats() {
+  const state = game.beginGomokuGame(plainGomokuPreset(9));
+  state.stones = [29, 20, 30, 40].map((index, offset) => ({
+    id: offset + 1,
+    index,
+    color: offset % 2 ? 'white' : 'black'
+  }));
+  state.round = state.stones.length;
+  state.turn = 'black';
+  const topology = ai.__test.buildTopology(state, game);
+  const position = ai.__test.createGomokuPosition(state, topology, game);
+  const initial = {
+    occupancy: Array.from(position.occupancyCodes),
+    black: Array.from(position.blackCounts),
+    white: Array.from(position.whiteCounts),
+    hash: position.zobristHash
+  };
+  const first = ai.__test.applyGomokuOccupancy(position, 31, 'black');
+  const second = ai.__test.applyGomokuOccupancy(position, 41, 'white');
+  assert.ok(first && second);
+  const rebuiltState = game.cloneGameState(state);
+  rebuiltState.stones.push({ id: 5, index: 31, color: 'black' }, { id: 6, index: 41, color: 'white' });
+  rebuiltState.round += 2;
+  const rebuilt = ai.__test.createGomokuPosition(rebuiltState, topology, game);
+  assert.deepStrictEqual(Array.from(position.occupancyCodes), Array.from(rebuilt.occupancyCodes));
+  assert.deepStrictEqual(Array.from(position.blackCounts), Array.from(rebuilt.blackCounts));
+  assert.deepStrictEqual(Array.from(position.whiteCounts), Array.from(rebuilt.whiteCounts));
+  assert.strictEqual(position.zobristHash, rebuilt.zobristHash);
+  ai.__test.undoGomokuOccupancy(position, second);
+  ai.__test.undoGomokuOccupancy(position, first);
+  assert.deepStrictEqual(Array.from(position.occupancyCodes), initial.occupancy);
+  assert.deepStrictEqual(Array.from(position.blackCounts), initial.black);
+  assert.deepStrictEqual(Array.from(position.whiteCounts), initial.white);
+  assert.strictEqual(position.zobristHash, initial.hash);
+  assert.strictEqual(position.deltaStack.length, 0);
+
+  const threatState = game.beginGomokuGame(plainGomokuPreset(9));
+  threatState.stones = [29, 30].map((index, offset) => ({ id: offset + 1, index, color: 'black' }));
+  threatState.round = 2;
+  threatState.turn = 'black';
+  const threatTopology = ai.__test.buildTopology(threatState, game);
+  const threatPosition = ai.__test.createGomokuPosition(threatState, threatTopology, game);
+  const openThree = ai.__test.analyzeGomokuThreatMove(threatPosition, 31, 'black');
+  assert.strictEqual(openThree.openThreeCount, 1, 'ordinary ..XXX.. is one traditional open three');
+  assert.deepStrictEqual(openThree.openThreeGains.slice().sort((a, b) => a - b), [28, 32]);
+
+  const openFourState = game.beginGomokuGame(plainGomokuPreset(9));
+  openFourState.stones = [29, 30, 31].map((index, offset) => ({ id: offset + 1, index, color: 'black' }));
+  openFourState.round = 3;
+  openFourState.turn = 'black';
+  const openFourPosition = ai.__test.createGomokuPosition(openFourState, threatTopology, game);
+  const openFour = ai.__test.analyzeGomokuThreatMove(openFourPosition, 32, 'black');
+  assert.strictEqual(openFour.openFour, true);
+  assert.deepStrictEqual(openFour.winningCells, [28, 33]);
+
+  const ramified = game.beginGomokuGame('gomoku-small-holes');
+  ramified.stones = [19, 35].map((index, offset) => ({ id: offset + 1, index, color: 'black' }));
+  ramified.round = 2;
+  ramified.turn = 'black';
+  const ramifiedTopology = ai.__test.buildTopology(ramified, game);
+  const ramifiedPosition = ai.__test.createGomokuPosition(ramified, ramifiedTopology, game);
+  const branchedThree = ai.__test.analyzeGomokuThreatMove(ramifiedPosition, 51, 'black');
+  assert.strictEqual(branchedThree.openThreeCount, 2, 'distinct ramified continuation tiles create separate open threes');
+  assert.ok(new Set(branchedThree.openThreeGains).size >= 2);
+}
+
+function testIncrementalGomokuAcrossBundledPresets() {
+  game.presetListForMode('gomoku').forEach((preset) => {
+    const state = game.beginGomokuGame(preset);
+    const topology = ai.__test.buildTopology(state, game);
+    const position = ai.__test.createGomokuPosition(state, topology, game);
+    const initialHash = position.zobristHash;
+    const deltas = [];
+    const stones = [];
+    topology.playable.slice(0, Math.min(6, topology.playable.length)).forEach((index, offset) => {
+      const color = offset % 2 ? 'white' : 'black';
+      const delta = ai.__test.applyGomokuOccupancy(position, index, color);
+      assert.ok(delta, `incremental Gomoku apply succeeds for ${preset.id}`);
+      deltas.push(delta);
+      stones.push({ id: offset + 1, index, color });
+      const rebuiltState = game.cloneGameState(state);
+      rebuiltState.stones = stones.map((stone) => ({ ...stone }));
+      rebuiltState.round = stones.length;
+      const rebuilt = ai.__test.createGomokuPosition(rebuiltState, topology, game);
+      assert.deepStrictEqual(Array.from(position.blackCounts), Array.from(rebuilt.blackCounts), `black windows match for ${preset.id}`);
+      assert.deepStrictEqual(Array.from(position.whiteCounts), Array.from(rebuilt.whiteCounts), `white windows match for ${preset.id}`);
+      assert.strictEqual(position.zobristHash, rebuilt.zobristHash, `hash matches for ${preset.id}`);
+    });
+    while (deltas.length) ai.__test.undoGomokuOccupancy(position, deltas.pop());
+    assert.strictEqual(position.zobristHash, initialHash, `undo restores hash for ${preset.id}`);
+    assert.strictEqual(position.deltaStack.length, 0, `undo clears delta stack for ${preset.id}`);
+  });
+}
+
+function testStrictAndSafeGomokuPruning() {
+  const state = game.beginGomokuGame(plainGomokuPreset(9));
+  state.stones = [29, 20, 30, 40].map((index, offset) => ({
+    id: offset + 1,
+    index,
+    color: offset % 2 ? 'white' : 'black'
+  }));
+  state.round = state.stones.length;
+  state.turn = 'black';
+  const topology = ai.__test.buildTopology(state, game);
+  const position = ai.__test.createGomokuPosition(state, topology, game);
+  const context = (safePruning) => ({
+    hardDeadline: Date.now() + 5000,
+    safePruning,
+    timedOut: false,
+    fallbackCandidates: []
+  });
+  const strict = ai.__test.challengingGomokuCandidates(position, 1, context(false), { root: true });
+  const safeContext = context(true);
+  const safe = ai.__test.challengingGomokuCandidates(position, 1, safeContext, { root: true });
+  assert.ok(strict.tier < 8, 'fixture produces a tactical pruning tier');
+  assert.strictEqual(strict.fallback.length, 0);
+  assert.ok(safe.records.length >= strict.records.length);
+  assert.ok(safeContext.fallbackCandidates.length > 0, 'safe pruning retains lower-tier fallback moves');
+}
+
 function testBundledPresetMoveLegality() {
   game.presetListForMode('gomoku').forEach((preset) => {
     const state = game.beginGomokuGame(preset);
     const selected = ai.chooseMove(state, { rules: game, softBudgetMs: 5, hardBudgetMs: 12, seed: 7 });
     assert.ok(selected.move, `Gomoku AI should return a move for ${preset.id}`);
     assert.ok(game.placeGomokuStone(state, selected.move.index).changed, `Gomoku AI move should be legal for ${preset.id}`);
+    const challenging = ai.chooseMove(state, {
+      rules: game,
+      profile: 'challenging',
+      softBudgetMs: 20,
+      hardBudgetMs: 35,
+      seed: 9
+    });
+    assert.ok(challenging.move, `Challenging Gomoku AI should return a move for ${preset.id}`);
+    assert.ok(game.placeGomokuStone(state, challenging.move.index).changed, `Challenging Gomoku move should be legal for ${preset.id}`);
   });
   game.presetListForMode('connect-four').forEach((preset) => {
     const state = game.beginConnectFourGame(preset);
@@ -222,11 +425,17 @@ function testControllerUiAndStrategyContract() {
   assert.ok(html.includes('id="connect-four-yellow-controller"'));
   assert.ok(html.includes('id="local-ai-pause"'));
   assert.ok(html.includes('value="local-ai-challenging"'));
-  assert.ok(html.includes('id="chinese-checkers-ai-sight-style"'));
-  assert.ok(html.includes('id="chinese-checkers-ai-sight-duration"'));
-  assert.ok(html.includes('id="chinese-checkers-ai-sight-preview"'));
-  assert.ok(html.includes('<option value="rings" selected'));
-  assert.ok(html.includes('id="chinese-checkers-ai-sight-duration" min="200" max="1000" step="50" value="1000"'));
+  assert.strictEqual((html.match(/value="local-ai-aggressive"/g) || []).length, 2, 'Aggressive is offered only for the two Gomoku sides');
+  assert.ok(html.includes('id="gomoku-five-path-counts"'));
+  assert.ok(html.includes('id="gomoku-ai-think-time" min="100" max="3000" step="100" value="1000"'));
+  assert.ok(html.includes('id="gomoku-safe-pruning"'));
+  const worker = fs.readFileSync(require.resolve('./ramified_minigames_ai_worker.js'), 'utf8');
+  assert.ok(worker.includes('profile: request.profile'));
+  assert.ok(worker.includes('safePruning: request.safePruning'));
+  assert.ok(!html.includes('id="online-turn-feedback-row"'));
+  assert.ok(!html.includes('id="chinese-checkers-ai-sight-style"'));
+  assert.ok(!html.includes('id="chinese-checkers-ai-sight-duration"'));
+  assert.ok(!html.includes('id="chinese-checkers-ai-sight-preview"'));
   const strategy = fs.readFileSync(require.resolve('../analysis/ramified_minigames_local_ai_strategy.md'), 'utf8');
   assert.ok(strategy.includes('routes are **not FIFO queues**'));
   assert.ok(strategy.includes('earliest occupied route position'));
@@ -282,11 +491,32 @@ function testChineseCheckersAiSightAndPauseReasonContract() {
   const settledRings = sightAt(0.56);
   near(settledRings.circles[0].radius, 12 * 0.84, 'settled inner ring preserves its geometry');
   near(settledRings.circles[1].radius, 12 * 1.26, 'settled outer ring preserves its geometry');
+  assert.deepStrictEqual(
+    game.__test.chineseCheckersAiSightConfig(),
+    { color: 'red', style: 'rings', duration: 1000 },
+    'the AI sight is a fixed red, 1000 ms concentric target'
+  );
   assert.strictEqual(game.__test.normalizeChineseCheckersAiSightStyle('unknown'), 'rings');
   assert.strictEqual(game.__test.normalizeChineseCheckersAiSightDuration(100), 200);
   assert.strictEqual(game.__test.normalizeChineseCheckersAiSightDuration(524), 500);
   assert.strictEqual(game.__test.normalizeChineseCheckersAiSightDuration(1200), 1000);
   assert.ok(game.__test.chineseCheckersMovingInfo({ color: 'red' }).includes('moving'));
+  assert.strictEqual(
+    game.__test.chineseCheckersAnimationHintColor(
+      { gameMode: 'chinese-checkers', turn: 'yellow' },
+      { event: { kind: 'chineseCheckersMove', color: 'red' } }
+    ),
+    'red',
+    'Chinese Checkers source and destination hints retain the moving color during animation'
+  );
+  assert.strictEqual(
+    game.__test.chineseCheckersAnimationHintColor(
+      { gameMode: 'chinese-checkers', turn: 'yellow' },
+      { event: { kind: 'connectFourDrop', color: 'red' } }
+    ),
+    '',
+    'unrelated animations do not override Chinese Checkers turn hints'
+  );
   game.__test.setLocalAiPauseReasonForTest('history');
   assert.strictEqual(game.__test.resumeLocalAiAfterReplacementHumanMove(), true);
   assert.strictEqual(game.__test.getLocalAiRuntimeState().pauseReason, '');
@@ -306,6 +536,10 @@ function run() {
   testCachedTraversalAndUndoRandomized();
   testThreatClassifications();
   testForcedWinsAndChineseCheckersMove();
+  testGomokuProfilesAndStaticPathCounts();
+  testIncrementalGomokuPositionAndThreats();
+  testIncrementalGomokuAcrossBundledPresets();
+  testStrictAndSafeGomokuPruning();
   testConnectFourForcedWinAndCompleteDefense();
   testBundledPresetMoveLegality();
   testControllerUiAndStrategyContract();

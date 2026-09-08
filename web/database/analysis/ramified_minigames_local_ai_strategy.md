@@ -97,13 +97,15 @@ No geometric-center or legal-hole-count bonus is permitted. Input holes are shar
 
 ### Gomoku
 
-- Budgets: 180 ms soft, 280 ms hard.
-- Candidate cap: 28 root, 16 descendants.
-- Window scores relative to win length `K`: `K-1 = 30000`, `K-2 = 2000`, `K-3 = 150`, earlier occupancy `10 * multiplicity`.
-- Opponent windows are multiplied by 1.15.
-- Two distinct `K-1` threats add 20,000.
-- Terminal score is +/-1,000,000, adjusted by ply.
-- Iterative alpha-beta negamax searches depths one through three. Immediate wins and complete immediate defenses precede search. Candidate generation uses forced cells, topology distance two around stones, high-occupancy windows, and graph centrality only for an empty-board opening/ties.
+Gomoku offers two local profiles. Omitting a profile from the developer API selects Aggressive for backward compatibility; the UI and worker always send the selected profile explicitly.
+
+**Aggressive** is the original Gomoku AI, unchanged apart from profile dispatch and its player-facing name. Its budgets are 180 ms soft and 280 ms hard, with candidate caps of 28 at the root and 16 below it. Window scores relative to win length `K` are `K-1 = 30000`, `K-2 = 2000`, `K-3 = 150`, and `10 * multiplicity` earlier; opponent windows are multiplied by 1.15 and two distinct `K-1` threats add 20,000. It uses iterative alpha-beta negamax through depth three and retains the controlled-imperfection selection described below.
+
+**Challenging** uses a reversible compact position. Per-window black/white multiplicity counts and the position hash are updated only through the placed tile's reverse window index. Its default UI budget is 850 ms soft and 1000 ms hard; debug may set a 100-3000 ms hard budget, with soft at 85 percent. Root candidates are capped at 32 and descendants at 18.
+
+At every Challenging node, candidate generation selects only the first non-empty tier: own five, complete immediate defense, own open-four or mixed four fork, defense against that fork, own rush-four or double-open-three, defense against those, own single open-three, then quiet moves. These shapes are pruning classes only; only a terminal result from the rule engine receives a win score. Ordinary `..XXX..` is one open three. Distinct transported diagonal continuations that end on distinct tiles are separate branches, while paths ending on the same gain or defense tile are deduplicated.
+
+Quiet candidates first avoid an opponent double-open-two, then seek an own double-open-two, maximize the open-two difference, and finally prefer the tile participating in the most distinct winning windows. Strict tier pruning is the default. The debug safety fallback adds at most two candidates from the next non-empty tier and two top quiet candidates. Challenging uses deterministic best-score selection, with seeded choice only across exactly tied scores and five-path counts.
 
 ### Connect Four
 
@@ -138,3 +140,5 @@ Any later weight or pruning change must update this document and add a dated tun
 - 2026-09-08: Initial challenging profile. Replaced the rejected FIFO Connect Four model with fixed transported routes and earliest-blocker pointers; removed center and shared-hole-count bonuses; added current, latent, poisoned, and unreachable threat classes.
 - 2026-09-08: Chinese Checkers AI moves now use a session-configurable source sight before travel. Animation status names the moving color until travel completes. History-induced pauses clear only after a successful replacement human move; manual and error pauses remain explicit.
 - 2026-09-08: The default Chinese Checkers AI source sight is now a 1000 ms concentric-target “soft lock-on”: it fades in while shrinking from 1.95× to its settled size, holds, then fades before travel. Reduced-motion rendering retains the fade but removes scaling. A completed placement-hint long press now commits its original tile on release and suppresses only the duplicate compatibility click.
+- 2026-09-08: The Chinese Checkers AI sight is now always red, concentric, and 1000 ms so it reads as a target rather than as the marble itself. Turn-notice, sight-style, sight-duration, and sight-preview controls were removed from the player-facing debug panel.
+- 2026-09-08: Preserved the original Gomoku search as the Aggressive profile and added a separate Challenging profile with reversible window counts, topology-aware threat-tier pruning, configurable one-second search, a strict/safe pruning comparison, and five-path debug annotations.
