@@ -443,7 +443,7 @@ function testDisplayExportAndMarkup() {
   assert.ok(html.includes('id="glue-flap-target-on-hover" checked'));
   assert.ok(/class="glue-flap-controls"[\s\S]*id="show-glue-flaps"[\s\S]*id="glue-flap-target-on-hover"/.test(html));
   assert.ok(!html.includes('id="glue-flap-base-angle"'));
-  assert.ok(html.includes('js/mosaic_calculator.js?v=billiards-snap-2'));
+  assert.ok(html.includes('js/mosaic_calculator.js?v=hyperbolic-metric-1'));
 }
 
 testLatticeDerivedGeometry();

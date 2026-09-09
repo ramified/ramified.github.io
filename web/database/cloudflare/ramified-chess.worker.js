@@ -2042,7 +2042,7 @@ export function billiardsTurnIssue(owned, action, currentSnapshot, nextSnapshot)
   const next = nextSnapshot && typeof nextSnapshot === 'object' ? nextSnapshot : {};
   const currentPhysics = current.deterministic && typeof current.deterministic === 'object' ? current.deterministic : {};
   const nextPhysics = next.deterministic && typeof next.deterministic === 'object' ? next.deterministic : {};
-  for (const key of ['physicsProfile', 'physicsVersion', 'equipmentProfileId', 'equipmentVersion', 'solverTolerancesVersion', 'cueInputVersion']) {
+  for (const key of ['physicsProfile', 'physicsVersion', 'equipmentProfileId', 'equipmentVersion', 'tileEdgeLengthM', 'solverTolerancesVersion', 'cueInputVersion']) {
     if (currentPhysics[key] && nextPhysics[key] !== currentPhysics[key]) return `Billiards ${key} cannot change during an online game.`;
     if (action && action[key] && currentPhysics[key] && action[key] !== currentPhysics[key]) return `Billiards action ${key} does not match the room.`;
   }

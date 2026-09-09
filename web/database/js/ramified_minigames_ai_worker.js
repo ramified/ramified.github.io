@@ -1,7 +1,7 @@
 'use strict';
 
 importScripts(
-  'ramified_minigames_setup.js?v=20260908-3',
+  'ramified_minigames_setup.js?v=20260909-3',
   'ramified_minigames_ai.js?v=20260908-3'
 );
 

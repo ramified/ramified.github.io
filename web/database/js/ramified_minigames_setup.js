@@ -374,7 +374,7 @@
   const BILLIARDS_SQUARE_BOARD_SIZE = 4;
   const BILLIARDS_RECTANGLE_ROWS = 3;
   const BILLIARDS_RECTANGLE_COLS = 5;
-  const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20260906-1';
+  const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20260909-3';
   const HEX_HOMOLOGY_WORKER_URL = 'js/hex_homology_worker.js?v=20260827-1';
   const BILLIARDS_FALLBACK_FRAME_BUDGET_MS = 8;
   const BILLIARDS_FALLBACK_STEP_CHUNK = 8;
@@ -529,7 +529,7 @@
       'js/billiards/topological_billiards_math.js?v=20260823-1',
       'js/billiards/topological_billiards_physics.js?v=20260823-1',
       'js/billiards/topological_billiards_renderer.js?v=20260905-3',
-      'js/billiards/topological_billiards_native.js?v=20260906-1'
+      'js/billiards/topological_billiards_native.js?v=20260909-3'
     ]),
     [GAME_MODES.LIANLIANKAN]: Object.freeze([
       'lianliankan/lianliankan_engine.js?v=20260830-1',
@@ -720,6 +720,7 @@
   let billiardsDragPower = 0;
   let billiardsSpinContact = { x: 0, y: 0 };
   let billiardsCueSpeedMps = 3;
+  let billiardsTileEdgeLengthM = null;
   let billiardsExactSpeedLocked = false;
   let billiardsElevationDeg = 0;
   let billiardsStrokePresetId = 'custom';
@@ -858,6 +859,8 @@
     refs.billiardsRules = document.getElementById('billiards-rules');
     refs.billiardsPhysicsProfile = document.getElementById('billiards-physics-profile');
     refs.billiardsEquipment = document.getElementById('billiards-equipment');
+    refs.billiardsTileLength = document.getElementById('billiards-tile-length');
+    refs.billiardsTileLengthValue = document.getElementById('billiards-tile-length-value');
     refs.billiardsBallPaletteRow = document.getElementById('billiards-ball-palette-row');
     refs.billiardsBallPalette = document.getElementById('billiards-ball-palette');
     refs.billiardsAssistance = document.getElementById('billiards-assistance');
@@ -873,6 +876,9 @@
     refs.fullscreenBilliardsPhysicsProfile = document.getElementById('fullscreen-billiards-physics-profile');
     refs.fullscreenBilliardsEquipmentRow = document.getElementById('fullscreen-billiards-equipment-row');
     refs.fullscreenBilliardsEquipment = document.getElementById('fullscreen-billiards-equipment');
+    refs.fullscreenBilliardsTileLengthRow = document.getElementById('fullscreen-billiards-tile-length-row');
+    refs.fullscreenBilliardsTileLength = document.getElementById('fullscreen-billiards-tile-length');
+    refs.fullscreenBilliardsTileLengthValue = document.getElementById('fullscreen-billiards-tile-length-value');
     refs.billiardsContactReadout = document.getElementById('billiards-contact-readout');
     refs.fullscreenBilliardsContactReadout = document.getElementById('fullscreen-billiards-contact-readout');
     refs.billiardsCenterContact = document.getElementById('billiards-center-contact');
@@ -1113,6 +1119,10 @@
     });
     [refs.billiardsEquipment, refs.fullscreenBilliardsEquipment].filter(Boolean).forEach((control) => {
       control.addEventListener('change', handleBilliardsEquipmentChange);
+    });
+    [refs.billiardsTileLength, refs.fullscreenBilliardsTileLength].filter(Boolean).forEach((control) => {
+      control.addEventListener('input', handleBilliardsTileLengthChange);
+      control.addEventListener('change', handleBilliardsTileLengthChange);
     });
     [refs.billiardsCueSpeed, refs.fullscreenBilliardsCueSpeed].filter(Boolean).forEach((control) => {
       control.addEventListener('input', handleBilliardsCueSpeedChange);
@@ -5088,12 +5098,39 @@
     return value;
   }
 
+  function selectedBilliardsTileEdgeLength(value = null) {
+    const source = value != null
+      ? value
+      : (billiardsTileEdgeLengthM != null
+        ? billiardsTileEdgeLengthM
+        : (refs.billiardsTileLength ? refs.billiardsTileLength.value : 0.13));
+    return Billiards && typeof Billiards.normalizeTileEdgeLengthM === 'function'
+      ? Billiards.normalizeTileEdgeLengthM(source, 0.13)
+      : clampNumber(source, 0.07, 0.5, 0.13);
+  }
+
+  function syncBilliardsTileEdgeLength(sourceState = game) {
+    const fromState = isBilliardsGame(sourceState) && sourceState.deterministic;
+    const value = fromState
+      ? selectedBilliardsTileEdgeLength(sourceState.deterministic.tileEdgeLengthM)
+      : selectedBilliardsTileEdgeLength();
+    if (fromState || billiardsTileEdgeLengthM != null) billiardsTileEdgeLengthM = value;
+    [refs.billiardsTileLength, refs.fullscreenBilliardsTileLength].filter(Boolean).forEach((control) => {
+      control.value = String(value);
+    });
+    const text = `${value.toFixed(2)} m`;
+    [refs.billiardsTileLengthValue, refs.fullscreenBilliardsTileLengthValue].filter(Boolean).forEach((output) => {
+      output.textContent = text;
+    });
+    return value;
+  }
+
   function confirmBilliardsConfigurationRestart() {
     if (!isBilliardsGame(game) || game.phase === 'setup') return true;
     if (typeof window === 'undefined' || typeof window.confirm !== 'function') return false;
     return window.confirm(tk(
       'runtime.billiardsConfigurationRestart',
-      'Changing physics or equipment restarts the current game. Continue?'
+      'Changing physics, equipment, or tile length restarts the current game. Continue?'
     ));
   }
 
@@ -5159,6 +5196,7 @@
     }
     game = Billiards.setEquipmentProfile(game, requested);
     syncBilliardsEquipment();
+    syncBilliardsTileEdgeLength();
     syncBilliardsToolControls();
     syncStatus(
       tk('runtime.billiardsEquipmentEnabled', '{{equipment}} equipment enabled', {
@@ -5167,6 +5205,45 @@
           : tk('billiards.equipment.pool9', '9-foot pool')
       }),
       tk('runtime.billiardsEquipmentRestartHint', 'Equipment remains fixed after the game begins.'),
+      'setup'
+    );
+    render();
+    syncControls();
+    refreshDebugExportIfNeeded();
+  }
+
+  function handleBilliardsTileLengthChange(event) {
+    const requested = selectedBilliardsTileEdgeLength(event && event.target ? event.target.value : null);
+    billiardsTileEdgeLengthM = requested;
+    if (!isBilliardsGame(game) || !Billiards || typeof Billiards.setTileEdgeLengthM !== 'function' || onlineIsInRoom() || billiardsShotPending || currentAnimation) {
+      syncBilliardsTileEdgeLength();
+      return;
+    }
+    [refs.billiardsTileLength, refs.fullscreenBilliardsTileLength].filter(Boolean).forEach((control) => {
+      control.value = String(requested);
+    });
+    if (event && event.type === 'input') {
+      [refs.billiardsTileLengthValue, refs.fullscreenBilliardsTileLengthValue].filter(Boolean).forEach((output) => {
+        output.textContent = `${requested.toFixed(2)} m`;
+      });
+      return;
+    }
+    if (!confirmBilliardsConfigurationRestart()) {
+      billiardsTileEdgeLengthM = game.deterministic && game.deterministic.tileEdgeLengthM;
+      syncBilliardsTileEdgeLength();
+      return;
+    }
+    if (game.phase !== 'setup') {
+      resetToPreview();
+      return;
+    }
+    game = Billiards.setTileEdgeLengthM(game, requested);
+    syncBilliardsTileEdgeLength();
+    syncStatus(
+      tk('runtime.billiardsTileLengthEnabled', 'Tile edge length set to {{length}} m', {
+        length: requested.toFixed(2)
+      }),
+      tk('runtime.billiardsTileLengthHint', 'Ball size now follows the selected equipment at this physical scale.'),
       'setup'
     );
     render();
@@ -7180,6 +7257,7 @@
         physicsVersion: game.deterministic && game.deterministic.physicsVersion,
         equipmentProfileId: game.deterministic && game.deterministic.equipmentProfileId,
         equipmentVersion: game.deterministic && game.deterministic.equipmentVersion,
+        tileEdgeLengthM: game.deterministic && game.deterministic.tileEdgeLengthM,
         solverTolerancesVersion: game.deterministic && game.deterministic.solverTolerancesVersion,
         cueInputVersion: game.deterministic && game.deterministic.cueInputVersion,
         resultingTurn: game.turn
@@ -11625,6 +11703,7 @@
       settings.physicsVersion = state.deterministic && state.deterministic.physicsVersion || 'legacy-v1';
       settings.equipmentProfileId = state.deterministic && state.deterministic.equipmentProfileId || 'pool-9ft';
       settings.equipmentVersion = state.deterministic && state.deterministic.equipmentVersion || '';
+      settings.tileEdgeLengthM = state.deterministic && state.deterministic.tileEdgeLengthM;
     }
     if (isPlacementGame(state)) {
       settings.pieceRadiusPercent = selectedPlacementPieceRadiusPercent(gameModeValue(state));
@@ -13131,7 +13210,8 @@
         rules: settings.rules,
         friction: settings.friction,
         physicsProfile: settings.physicsProfile,
-        equipmentProfileId: settings.equipmentProfileId
+        equipmentProfileId: settings.equipmentProfileId,
+        tileEdgeLengthM: settings.tileEdgeLengthM
       });
       const result = Billiards.begin(created);
       if (!result.changed) throw new Error(`record Billiards setup is invalid: ${result.message}`);
@@ -14601,6 +14681,7 @@
         dragPower: billiardsDragPower,
         assistance: refs.billiardsAssistance ? refs.billiardsAssistance.value : 'beginner',
         setupHover: (game.phase === 'setup' || game.phase === 'ball-in-hand') ? billiardsSetupHover : null,
+        setupHoverLabel: !wrappedCover,
         rackPreview: game.phase === 'setup' ? billiardsRackPreview() : null,
         cuePrompt: !!(billiardsGuidance && billiardsGuidance.highlight),
         pulseTime: now(),
@@ -14673,6 +14754,7 @@
         tk('runtime.billiardsCueHint', 'Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.')
       );
     }
+    if (wrappedCover) drawWrappedBilliardsSetupHoverLabelOverlay(ctx);
     syncStats();
     requestFullscreenActionPlacement();
     syncBilliardsCueGuidanceAnimation();
@@ -14748,6 +14830,24 @@
     applyGeometryDisplayTransform(ctx, geometry);
     drawGlueEdges(ctx, geometry, game.preset, null, { opacity: 0.5 });
     ctx.restore();
+  }
+
+  function drawWrappedBilliardsSetupHoverLabelOverlay(ctx) {
+    if (
+      !isBilliardsGame(game)
+      || !Billiards
+      || typeof Billiards.drawSetupHoverLabelOverlay !== 'function'
+      || !billiardsSetupHover
+      || !billiardsSetupHover.label
+      || !billiardsLastPointerClient
+      || (game.phase !== 'setup' && game.phase !== 'ball-in-hand')
+    ) return;
+    const point = canvasDisplayPointFromEvent({
+      clientX: billiardsLastPointerClient.x,
+      clientY: billiardsLastPointerClient.y
+    });
+    if (!point) return;
+    Billiards.drawSetupHoverLabelOverlay(ctx, point, billiardsSetupHover);
   }
 
   function normalizeWrappedDeckOffset(value) {
@@ -30160,6 +30260,7 @@
         : 'solo';
       options.physicsProfile = selectedBilliardsPhysicsProfile();
       options.equipmentProfileId = selectedBilliardsEquipment();
+      if (billiardsTileEdgeLengthM != null) options.tileEdgeLengthM = selectedBilliardsTileEdgeLength();
     }
     if (selectedGameMode() === GAME_MODES.LIANLIANKAN) options.symbols = lianliankanSymbolsForTileSet();
     return options;
@@ -31748,6 +31849,7 @@
     if (refs.billiardsRules) refs.billiardsRules.disabled = !modeBilliards || !!(game && game.phase !== 'setup') || onlineRoomActive || !!billiardsShotPending;
     if (refs.fullscreenBilliardsPhysicsRow) refs.fullscreenBilliardsPhysicsRow.hidden = !modeBilliards;
     if (refs.fullscreenBilliardsEquipmentRow) refs.fullscreenBilliardsEquipmentRow.hidden = !modeBilliards;
+    if (refs.fullscreenBilliardsTileLengthRow) refs.fullscreenBilliardsTileLengthRow.hidden = !modeBilliards;
     const billiardsPhysicsLocked = !modeBilliards
       || !game
       || !['setup', 'ready', 'ball-in-hand'].includes(game.phase)
@@ -31762,6 +31864,10 @@
       control.disabled = billiardsPhysicsLocked;
     });
     syncBilliardsEquipment();
+    [refs.billiardsTileLength, refs.fullscreenBilliardsTileLength].filter(Boolean).forEach((control) => {
+      control.disabled = billiardsPhysicsLocked;
+    });
+    syncBilliardsTileEdgeLength();
     if (refs.lianliankanTileSet) refs.lianliankanTileSet.disabled = !modeLianliankan || !game || game.phase !== 'setup' || onlineRoomActive;
     syncLianliankanTileLevelControl(modeLianliankan);
     if (refs.lianliankanTileLevel) refs.lianliankanTileLevel.disabled = !modeLianliankan || !game || game.phase !== 'setup' || onlineRoomActive;
@@ -32479,7 +32585,7 @@
     if (localAiWorker) return localAiWorker;
     if (typeof Worker === 'undefined') return null;
     try {
-      localAiWorker = new Worker('js/ramified_minigames_ai_worker.js?v=20260908-3');
+      localAiWorker = new Worker('js/ramified_minigames_ai_worker.js?v=20260909-3');
       localAiWorker.addEventListener('message', handleLocalAiWorkerMessage);
       localAiWorker.addEventListener('error', () => failLocalAiMove());
       return localAiWorker;

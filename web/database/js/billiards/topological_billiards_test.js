@@ -239,7 +239,7 @@ function testPageIntegration() {
   assert.ok(setup.includes('topological_billiards_physics.js'));
   assert.ok(setup.includes('topological_billiards_renderer.js'));
   assert.ok(setup.includes('topological_billiards_native.js'));
-  assert.ok(setup.includes('topological_billiards_native.js?v=20260906-1'));
+  assert.ok(setup.includes('topological_billiards_native.js?v=20260909-3'));
   assert.ok(html.includes('id="billiards-physics-profile"'));
   assert.ok(html.includes('id="fullscreen-billiards-physics-profile"'));
   assert.ok(setup.includes('wrappedViewCamera().scale'), 'wrapped billiards snapping uses the visible camera scale');
@@ -539,6 +539,44 @@ function testNativePhysicsProfilesAndHiDpiSprites() {
   near(legacy.deterministic.dt, N.PHYSICS_DT);
   near(legacy.deterministic.parameters.ballBallFriction, 0);
   near(legacy.deterministic.parameters.cushionFriction, 0);
+  near(
+    legacy.deterministic.tileEdgeLengthM,
+    N.EQUIPMENT_PROFILES['pool-9ft'].ballDiameterM / (2 * legacy.ballRadius),
+    1e-12,
+    'legacy presets infer physical scale from their stored radius'
+  );
+
+  const physicallyScaled = N.setTileEdgeLengthM(legacy, 0.5);
+  near(physicallyScaled.deterministic.tileEdgeLengthM, 0.5);
+  near(N.normalizeTileEdgeLengthM(2, 0.13), 0.5, 1e-12, 'tile edge length is capped at 0.5 m');
+  near(
+    physicallyScaled.ballRadius,
+    N.EQUIPMENT_PROFILES['pool-9ft'].ballDiameterM / (2 * 0.5),
+    1e-12,
+    'tile edge length determines the atlas-unit ball radius'
+  );
+  physicallyScaled.balls.forEach((ball) => near(ball.radius, physicallyScaled.ballRadius, 1e-12));
+  near(
+    physicallyScaled.pocketRadius,
+    N.EQUIPMENT_PROFILES['pool-9ft'].cornerPocketMouthM / (2 * 0.5),
+    1e-12,
+    'tile edge length also determines the circular pocket radius'
+  );
+  const pocketSource = N.cloneState(legacy);
+  pocketSource.pockets = [{ id: 'p1', classIndex: 0, radius: pocketSource.pocketRadius }];
+  const scaledPocketState = N.setTileEdgeLengthM(pocketSource, 0.5);
+  near(scaledPocketState.pockets[0].radius, scaledPocketState.pocketRadius, 1e-12, 'placed pockets resize with the physical scale');
+  const chineseScaledPocketState = N.setEquipmentProfile(scaledPocketState, 'chinese-8ball');
+  near(
+    chineseScaledPocketState.pocketRadius,
+    N.EQUIPMENT_PROFILES['chinese-8ball'].cornerPocketMouthM / (2 * 0.5),
+    1e-12,
+    'equipment changes update the physical pocket mouth'
+  );
+  const scaledExport = N.stateExport(physicallyScaled);
+  near(scaledExport.tileEdgeLengthM, 0.5);
+  near(scaledExport.deterministic.tileEdgeLengthM, 0.5);
+  near(N.stateFromExport(preset, scaledExport).ballRadius, physicallyScaled.ballRadius, 1e-12);
 
   const realistic = N.setPhysicsProfile(legacy, 'realistic');
   assert.strictEqual(realistic.deterministic.physicsProfile, 'realistic');
@@ -558,10 +596,15 @@ function testNativePhysicsProfilesAndHiDpiSprites() {
   assert.strictEqual(chineseEquipment.deterministic.equipmentVersion, N.EQUIPMENT_PROFILES['chinese-8ball'].version);
   assert.ok(chineseEquipment.balls.every((ball) => ball.physicalMassKg === N.EQUIPMENT_PROFILES['chinese-8ball'].ballMassKg));
   const oldExport = N.stateExport(legacy);
+  delete oldExport.tileEdgeLengthM;
+  delete oldExport.deterministic.tileEdgeLengthM;
   delete oldExport.deterministic.physicsProfile;
   delete oldExport.deterministic.physicsVersion;
   delete oldExport.deterministic.equipmentProfileId;
-  assert.strictEqual(N.stateFromExport(preset, oldExport).deterministic.physicsProfile, 'legacy', 'old states migrate to Classic');
+  const migratedOldExport = N.stateFromExport(preset, oldExport);
+  assert.strictEqual(migratedOldExport.deterministic.physicsProfile, 'legacy', 'old states migrate to Classic');
+  near(migratedOldExport.ballRadius, legacy.ballRadius, 1e-12, 'old states retain their visual ball radius');
+  near(migratedOldExport.pocketRadius, legacy.pocketRadius, 1e-12, 'old states retain their visual pocket radius');
   const incompatible = N.stateExport(research);
   incompatible.deterministic.physicsVersion = 'research-obsolete';
   assert.throws(() => N.stateFromExport(preset, incompatible), /Unsupported Billiards physics version/, 'versioned advanced states are never silently reinterpreted');
@@ -600,8 +643,9 @@ function testNativePhysicsProfilesAndHiDpiSprites() {
   const repeatedElevated = N.resolveShot(elevatedSource, { x: 1, y: 0 }, 0.5, { x: 0.2, y: -0.2 }, elevatedOptions);
   assert.deepStrictEqual(N.stateExport(repeatedElevated.state), N.stateExport(elevated.state), 'Research direct execution is deterministic');
 
-  near(N.ballSpriteRasterScale({ backingScaleX: 2.5, backingScaleY: 2.49, devicePixelRatio: 1.5 }), 1.5);
-  near(N.ballSpriteRasterScale({ backingScaleX: 3, backingScaleY: 3, devicePixelRatio: 3 }), 2);
+  near(N.ballSpriteRasterScale({ backingScaleX: 2.5, backingScaleY: 2.49, devicePixelRatio: 1.5 }), 2.5);
+  near(N.ballSpriteRasterScale({ backingScaleX: 3, backingScaleY: 3, devicePixelRatio: 3 }), 3);
+  near(N.ballSpriteRasterScale({ backingScaleX: 12, backingScaleY: 12, devicePixelRatio: 2 }), 8);
   near(N.ballSpriteRasterScale({ backingScaleX: 0.75, backingScaleY: 0.75 }), 1);
 }
 
@@ -1232,14 +1276,20 @@ function testCompactRackRecipes() {
 function testCompleteSetupHoverCircle() {
   const state = N.createState({ lattice: 'square', rows: 1, cols: 2, removedTiles: [], cutEdges: [], gluedEdges: [], billiards: { ballRadius: 0.1, pockets: [] } });
   const geometry = { width: 200, height: 100, size: 100, radius: 50, cells: [{ x: 50, y: 50 }, { x: 150, y: 50 }] };
-  const calls = { arcs: 0, clips: 0 };
+  const calls = { arcs: 0, clips: 0, labels: 0 };
   const ctx = {
-    save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, stroke() {}, fillText() {},
+    save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, rect() {}, stroke() {}, fill() {},
+    measureText(text) { return { width: String(text).length * 7 }; },
+    fillText() { calls.labels += 1; },
     setLineDash() {}, arc() { calls.arcs += 1; }, clip() { calls.clips += 1; }
   };
-  N.drawSetupHover(ctx, geometry, state, { type: 'ball', tileIndex: 0, position: { x: 0.45, y: 0 }, radius: 0.1, valid: true });
+  const validHover = { type: 'ball', tileIndex: 0, position: { x: 0.45, y: 0 }, radius: 0.1, valid: true, label: 'click to place ball' };
+  N.drawSetupHover(ctx, geometry, state, validHover, { label: false });
   assert.strictEqual(calls.arcs, 2, 'a seam-crossing hint is composed from both tile images');
   assert.strictEqual(calls.clips, 2);
+  assert.strictEqual(calls.labels, 0, 'wrapped copies can suppress their repeated text labels');
+  N.drawSetupHoverLabelOverlay(ctx, { x: 75, y: 50 }, validHover);
+  assert.strictEqual(calls.labels, 1, 'the final screen-space overlay draws exactly one label');
   calls.arcs = 0;
   calls.clips = 0;
   N.drawSetupHover(ctx, geometry, state, { type: 'ball', tileIndex: 0, position: { x: -0.48, y: 0 }, radius: 0.1, valid: false });

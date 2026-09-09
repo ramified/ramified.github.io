@@ -254,6 +254,7 @@
     'access.billiardsFriction': ['Billiards table friction', '台球桌面摩擦力'],
     'access.billiardsPhysicsProfile': ['Billiards physics profile', '台球物理模式'],
     'access.billiardsEquipment': ['Billiards equipment profile', '台球器材配置'],
+    'access.billiardsTileEdgeLength': ['Physical length of each billiards tile edge', '每条台球方块边的实际长度'],
     'access.billiardsCueSpeed': ['Cue speed in metres per second', '球杆速度（米每秒）'],
     'access.billiardsElevation': ['Cue elevation angle', '球杆仰角'],
     'access.billiardsStroke': ['Stroke preset', '杆法预设'],
@@ -390,6 +391,7 @@
     'billiards.tools.tip': ['Tip', '杆头'],
     'billiards.tools.telemetry': ['Research telemetry', '研究遥测'],
     'billiards.tools.equipment': ['Equipment', '器材'],
+    'billiards.tools.tileEdgeLength': ['Tile edge length', '方块边长'],
     'billiards.tools.classicDisabled': ['Advanced physics controls require Realistic or Research.', '高级物理控制仅适用于拟真或研究模式。'],
     'billiards.equipment.pool9': ['9-foot American pool', '九英尺美式球桌'],
     'billiards.equipment.chinese8': ['Chinese 8-ball', '中式八球'],
@@ -825,9 +827,11 @@
     , 'runtime.billiardsCueHint': ['Click the white cue ball and drag away from the intended shot; it travels in the opposite direction.', '点击白色母球，并向目标反方向拖动；母球会沿相反方向前进。']
     , 'runtime.billiardsPhysicsEnabled': ['{{profile}} physics enabled', '已启用{{profile}}物理模式']
     , 'runtime.billiardsPhysicsNextShot': ['The selected profile will be used for the next shot.', '下一杆将使用所选物理模式。']
-    , 'runtime.billiardsConfigurationRestart': ['Changing physics or equipment restarts the current game. Continue?', '更换物理模式或器材会重新开始当前游戏。是否继续？']
+    , 'runtime.billiardsConfigurationRestart': ['Changing physics, equipment, or tile length restarts the current game. Continue?', '更换物理模式、器材或方块边长会重新开始当前游戏。是否继续？']
     , 'runtime.billiardsEquipmentEnabled': ['{{equipment}} equipment enabled', '已启用{{equipment}}器材配置']
     , 'runtime.billiardsEquipmentRestartHint': ['Equipment remains fixed after the game begins.', '游戏开始后器材配置保持固定。']
+    , 'runtime.billiardsTileLengthEnabled': ['Tile edge length set to {{length}} m', '方块边长已设为 {{length}} 米']
+    , 'runtime.billiardsTileLengthHint': ['Ball size now follows the selected equipment at this physical scale.', '球的大小现在会按此实际比例匹配所选器材。']
     , 'runtime.billiardsResearchCancelled': ['research calculation cancelled', '已取消研究模式计算']
     , 'runtime.billiardsResearchCancelledHint': ['The game state was not changed.', '游戏和录像状态均未改变。']
     , 'billiards.telemetry.idle': ['idle', '空闲']

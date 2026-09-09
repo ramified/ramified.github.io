@@ -333,12 +333,14 @@ async function run() {
   const deterministic = {
     physicsProfile: 'research', physicsVersion: 'research-v1-event',
     equipmentProfileId: 'pool-9ft', equipmentVersion: 'wpa-9ft-v1',
+    tileEdgeLengthM: 0.635,
     solverTolerancesVersion: 'event-toi-v1'
   };
   const physicalShot = worker.normalizeAction({
     ...shot,
     physicsVersion: deterministic.physicsVersion,
     equipmentVersion: deterministic.equipmentVersion,
+    tileEdgeLengthM: deterministic.tileEdgeLengthM,
     cueSpeedMps: 4.2,
     elevationRad: 0.2,
     tipOffset: { x: 0.2, y: -0.1 },
@@ -364,6 +366,10 @@ async function run() {
     ...physicalRetained,
     deterministic: { ...deterministic, equipmentVersion: 'other' }
   }), /equipmentVersion cannot change/);
+  assert.match(worker.billiardsTurnIssue(['player-1'], {
+    ...physicalShot,
+    tileEdgeLengthM: 0.5
+  }, physicalCurrent, physicalRetained), /tileEdgeLengthM does not match/);
 
   const passed = {
     ...retained,

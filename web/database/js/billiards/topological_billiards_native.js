@@ -19,6 +19,8 @@
   const RESEARCH_PHYSICS_DT = 1 / 960;
   const DEFAULT_PHYSICS_PROFILE = 'legacy';
   const DEFAULT_EQUIPMENT_PROFILE = 'pool-9ft';
+  const MIN_TILE_EDGE_LENGTH_M = 0.07;
+  const MAX_TILE_EDGE_LENGTH_M = 0.5;
   const SOLVER_TOLERANCES_VERSION = 'event-toi-v1';
   const CUE_INPUT_VERSION = 'power-to-cue-speed-v1';
   const PHYSICS_VERSION = Object.freeze({
@@ -185,6 +187,23 @@
 
   function equipmentProfile(value) {
     return EQUIPMENT_PROFILES[normalizeEquipmentProfile(value)];
+  }
+
+  function normalizeTileEdgeLengthM(value, fallback) {
+    const number = value == null || value === '' ? NaN : Number(value);
+    const fallbackNumber = Number(fallback);
+    const resolvedFallback = Number.isFinite(fallbackNumber) ? fallbackNumber : 0.13;
+    return clamp(Number.isFinite(number) ? number : resolvedFallback, MIN_TILE_EDGE_LENGTH_M, MAX_TILE_EDGE_LENGTH_M);
+  }
+
+  function ballRadiusForTileEdgeLength(equipment, tileEdgeLengthM) {
+    return normalizeRadius(equipment.ballDiameterM / (2 * tileEdgeLengthM), 0.22, 0.005, 0.45);
+  }
+
+  function pocketRadiusForTileEdgeLength(equipment, tileEdgeLengthM) {
+    // Quotient vertices do not have a stable ordinary-table side/corner role.
+    // Use the corner mouth as the conservative circular pocket diameter.
+    return normalizeRadius(equipment.cornerPocketMouthM / (2 * tileEdgeLengthM), 0.34, 0.005, 0.75);
   }
 
   function cueProfile(value) {
@@ -665,7 +684,7 @@
       velocity: { ...velocity, z: Number(source && source.velocity && source.velocity.z) || 0 },
       angularVelocity: normalizeVector3(source && source.angularVelocity),
       orientation: source && source.orientation ? normalizeQuaternion(source.orientation) : defaultBallOrientation(),
-      radius: normalizeRadius(source && source.radius, defaults.ballRadius, 0.05, 0.45),
+      radius: normalizeRadius(source && source.radius, defaults.ballRadius, 0.005, 0.45),
       mass: normalizeRadius(source && source.mass, 1, 0.05, 20),
       physicalMassKg: Math.max(0.01, Number(source && source.physicalMassKg) || Number(defaults.physicalMassKg) || 0.17),
       active,
@@ -724,7 +743,7 @@
       pockets.push({
         id: String(source && source.id || `p${index + 1}`),
         classIndex: vertexClass.index,
-        radius: normalizeRadius(source && source.radius, pocketRadius, 0.08, 0.75)
+        radius: normalizeRadius(source && source.radius, pocketRadius, 0.005, 0.75)
       });
     });
     return pockets;
@@ -738,8 +757,21 @@
     const rules = normalizeRules(options.rules || block.rules);
     const equipmentProfileId = normalizeEquipmentProfile(options.equipmentProfileId || block.equipmentProfileId);
     const equipment = equipmentProfile(equipmentProfileId);
-    const ballRadius = normalizeRadius(block.ballRadius, 0.22, 0.05, 0.45);
-    const pocketRadius = normalizeRadius(block.pocketRadius, 0.34, 0.08, 0.75);
+    const legacyBallRadius = normalizeRadius(block.ballRadius, 0.22, 0.005, 0.45);
+    const inferredTileEdgeLengthM = equipment.ballDiameterM / (2 * legacyBallRadius);
+    const tileEdgeLengthM = normalizeTileEdgeLengthM(
+      options.tileEdgeLengthM != null ? options.tileEdgeLengthM : block.tileEdgeLengthM,
+      inferredTileEdgeLengthM
+    );
+    const hasExplicitTileEdgeLength = options.tileEdgeLengthM != null || block.tileEdgeLengthM != null;
+    const ballRadius = hasExplicitTileEdgeLength
+      ? ballRadiusForTileEdgeLength(equipment, tileEdgeLengthM)
+      : legacyBallRadius;
+    const pocketRadius = block.pocketRadius != null
+      ? normalizeRadius(block.pocketRadius, 0.34, 0.005, 0.75)
+      : (hasExplicitTileEdgeLength
+        ? pocketRadiusForTileEdgeLength(equipment, tileEdgeLengthM)
+        : 0.34);
     const defaults = { ballRadius, pocketRadius, physicalMassKg: equipment.ballMassKg };
     const ballSources = Array.isArray(block.balls) ? block.balls : [];
     const balls = ballSources.map((source, index) => ballFromPayload(source, preset, atlas, defaults, index + 1)).filter(Boolean);
@@ -781,6 +813,7 @@
         physicsVersion: PHYSICS_VERSION[physicsProfile],
         equipmentProfileId,
         equipmentVersion: equipment.version,
+        tileEdgeLengthM,
         solverTolerancesVersion: physicsProfile === 'legacy' ? 'legacy-fixed-step-v1' : SOLVER_TOLERANCES_VERSION,
         cueInputVersion: CUE_INPUT_VERSION,
         seed: Math.max(1, Math.floor(Number(block.seed) || 1)),
@@ -844,6 +877,10 @@
       rules: normalizeRules(state.rules),
       physicsProfile: normalizePhysicsProfile(state.deterministic && state.deterministic.physicsProfile),
       equipmentProfileId: normalizeEquipmentProfile(state.deterministic && state.deterministic.equipmentProfileId),
+      tileEdgeLengthM: normalizeTileEdgeLengthM(
+        state.deterministic && state.deterministic.tileEdgeLengthM,
+        localMetersPerUnit(state)
+      ),
       ballRadius: state.ballRadius,
       pocketRadius: state.pocketRadius,
       parameters: clonePlain(state.deterministic.parameters),
@@ -938,13 +975,62 @@
     const state = cloneState(source);
     const id = normalizeEquipmentProfile(value);
     const equipment = equipmentProfile(id);
+    const previousBallRadius = Math.max(EPSILON, Number(state.ballRadius) || 0.22);
+    const previousPocketRadius = Math.max(EPSILON, Number(state.pocketRadius) || 0.34);
+    const tileEdgeLengthM = normalizeTileEdgeLengthM(
+      state.deterministic && state.deterministic.tileEdgeLengthM,
+      localMetersPerUnit(state)
+    );
+    const ballRadius = ballRadiusForTileEdgeLength(equipment, tileEdgeLengthM);
+    const radiusScale = ballRadius / previousBallRadius;
+    const pocketRadius = pocketRadiusForTileEdgeLength(equipment, tileEdgeLengthM);
+    const pocketRadiusScale = pocketRadius / previousPocketRadius;
     state.deterministic = {
       ...(state.deterministic || {}),
       equipmentProfileId: id,
       equipmentVersion: equipment.version,
+      tileEdgeLengthM,
       telemetry: null
     };
-    state.balls.forEach((ball) => { ball.physicalMassKg = equipment.ballMassKg; });
+    state.ballRadius = ballRadius;
+    state.pocketRadius = pocketRadius;
+    state.balls.forEach((ball) => {
+      ball.radius = normalizeRadius(ball.radius * radiusScale, ballRadius, 0.005, 0.45);
+      ball.physicalMassKg = equipment.ballMassKg;
+    });
+    state.pockets.forEach((pocket) => {
+      pocket.radius = normalizeRadius(pocket.radius * pocketRadiusScale, pocketRadius, 0.005, 0.75);
+    });
+    return state;
+  }
+
+  function setTileEdgeLengthM(source, value) {
+    if (!source) return source;
+    const state = cloneState(source);
+    const equipment = equipmentProfile(state.deterministic && state.deterministic.equipmentProfileId);
+    const previousBallRadius = Math.max(EPSILON, Number(state.ballRadius) || 0.22);
+    const previousPocketRadius = Math.max(EPSILON, Number(state.pocketRadius) || 0.34);
+    const tileEdgeLengthM = normalizeTileEdgeLengthM(
+      value,
+      state.deterministic && state.deterministic.tileEdgeLengthM
+    );
+    const ballRadius = ballRadiusForTileEdgeLength(equipment, tileEdgeLengthM);
+    const radiusScale = ballRadius / previousBallRadius;
+    const pocketRadius = pocketRadiusForTileEdgeLength(equipment, tileEdgeLengthM);
+    const pocketRadiusScale = pocketRadius / previousPocketRadius;
+    state.ballRadius = ballRadius;
+    state.pocketRadius = pocketRadius;
+    state.balls.forEach((ball) => {
+      ball.radius = normalizeRadius(ball.radius * radiusScale, ballRadius, 0.005, 0.45);
+    });
+    state.pockets.forEach((pocket) => {
+      pocket.radius = normalizeRadius(pocket.radius * pocketRadiusScale, pocketRadius, 0.005, 0.75);
+    });
+    state.deterministic = {
+      ...(state.deterministic || {}),
+      tileEdgeLengthM,
+      telemetry: null
+    };
     return state;
   }
 
@@ -1771,7 +1857,8 @@
 
   function localMetersPerUnit(state) {
     const equipment = equipmentProfile(state && state.deterministic && state.deterministic.equipmentProfileId);
-    return equipment.ballDiameterM / Math.max(EPSILON, 2 * Number(state && state.ballRadius || 0.22));
+    const inferred = equipment.ballDiameterM / Math.max(EPSILON, 2 * Number(state && state.ballRadius || 0.22));
+    return normalizeTileEdgeLengthM(state && state.deterministic && state.deterministic.tileEdgeLengthM, inferred);
   }
 
   function totalKineticEnergy(state) {
@@ -2589,6 +2676,7 @@
   function stateExport(state) {
     return {
       rules: state.rules,
+      tileEdgeLengthM: localMetersPerUnit(state),
       ballRadius: state.ballRadius,
       pocketRadius: state.pocketRadius,
       phase: state.phase,
@@ -2633,6 +2721,9 @@
         rules: source.rules,
         physicsProfile: source.physicsProfile || (source.deterministic && source.deterministic.physicsProfile),
         equipmentProfileId: source.equipmentProfileId || (source.deterministic && source.deterministic.equipmentProfileId),
+        tileEdgeLengthM: source.tileEdgeLengthM != null
+          ? source.tileEdgeLengthM
+          : (source.deterministic && source.deterministic.tileEdgeLengthM),
         ballRadius: source.ballRadius,
         pocketRadius: source.pocketRadius,
         balls,
@@ -2672,6 +2763,10 @@
       const physicsProfile = normalizePhysicsProfile(source.deterministic.physicsProfile || source.physicsProfile);
       const equipmentProfileId = normalizeEquipmentProfile(source.deterministic.equipmentProfileId || source.equipmentProfileId);
       const currentEquipment = equipmentProfile(equipmentProfileId);
+      const tileEdgeLengthM = normalizeTileEdgeLengthM(
+        source.deterministic.tileEdgeLengthM,
+        state.deterministic.tileEdgeLengthM
+      );
       if (source.deterministic.physicsVersion && source.deterministic.physicsVersion !== PHYSICS_VERSION[physicsProfile]) {
         throw new Error(`Unsupported Billiards physics version ${source.deterministic.physicsVersion}; expected ${PHYSICS_VERSION[physicsProfile]}.`);
       }
@@ -2693,6 +2788,7 @@
         physicsVersion: PHYSICS_VERSION[physicsProfile],
         equipmentProfileId,
         equipmentVersion: currentEquipment.version,
+        tileEdgeLengthM,
         solverTolerancesVersion: expectedToleranceVersion,
         cueInputVersion: CUE_INPUT_VERSION,
         seed: Math.max(1, Math.floor(Number(source.deterministic.seed) || 1)),
@@ -2900,7 +2996,10 @@
       Number(geometry && geometry.backingScaleY) || 1
     );
     const deviceScale = Number(geometry && geometry.devicePixelRatio);
-    return Math.min(2, Math.max(1, Number.isFinite(deviceScale) ? deviceScale : backingScale));
+    // Normal view caps logical tile size and then enlarges the whole canvas in
+    // CSS.  The sprite must follow the complete logical-to-backing-pixel scale,
+    // not just devicePixelRatio, or its number texture is enlarged and blurred.
+    return Math.min(8, Math.max(1, backingScale, Number.isFinite(deviceScale) ? deviceScale : 1));
   }
 
   function rayCircleDistance(origin, direction, center, radius) {
@@ -3283,7 +3382,12 @@
     ctx.restore();
   }
 
-  function drawSetupHover(ctx, geometry, state, hover) {
+  function drawSetupHoverLabelOverlay(ctx, point, hover) {
+    if (!hover) return;
+    drawSetupHoverLabel(ctx, point, hover.label, setupHoverColor(hover));
+  }
+
+  function drawSetupHover(ctx, geometry, state, hover, options = {}) {
     if (!hover || !Number.isInteger(hover.tileIndex)) return;
     const color = setupHoverColor(hover);
     const radius = Number(hover.radius) || state.ballRadius;
@@ -3303,7 +3407,7 @@
           : drawSetupHoverCircle(ctx, geometry, state, targetTile, targetPosition, radius, color);
       }
     }
-    drawSetupHoverLabel(ctx, labelPoint, hover.label, color);
+    if (options.label !== false) drawSetupHoverLabel(ctx, labelPoint, hover.label, color);
   }
 
   function drawCuePrompt(ctx, geometry, state, view) {
@@ -3336,7 +3440,9 @@
   function render(ctx, geometry, state, view = {}) {
     if (!ctx || !geometry || !state) return;
     drawPocketWedges(ctx, geometry, state);
-    if (view.setupHover && Number.isInteger(view.setupHover.tileIndex)) drawSetupHover(ctx, geometry, state, view.setupHover);
+    if (view.setupHover && Number.isInteger(view.setupHover.tileIndex)) {
+      drawSetupHover(ctx, geometry, state, view.setupHover, { label: view.setupHoverLabel !== false });
+    }
     if (view.rackPreview && Number.isInteger(view.rackPreview.tileIndex)) {
       const preview = view.rackPreview;
       const entries = rackPreviewEntries(state, preview.count, preview.tileIndex, preview.center, preview.direction);
@@ -3446,6 +3552,7 @@
     createState,
     defaultBallOrientation,
     drawSetupHover,
+    drawSetupHoverLabelOverlay,
     eraseAt,
     indexOf,
     latticeInfo,
@@ -3460,6 +3567,7 @@
     normalizeFriction,
     normalizeEquipmentProfile,
     normalizePhysicsProfile,
+    normalizeTileEdgeLengthM,
     normalizeRackRecipe,
     placeBall,
     placeRack,
@@ -3480,6 +3588,7 @@
     setupInteractionPreview,
     setPhysicsProfile,
     setEquipmentProfile,
+    setTileEdgeLengthM,
     shotSimulationProgress,
     totalKineticEnergy,
     shotSimulationResult,

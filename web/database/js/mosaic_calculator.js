@@ -25,6 +25,13 @@
     }
     return null;
   })();
+  const HyperbolicMetric = (() => {
+    if (typeof globalThis !== 'undefined' && globalThis.MosaicHyperbolicMetric) return globalThis.MosaicHyperbolicMetric;
+    if (typeof module !== 'undefined' && module.exports && typeof require === 'function') {
+      try { return require('./mosaic_hyperbolic_metric.js'); } catch (_) { return null; }
+    }
+    return null;
+  })();
 
   const LATTICES = {
     hexagonal: {
@@ -838,6 +845,7 @@
   const SOKOBAN_ENERGY_GLOW_DEFAULT = { inner: 0.55, outer: 0.82, blur: 0.38 };
   const BILLIARDS_RACK_COUNTS = [6, 10, 15];
   const BILLIARDS_BALL_NUMBERS = Array.from({ length: 15 }, (_, index) => index + 1);
+  const hyperbolicMetricCache = new Map();
 
   const state = {
     rows: 5,
@@ -872,6 +880,16 @@
     backgroundBilliardTrailLength: DEFAULT_BACKGROUND_BILLIARD_TRAIL_LENGTH,
     backgroundBilliardArrowLength: DEFAULT_BACKGROUND_BILLIARD_ARROW_LENGTH,
     backgroundBilliardHitMarkers: DEFAULT_BACKGROUND_BILLIARD_HIT_MARKERS,
+    backgroundMetric: 'flat',
+    hyperbolicMetricMethod: 'discrete',
+    hyperbolicMetricRefinement: 'auto',
+    hyperbolicMetricHeatmap: 'off',
+    hyperbolicMetricResult: null,
+    hyperbolicMetricStatus: 'idle',
+    hyperbolicMetricMessage: '',
+    hyperbolicMetricTopologyKey: '',
+    hyperbolicMetricRequestId: 0,
+    hyperbolicMetricWorker: null,
     backgroundHoverCusp: null,
     homologyAnalysis: null,
     homologyTopologyKey: '',
@@ -939,7 +957,8 @@
       trailColorMode: 'blue',
       playing: false,
       frame: null,
-      lastTime: 0
+      lastTime: 0,
+      launch: null
     },
     selectedBackgroundCusp: null,
     edits: 0,
@@ -1174,6 +1193,7 @@
     refs.backgroundChainLength = document.getElementById('background-chain-length');
     refs.backgroundChainReversed = document.getElementById('background-chain-reversed');
     refs.backgroundBilliardRow = document.getElementById('background-billiard-row');
+    refs.backgroundMetricToggle = document.getElementById('background-metric-toggle');
     refs.backgroundBilliardPlay = document.getElementById('background-billiard-play');
     refs.backgroundBilliardClear = document.getElementById('background-billiard-clear');
     refs.backgroundBilliardSpeedRow = document.getElementById('background-billiard-speed-row');
@@ -1187,6 +1207,13 @@
     refs.backgroundBilliardArrowValue = document.getElementById('background-billiard-arrow-value');
     refs.backgroundBilliardHitRow = document.getElementById('background-billiard-hit-row');
     refs.backgroundBilliardHitMarkers = document.getElementById('background-billiard-hit-markers');
+    refs.hyperbolicMetricDebugCard = document.getElementById('hyperbolic-metric-debug-card');
+    refs.hyperbolicMetricSolver = document.getElementById('hyperbolic-metric-solver');
+    refs.hyperbolicMetricRefinement = document.getElementById('hyperbolic-metric-refinement');
+    refs.hyperbolicMetricHeatmap = document.getElementById('hyperbolic-metric-heatmap');
+    refs.hyperbolicMetricDebugReadout = document.getElementById('hyperbolic-metric-debug-readout');
+    refs.hyperbolicHeatmapLegend = document.getElementById('hyperbolic-heatmap-legend');
+    refs.hyperbolicHeatmapLegendLabel = document.getElementById('hyperbolic-heatmap-legend-label');
     refs.homologyCard = document.getElementById('homology-card');
     refs.homologyGroup = document.getElementById('homology-group');
     refs.computeHomology = document.getElementById('compute-homology');
@@ -1547,6 +1574,35 @@
     }
     if (refs.backgroundBeginSecondChain) {
       refs.backgroundBeginSecondChain.addEventListener('click', beginSecondGlueBoundaryChain);
+    }
+    if (refs.backgroundMetricToggle) {
+      refs.backgroundMetricToggle.addEventListener('click', toggleBackgroundMetric);
+    }
+    if (refs.hyperbolicMetricSolver) {
+      refs.hyperbolicMetricSolver.addEventListener('change', () => {
+        state.hyperbolicMetricMethod = refs.hyperbolicMetricSolver.value === 'fem' ? 'fem' : 'discrete';
+        restartBackgroundBilliardFromLaunch();
+        if (state.backgroundMetric === 'hyperbolic') requestHyperbolicMetric(true);
+        syncHyperbolicMetricControls();
+      });
+    }
+    if (refs.hyperbolicMetricRefinement) {
+      refs.hyperbolicMetricRefinement.addEventListener('change', () => {
+        const value = refs.hyperbolicMetricRefinement.value;
+        state.hyperbolicMetricRefinement = value === 'auto' ? 'auto' : String(clampInt(value, 1, 4, 2));
+        restartBackgroundBilliardFromLaunch();
+        if (state.backgroundMetric === 'hyperbolic') requestHyperbolicMetric(true);
+        syncHyperbolicMetricControls();
+      });
+    }
+    if (refs.hyperbolicMetricHeatmap) {
+      refs.hyperbolicMetricHeatmap.addEventListener('change', () => {
+        state.hyperbolicMetricHeatmap = ['scale', 'residual'].includes(refs.hyperbolicMetricHeatmap.value)
+          ? refs.hyperbolicMetricHeatmap.value
+          : 'off';
+        syncHyperbolicMetricControls();
+        draw(analyze());
+      });
     }
     if (refs.backgroundBilliardPlay) {
       refs.backgroundBilliardPlay.addEventListener('click', toggleBackgroundBilliardPlayback);
@@ -3563,6 +3619,7 @@
       rows: state.rows,
       cols: state.cols,
       surface: currentBackgroundSurface(),
+      ...(state.backgroundMetric === 'hyperbolic' ? { metric: 'hyperbolic' } : {}),
       removedTiles: minigameRemovedRefsForExport(),
       connectFourHoles: minigameHoleRefsForExport(),
       inputHoles: minigameHoleRefsForExport(),
@@ -3590,6 +3647,7 @@
     compact.lattice = state.lattice;
     compact.size = `${state.rows}x${state.cols}`;
     compact.surface = currentBackgroundSurface();
+    if (state.backgroundMetric === 'hyperbolic') compact.metric = 'hyperbolic';
     const removed = compactTileListForExport(minigameRemovedRefsForExport(), state.rows, state.cols, { rect: true });
     const holes = compactTileListForExport(minigameHoleRefsForExport(), state.rows, state.cols, { top: true });
     const cuts = compactCutListForExport(minigameCutEdgesForExport());
@@ -4718,6 +4776,14 @@
       payload.backgroundBilliardHitMarkers
       || (payload.backgroundSpace && payload.backgroundSpace.billiardHitMarkers)
     );
+    state.backgroundMetric = normalizeBackgroundMetric(
+      payload.backgroundMetric || payload.metric || (payload.backgroundSpace && payload.backgroundSpace.metric)
+    );
+    cancelHyperbolicMetricWorker();
+    state.hyperbolicMetricResult = null;
+    state.hyperbolicMetricTopologyKey = '';
+    state.hyperbolicMetricStatus = 'idle';
+    state.hyperbolicMetricMessage = state.backgroundMetric === 'hyperbolic' ? 'Waiting to uniformize imported topology.' : 'Flat metric selected.';
     state.editMode = normalizeEditMode(payload.clickMode || payload.editMode);
     state.drawAction = normalizeDrawAction(payload.drawAction || (payload.display && payload.display.drawAction));
     if (state.diagramType === 'dual' && (payload.drawAddVertices || (payload.display && payload.display.drawAddVertices))) {
@@ -5571,7 +5637,8 @@
         y: position.y + direction.y * normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength)
       } : null,
       trailPoints: [{ x: position.x, y: position.y, colorMode: 'blue' }],
-      trailColorMode: 'blue'
+      trailColorMode: 'blue',
+      launch: backgroundBilliardLaunchFromPosition(index, position, direction)
     };
     syncBackgroundBilliardControls();
   }
@@ -7884,6 +7951,258 @@
     return vertex;
   }
 
+  function normalizeBackgroundMetric(value) {
+    return String(value || '').toLowerCase() === 'hyperbolic' ? 'hyperbolic' : 'flat';
+  }
+
+  function hyperbolicMetricEligibility(background = analyzeBackgroundSpace()) {
+    if (!HyperbolicMetric) return { supported: false, reason: 'The hyperbolic solver module is unavailable.' };
+    if (!isGluedBoundaryMode()) return { supported: false, reason: 'Choose Glued boundary mode before uniformizing the background.' };
+    if (!background || background.existing < 1) return { supported: false, reason: 'Add at least one tile.' };
+    if (background.components !== 1) return { supported: false, reason: 'Hyperbolic mode requires one connected surface.' };
+    if (background.orientable !== true) return { supported: false, reason: 'Hyperbolic mode currently supports orientable surfaces only.' };
+    const chi = Number(background.eulerCharacteristic);
+    if (!Number.isFinite(chi)) return { supported: false, reason: 'The gluing data does not define a valid surface.' };
+    if (chi >= 0) {
+      const type = String(background.surfaceType || '').toLowerCase();
+      const familiar = ['sphere', 'disk', 'torus', 'annulus'].find((name) => type.includes(name));
+      return { supported: false, reason: `${familiar ? familiar[0].toUpperCase() + familiar.slice(1) : 'This surface'} has χ ≥ 0, so it has no curvature −1 uniformizing metric of this type.` };
+    }
+    const usedEdges = new Set();
+    for (const pair of cloneGluedEdges()) {
+      const first = cloneBoundaryEdge(pair && pair.first);
+      const second = cloneBoundaryEdge(pair && pair.second);
+      const firstKey = boundaryEdgeKey(first);
+      const secondKey = boundaryEdgeKey(second);
+      if (!first || !second || !isValidBoundaryEdge(first) || !isValidBoundaryEdge(second) || !firstKey || !secondKey || usedEdges.has(firstKey) || usedEdges.has(secondKey)) {
+        return { supported: false, reason: 'The glued-edge data is malformed or reuses a boundary edge.' };
+      }
+      usedEdges.add(firstKey);
+      usedEdges.add(secondKey);
+    }
+    return { supported: true, reason: '' };
+  }
+
+  function hyperbolicMetricSurfaceSnapshot() {
+    const lattice = getLattice();
+    const tiles = [];
+    for (let index = 0; index < state.rows * state.cols; index += 1) {
+      if (!tileExists(index)) continue;
+      const links = new Array(lattice.sides).fill(null);
+      for (let dir = 0; dir < lattice.sides; dir += 1) {
+        const ordinary = backgroundBilliardNeighbor(index, dir);
+        if (ordinary) {
+          links[dir] = { index: ordinary.index, dir: ordinary.dir, sameDirection: false };
+          continue;
+        }
+        const pair = gluedPairForBoundaryEdge({ index, dir });
+        if (!pair) continue;
+        const first = sameBoundaryEdge(pair.first, { index, dir });
+        const partner = first ? pair.second : pair.first;
+        if (partner && tileExists(partner.index)) {
+          links[dir] = { index: partner.index, dir: partner.dir, sameDirection: !!pair.reversed };
+        }
+      }
+      tiles.push({ index, links });
+    }
+    return { lattice: state.lattice, tiles };
+  }
+
+  function hyperbolicMetricTopologyKey() {
+    return JSON.stringify(hyperbolicMetricSurfaceSnapshot());
+  }
+
+  function hyperbolicMetricCacheKey(topologyKey = hyperbolicMetricTopologyKey()) {
+    return `${topologyKey}|${state.hyperbolicMetricMethod}|${state.hyperbolicMetricRefinement}`;
+  }
+
+  function cancelHyperbolicMetricWorker() {
+    state.hyperbolicMetricRequestId += 1;
+    if (state.hyperbolicMetricWorker && typeof state.hyperbolicMetricWorker.terminate === 'function') {
+      state.hyperbolicMetricWorker.terminate();
+    }
+    state.hyperbolicMetricWorker = null;
+  }
+
+  function toggleBackgroundMetric() {
+    if (state.backgroundMetric === 'hyperbolic') {
+      cancelHyperbolicMetricWorker();
+      state.backgroundMetric = 'flat';
+      state.hyperbolicMetricStatus = 'idle';
+      state.hyperbolicMetricMessage = 'Flat metric selected.';
+      restartBackgroundBilliardFromLaunch();
+      syncHyperbolicMetricControls();
+      refreshExport();
+      draw(analyze());
+      return;
+    }
+    const eligibility = hyperbolicMetricEligibility();
+    if (!eligibility.supported) {
+      state.backgroundMetric = 'flat';
+      state.hyperbolicMetricStatus = 'error';
+      state.hyperbolicMetricMessage = eligibility.reason;
+      syncHyperbolicMetricControls();
+      syncBackgroundBilliardStatusLine();
+      return;
+    }
+    state.backgroundMetric = 'hyperbolic';
+    restartBackgroundBilliardFromLaunch();
+    requestHyperbolicMetric(false);
+    refreshExport();
+  }
+
+  function requestHyperbolicMetric(force = false) {
+    if (state.backgroundMetric !== 'hyperbolic') return;
+    const eligibility = hyperbolicMetricEligibility();
+    if (!eligibility.supported) {
+      cancelHyperbolicMetricWorker();
+      state.backgroundMetric = 'flat';
+      state.hyperbolicMetricStatus = 'error';
+      state.hyperbolicMetricMessage = eligibility.reason;
+      syncHyperbolicMetricControls();
+      return;
+    }
+    const topologyKey = hyperbolicMetricTopologyKey();
+    const cacheKey = hyperbolicMetricCacheKey(topologyKey);
+    if (!force && hyperbolicMetricCache.has(cacheKey)) {
+      state.hyperbolicMetricResult = hyperbolicMetricCache.get(cacheKey);
+      state.hyperbolicMetricTopologyKey = topologyKey;
+      state.hyperbolicMetricStatus = state.hyperbolicMetricResult.status;
+      state.hyperbolicMetricMessage = state.hyperbolicMetricResult.warning || 'Hyperbolic metric ready.';
+      restartBackgroundBilliardFromLaunch();
+      syncHyperbolicMetricControls();
+      draw(analyze());
+      return;
+    }
+    cancelHyperbolicMetricWorker();
+    const requestId = state.hyperbolicMetricRequestId;
+    state.hyperbolicMetricResult = null;
+    state.hyperbolicMetricTopologyKey = topologyKey;
+    state.hyperbolicMetricStatus = 'computing';
+    state.hyperbolicMetricMessage = 'Uniformizing the tiled surface…';
+    syncHyperbolicMetricControls();
+    const surface = hyperbolicMetricSurfaceSnapshot();
+    const options = {
+      method: state.hyperbolicMetricMethod,
+      refinement: state.hyperbolicMetricRefinement,
+      tolerance: 1e-6
+    };
+    const acceptResult = (result) => {
+      if (requestId !== state.hyperbolicMetricRequestId || state.backgroundMetric !== 'hyperbolic') return;
+      if (hyperbolicMetricTopologyKey() !== topologyKey) return;
+      if (!result || result.topologyKey && result.topologyKey !== topologyKey) return;
+      result.topologyKey = topologyKey;
+      state.hyperbolicMetricResult = result;
+      state.hyperbolicMetricStatus = result.status;
+      state.hyperbolicMetricMessage = result.warning || 'Hyperbolic metric ready.';
+      hyperbolicMetricCache.set(cacheKey, result);
+      state.hyperbolicMetricWorker = null;
+      if (result.status === 'error') {
+        state.backgroundMetric = 'flat';
+        state.hyperbolicMetricMessage = 'Uniformization did not converge; Flat mode was retained.';
+      }
+      restartBackgroundBilliardFromLaunch();
+      syncHyperbolicMetricControls();
+      refreshExport();
+      draw(analyze());
+    };
+    const rejectResult = (message) => {
+      if (requestId !== state.hyperbolicMetricRequestId) return;
+      state.hyperbolicMetricWorker = null;
+      state.hyperbolicMetricResult = null;
+      state.hyperbolicMetricStatus = 'error';
+      state.hyperbolicMetricMessage = `${message || 'Uniformization failed.'} Flat mode was retained.`;
+      state.backgroundMetric = 'flat';
+      restartBackgroundBilliardFromLaunch();
+      syncHyperbolicMetricControls();
+      refreshExport();
+      draw(analyze());
+    };
+    if (typeof Worker !== 'undefined') {
+      try {
+        const worker = new Worker('js/mosaic_hyperbolic_metric_worker.js?v=20260909-1');
+        state.hyperbolicMetricWorker = worker;
+        worker.addEventListener('message', (event) => {
+          const message = event.data || {};
+          if (message.requestId !== requestId) return;
+          worker.terminate();
+          if (message.type === 'result') acceptResult(message.result);
+          else rejectResult(message.message);
+        });
+        worker.addEventListener('error', (event) => {
+          worker.terminate();
+          rejectResult(event && event.message);
+        });
+        worker.postMessage({ type: 'solve', requestId, topologyKey, surface, options });
+        return;
+      } catch (error) {
+        state.hyperbolicMetricWorker = null;
+      }
+    }
+    setTimeout(() => {
+      try {
+        const result = HyperbolicMetric.solve(surface, options);
+        result.topologyKey = topologyKey;
+        acceptResult(result);
+      } catch (error) {
+        rejectResult(error && error.message);
+      }
+    }, 0);
+  }
+
+  function syncHyperbolicMetricForReport(report) {
+    if (state.backgroundMetric !== 'hyperbolic') {
+      syncHyperbolicMetricControls();
+      return;
+    }
+    const background = report && report.background ? report.background : analyzeBackgroundSpace();
+    const eligibility = hyperbolicMetricEligibility(background);
+    if (!eligibility.supported) {
+      cancelHyperbolicMetricWorker();
+      state.backgroundMetric = 'flat';
+      state.hyperbolicMetricResult = null;
+      state.hyperbolicMetricStatus = 'error';
+      state.hyperbolicMetricMessage = eligibility.reason;
+      restartBackgroundBilliardFromLaunch();
+      syncHyperbolicMetricControls();
+      return;
+    }
+    const topologyKey = hyperbolicMetricTopologyKey();
+    if (topologyKey !== state.hyperbolicMetricTopologyKey) {
+      restartBackgroundBilliardFromLaunch();
+      requestHyperbolicMetric(false);
+      return;
+    }
+    syncHyperbolicMetricControls();
+  }
+
+  function syncHyperbolicMetricControls() {
+    const metric = normalizeBackgroundMetric(state.backgroundMetric);
+    const status = metric === 'hyperbolic' ? state.hyperbolicMetricStatus : (state.hyperbolicMetricStatus === 'error' ? 'error' : 'flat');
+    if (refs.backgroundMetricToggle) {
+      refs.backgroundMetricToggle.textContent = metric === 'hyperbolic'
+        ? (status === 'computing' ? 'Metric: Hyperbolic (computing)' : 'Metric: Hyperbolic')
+        : 'Metric: Flat';
+      refs.backgroundMetricToggle.setAttribute('aria-pressed', metric === 'hyperbolic' ? 'true' : 'false');
+      refs.backgroundMetricToggle.setAttribute('aria-busy', status === 'computing' ? 'true' : 'false');
+      refs.backgroundMetricToggle.dataset.state = status;
+      refs.backgroundMetricToggle.title = state.hyperbolicMetricMessage || 'Switch the geodesic background metric.';
+    }
+    if (refs.hyperbolicMetricSolver) refs.hyperbolicMetricSolver.value = state.hyperbolicMetricMethod;
+    if (refs.hyperbolicMetricRefinement) refs.hyperbolicMetricRefinement.value = state.hyperbolicMetricRefinement;
+    if (refs.hyperbolicMetricHeatmap) refs.hyperbolicMetricHeatmap.value = state.hyperbolicMetricHeatmap;
+    if (refs.hyperbolicHeatmapLegend) refs.hyperbolicHeatmapLegend.hidden = state.hyperbolicMetricHeatmap === 'off' || !state.hyperbolicMetricResult;
+    if (refs.hyperbolicHeatmapLegendLabel) {
+      refs.hyperbolicHeatmapLegendLabel.textContent = state.hyperbolicMetricHeatmap === 'residual' ? '|residual| low → high' : 'scale low → high';
+    }
+    if (refs.hyperbolicMetricDebugReadout) {
+      const result = state.hyperbolicMetricResult;
+      refs.hyperbolicMetricDebugReadout.textContent = result
+        ? `${state.hyperbolicMetricMessage}\nconvergence: max ${result.maxResidual.toExponential(3)}, rms ${result.rmsResidual.toExponential(3)}\niterations: ${result.iterations}, PCG: ${result.linearIterations || 0}, flips: ${result.flips || 0}, time: ${result.timingMs} ms\narea: ${result.area.toFixed(6)}, −2πχ: ${result.expectedArea.toFixed(6)}, error: ${result.gaussBonnetError.toExponential(3)}`
+        : (state.hyperbolicMetricMessage || 'Flat metric selected.');
+    }
+  }
+
   function resetBackgroundBilliardState() {
     return {
       tileIndex: -1,
@@ -7895,7 +8214,8 @@
       trailColorMode: 'blue',
       playing: false,
       frame: null,
-      lastTime: 0
+      lastTime: 0,
+      launch: null
     };
   }
 
@@ -7904,6 +8224,56 @@
       state.backgroundBilliard = resetBackgroundBilliardState();
     }
     return state.backgroundBilliard;
+  }
+
+  function backgroundBilliardLaunchFromPosition(tileIndex, position, direction = null) {
+    const cell = geometry && geometry.cells ? geometry.cells[tileIndex] : null;
+    if (!cell || !position || !(geometry.radius > 0)) return null;
+    return {
+      tileIndex,
+      local: {
+        x: (position.x - cell.x) / geometry.radius,
+        y: (position.y - cell.y) / geometry.radius
+      },
+      direction: direction ? normalizeVector(direction.x, direction.y, 1, 0) : null
+    };
+  }
+
+  function restartBackgroundBilliardFromLaunch(redraw = false) {
+    const current = backgroundBilliardState();
+    const launch = current.launch || backgroundBilliardLaunchFromPosition(current.tileIndex, current.position, current.direction);
+    if (current.frame != null && typeof window !== 'undefined') window.cancelAnimationFrame(current.frame);
+    if (!launch || !geometry || !geometry.cells || !tileExists(launch.tileIndex)) {
+      state.backgroundBilliard = resetBackgroundBilliardState();
+      syncBackgroundBilliardControls();
+      if (redraw) draw(analyze());
+      return;
+    }
+    const cell = geometry.cells[launch.tileIndex];
+    if (!cell) return;
+    const position = {
+      x: cell.x + launch.local.x * geometry.radius,
+      y: cell.y + launch.local.y * geometry.radius
+    };
+    const direction = launch.direction ? normalizeVector(launch.direction.x, launch.direction.y, 1, 0) : null;
+    state.backgroundBilliard = {
+      ...resetBackgroundBilliardState(),
+      tileIndex: launch.tileIndex,
+      position,
+      direction,
+      launch: {
+        tileIndex: launch.tileIndex,
+        local: { ...launch.local },
+        direction: direction ? { ...direction } : null
+      },
+      aimPoint: direction ? {
+        x: position.x + direction.x * normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength),
+        y: position.y + direction.y * normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength)
+      } : null,
+      trailPoints: [{ x: position.x, y: position.y, colorMode: 'blue' }]
+    };
+    syncBackgroundBilliardControls();
+    if (redraw) draw(analyze());
   }
 
   function stopBackgroundBilliard(redraw = true) {
@@ -7973,7 +8343,8 @@
         playLabel = 'choose direction';
       } else if (billiard.position && billiard.direction) {
         playLabel = 'play';
-        playDisabled = false;
+        playDisabled = state.backgroundMetric === 'hyperbolic'
+          && !['ready', 'warning'].includes(state.hyperbolicMetricStatus);
       }
       refs.backgroundBilliardPlay.textContent = playLabel;
       refs.backgroundBilliardPlay.disabled = !show || playDisabled;
@@ -7999,6 +8370,7 @@
     if (refs.backgroundBilliardHitMarkers) {
       refs.backgroundBilliardHitMarkers.value = normalizeBackgroundBilliardHitMarkers(state.backgroundBilliardHitMarkers);
     }
+    syncHyperbolicMetricControls();
   }
 
   function toggleBackgroundBilliardPlayback() {
@@ -8053,7 +8425,8 @@
         position: { x: point.x, y: point.y },
         trailPoints: [{ x: point.x, y: point.y, colorMode: 'blue' }],
         trailColorMode: 'blue',
-        aimPoint: null
+        aimPoint: null,
+        launch: backgroundBilliardLaunchFromPosition(hit.index, point, null)
       };
       syncBackgroundBilliardControls();
       updateReport(false);
@@ -8065,6 +8438,7 @@
     if (Math.hypot(dx, dy) < Math.max(4, geometry.radius * 0.12)) return false;
     billiard.direction = normalizeVector(dx, dy, 1, 0);
     billiard.aimPoint = { x: point.x, y: point.y };
+    billiard.launch = backgroundBilliardLaunchFromPosition(billiard.tileIndex, billiard.position, billiard.direction);
     syncBackgroundBilliardControls();
     updateReport(false);
     return true;
@@ -8095,6 +8469,12 @@
 
   function backgroundBilliardStatusText() {
     if (!isBackgroundBilliardAction()) return '';
+    if (state.backgroundMetric === 'hyperbolic' && state.hyperbolicMetricStatus === 'computing') {
+      return 'geodesic: computing hyperbolic metric…';
+    }
+    if (state.hyperbolicMetricStatus === 'error' && state.hyperbolicMetricMessage) {
+      return `geodesic: ${state.hyperbolicMetricMessage}`;
+    }
     const billiard = backgroundBilliardState();
     if (!billiard.position) return 'geodesic: click inside an existing tile to place the point';
     if (!billiard.direction) return 'geodesic: click a second point to choose direction';
@@ -8117,6 +8497,14 @@
   }
 
   function advanceBackgroundBilliard(distance) {
+    if (
+      state.backgroundMetric === 'hyperbolic'
+      && state.hyperbolicMetricResult
+      && ['ready', 'warning'].includes(state.hyperbolicMetricStatus)
+    ) {
+      advanceHyperbolicBackgroundBilliard(distance);
+      return;
+    }
     const billiard = backgroundBilliardState();
     if (!billiard.position || !billiard.direction || billiard.tileIndex < 0 || !Number.isFinite(distance) || distance <= 0) return;
     appendBackgroundBilliardTrailPoint(billiard.position);
@@ -8156,6 +8544,143 @@
     if (guard >= BACKGROUND_BILLIARD_MAX_COLLISIONS_PER_FRAME) {
       stopBackgroundBilliard(false);
     }
+  }
+
+  function hyperbolicMetricSample(tileIndex, position) {
+    const result = state.hyperbolicMetricResult;
+    const cell = geometry && geometry.cells ? geometry.cells[tileIndex] : null;
+    if (!result || !cell || !(geometry.radius > 0) || !HyperbolicMetric) return null;
+    return HyperbolicMetric.sample(result, tileIndex, {
+      x: (position.x - cell.x) / geometry.radius,
+      y: (position.y - cell.y) / geometry.radius
+    });
+  }
+
+  function hyperbolicCoordinateSpeedNormalization(result) {
+    if (!result || !Array.isArray(result.u) || !result.u.length) return 1;
+    if (Number.isFinite(result.coordinateSpeedNormalization)) return result.coordinateSpeedNormalization;
+    let weighted = 0;
+    let mass = 0;
+    result.mesh.vertices.forEach((vertex, index) => {
+      const weight = Number(vertex.mass) || 0;
+      weighted += weight * Math.exp(clamp(-result.u[index], -8, 8));
+      mass += weight;
+    });
+    result.coordinateSpeedNormalization = weighted / Math.max(1e-9, mass);
+    return result.coordinateSpeedNormalization;
+  }
+
+  function hyperbolicGeodesicDerivative(tileIndex, values) {
+    const direction = normalizeVector(values.dx, values.dy, 1, 0);
+    const sample = hyperbolicMetricSample(tileIndex, values);
+    if (!sample) return { x: direction.x, y: direction.y, dx: 0, dy: 0 };
+    const gx = sample.gradient.x / geometry.radius;
+    const gy = sample.gradient.y / geometry.radius;
+    const tangentPart = gx * direction.x + gy * direction.y;
+    return {
+      x: direction.x,
+      y: direction.y,
+      dx: gx - tangentPart * direction.x,
+      dy: gy - tangentPart * direction.y
+    };
+  }
+
+  function hyperbolicGeodesicRk4(tileIndex, position, direction, step) {
+    const initial = { x: position.x, y: position.y, dx: direction.x, dy: direction.y };
+    const k1 = hyperbolicGeodesicDerivative(tileIndex, initial);
+    const stage = (base, a, factor) => ({
+      x: base.x + a.x * step * factor,
+      y: base.y + a.y * step * factor,
+      dx: base.dx + a.dx * step * factor,
+      dy: base.dy + a.dy * step * factor
+    });
+    const k2 = hyperbolicGeodesicDerivative(tileIndex, stage(initial, k1, 0.5));
+    const k3 = hyperbolicGeodesicDerivative(tileIndex, stage(initial, k2, 0.5));
+    const k4 = hyperbolicGeodesicDerivative(tileIndex, stage(initial, k3, 1));
+    const nextDirection = normalizeVector(
+      initial.dx + step * (k1.dx + 2 * k2.dx + 2 * k3.dx + k4.dx) / 6,
+      initial.dy + step * (k1.dy + 2 * k2.dy + 2 * k3.dy + k4.dy) / 6,
+      direction.x,
+      direction.y
+    );
+    return {
+      position: {
+        x: initial.x + step * (k1.x + 2 * k2.x + 2 * k3.x + k4.x) / 6,
+        y: initial.y + step * (k1.y + 2 * k2.y + 2 * k3.y + k4.y) / 6
+      },
+      direction: nextDirection
+    };
+  }
+
+  function adaptiveHyperbolicGeodesicRk4(tileIndex, position, direction, requestedStep) {
+    let step = requestedStep;
+    const tolerance = Math.max(0.0005, geometry.radius * 2e-5);
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const full = hyperbolicGeodesicRk4(tileIndex, position, direction, step);
+      const firstHalf = hyperbolicGeodesicRk4(tileIndex, position, direction, step * 0.5);
+      const secondHalf = hyperbolicGeodesicRk4(tileIndex, firstHalf.position, firstHalf.direction, step * 0.5);
+      const error = Math.hypot(full.position.x - secondHalf.position.x, full.position.y - secondHalf.position.y)
+        + geometry.radius * Math.hypot(full.direction.x - secondHalf.direction.x, full.direction.y - secondHalf.direction.y);
+      if (error <= tolerance || step <= geometry.radius * 1e-5) return { ...secondHalf, usedStep: step };
+      step *= 0.5;
+    }
+    return { ...hyperbolicGeodesicRk4(tileIndex, position, direction, step), usedStep: step };
+  }
+
+  function nextHyperbolicMeshEdgeDistance(tileIndex, position, direction, triangleId) {
+    const result = state.hyperbolicMetricResult;
+    const triangle = result && result.mesh && result.mesh.triangles[triangleId];
+    const cell = geometry && geometry.cells ? geometry.cells[tileIndex] : null;
+    if (!triangle || !cell) return Infinity;
+    let best = Infinity;
+    for (let edge = 0; edge < 3; edge += 1) {
+      const localA = triangle.local[edge];
+      const localB = triangle.local[(edge + 1) % 3];
+      const a = { x: cell.x + localA.x * geometry.radius, y: cell.y + localA.y * geometry.radius };
+      const b = { x: cell.x + localB.x * geometry.radius, y: cell.y + localB.y * geometry.radius };
+      const hit = raySegmentIntersection(position, direction, a, b);
+      if (hit && hit.rayDistance > 0.0008) best = Math.min(best, hit.rayDistance);
+    }
+    return best;
+  }
+
+  function advanceHyperbolicBackgroundBilliard(distance) {
+    const billiard = backgroundBilliardState();
+    if (!billiard.position || !billiard.direction || !(distance > 0)) return;
+    appendBackgroundBilliardTrailPoint(billiard.position);
+    let remaining = distance;
+    let guard = 0;
+    const result = state.hyperbolicMetricResult;
+    const meshStep = geometry.radius / Math.max(8, (result.mesh.refinement || 2) * 5);
+    const globalSpeed = hyperbolicCoordinateSpeedNormalization(result);
+    while (remaining > 0.0005 && guard < 256) {
+      guard += 1;
+      const sample = hyperbolicMetricSample(billiard.tileIndex, billiard.position);
+      if (!sample) {
+        stopBackgroundBilliard(false);
+        return;
+      }
+      const coordinateScale = clamp(Math.exp(clamp(-sample.u, -8, 8)) / Math.max(1e-8, globalSpeed), 0.2, 5);
+      const hit = nextBackgroundBilliardEdgeHit(billiard);
+      const meshEdgeDistance = nextHyperbolicMeshEdgeDistance(billiard.tileIndex, billiard.position, billiard.direction, sample.triangleId);
+      const coordinateStep = Math.min(meshStep, remaining * coordinateScale, meshEdgeDistance);
+      if (hit && hit.distance <= coordinateStep * 1.02) {
+        billiard.position = { x: hit.point.x, y: hit.point.y };
+        appendBackgroundBilliardTrailPoint(billiard.position);
+        remaining -= Math.max(hit.distance / coordinateScale, 0);
+        if (!applyBackgroundBilliardBoundaryHit(billiard, hit)) {
+          stopBackgroundBilliard(false);
+          return;
+        }
+        continue;
+      }
+      const integrated = adaptiveHyperbolicGeodesicRk4(billiard.tileIndex, billiard.position, billiard.direction, coordinateStep);
+      billiard.position = integrated.position;
+      billiard.direction = integrated.direction;
+      appendBackgroundBilliardTrailPoint(billiard.position);
+      remaining -= integrated.usedStep / coordinateScale;
+    }
+    if (guard >= 256) stopBackgroundBilliard(false);
   }
 
   function nextBackgroundBilliardEdgeHit(billiard) {
@@ -12146,6 +12671,8 @@
       refs.statusLine.textContent = pendingGlueText || backgroundBilliardStatusText() || selectedBackgroundCuspStatusText(background) || `${background.existing} existing tile${background.existing === 1 ? '' : 's'}, ${background.components} component${background.components === 1 ? '' : 's'}, ${background.unmatchedBoundaries} unmatched boundar${background.unmatchedBoundaries === 1 ? 'y' : 'ies'}${glueText}${holesText}${surfaceText}`;
       refs.statusLine.classList.remove('mosaic-status-good', 'mosaic-status-bad');
     }
+
+    syncHyperbolicMetricForReport(report);
 
     updatePickControls();
     updateDisplayControls();
@@ -17975,6 +18502,7 @@
     }
 
     drawBoardCopy(ctx, report, palette, { x: 0, y: 0, copyCol: 0, copyRow: 0 }, null);
+    drawHyperbolicMetricHeatmap(ctx);
     if (shouldDrawSeifertBackground() && graphData && graphData.isValid) drawHalfEdgeDecorationLabels(ctx, graphData, palette);
     drawDrawDebugOverlay(ctx, palette, report);
     drawBackgroundHoverOverlay(ctx, palette);
@@ -17987,6 +18515,46 @@
     drawMainWanderMarker(ctx, palette);
     renderWanderChart();
     renderHomologyLocalChart();
+  }
+
+  function drawHyperbolicMetricHeatmap(ctx) {
+    const result = state.hyperbolicMetricResult;
+    const mode = state.hyperbolicMetricHeatmap;
+    if (state.backgroundMetric !== 'hyperbolic' || !result || !['scale', 'residual'].includes(mode) || !geometry) return;
+    const values = mode === 'scale'
+      ? result.u.map((value) => Math.exp(clamp(value, -12, 12)))
+      : result.residuals.map((value) => Math.abs(value));
+    const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+    if (!sorted.length) return;
+    ctx.save();
+    const low = sorted[Math.floor((sorted.length - 1) * 0.05)];
+    const high = sorted[Math.floor((sorted.length - 1) * 0.95)];
+    const color = (value) => {
+      const t = high > low ? clamp((value - low) / (high - low), 0, 1) : 0.5;
+      if (t < 0.5) {
+        const q = t * 2;
+        return `rgba(${Math.round(36 + 209 * q)},${Math.round(104 + 136 * q)},${Math.round(180 + 43 * q)},0.34)`;
+      }
+      const q = (t - 0.5) * 2;
+      return `rgba(${Math.round(245 - 48 * q)},${Math.round(240 - 179 * q)},${Math.round(223 - 172 * q)},0.34)`;
+    };
+    ctx.save();
+    result.mesh.triangles.forEach((triangle) => {
+      const cell = geometry.cells[triangle.tileIndex];
+      if (!cell) return;
+      const value = triangle.ids.reduce((sum, id) => sum + values[id], 0) / 3;
+      ctx.beginPath();
+      triangle.local.forEach((point, index) => {
+        const x = cell.x + point.x * geometry.radius;
+        const y = cell.y + point.y * geometry.radius;
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = color(value);
+      ctx.fill();
+    });
+    ctx.restore();
   }
 
   function bindHomologyLocalChartResize() {
@@ -30177,6 +30745,7 @@
       backgroundBilliardTrailLength: normalizeBackgroundBilliardTrailLength(state.backgroundBilliardTrailLength),
       backgroundBilliardArrowLength: normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength),
       backgroundBilliardHitMarkers: normalizeBackgroundBilliardHitMarkers(state.backgroundBilliardHitMarkers),
+      backgroundMetric: normalizeBackgroundMetric(state.backgroundMetric),
       backgroundBilliard: backgroundBilliard || undefined,
       clickMode: state.editMode,
       drawAction: state.drawAction,
@@ -30602,7 +31171,8 @@
       billiardSpeed: normalizeBackgroundBilliardSpeed(state.backgroundBilliardSpeed),
       billiardTrailLength: normalizeBackgroundBilliardTrailLength(state.backgroundBilliardTrailLength),
       billiardArrowLength: normalizeBackgroundBilliardArrowLength(state.backgroundBilliardArrowLength),
-      billiardHitMarkers: normalizeBackgroundBilliardHitMarkers(state.backgroundBilliardHitMarkers)
+      billiardHitMarkers: normalizeBackgroundBilliardHitMarkers(state.backgroundBilliardHitMarkers),
+      metric: normalizeBackgroundMetric(state.backgroundMetric)
     };
   }
 
@@ -30614,22 +31184,23 @@
 
   function backgroundBilliardForExport() {
     const billiard = backgroundBilliardState();
-    if (!billiard.position || billiard.tileIndex < 0 || !tileExists(billiard.tileIndex)) return null;
-    const cell = geometry && geometry.cells ? geometry.cells[billiard.tileIndex] : null;
+    const launch = billiard.launch || backgroundBilliardLaunchFromPosition(billiard.tileIndex, billiard.position, billiard.direction);
+    if (!launch || launch.tileIndex < 0 || !tileExists(launch.tileIndex)) return null;
+    const cell = geometry && geometry.cells ? geometry.cells[launch.tileIndex] : null;
     if (!cell || !Number.isFinite(geometry.radius) || geometry.radius <= 0) return null;
-    const direction = billiard.direction && Number.isFinite(billiard.direction.x) && Number.isFinite(billiard.direction.y)
-      ? normalizeVector(billiard.direction.x, billiard.direction.y, 1, 0)
+    const direction = launch.direction && Number.isFinite(launch.direction.x) && Number.isFinite(launch.direction.y)
+      ? normalizeVector(launch.direction.x, launch.direction.y, 1, 0)
       : null;
     const angleRadians = direction ? Math.atan2(direction.y, direction.x) : null;
     return {
       tile: {
-        row: Math.floor(billiard.tileIndex / state.cols) + 1,
-        col: (billiard.tileIndex % state.cols) + 1,
-        index: billiard.tileIndex
+        row: Math.floor(launch.tileIndex / state.cols) + 1,
+        col: (launch.tileIndex % state.cols) + 1,
+        index: launch.tileIndex
       },
       local: {
-        x: roundExportNumber((billiard.position.x - cell.x) / geometry.radius, 6),
-        y: roundExportNumber((billiard.position.y - cell.y) / geometry.radius, 6)
+        x: roundExportNumber(launch.local.x, 6),
+        y: roundExportNumber(launch.local.y, 6)
       },
       angleRadians: angleRadians == null ? undefined : roundExportNumber(angleRadians, 6),
       angleDegrees: angleRadians == null ? undefined : roundExportNumber(angleRadians * 180 / Math.PI, 4)
@@ -32957,6 +33528,15 @@
     state.wrapped = state.boundaryMode === 'wrapped';
     state.inputMode = normalizeInputMode(options.inputMode || 'background');
     state.backgroundAction = normalizeBackgroundAction(options.backgroundAction || 'tile');
+    state.backgroundMetric = normalizeBackgroundMetric(options.backgroundMetric || options.metric);
+    state.hyperbolicMetricMethod = options.hyperbolicMetricMethod === 'fem' ? 'fem' : 'discrete';
+    state.hyperbolicMetricRefinement = options.hyperbolicMetricRefinement || 'auto';
+    state.hyperbolicMetricHeatmap = 'off';
+    state.hyperbolicMetricResult = null;
+    state.hyperbolicMetricStatus = 'idle';
+    state.hyperbolicMetricMessage = '';
+    state.hyperbolicMetricTopologyKey = '';
+    state.backgroundBilliard = resetBackgroundBilliardState();
     state.backgroundDecorationKind = normalizeBackgroundDecorationKind(options.backgroundDecorationKind || 'input-hole');
     state.backgroundDecorationColor = normalizePresetPieceColor(options.backgroundDecorationColor || 'black') || 'black';
     state.backgroundChessPawnDirection = normalizeChessPawnDirectionChoice(options.backgroundChessPawnDirection || options.chessPawnDirection);
@@ -33223,6 +33803,15 @@
       setBackgroundHomologyCordMode,
       isBackgroundHomologyTraceClosed,
       selectedHomologyEdgeSide,
+      normalizeBackgroundMetric,
+      hyperbolicMetricEligibility,
+      hyperbolicMetricSurfaceSnapshot,
+      hyperbolicMetricTopologyKey,
+      hyperbolicGeodesicRk4,
+      advanceBackgroundBilliard,
+      advanceHyperbolicBackgroundBilliard,
+      restartBackgroundBilliardFromLaunch,
+      backgroundBilliardLaunchFromPosition,
       normalizeExportImportPayload,
       normalizeMosaicImportPayload,
       exportImportMetadataFromPayload,

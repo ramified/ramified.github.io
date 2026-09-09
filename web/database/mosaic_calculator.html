@@ -460,6 +460,42 @@
       font-size: 0.76rem;
     }
 
+    .metric-toggle[aria-pressed="true"] {
+      color: #fff;
+      border-color: #8a4b20;
+      background: #a85d2d;
+    }
+
+    .metric-toggle[data-state="computing"] { cursor: progress; }
+    .metric-toggle[data-state="warning"] { box-shadow: 0 0 0 2px rgba(191, 126, 0, 0.24); }
+    .metric-toggle[data-state="error"] { box-shadow: 0 0 0 2px rgba(177, 39, 39, 0.22); }
+
+    .hyperbolic-debug-readout {
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(255, 253, 248, 0.72);
+      font-size: 0.76rem;
+      line-height: 1.45;
+      white-space: pre-line;
+    }
+
+    .hyperbolic-heatmap-legend {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 0.72rem;
+    }
+
+    .hyperbolic-heatmap-gradient {
+      height: 9px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #2468b4, #f5f0df, #c53d32);
+    }
+
     .background-slider-controls {
       display: flex;
       align-items: center;
@@ -1543,6 +1579,7 @@
           <div class="mosaic-inline-row" id="background-billiard-row">
             <span class="input-label">Geodesic</span>
             <span class="billiard-controls">
+              <button class="btn btn-ghost metric-toggle" id="background-metric-toggle" type="button" aria-pressed="false" data-state="flat">Metric: Flat</button>
               <button class="btn" id="background-billiard-play" type="button">add point</button>
               <button class="btn btn-ghost" id="background-billiard-clear" type="button">clear</button>
             </span>
@@ -1728,6 +1765,42 @@
         <label class="opt-row"><input type="checkbox" id="show-homology-cord-particles"> show material particles</label>
         <label class="opt-row"><input type="checkbox" id="inspect-homology-cord-optimization"> inspect optimization direction</label>
         <div class="hint" id="homology-cord-optimization-readout">Enable inspection, then click a particle.</div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="hyperbolic-metric-debug-card" data-card-settings-id="hyperbolic-metric-debug" data-card-advanced="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Hyperbolic metric debug</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="mosaic-inline-row">
+          <span class="input-label">Solver</span>
+          <select id="hyperbolic-metric-solver">
+            <option value="discrete">Discrete curvature flow</option>
+            <option value="fem">FEM Liouville (experimental)</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Refinement</span>
+          <select id="hyperbolic-metric-refinement">
+            <option value="auto">Automatic</option>
+            <option value="1">Level 1</option>
+            <option value="2">Level 2</option>
+            <option value="3">Level 3</option>
+            <option value="4">Level 4</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Heatmap</span>
+          <select id="hyperbolic-metric-heatmap">
+            <option value="off">Off</option>
+            <option value="scale">Conformal scale</option>
+            <option value="residual">Curvature residual</option>
+          </select>
+        </div>
+        <div class="hyperbolic-heatmap-legend" id="hyperbolic-heatmap-legend" hidden>
+          <span id="hyperbolic-heatmap-legend-label">low → high</span>
+          <span class="hyperbolic-heatmap-gradient" aria-hidden="true"></span>
+        </div>
+        <output class="hyperbolic-debug-readout" id="hyperbolic-metric-debug-readout" aria-live="polite">Flat metric selected.</output>
       </div>
     </section>
 
@@ -2118,8 +2191,9 @@
 <script src="js/hex_homology_game.js?v=20260827-1"></script>
 <script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
-<script src="js/billiards/topological_billiards_native.js?v=20260905-1"></script>
-<script src="js/mosaic_calculator.js?v=billiards-snap-2"></script>
+<script src="js/billiards/topological_billiards_native.js?v=20260909-3"></script>
+<script src="js/mosaic_hyperbolic_metric.js?v=20260909-1"></script>
+<script src="js/mosaic_calculator.js?v=hyperbolic-metric-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260826-1"></script>
 <script>

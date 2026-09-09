@@ -2185,6 +2185,13 @@
                   <option value="chinese-8ball" data-i18n="billiards.equipment.chinese8">Chinese 8-ball</option>
                 </select>
               </div>
+              <div class="fullscreen-setting-row" id="fullscreen-billiards-tile-length-row" hidden>
+                <label for="fullscreen-billiards-tile-length" data-i18n="billiards.tools.tileEdgeLength">Tile edge length</label>
+                <span class="background-slider-controls">
+                  <input id="fullscreen-billiards-tile-length" type="range" min="0.07" max="0.5" step="0.01" value="0.13" data-i18n-aria-label="access.billiardsTileEdgeLength" aria-label="Physical length of each billiards tile edge">
+                  <output id="fullscreen-billiards-tile-length-value" for="fullscreen-billiards-tile-length">0.13 m</output>
+                </span>
+              </div>
               <label class="fullscreen-setting-row" for="fullscreen-sound-enabled">
                 <span data-i18n="fullscreen.soundEffects">Sound effects</span>
                 <span class="fullscreen-setting-switch">
@@ -2375,6 +2382,13 @@
             <option value="pool-9ft" selected data-i18n="billiards.equipment.pool9">9-foot pool</option>
             <option value="chinese-8ball" data-i18n="billiards.equipment.chinese8">Chinese 8-ball</option>
           </select>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-tile-length-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.tileEdgeLength">Tile edge length</span>
+          <span class="background-slider-controls">
+            <input id="billiards-tile-length" type="range" min="0.07" max="0.5" step="0.01" value="0.13" data-i18n-aria-label="access.billiardsTileEdgeLength" aria-label="Physical length of each billiards tile edge">
+            <output id="billiards-tile-length-value" for="billiards-tile-length">0.13 m</output>
+          </span>
         </div>
         <div class="mosaic-inline-row billiards-ball-palette-row" id="billiards-ball-palette-row" data-mode-control="billiards" hidden>
           <span class="input-label" data-i18n="setup.billiardsBalls">Balls</span>
@@ -3004,13 +3018,13 @@
 <script src="js/calculator_input_settings.js?v=20260903-1"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260908-3"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260909-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
-<script src="js/ramified_minigames_setup.js?v=20260908-4"></script>
+<script src="js/ramified_minigames_setup.js?v=20260909-3"></script>
 <script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
 </body>
