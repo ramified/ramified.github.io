@@ -460,6 +460,14 @@
       font-size: 0.76rem;
     }
 
+    #poincare-canvas { display: block; width: 100%; height: 420px; min-height: 280px; touch-action: none; cursor: grab; }
+    #poincare-canvas:active { cursor: grabbing; }
+    .poincare-canvas-wrap { resize: vertical; overflow: hidden; min-height: 280px; height: 420px; border: 1px solid var(--border); border-radius: 4px; }
+    .poincare-canvas-wrap #poincare-canvas { height: 100%; }
+    #poincare-card.wide .poincare-canvas-wrap { height: 620px; }
+    #poincare-wide-host[hidden], #poincare-side-host:empty { display: none; }
+    #poincare-status { display: block; margin: 8px 0; font-size: 12px; color: var(--muted); }
+
     .metric-toggle[aria-pressed="true"] {
       color: #fff;
       border-color: #8a4b20;
@@ -1317,6 +1325,7 @@
     </div>
     <section id="dual-graph-degenerations-wide-host" hidden></section>
     <section id="wander-wide-host" hidden></section>
+    <section id="poincare-wide-host" hidden></section>
     <section id="homology-local-chart-wide-host" hidden></section>
   </section>
 
@@ -1580,6 +1589,7 @@
             <span class="input-label">Geodesic</span>
             <span class="billiard-controls">
               <button class="btn btn-ghost metric-toggle" id="background-metric-toggle" type="button" aria-pressed="false" data-state="flat">Metric: Flat</button>
+              <button class="btn btn-ghost" id="poincare-open" type="button">Poincaré disk</button>
               <button class="btn" id="background-billiard-play" type="button">add point</button>
               <button class="btn btn-ghost" id="background-billiard-clear" type="button">clear</button>
             </span>
@@ -1767,6 +1777,27 @@
         <div class="hint" id="homology-cord-optimization-readout">Enable inspection, then click a particle.</div>
       </div>
     </section>
+
+    <div id="poincare-side-host" data-card-drag-item="true">
+      <section class="card collapsed" id="poincare-card" data-card-settings-id="poincare-disk" data-card-wide="true" data-card-wide-host="#poincare-wide-host" data-card-side-host="#poincare-side-host" data-card-wide-button="#poincare-wide">
+        <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Poincaré disk</span><em class="toggle-icon">&#9662;</em></div>
+        <div class="card-body">
+          <div class="mosaic-inline-row">
+            <button class="btn btn-ghost" id="poincare-wide" type="button" aria-pressed="false">wide</button>
+            <button class="btn btn-ghost" id="poincare-recenter" type="button">recenter</button>
+            <button class="btn btn-ghost" id="poincare-close" type="button">close</button>
+          </div>
+          <div class="mosaic-inline-row">
+            <label><input id="poincare-follow" type="checkbox"> Follow ball</label>
+            <label><input id="poincare-mesh" type="checkbox"> Triangle mesh</label>
+          </div>
+          <button class="btn" id="poincare-use-discrete" type="button">Use discrete solver</button>
+          <output id="poincare-status" aria-live="polite">Select the hyperbolic metric to develop this surface.</output>
+          <div class="poincare-canvas-wrap"><canvas id="poincare-canvas" tabindex="0" aria-label="Poincaré disk universal cover; drag or use arrow keys to move the camera"></canvas></div>
+          <p class="hint">Numerical development of the hyperbolic triangles. Pipes, decorations, and the lifted trajectory use an approximate interior map. Drag or use arrow keys to move; recenter returns to the initial lift. Physical boundaries bound a region inside the disk. Only a finite neighborhood is drawn.</p>
+        </div>
+      </section>
+    </div>
 
     <section class="card collapsed" id="hyperbolic-metric-debug-card" data-card-settings-id="hyperbolic-metric-debug" data-card-advanced="true">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Hyperbolic metric debug</span><em class="toggle-icon">&#9662;</em></div>
@@ -2193,7 +2224,9 @@
 <script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
 <script src="js/billiards/topological_billiards_native.js?v=20260909-3"></script>
 <script src="js/mosaic_hyperbolic_metric.js?v=20260909-1"></script>
-<script src="js/mosaic_calculator.js?v=hyperbolic-metric-1"></script>
+<script src="js/mosaic_poincare.js?v=20260910-1"></script>
+<script src="js/mosaic_poincare_view.js?v=20260910-1"></script>
+<script src="js/mosaic_calculator.js?v=poincare-disk-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260826-1"></script>
 <script>

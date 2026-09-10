@@ -8646,6 +8646,7 @@
     };
     button.addEventListener("pointerup", stop);
     button.addEventListener("pointercancel", stop);
+    button.addEventListener("lostpointercapture", stop);
     button.addEventListener("pointerleave", stop);
     button.addEventListener("click", (event) => {
       if (state.motionMode !== "discrete") return;
@@ -9277,6 +9278,7 @@
     $("import-object-replace").addEventListener("click", replaceActiveObject);
     $("reset-preset").addEventListener("click", resetToPreset);
 
+    bindTouchControls();
     $("slice-viewport").addEventListener("click", handleCanvasClick);
     $("slice-viewport").addEventListener("mousemove", handleCanvasPointerMove);
     $("slice-viewport").addEventListener("mouseleave", () => {
@@ -9286,6 +9288,36 @@
     window.addEventListener("blur", clearAllMotion);
     window.addEventListener("resize", resizeCanvas);
     window.addEventListener("load", () => queueMathTypeset());
+  }
+
+  function updateTouchHelp() {
+    const rotate = $("slice-touch-mode").value === "rotate";
+    const instruction = state.activeVectorTarget
+      ? "Tap a visible point to set the active vector target. Dragging is paused while picking."
+      : state.slideInputMode !== "move"
+        ? "Choose move in Slide Position to enable touch dragging."
+        : `Drag left / right to ${rotate ? "rotate in the chosen plane" : "move along the chosen direction"}.`;
+    $("slice-touch-help").textContent = instruction;
+  }
+
+  function bindTouchControls() {
+    const mode = $("slice-touch-mode");
+    mode.addEventListener("change", updateTouchHelp);
+    window.SliceTouch.bind($("slice-viewport"), {
+      onTap: handleCanvasClick,
+      onDrag: (dx, width) => {
+        // Direct input and vector picking must not be changed by an accidental drag.
+        if (state.slideInputMode !== "move" || state.activeVectorTarget) return;
+        if (mode.value === "rotate") applyRotationDegrees(dx / Math.max(width, 1) * 180);
+        else applyTranslationDistance(dx / Math.max(width, 1) * 2 * state.viewport.boxRadius / state.viewport.zoom);
+      },
+      onPinch: (factor) => {
+        state.viewport.zoom = clamp(state.viewport.zoom * factor, 0.4, 3);
+        $("screen-zoom").value = String(state.viewport.zoom);
+        draw();
+        updateDebug();
+      },
+    });
   }
 
   function handleKeyboardDown(event) {
@@ -9388,9 +9420,12 @@
       pageId: "higher-dimensional-slice",
       actions,
       pointerHints: [
-        { input: "Primary drag", description: "Drag supported handles and cards; use the canvas controls to change the slice." },
+        { input: "Primary drag", description: "Drag supported handles and cards; use Slide Position to change the slice." },
         { input: "Wheel / trackpad", description: "Scroll the page or the active settings panel." },
-        { input: "Primary click", description: "Select canvas objects, vertices, chambers, or controls." }
+        { input: "Primary click / touch tap", description: "Select canvas objects, vertices, chambers, or controls." },
+        { input: "One-finger drag", description: "Drag left / right on the canvas to move or rotate the slice. Choose Touch drag in Slide Position; use its direction buttons for movement and its rotation-pair selectors for rotation. Dragging pauses during direct input and vector picking." },
+        { input: "Two-finger pinch", description: "Pinch on the canvas to zoom. Use Viewport to adjust or reset zoom." },
+        { input: "Touch scroll", description: "Swipe outside the canvas to scroll the page." }
       ]
     });
   }
@@ -9424,6 +9459,7 @@
     syncMotionControls();
     syncRotationControls();
     syncSourceMode();
+    updateTouchHelp();
     syncObjectSelect();
     const object = activeObject();
     if (object) syncLayerButtons(object);

@@ -26,6 +26,28 @@
       display: block;
       background: #fffdf8;
       cursor: default;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    #move-negative, #move-positive {
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    @media (any-pointer: coarse) {
+      .slice-calculator-layout button,
+      .slice-calculator-layout select,
+      .slice-calculator-layout input:not([type="checkbox"]):not([type="radio"]) {
+        min-height: 44px;
+      }
+      .slice-calculator-layout input:not([type="range"]),
+      .slice-calculator-layout select,
+      .slice-calculator-layout textarea { font-size: 16px; }
+      .slice-icon-btn, .slice-segment { min-width: 44px; }
     }
 
     .slice-toolbar-dimension {
@@ -1043,7 +1065,7 @@
         </div>
       </header>
       <div class="slice-stage-wrap">
-        <canvas id="slice-viewport" width="980" height="680" aria-label="Higher-dimensional projection and exact or numeric 2D slice viewport"></canvas>
+        <canvas id="slice-viewport" width="980" height="680" aria-describedby="slice-touch-help" aria-label="Higher-dimensional projection and exact or numeric 2D slice viewport"></canvas>
         <div class="slice-label-overlay" id="slice-label-overlay" aria-hidden="true"></div>
         <div id="toric-cone-pick-menu" class="slice-toric-pick-menu" role="menu" aria-label="Overlapping toric cones" hidden></div>
         <div class="slice-canvas-corner-actions">
@@ -1301,6 +1323,17 @@
             <div class="slice-segmented" id="slide-input-mode-controls" aria-label="Slide position input mode">
               <button class="slice-segment active" type="button" data-slide-input-mode="move">move</button>
               <button class="slice-segment" type="button" data-slide-input-mode="direct">direct input</button>
+            </div>
+          </div>
+
+          <div class="slice-row">
+            <label class="slice-row-label" for="slice-touch-mode">Touch drag</label>
+            <div class="slice-card-body">
+              <select id="slice-touch-mode" class="slice-select" aria-describedby="slice-touch-help">
+                <option value="move">Move slice</option>
+                <option value="rotate">Rotate slice</option>
+              </select>
+              <span id="slice-touch-help" class="slice-card-note">Drag left / right to move along the selected direction.</span>
             </div>
           </div>
 
@@ -1613,7 +1646,8 @@
 <script src="js/calculator_cards.js?v=20260903-1"></script>
 <script src="js/calculator_input_settings.js?v=20260903-1"></script>
 <script src="js/toric_cone_math.js?v=20260830-2"></script>
-  <script src="js/higher_dimensional_slice_explorer.js?v=20260830-2"></script>
+  <script src="js/higher_dimensional_slice_touch.js?v=20260910-1"></script>
+  <script src="js/higher_dimensional_slice_explorer.js?v=20260910-2"></script>
   <script src="js/import_export_panel.js?v=20260821-7"></script>
   <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
 </body>

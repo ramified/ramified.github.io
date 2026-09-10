@@ -33,6 +33,67 @@
     return null;
   })();
 
+  let poincareView = null;
+  let poincareReport = null;
+  let poincareArtwork = null;
+  let poincareLastSample = null;
+
+  function poincareLocalPoint(tileIndex, point) {
+    const cell = geometry && geometry.cells[tileIndex];
+    return cell && point ? { x: (point.x - cell.x) / geometry.radius, y: (point.y - cell.y) / geometry.radius } : null;
+  }
+
+  function poincareSnapshot() {
+    const billiard = backgroundBilliardState();
+    const ready = state.backgroundMetric === 'hyperbolic' && state.hyperbolicMetricStatus === 'ready' && !!state.hyperbolicMetricResult;
+    const eligibility = ready ? { supported: true } : hyperbolicMetricEligibility(poincareReport && poincareReport.background || undefined);
+    return {
+      eligible: eligibility.supported, reason: eligibility.reason,
+      metric: state.backgroundMetric, method: state.hyperbolicMetricMethod,
+      result: state.hyperbolicMetricResult, status: state.hyperbolicMetricStatus, message: state.hyperbolicMetricMessage,
+      billiard,
+      sample: billiard.position ? { tileIndex: billiard.tileIndex, local: poincareLocalPoint(billiard.tileIndex, billiard.position) } : null,
+      trailLength: normalizeBackgroundBilliardTrailLength(state.backgroundBilliardTrailLength),
+      infiniteTrail: isInfiniteBackgroundBilliardTrailLength(state.backgroundBilliardTrailLength)
+    };
+  }
+
+  function poincareBoardArtwork() {
+    const palette = getPalette();
+    const key = JSON.stringify([state.tiles, [...state.removedTiles], [...state.cutEdges], state.gluedEdges,
+      [...state.inputHoles], [...state.lianliankanEmpty], [...state.hexSeeds], state.billiards, state.presetPieces, state.sokoban,
+      state.vertexDecorations, state.halfEdgeDecorations, state.diagramType, palette, geometry.width, geometry.height, geometry.radius,
+      state.showCoords, state.showErrors, state.colorComponents, state.showSeifertSurface, state.showSeifertBackground,
+      state.colorSeifertBoundaries, state.seifertBandWidth, state.seifertSurfaceColor]);
+    if (!poincareArtwork || poincareArtwork.key !== key) {
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(2, 4096 / Math.max(geometry.width, geometry.height));
+      canvas.width = Math.ceil(geometry.width * scale); canvas.height = Math.ceil(geometry.height * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(scale, scale); ctx.fillStyle = '#fffdf8'; ctx.fillRect(0, 0, geometry.width, geometry.height);
+      drawBoardCopy(ctx, poincareReport || analyze(), palette, { x: 0, y: 0, copyCol: 0, copyRow: 0 }, null, { artwork: true });
+      poincareArtwork = { key, canvas, sourcePoint: (tileIndex, local) => ({
+        x: (geometry.cells[tileIndex].x + geometry.radius * local.x) * scale,
+        y: (geometry.cells[tileIndex].y + geometry.radius * local.y) * scale
+      }) };
+    }
+    return poincareArtwork;
+  }
+
+  function bindPoincareView() {
+    if (!window.MosaicPoincareView || !document.getElementById('poincare-canvas')) return;
+    poincareView = new window.MosaicPoincareView.View({
+      snapshot: poincareSnapshot,
+      artwork: poincareBoardArtwork,
+      useDiscrete: () => {
+        state.hyperbolicMetricMethod = 'discrete';
+        if (state.backgroundMetric !== 'hyperbolic') toggleBackgroundMetric();
+        else requestHyperbolicMetric(true);
+        syncHyperbolicMetricControls();
+      }
+    });
+  }
+
   const LATTICES = {
     hexagonal: {
       label: 'hexagonal',
@@ -1123,6 +1184,7 @@
     bindCards();
     bindCanvas();
     bindHomologyLocalChartResize();
+    bindPoincareView();
     initCustomTooltips();
 
     createBoard(5, 5, state.lattice, state.wrapped);
@@ -8177,6 +8239,7 @@
   }
 
   function syncHyperbolicMetricControls() {
+    if (poincareView) poincareView.sync();
     const metric = normalizeBackgroundMetric(state.backgroundMetric);
     const status = metric === 'hyperbolic' ? state.hyperbolicMetricStatus : (state.hyperbolicMetricStatus === 'error' ? 'error' : 'flat');
     if (refs.backgroundMetricToggle) {
@@ -8240,6 +8303,8 @@
   }
 
   function restartBackgroundBilliardFromLaunch(redraw = false) {
+    if (poincareView) poincareView.reset();
+    poincareLastSample = null;
     const current = backgroundBilliardState();
     const launch = current.launch || backgroundBilliardLaunchFromPosition(current.tileIndex, current.position, current.direction);
     if (current.frame != null && typeof window !== 'undefined') window.cancelAnimationFrame(current.frame);
@@ -8291,6 +8356,8 @@
   }
 
   function clearBackgroundBilliard(redraw = true) {
+    if (poincareView) poincareView.reset();
+    poincareLastSample = null;
     const current = backgroundBilliardState();
     if (current.frame != null) window.cancelAnimationFrame(current.frame);
     state.backgroundBilliard = resetBackgroundBilliardState();
@@ -8712,6 +8779,7 @@
     const next = backgroundBilliardNeighbor(hit.index, hit.dir);
     if (next) {
       const epsilon = Math.max(0.02, geometry.radius * 0.0008);
+      if (poincareView) poincareView.cross(next.index, poincareLocalPoint(next.index, hit.point), billiard.trailColorMode);
       billiard.tileIndex = next.index;
       billiard.position = {
         x: hit.point.x + billiard.direction.x * epsilon,
@@ -8737,6 +8805,7 @@
       );
       if (!transfer) return false;
       const epsilon = Math.max(0.02, geometry.radius * 0.0008);
+      if (poincareView) poincareView.cross(partner.index, poincareLocalPoint(partner.index, transfer.point), billiard.trailColorMode);
       recordBackgroundBilliardHit(hit.point, 'glued');
       billiard.tileIndex = partner.index;
       appendBackgroundBilliardTrailPoint(transfer.point, true);
@@ -8753,6 +8822,7 @@
     }
 
     recordBackgroundBilliardHit(hit.point, 'boundary');
+    if (poincareView) poincareView.reflect();
     billiard.direction = reflectVectorAcrossSegment(billiard.direction, hit.segment);
     const epsilon = Math.max(0.02, geometry.radius * 0.0008);
     billiard.position = {
@@ -8851,6 +8921,13 @@
   function appendBackgroundBilliardTrailPoint(point, breakBefore = false) {
     const billiard = backgroundBilliardState();
     if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+    if (poincareView && state.backgroundMetric === 'hyperbolic') {
+      const previous = poincareLastSample;
+      const length = !breakBefore && previous && previous.tileIndex === billiard.tileIndex
+        ? Math.hypot(previous.x - point.x, previous.y - point.y) : 0;
+      poincareView.sample(billiard.tileIndex, poincareLocalPoint(billiard.tileIndex, point), billiard.trailColorMode, length);
+      poincareLastSample = { ...point, tileIndex: billiard.tileIndex };
+    }
     if (!Array.isArray(billiard.trailPoints)) billiard.trailPoints = [];
     const last = billiard.trailPoints[billiard.trailPoints.length - 1];
     if (!breakBefore && last && Math.hypot(last.x - point.x, last.y - point.y) < 0.25) return;
@@ -18470,6 +18547,8 @@
   }
 
   function draw(report) {
+    poincareReport = report;
+    if (poincareView) poincareView.sync();
     if (!geometry) resizeCanvas();
     const canvas = refs.canvas;
     const ctx = canvas.getContext('2d');
@@ -18571,20 +18650,20 @@
     observer.observe(canvas);
   }
 
-  function drawBoardCopy(ctx, report, palette, offset, pickedLift) {
+  function drawBoardCopy(ctx, report, palette, offset, pickedLift, options = {}) {
     ctx.save();
     ctx.translate(offset.x, offset.y);
     for (let index = 0; index < state.tiles.length; index += 1) {
-      drawTile(ctx, index, report, palette, offset, pickedLift);
+      drawTile(ctx, index, report, palette, offset, pickedLift, options);
     }
     drawSeifertBoundaryComponents(ctx);
-    drawBackgroundBoundaries(ctx);
+    if (!options.artwork) drawBackgroundBoundaries(ctx);
     drawInputHoleMarkers(ctx, palette);
     drawLianliankanEmptyMarkers(ctx);
     drawHexSeedMarkers(ctx);
     drawSokobanDecorationMarkers(ctx);
     drawPresetPieceMarkers(ctx);
-    drawBilliardsDecorationMarkers(ctx);
+    drawBilliardsDecorationMarkers(ctx, options);
     ctx.restore();
   }
 
@@ -24757,13 +24836,13 @@
     ctx.restore();
   }
 
-  function drawBilliardsDecorationMarkers(ctx) {
+  function drawBilliardsDecorationMarkers(ctx, options = {}) {
     const nativeState = currentBilliardsEditorState();
     if (!nativeState || !Billiards || (!billiardsDecorationsPresent() && !state.billiardsHover)) return;
     Billiards.render(ctx, billiardsEditorGeometry(), billiardsRenderStateForDecoration(nativeState), {
       assistance: 'expert',
-      setupHover: state.billiardsHover,
-      rackPreview: billiardsRackPreviewForHover(nativeState, state.billiardsHover)
+      setupHover: options.artwork ? null : state.billiardsHover,
+      rackPreview: options.artwork ? null : billiardsRackPreviewForHover(nativeState, state.billiardsHover)
     });
   }
 
@@ -28023,7 +28102,7 @@
     };
   }
 
-  function drawTile(ctx, index, report, palette, offset = null, pickedLift = null) {
+  function drawTile(ctx, index, report, palette, offset = null, pickedLift = null, options = {}) {
     const cell = geometry.cells[index];
     if (!cell) return;
     const radius = geometry.radius;
@@ -28032,8 +28111,8 @@
     const mask = tileToMask(tile);
     const hasTile = exists && !isTileEmpty(tile);
     const points = tilePoints(cell.x, cell.y, radius * 0.96);
-    const isDragTarget = !!state.drag && index === state.dragPreviewIndex;
-    const isDragSource = exists && !!state.drag && state.drag.active && state.drag.type === 'canvas' && state.drag.sourceIndex === index;
+    const isDragTarget = !options.artwork && !!state.drag && index === state.dragPreviewIndex;
+    const isDragSource = !options.artwork && exists && !!state.drag && state.drag.active && state.drag.type === 'canvas' && state.drag.sourceIndex === index;
     const displayTile = isDragTarget && !isTileEmpty(state.drag.tile) ? state.drag.tile : tile;
     const arcComponents = !isDragTarget && report.arcComponents
       ? report.arcComponents[index]
@@ -28041,10 +28120,10 @@
     const spokeComponents = !isDragTarget && report.spokeComponents
       ? report.spokeComponents[index]
       : null;
-    const isHover = exists && (isTilingMode() || (state.inputMode === 'draw' && !isDrawGestureAction()))
+    const isHover = !options.artwork && exists && (isTilingMode() || (state.inputMode === 'draw' && !isDrawGestureAction()))
       && index === state.hoverIndex;
-    const isDecorationHover = isDecorationMode() && index === state.hoverIndex;
-    const isBackgroundHover = isGluedBoundaryMode() && state.inputMode === 'background' && index === state.hoverIndex;
+    const isDecorationHover = !options.artwork && isDecorationMode() && index === state.hoverIndex;
+    const isBackgroundHover = !options.artwork && isGluedBoundaryMode() && state.inputMode === 'background' && index === state.hoverIndex;
 
     ctx.beginPath();
     points.forEach((point, pointIndex) => {
@@ -33633,6 +33712,12 @@
     __test: {
       state,
       refs,
+      backgroundSpacePresets: BACKGROUND_SPACE_PRESETS,
+      poincareSnapshot,
+      setPoincareView: (view) => { poincareView = view; poincareLastSample = null; },
+      applyBackgroundBilliardBoundaryHit,
+      appendBackgroundBilliardTrailPoint,
+      clearBackgroundBilliard,
       buildBackgroundPresetExport,
       buildCompactBackgroundExport,
       buildExportText,
