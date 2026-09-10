@@ -60,7 +60,7 @@
 
   function poincareBoardArtwork() {
     const palette = getPalette();
-    const key = JSON.stringify([state.tiles, [...state.removedTiles], [...state.cutEdges], state.gluedEdges,
+    const key = JSON.stringify([state.lattice, state.rows, state.cols, state.tiles, [...state.removedTiles], [...state.cutEdges], state.gluedEdges,
       [...state.inputHoles], [...state.lianliankanEmpty], [...state.hexSeeds], state.billiards, state.presetPieces, state.sokoban,
       state.vertexDecorations, state.halfEdgeDecorations, state.diagramType, palette, geometry.width, geometry.height, geometry.radius,
       state.showCoords, state.showErrors, state.colorComponents, state.showSeifertSurface, state.showSeifertBackground,
@@ -1206,9 +1206,11 @@
       imported.inputMode = 'background';
       imported.backgroundAction = 'decoration';
       applyImportedMosaic(imported);
-      syncStatus('Mosaic imported from Minigames', 'Glued background space: add/remove decorations.', 'ready');
+      refs.statusLine.textContent = 'Mosaic imported from Minigames. Glued background space: add/remove decorations.';
+      refs.statusLine.classList.remove('mosaic-status-bad');
     } catch (error) {
-      syncStatus('Mosaic link import failed', error && error.message ? error.message : 'invalid Mosaic preset link', 'error');
+      refs.statusLine.textContent = `Mosaic link import failed: ${error && error.message ? error.message : 'invalid Mosaic preset link'}`;
+      refs.statusLine.classList.add('mosaic-status-bad');
     }
     return true;
   }

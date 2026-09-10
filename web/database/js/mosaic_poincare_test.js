@@ -60,6 +60,7 @@ function run() {
     const trail = new P.LiftedTrail(d, copy, center(triangle));
     let crossings = 0, random = 12345;
     for (let n = 0; n < 1000; n++) {
+      if (P.distance({ x: 0, y: 0 }, trail.position) > 4) trail.rebase(trail.position);
       triangle = result.mesh.triangles[trail.copy.triangleId];
       random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
       const opposite = random % 3;

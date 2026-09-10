@@ -189,6 +189,23 @@
       }
       return best;
     }
+    rebase(center, active) {
+      // Keep calculations well away from the ideal circle in follow mode.
+      // Old copies outside the finite neighborhood can be regenerated later.
+      const kept = this.copies.filter(copy => copy === active || copy === this.seed || copy.vertices.every(p => distance(p, center) < 12));
+      const retained = new Set(kept);
+      this.byTriangle = new Map();
+      this.copies = kept;
+      kept.forEach((copy, id) => {
+        copy.id = id;
+        copy.vertices = copy.vertices.map(p => toOrigin(p, center));
+        for (const [edge, next] of copy.neighbors) if (next && !retained.has(next)) copy.neighbors.delete(edge);
+        const list = this.byTriangle.get(copy.triangleId) || [];
+        list.push(copy); this.byTriangle.set(copy.triangleId, list);
+      });
+      if (!retained.has(this.seed)) this.seed = active;
+      this.resetNeighborhood(active, origin());
+    }
   }
   class LiftedTrail {
     constructor(development, copy, local) {
@@ -206,6 +223,7 @@
       if (this.error) return false;
       const mesh = this.development.result.mesh;
       try {
+        if (norm2(this.position) > 1 - 1e-9) throw new Error('Fixed-view precision limit reached near the ideal circle. Enable Follow ball to start a fresh lift here.');
         for (let n = 0; n < 256; n++) {
           const triangle = mesh.triangles[this.copy.triangleId];
           if (triangle.tileIndex !== tileIndex) throw new Error('Missing lifted seam transition.');
@@ -254,6 +272,16 @@
     reflect() {
       this.events.push({ kind: 'reflection', triangleId: this.copy.triangleId });
       if (this.events.length > 1000) this.events.shift();
+    }
+    rebase(center) {
+      this.development.rebase(center, this.copy);
+      let gap = false;
+      this.points = this.points.flatMap(p => {
+        if (distance(p, center) >= 12) { gap = true; return []; }
+        const point = { ...p, ...toOrigin(p, center), breakBefore: !!p.breakBefore || gap };
+        gap = false; return [point];
+      });
+      this.position = mapPoint(this.copy, this.development.result.mesh.triangles[this.copy.triangleId], this.local);
     }
     trim(length, infinite = false) {
       if (infinite) return;

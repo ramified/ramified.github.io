@@ -792,6 +792,9 @@
   let wrappedPanGesture = null;
   const wrappedTouchPointers = new Map();
   let wrappedPinchGesture = null;
+  let wrappedTouchGame = null;
+  let wrappedTouchTakingOver = false;
+  const wrappedTouchConsumed = new Set();
   let calculatorInputSession = null;
   let fullscreenActionPlacementFrame = null;
   let fullscreenRestartPending = false;
@@ -1341,6 +1344,7 @@
         billiardsSetupHover = null;
       });
       refs.canvas.addEventListener('blur', () => {
+        clearWrappedViewGestures();
         clearGlueHover();
         clearHexHover();
         clearPlacementReachAssist();
@@ -1375,9 +1379,13 @@
       render();
     });
     window.addEventListener('blur', () => {
+      clearWrappedViewGestures();
       clearKeyboardState();
       clearPlacementReachAssist(true);
       billiardsSnapBypass = false;
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) clearWrappedViewGestures();
     });
     window.addEventListener('resize', handleWindowResize);
     if (window.visualViewport && typeof window.visualViewport.addEventListener === 'function') {
@@ -5999,10 +6007,57 @@
     if (refs.billiardsFriction && isBilliardsGame(imported.state)) syncBilliardsFriction();
   }
 
+  function wrappedTouchSample() {
+    const entries = Array.from(wrappedTouchPointers.entries()).slice(0, 2);
+    if (entries.length < 2) return null;
+    const [[aId, a], [bId, b]] = entries;
+    return { aId, bId, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2,
+      distance: Math.hypot(a.x - b.x, a.y - b.y) };
+  }
+
+  function cancelWrappedGameplay() {
+    clearPlacementReachAssist();
+    clearPlacementHover();
+    const swipeId = swipeGesture && swipeGesture.pointerId;
+    resetSwipeGesture();
+    if (fideChessDrag) cancelFideChessPieceDrag();
+    if (billiardsPointer) handleBilliardsPointerCancel();
+    if (swipeId != null && !wrappedTouchConsumed.has(swipeId)) releaseSwipePointer(swipeId);
+  }
+
+  function clearWrappedViewGestures() {
+    const ids = Array.from(wrappedTouchPointers.keys());
+    ids.forEach((id) => wrappedTouchConsumed.add(id));
+    wrappedTouchPointers.clear();
+    wrappedPinchGesture = null;
+    wrappedTouchGame = null;
+    if (ids.length) {
+      cancelWrappedGameplay();
+      suppressUpcomingCanvasClick();
+    }
+    ids.forEach((id) => releaseSwipePointer(id));
+    clearWrappedPanGesture();
+  }
+
   function handleWrappedViewPointerDown(event) {
     if (!wrappedViewIsActive() || !event) return false;
+    if (event.pointerType === 'touch') {
+      wrappedTouchConsumed.delete(event.pointerId);
+      wrappedTouchGame = game;
+      wrappedTouchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (wrappedTouchPointers.size < 2) return false;
+      wrappedTouchPointers.forEach((_point, id) => wrappedTouchConsumed.add(id));
+      // Clear gameplay before taking capture; release callbacks must not clear this gesture.
+      wrappedTouchTakingOver = true;
+      try { cancelWrappedGameplay(); } finally { wrappedTouchTakingOver = false; }
+      wrappedPinchGesture = wrappedTouchSample();
+      wrappedTouchPointers.forEach((_point, id) => captureSwipePointer(id));
+      suppressUpcomingCanvasClick();
+      if (event.preventDefault) event.preventDefault();
+      return true;
+    }
     if (event.pointerType === 'mouse' && event.button === 1) {
-      wrappedPanGesture = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+      wrappedPanGesture = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, game };
       if (refs.canvas && refs.canvas.setPointerCapture) {
         try { refs.canvas.setPointerCapture(event.pointerId); } catch (_error) {}
       }
@@ -6014,6 +6069,22 @@
   }
 
   function handleWrappedViewPointerMove(event) {
+    if (event && wrappedTouchPointers.has(event.pointerId)) {
+      wrappedTouchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (!wrappedTouchConsumed.has(event.pointerId)) return false;
+      const next = wrappedTouchSample();
+      const previous = wrappedPinchGesture;
+      wrappedPinchGesture = next;
+      if (next && previous && next.aId === previous.aId && next.bId === previous.bId) {
+        panWrappedViewByClientDelta(next.x - previous.x, next.y - previous.y);
+        if (previous.distance > 0 && next.distance > 0) {
+          zoomWrappedViewAtClientPoint(next.x, next.y, wrappedViewCamera().scale * next.distance / previous.distance);
+        }
+      }
+      if (event.preventDefault) event.preventDefault();
+      return true;
+    }
+    if (event && wrappedTouchConsumed.has(event.pointerId)) return true;
     if (!wrappedPanGesture || !event || event.pointerId !== wrappedPanGesture.pointerId) return false;
     const dx = event.clientX - wrappedPanGesture.x;
     const dy = event.clientY - wrappedPanGesture.y;
@@ -6036,10 +6107,26 @@
   }
 
   function handleWrappedViewPointerUp(event) {
+    if (event) {
+      const consumed = wrappedTouchConsumed.delete(event.pointerId);
+      wrappedTouchPointers.delete(event.pointerId);
+      wrappedPinchGesture = wrappedTouchSample();
+      if (consumed) {
+        releaseSwipePointer(event.pointerId);
+        suppressUpcomingCanvasClick();
+        if (event.preventDefault) event.preventDefault();
+        return true;
+      }
+    }
     return clearWrappedPanGesture(event && event.pointerId);
   }
 
   function handleWrappedViewPointerCancel(event) {
+    if (event && wrappedTouchConsumed.has(event.pointerId)) {
+      if (wrappedTouchPointers.has(event.pointerId)) clearWrappedViewGestures();
+      return true;
+    }
+    if (event) wrappedTouchPointers.delete(event.pointerId);
     return clearWrappedPanGesture(event && event.pointerId);
   }
 
@@ -6142,6 +6229,7 @@
   }
 
   function handleCanvasLostPointerCapture(event) {
+    if (wrappedTouchTakingOver) return;
     if (handleWrappedViewPointerCancel(event)) return;
     if (handleBilliardsPointerCancel(event)) return;
     if (activeFideChessDragEvent(event)) {
@@ -6706,6 +6794,8 @@
       ];
       if (wrappedViewIsActive()) {
         hints.push(
+          { input: 'Two-finger drag', inputKey: 'controls.pointerTouchPan', description: 'Pan the universal-cover view with two fingers. One finger keeps its game action.', descriptionKey: 'controls.pointerTouchPanDescription' },
+          { input: 'Pinch', inputKey: 'controls.pointerTouchPinch', description: 'Pinch with two fingers to zoom around their midpoint.', descriptionKey: 'controls.pointerTouchPinchDescription' },
           { input: 'Middle drag', inputKey: 'controls.pointerMiddleDrag', description: 'Pans the universal-cover view.', descriptionKey: 'controls.pointerMiddleDragDescription' },
           { input: 'Mouse wheel', inputKey: 'controls.pointerWheel', description: 'Zooms at the pointer.', descriptionKey: 'controls.pointerWheelDescription' },
           { input: 'Trackpad', inputKey: 'controls.pointerTrackpad', description: 'Two-finger scroll pans; pinch zooms.', descriptionKey: 'controls.pointerTrackpadDescription' }
@@ -9218,6 +9308,7 @@
   }
 
   function handleWrappedViewModeChange(event) {
+    clearWrappedViewGestures();
     const profile = wrappedViewProfile();
     if (!profile) return;
     const next = event && event.target && event.target.value === 'wrapped' ? 'wrapped' : 'usual';
@@ -9287,6 +9378,7 @@
   }
 
   function openFullscreenSettings(panel = 'display', trigger = null) {
+    clearWrappedViewGestures();
     if (!refs.fullscreenSettingsOverlay) return;
     fullscreenSettingsReturnFocus = trigger || (typeof document !== 'undefined' ? document.activeElement : null);
     fullscreenSettingsOpen = true;
@@ -10002,6 +10094,7 @@
   }
 
   function handleCanvasClick(event) {
+    if (wrappedPinchGesture || wrappedTouchPointers.size && Array.from(wrappedTouchPointers.keys()).some((id) => wrappedTouchConsumed.has(id))) return;
     if (suppressNextCanvasClick) {
       clearSuppressedCanvasClick();
       if (event.preventDefault) event.preventDefault();
@@ -14566,6 +14659,8 @@
   }
 
   function render() {
+    if ((wrappedTouchPointers.size && (wrappedTouchGame !== game || !wrappedViewIsActive()))
+      || (wrappedPanGesture && (wrappedPanGesture.game !== game || !wrappedViewIsActive()))) clearWrappedViewGestures();
     if (!refs.canvas || !refs.ctx) return;
     if (placementReachAssistData && (!placementReachInteractionAvailable() || placementReachAssistState !== game)) clearPlacementReachAssist();
     if (placementHover && (!placementHoverInteractionAvailable() || placementHover.state !== game)) clearPlacementHover(false);

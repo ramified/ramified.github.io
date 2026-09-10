@@ -14,10 +14,19 @@
       this.solve = document.getElementById('poincare-use-discrete');
       this.background = document.createElement('canvas');
       this.camera = new P.Camera(); this.frame = null; this.dirty = true;
-      this.follow.addEventListener('change', () => this.schedule(true));
+      this.follow.addEventListener('change', () => {
+        if (this.follow.checked && this.trace && this.trace.error) this.reset();
+        this.schedule(true);
+      });
       this.mesh.addEventListener('change', () => this.schedule(true));
       this.solve.addEventListener('click', () => options.useDiscrete());
-      document.getElementById('poincare-recenter').addEventListener('click', () => {
+      document.getElementById('poincare-wide').addEventListener('click', event => {
+        event.preventDefault();
+        if (root.CalculatorCards) root.CalculatorCards.setWide(this.card, !this.card.classList.contains('wide'));
+        this.schedule(true);
+      });
+      this.recenter = document.getElementById('poincare-recenter');
+      this.recenter.addEventListener('click', () => {
         this.follow.checked = false; this.camera = new P.Camera(this.launchCenter || { x: 0, y: 0 });
         if (this.development) this.development.resetNeighborhood(this.development.seed, this.camera.center);
         this.schedule(true);
@@ -26,9 +35,13 @@
         this.card.classList.remove('collapsed'); this.card.scrollIntoView({ block: 'nearest' }); this.schedule(true);
       });
       document.getElementById('poincare-close').addEventListener('click', () => this.card.classList.add('collapsed'));
+      let wasOpen = this.isOpen();
       new MutationObserver(() => {
-        if (this.isOpen()) { this.reset(); this.schedule(true); }
+        const open = this.isOpen();
+        if (open && !wasOpen) { this.reset(); this.schedule(true); }
+        else if (open) this.schedule(true);
         else if (this.frame != null) { cancelAnimationFrame(this.frame); this.frame = null; }
+        wasOpen = open;
       }).observe(this.card, { attributes: true, attributeFilter: ['class'] });
       if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => this.schedule(true)).observe(this.canvas);
       this.canvas.addEventListener('pointerdown', event => {
@@ -112,11 +125,17 @@
           this.reset(); this.ensure();
         }
         if (this.trace) {
+          if (this.follow.checked && P.distance({ x: 0, y: 0 }, this.trace.position) > 4) {
+            const center = this.trace.position;
+            this.launchCenter = P.toOrigin(this.launchCenter, center);
+            this.trace.rebase(center);
+            this.camera = new P.Camera(); this.dirty = true;
+          }
           this.trace.move(tileIndex, local, color, length);
           const snapshot = this.options.snapshot();
           this.trace.trim(snapshot.trailLength, snapshot.infiniteTrail);
         }
-      } catch (error) { this.status.textContent = error.message; }
+      } catch (error) { if (this.trace) this.trace.error = error.message; this.status.textContent = error.message; }
     }
     cross(tileIndex, local, color) {
       if (this.isOpen() && this.trace) this.trace.crossEdge(tileIndex, local, color);
@@ -152,6 +171,10 @@
             this.development.resetNeighborhood(this.trace.copy, this.camera.center);
           }
         }
+        if (this.recenter) {
+          this.recenter.disabled = this.launchCenter.x ** 2 + this.launchCenter.y ** 2 >= 1 - 1e-9;
+          this.recenter.title = this.recenter.disabled ? 'The initial lift is beyond numerical precision. Restart the billiard to return to its launch.' : 'Return to the initial lift';
+        }
         const before = this.development.visible.length;
         const more = this.development.expand(6);
         if (before !== this.development.visible.length) this.dirty = true;
@@ -165,6 +188,7 @@
           ctx.lineWidth = 1.8; ctx.lineJoin = 'round';
           const points = this.trace.points;
           for (let i = 1; i < points.length; i++) {
+            if (points[i].breakBefore) continue;
             const a = this.screen(points[i - 1]), b = this.screen(points[i]);
             ctx.strokeStyle = points[i].color === 'purple' ? '#813da6' : '#1865d8';
             ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
@@ -241,7 +265,12 @@
       });
       ctx.closePath(); ctx.clip();
       ctx.transform(a, b, c, e, target[0].x - a * s[0].x - c * s[0].y, target[0].y - b * s[0].x - e * s[0].y);
-      ctx.drawImage(texture, 0, 0); ctx.restore();
+      const left = Math.max(0, Math.floor(Math.min(...s.map(p => p.x))) - 1);
+      const top = Math.max(0, Math.floor(Math.min(...s.map(p => p.y))) - 1);
+      const width = Math.min(texture.width - left, Math.ceil(Math.max(...s.map(p => p.x))) + 1 - left);
+      const height = Math.min(texture.height - top, Math.ceil(Math.max(...s.map(p => p.y))) + 1 - top);
+      if (width > 0 && height > 0) ctx.drawImage(texture, left, top, width, height, left, top, width, height);
+      ctx.restore();
     }
   }
   root.MosaicPoincareView = { View };
