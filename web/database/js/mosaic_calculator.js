@@ -33,6 +33,68 @@
     return null;
   })();
 
+  const CompleteInterior = typeof module !== 'undefined' && module.exports
+    ? require('./mosaic_complete_interior.js') : globalThis.MosaicCompleteInterior;
+  const completeMotion = new CompleteInterior.Controller();
+  let completePreparing = false;
+  let wanderDiskView = null;
+  let wanderViewMode = 'tiles';
+
+  function projectCompleteMotion() {
+    if (state.backgroundMetric !== 'complete-interior') return;
+    const snapshot = completeMotion.snapshot(), ball = backgroundBilliardState();
+    if (snapshot.position && geometry && geometry.cells[snapshot.tileIndex] && ball.position) {
+      const point = entry => ({ x: geometry.cells[entry.tileIndex].x + entry.local.x * geometry.radius,
+        y: geometry.cells[entry.tileIndex].y + entry.local.y * geometry.radius });
+      ball.tileIndex = snapshot.tileIndex; ball.position = point(snapshot);
+      if (snapshot.direction) ball.direction = snapshot.direction;
+      ball.trailPoints = snapshot.trailSegments.filter(e => geometry.cells[e.tileIndex]).map(e => ({ ...point(e), breakBefore: e.breakBefore, colorMode: 'blue' }));
+      ball.hitPoints = [];
+      if (ball.direction) ball.aimPoint = { x: ball.position.x + ball.direction.x * state.backgroundBilliardArrowLength,
+        y: ball.position.y + ball.direction.y * state.backgroundBilliardArrowLength };
+    }
+    if (!snapshot.playing) ball.playing = false;
+    if (poincareView) poincareView.schedule();
+    if (wanderDiskView) wanderDiskView.schedule();
+  }
+  completeMotion.subscribe(projectCompleteMotion);
+
+  function ensureCompleteSession() {
+    if (completePreparing || state.backgroundMetric !== 'complete-interior') return;
+    const result = state.hyperbolicMetricResult;
+    if (!result || state.hyperbolicMetricStatus !== 'ready' || state.hyperbolicMetricMethod !== 'discrete') {
+      if (completeMotion.result) completeMotion.invalidate('A ready discrete solve is required for complete-interior motion.');
+      return;
+    }
+    if (completeMotion.result === result) return;
+    completePreparing = true;
+    try {
+      const token = completeMotion.prepare(result, poincareSnapshot().sample);
+      if (typeof window !== 'undefined') {
+        const prepare = () => {
+          if (token !== completeMotion.generation || state.backgroundMetric !== 'complete-interior' || state.hyperbolicMetricResult !== result) return;
+          if (completeMotion.prepareStep(token)) setTimeout(prepare, 0);
+          else { syncBackgroundBilliardControls(); syncBackgroundBilliardStatusLine(); draw(analyze()); }
+        };
+        setTimeout(prepare, 0);
+      }
+    } catch (error) { completeMotion.status = 'error'; completeMotion.pause(error.message); }
+    finally { completePreparing = false; }
+  }
+
+  function setWanderViewMode(value) {
+    wanderViewMode = value === 'complete-interior' ? value : 'tiles';
+    stopWanderMarkerAnimation(false); stopWanderCameraAnimation(false);
+    if (wanderViewMode === 'complete-interior') setBackgroundMetric('complete-interior');
+    if (typeof document !== 'undefined') {
+      document.getElementById('wander-view-mode').value = wanderViewMode;
+      document.getElementById('wander-tile-controls').hidden = wanderViewMode !== 'tiles';
+      document.getElementById('wander-disk-controls').hidden = wanderViewMode === 'tiles';
+    }
+    if (wanderDiskView) wanderDiskView.schedule(true);
+    syncWanderControls(); renderWanderChart();
+  }
+
   let poincareView = null;
   let poincareReport = null;
   let poincareArtwork = null;
@@ -45,14 +107,14 @@
 
   function poincareSnapshot() {
     const billiard = backgroundBilliardState();
-    const ready = state.backgroundMetric === 'hyperbolic' && state.hyperbolicMetricStatus === 'ready' && !!state.hyperbolicMetricResult;
+    const ready = state.backgroundMetric !== 'flat' && state.hyperbolicMetricStatus === 'ready' && !!state.hyperbolicMetricResult;
     const eligibility = ready ? { supported: true } : hyperbolicMetricEligibility(poincareReport && poincareReport.background || undefined);
     return {
       eligible: eligibility.supported, reason: eligibility.reason,
       metric: state.backgroundMetric, method: state.hyperbolicMetricMethod,
       result: state.hyperbolicMetricResult, status: state.hyperbolicMetricStatus, message: state.hyperbolicMetricMessage,
       billiard,
-      sample: billiard.position ? { tileIndex: billiard.tileIndex, local: poincareLocalPoint(billiard.tileIndex, billiard.position) } : null,
+      sample: billiard.position ? { tileIndex: billiard.tileIndex, local: poincareLocalPoint(billiard.tileIndex, billiard.position), direction: billiard.direction } : null,
       trailLength: normalizeBackgroundBilliardTrailLength(state.backgroundBilliardTrailLength),
       infiniteTrail: isInfiniteBackgroundBilliardTrailLength(state.backgroundBilliardTrailLength)
     };
@@ -82,16 +144,20 @@
 
   function bindPoincareView() {
     if (!window.MosaicPoincareView || !document.getElementById('poincare-canvas')) return;
-    poincareView = new window.MosaicPoincareView.View({
-      snapshot: poincareSnapshot,
-      artwork: poincareBoardArtwork,
+    const options = { snapshot: poincareSnapshot, artwork: poincareBoardArtwork, controller: completeMotion,
+      setMotionMode: setBackgroundMetric, play: toggleBackgroundBilliardPlayback,
+      restart: () => restartBackgroundBilliardFromLaunch(true),
       useDiscrete: () => {
         state.hyperbolicMetricMethod = 'discrete';
-        if (state.backgroundMetric !== 'hyperbolic') toggleBackgroundMetric();
+        if (state.backgroundMetric === 'flat') setBackgroundMetric('hyperbolic');
         else requestHyperbolicMetric(true);
         syncHyperbolicMetricControls();
       }
-    });
+    };
+    poincareView = new window.MosaicPoincareView.View(options);
+    wanderDiskView = new window.MosaicPoincareView.View({ ...options, prefix: 'wander', exploration: true,
+      enabled: () => wanderViewMode === 'complete-interior', wide: false });
+    document.getElementById('wander-view-mode').addEventListener('change', event => setWanderViewMode(event.target.value));
   }
 
   const LATTICES = {
@@ -1640,13 +1706,13 @@
       refs.backgroundBeginSecondChain.addEventListener('click', beginSecondGlueBoundaryChain);
     }
     if (refs.backgroundMetricToggle) {
-      refs.backgroundMetricToggle.addEventListener('click', toggleBackgroundMetric);
+      refs.backgroundMetricToggle.addEventListener('change', event => setBackgroundMetric(event.target.value));
     }
     if (refs.hyperbolicMetricSolver) {
       refs.hyperbolicMetricSolver.addEventListener('change', () => {
         state.hyperbolicMetricMethod = refs.hyperbolicMetricSolver.value === 'fem' ? 'fem' : 'discrete';
         restartBackgroundBilliardFromLaunch();
-        if (state.backgroundMetric === 'hyperbolic') requestHyperbolicMetric(true);
+        if (state.backgroundMetric !== 'flat') requestHyperbolicMetric(true);
         syncHyperbolicMetricControls();
       });
     }
@@ -1655,7 +1721,7 @@
         const value = refs.hyperbolicMetricRefinement.value;
         state.hyperbolicMetricRefinement = value === 'auto' ? 'auto' : String(clampInt(value, 1, 4, 2));
         restartBackgroundBilliardFromLaunch();
-        if (state.backgroundMetric === 'hyperbolic') requestHyperbolicMetric(true);
+        if (state.backgroundMetric !== 'flat') requestHyperbolicMetric(true);
         syncHyperbolicMetricControls();
       });
     }
@@ -2097,6 +2163,7 @@
     }
     if (refs.wanderReset) {
       refs.wanderReset.addEventListener('click', () => {
+        if (wanderViewMode === 'complete-interior') { if (wanderDiskView) wanderDiskView.resetCamera(); return; }
         resetWanderPath('select a start tile on the main canvas', true);
         draw(analyze());
       });
@@ -3683,7 +3750,7 @@
       rows: state.rows,
       cols: state.cols,
       surface: currentBackgroundSurface(),
-      ...(state.backgroundMetric === 'hyperbolic' ? { metric: 'hyperbolic' } : {}),
+      ...(state.backgroundMetric !== 'flat' ? { metric: state.backgroundMetric } : {}),
       removedTiles: minigameRemovedRefsForExport(),
       connectFourHoles: minigameHoleRefsForExport(),
       inputHoles: minigameHoleRefsForExport(),
@@ -3711,7 +3778,7 @@
     compact.lattice = state.lattice;
     compact.size = `${state.rows}x${state.cols}`;
     compact.surface = currentBackgroundSurface();
-    if (state.backgroundMetric === 'hyperbolic') compact.metric = 'hyperbolic';
+    if (state.backgroundMetric !== 'flat') compact.metric = state.backgroundMetric;
     const removed = compactTileListForExport(minigameRemovedRefsForExport(), state.rows, state.cols, { rect: true });
     const holes = compactTileListForExport(minigameHoleRefsForExport(), state.rows, state.cols, { top: true });
     const cuts = compactCutListForExport(minigameCutEdgesForExport());
@@ -8016,7 +8083,8 @@
   }
 
   function normalizeBackgroundMetric(value) {
-    return String(value || '').toLowerCase() === 'hyperbolic' ? 'hyperbolic' : 'flat';
+    const mode = String(value || '').toLowerCase();
+    return ['hyperbolic', 'complete-interior'].includes(mode) ? mode : 'flat';
   }
 
   function hyperbolicMetricEligibility(background = analyzeBackgroundSpace()) {
@@ -8088,39 +8156,32 @@
     state.hyperbolicMetricWorker = null;
   }
 
-  function toggleBackgroundMetric() {
-    if (state.backgroundMetric === 'hyperbolic') {
-      cancelHyperbolicMetricWorker();
-      state.backgroundMetric = 'flat';
-      state.hyperbolicMetricStatus = 'idle';
-      state.hyperbolicMetricMessage = 'Flat metric selected.';
-      restartBackgroundBilliardFromLaunch();
-      syncHyperbolicMetricControls();
-      refreshExport();
-      draw(analyze());
-      return;
-    }
-    const eligibility = hyperbolicMetricEligibility();
-    if (!eligibility.supported) {
-      state.backgroundMetric = 'flat';
-      state.hyperbolicMetricStatus = 'error';
-      state.hyperbolicMetricMessage = eligibility.reason;
-      syncHyperbolicMetricControls();
-      syncBackgroundBilliardStatusLine();
-      return;
-    }
-    state.backgroundMetric = 'hyperbolic';
-    restartBackgroundBilliardFromLaunch();
-    requestHyperbolicMetric(false);
-    refreshExport();
+  function toggleBackgroundMetric() { setBackgroundMetric(state.backgroundMetric === 'flat' ? 'hyperbolic' : 'flat'); }
+
+  function setBackgroundMetric(value) {
+    const mode = normalizeBackgroundMetric(value);
+    if (state.backgroundMetric === mode) { ensureCompleteSession(); return; }
+    stopBackgroundBilliard(false);
+    cancelHyperbolicMetricWorker();
+    completeMotion.invalidate('Motion mode changed; incompatible trail cleared.');
+    state.backgroundMetric = mode;
+    const ball = backgroundBilliardState();
+    ball.trailPoints = ball.position ? [{ ...ball.position, colorMode: 'blue' }] : []; ball.hitPoints = [];
+    if (poincareView) poincareView.reset();
+    if (wanderDiskView) wanderDiskView.reset();
+    if (mode === 'flat') { state.hyperbolicMetricStatus = 'idle'; state.hyperbolicMetricMessage = 'Flat metric selected.'; }
+    else requestHyperbolicMetric(false);
+    syncBackgroundBilliardControls(); refreshExport(); draw(analyze());
   }
 
   function requestHyperbolicMetric(force = false) {
-    if (state.backgroundMetric !== 'hyperbolic') return;
+    if (state.backgroundMetric === 'flat') return;
+    stopBackgroundBilliard(false);
+    completeMotion.invalidate('Metric changed; preparing a new session.');
     const eligibility = hyperbolicMetricEligibility();
     if (!eligibility.supported) {
       cancelHyperbolicMetricWorker();
-      state.backgroundMetric = 'flat';
+      if (state.backgroundMetric !== 'complete-interior') state.backgroundMetric = 'flat';
       state.hyperbolicMetricStatus = 'error';
       state.hyperbolicMetricMessage = eligibility.reason;
       syncHyperbolicMetricControls();
@@ -8133,7 +8194,8 @@
       state.hyperbolicMetricTopologyKey = topologyKey;
       state.hyperbolicMetricStatus = state.hyperbolicMetricResult.status;
       state.hyperbolicMetricMessage = state.hyperbolicMetricResult.warning || 'Hyperbolic metric ready.';
-      restartBackgroundBilliardFromLaunch();
+      stopBackgroundBilliard(false);
+      completeMotion.invalidate();
       syncHyperbolicMetricControls();
       draw(analyze());
       return;
@@ -8152,7 +8214,7 @@
       tolerance: 1e-6
     };
     const acceptResult = (result) => {
-      if (requestId !== state.hyperbolicMetricRequestId || state.backgroundMetric !== 'hyperbolic') return;
+      if (requestId !== state.hyperbolicMetricRequestId || state.backgroundMetric === 'flat') return;
       if (hyperbolicMetricTopologyKey() !== topologyKey) return;
       if (!result || result.topologyKey && result.topologyKey !== topologyKey) return;
       result.topologyKey = topologyKey;
@@ -8162,10 +8224,11 @@
       hyperbolicMetricCache.set(cacheKey, result);
       state.hyperbolicMetricWorker = null;
       if (result.status === 'error') {
-        state.backgroundMetric = 'flat';
-        state.hyperbolicMetricMessage = 'Uniformization did not converge; Flat mode was retained.';
+        if (state.backgroundMetric !== 'complete-interior') state.backgroundMetric = 'flat';
+        state.hyperbolicMetricMessage = 'Uniformization did not converge; motion is unavailable.';
       }
-      restartBackgroundBilliardFromLaunch();
+      stopBackgroundBilliard(false);
+      completeMotion.invalidate();
       syncHyperbolicMetricControls();
       refreshExport();
       draw(analyze());
@@ -8175,9 +8238,10 @@
       state.hyperbolicMetricWorker = null;
       state.hyperbolicMetricResult = null;
       state.hyperbolicMetricStatus = 'error';
-      state.hyperbolicMetricMessage = `${message || 'Uniformization failed.'} Flat mode was retained.`;
-      state.backgroundMetric = 'flat';
-      restartBackgroundBilliardFromLaunch();
+      state.hyperbolicMetricMessage = `${message || 'Uniformization failed.'} Motion is unavailable.`;
+      if (state.backgroundMetric !== 'complete-interior') state.backgroundMetric = 'flat';
+      stopBackgroundBilliard(false);
+      completeMotion.invalidate();
       syncHyperbolicMetricControls();
       refreshExport();
       draw(analyze());
@@ -8215,7 +8279,7 @@
   }
 
   function syncHyperbolicMetricForReport(report) {
-    if (state.backgroundMetric !== 'hyperbolic') {
+    if (state.backgroundMetric === 'flat') {
       syncHyperbolicMetricControls();
       return;
     }
@@ -8223,17 +8287,19 @@
     const eligibility = hyperbolicMetricEligibility(background);
     if (!eligibility.supported) {
       cancelHyperbolicMetricWorker();
-      state.backgroundMetric = 'flat';
+      if (state.backgroundMetric !== 'complete-interior') state.backgroundMetric = 'flat';
       state.hyperbolicMetricResult = null;
       state.hyperbolicMetricStatus = 'error';
       state.hyperbolicMetricMessage = eligibility.reason;
-      restartBackgroundBilliardFromLaunch();
+      stopBackgroundBilliard(false);
+      completeMotion.invalidate();
       syncHyperbolicMetricControls();
       return;
     }
     const topologyKey = hyperbolicMetricTopologyKey();
     if (topologyKey !== state.hyperbolicMetricTopologyKey) {
-      restartBackgroundBilliardFromLaunch();
+      stopBackgroundBilliard(false);
+      completeMotion.invalidate();
       requestHyperbolicMetric(false);
       return;
     }
@@ -8241,14 +8307,13 @@
   }
 
   function syncHyperbolicMetricControls() {
+    ensureCompleteSession();
+    if (wanderDiskView) wanderDiskView.sync();
     if (poincareView) poincareView.sync();
     const metric = normalizeBackgroundMetric(state.backgroundMetric);
-    const status = metric === 'hyperbolic' ? state.hyperbolicMetricStatus : (state.hyperbolicMetricStatus === 'error' ? 'error' : 'flat');
+    const status = metric !== 'flat' ? state.hyperbolicMetricStatus : (state.hyperbolicMetricStatus === 'error' ? 'error' : 'flat');
     if (refs.backgroundMetricToggle) {
-      refs.backgroundMetricToggle.textContent = metric === 'hyperbolic'
-        ? (status === 'computing' ? 'Metric: Hyperbolic (computing)' : 'Metric: Hyperbolic')
-        : 'Metric: Flat';
-      refs.backgroundMetricToggle.setAttribute('aria-pressed', metric === 'hyperbolic' ? 'true' : 'false');
+      refs.backgroundMetricToggle.value = metric;
       refs.backgroundMetricToggle.setAttribute('aria-busy', status === 'computing' ? 'true' : 'false');
       refs.backgroundMetricToggle.dataset.state = status;
       refs.backgroundMetricToggle.title = state.hyperbolicMetricMessage || 'Switch the geodesic background metric.';
@@ -8305,6 +8370,7 @@
   }
 
   function restartBackgroundBilliardFromLaunch(redraw = false) {
+    completeMotion.invalidate('Restarting from the stored launch.');
     if (poincareView) poincareView.reset();
     poincareLastSample = null;
     const current = backgroundBilliardState();
@@ -8344,6 +8410,7 @@
   }
 
   function stopBackgroundBilliard(redraw = true) {
+    completeMotion.pause();
     const billiard = backgroundBilliardState();
     if (billiard.frame != null) {
       window.cancelAnimationFrame(billiard.frame);
@@ -8358,6 +8425,7 @@
   }
 
   function clearBackgroundBilliard(redraw = true) {
+    completeMotion.clear();
     if (poincareView) poincareView.reset();
     poincareLastSample = null;
     const current = backgroundBilliardState();
@@ -8369,6 +8437,7 @@
   }
 
   function remapBackgroundBilliardAfterResize(oldGeometry) {
+    if (state.backgroundMetric === 'complete-interior' && completeMotion.pose) { projectCompleteMotion(); return; }
     const billiard = backgroundBilliardState();
     if (!oldGeometry || !geometry || !billiard.position || billiard.tileIndex < 0) return;
     const oldCell = oldGeometry.cells && oldGeometry.cells[billiard.tileIndex];
@@ -8412,8 +8481,9 @@
         playLabel = 'choose direction';
       } else if (billiard.position && billiard.direction) {
         playLabel = 'play';
-        playDisabled = state.backgroundMetric === 'hyperbolic'
-          && !['ready', 'warning'].includes(state.hyperbolicMetricStatus);
+        playDisabled = state.backgroundMetric === 'complete-interior'
+          ? completeMotion.status !== 'ready' || !completeMotion.ray || !!completeMotion.condition
+          : state.backgroundMetric === 'hyperbolic' && !['ready', 'warning'].includes(state.hyperbolicMetricStatus);
       }
       refs.backgroundBilliardPlay.textContent = playLabel;
       refs.backgroundBilliardPlay.disabled = !show || playDisabled;
@@ -8424,7 +8494,7 @@
     if (refs.backgroundBilliardSpeed) {
       const speed = normalizeBackgroundBilliardSpeed(state.backgroundBilliardSpeed);
       refs.backgroundBilliardSpeed.value = speed.toFixed(2);
-      if (refs.backgroundBilliardSpeedValue) refs.backgroundBilliardSpeedValue.textContent = speed.toFixed(2);
+      if (refs.backgroundBilliardSpeedValue) refs.backgroundBilliardSpeedValue.textContent = state.backgroundMetric === 'complete-interior' ? `${(5 * speed).toFixed(2)} hyperbolic units/s` : speed.toFixed(2);
     }
     if (refs.backgroundBilliardTrail) {
       const trailLength = normalizeBackgroundBilliardTrailLength(state.backgroundBilliardTrailLength);
@@ -8452,6 +8522,10 @@
     if (!Array.isArray(billiard.trailPoints) || !billiard.trailPoints.length) {
       billiard.trailPoints = [{ x: billiard.position.x, y: billiard.position.y, colorMode: billiard.trailColorMode === 'purple' ? 'purple' : 'blue' }];
     }
+    if (state.backgroundMetric === 'complete-interior') {
+      ensureCompleteSession();
+      if (!completeMotion.play()) return;
+    }
     billiard.playing = true;
     billiard.lastTime = 0;
     syncBackgroundBilliardControls();
@@ -8468,9 +8542,9 @@
       return;
     }
     if (!billiard.lastTime) billiard.lastTime = timestamp;
-    const elapsed = clamp(timestamp - billiard.lastTime, 0, 48);
+    const elapsed = state.backgroundMetric === 'complete-interior' ? Math.max(0, timestamp - billiard.lastTime) : clamp(timestamp - billiard.lastTime, 0, 48);
     billiard.lastTime = timestamp;
-    advanceBackgroundBilliard(normalizeBackgroundBilliardSpeed(state.backgroundBilliardSpeed) * elapsed);
+    advanceBackgroundBilliard(normalizeBackgroundBilliardSpeed(state.backgroundBilliardSpeed) * elapsed * (state.backgroundMetric === 'complete-interior' ? 0.005 : 1));
     syncBackgroundBilliardStatusLine();
     draw(analyze());
     if (billiard.playing) billiard.frame = window.requestAnimationFrame(stepBackgroundBilliardAnimation);
@@ -8488,6 +8562,7 @@
       const hit = tileHitAtBoardPoint(point, 1);
       if (!hit || !tileExists(hit.index)) return false;
       stopBackgroundBilliard(false);
+      completeMotion.invalidate('New launch point.');
       state.backgroundBilliard = {
         ...resetBackgroundBilliardState(),
         tileIndex: hit.index,
@@ -8508,6 +8583,10 @@
     billiard.direction = normalizeVector(dx, dy, 1, 0);
     billiard.aimPoint = { x: point.x, y: point.y };
     billiard.launch = backgroundBilliardLaunchFromPosition(billiard.tileIndex, billiard.position, billiard.direction);
+    if (state.backgroundMetric === 'complete-interior') {
+      if (completeMotion.status === 'ready') { try { completeMotion.launch(poincareSnapshot().sample); } catch (error) { completeMotion.pause(error.message); } }
+      else completeMotion.invalidate('Launch direction changed.');
+    }
     syncBackgroundBilliardControls();
     updateReport(false);
     return true;
@@ -8547,6 +8626,7 @@
     const billiard = backgroundBilliardState();
     if (!billiard.position) return 'geodesic: click inside an existing tile to place the point';
     if (!billiard.direction) return 'geodesic: click a second point to choose direction';
+    if (state.backgroundMetric === 'complete-interior') return `Complete interior (approximation): ${completeMotion.condition || (completeMotion.playing ? 'playing' : completeMotion.status)} · s=${(completeMotion.length || 0).toFixed(2)}`;
     const boundaryHits = backgroundBilliardBoundaryHitCount(billiard);
     return `geodesic: ${billiard.playing ? 'playing' : 'ready'}, ${boundaryHits} hit${boundaryHits === 1 ? '' : 's'}`;
   }
@@ -8566,6 +8646,7 @@
   }
 
   function advanceBackgroundBilliard(distance) {
+    if (state.backgroundMetric === 'complete-interior') { completeMotion.advance(distance); return; }
     if (
       state.backgroundMetric === 'hyperbolic'
       && state.hyperbolicMetricResult
@@ -18550,6 +18631,7 @@
 
   function draw(report) {
     poincareReport = report;
+    if (wanderDiskView) wanderDiskView.sync();
     if (poincareView) poincareView.sync();
     if (!geometry) resizeCanvas();
     const canvas = refs.canvas;
@@ -25731,6 +25813,7 @@
   }
 
   function renderWanderChart() {
+    if (wanderViewMode === 'complete-interior') { if (wanderDiskView) wanderDiskView.schedule(); return; }
     if (!refs.wanderCanvas) return;
     if (!wanderGeometry) resizeWanderCanvas();
     if (!wanderGeometry) return;
@@ -26438,6 +26521,7 @@
   }
 
   function handleWanderPointerDown(event) {
+    if (wanderViewMode === 'complete-interior') return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     event.preventDefault();
     if (!isGluedBoundaryMode()) return;
@@ -26463,6 +26547,7 @@
   }
 
   function handleWanderPointerMove(event) {
+    if (wanderViewMode === 'complete-interior') return;
     if (!state.wanderOpen || !state.wanderTiles.length || !isGluedBoundaryMode()) return;
     const hit = wanderEdgeHitTest(event.clientX, event.clientY);
     const next = hit
@@ -26478,6 +26563,7 @@
   }
 
   function handleWanderKeyDown(event) {
+    if (wanderViewMode === 'complete-interior') return;
     if (!state.wanderOpen || state.wanderSelectingStart || !state.wanderTiles.length || !isGluedBoundaryMode()) return;
     if (!event || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
     if (isEditableWanderKeyTarget(event.target)) return;
@@ -31973,7 +32059,7 @@
       refs.wanderChooseStart.disabled = !available;
       refs.wanderChooseStart.textContent = state.wanderSelectingStart ? 'cancel' : 'select';
     }
-    if (refs.wanderReset) refs.wanderReset.disabled = !available || (!state.wanderTiles.length && !state.wanderSelectingStart);
+    if (refs.wanderReset) refs.wanderReset.disabled = !available || (wanderViewMode === 'tiles' && !state.wanderTiles.length && !state.wanderSelectingStart);
     syncWanderMarkerRadiusControl();
     syncWanderSmokeControls();
     syncWanderPlacement();
@@ -32139,6 +32225,7 @@
   }
 
   function syncWanderStatus(message = '') {
+    if (wanderViewMode === 'complete-interior' && !state.wanderSelectingStart) { if (wanderDiskView) wanderDiskView.schedule(); return; }
     if (!refs.wanderStatus) return;
     if (message) {
       refs.wanderStatus.textContent = message;
@@ -32207,6 +32294,10 @@
   }
 
   function startWanderAtTile(index) {
+    if (wanderViewMode === 'complete-interior') {
+      state.wanderSelectingStart = false; restoreWanderSelectionInputMode();
+      return wanderDiskView ? wanderDiskView.selectTile(index) : false;
+    }
     if (!tileExists(index)) return false;
     stopWanderMarkerAnimation(false);
     stopWanderCameraAnimation(false);
@@ -33716,6 +33807,8 @@
       refs,
       backgroundSpacePresets: BACKGROUND_SPACE_PRESETS,
       poincareSnapshot,
+      completeMotion, ensureCompleteSession, projectCompleteMotion, setBackgroundMetric, normalizeBackgroundMetric,
+      setWanderViewMode, getWanderViewMode: () => wanderViewMode, stepBackgroundBilliardAnimation, toggleBackgroundBilliardPlayback,
       setPoincareView: (view) => { poincareView = view; poincareLastSample = null; },
       applyBackgroundBilliardBoundaryHit,
       appendBackgroundBilliardTrailPoint,

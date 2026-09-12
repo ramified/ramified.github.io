@@ -76,7 +76,8 @@ function setBoard(options = {}) {
 
 (function testMarkupAndBibliography() {
   const html = fs.readFileSync(path.join(__dirname, '..', 'mosaic_calculator.html'), 'utf8');
-  assert.match(html, /id="background-metric-toggle"[^>]*aria-pressed="false"/);
+  assert.match(html, /<select[^>]*id="background-metric-toggle"/);
+  assert.ok(html.includes('value="complete-interior"'));
   assert.match(html, /id="hyperbolic-metric-debug-card"[^>]*data-card-advanced="true"/);
   assert.ok(html.includes('mosaic_hyperbolic_metric_worker.js') || fs.existsSync(path.join(__dirname, 'mosaic_hyperbolic_metric_worker.js')));
   ['hyperbolic-metric-solver', 'hyperbolic-metric-refinement', 'hyperbolic-metric-heatmap', 'hyperbolic-heatmap-legend'].forEach((id) => assert.ok(html.includes(`id="${id}"`)));

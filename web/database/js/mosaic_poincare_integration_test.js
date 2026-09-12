@@ -6,7 +6,8 @@ const path = require('path');
 const mosaic = require('./mosaic_calculator.js').__test;
 const metric = require('./mosaic_hyperbolic_metric.js');
 const P = require('./mosaic_poincare.js');
-const scope = { MosaicPoincare: P };
+const U = require('./mosaic_poincare_uniformization.js');
+const scope = { MosaicPoincare: P, MosaicPoincareUniformization: U };
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'mosaic_poincare_view.js'), 'utf8'), scope);
 const View = scope.MosaicPoincareView.View;
 
@@ -23,7 +24,7 @@ function setup(bordered = false) {
   mosaic.state.backgroundBilliard = { tileIndex: 5, position, direction, trailPoints: [], hitPoints: [], trailColorMode: 'blue', frame: null,
     launch: mosaic.backgroundBilliardLaunchFromPosition(5, position, direction) };
   const view = Object.create(View.prototype);
-  Object.assign(view, { options: { snapshot: mosaic.poincareSnapshot }, solve: {}, status: {}, follow: { checked: false }, isOpen: () => true, schedule: () => {} });
+  Object.assign(view, { options: { snapshot: mosaic.poincareSnapshot }, model: { value: 'reflecting' }, solve: {}, status: {}, follow: { checked: false }, isOpen: () => true, schedule: () => {} });
   mosaic.setPoincareView(view);
   assert.ok(view.ensure());
   return view;
@@ -72,6 +73,30 @@ for (const bordered of [false, true]) {
   mosaic.clearBackgroundBilliard(false); assert.equal(view.trace, null);
   mosaic.setPoincareView(null);
 }
+// Both companion views attach to the controller; neither owns an animation.
+{
+  const view = setup(true);
+  mosaic.state.backgroundMetric = 'complete-interior';
+  mosaic.ensureCompleteSession();
+  const controller = mosaic.completeMotion;
+  while (controller.prepareStep(controller.generation, 100)) {}
+  assert.equal(controller.status, 'ready', controller.condition);
+  view.options.controller = controller; view.play = {}; view.reset();
+  assert.ok(view.ensure()); assert.equal(view.interiorActive, true);
+  assert.strictEqual(view.development, controller.development);
+  assert.strictEqual(view.interiorMap, controller.map);
+  controller.play(); mosaic.advanceBackgroundBilliard(0.3);
+  view.ensure(); assert.equal(view.interiorPath.length, controller.length);
+  const before = controller.snapshot(); view.reset(); view.ensure();
+  assert.equal(controller.length, before.length);
+  view.options.enabled = () => false; view.ensure();
+  mosaic.setPoincareView(null); mosaic.advanceBackgroundBilliard(0.3);
+  assert.ok(controller.length > before.length);
+  assert.ok(Math.hypot(mosaic.poincareSnapshot().sample.local.x - controller.snapshot().local.x, mosaic.poincareSnapshot().sample.local.y - controller.snapshot().local.y) < 1e-10);
+  mosaic.state.hyperbolicMetricStatus = 'computing'; mosaic.ensureCompleteSession();
+  assert.equal(controller.status, 'idle'); assert.equal(controller.playing, false);
+  assert.equal(view.ensure(), false);
+}
 const html = fs.readFileSync(path.join(__dirname, '..', 'mosaic_calculator.html'), 'utf8');
-for (const id of ['poincare-card', 'poincare-canvas', 'poincare-open', 'poincare-close', 'poincare-wide', 'poincare-recenter', 'poincare-follow', 'poincare-mesh', 'poincare-use-discrete']) assert.ok(html.includes(`id="${id}"`));
+for (const id of ['poincare-card', 'poincare-canvas', 'poincare-open', 'poincare-close', 'poincare-wide', 'poincare-recenter', 'poincare-follow', 'poincare-mesh', 'poincare-use-discrete', 'poincare-model', 'poincare-interior-play']) assert.ok(html.includes(`id="${id}"`));
 console.log('mosaic Poincare calculator integration tests passed');

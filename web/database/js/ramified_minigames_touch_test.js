@@ -94,4 +94,6 @@ assert.equal(run('camera.scale'), 0.2);
 assert.equal(run("handleWrappedViewPointerDown({...event(9,100,100),pointerType:'mouse',button:1})"), true);
 run('handleWrappedViewPointerMove(event(9,110,120)); handleWrappedViewPointerUp(event(9,110,120))');
 assert.equal(run('wrappedPanGesture'), null);
+run("wrappedTouchConsumed.add(5); active=false; handleWrappedViewPointerDown(event(5,100,100))");
+assert.equal(run('wrappedTouchConsumed.has(5)'), false, 'fresh pointer IDs are reusable after leaving wrapped view');
 console.log('ramified_minigames_touch_test: settings containment and gesture tests passed');

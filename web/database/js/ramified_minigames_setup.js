@@ -6040,9 +6040,10 @@
   }
 
   function handleWrappedViewPointerDown(event) {
-    if (!wrappedViewIsActive() || !event) return false;
+    if (!event) return false;
+    wrappedTouchConsumed.delete(event.pointerId);
+    if (!wrappedViewIsActive()) return false;
     if (event.pointerType === 'touch') {
-      wrappedTouchConsumed.delete(event.pointerId);
       wrappedTouchGame = game;
       wrappedTouchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (wrappedTouchPointers.size < 2) return false;

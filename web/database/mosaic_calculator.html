@@ -1339,6 +1339,22 @@
             <button class="btn btn-ghost" id="wander-reset" type="button">reset</button>
             <button class="btn btn-ghost" id="wander-toggle-wide" type="button">side</button>
           </div>
+          <div class="mosaic-inline-row"><label for="wander-view-mode">View</label><select id="wander-view-mode"><option value="tiles">Tile exploration</option><option value="complete-interior">Complete interior</option></select></div>
+          <div id="wander-disk-controls" hidden>
+            <label><input id="wander-follow" type="checkbox" checked> Follow ball</label>
+            <label><input id="wander-mesh" type="checkbox"> Triangle mesh</label>
+            <button class="btn" id="wander-interior-play" type="button">Play</button>
+            <button class="btn btn-ghost" id="wander-restart" type="button">Restart ball</button>
+            <button class="btn btn-ghost" id="wander-recenter" type="button">Recenter</button>
+            <button class="btn" id="wander-use-discrete" type="button">Use discrete solver</button>
+            <div class="mosaic-inline-row">Explore adjacent triangle:
+              <button class="btn btn-ghost" id="wander-neighbor-0" type="button">1</button>
+              <button class="btn btn-ghost" id="wander-neighbor-1" type="button">2</button>
+              <button class="btn btn-ghost" id="wander-neighbor-2" type="button">3</button>
+            </div>
+            <p class="hint" id="wander-explanation">Click a visible lift to explore. Drag or use arrow keys to pan; this disables Follow ball. Reset changes only this camera.</p>
+          </div>
+          <div id="wander-tile-controls">
           <div class="mosaic-inline-row">
             <span class="input-label">Radius</span>
             <span class="background-slider-controls">
@@ -1424,6 +1440,7 @@
               <input type="range" id="wander-smoke-alpha-edge" min="0" max="1" step="0.01" value="0.00">
               <output id="wander-smoke-alpha-edge-value">0.00</output>
             </span>
+          </div>
           </div>
           <span class="wander-status" id="wander-status">select a start tile on the main canvas</span>
           <div class="wander-canvas-wrap">
@@ -1588,7 +1605,7 @@
           <div class="mosaic-inline-row" id="background-billiard-row">
             <span class="input-label">Geodesic</span>
             <span class="billiard-controls">
-              <button class="btn btn-ghost metric-toggle" id="background-metric-toggle" type="button" aria-pressed="false" data-state="flat">Metric: Flat</button>
+              <label for="background-metric-toggle">Motion</label><select class="metric-toggle" id="background-metric-toggle" data-state="flat"><option value="flat">Flat</option><option value="hyperbolic">Hyperbolic — reflecting boundary</option><option value="complete-interior">Complete interior (approximation)</option></select>
               <button class="btn btn-ghost" id="poincare-open" type="button">Poincaré disk</button>
               <button class="btn" id="background-billiard-play" type="button">add point</button>
               <button class="btn btn-ghost" id="background-billiard-clear" type="button">clear</button>
@@ -1791,10 +1808,16 @@
             <label><input id="poincare-follow" type="checkbox"> Follow ball</label>
             <label><input id="poincare-mesh" type="checkbox"> Triangle mesh</label>
           </div>
+          <div class="mosaic-inline-row">
+            <label for="poincare-model">Shared motion</label>
+            <select id="poincare-model"><option value="flat">Flat</option><option value="hyperbolic">Hyperbolic — reflecting boundary</option><option value="complete-interior">Complete interior (approximation)</option></select>
+            <button class="btn" id="poincare-interior-play" type="button" hidden disabled>Play</button><button class="btn btn-ghost" id="poincare-restart" type="button" hidden>Restart</button>
+          </div>
           <button class="btn" id="poincare-use-discrete" type="button">Use discrete solver</button>
           <output id="poincare-status" aria-live="polite">Select the hyperbolic metric to develop this surface.</output>
           <div class="poincare-canvas-wrap"><canvas id="poincare-canvas" tabindex="0" aria-label="Poincaré disk universal cover; drag or use arrow keys to move the camera"></canvas></div>
-          <p class="hint">Numerical development of the hyperbolic triangles. Pipes, decorations, and the lifted trajectory use an approximate interior map. Drag or use arrow keys to move; recenter returns to the initial lift. Physical boundaries bound a region inside the disk. Only a finite neighborhood is drawn.</p>
+          <p class="hint" id="poincare-explanation">Complete interior uses one shared ball and trajectory across the board and both companion views. Finite coverage and interpolated boundary artwork are approximations.</p>
+          <p class="hint">Drag or use arrow keys to move; recenter returns to the initial lift. The current starting solver requires χ &lt; 0. Disk and annulus interiors also have complete Poincaré metrics, but need a different starting solver and are not yet supported here. Boundary sampling and the finite neighborhood limit the interior preview's accuracy.</p>
         </div>
       </section>
     </div>
@@ -2225,8 +2248,10 @@
 <script src="js/billiards/topological_billiards_native.js?v=20260909-3"></script>
 <script src="js/mosaic_hyperbolic_metric.js?v=20260909-1"></script>
 <script src="js/mosaic_poincare.js?v=20260911-1"></script>
-<script src="js/mosaic_poincare_view.js?v=20260911-2"></script>
-<script src="js/mosaic_calculator.js?v=poincare-disk-2"></script>
+<script src="js/mosaic_poincare_uniformization.js?v=20260911-2"></script>
+<script src="js/mosaic_complete_interior.js?v=20260912-1"></script>
+<script src="js/mosaic_poincare_view.js?v=20260912-1"></script>
+<script src="js/mosaic_calculator.js?v=shared-interior-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20260826-1"></script>
 <script>
