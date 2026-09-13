@@ -9,11 +9,11 @@ const SHOP_CONFIG = {
       {
     id: "hair-dryer",
     image: "hair_dryer.jpg",
-    price: 15,
+    price: 14,
     name: { en: "Hair dryer", zh: "吹风机" },
     description: {
-      en: "Reliable hair dryer that has been in regular use for 6 years and still works great. €15.",
-      zh: "稳定使用6年了，贼好用，15欧出。"
+      en: "Reliable hair dryer that has been in regular use for 6 years and still works great. €14.",
+      zh: "稳定使用6年了，贼好用，14欧出。"
     }
   },
   {
@@ -103,16 +103,16 @@ const SHOP_CONFIG = {
     quantity: 5
   },
 
-  {
-    id: "dish-drying-rack",
-    image: "dish_drying_rack.jpg",
-    price: 1,
-    name: { en: "Dish drying rack", zh: "沥水架" },
-    description: {
-      en: "Practical dish drying rack, €1.",
-      zh: "实用沥水架，1欧1个。"
-    }
-  },
+  // {
+  //   id: "dish-drying-rack",
+  //   image: "dish_drying_rack.jpg",
+  //   price: 1,
+  //   name: { en: "Dish drying rack", zh: "沥水架" },
+  //   description: {
+  //     en: "Practical dish drying rack, €1.",
+  //     zh: "实用沥水架，1欧1个。"
+  //   }
+  // },
 
   {
     id: "blue-raincoat",
@@ -161,21 +161,21 @@ const SHOP_CONFIG = {
   {
     id: "quiet-fan",
     image: "quiet_fan.jpg",
-    price: 19,
+    price: 18,
     name: { en: "Very quiet fan", zh: "静音风扇" },
     description: {
       en: "A very quiet and comfortable fan, suitable for sleeping or working. €19.",
-      zh: "非常舒适的静音风扇，19欧出。"
+      zh: "非常舒适的静音风扇，18欧出。"
     }
   },
   {
     id: "books",
     image: "books.jpg",
-    price: 3,
+    price: 2.5,
     name: { en: "Books", zh: "书籍" },
     description: {
-      en: "A small selection of books, 3 euro for each book, 7 for all",
-      zh: "一些保存良好的全彩二手书籍，3欧一本，多买可以优惠"
+      en: "A small selection of books, 2.5 euro for each book, 6 for all",
+      zh: "一些保存良好的全彩二手书籍，2.5欧一本，多买可以优惠"
     },
     quantity: 3,
   },
@@ -192,7 +192,7 @@ const SHOP_CONFIG = {
   {
     id: "electric-grill",
     image: "electric_grill.jpg",
-    price: 28,
+    price: 25,
     name: { en: "Electric grill", zh: "电烤炉" },
     description: {
       en: "Electric grill only used once, ready for a barbecue party.",
@@ -202,7 +202,7 @@ const SHOP_CONFIG = {
   {
     id: "pot",
     image: "pot.jpg",
-    price: 8,
+    price: 7,
     name: { en: "Pot", zh: "锅" },
     description: {
       en: "A practical cooking pot.",
@@ -222,11 +222,11 @@ const SHOP_CONFIG = {
   {
     id: "umeshu",
     image: "Umeshu.jpg",
-    price: 11.5,
+    price: 10,
     name: { en: "Umeshu", zh: "梅酒" },
     description: {
-      en: "Umeshu bottle, offered for 11.5 euros.",
-      zh: "梅酒一瓶，价格11.5欧元。"
+      en: "Umeshu bottle, offered for 10 euros.",
+      zh: "梅酒一瓶，价格10欧元。"
     }
   },
   // {
@@ -292,7 +292,7 @@ const SHOP_CONFIG = {
   {
     id: "bosideng-down-jacket",
     image: "bosideng_down_jacket.jpg",
-    price: 5,
+    price: 4,
     name: { en: "Bosideng down jacket", zh: "波司登羽绒服" },
     description: {
       en: "Bosideng down jacket. There is some damage around the zipper, hence the low price.",

@@ -1324,6 +1324,7 @@
     refs.backgroundChainReversed = document.getElementById('background-chain-reversed');
     refs.backgroundBilliardRow = document.getElementById('background-billiard-row');
     refs.backgroundMetricToggle = document.getElementById('background-metric-toggle');
+    refs.backgroundBilliardRestart = document.getElementById('background-billiard-restart');
     refs.backgroundBilliardPlay = document.getElementById('background-billiard-play');
     refs.backgroundBilliardClear = document.getElementById('background-billiard-clear');
     refs.backgroundBilliardSpeedRow = document.getElementById('background-billiard-speed-row');
@@ -1705,6 +1706,7 @@
     if (refs.backgroundBeginSecondChain) {
       refs.backgroundBeginSecondChain.addEventListener('click', beginSecondGlueBoundaryChain);
     }
+    if (refs.backgroundBilliardRestart) refs.backgroundBilliardRestart.addEventListener('click', () => restartBackgroundBilliardFromLaunch(true));
     if (refs.backgroundMetricToggle) {
       refs.backgroundMetricToggle.addEventListener('change', event => setBackgroundMetric(event.target.value));
     }
@@ -4914,7 +4916,7 @@
     state.hyperbolicMetricResult = null;
     state.hyperbolicMetricTopologyKey = '';
     state.hyperbolicMetricStatus = 'idle';
-    state.hyperbolicMetricMessage = state.backgroundMetric === 'hyperbolic' ? 'Waiting to uniformize imported topology.' : 'Flat metric selected.';
+    state.hyperbolicMetricMessage = state.backgroundMetric !== 'flat' ? 'Waiting to uniformize imported topology.' : 'Flat metric selected.';
     state.editMode = normalizeEditMode(payload.clickMode || payload.editMode);
     state.drawAction = normalizeDrawAction(payload.drawAction || (payload.display && payload.display.drawAction));
     if (state.diagramType === 'dual' && (payload.drawAddVertices || (payload.display && payload.display.drawAddVertices))) {
@@ -8488,6 +8490,7 @@
       refs.backgroundBilliardPlay.textContent = playLabel;
       refs.backgroundBilliardPlay.disabled = !show || playDisabled;
     }
+    if (refs.backgroundBilliardRestart) refs.backgroundBilliardRestart.disabled = !billiard.launch;
     if (refs.backgroundBilliardClear) {
       refs.backgroundBilliardClear.disabled = !show || (!billiard.position && !billiard.direction && !billiard.hitPoints.length && !billiard.trailPoints.length);
     }
@@ -33807,7 +33810,7 @@
       refs,
       backgroundSpacePresets: BACKGROUND_SPACE_PRESETS,
       poincareSnapshot,
-      completeMotion, ensureCompleteSession, projectCompleteMotion, setBackgroundMetric, normalizeBackgroundMetric,
+      completeMotion, ensureCompleteSession, projectCompleteMotion, setBackgroundMetric, normalizeBackgroundMetric, requestHyperbolicMetric, cancelHyperbolicMetricWorker,
       setWanderViewMode, getWanderViewMode: () => wanderViewMode, stepBackgroundBilliardAnimation, toggleBackgroundBilliardPlayback,
       setPoincareView: (view) => { poincareView = view; poincareLastSample = null; },
       applyBackgroundBilliardBoundaryHit,

@@ -2667,6 +2667,35 @@
           <button class="btn" id="redo-step" type="button" disabled>redo</button>
         </div>
         <div class="mosaic-debug-panel" id="debug-tools" hidden>
+          <section class="mosaic-debug-step-row" id="sound-effects-debug" aria-label="Sound effect variants" data-i18n-aria-label="access.soundVariants">
+            <span class="input-label" data-i18n="debug.soundVariants">Sound effect variants</span>
+            <div id="sound-effects-debug-list"></div>
+          </section>
+          <section class="mosaic-debug-step-row" id="sound-audition-debug" aria-label="Seeded retro sound audition" data-i18n-aria-label="access.soundAudition">
+            <span class="input-label" data-i18n="debug.soundAudition">Seeded retro sound audition</span>
+            <div class="mosaic-inline-row">
+              <label class="input-label" for="sound-audition-category" data-i18n="sfx.audition.category">Collection</label>
+              <select class="mosaic-editor-input calculator-control" id="sound-audition-category" data-i18n-aria-label="access.soundAuditionCategory" aria-label="Sound collection">
+                <option value="marble" data-i18n="sfx.audition.marble">Marble hops</option>
+                <option value="stone" data-i18n="sfx.audition.stone">Stone skips</option>
+                <option value="billiards" data-i18n="sfx.audition.billiards">Billiards contacts</option>
+                <option value="win" data-i18n="sfx.audition.win">Wins</option>
+              </select>
+              <select class="mosaic-editor-input calculator-control" id="sound-audition-seed" data-i18n-aria-label="access.soundAuditionSeed" aria-label="Sound seed"></select>
+              <button class="btn" id="sound-audition-generate" type="button" data-i18n="sfx.audition.generate">Generate 24</button>
+            </div>
+            <div class="mosaic-inline-row">
+              <label class="input-label" for="sound-audition-custom-seed" data-i18n="sfx.audition.customSeed">Numeric seed</label>
+              <input class="mosaic-editor-input calculator-control" id="sound-audition-custom-seed" type="text" inputmode="numeric" maxlength="12" autocomplete="off" data-i18n-aria-label="access.soundAuditionCustomSeed" aria-label="Custom numeric sound seed">
+              <button class="btn" id="sound-audition-use-seed" type="button" data-i18n="sfx.audition.useSeed">Use seed</button>
+            </div>
+            <div class="mosaic-inline-row">
+              <label class="input-label" for="sound-audition-event" data-i18n="sfx.audition.applyTo">Apply to event</label>
+              <select class="mosaic-editor-input calculator-control" id="sound-audition-event" data-i18n-aria-label="access.soundAuditionEvent" aria-label="Sound event"></select>
+              <button class="btn" id="sound-audition-preview" type="button" data-i18n="sfx.preview">Preview</button>
+              <button class="btn" id="sound-audition-save" type="button" data-i18n="sfx.audition.save">Save for event</button>
+            </div>
+          </section>
           <div class="mosaic-debug-step-row" id="translation-check-row">
             <label class="opt-row"><input type="checkbox" id="check-translation" data-i18n-aria-label="access.checkTranslation" aria-label="Check Chinese translations"> <span data-i18n="debug.checkTranslation">check translation</span></label>
           </div>
@@ -3014,13 +3043,14 @@
 <script src="js/calculator_input_settings.js?v=20260903-1"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20260911-1"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20260913-2"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
-<script src="js/ramified_minigames_setup.js?v=20260911-2"></script>
+<script src="js/ramified_minigames_sfx.js?v=20260913-2"></script>
+<script src="js/ramified_minigames_setup.js?v=20260913-2"></script>
 <script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
 </body>

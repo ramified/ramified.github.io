@@ -1,14 +1,13 @@
 (function(root) {
   'use strict';
   const P = root.MosaicPoincare;
-  const U = root.MosaicPoincareUniformization;
   const mid = (a, b) => a.map((v, i) => (v + b[i]) / 2);
   const unitWeights = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
   class View {
     constructor(options) {
       this.options = options;
       const element = suffix => document.getElementById(`${options.prefix || 'poincare'}-${suffix}`);
-      this.canvas = element('canvas');
+      this.canvas = options.canvas || element('canvas');
       this.card = element('card');
       this.status = element('status');
       this.follow = element('follow');
@@ -18,12 +17,15 @@
       this.play = element('interior-play');
       this.explanation = element('explanation');
       if (this.model) this.model.addEventListener('change', () => options.setMotionMode(this.model.value));
-      if (this.play) this.play.addEventListener('click', () => options.play());
+      if (this.play) this.play.addEventListener('click', () => {
+        if (options.exploration && options.snapshot().metric !== 'complete-interior') options.setMotionMode('complete-interior');
+        else options.play();
+      });
       this.restart = element('restart');
       if (this.restart) this.restart.addEventListener('click', () => options.restart());
       if (options.controller) options.controller.subscribe(() => this.schedule());
       this.background = document.createElement('canvas');
-      this.camera = new P.Camera(); this.frame = null; this.dirty = true;
+      this.camera = options.camera || new P.Camera(); this.frame = null; this.dirty = true;
       this.follow.addEventListener('change', () => {
         if (this.follow.checked && this.trace && this.trace.error) this.reset();
         this.schedule(true);
@@ -46,6 +48,13 @@
           if (this.dragDistance > 4 || !this.isOpen() || !this.interiorMap) return;
           const disk = this.camera.unproject(this.diskPoint(event)), controller = options.controller;
           try {
+            if (this.intrinsicView) {
+              const source = this.interiorMap.inverse(disk), copy = this.development.nearestCopy(source);
+              const triangle = this.result.mesh.triangles[copy.triangleId];
+              if (Math.min(...root.MosaicIntrinsicMetric.weights(copy, source)) >= -1e-6) this.selectCopy(copy);
+              else this.status.textContent = 'This point is outside the available preview triangles.';
+              return;
+            }
             const source = controller.inverseDisplay(disk, controller.pose && controller.pose.source);
             const copy = controller.development.nearestCopy(source);
             this.selectCopy(controller.locateSource(source, copy).copy);
@@ -109,7 +118,7 @@
     }
     selectCopy(copy) {
       const controller = this.options.controller;
-      if (!controller.coverage || !controller.coverage.has(copy)) return false;
+      if (this.intrinsicView ? !this.development.visible.includes(copy) : !controller.coverage || !controller.coverage.has(copy)) return false;
       this.selection = copy; this.follow.checked = false;
       const point = P.interpolate(copy.vertices, [1 / 3, 1 / 3, 1 / 3]);
       this.camera = new P.Camera(this.interiorMap.renderPoint(point)); this.schedule(true); return true;
@@ -123,8 +132,14 @@
       return this.selectCopy(candidates[0]);
     }
     exploreNeighbor(opposite) {
+      if (this.intrinsicView) {
+        const current = this.selection || this.development.seed;
+        const next = this.development.neighbor(current, opposite);
+        if (!next || !this.development.visible.includes(next)) { this.status.textContent = 'Exploration stops at physical boundaries or unavailable finite coverage.'; return false; }
+        return this.selectCopy(next);
+      }
       const current = this.selection || this.options.controller.pose && this.options.controller.pose.copy || this.development && this.development.seed;
-      const next = current && current.neighbors.get(opposite);
+      const next = current && this.options.controller.neighbor(current, opposite);
       if (!next || !this.selectCopy(next)) { this.status.textContent = 'Exploration stops at physical boundaries or unavailable finite coverage.'; return false; }
       return true;
     }
@@ -132,6 +147,7 @@
       this.development = null; this.trace = null; this.result = null; this.artworkKey = null; this.dirty = true;
       this.interiorMap = null; this.interiorPath = null; this.interiorRunning = false; this.lastInteriorTime = null; this.selection = null; this.sharedGeneration = null; this.mapError = '';
       this.painting = false;
+      this.intrinsicView = false; this.motionTransform = null; this.motionFrame = null; this.previewReady = false; this.previewError = '';
     }
     sync() {
       if (!this.isOpen()) return;
@@ -147,6 +163,11 @@
     }
     ensure() {
       const snapshot = this.options.snapshot();
+      if (this.model) this.model.value = snapshot.metric;
+      if (this.options.exploration && snapshot.metric !== 'complete-interior') {
+        this.play.hidden = false; this.play.disabled = false; this.play.textContent = 'Use complete-interior motion';
+        this.status.textContent = 'Select Complete interior motion to use this view.'; return false;
+      }
       this.solve.hidden = snapshot.method === 'discrete' && snapshot.metric !== 'flat';
       const unavailable = !snapshot.eligible ? snapshot.reason
         : snapshot.method !== 'discrete' ? 'The disk requires discrete triangle lengths. Use the discrete solver.'
@@ -161,7 +182,6 @@
       this.billiard = snapshot.billiard;
       const bordered = snapshot.result.mesh.vertices.some(vertex => vertex.boundary);
       this.interiorActive = snapshot.metric === 'complete-interior';
-      if (this.model) this.model.value = snapshot.metric;
       if (this.play) { this.play.hidden = !this.interiorActive; this.play.disabled = !this.interiorMap; }
       if (this.explanation) this.explanation.textContent = this.interiorActive
         ? 'Complete interior (approximation): one shared ball and trajectory on the main canvas and both disk views. Physical boundaries are at infinite distance. The finite uniformization and interpolated boundary collar are numerical approximations; motion pauses when inversion or coverage is insufficient.'
@@ -175,9 +195,10 @@
           this.status.textContent = shared && shared.condition || 'Preparing the shared complete-interior geometry…';
           this.play.disabled = true; return false;
         }
+        if (shared.intrinsic) return this.ensureIntrinsic(snapshot, controller, shared);
         this.result = snapshot.result; this.development = controller.development; this.interiorMap = controller.map;
         this.interiorPath = shared.position ? shared : null; this.interiorRunning = false;
-        this.launchCenter = shared.launch || { x: 0, y: 0 };
+        this.launchCenter = shared.launch || controller.map.renderPoint(controller.center);
         if (this.sharedGeneration !== shared.generation) {
           this.sharedGeneration = shared.generation; this.camera = new P.Camera(this.launchCenter); this.dirty = true; this.selection = null;
         }
@@ -204,6 +225,68 @@
         this.development.resetNeighborhood(this.development.seed, this.launchCenter);
         this.dirty = true;
       }
+      return true;
+    }
+    startIntrinsicPreview(snapshot, controller, shared) {
+      const active = controller.pose && controller.pose.copy || controller.development.seed;
+      this.result = snapshot.result; this.development = new P.Development(this.result, active.triangleId);
+      this.development.seed.vertices = active.vertices.map(p => ({ ...p }));
+      const center = shared.position || controller.center;
+      this.development.resetNeighborhood(this.development.seed, center);
+      this.motionTransform = new P.Camera(); this.motionFrame = shared.frame;
+      this.sharedGeneration = shared.generation; this.previewReady = false; this.previewError = '';
+      this.interiorMap = null; this.interiorPath = null; this.dirty = true; this.painting = false; this.selection = null;
+      this.camera = new P.Camera();
+    }
+    ensureIntrinsic(snapshot, controller, shared) {
+      this.intrinsicView = true;
+      this.play.disabled = !controller.ray || !!shared.condition; this.play.textContent = shared.playing ? 'Pause' : 'Play';
+      if (this.restart) { this.restart.hidden = false; this.restart.disabled = !shared.position; }
+      if (this.explanation) this.explanation.textContent = 'Motion follows one fixed intrinsic metric in local charts. Each camera owns a finite conformal disk preview; its coverage and boundary interpolation never limit or change motion. The bordered metric and this visualization are numerical approximations.';
+      if (!this.motionTransform || this.sharedGeneration !== shared.generation) this.startIntrinsicPreview(snapshot, controller, shared);
+      for (const change of shared.frames) {
+        if (change.frame <= this.motionFrame) continue;
+        if (change.frame !== this.motionFrame + 1) { this.startIntrinsicPreview(snapshot, controller, shared); break; }
+        const old = this.motionTransform, center = P.toOrigin(old.center, change.center);
+        const probe = old.project(P.fromOrigin(P.fromOrigin({ x: 0.001, y: 0 }, center), change.center));
+        const length = Math.hypot(probe.x, probe.y);
+        this.motionTransform = new P.Camera(center);
+        this.motionTransform.rotation = length > 1e-12 ? { x: probe.x / length, y: probe.y / length } : old.rotation;
+        this.motionFrame = change.frame;
+      }
+      let source = shared.position && this.motionTransform.project(shared.position);
+      if (this.follow.checked && source && this.previewReady && P.distance(source, this.development.center) > 0.75
+        && (!shared.collar || shared.collar.logDistance > -8)) {
+        this.startIntrinsicPreview(snapshot, controller, shared); source = shared.position;
+      }
+      if (!this.previewReady && !this.previewError) {
+        const before = this.development.visible.length, more = this.development.expand(6);
+        if (before !== this.development.visible.length) this.dirty = true;
+        if (more) { this.status.textContent = 'Developing the independent disk preview; motion continues.'; this.schedule(); return false; }
+        try {
+          this.interiorMap = controller.metric.bordered
+            ? new root.MosaicPoincareUniformization.InteriorMap(this.development, this.development.center)
+            : { planes: [], refinementError: 0, renderPoint: p => ({ ...p }), inverse: p => ({ ...p }) };
+          this.previewReady = true;
+          const launch = shared.launch && this.motionTransform.project(shared.launch);
+          this.launchCenter = launch && this.interiorMap.renderPoint(launch) || this.interiorMap.renderPoint(this.development.center);
+          this.camera = new P.Camera(source ? this.interiorMap.renderPoint(source) : this.launchCenter);
+          this.dirty = true;
+        } catch (error) { this.previewError = error.message; }
+      }
+      if (this.previewError) { this.status.textContent = `Preview unavailable: ${this.previewError} Motion is independent and may continue.`; return false; }
+      const convert = point => this.interiorMap.renderPoint(this.motionTransform.project(point));
+      const points = [];
+      let broken = true;
+      for (const p of shared.points.slice(-1500)) {
+        if (p.hidden) { broken = true; continue; }
+        const z = convert(p.disk);
+        if (!Number.isFinite(z.x + z.y) || z.x * z.x + z.y * z.y >= 1 - 1e-12) { broken = true; continue; }
+        points.push({ ...p, ...z, breakBefore: broken || p.breakBefore }); broken = false;
+      }
+      const position = source && this.interiorMap.renderPoint(source);
+      this.previewBelowPrecision = position && (!Number.isFinite(position.x + position.y) || position.x ** 2 + position.y ** 2 >= 1 - 1e-12);
+      this.interiorPath = position && !this.previewBelowPrecision ? { position, points, length: shared.length } : null;
       return true;
     }
     prepareInterior() { return !!this.interiorMap; }
@@ -260,7 +343,7 @@
       this.width = rect.width; this.height = rect.height; this.radius = Math.min(rect.width, rect.height) / 2 - 12;
       this.dpr = Math.min(2, root.devicePixelRatio || 1);
       const w = Math.round(this.width * this.dpr), h = Math.round(this.height * this.dpr);
-      if (this.canvas.width !== w || this.canvas.height !== h) {
+      if (this.canvas.width !== w || this.canvas.height !== h || this.background.width !== w || this.background.height !== h) {
         this.canvas.width = this.background.width = w; this.canvas.height = this.background.height = h; this.dirty = true;
       }
       const ctx = this.canvas.getContext('2d');
@@ -311,8 +394,10 @@
         ctx.restore();
         const warnings = [...this.development.warnings];
         if (this.trace && this.trace.error) warnings.push(`Lift paused: ${this.trace.error}`);
-        const description = this.interiorActive
-          ? `Complete-interior approximation · ${this.interiorMap.planes.length} boundary lifts · map refinement Δ ${this.interiorMap.refinementError.toExponential(1)} · shared trajectory s=${(this.options.controller.length || 0).toFixed(2)}${this.options.controller.condition ? ' · paused: ' + this.options.controller.condition : ''}`
+        const description = this.intrinsicView
+          ? `Fixed intrinsic motion · s=${(this.options.controller.length || 0).toFixed(2)} · metric solve residual ${Number(this.options.controller.metric.residual).toExponential(1)}${this.options.controller.condition ? ' · paused: ' + this.options.controller.condition : ''}${this.previewBelowPrecision ? ' · ball below disk display precision; motion continues' : ''} · independent conformal preview`
+          : this.interiorActive
+          ? `Complete-interior approximation · ${this.interiorMap.planes.length} boundary lifts · map sampling Δ ${this.interiorMap.refinementError.toExponential(1)} · shared trajectory s=${(this.options.controller.length || 0).toFixed(2)}${this.options.controller.condition ? ' · paused: ' + this.options.controller.condition : ''}`
           : 'Approximate lifted trajectory';
         this.status.textContent = `${description} · ${this.development.visible.length.toLocaleString()} triangle copies · ${more ? 'developing…' : 'finite radius-5 preview'}${this.painting ? ' · drawing artwork…' : ''}${this.development.queued.size >= this.development.limit ? ' · 10,000-copy limit' : ''}${warnings.length ? ' · ' + warnings.join(' ') : ''}`;
         if (more || this.painting) this.schedule();
@@ -329,6 +414,7 @@
       ctx.save(); ctx.beginPath(); ctx.arc(this.width / 2, this.height / 2, this.radius, 0, 2 * Math.PI); ctx.clip();
       if (restart) { ctx.fillStyle = '#ede8df'; ctx.fillRect(0, 0, this.width, this.height); }
       const deadline = Date.now() + budgetMs;
+      try {
       for (; this.paintCursor < this.development.visible.length && Date.now() <= deadline; this.paintCursor++) {
         const copy = this.development.visible[this.paintCursor];
         const triangle = this.result.mesh.triangles[copy.triangleId];
@@ -356,7 +442,8 @@
           ctx.stroke();
         });
       }
-      ctx.restore(); ctx.strokeStyle = '#5f5b55'; ctx.lineWidth = 1.5;
+      } finally { ctx.restore(); }
+      ctx.strokeStyle = '#5f5b55'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(this.width / 2, this.height / 2, this.radius, 0, 2 * Math.PI); ctx.stroke();
       return this.paintCursor < this.development.visible.length;
     }

@@ -8547,6 +8547,8 @@ function testFullscreenSettingsPreferencesAndMarkup() {
   const defaults = {
     soundEnabled: false,
     soundVolume: 1,
+    soundVariants: {},
+    soundSeeds: {},
     showActionRow: true,
     showGameTools: true
   };
@@ -8560,6 +8562,8 @@ function testFullscreenSettingsPreferencesAndMarkup() {
   }), {
     soundEnabled: true,
     soundVolume: 1,
+    soundVariants: {},
+    soundSeeds: {},
     showActionRow: false,
     showGameTools: true
   });
@@ -8635,6 +8639,8 @@ function testFullscreenSettingsPreferencesAndMarkup() {
   }), {
     soundEnabled: false,
     soundVolume: 1,
+    soundVariants: {},
+    soundSeeds: {},
     showActionRow: true,
     showGameTools: false
   });
@@ -8655,6 +8661,8 @@ function testFullscreenSettingsPreferencesAndMarkup() {
     const expected = {
       soundEnabled: true,
       soundVolume: 0.42,
+      soundVariants: {},
+      soundSeeds: {},
       showActionRow: false,
       showGameTools: true
     };

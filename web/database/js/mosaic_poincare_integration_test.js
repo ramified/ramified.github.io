@@ -82,9 +82,10 @@ for (const bordered of [false, true]) {
   while (controller.prepareStep(controller.generation, 100)) {}
   assert.equal(controller.status, 'ready', controller.condition);
   view.options.controller = controller; view.play = {}; view.reset();
-  assert.ok(view.ensure()); assert.equal(view.interiorActive, true);
-  assert.strictEqual(view.development, controller.development);
-  assert.strictEqual(view.interiorMap, controller.map);
+  for (let i = 0; i < 1000 && !view.ensure(); i++) assert.ok(!view.previewError, view.previewError);
+  assert.ok(view.previewReady); assert.equal(view.interiorActive, true);
+  assert.notStrictEqual(view.development, controller.development);
+  assert.notStrictEqual(view.interiorMap, controller.map);
   controller.play(); mosaic.advanceBackgroundBilliard(0.3);
   view.ensure(); assert.equal(view.interiorPath.length, controller.length);
   const before = controller.snapshot(); view.reset(); view.ensure();

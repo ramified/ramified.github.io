@@ -4,7 +4,11 @@ const path = require('path');
 
 const root = path.resolve(__dirname, '..');
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-const activePages = Array.from(index.matchAll(/class="applet-link" href="([^"]+\.html)"/g), (match) => match[1]);
+const linkedPages = Array.from(index.matchAll(/class="applet-link" href="([^"]+\.html)"/g), (match) => match[1]);
+assert.ok(linkedPages.includes('math_workspace.html'), 'the native workspace must be discoverable');
+// The workspace has project/asset/recipe interchange, tested by its own contract
+// suite. The existing calculator panel adapters remain specific to legacy pages.
+const activePages = linkedPages.filter(page => page !== 'math_workspace.html');
 const expectedPages = [
   'young_diagrams.html',
   'double_young_diagram.html',

@@ -16,6 +16,7 @@
   let TopologicalHex = typeof window !== 'undefined' && window.TopologicalHex
     ? window.TopologicalHex
     : (typeof require === 'function' ? require('./hex_homology_game.js') : null);
+  const MinigameSfx = typeof window !== 'undefined' ? window.RamifiedMinigameSfx : null;
 
   function tr(value) {
     if (typeof window === 'undefined' || !window.SiteI18n || typeof window.SiteI18n.translateSource !== 'function') {
@@ -496,6 +497,8 @@
   const FULLSCREEN_SETTINGS_DEFAULTS = Object.freeze({
     soundEnabled: false,
     soundVolume: 1,
+    soundVariants: Object.freeze(MinigameSfx && typeof MinigameSfx.defaultVariants === 'function' ? MinigameSfx.defaultVariants() : {}),
+    soundSeeds: Object.freeze({}),
     showActionRow: true,
     showGameTools: true
   });
@@ -698,6 +701,7 @@
   let stepPaused = false;
   let animationFrameId = null;
   let debugMode = false;
+  let soundAuditionSeeds = [];
   let undoStack = [];
   let redoStack = [];
   let importedPreset = null;
@@ -1011,6 +1015,16 @@
     refs.nextStep = document.getElementById('next-step');
     refs.debugToggle = document.getElementById('debug-toggle');
     refs.debugTools = document.getElementById('debug-tools');
+    refs.soundEffectsDebug = document.getElementById('sound-effects-debug');
+    refs.soundEffectsDebugList = document.getElementById('sound-effects-debug-list');
+    refs.soundAuditionCategory = document.getElementById('sound-audition-category');
+    refs.soundAuditionSeed = document.getElementById('sound-audition-seed');
+    refs.soundAuditionEvent = document.getElementById('sound-audition-event');
+    refs.soundAuditionPreview = document.getElementById('sound-audition-preview');
+    refs.soundAuditionSave = document.getElementById('sound-audition-save');
+    refs.soundAuditionGenerate = document.getElementById('sound-audition-generate');
+    refs.soundAuditionCustomSeed = document.getElementById('sound-audition-custom-seed');
+    refs.soundAuditionUseSeed = document.getElementById('sound-audition-use-seed');
     refs.translationCheck = document.getElementById('check-translation');
     refs.debugTileValue = document.getElementById('debug-tile-value');
     refs.debugBombTool = document.getElementById('debug-bomb-tool');
@@ -1083,6 +1097,8 @@
     fullscreenPreferences = readFullscreenPreferences();
     wrappedViewPreferences = readWrappedViewPreferences();
     syncFullscreenSettingsUi();
+    buildSoundEffectsDebugControls();
+    buildSoundAuditionControls();
     moveVisualControlsToDisplayCard();
     bindCards();
     if (!refs.canvas || !refs.ctx || !refs.select) return;
@@ -1180,6 +1196,7 @@
     if (typeof document !== 'undefined') document.addEventListener('site-language-change', () => {
       syncBilliardsBallPalette();
       buildBilliardsToolOptions();
+      buildSoundEffectsDebugControls();
     });
     buildBilliardsBallPalette();
     buildBilliardsToolOptions();
@@ -1239,6 +1256,11 @@
     if (refs.keepNumbersUpright) refs.keepNumbersUpright.addEventListener('change', render);
     if (refs.highlightNewBoxes) refs.highlightNewBoxes.addEventListener('change', render);
     if (refs.debugBombTool) refs.debugBombTool.addEventListener('change', syncDebugModeUi);
+    if (refs.soundAuditionCategory) refs.soundAuditionCategory.addEventListener('change', buildSoundAuditionSeedOptions);
+    if (refs.soundAuditionGenerate) refs.soundAuditionGenerate.addEventListener('click', generateSoundAuditionSeeds);
+    if (refs.soundAuditionUseSeed) refs.soundAuditionUseSeed.addEventListener('click', useCustomSoundAuditionSeed);
+    if (refs.soundAuditionPreview) refs.soundAuditionPreview.addEventListener('click', previewSoundAudition);
+    if (refs.soundAuditionSave) refs.soundAuditionSave.addEventListener('click', saveSoundAudition);
     if (refs.bombArtStyle) refs.bombArtStyle.addEventListener('change', render);
     [refs.hexNeighborDelay, refs.hexNeighborSize, refs.hexNeighborStroke].forEach((input) => {
       if (!input) return;
@@ -2848,6 +2870,11 @@
       onlineState.applyingRemoteState = false;
     }
     if (!applied) return false;
+    playSoundEffect(remoteSoundEventForAction(mode, type));
+    if (game.phase === 'gameover') {
+      if (mode === GAME_MODES.CHINESE_CHECKERS) playSoundEffect('checkers-goal');
+      playSoundEffect(game.winner ? 'shared-win' : 'shared-draw');
+    }
     onlineState.version = normalizeOnlineVersion(message && message.version, onlineState.version);
     onlineState.gameMode = mode;
     syncOnlineRoleOptions(mode);
@@ -2855,6 +2882,15 @@
     syncOnlineControls();
     syncControls();
     return true;
+  }
+
+  function remoteSoundEventForAction(mode, type) {
+    if (mode === GAME_MODES.BILLIARDS) return 'billiards-strike';
+    if (mode === GAME_MODES.CHINESE_CHECKERS) return 'checkers-move';
+    if (mode === GAME_MODES.FIDE_CHESS) return 'chess-move';
+    if (mode === GAME_MODES.GO) return type === 'pass' ? 'shared-action' : 'placement-place';
+    if (mode === GAME_MODES.REVERSI) return 'reversi-flip';
+    return 'placement-place';
   }
 
   function replayOnlineHexAction(action) {
@@ -4677,6 +4713,7 @@
       return false;
     }
     const previous = game;
+    playSoundEffect('shared-restart');
     clearLianliankanHint();
     clearLianliankanMatchEffects();
     clearPlacementReachAssist();
@@ -4759,6 +4796,7 @@
     syncDefaultPresetForGameMode();
     syncOnlineRoleOptions();
     if (refs.importGameMode) refs.importGameMode.value = selectedGameMode();
+    buildSoundEffectsDebugControls();
     loadSelectionAndReset();
   }
 
@@ -7317,6 +7355,12 @@
     pushUndoSnapshot(`Billiards shot ${source.shots + 1}`);
     game = result.state;
     billiardsTelemetry = result.telemetry || (game.deterministic && game.deterministic.telemetry) || null;
+    const billiardsContacts = billiardsTelemetry && Array.isArray(billiardsTelemetry.contacts) ? billiardsTelemetry.contacts : [];
+    const lastBilliardsContact = billiardsContacts[billiardsContacts.length - 1];
+    if (lastBilliardsContact) {
+      const soundByContact = { 'ball-ball': 'billiards-ball', wall: 'billiards-cushion', pocket: 'billiards-pocket', foul: 'billiards-foul' };
+      playSoundEffect(soundByContact[lastBilliardsContact.type] || 'billiards-ball');
+    }
     billiardsCueGuidanceDismissed = true;
     billiardsCueHintUntil = 0;
     if (options.expectedSnapshot) {
@@ -7383,6 +7427,7 @@
       strokePresetId: options.strokePresetId || billiardsStrokePresetId
     } : {};
     const source = game;
+    playSoundEffect('billiards-strike');
     const token = ++billiardsSimulationSerial;
     billiardsShotPending = { token, source };
     billiardsTelemetry = selectedBilliardsPhysicsProfile(game.deterministic && game.deterministic.physicsProfile) === 'research'
@@ -7454,6 +7499,7 @@
 
   function applyBilliardsSetupResult(result, label) {
     if (!result || !result.changed) {
+      playSoundEffect('shared-invalid');
       const message = localizedBilliardsIssue(result && result.message ? result.message : 'choose a point inside an existing tile');
       showSetupAlert(message);
       syncStatus('setup unchanged', message, 'warn');
@@ -7461,6 +7507,7 @@
     }
     pushUndoSnapshot(label);
     game = result.state;
+    playSoundEffect('shared-action');
     clearSetupAlert();
     resetBilliardsQuickRulesPrompt();
     syncStatusForCurrentGame();
@@ -8159,6 +8206,7 @@
   function playRound(dir) {
     const result = simulateRound(game, dir, { rng: Math.random, spawn: true });
     if (!result.changed) {
+      playSoundEffect('shared-invalid');
       const triedAllDirections = recordNoMoveDirection(dir);
       if (result.events && result.events.length) {
         eventQueue = result.events;
@@ -8198,6 +8246,7 @@
       return;
     }
     clearNoMoveTrial();
+    playSoundEffect(result.events && result.events.some((event) => event.kind === 'merge') ? '2048-merge' : '2048-slide');
     game.ending = '';
     game.newBoxIds = new Set();
     pushUndoSnapshot(`round ${game.round + 1}: ${dirLabel(dir, game.preset)}`);
@@ -8541,6 +8590,9 @@
       to: result.marble.index,
       path: (result.move.path || [result.marble.from, result.marble.index]).slice(),
       segments,
+      jump: result.move.kind === 'jump',
+      hopCues: result.move.kind === 'jump' && segments.length > 1,
+      hopCueIndex: -1,
       moveTime: selectedChineseCheckersMoveTime(),
       jumpPause: selectedChineseCheckersJumpPause(),
       leadInDuration: actor === 'ai' ? CHINESE_CHECKERS_AI_SIGHT_DURATION_DEFAULT : 0,
@@ -8818,6 +8870,9 @@
     const elapsed = now() - currentAnimation.startedAt;
     const progress = currentAnimation.duration <= 0 ? 1 : Math.min(1, elapsed / currentAnimation.duration);
     currentAnimation.progress = progress;
+    if (currentAnimation.event && currentAnimation.event.kind === 'chineseCheckersMove') {
+      playChineseCheckersHopCues(currentAnimation.event, elapsed);
+    }
     render();
     if (progress < 1) {
       animationFrameId = requestFrame(tickAnimation);
@@ -8910,6 +8965,7 @@
         game.phase = 'gameover';
         game.winner = 'solved';
         game.ending = 'sokoban-win';
+        playSoundEffect('sokoban-solved');
         syncStatus('Sokoban solved', sokobanTurnInfo(game), 'over');
       } else {
         game.phase = 'ready';
@@ -8919,6 +8975,7 @@
       }
     } else if (changedBoard && isGameOver(game)) {
       finishGameAs('standard');
+      playSoundEffect('2048-gameover');
     } else {
       game.phase = 'ready';
       game.ending = '';
@@ -9133,6 +9190,12 @@
       soundVolume: typeof parsedVolume === 'number' && Number.isFinite(parsedVolume)
         ? Math.max(0, Math.min(1, parsedVolume))
         : FULLSCREEN_SETTINGS_DEFAULTS.soundVolume,
+      soundVariants: MinigameSfx && typeof MinigameSfx.normalizeVariants === 'function'
+        ? MinigameSfx.normalizeVariants(source.soundVariants)
+        : { ...FULLSCREEN_SETTINGS_DEFAULTS.soundVariants },
+      soundSeeds: MinigameSfx && typeof MinigameSfx.normalizeSeeds === 'function'
+        ? MinigameSfx.normalizeSeeds(source.soundSeeds)
+        : {},
       showActionRow: typeof source.showActionRow === 'boolean'
         ? source.showActionRow
         : FULLSCREEN_SETTINGS_DEFAULTS.showActionRow,
@@ -9347,7 +9410,153 @@
     }
     if (refs.fullscreenShowActionRow) refs.fullscreenShowActionRow.checked = fullscreenPreferences.showActionRow;
     if (refs.fullscreenShowGameTools) refs.fullscreenShowGameTools.checked = fullscreenPreferences.showGameTools;
+    syncSoundEffectsDebugControls();
     syncWrappedViewUi();
+  }
+
+  function playChineseCheckersHopCues(event, elapsed) {
+    if (!event || !event.hopCues) return;
+    const segments = Array.isArray(event.segments) ? event.segments : [];
+    const moveTime = Math.max(1, Number(event.moveTime) || CHINESE_CHECKERS_MOVE_TIME_DEFAULT);
+    const jumpPause = Math.max(0, Number(event.jumpPause) || 0);
+    let start = Math.max(0, Number(event.leadInDuration) || 0);
+    const nextIndex = Math.max(0, Number(event.hopCueIndex) + 1);
+    if (nextIndex >= segments.length || elapsed < start) return;
+    for (let index = 0; index < nextIndex; index += 1) {
+      start += Math.max(1, chineseCheckersSegmentTransitionCount(segments[index])) * moveTime;
+      if (index < segments.length - 1) start += jumpPause;
+    }
+    if (elapsed >= start || nextIndex === 0) {
+      if (playSoundEffect('checkers-lake-hop')) event.hopCueIndex = nextIndex;
+    }
+  }
+
+  function currentSoundEffectsMode() {
+    // The select is authoritative while setup is loading. The previous game
+    // remains in `game` briefly during a mode change and must not determine
+    // which debug rows are rendered.
+    return selectedGameMode() || gameModeValue(game) || GAME_MODES.NUMBER_2048;
+  }
+
+  function buildSoundEffectsDebugControls() {
+    if (!refs.soundEffectsDebugList || !MinigameSfx || typeof document === 'undefined' || typeof document.createElement !== 'function') return;
+    refs.soundEffectsDebugList.innerHTML = '';
+    const events = MinigameSfx.eventsForMode(currentSoundEffectsMode());
+    events.forEach((soundEvent) => {
+      const row = document.createElement('div');
+      row.className = 'mosaic-inline-row';
+      const label = document.createElement('label');
+      label.className = 'input-label';
+      label.textContent = tk(soundEvent.labelKey, soundEvent.id);
+      const select = document.createElement('select');
+      select.className = 'mosaic-editor-input calculator-control';
+      select.dataset.soundEvent = soundEvent.id;
+      select.setAttribute('aria-label', tk('access.soundVariants', 'Sound effect variant controls'));
+      soundEvent.variants.forEach((variant) => {
+        const option = document.createElement('option');
+        option.value = variant;
+        option.textContent = tk(`sfx.variant.${variant}`, variant);
+        select.appendChild(option);
+      });
+      select.addEventListener('change', () => {
+        const soundSeeds = { ...fullscreenPreferences.soundSeeds };
+        delete soundSeeds[soundEvent.id];
+        updateFullscreenPreferences({ soundVariants: { ...fullscreenPreferences.soundVariants, [soundEvent.id]: select.value }, soundSeeds });
+      });
+      const preview = document.createElement('button');
+      preview.type = 'button'; preview.className = 'btn';
+      preview.textContent = tk('sfx.preview', 'Preview');
+      preview.addEventListener('click', () => playSoundEffect(soundEvent.id, { preview: true }));
+      row.append(label, select, preview);
+      refs.soundEffectsDebugList.appendChild(row);
+    });
+    syncSoundEffectsDebugControls();
+    buildSoundAuditionControls();
+  }
+
+  function syncSoundEffectsDebugControls() {
+    if (!refs.soundEffectsDebugList) return;
+    refs.soundEffectsDebugList.querySelectorAll('[data-sound-event]').forEach((select) => {
+      select.value = fullscreenPreferences.soundVariants && fullscreenPreferences.soundVariants[select.dataset.soundEvent] || 'arcade';
+    });
+  }
+
+  function playSoundEffect(eventId, options = {}) {
+    return !!(MinigameSfx && typeof MinigameSfx.play === 'function'
+      && MinigameSfx.play(eventId, fullscreenPreferences, options));
+  }
+
+  function buildSoundAuditionControls() {
+    if (!MinigameSfx || !refs.soundAuditionEvent || typeof document === 'undefined' || typeof document.createElement !== 'function') return;
+    const current = refs.soundAuditionEvent.value;
+    refs.soundAuditionEvent.innerHTML = '';
+    MinigameSfx.eventsForMode(currentSoundEffectsMode()).forEach((soundEvent) => {
+      const option = document.createElement('option');
+      option.value = soundEvent.id;
+      option.textContent = tk(soundEvent.labelKey, soundEvent.id);
+      refs.soundAuditionEvent.appendChild(option);
+    });
+    if (current && Array.from(refs.soundAuditionEvent.options).some((option) => option.value === current)) refs.soundAuditionEvent.value = current;
+    buildSoundAuditionSeedOptions();
+  }
+
+  function buildSoundAuditionSeedOptions(preferredSeedId) {
+    if (!MinigameSfx || !refs.soundAuditionSeed || !refs.soundAuditionCategory || typeof document === 'undefined' || typeof document.createElement !== 'function') return;
+    const current = preferredSeedId || refs.soundAuditionSeed.value;
+    const category = refs.soundAuditionCategory.value;
+    refs.soundAuditionSeed.innerHTML = '';
+    const generated = soundAuditionSeeds.filter((seedId) => {
+      const info = MinigameSfx.auditionSeedInfo(seedId);
+      return info && info.category === category;
+    });
+    const seedIds = generated.length ? generated : MinigameSfx.auditionSeedsForCategory(category).map((seed) => seed.id);
+    seedIds.forEach((seedId) => {
+      const seed = MinigameSfx.auditionSeedInfo(seedId);
+      if (!seed) return;
+      const option = document.createElement('option');
+      option.value = seedId;
+      option.textContent = seed.labelKey
+        ? `${tk(seed.labelKey, seedId)} · ${seed.seed}`
+        : tk('sfx.audition.seedValue', `Seed ${seed.seed}`, { seed: seed.seed });
+      refs.soundAuditionSeed.appendChild(option);
+    });
+    if (current && Array.from(refs.soundAuditionSeed.options).some((option) => option.value === current)) refs.soundAuditionSeed.value = current;
+  }
+
+  function generateSoundAuditionSeeds() {
+    if (!MinigameSfx || !refs.soundAuditionCategory) return;
+    const category = refs.soundAuditionCategory.value;
+    const generated = new Set();
+    while (generated.size < 24) {
+      const digits = String(Math.floor(100000000000 + Math.random() * 900000000000));
+      const seedId = MinigameSfx.auditionSeedId(category, digits);
+      if (seedId) generated.add(seedId);
+    }
+    soundAuditionSeeds = Array.from(generated);
+    buildSoundAuditionSeedOptions(soundAuditionSeeds[0]);
+  }
+
+  function useCustomSoundAuditionSeed() {
+    if (!MinigameSfx || !refs.soundAuditionCategory || !refs.soundAuditionCustomSeed) return;
+    const seedId = MinigameSfx.auditionSeedId(refs.soundAuditionCategory.value, refs.soundAuditionCustomSeed.value);
+    const info = MinigameSfx.auditionSeedInfo(seedId);
+    if (!info) return;
+    refs.soundAuditionCustomSeed.value = info.seed;
+    soundAuditionSeeds = [seedId].concat(soundAuditionSeeds.filter((candidate) => candidate !== seedId));
+    buildSoundAuditionSeedOptions(seedId);
+  }
+
+  function previewSoundAudition() {
+    if (!refs.soundAuditionSeed || !refs.soundAuditionEvent) return;
+    playSoundEffect(refs.soundAuditionEvent.value, { preview: true, seedId: refs.soundAuditionSeed.value });
+  }
+
+  function saveSoundAudition() {
+    if (!refs.soundAuditionSeed || !refs.soundAuditionEvent) return;
+    const eventId = refs.soundAuditionEvent.value;
+    const seedId = refs.soundAuditionSeed.value;
+    if (!eventId || !seedId) return;
+    updateFullscreenPreferences({ soundSeeds: { ...fullscreenPreferences.soundSeeds, [eventId]: seedId } });
   }
 
   function handleFullscreenSoundEnabledChange() {
@@ -10178,6 +10387,7 @@
       }
     });
     if (outcome.result && outcome.result.kind === 'removed') {
+      playSoundEffect(selectedGame.phase === 'complete' ? 'tile-cleared' : 'tile-match');
       LianliankanMosaicAdapter.syncSharedState(selectedGame);
       playLianliankanPronunciation(outcome.matchedTile);
       syncStatusForCurrentGame({ deferResultPrompt: selectedGame.phase === 'complete' });
@@ -10186,6 +10396,7 @@
       refreshDebugExportIfNeeded();
       return;
     }
+    playSoundEffect(outcome.result ? 'tile-mismatch' : 'tile-select');
     syncStatusForCurrentGame();
     render();
     syncControls();
@@ -10197,6 +10408,7 @@
     clearLianliankanMatchEffects(game);
     pushUndoSnapshot('refresh Tile Matching tiles');
     const result = Lianliankan.refreshGame(game, { rng: Math.random, maxAttempts: 50 });
+    if (result.success) playSoundEffect('tile-shuffle');
     LianliankanMosaicAdapter.syncSharedState(game);
     syncStatusForCurrentGame();
     render();
@@ -10222,6 +10434,7 @@
     if (!bomb) return false;
     const result = detonateBombAt(game, target.index);
     if (!result.changed) return false;
+    playSoundEffect('2048-bomb');
     pushUndoSnapshot(`${bomb.kind} bomb ${target.label}`);
     game = result.state;
     game.phase = 'ready';
@@ -10444,11 +10657,14 @@
     if (!target) return;
     const result = placeGomokuStone(game, target.index);
     if (!result.changed) {
+      playSoundEffect('shared-invalid');
       syncStatus('Gomoku move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
       return;
     }
     pushUndoSnapshot(`Gomoku ${result.stone.color} at ${target.label}`, { actor: 'human' });
     game = result.state;
+    playSoundEffect('placement-place');
+    if (game.phase === 'gameover') playSoundEffect(game.winner ? 'shared-win' : 'shared-draw');
     resumeLocalAiAfterReplacementHumanMove();
     if (game.phase === 'gameover') {
       if (game.winner) syncStatus(`${gomokuColorLabel(game.winner)} wins`, `${game.round} move${game.round === 1 ? '' : 's'}`, 'over');
@@ -10476,11 +10692,14 @@
     if (!target) return;
     const result = placeHexTile(game, target.index);
     if (!result.changed) {
+      playSoundEffect('shared-invalid');
       syncStatus('Hex move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
       return;
     }
     pushUndoSnapshot(`Hex ${result.tile.color} at ${target.label}`);
     game = result.state;
+    playSoundEffect('placement-place');
+    if (game.phase === 'gameover') playSoundEffect(game.winner ? 'shared-win' : 'shared-draw');
     if (game.phase === 'gameover') {
       if (game.winner) syncStatus(`${hexColorLabel(game.winner)} wins`, `[loop] = ${game.winningExpression}`, 'over');
       else syncStatus('Hex draw', `${game.round} filled tiles`, 'over');
@@ -10535,6 +10754,7 @@
     }
     const result = placeConnectFourToken(game, target.index);
     if (!result.changed) {
+      playSoundEffect('shared-invalid');
       showSetupAlert(`Connect Four drop rejected: ${result.message || `${target.label} is unavailable`}`);
       if (result.cycle) setConnectFourCycleHoles(result.cycleHoles && result.cycleHoles.length ? result.cycleHoles : [target.index]);
       else clearConnectFourCycleHoles();
@@ -10547,6 +10767,8 @@
     clearSetupAlert();
     pushUndoSnapshot(`Connect Four ${result.token.color} from ${target.label}`, { actor: 'human' });
     game = result.state;
+    playSoundEffect('placement-place');
+    if (game.phase === 'gameover') playSoundEffect(game.winner ? 'shared-win' : 'shared-draw');
     resumeLocalAiAfterReplacementHumanMove();
     startConnectFourDropAnimation(result);
     if (game.phase === 'gameover') {
@@ -10597,11 +10819,13 @@
     if (rejectOnlineLocalAction('online Go turn blocked')) return;
     const result = placeGoStone(game, target.index);
     if (!result.changed) {
+      playSoundEffect('shared-invalid');
       syncStatus('Go move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
       return;
     }
     pushUndoSnapshot(`Go ${result.stone.color} at ${target.label}`);
     game = result.state;
+    playSoundEffect(result.captured && result.captured.length ? 'go-capture' : 'placement-place');
     syncStatusForCurrentGame();
     render();
     syncControls();
@@ -10785,12 +11009,15 @@
     if (!target) return;
     const result = placeReversiDisc(game, target.index);
     if (!result.changed) {
+      playSoundEffect('shared-invalid');
       startReversiInvalidMoveFeedback(target);
       syncStatus('Reversi move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
       return;
     }
     pushUndoSnapshot(`Reversi ${result.disc.color} at ${target.label}`);
     game = result.state;
+    playSoundEffect(result.flipped && result.flipped.length ? 'reversi-flip' : 'placement-place');
+    if (game.phase === 'gameover') playSoundEffect(game.winner ? 'shared-win' : 'shared-draw');
     startReversiFlipAnimation(result);
     syncStatusForCurrentGame();
     render();
@@ -10897,11 +11124,20 @@
       stepwise: !shouldUseChineseCheckersFullChainHints()
     });
     if (!result.changed) {
+      playSoundEffect('shared-invalid');
       syncStatus('Chinese Checkers move rejected', result.message || `${target.label} is unavailable`, phaseBadge(game.phase));
       return;
     }
     pushUndoSnapshot(`Chinese Checkers ${game.turn} move`, { actor: 'human' });
     game = result.state;
+    const chineseJump = result.move && result.move.kind === 'jump';
+    const chineseSegments = chineseJump && Array.isArray(result.move.segments) ? result.move.segments : [];
+    if (!chineseJump) playSoundEffect('checkers-move');
+    else if (chineseSegments.length <= 1) playSoundEffect('checkers-jump');
+    if (game.phase === 'gameover') {
+      playSoundEffect('checkers-goal');
+      playSoundEffect(game.winner ? 'shared-win' : 'shared-draw');
+    }
     resumeLocalAiAfterReplacementHumanMove();
     startChineseCheckersMoveAnimation(result);
     syncStatusForCurrentGame();
@@ -10982,6 +11218,7 @@
       return;
     }
     if (!result.changed) {
+      playSoundEffect('shared-invalid');
       const label = target && target.label ? target.label : compactTileRef(to, game && game.preset);
       syncStatus('FIDE Chess move rejected', result.message || `${label} is unavailable`, phaseBadge(game.phase));
       restoreRejectedFideChessMoveSelection(from);
@@ -10996,6 +11233,8 @@
     const label = target && target.label ? target.label : compactTileRef(to, game && game.preset);
     pushUndoSnapshot(`FIDE Chess ${movedPiece ? movedPiece.kind : 'move'} to ${label}`);
     game = result.state;
+    playSoundEffect(result.move && result.move.capturedId ? 'chess-capture' : 'chess-move');
+    if (game.phase === 'gameover') playSoundEffect(game.winner ? 'shared-win' : 'shared-draw');
     startFideChessMoveAnimation(result, movedPiece, rookPiece);
     syncStatusForCurrentGame();
     render();
@@ -11189,6 +11428,7 @@
     }
     pushUndoSnapshot(`Chinese Checkers ${game.turn} jump`, { actor: 'human' });
     game = result.state;
+    playSoundEffect('checkers-jump');
     resumeLocalAiAfterReplacementHumanMove();
     startChineseCheckersMoveAnimation(result);
     syncStatusForCurrentGame();
@@ -11586,6 +11826,7 @@
       syncControls();
       return;
     }
+    playSoundEffect('shared-undo');
     let beforeHumanIndex = -1;
     if (localAiHistory && snapshot.actor === 'ai' && localAiHasHumanController()) {
       for (let index = undoStack.length - 1; index >= 0; index -= 1) {
@@ -11629,6 +11870,7 @@
       syncControls();
       return;
     }
+    playSoundEffect('shared-redo');
     if (!options.onlineApproved && localAiConfigured()) cancelLocalAiWork({ pauseReason: LOCAL_AI_PAUSE_REASONS.HISTORY });
     pushUndoSnapshotForRedo(snapshot.label || 'previous step', { actor: snapshot.actor === 'ai-group' ? 'ai-group' : snapshot.actor });
     restoreHistorySnapshot(
@@ -23689,6 +23931,7 @@
   function playSokobanMove(dir) {
     const start = createSokobanMoveSession(game, dir);
     if (!start.ok) {
+      playSoundEffect('sokoban-blocked');
       game.debugMessage = start.message || 'move rejected';
       syncStatus('Sokoban blocked', start.message || 'move rejected', phaseBadge(game.phase));
       startSokobanBounceAnimation(game, dir, { message: start.message });
@@ -23699,6 +23942,7 @@
     sokobanMoveSession = start.session;
     const firstStep = nextSokobanSessionStep(game, sokobanMoveSession);
     if (!firstStep.event) {
+      playSoundEffect('sokoban-blocked');
       const message = firstStep.message || 'move rejected';
       sokobanMoveSession = null;
       game.debugMessage = message;
@@ -23709,6 +23953,7 @@
       return;
     }
     pushUndoSnapshot(`Sokoban move ${game.moves + 1}: ${dirLabel(dir, game.preset)}`);
+    playSoundEffect(Number(firstStep.event.pushes) > 0 ? 'sokoban-push' : 'sokoban-step');
     clearNoMoveTrial();
     initializeSokobanMoveCounters(game, game);
     eventQueue = [firstStep.event];

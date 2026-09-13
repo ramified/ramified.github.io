@@ -1,0 +1,86 @@
+export const messages = {
+  en: {
+    title: 'Mathematical Workspace', subtitle: 'Objects · views · reproducible computations', home: 'Toolkit',
+    projectName: 'Project name', new: 'New', import: 'Import', export: 'Export', undo: 'Undo', redo: 'Redo', language: 'Language',
+    library: 'Assets', search: 'Search assets', create: 'Create object', emptyLibrary: 'Your mathematical objects will appear here.',
+    view: 'View {{n}}', addView: 'New view', addToView: 'Add to view', compare: 'Compare views', inspector: 'Inspector',
+    emptyView: 'Open an example or create an object to begin.', emptyHint: 'One object can be used in several views. Its computations remain reproducible.',
+    examples: 'Examples', chooseExample: 'Choose an example', examplePartitions: 'Multiply two partitions', exampleMatrix: 'An exact matrix and its inverse',
+    exampleRoots: 'A representation of A₂', exampleToric: 'Faces of a toric cone', exampleStrand: 'A braid and its image', exampleSurface: 'Homology of a torus', exampleFields: 'Primes in Q(√2)', exampleCategory: 'A category presentation', exampleSheaf: 'Cohomology on projective space',
+    recipe: 'Recipe', run: 'Run recipe', cancel: 'Cancel', recipeHelp: 'Assignments, calls, lists and records. # starts a comment. Running replaces the project’s mathematical definitions; view layout is retained.',
+    diagnostics: 'Diagnostics', ready: 'Ready', running: 'Computing {{name}} ({{index}}/{{total}})…', complete: 'Recipe completed. {{count}} assets.', cancelled: 'Cancelled. Previous results retained.',
+    failed: 'Computation failed at line {{line}}. Previous results retained.', saved: 'Saved locally', saving: 'Saving…', storageError: 'Local save failed. Export your project to keep a copy.',
+    restored: 'Restored local project', revision: 'Revision {{n}}', current: 'Current', stale: 'Stale — rerun recipe', depends: 'Inputs',
+    noSelection: 'Select an asset to inspect its definition and available operations.', properties: 'Mathematical data', edit: 'Edit definition', apply: 'Apply edit', close: 'Close',
+    arguments: 'Arguments', argumentHelp: 'Edit the arguments inside the constructor call. Asset references use their recipe names.',
+    delete: 'Delete asset', removeView: 'Remove from view', visual: 'Visual', data: 'Data', viewType: 'View type', scale: 'View scale',
+    operations: 'Compatible operations', useOperation: 'Add computation', operation: 'Operation', name: 'Asset name', createHelp: 'Choose a constructor, then supply its arguments. A complete example is provided.',
+    exportProject: 'Whole project JSON', exportSelection: 'Selected asset and dependencies', exportRecipe: 'Recipe text', exportSage: 'SageMath matrix snippet', exportM2: 'Macaulay2 matrix snippet',
+    copy: 'Copy', copied: 'Copied', download: 'Download', exportHelp: 'Matrix snippets support QQ and ZZ. CAS execution has not been verified on this machine.',
+    importHelp: 'Open workspace JSON, a recipe (.math or .txt), a Young diagram JSON export, a double-Young JSON export, or rational matrix rows.',
+    importText: 'Import text', replace: 'Replace project', merge: 'Merge assets', file: 'Choose file', applyImport: 'Import data', importMode: 'Import mode',
+    confirmNew: 'Start a new project? The current autosave will be replaced. You can undo this action.',
+    untitled: 'Untitled', coverage: 'Migration coverage', coverageNote: 'This page is an evolving implementation. Existing calculators remain the full-featured versions.',
+    coverageSummary: '{{count}} registered constructors and operations; full calculator parity is not yet reached.', native: 'Native operations', pending: 'Remaining coverage',
+    selectFirst: 'Select an asset first.', changed: 'Source updated. Dependent results are marked stale.', imported: 'Import completed.',
+    engineDetails: 'Engine details', validationFailed: 'The input could not be applied. See engine details.', noOperation: 'No operations registered for this asset type yet.',
+    exact: 'Exact rational arithmetic', legacy: 'Uses the original calculator’s numerical algorithms and limits.', assumptions: 'Assumptions and context',
+    cell: 'Row {{r}}, column {{c}}', partitionHelp: 'Select a boundary cell to add or remove it. Changes update every linked view.',
+    searchOperations: 'Constructor', pendingRecipe: 'Unrun recipe edits are saved as a draft.', source: 'Source calculator',
+    young: 'Partitions and tableaux', representation: 'Representation theory', dynkin: 'Root systems', matrix: 'Linear algebra', geometry: 'Higher-dimensional geometry',
+    mosaic: 'Surfaces and topology', category: 'Categories', ramification: 'Field extensions', sheaf: 'Varieties and sheaves', complex: 'Sheaf complexes', context: 'Algebraic contexts',
+    hooksCount: '{{cells}} cells · {{count}} standard tableaux', decompositionTerms: '{{count}} decomposition terms', unavailable: 'Not available for this object',
+    sourceEditOnly: 'Derived objects are edited through their recipe inputs.', unknownFormat: 'Unrecognised import format.',
+    closeView: 'Close view', clearDiagnostic: 'Clear diagnostics', mathematicalData: 'Mathematical data (JSON)', strand: 'Strand diagrams',
+    restoreRecipe: 'Restore applied recipe', draftConflict: 'Run your edited recipe or restore the applied recipe before changing objects.', inventoryLink: 'Capability inventory (JSON)',
+    workspaceDirectoryKind: 'Mathematical workspace · in development', workspaceDirectoryDescription: 'Reuse mathematical objects across views and save editable computation recipes. Calculator migration is in progress.', workspaceDirectoryOpen: 'Open workspace',
+  },
+  'zh-cn': {
+    title: '数学工作区', subtitle: '对象 · 视图 · 可复现计算', home: '工具集',
+    projectName: '项目名称', new: '新建', import: '导入', export: '导出', undo: '撤销', redo: '重做', language: '语言',
+    library: '数学对象', search: '搜索对象', create: '创建对象', emptyLibrary: '创建的数学对象将显示在这里。',
+    view: '视图 {{n}}', addView: '新建视图', addToView: '添加到视图', compare: '对比视图', inspector: '属性面板',
+    emptyView: '打开示例或创建对象以开始。', emptyHint: '同一对象可以出现在多个视图中，其计算始终可以复现。',
+    examples: '示例', chooseExample: '选择示例', examplePartitions: '两个分拆的乘积', exampleMatrix: '精确矩阵及其逆',
+    exampleRoots: 'A₂ 的一个表示', exampleToric: '环面锥的面', exampleStrand: '辫子及其像', exampleSurface: '环面的同调', exampleFields: 'Q(√2) 中的素数', exampleCategory: '范畴的表示数据', exampleSheaf: '射影空间上的上同调',
+    recipe: '计算配方', run: '运行配方', cancel: '取消', recipeHelp: '支持赋值、调用、列表和记录。# 表示注释。运行将替换项目的数学定义，保留视图布局。',
+    diagnostics: '诊断', ready: '就绪', running: '正在计算 {{name}}（{{index}}/{{total}}）…', complete: '配方运行完成，共 {{count}} 个对象。', cancelled: '已取消，保留之前的结果。',
+    failed: '第 {{line}} 行计算失败，保留之前的结果。', saved: '已保存到本地', saving: '正在保存…', storageError: '本地保存失败，请导出项目以保留副本。',
+    restored: '已恢复本地项目', revision: '版本 {{n}}', current: '最新', stale: '已过期 — 请重新运行配方', depends: '输入对象',
+    noSelection: '选择对象以查看定义及可用操作。', properties: '数学数据', edit: '编辑定义', apply: '应用修改', close: '关闭',
+    arguments: '参数', argumentHelp: '编辑构造调用括号内的参数。引用对象时使用其配方名称。',
+    delete: '删除对象', removeView: '从视图移除', visual: '图形', data: '数据', viewType: '视图类型', scale: '视图缩放',
+    operations: '兼容的操作', useOperation: '添加计算', operation: '操作', name: '对象名称', createHelp: '选择构造方式并填写参数，下方提供完整示例。',
+    exportProject: '完整项目 JSON', exportSelection: '所选对象及依赖', exportRecipe: '配方文本', exportSage: 'SageMath 矩阵代码', exportM2: 'Macaulay2 矩阵代码',
+    copy: '复制', copied: '已复制', download: '下载', exportHelp: '矩阵代码支持 QQ 和 ZZ。尚未在此计算机上验证 CAS 执行。',
+    importHelp: '支持工作区 JSON、配方（.math 或 .txt）、杨图 JSON、双杨图 JSON 以及有理数矩阵行。',
+    importText: '导入文本', replace: '替换项目', merge: '合并对象', file: '选择文件', applyImport: '导入数据', importMode: '导入方式',
+    confirmNew: '新建项目将替换当前自动保存。此操作可以撤销。是否继续？',
+    untitled: '未命名', coverage: '迁移覆盖情况', coverageNote: '此页面仍在开发，现有计算器继续提供完整功能。',
+    coverageSummary: '已注册 {{count}} 个构造方式和操作；尚未覆盖全部计算器功能。', native: '原生操作', pending: '待迁移功能',
+    selectFirst: '请先选择对象。', changed: '已更新源对象，依赖结果标记为过期。', imported: '导入完成。',
+    engineDetails: '引擎详情', validationFailed: '无法应用输入，请查看引擎详情。', noOperation: '此对象类型尚未注册操作。',
+    exact: '精确有理数运算', legacy: '使用原计算器的数值算法及计算上限。', assumptions: '假设及上下文',
+    cell: '第 {{r}} 行，第 {{c}} 列', partitionHelp: '选择边界格以添加或移除，修改会更新所有关联视图。',
+    searchOperations: '构造方式', pendingRecipe: '未运行的配方修改已保存为草稿。', source: '原计算器',
+    young: '分拆与杨表', representation: '表示论', dynkin: '根系', matrix: '线性代数', geometry: '高维几何',
+    mosaic: '曲面与拓扑', category: '范畴', ramification: '域扩张', sheaf: '簇与层', complex: '层复形', context: '代数上下文',
+    hooksCount: '{{cells}} 个格 · {{count}} 个标准杨表', decompositionTerms: '{{count}} 个分解项', unavailable: '此对象不支持此功能',
+    sourceEditOnly: '请通过配方的输入对象修改派生对象。', unknownFormat: '无法识别导入格式。',
+    closeView: '关闭视图', clearDiagnostic: '清除诊断', mathematicalData: '数学数据（JSON）', strand: '弦图',
+    restoreRecipe: '恢复已应用配方', draftConflict: '修改对象前，请先运行已编辑的配方或恢复已应用的配方。', inventoryLink: '功能清单（JSON）',
+    workspaceDirectoryKind: '数学工作区 · 开发中', workspaceDirectoryDescription: '在多个视图中复用数学对象，保存可编辑的计算配方。计算器功能正在迁移中。', workspaceDirectoryOpen: '打开工作区',
+  }
+};
+let locale = 'en';
+export function setLocale(value) { locale = value === 'zh-cn' ? 'zh-cn' : 'en'; }
+export const getLocale = () => locale;
+export function tk(key, params = {}) {
+  const template = messages[locale][key];
+  if (!template) throw new Error(`Missing translation ${locale}:${key}`);
+  return template.replace(/\{\{(\w+)\}\}/g, (_, k) => String(params[k] ?? ''));
+}
+export function translate(root = document) {
+  root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = tk(el.dataset.i18n); });
+  for (const attr of ['placeholder', 'title', 'aria-label']) root.querySelectorAll(`[data-i18n-${attr}]`).forEach(el => el.setAttribute(attr, tk(el.getAttribute(`data-i18n-${attr}`))));
+}
