@@ -19,6 +19,17 @@ test('recipe roundtrip, comments, quoted exact numbers, nested references', () =
   assert.equal(printRecipe(parseRecipe(printRecipe(p))), printRecipe(p));
   assert.deepEqual(resolveValue(p[1].args[0], n => n), { v: ['A', true, null], label: 'a\nb' });
 });
+test('appendStatement creates one object without rerunning existing recipe', async () => {
+  const s = store(); await s.runRecipe('A = partition([2])');
+  const before = structuredClone(s.project); const b = await s.appendStatement('B = partition([1])');
+  assert.equal(b.name, 'B'); assert.equal(s.project.assets.length, 2);
+  assert.equal(s.project.assets.find(a=>a.name==='A').revision, before.assets[0].revision);
+  assert.match(s.project.recipeDraft,/B = partition/);
+});
+test('constructor names use an explicit validation path instead of silent browser blocking', () => {
+  assert.match('<form id="editor-form" novalidate>', /novalidate/);
+  assert.match(fs.readFileSync(new URL('../../math_workspace.html', import.meta.url), 'utf8'), /app\.mjs\?v=/);
+});
 test('recipe rejects executable code, unsafe numbers, duplicate names and records', () => {
   for (const input of ['x = eval("alert(1)")\nx = partition([])', 'x = partition([9007199254740993])', 'x = partition([1]); alert(1)', 'x = partition([1+2])', 'x = window.alert(1)', 'x = f({"__proto__":1})', 'x = f({"a":1,"a":2})', 'x = f("unclosed)']) assert.throws(() => parseRecipe(input), undefined, input);
 });
@@ -50,14 +61,39 @@ test('matrix arithmetic is exact, preserves large integers and rejects singular 
   await assert.rejects(execute('multiply',[await M([[1,2]]),await M([[1,2]])]), /dimensions/);
   assert.throws(() => rational('1e1000000'), /decimal or fraction/);
 });
-test('every registered operation has a passing representative execution', async () => {
+test('numerical factors reconstruct matrices and require explicit approximate inputs',async()=>{
+  const A=await M([[2,1],[1,3]]), N=await execute('numerical',[A]);
+  const re=rows=>rows.map(row=>row.map(z=>Number(z.re)));
+  const mul=(a,b)=>a.map(row=>b[0].map((_,j)=>row.reduce((s,x,k)=>s+x*b[k][j],0)));
+  const transpose=a=>a[0].map((_,j)=>a.map(row=>row[j]));
+  for(const name of ['qr','svd','polar','bruhat']){
+    const d=await execute(name,[N]), f=Object.fromEntries(Object.entries(d.data.factors).map(([k,v])=>[k,re(v)]));
+    const result=name==='qr'?mul(f.Q,f.R):name==='svd'?mul(mul(f.U,f.Sigma),transpose(f.V)):name==='polar'?mul(f.U,f.P):mul(mul(f.B1,f.W),f.B2);
+    result.forEach((row,i)=>row.forEach((v,j)=>assert.ok(Math.abs(v-Number(A.data.rows[i][j]))<1e-8,`${name}: ${i},${j}`)));
+    validateAssetValue(d);
+  }
+  const exp=await execute('matrixExponential',[await execute('numericMatrix',[[[0,1],[0,0]]])]);
+  assert.deepEqual(re(exp.data.rows),[[1,1],[0,1]]);
+  await assert.rejects(execute('qr',[A]),/numericMatrix/);
+  await assert.rejects(execute('numericMatrix',[[['Infinity']]]),/finite/);
+  await assert.rejects(execute('cone',[[[1]],1]),/2 to 8/);
+  await assert.rejects(execute('fan',[{ambientDimension:9,cones:[]}]),/2 to 8/);
+});
+
+test('every registered operation has a passing representative execution (remote lookup uses a fixture)', async (t) => {
+  t.mock.method(globalThis,'fetch',async()=>({ok:true,json:async()=>({field:{label:'2.2.8.1',coeffs:['-2','0','1']}})}));
   const p = await P([1]), roots = await execute('rootSystem',['A',2]), rep = await execute('representation',[p,roots]);
   const m = await M([[1,0],[0,1]]), points = await execute('points',[[[0,0],[1,1]]]), cone = await execute('cone',[[[1,0],[0,1]]]);
   const fanSpec = { ambientDimension:2, cones:[{id:'sigma', generators:cone.data.generators}] }, fan = await execute('fan',[fanSpec]);
   const strand = await execute('strand',[3,[1,2]]), surfaceSpec = {lattice:'square',rows:1,cols:1}, surface = await execute('surface',[surfaceSpec]);
   const catSpec = {objects:['X','Y'],morphisms:[{id:'f',source:'X',target:'Y'}]}, cat = await execute('category',[catSpec]);
   const field = await execute('fieldExtension',[{kind:'Q'},'x^2-2']), variety = await execute('projectiveSpace',[2]), line = await execute('lineBundle',[variety,-3]);
+  const cube=await execute('polytope',['hypercube',2]),frame=await execute('frame',[m,[0,0]]),sym=await execute('symmetricFunction',['s',p]),permutation=await execute('permutationOf',[strand]);
+  const symbolic=await execute('categoryPresentation',[{label:'C'}]),fieldRecord=await execute('numberFieldSnapshot',[{field:{label:'2.2.8.1',coeffs:['-2','0','1']}}]);
   const cases = {
+    numericMatrix:[[[1,0],[0,1]]], numerical:[m],
+    ...Object.fromEntries(['qr','svd','polar','bruhat','matrixExponential'].map(name=>[name,[{type:'numericMatrix',data:{rows:[[1,0],[0,1]]}}]])),
+    matrixFactor:[await execute('qr',[await execute('numerical',[m])]),'Q'],
     partition:[[2,1]], skew:[await P([2,1]),p], conjugate:[p], hooks:[p], tableaux:[p,[1]], littlewoodRichardson:[p,p],
     kronecker:[p,p], plethysm:[p,p], classicalStable:[p,p], rootSystem:['A',2], cartan:[roots], positiveRoots:[roots], representation:[p,roots],
     weylDimension:[rep], weylOrbit:[rep], character:[rep], tensor:[rep,rep], schurFunctor:[rep,p], grassmannianCup:[p,p,2,2], giambelli:[p,2,2],
@@ -67,12 +103,33 @@ test('every registered operation has a passing representative execution', async 
     functor:[cat,cat,{X:'X',Y:'Y'},{f:'f'}], fieldExtension:[{kind:'Q'},'x^2-2'], ramification:[field], projectiveSpace:[2], curve:[2], abelianVariety:[2],
     grassmannian:[2,4], completeIntersection:[4,[5]], varietyProduct:[variety,variety], hodge:[variety], lineBundle:[variety,-3], structureSheaf:[variety],
     sheafCohomology:[line], koszulBetti:[variety], sheafComplex:[[{degree:0,sheaf:line}]],
+    polytope:['hypercube',3],sphere:[[0,0,0],'1'],slice:[cube,frame],vertices:[cube],embedPoints:[points,frame],
+    symmetricFunction:['s',p],changeBasis:[sym,'m'],symmetricProduct:[sym,sym,'s'],symmetricPlethysm:[sym,sym,'s'],specializeVariables:[sym,3],
+    permutationOf:[strand],permutationMatrix:[permutation],strandBasis:[strand,'tl','diagram'],
+    categoryPresentation:[{label:'C'}],oppositeCategory:[symbolic],symbolicFunctor:[symbolic,symbolic,'F','contravariant'],
+    lmfdbLookup:['2.2.8.1'],numberFieldSnapshot:[{field:{label:'2.2.8.1',coeffs:['-2','0','1']}}],fieldFromRecord:[fieldRecord],ramificationSnapshot:[{schemaVersion:1,engine:{name:'fixture'},places:[]}],
   };
   assert.deepEqual([...operations.keys()].sort(), Object.keys(cases).sort());
   for (const [name,args] of Object.entries(cases)) {
     try { const result = await execute(name,args); validateAssetValue(result); assert.ok(result.type); }
     catch (e) { throw new Error(`${name}: ${e.message}`, {cause:e}); }
   }
+});
+test('exact cube slicing, empty and tangent sphere sections, and nonorthonormal frames',async()=>{
+  const cube=await execute('polytope',['hypercube',3]),basis=await M([[1,0],[0,1],[1,1]]),frame=await execute('frame',[basis,[0,0,0]]);
+  const section=await execute('slice',[cube,frame]);assert.equal(section.data.kind,'polygon');assert.equal(section.data.vertices.length,6);assert.equal(section.data.touchesClipBoundary,false);
+  assert.deepEqual(new Set(section.data.vertices.map(p=>p.join(','))),new Set(['-1,0','0,-1','1,-1','1,0','0,1','-1,1']));
+  const sphere=await execute('sphere',[[0,0,0],'1']),axes=await M([[2,0],[0,1],[0,0]]);
+  for(const [z,kind] of [[0,'ellipse'],[1,'point'],[2,'empty']]){const f=await execute('frame',[axes,[0,0,z]]);const s=await execute('slice',[sphere,f]);assert.equal(s.data.kind,kind);assert.deepEqual(s.data.gram,[['4','0'],['0','1']]);}
+  const clipped=await execute('slice',[cube,frame,'1/2']);assert.equal(clipped.data.touchesClipBoundary,true);
+});
+test('symmetric functions preserve exact coefficients across bases and finite specialisation',async()=>{
+  const p=await P([2]),s=await execute('symmetricFunction',['s',p]),m=await execute('changeBasis',[s,'m']);
+  assert.deepEqual(m.data.terms,[{partition:[2],coefficient:'1'},{partition:[1,1],coefficient:'1'}]);
+  const back=await execute('changeBasis',[m,'s']);assert.deepEqual(back.data,s.data);
+  const finite=await execute('specializeVariables',[s,2]);
+  assert.deepEqual(new Set(finite.data.terms.map(t=>`${t.exponents}:${t.coefficient}`)),new Set(['2,0:1','1,1:1','0,2:1']));
+  const one=await execute('symmetricFunction',['s',await P([1])]),product=await execute('symmetricProduct',[one,one]);assert.equal(product.data.terms.length,2);
 });
 test('source edit retains old values and invalidates transitive outputs', async () => {
   const s = store(); await s.runRecipe('A = matrix([[1,0],[0,2]])\nB = inverse(A)\nC = determinant(B)');
@@ -125,11 +182,23 @@ test('project import rejects broken references, future versions, malformed matri
   assert.throws(()=>s.importProject(JSON.parse('{"schema":"pure-math-workspace","version":1,"__proto__":{"x":1}}')),/Reserved/);
 });
 test('legacy imports are explicit and CAS exports retain exact coefficient context', async () => {
-  assert.equal(detectImport('{"partition":[3,2]}').value,'lambda = partition([3,2])');
+  assert.equal(detectImport('{"partition":[3,2]}').value,'lambda = partition([3, 2])');
   assert.equal(parseRecipe(detectImport('{"lambda":[2],"mu":[1]}').value).length,2);
   const s = store(); await s.runRecipe(detectImport('1/2 2\n3 4').value);
   assert.match(matrixCAS(get(s,'A'),'sage'),/matrix\(QQ, \[\[1\/2, 2\], \[3, 4\]\]\)/);
   assert.match(matrixCAS(get(s,'A'),'macaulay2'),/matrix\(QQ, \{\{1\/2, 2\}, \{3, 4\}\}\)/);
+});
+test('legacy symbolic categories and functors preserve conditions and variance',async()=>{
+  const legacy={kind:'category-calculator-prototype',categories:[{id:'a',label:'C',objectSymbol:'X',objectCondition:'smooth',morphismElement:'f',morphismCondition:'proper',opposite:true},{id:'b',label:'D'}],functors:[{domainId:'a',codomainId:'b',label:'F',variance:'contravariant'}]};
+  const imported=detectImport(JSON.stringify(legacy)),s=store();await s.runRecipe(imported.value);assert.equal(get(s,'category1').data.objectCondition,'smooth');assert.equal(get(s,'category1').data.opposite,true);assert.equal(get(s,'functor1').data.variance,'contravariant');assert.deepEqual(imported.legacy.payload,legacy);
+});
+test('legacy strand chronological clicks are reversed into calculation word order',async()=>{
+  const imported=detectImport(JSON.stringify({kind:'strand-diagram-calculator',groupType:'symmetric',strandCount:3,appliedSteps:[1,2],calculationSettings:{target:'symmetric'}})),s=store();await s.runRecipe(imported.value);assert.deepEqual(get(s,'braid').data.word.map(r=>r.index),[2,1]);
+  const perm=await execute('permutationOf',[get(s,'braid')]);assert.deepEqual(perm.data.values,[3,1,2]);
+});
+test('field records convert to reproducible local inputs; snapshots retain provenance',async()=>{
+  const record=await execute('numberFieldSnapshot',[{field:{label:'2.2.8.1',coeffs:['-2','0','1']}}]),extension=await execute('fieldFromRecord',[record]);
+  const result=await execute('ramification',[extension]);assert.equal(result.data.places.find(p=>p.id==='Q:2').behavior,'ramified');assert.equal(record.context.verification,'unverified-snapshot');
 });
 test('new interface has matching English and Chinese keys and an isolated stylesheet', () => {
   assert.deepEqual(Object.keys(messages.en).sort(),Object.keys(messages['zh-cn']).sort());

@@ -1,5 +1,5 @@
-import { operations } from './kernel.mjs';
-import { ProjectStore, newProject, validateProject } from './project.mjs';
+import { operations } from './kernel.mjs?v=20260913-2';
+import { ProjectStore, newProject, validateProject } from './project.mjs?v=20260913-2';
 import { workerExecutor } from './executor.mjs';
 import { parseRecipe, printRecipe, printValue, literal } from './recipe.mjs';
 import { loadProject, saveProject } from './persistence.mjs';
@@ -165,6 +165,7 @@ function fillArguments() {
   const op = operations.get($('operation-select').value), sample = parseRecipe(op.example)[0];
   if (editing?.mode === 'operation' && current()) sample.args[0] = { ref: current().name };
   $('signature').textContent = `${op.name}(${op.signature.join(', ')})`;
+  $('operation-note').hidden=!op.network;$('operation-note').textContent=op.network?tk('externalComputation'):'';
   $('arguments').value = sample.args.map(printValue).join(', ');
   $('asset-name').value = uniqueName(op.kind === 'constructor' ? sample.name : 'result');
 }
@@ -180,28 +181,32 @@ function openEditor(mode, operation) {
   ops.forEach(op => { const n = el('option', `${tk(op.family)} · ${op.name}`); n.value = op.name; select.append(n); });
   if (operation) select.value = operation;
   $('editor-title').textContent = tk(mode === 'create' ? 'create' : mode === 'edit' ? 'edit' : 'useOperation');
+  $('editor-submit').textContent = tk(mode === 'create' ? 'createObject' : 'apply');
   fillArguments();
   if (statement) { $('asset-name').value = a.name; $('arguments').value = statement.args.map(printValue).join(', '); }
   $('asset-name').readOnly = mode === 'edit'; select.disabled = mode === 'edit';
-  $('editor-dialog').showModal();
+  const editor = $('editor-dialog');
+  if (typeof editor.showModal === 'function') editor.showModal();
+  else { editor.setAttribute('open', ''); editor.classList.add('dialog-fallback'); }
 }
 $('operation-select').onchange = fillArguments;
 $('editor-form').onsubmit = event => {
   event.preventDefault();
   const mode = editing.mode, id = editing.id, name = $('asset-name').value, operation = $('operation-select').value;
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) { report(new Error('Asset name must start with a letter and contain only letters, numbers, or underscores')); return; }
+  if (!name) { report(new Error('Asset name is required')); return; }
+  if (!operation || !operations.has(operation)) { report(new Error('Choose a valid constructor')); return; }
   const text = `${name} = ${operation}(${$('arguments').value})`;
   action(async signal => {
-    requireAppliedRecipe();
     const statements = parseRecipe(text); if (statements.length !== 1) throw new Error('Expected one constructor or operation');
-    if (mode === 'edit') { await store.editSource(id, statements[0].args, { signal }); status('changed'); }
+    if (mode === 'edit') { requireAppliedRecipe(); await store.editSource(id, statements[0].args, { signal }); status('changed'); }
     else {
-      if (store.project.assets.some(a => a.name === name)) throw new Error('Asset name already exists');
-      await store.runRecipe(`${printRecipe(store.project.statements)}\n${text}`, { signal });
-      const a = store.project.assets.find(a => a.name === name), view = store.project.views[store.project.activeView];
-      store.updateView(view.id, { assetIds: [...view.assetIds, a.id] }); selected = a.id;
+      const a = await store.appendStatement(text, { signal }); selected = a.id;
       status('complete', { count: store.project.assets.length });
     }
-    $('editor-dialog').close();
+    const editor = $('editor-dialog');
+    if (typeof editor.close === 'function') editor.close();
+    else { editor.removeAttribute('open'); editor.classList.remove('dialog-fallback'); }
   });
 };
 $('run').onclick = () => run($('recipe').value);
@@ -240,8 +245,8 @@ $('import-file').onchange = async () => { const file = $('import-file').files[0]
 $('apply-import').onclick = () => action(async signal => {
   const imported = detectImport($('import-text').value), merge = $('import-mode').value === 'merge';
   if (imported.kind === 'project') store.importProject(imported.value, merge);
-  else { const temp = new ProjectStore(operations, workerExecutor); await temp.runRecipe(imported.value, { signal }); store.importProject(temp.project, merge); }
-  selected = null; $('import-dialog').close(); status('imported');
+  else { const temp = new ProjectStore(operations, workerExecutor); await temp.runRecipe(imported.value, { signal }); if(imported.legacy) temp.project.legacyImports=[imported.legacy]; store.importProject(temp.project, merge); }
+  selected = null; $('import-dialog').close(); status(imported.notice||'imported');
 });
 $('show-coverage').onclick = () => {
   const root = $('coverage-content'); root.replaceChildren(el('p', tk('coverageSummary', { count: operations.size })));
@@ -266,6 +271,5 @@ try { const saved = await loadProject(); if (saved) store.project = validateProj
 catch (e) { restoreError = e; }
 language(getLocale());
 if (restoreError) report(restoreError);
-if (!store.project.assets.length && !store.project.recipeDraft) { store.project.recipeDraft = examples[0].source; $('recipe').value = store.project.recipeDraft; }
 // Read-only inspection hook for automated browser acceptance checks.
 globalThis.MathWorkspace = Object.freeze({ snapshot: () => structuredClone(store.project), operations: () => [...operations.keys()] });

@@ -2,7 +2,7 @@ export const messages = {
   en: {
     title: 'Mathematical Workspace', subtitle: 'Objects · views · reproducible computations', home: 'Toolkit',
     projectName: 'Project name', new: 'New', import: 'Import', export: 'Export', undo: 'Undo', redo: 'Redo', language: 'Language',
-    library: 'Assets', search: 'Search assets', create: 'Create object', emptyLibrary: 'Your mathematical objects will appear here.',
+    library: 'Assets', search: 'Search assets', create: 'Create object', createObject: 'Create object', emptyLibrary: 'Your mathematical objects will appear here.',
     view: 'View {{n}}', addView: 'New view', addToView: 'Add to view', compare: 'Compare views', inspector: 'Inspector',
     emptyView: 'Open an example or create an object to begin.', emptyHint: 'One object can be used in several views. Its computations remain reproducible.',
     examples: 'Examples', chooseExample: 'Choose an example', examplePartitions: 'Multiply two partitions', exampleMatrix: 'An exact matrix and its inverse',
@@ -17,7 +17,7 @@ export const messages = {
     operations: 'Compatible operations', useOperation: 'Add computation', operation: 'Operation', name: 'Asset name', createHelp: 'Choose a constructor, then supply its arguments. A complete example is provided.',
     exportProject: 'Whole project JSON', exportSelection: 'Selected asset and dependencies', exportRecipe: 'Recipe text', exportSage: 'SageMath matrix snippet', exportM2: 'Macaulay2 matrix snippet',
     copy: 'Copy', copied: 'Copied', download: 'Download', exportHelp: 'Matrix snippets support QQ and ZZ. CAS execution has not been verified on this machine.',
-    importHelp: 'Open workspace JSON, a recipe (.math or .txt), a Young diagram JSON export, a double-Young JSON export, or rational matrix rows.',
+    importHelp: 'Open workspace JSON, a recipe, rational matrix rows, or a supported Young, double-Young, Dynkin, strand, category, slice-object or ramification JSON export. Unsupported legacy options produce an error.',
     importText: 'Import text', replace: 'Replace project', merge: 'Merge assets', file: 'Choose file', applyImport: 'Import data', importMode: 'Import mode',
     confirmNew: 'Start a new project? The current autosave will be replaced. You can undo this action.',
     untitled: 'Untitled', coverage: 'Migration coverage', coverageNote: 'This page is an evolving implementation. Existing calculators remain the full-featured versions.',
@@ -34,11 +34,13 @@ export const messages = {
     closeView: 'Close view', clearDiagnostic: 'Clear diagnostics', mathematicalData: 'Mathematical data (JSON)', strand: 'Strand diagrams',
     restoreRecipe: 'Restore applied recipe', draftConflict: 'Run your edited recipe or restore the applied recipe before changing objects.', inventoryLink: 'Capability inventory (JSON)',
     workspaceDirectoryKind: 'Mathematical workspace · in development', workspaceDirectoryDescription: 'Reuse mathematical objects across views and save editable computation recipes. Calculator migration is in progress.', workspaceDirectoryOpen: 'Open workspace',
+    exampleSlice: 'A hexagonal section of a cube', exampleSymmetric: 'Change a symmetric-function basis', clippedSection: 'This section touches the clipping boundary. Increase the clip radius to inspect more of it.', emptySection: 'The section is empty.', coordinateProjection: 'Projection onto the first two coordinate axes.', exactConic: 'Exact quadratic form; curve sampled for display.',
+    legacyImportNotice:'Supported definitions imported. Original legacy data is retained in whole-project exports; specialised controls and view settings may not yet be mapped.', externalComputation:'This operation queries the existing LMFDB proxy. The returned record is saved with its source and retrieval time.',
   },
   'zh-cn': {
     title: '数学工作区', subtitle: '对象 · 视图 · 可复现计算', home: '工具集',
     projectName: '项目名称', new: '新建', import: '导入', export: '导出', undo: '撤销', redo: '重做', language: '语言',
-    library: '数学对象', search: '搜索对象', create: '创建对象', emptyLibrary: '创建的数学对象将显示在这里。',
+    library: '数学对象', search: '搜索对象', create: '创建对象', createObject: '创建对象', emptyLibrary: '创建的数学对象将显示在这里。',
     view: '视图 {{n}}', addView: '新建视图', addToView: '添加到视图', compare: '对比视图', inspector: '属性面板',
     emptyView: '打开示例或创建对象以开始。', emptyHint: '同一对象可以出现在多个视图中，其计算始终可以复现。',
     examples: '示例', chooseExample: '选择示例', examplePartitions: '两个分拆的乘积', exampleMatrix: '精确矩阵及其逆',
@@ -53,7 +55,7 @@ export const messages = {
     operations: '兼容的操作', useOperation: '添加计算', operation: '操作', name: '对象名称', createHelp: '选择构造方式并填写参数，下方提供完整示例。',
     exportProject: '完整项目 JSON', exportSelection: '所选对象及依赖', exportRecipe: '配方文本', exportSage: 'SageMath 矩阵代码', exportM2: 'Macaulay2 矩阵代码',
     copy: '复制', copied: '已复制', download: '下载', exportHelp: '矩阵代码支持 QQ 和 ZZ。尚未在此计算机上验证 CAS 执行。',
-    importHelp: '支持工作区 JSON、配方（.math 或 .txt）、杨图 JSON、双杨图 JSON 以及有理数矩阵行。',
+    importHelp: '支持工作区 JSON、配方、有理数矩阵行，以及支持的杨图、双杨图、Dynkin 图、线股、范畴、切片对象或分歧 JSON 导出。不支持的旧版选项会显示错误。',
     importText: '导入文本', replace: '替换项目', merge: '合并对象', file: '选择文件', applyImport: '导入数据', importMode: '导入方式',
     confirmNew: '新建项目将替换当前自动保存。此操作可以撤销。是否继续？',
     untitled: '未命名', coverage: '迁移覆盖情况', coverageNote: '此页面仍在开发，现有计算器继续提供完整功能。',
@@ -70,10 +72,12 @@ export const messages = {
     closeView: '关闭视图', clearDiagnostic: '清除诊断', mathematicalData: '数学数据（JSON）', strand: '弦图',
     restoreRecipe: '恢复已应用配方', draftConflict: '修改对象前，请先运行已编辑的配方或恢复已应用的配方。', inventoryLink: '功能清单（JSON）',
     workspaceDirectoryKind: '数学工作区 · 开发中', workspaceDirectoryDescription: '在多个视图中复用数学对象，保存可编辑的计算配方。计算器功能正在迁移中。', workspaceDirectoryOpen: '打开工作区',
+    exampleSlice: '立方体的六边形截面', exampleSymmetric: '对称函数的换基', clippedSection: '截面触及裁剪边界，请增大裁剪半径以查看更多部分。', emptySection: '截面为空。', coordinateProjection: '向前两个坐标轴的投影。', exactConic: '二次型为精确值，曲线采用采样显示。',
+    legacyImportNotice:'已导入支持的定义。完整项目导出保留原始数据，部分专用控件及视图设置尚未映射。', externalComputation:'此操作查询现有 LMFDB 代理，返回的数据连同来源及获取时间一并保存。',
   }
 };
 let locale = 'en';
-export function setLocale(value) { locale = value === 'zh-cn' ? 'zh-cn' : 'en'; }
+export function setLocale(value) { locale = String(value).toLowerCase() === 'zh-cn' ? 'zh-cn' : 'en'; }
 export const getLocale = () => locale;
 export function tk(key, params = {}) {
   const template = messages[locale][key];

@@ -1,4 +1,6 @@
 export const examples = [
+  { key: 'exampleSlice', source: 'cube = polytope("hypercube", 3)\nB = matrix([[1,0],[0,1],[1,1]], "QQ")\nF = frame(B, [0,0,0])\nsection = slice(cube, F, "4")', show: ['cube','section'] },
+  { key: 'exampleSymmetric', source: 'lambda = partition([2])\nf = symmetricFunction("s", lambda)\nmonomials = changeBasis(f, "m")\nproduct = symmetricProduct(f, f, "s")\npolynomial = specializeVariables(f, 3)', show: ['f','monomials','product','polynomial'] },
   { key: 'exampleSheaf', source: 'X = projectiveSpace(2)\nL = lineBundle(X, -3)\nH = sheafCohomology(L)\ndiamond = hodge(X)', show: ['X', 'L', 'H', 'diamond'] },
   { key: 'examplePartitions', source: 'lambda = partition([3, 2])\nmu = partition([2, 1])\nproduct = littlewoodRichardson(lambda, mu)\nhookData = hooks(lambda)', show: ['lambda', 'mu', 'product'] },
   { key: 'exampleMatrix', source: 'A = matrix([["1/2", "2"], ["3", "4"]], "QQ")\nAi = inverse(A)\nidentity = multiply(A, Ai)\nd = determinant(A)', show: ['A', 'Ai', 'identity'] },

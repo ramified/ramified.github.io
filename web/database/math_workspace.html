@@ -35,11 +35,11 @@
   </main>
   <footer class="statusbar"><span id="status" role="status" aria-live="polite"></span><span id="save-status" role="status"></span></footer>
   <details id="diagnostics" class="diagnostics" hidden><summary data-i18n="engineDetails">Engine details</summary><pre id="error-detail" lang="en" data-i18n-ignore></pre></details>
-  <dialog id="editor-dialog"><form id="editor-form"><div class="dialog-heading"><h2 id="editor-title" data-i18n="create">Create object</h2><button type="button" data-close-dialog data-i18n="close">Close</button></div>
+  <dialog id="editor-dialog"><form id="editor-form" novalidate><div class="dialog-heading"><h2 id="editor-title" data-i18n="create">Create object</h2><button type="button" data-close-dialog data-i18n="close">Close</button></div>
     <label><span data-i18n="operation">Operation</span><select id="operation-select"></select></label>
     <label><span data-i18n="name">Asset name</span><input id="asset-name" required pattern="[A-Za-z][A-Za-z0-9_]*" maxlength="100" autocomplete="off"></label>
-    <p id="signature" lang="en" data-i18n-ignore></p><label><span data-i18n="arguments">Arguments</span><textarea id="arguments" rows="6" spellcheck="false" lang="en" data-i18n-ignore></textarea></label>
-    <p class="hint" data-i18n="argumentHelp">Edit the arguments inside the constructor call. Asset references use their recipe names.</p><button class="primary" type="submit" data-i18n="apply">Apply edit</button>
+    <p id="signature" lang="en" data-i18n-ignore></p><p id="operation-note" class="hint" hidden></p><label><span data-i18n="arguments">Arguments</span><textarea id="arguments" rows="6" spellcheck="false" lang="en" data-i18n-ignore></textarea></label>
+    <p class="hint" data-i18n="argumentHelp">Edit the arguments inside the constructor call. Asset references use their recipe names.</p><button id="editor-submit" class="primary" type="submit" data-i18n="apply">Apply edit</button>
   </form></dialog>
   <dialog id="export-dialog"><div class="dialog-heading"><h2 data-i18n="export">Export</h2><button data-close-dialog data-i18n="close">Close</button></div>
     <select id="export-kind" data-i18n-aria-label="export" aria-label="Export"><option value="project" data-i18n="exportProject">Whole project JSON</option><option value="selection" data-i18n="exportSelection">Selected asset and dependencies</option><option value="recipe" data-i18n="exportRecipe">Recipe text</option><option value="sage" data-i18n="exportSage">SageMath matrix snippet</option><option value="macaulay2" data-i18n="exportM2">Macaulay2 matrix snippet</option></select>
@@ -50,6 +50,6 @@
     <select id="import-mode" data-i18n-aria-label="importMode" aria-label="Import mode"><option value="merge" data-i18n="merge">Merge assets</option><option value="replace" data-i18n="replace">Replace project</option></select><button id="apply-import" class="primary" data-i18n="applyImport">Import data</button>
   </dialog>
   <dialog id="coverage-dialog"><div class="dialog-heading"><h2 data-i18n="coverage">Migration coverage</h2><button data-close-dialog data-i18n="close">Close</button></div><div id="coverage-content"></div></dialog>
-  <script type="module" src="js/math_workspace/app.mjs"></script>
+  <script type="module" src="js/math_workspace/app.mjs?v=20260913-2"></script>
 </body>
 </html>

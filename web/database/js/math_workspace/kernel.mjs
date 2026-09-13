@@ -12,6 +12,9 @@ import '../strand_math/diagrammatics.js';
 import '../strand_math/basis_catalog.js';
 import * as Rep from './representation.mjs';
 import * as Sheaf from './sheaf_math.mjs';
+import * as Geometry from './geometry.mjs';
+import * as Mat from './matrix_math.mjs';
+import { lookupNumberField } from './remote.mjs';
 
 const Toric = globalThis.ToricConeMath;
 export const Strand = globalThis.StrandMath;
@@ -183,12 +186,13 @@ define('project', 'geometry', 'operation', ['points', 'matrix'], 'image = projec
 define('cone', 'geometry', 'constructor', ['rays', 'dimension?'], 'sigma = cone([[1, 0], [0, 1]])', (rays, dimension) => {
   const coords = rays.length ? pointRows(rays) : [];
   const n = dimension ?? coords[0]?.length;
-  integer(n, 1, 16); if (coords.some(r => r.length !== n)) throw new Error('Ray dimension mismatch');
+  integer(n, 2, 8); if (coords.some(r => r.length !== n)) throw new Error('Ray dimension mismatch');
   return object('cone', { ambientDimension: n, generators: coords.map((coordinates, i) => ({ id: `r${i + 1}`, label: `r${i + 1}`, coordinates })) });
 });
 define('analyzeCone', 'geometry', 'operation', ['cone'], 'faces = analyzeCone(sigma)', a => object('report', Toric.analyzeCone(data(a, 'cone'))), { accepts: ['cone'] });
 define('fan', 'geometry', 'constructor', ['specification'], 'fan1 = fan({"ambientDimension": 2, "cones": []})', spec => {
   if (!spec || typeof spec !== 'object') throw new Error('Expected fan specification');
+  integer(spec.ambientDimension, 2, 8);
   const analysis = Toric.analyzeFan(spec); if (!analysis.valid) throw new Error((analysis.issues || ['Invalid fan']).join('; '));
   return object('fan', spec);
 });
@@ -289,9 +293,155 @@ define('koszulBetti', 'sheaf', 'operation', ['variety'], 'betti = koszulBetti(X)
 define('sheafComplex', 'complex', 'constructor', ['terms'], 'complex1 = sheafComplex([{"degree":0,"sheaf":L}])', terms => {
   const seen = new Set();
   const normalized = list(terms, 100).map(t => { integer(t.degree, -100, 100); if (seen.has(t.degree)) throw new Error('Use one term per complex degree'); seen.add(t.degree); return { degree: t.degree, sheaf: data(t.sheaf, 'sheaf') }; });
+  if(normalized.some(t=>JSON.stringify(t.sheaf.base)!==JSON.stringify(normalized[0].sheaf.base))) throw new Error('Complex terms must have the same formal base specification');
   // With no differential input, this constructor explicitly specifies zero maps.
-  return object('sheafComplex', { terms: normalized.sort((a, b) => a.degree - b.degree), differentials: 'zero' });
+  return object('sheafComplex', { terms: normalized.sort((a, b) => a.degree - b.degree), differentials: 'zero' }, { interpretation:'complex-over-a-formal-geometric-specification' });
 });
+
+define('polytope', 'geometry', 'constructor', ['family', 'dimension'], 'cube = polytope("hypercube", 3)', (family, dim) => object('polytope', Geometry.standardPolytope(family, integer(dim, 2, 8)), { arithmetic: 'exact', coordinates: 'standard' }));
+define('sphere', 'geometry', 'constructor', ['center', 'radius'], 'S = sphere([0,0,0], "1")', (center, radius) => {
+  const c = list(center, 8).map(rational); if (c.length < 2 || q(radius).sign() <= 0) throw new Error('Sphere requires a positive radius and at least two coordinates');
+  return object('sphere', { center: c, radius: rational(radius), dimension: c.length }, { metric: 'standard-euclidean' });
+});
+define('slice', 'geometry', 'operation', ['object', 'frame', 'clipRadius?'], 'section = slice(cube, F, "4")', (a, b, clipRadius = '4') => {
+  const f = data(b, 'frame'), dim = f.origin.length;
+  if (f.basis[0].length !== 2) throw new Error('A two-dimensional slice needs exactly two frame columns');
+  if (a.type === 'polytope') {
+    if (a.data.dimension !== dim) throw new Error('Slice dimensions do not match');
+    return object('slice2d', Geometry.sliceHalfspaces(a.data.halfspaces, f, rational(clipRadius)), { arithmetic: 'exact', coordinates: 'frame' });
+  }
+  if (a.type === 'sphere') {
+    if (a.data.dimension !== dim) throw new Error('Slice dimensions do not match');
+    return object('conic2d', Geometry.sliceSphere(a.data, f), { arithmetic: 'exact', coordinates: 'frame' });
+  }
+  if (a.type === 'cone') {
+    if (a.data.ambientDimension !== dim) throw new Error('Slice dimensions do not match');
+    const raw = Toric.sliceCone(Toric.analyzeCone(a.data), f.origin, [f.basis.map(r => r[0]), f.basis.map(r => r[1])], { clipRadius: rational(clipRadius) });
+    const vertices = (raw.vertices || (raw.point ? [raw.point] : [])).map(p => p.exact);
+    return object('slice2d', { ...raw, vertices, clipRadius: rational(clipRadius), touchesClipBoundary: vertices.some(p => p.some(c => q(c).equals(q(clipRadius)) || q(c).equals(q(clipRadius).neg()))) }, { arithmetic: 'exact', coordinates: 'frame' });
+  }
+  throw new Error('Slice is available for polytopes, spheres and cones');
+}, { accepts: ['polytope', 'sphere', 'cone'] });
+define('vertices', 'geometry', 'operation', ['polytope'], 'P = vertices(cube)', a => object('points', { points: data(a, 'polytope').vertices }, a.context), { accepts: ['polytope'] });
+define('embedPoints', 'geometry', 'operation', ['points', 'frame'], 'ambient = embedPoints(P, F)', (a, b) => {
+  const p = data(a, 'points').points, f = data(b, 'frame'); if (p.some(row => row.length !== f.basis[0].length)) throw new Error('Coordinate and frame dimensions do not match');
+  return object('points', { points: p.map(point => Geometry.ambientPoint(f, point)) }, { arithmetic: 'exact' });
+}, { accepts: ['points'] });
+
+const basisName = value => { if (!['m','p','e','h','s'].includes(value)) throw new Error('Symmetric-function basis must be m, p, e, h or s'); return value; };
+function symmetricTerms(terms, basis) {
+  return object('symmetricFunction', { basis, terms: terms.filter(t => t.coeff.n !== 0n).map(t => ({ partition: t.part, coefficient: q(`${t.coeff.n}/${t.coeff.d}`).toString() })) }, { variables: 'infinite', arithmetic: 'exact' });
+}
+define('symmetricFunction', 'representation', 'constructor', ['basis', 'partition'], 'f = symmetricFunction("s", lambda)', (basis, a) => object('symmetricFunction', { basis: basisName(basis), terms: [{ partition: data(a, 'partition').rows, coefficient: '1' }] }, { variables: 'infinite', arithmetic: 'exact' }));
+define('changeBasis', 'representation', 'operation', ['function', 'basis'], 'monomials = changeBasis(f, "m")', (a, basis) => {
+  const f = data(a, 'symmetricFunction'); basisName(basis); const terms = new Map();
+  Rep.startSympolyComputationTimer('product');
+  try {
+    for (const term of f.terms) for (const t of Rep.sympolyBasisElementTerms(f.basis, term.partition, basis)) {
+      const key = t.part.join(','), c = q(`${t.coeff.n}/${t.coeff.d}`).mul(q(term.coefficient)); terms.set(key, (terms.get(key) || q('0')).add(c));
+    }
+    return object('symmetricFunction', { basis, terms: [...terms].filter(([,c])=>!c.isZero()).map(([key,c]) => ({ partition: key ? key.split(',').map(Number) : [], coefficient: c.toString() })) }, a.context);
+  } finally { Rep.clearSympolyComputationTimer(); }
+}, { accepts: ['symmetricFunction'] });
+define('symmetricProduct', 'representation', 'operation', ['left', 'right', 'basis?'], 'fg = symmetricProduct(f, f, "s")', (a, b, basis = 's') => {
+  const A = data(a, 'symmetricFunction'), B = data(b, 'symmetricFunction'); basisName(basis); const sum = new Map();
+  Rep.startSympolyComputationTimer('product');
+  try {
+    for (const left of A.terms) for (const right of B.terms) for (const t of Rep.infiniteSympolyProductTerms(A.basis, B.basis, basis, 'linear', left.partition, right.partition)) {
+      const key = t.part.join(','), c = q(`${t.coeff.n}/${t.coeff.d}`).mul(q(left.coefficient)).mul(q(right.coefficient)); sum.set(key,(sum.get(key)||q('0')).add(c));
+    }
+    return object('symmetricFunction', { basis, terms: [...sum].filter(([,c])=>!c.isZero()).map(([key,c])=>({partition:key?key.split(',').map(Number):[],coefficient:c.toString()})) }, a.context);
+  } finally { Rep.clearSympolyComputationTimer(); }
+}, { accepts: ['symmetricFunction'] });
+define('symmetricPlethysm', 'representation', 'operation', ['left', 'right', 'basis?'], 'composition = symmetricPlethysm(f, f, "s")', (a, b, basis = 's') => {
+  const A = data(a,'symmetricFunction'), B = data(b,'symmetricFunction'); basisName(basis);
+  if (A.terms.length !== 1 || B.terms.length !== 1 || A.terms[0].coefficient !== '1' || B.terms[0].coefficient !== '1') throw new Error('This plethysm adapter currently accepts individual basis elements');
+  Rep.startSympolyComputationTimer('plethysm');
+  try { return symmetricTerms(Rep.infiniteSympolyPlethysmTerms(A.basis,B.basis,basis,'linear',A.terms[0].partition,B.terms[0].partition),basis); }
+  finally { Rep.clearSympolyComputationTimer(); }
+}, { accepts: ['symmetricFunction'] });
+define('specializeVariables', 'representation', 'operation', ['function', 'variableCount'], 'polynomial = specializeVariables(f, 3)', (a, n) => {
+  const f = data(a,'symmetricFunction'); integer(n,1,16); const sum = new Map();
+  Rep.startSympolyComputationTimer('product');
+  try {
+    for (const t of f.terms) for (const [key,value] of Rep.finiteSympolyPolynomial(f.basis,t.partition,n)) sum.set(key,(sum.get(key)||q('0')).add(q(String(value)).mul(q(t.coefficient))));
+    return object('symmetricPolynomial',{ variables:Array.from({length:n},(_,i)=>`x${i+1}`),terms:[...sum].filter(([,c])=>!c.isZero()).map(([key,c])=>({exponents:key.split(',').map(Number),coefficient:c.toString()})) },{ring:'QQ',arithmetic:'exact'});
+  } finally { Rep.clearSympolyComputationTimer(); }
+}, { accepts:['symmetricFunction'] });
+define('permutationOf', 'strand', 'operation', ['strand'], 'permutation = permutationOf(braid)', a => {
+  const s = data(a,'strand'); if(s.word.some(r=>!['braid','coxeter'].includes(r.family))) throw new Error('A permutation image requires a braid or symmetric-group word');
+  return object('permutation',{values:Strand.permutationFromWord(s.rank,s.word.map(r=>r.index))},{conversion:'braid-to-symmetric',informationLoss:'crossing-signs'});
+},{accepts:['strand']});
+define('permutationMatrix', 'strand', 'operation', ['permutation'], 'A = permutationMatrix(permutation)', a => {
+  const values=data(a,'permutation').values; if(values.length>8) throw new Error('Workspace matrices currently have at most 8 rows');
+  return matrix(values.map((_,i)=>values.map(v=>v===i+1?'1':'0')),'ZZ');
+},{accepts:['permutation']});
+define('strandBasis', 'strand', 'operation', ['strand','target','basis?'], 'basis = strandBasis(braid,"tl","diagram")', (a,target,basis) => object('report',Strand.buildBasisCatalog({rank:data(a,'strand').rank,target,...(basis?{basis}:{})})),{accepts:['strand']});
+
+function symbolicCategory(spec) {
+  if(!spec||typeof spec!=='object') throw new Error('Expected a symbolic category specification');
+  const fields={label:'C',objectSymbol:'X',objectCondition:'',morphismElement:'f',morphismCondition:''};
+  for(const key of Object.keys(fields)) {if(spec[key]!==undefined) {if(typeof spec[key]!=='string'||spec[key].length>10000) throw new Error(`Invalid category ${key}`); fields[key]=spec[key];}}
+  if(spec.opposite!==undefined&&typeof spec.opposite!=='boolean') throw new Error('Opposite must be boolean');
+  return {...fields,opposite:!!spec.opposite};
+}
+define('categoryPresentation','category','constructor',['specification'],'C = categoryPresentation({"label":"Vect_k","objectSymbol":"V","objectCondition":"finite dimensional k-vector spaces","morphismElement":"f","morphismCondition":"k-linear"})',spec=>object('symbolicCategory',symbolicCategory(spec),{interpretation:'symbolic-category-presentation'}));
+define('oppositeCategory','category','operation',['category'],'Cop = oppositeCategory(C)',a=>{const c=data(a,'symbolicCategory');return object('symbolicCategory',{...c,opposite:!c.opposite},a.context);},{accepts:['symbolicCategory']});
+define('symbolicFunctor','category','constructor',['source','target','label','variance?'],'F = symbolicFunctor(C, Cop, "F", "contravariant")',(a,b,label,variance='covariant')=>{
+  if(typeof label!=='string'||label.length>200||!['covariant','contravariant'].includes(variance)) throw new Error('Invalid functor label or variance');
+  return object('symbolicFunctor',{source:data(a,'symbolicCategory'),target:data(b,'symbolicCategory'),label,variance},{interpretation:'declared-functor',functorLawsVerified:false});
+});
+define('lmfdbLookup','ramification','constructor',['query'],'K = lmfdbLookup("2.2.8.1")',async query=>object('numberField',await lookupNumberField(query),{origin:'external',provider:'LMFDB proxy',verification:'provider-record'}),{network:true});
+define('numberFieldSnapshot','ramification','constructor',['snapshot'],'K = numberFieldSnapshot({"field":{"label":"2.2.8.1","coeffs":["-2","0","1"]}})',snapshot=>{
+  if(!snapshot?.field||typeof snapshot.field.label!=='string') throw new Error('Expected an LMFDB field snapshot');list(snapshot.field.coeffs,32).forEach(rational);
+  return object('numberField',{payload:snapshot},{origin:'imported',verification:'unverified-snapshot'});
+});
+define('fieldFromRecord','ramification','operation',['numberField'],'extension = fieldFromRecord(K)',a=>{
+  const record=data(a,'numberField').payload.field,coeffs=record.coeffs.map(rational);
+  if(coeffs.length<2||coeffs.at(-1)!=='1') throw new Error('The defining polynomial must be monic');
+  const polynomial=coeffs.map((c,i)=>`(${c})${i?`*x${i>1?`^${i}`:''}`:''}`).join('+');
+  return object('fieldExtension',{base:{kind:'Q'},polynomial},{irreducibility:'unverified',sourceRecord:record.label});
+},{accepts:['numberField']});
+define('ramificationSnapshot','ramification','constructor',['response'],'saved = ramificationSnapshot({"schemaVersion":1,"places":[],"engine":{"name":"external"}})',response=>{
+  if(!response||!Array.isArray(response.places)||!response.engine||typeof response.engine.name!=='string') throw new Error('Expected a saved ramification response');
+  return object('ramification',response,{origin:'imported',verification:'unverified-snapshot'});
+});
+
+const numericalContext = { arithmetic: 'float64', precisionBits: 53, tolerance: 1e-10, ring: 'CC' };
+function finiteComponent(value) {
+  if (!['string','number'].includes(typeof value) || !String(value).trim() || !Number.isFinite(Number(value))) throw new Error('Expected a finite numerical component');
+  return Number(value);
+}
+function numericMatrix(rows) {
+  const result = list(rows,8).map(row=>list(row,8).map(z=>{
+    const re=finiteComponent(z && typeof z==='object'?z.re:z), im=finiteComponent(z && typeof z==='object'?(z.im??0):0);
+    return {re:String(re),im:String(im)};
+  }));
+  if(!result.length||!result[0].length||result.some(row=>row.length!==result[0].length)) throw new Error('Matrix must be nonempty and rectangular, at most 8 × 8');
+  return object('numericMatrix',{rows:result},numericalContext);
+}
+const complexRows = a => numericMatrix(data(a,'numericMatrix').rows).data.rows.map(row=>row.map(z=>new Mat.Complex(Number(z.re),Number(z.im))));
+define('numericMatrix','matrix','constructor',['rows'],'N = numericMatrix([[1,2],[3,4]])',numericMatrix);
+define('numerical','matrix','operation',['matrix'],'N = numerical(A)',a=>numericMatrix(rowsOf(a).map(row=>row.map(value=>{
+  const [n,d='1']=rational(value).split('/');
+  const result=Number(n)/Number(d); if(!Number.isFinite(result)||(result===0&&n!=='0')) throw new Error('Rational is outside the supported numerical conversion range');
+  return result;
+}))),{accepts:['matrix']});
+for(const [name,fn,keys] of [['qr',Mat.qrDecomposition,['Q','R']],['svd',Mat.svdDecomposition,['U','Sigma','V']],['polar',Mat.polarDecomposition,['U','P']],['bruhat',Mat.bruhatDecomposition,['B1','W','B2']]]) {
+  define(name,'matrix','operation',['numericMatrix'],`D = ${name}(N)`,a=>{
+    const result=fn(complexRows(a));
+    return object('matrixDecomposition',{method:name,factors:Object.fromEntries(keys.map(key=>[key,numericMatrix(result[key]).data.rows])),diagnostics:Object.fromEntries(Object.entries(result).filter(([key])=>!keys.includes(key)))},numericalContext);
+  },{accepts:['numericMatrix']});
+}
+define('matrixExponential','matrix','operation',['numericMatrix'],'E = matrixExponential(N)',a=>{
+  const rows=complexRows(a); if(rows.length!==rows[0].length) throw new Error('Expected a square matrix');
+  return numericMatrix(Mat.matrixExp(rows));
+},{accepts:['numericMatrix']});
+define('matrixFactor','matrix','operation',['decomposition','name'],'Q = matrixFactor(D,"Q")',(a,name)=>{
+  const factors=data(a,'matrixDecomposition').factors;
+  if(typeof name!=='string'||!Object.hasOwn(factors,name)) throw new Error('Unknown matrix factor');
+  return numericMatrix(factors[name]);
+},{accepts:['matrixDecomposition']});
 
 export async function execute(name, args) {
   const op = operations.get(name);
@@ -303,11 +453,15 @@ export async function execute(name, args) {
 export function describeOperations() { return [...operations.values()].map(({ run, ...meta }) => meta); }
 
 export function validateAssetValue(a) {
-  const known = ['partition','skew','tableaux','hookTable','decomposition','rootSystem','representation','report','classExpression','matrix','scalar','points','frame','cone','fan','strand','strandResult','surface','category','functor','fieldExtension','ramification','variety','sheaf','sheafComplex','invariantTable'];
+  const known = ['partition','skew','tableaux','hookTable','decomposition','rootSystem','representation','report','classExpression','matrix','scalar','points','frame','cone','fan','strand','strandResult','surface','category','functor','fieldExtension','ramification','variety','sheaf','sheafComplex','invariantTable','polytope','sphere','slice2d','conic2d','symmetricFunction','symmetricPolynomial','permutation','symbolicCategory','symbolicFunctor','numberField'];
+  known.push('numericMatrix','matrixDecomposition');
   if (!known.includes(a.type)) throw new Error(`Unsupported asset type ${a.type}`);
   const d = a.data;
   if (a.type === 'partition') partition(d.rows);
   if (a.type === 'matrix') matrix(d.rows, a.context.ring);
+  if (a.type === 'numericMatrix') numericMatrix(d.rows);
+  if (a.type === 'matrixDecomposition') { if(!d.factors||!Object.keys(d.factors).length) throw new Error('Missing matrix factors'); Object.values(d.factors).forEach(numericMatrix); }
+  if (a.type === 'cone' || a.type === 'fan') integer(d.ambientDimension,2,8);
   if (a.type === 'points') pointRows(d.points);
   if (a.type === 'rootSystem') lie(d.type, d.rank);
   if (a.type === 'representation') { lie(a.context.type, a.context.rank); partition(d.rows); if (!Array.isArray(d.labels) || d.labels.length !== a.context.rank) throw new Error('Invalid highest weight'); }
@@ -315,6 +469,13 @@ export function validateAssetValue(a) {
   if (a.type === 'strand') { integer(d.rank, 2, 16); Strand.normalizeWord(list(d.word, 1000), d.rank); }
   if (a.type === 'surface') { integer(d.snapshot?.rows, 1, 30); integer(d.snapshot?.cols, 1, 30); if (d.snapshot.rows * d.snapshot.cols > 300) throw new Error('Oversized surface'); }
   if (a.type === 'category') validateGraph(d);
+  if (a.type === 'symbolicCategory') symbolicCategory(d);
+  if (a.type === 'symbolicFunctor') { symbolicCategory(d.source);symbolicCategory(d.target);if(!['covariant','contravariant'].includes(d.variance)) throw new Error('Invalid functor variance'); }
+  if (a.type === 'numberField') {if(typeof d.payload?.field?.label!=='string') throw new Error('Invalid field record');list(d.payload.field.coeffs,32).forEach(rational);}
+  if (a.type === 'permutation') { if (!Array.isArray(d.values) || d.values.length>16 || new Set(d.values).size!==d.values.length || d.values.some(v=>!Number.isInteger(v)||v<1||v>d.values.length)) throw new Error('Invalid permutation'); }
+  if (a.type === 'symmetricFunction') { basisName(d.basis); for(const t of list(d.terms,10000)) { partition(t.partition); rational(t.coefficient); } }
+  if (a.type === 'polytope') { integer(d.dimension,2,8); pointRows(d.vertices); list(d.halfspaces,256); }
+  if (a.type === 'sphere') { integer(d.dimension,2,8); if(d.center.length!==d.dimension||q(d.radius).sign()<=0) throw new Error('Invalid sphere'); d.center.forEach(rational); }
   if (a.type === 'variety') { integer(d.dim, 0, 15); if (!['projective','curve','abelian','grassmannian','complete-intersection','product'].includes(d.type)) throw new Error('Unsupported variety'); }
   if (a.type === 'sheaf' && (!d.base || !['structure','line-bundle'].includes(d.type))) throw new Error('Unsupported sheaf');
 }

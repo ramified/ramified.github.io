@@ -845,6 +845,17 @@
             "rootSystem"
           ],
           "example": "V = representation(lambda, roots)"
+        },
+        {
+          "name": "symmetricFunction",
+          "version": 1,
+          "family": "representation",
+          "kind": "constructor",
+          "signature": [
+            "basis",
+            "partition"
+          ],
+          "example": "f = symmetricFunction(\"s\", lambda)"
         }
       ],
       "workingOperations": [
@@ -1001,6 +1012,64 @@
           "accepts": [
             "partition"
           ]
+        },
+        {
+          "name": "changeBasis",
+          "version": 1,
+          "family": "representation",
+          "kind": "operation",
+          "signature": [
+            "function",
+            "basis"
+          ],
+          "example": "monomials = changeBasis(f, \"m\")",
+          "accepts": [
+            "symmetricFunction"
+          ]
+        },
+        {
+          "name": "symmetricProduct",
+          "version": 1,
+          "family": "representation",
+          "kind": "operation",
+          "signature": [
+            "left",
+            "right",
+            "basis?"
+          ],
+          "example": "fg = symmetricProduct(f, f, \"s\")",
+          "accepts": [
+            "symmetricFunction"
+          ]
+        },
+        {
+          "name": "symmetricPlethysm",
+          "version": 1,
+          "family": "representation",
+          "kind": "operation",
+          "signature": [
+            "left",
+            "right",
+            "basis?"
+          ],
+          "example": "composition = symmetricPlethysm(f, f, \"s\")",
+          "accepts": [
+            "symmetricFunction"
+          ]
+        },
+        {
+          "name": "specializeVariables",
+          "version": 1,
+          "family": "representation",
+          "kind": "operation",
+          "signature": [
+            "function",
+            "variableCount"
+          ],
+          "example": "polynomial = specializeVariables(f, 3)",
+          "accepts": [
+            "symmetricFunction"
+          ]
         }
       ],
       "acceptanceTest": "node js/math_workspace/workspace_test.mjs",
@@ -1011,6 +1080,14 @@
           "operation": "representation",
           "version": 1,
           "acceptanceRecipe": "V = representation(lambda, roots)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "representation.symmetricFunction",
+          "status": "native",
+          "operation": "symmetricFunction",
+          "version": 1,
+          "acceptanceRecipe": "f = symmetricFunction(\"s\", lambda)",
           "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
         },
         {
@@ -1099,6 +1176,38 @@
           "operation": "giambelli",
           "version": 1,
           "acceptanceRecipe": "chern = giambelli(lambda, 3, 4)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "representation.changeBasis",
+          "status": "native",
+          "operation": "changeBasis",
+          "version": 1,
+          "acceptanceRecipe": "monomials = changeBasis(f, \"m\")",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "representation.symmetricProduct",
+          "status": "native",
+          "operation": "symmetricProduct",
+          "version": 1,
+          "acceptanceRecipe": "fg = symmetricProduct(f, f, \"s\")",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "representation.symmetricPlethysm",
+          "status": "native",
+          "operation": "symmetricPlethysm",
+          "version": 1,
+          "acceptanceRecipe": "composition = symmetricPlethysm(f, f, \"s\")",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "representation.specializeVariables",
+          "status": "native",
+          "operation": "specializeVariables",
+          "version": 1,
+          "acceptanceRecipe": "polynomial = specializeVariables(f, 3)",
           "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
         }
       ],
@@ -1837,6 +1946,8 @@
       ],
       "assets": [
         "matrix",
+        "numericMatrix",
+        "matrixDecomposition",
         "vector",
         "linearMap",
         "polynomial"
@@ -1865,7 +1976,7 @@
         "macaulay2-matrix"
       ],
       "limitations": [
-        "Workspace matrix arithmetic currently supports QQ and ZZ. Numerical, finite-field, function-field, number-field, canonical-form and polynomial-action features remain to migrate.",
+        "Exact QQ/ZZ arithmetic and explicit float64 QR, SVD, polar, Bruhat and exponential computations are available. Finite-field, function-field, number-field, canonical-form and polynomial-action features remain to migrate.",
         "Generated CAS snippets are not execution-verified on this machine."
       ],
       "migrationStatus": "partial",
@@ -1880,6 +1991,16 @@
             "ring?"
           ],
           "example": "A = matrix([[\"1\", \"2\"], [\"3\", \"4\"]], \"QQ\")"
+        },
+        {
+          "name": "numericMatrix",
+          "version": 1,
+          "family": "matrix",
+          "kind": "constructor",
+          "signature": [
+            "rows"
+          ],
+          "example": "N = numericMatrix([[1,2],[3,4]])"
         }
       ],
       "workingOperations": [
@@ -1975,6 +2096,98 @@
           "accepts": [
             "matrix"
           ]
+        },
+        {
+          "name": "numerical",
+          "version": 1,
+          "family": "matrix",
+          "kind": "operation",
+          "signature": [
+            "matrix"
+          ],
+          "example": "N = numerical(A)",
+          "accepts": [
+            "matrix"
+          ]
+        },
+        {
+          "name": "qr",
+          "version": 1,
+          "family": "matrix",
+          "kind": "operation",
+          "signature": [
+            "numericMatrix"
+          ],
+          "example": "D = qr(N)",
+          "accepts": [
+            "numericMatrix"
+          ]
+        },
+        {
+          "name": "svd",
+          "version": 1,
+          "family": "matrix",
+          "kind": "operation",
+          "signature": [
+            "numericMatrix"
+          ],
+          "example": "D = svd(N)",
+          "accepts": [
+            "numericMatrix"
+          ]
+        },
+        {
+          "name": "polar",
+          "version": 1,
+          "family": "matrix",
+          "kind": "operation",
+          "signature": [
+            "numericMatrix"
+          ],
+          "example": "D = polar(N)",
+          "accepts": [
+            "numericMatrix"
+          ]
+        },
+        {
+          "name": "bruhat",
+          "version": 1,
+          "family": "matrix",
+          "kind": "operation",
+          "signature": [
+            "numericMatrix"
+          ],
+          "example": "D = bruhat(N)",
+          "accepts": [
+            "numericMatrix"
+          ]
+        },
+        {
+          "name": "matrixExponential",
+          "version": 1,
+          "family": "matrix",
+          "kind": "operation",
+          "signature": [
+            "numericMatrix"
+          ],
+          "example": "E = matrixExponential(N)",
+          "accepts": [
+            "numericMatrix"
+          ]
+        },
+        {
+          "name": "matrixFactor",
+          "version": 1,
+          "family": "matrix",
+          "kind": "operation",
+          "signature": [
+            "decomposition",
+            "name"
+          ],
+          "example": "Q = matrixFactor(D,\"Q\")",
+          "accepts": [
+            "matrixDecomposition"
+          ]
         }
       ],
       "acceptanceTest": "node js/math_workspace/workspace_test.mjs",
@@ -1985,6 +2198,14 @@
           "operation": "matrix",
           "version": 1,
           "acceptanceRecipe": "A = matrix([[\"1\", \"2\"], [\"3\", \"4\"]], \"QQ\")",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "matrix.numericMatrix",
+          "status": "native",
+          "operation": "numericMatrix",
+          "version": 1,
+          "acceptanceRecipe": "N = numericMatrix([[1,2],[3,4]])",
           "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
         },
         {
@@ -2041,6 +2262,62 @@
           "operation": "power",
           "version": 1,
           "acceptanceRecipe": "A2 = power(A, 2)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "matrix.numerical",
+          "status": "native",
+          "operation": "numerical",
+          "version": 1,
+          "acceptanceRecipe": "N = numerical(A)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "matrix.qr",
+          "status": "native",
+          "operation": "qr",
+          "version": 1,
+          "acceptanceRecipe": "D = qr(N)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "matrix.svd",
+          "status": "native",
+          "operation": "svd",
+          "version": 1,
+          "acceptanceRecipe": "D = svd(N)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "matrix.polar",
+          "status": "native",
+          "operation": "polar",
+          "version": 1,
+          "acceptanceRecipe": "D = polar(N)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "matrix.bruhat",
+          "status": "native",
+          "operation": "bruhat",
+          "version": 1,
+          "acceptanceRecipe": "D = bruhat(N)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "matrix.matrixExponential",
+          "status": "native",
+          "operation": "matrixExponential",
+          "version": 1,
+          "acceptanceRecipe": "E = matrixExponential(N)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "matrix.matrixFactor",
+          "status": "native",
+          "operation": "matrixFactor",
+          "version": 1,
+          "acceptanceRecipe": "Q = matrixFactor(D,\"Q\")",
           "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
         }
       ],
@@ -2379,7 +2656,9 @@
         "sphere",
         "frame",
         "cone",
-        "fan"
+        "fan",
+        "slice2d",
+        "conic2d"
       ],
       "fields": [
         "points",
@@ -2396,6 +2675,7 @@
       ],
       "views": [
         "points",
+        "slice",
         "data"
       ],
       "formats": [
@@ -2403,7 +2683,7 @@
         "recipe"
       ],
       "limitations": [
-        "Interactive affine slicing, camera controls, regular-polytope builders and complete toric view interactions remain to migrate."
+        "Exact two-dimensional affine sections of supported standard polytopes and spheres are available. Camera controls, further regular-polytope builders and complete toric view interactions remain to migrate."
       ],
       "migrationStatus": "partial",
       "constructors": [
@@ -2448,6 +2728,28 @@
             "specification"
           ],
           "example": "fan1 = fan({\"ambientDimension\": 2, \"cones\": []})"
+        },
+        {
+          "name": "polytope",
+          "version": 1,
+          "family": "geometry",
+          "kind": "constructor",
+          "signature": [
+            "family",
+            "dimension"
+          ],
+          "example": "cube = polytope(\"hypercube\", 3)"
+        },
+        {
+          "name": "sphere",
+          "version": 1,
+          "family": "geometry",
+          "kind": "constructor",
+          "signature": [
+            "center",
+            "radius"
+          ],
+          "example": "S = sphere([0,0,0], \"1\")"
         }
       ],
       "workingOperations": [
@@ -2490,6 +2792,50 @@
           "accepts": [
             "fan"
           ]
+        },
+        {
+          "name": "slice",
+          "version": 1,
+          "family": "geometry",
+          "kind": "operation",
+          "signature": [
+            "object",
+            "frame",
+            "clipRadius?"
+          ],
+          "example": "section = slice(cube, F, \"4\")",
+          "accepts": [
+            "polytope",
+            "sphere",
+            "cone"
+          ]
+        },
+        {
+          "name": "vertices",
+          "version": 1,
+          "family": "geometry",
+          "kind": "operation",
+          "signature": [
+            "polytope"
+          ],
+          "example": "P = vertices(cube)",
+          "accepts": [
+            "polytope"
+          ]
+        },
+        {
+          "name": "embedPoints",
+          "version": 1,
+          "family": "geometry",
+          "kind": "operation",
+          "signature": [
+            "points",
+            "frame"
+          ],
+          "example": "ambient = embedPoints(P, F)",
+          "accepts": [
+            "points"
+          ]
         }
       ],
       "acceptanceTest": "node js/math_workspace/workspace_test.mjs",
@@ -2527,6 +2873,22 @@
           "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
         },
         {
+          "id": "geometry.polytope",
+          "status": "native",
+          "operation": "polytope",
+          "version": 1,
+          "acceptanceRecipe": "cube = polytope(\"hypercube\", 3)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "geometry.sphere",
+          "status": "native",
+          "operation": "sphere",
+          "version": 1,
+          "acceptanceRecipe": "S = sphere([0,0,0], \"1\")",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
           "id": "geometry.project",
           "status": "native",
           "operation": "project",
@@ -2548,6 +2910,30 @@
           "operation": "analyzeFan",
           "version": 1,
           "acceptanceRecipe": "fanData = analyzeFan(fan1)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "geometry.slice",
+          "status": "native",
+          "operation": "slice",
+          "version": 1,
+          "acceptanceRecipe": "section = slice(cube, F, \"4\")",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "geometry.vertices",
+          "status": "native",
+          "operation": "vertices",
+          "version": 1,
+          "acceptanceRecipe": "P = vertices(cube)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "geometry.embedPoints",
+          "status": "native",
+          "operation": "embedPoints",
+          "version": 1,
+          "acceptanceRecipe": "ambient = embedPoints(P, F)",
           "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
         }
       ],
@@ -10088,7 +10474,9 @@
       ],
       "assets": [
         "category",
-        "functor"
+        "functor",
+        "symbolicCategory",
+        "symbolicFunctor"
       ],
       "fields": [
         "objects",
@@ -10108,10 +10496,11 @@
       ],
       "formats": [
         "project-json",
-        "recipe"
+        "recipe",
+        "legacy-category-json"
       ],
       "limitations": [
-        "Workspace categories are presentation data. Functor endpoint checks do not certify composition preservation; existing condition editors and presets remain to migrate."
+        "Symbolic conditions, opposite categories and declared functor variance are retained. General composition laws are not verified. Full diagram editing and presentation export remain to migrate."
       ],
       "migrationStatus": "partial",
       "constructors": [
@@ -10137,9 +10526,46 @@
             "morphismMap"
           ],
           "example": "F = functor(C, C, {\"X\":\"X\",\"Y\":\"Y\"}, {\"f\":\"f\"})"
+        },
+        {
+          "name": "categoryPresentation",
+          "version": 1,
+          "family": "category",
+          "kind": "constructor",
+          "signature": [
+            "specification"
+          ],
+          "example": "C = categoryPresentation({\"label\":\"Vect_k\",\"objectSymbol\":\"V\",\"objectCondition\":\"finite dimensional k-vector spaces\",\"morphismElement\":\"f\",\"morphismCondition\":\"k-linear\"})"
+        },
+        {
+          "name": "symbolicFunctor",
+          "version": 1,
+          "family": "category",
+          "kind": "constructor",
+          "signature": [
+            "source",
+            "target",
+            "label",
+            "variance?"
+          ],
+          "example": "F = symbolicFunctor(C, Cop, \"F\", \"contravariant\")"
         }
       ],
-      "workingOperations": [],
+      "workingOperations": [
+        {
+          "name": "oppositeCategory",
+          "version": 1,
+          "family": "category",
+          "kind": "operation",
+          "signature": [
+            "category"
+          ],
+          "example": "Cop = oppositeCategory(C)",
+          "accepts": [
+            "symbolicCategory"
+          ]
+        }
+      ],
       "acceptanceTest": "node js/math_workspace/workspace_test.mjs",
       "capabilities": [
         {
@@ -10156,6 +10582,30 @@
           "operation": "functor",
           "version": 1,
           "acceptanceRecipe": "F = functor(C, C, {\"X\":\"X\",\"Y\":\"Y\"}, {\"f\":\"f\"})",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "category.categoryPresentation",
+          "status": "native",
+          "operation": "categoryPresentation",
+          "version": 1,
+          "acceptanceRecipe": "C = categoryPresentation({\"label\":\"Vect_k\",\"objectSymbol\":\"V\",\"objectCondition\":\"finite dimensional k-vector spaces\",\"morphismElement\":\"f\",\"morphismCondition\":\"k-linear\"})",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "category.symbolicFunctor",
+          "status": "native",
+          "operation": "symbolicFunctor",
+          "version": 1,
+          "acceptanceRecipe": "F = symbolicFunctor(C, Cop, \"F\", \"contravariant\")",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "category.oppositeCategory",
+          "status": "native",
+          "operation": "oppositeCategory",
+          "version": 1,
+          "acceptanceRecipe": "Cop = oppositeCategory(C)",
           "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
         }
       ],
@@ -10524,7 +10974,8 @@
       "assets": [
         "fieldExtension",
         "place",
-        "ramification"
+        "ramification",
+        "numberField"
       ],
       "fields": [
         "base",
@@ -10543,10 +10994,11 @@
       ],
       "formats": [
         "project-json",
-        "recipe"
+        "recipe",
+        "legacy-ramification-json"
       ],
       "limitations": [
-        "Local engine supports only its existing certified cases; unresolved places remain unresolved. Existing remote service and LMFDB selection UI remain to migrate."
+        "Local computations retain the existing certified cases. LMFDB lookup uses the existing proxy and saves provenance; live service availability is not verified by offline tests. Complete place-selection and diagram interactions remain to migrate."
       ],
       "migrationStatus": "partial",
       "constructors": [
@@ -10560,6 +11012,37 @@
             "polynomial"
           ],
           "example": "K = fieldExtension({\"kind\":\"Q\"}, \"x^2-2\")"
+        },
+        {
+          "name": "lmfdbLookup",
+          "version": 1,
+          "family": "ramification",
+          "kind": "constructor",
+          "signature": [
+            "query"
+          ],
+          "example": "K = lmfdbLookup(\"2.2.8.1\")",
+          "network": true
+        },
+        {
+          "name": "numberFieldSnapshot",
+          "version": 1,
+          "family": "ramification",
+          "kind": "constructor",
+          "signature": [
+            "snapshot"
+          ],
+          "example": "K = numberFieldSnapshot({\"field\":{\"label\":\"2.2.8.1\",\"coeffs\":[\"-2\",\"0\",\"1\"]}})"
+        },
+        {
+          "name": "ramificationSnapshot",
+          "version": 1,
+          "family": "ramification",
+          "kind": "constructor",
+          "signature": [
+            "response"
+          ],
+          "example": "saved = ramificationSnapshot({\"schemaVersion\":1,\"places\":[],\"engine\":{\"name\":\"external\"}})"
         }
       ],
       "workingOperations": [
@@ -10576,6 +11059,19 @@
           "accepts": [
             "fieldExtension"
           ]
+        },
+        {
+          "name": "fieldFromRecord",
+          "version": 1,
+          "family": "ramification",
+          "kind": "operation",
+          "signature": [
+            "numberField"
+          ],
+          "example": "extension = fieldFromRecord(K)",
+          "accepts": [
+            "numberField"
+          ]
         }
       ],
       "acceptanceTest": "node js/math_workspace/workspace_test.mjs",
@@ -10589,11 +11085,43 @@
           "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
         },
         {
+          "id": "ramification.lmfdbLookup",
+          "status": "native",
+          "operation": "lmfdbLookup",
+          "version": 1,
+          "acceptanceRecipe": "K = lmfdbLookup(\"2.2.8.1\")",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "ramification.numberFieldSnapshot",
+          "status": "native",
+          "operation": "numberFieldSnapshot",
+          "version": 1,
+          "acceptanceRecipe": "K = numberFieldSnapshot({\"field\":{\"label\":\"2.2.8.1\",\"coeffs\":[\"-2\",\"0\",\"1\"]}})",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "ramification.ramificationSnapshot",
+          "status": "native",
+          "operation": "ramificationSnapshot",
+          "version": 1,
+          "acceptanceRecipe": "saved = ramificationSnapshot({\"schemaVersion\":1,\"places\":[],\"engine\":{\"name\":\"external\"}})",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
           "id": "ramification.ramification",
           "status": "native",
           "operation": "ramification",
           "version": 1,
           "acceptanceRecipe": "places = ramification(K, {\"bound\":7,\"includeInfinite\":false})",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "ramification.fieldFromRecord",
+          "status": "native",
+          "operation": "fieldFromRecord",
+          "version": 1,
+          "acceptanceRecipe": "extension = fieldFromRecord(K)",
           "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
         }
       ],
@@ -11063,6 +11591,47 @@
           "accepts": [
             "strand"
           ]
+        },
+        {
+          "name": "permutationOf",
+          "version": 1,
+          "family": "strand",
+          "kind": "operation",
+          "signature": [
+            "strand"
+          ],
+          "example": "permutation = permutationOf(braid)",
+          "accepts": [
+            "strand"
+          ]
+        },
+        {
+          "name": "permutationMatrix",
+          "version": 1,
+          "family": "strand",
+          "kind": "operation",
+          "signature": [
+            "permutation"
+          ],
+          "example": "A = permutationMatrix(permutation)",
+          "accepts": [
+            "permutation"
+          ]
+        },
+        {
+          "name": "strandBasis",
+          "version": 1,
+          "family": "strand",
+          "kind": "operation",
+          "signature": [
+            "strand",
+            "target",
+            "basis?"
+          ],
+          "example": "basis = strandBasis(braid,\"tl\",\"diagram\")",
+          "accepts": [
+            "strand"
+          ]
         }
       ],
       "acceptanceTest": "node js/math_workspace/workspace_test.mjs",
@@ -11089,6 +11658,30 @@
           "operation": "strandRelations",
           "version": 1,
           "acceptanceRecipe": "relations = strandRelations(braid, {\"target\":\"tl\"})",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "strand.permutationOf",
+          "status": "native",
+          "operation": "permutationOf",
+          "version": 1,
+          "acceptanceRecipe": "permutation = permutationOf(braid)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "strand.permutationMatrix",
+          "status": "native",
+          "operation": "permutationMatrix",
+          "version": 1,
+          "acceptanceRecipe": "A = permutationMatrix(permutation)",
+          "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
+        },
+        {
+          "id": "strand.strandBasis",
+          "status": "native",
+          "operation": "strandBasis",
+          "version": 1,
+          "acceptanceRecipe": "basis = strandBasis(braid,\"tl\",\"diagram\")",
           "validation": "See operation smoke tests and workflow fixtures; native does not imply legacy parity."
         }
       ],

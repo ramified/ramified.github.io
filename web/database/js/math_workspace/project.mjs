@@ -118,8 +118,8 @@ export class ProjectStore {
         const value = await this.executor(s.operation, args, { signal });
         const a = changeAsset(old.assets.find(a => a.name === s.name), s.name, value, dependencies);
         next.assets.push(a); byName.set(s.name, a);
-        if (this.registry.get(s.operation).kind === 'operation') {
-          next.computations.push({ id: uid(), operation: s.operation, version: this.registry.get(s.operation).version, inputs, parameters: clone(s.args), outputId: a.id, status: 'success', completed: new Date().toISOString(), provenance: 'workspace-engine' });
+        if (this.registry.get(s.operation).kind === 'operation' || this.registry.get(s.operation).network) {
+          next.computations.push({ id: uid(), operation: s.operation, version: this.registry.get(s.operation).version, inputs, parameters: clone(s.args), outputId: a.id, status: 'success', completed: new Date().toISOString(), provenance: value.context?.origin === 'external' ? 'external-service' : 'workspace-engine' });
         }
       } catch (e) { e.line = s.line; e.statement = s.name; throw e; }
     }
@@ -132,6 +132,32 @@ export class ProjectStore {
     next.computations = [...past, ...next.computations].slice(-1000);
     this.commit(next);
     return next;
+  }
+  async appendStatement(text, { signal } = {}) {
+    const statements = parseRecipe(text);
+    if (statements.length !== 1) fail('Expected one constructor or operation');
+    const s = statements[0], old = this.project, generation = this.generation;
+    if (old.assets.some(a => a.name === s.name)) fail('Asset name already exists');
+    const op = this.registry.get(s.operation);
+    if (!op) fail(`Unknown operation ${s.operation}`);
+    const resolve = name => {
+      const a = old.assets.find(a => a.name === name);
+      if (!a) fail(`Missing input ${name}`);
+      if (a.status === 'stale') fail(`Input ${name} is stale; recompute it first`);
+      return a;
+    };
+    const inputs = [...new Set(references(s.args))].map(resolve);
+    const value = await this.executor(s.operation,s.args.map(v=>resolveValue(v,n=>valueOf(resolve(n)))),{signal});
+    if (signal?.aborted) throw new DOMException('Cancelled','AbortError');
+    if (generation !== this.generation) fail('Project changed during computation; results were not applied');
+    const next = clone(old), a = changeAsset(undefined,s.name,value,inputs.map(a=>a.id));
+    next.assets.push(a); next.statements.push(s);
+    if(op.kind === 'operation' || op.network) next.computations.push({id:uid(),operation:s.operation,version:op.version,inputs:inputs.map(a=>({id:a.id,revision:a.revision})),parameters:clone(s.args),outputId:a.id,status:'success',completed:new Date().toISOString(),provenance:value.context?.origin==='external'?'external-service':'workspace-engine'});
+    // Keep unexecuted text intact; adding an asset must not discard a draft.
+    next.recipeDraft = `${old.recipeDraft.trimEnd()}${old.recipeDraft.trim()?'\n':''}${printRecipe(statements)}`;
+    next.views[next.activeView].assetIds.push(a.id);
+    this.commit(next);
+    return a;
   }
   async editSource(id, args, { signal } = {}) {
     const old = this.project.assets.find(a => a.id === id);
@@ -176,6 +202,9 @@ export class ProjectStore {
     p.assets = p.assets.filter(a => needed.has(a.id)); const names = new Set(p.assets.map(a => a.name));
     p.statements = p.statements.filter(s => names.has(s.name)); p.computations = p.computations.filter(c => needed.has(c.outputId));
     p.views.forEach(v => { v.assetIds = v.assetIds.filter(id => needed.has(id)); }); p.recipeDraft = printRecipe(p.statements);
+    // Whole legacy files may contain unselected objects. Only whole-project
+    // exports retain those originals; selection exports contain the native closure.
+    delete p.legacyImports;
     return p;
   }
   importProject(raw, merge = false) {
@@ -195,6 +224,7 @@ export class ProjectStore {
     p.statements.push(...imported.statements.map(s => ({ ...s, name: names.get(s.name), args: s.args.map(remap) })));
     p.computations.push(...imported.computations.map(c => ({ ...c, id: uid(), outputId: ids.get(c.outputId), inputs: c.inputs.map(r => ({ ...r, id: ids.get(r.id) })), parameters: c.parameters.map(remap) })));
     p.views.push(...imported.views.map(v => ({ ...v, id: uid(), assetIds: v.assetIds.map(id => ids.get(id)) })));
+    p.legacyImports = [...(p.legacyImports || []), ...(imported.legacyImports || [])];
     p.recipeDraft = printRecipe(p.statements); this.commit(p);
   }
 }
