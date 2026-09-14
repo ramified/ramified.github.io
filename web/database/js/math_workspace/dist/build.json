@@ -1,0 +1,66 @@
+{
+  "bundler": "esbuild@0.25.12",
+  "sha256": "7ddeef902f57fe8ebb16a97a90d06be215f42c0fcb82b6c739b5d5b74853572a",
+  "editors": [
+    {
+      "id": "slice",
+      "source": "higher_dimensional_slice_calculator.html",
+      "status": "parity-pending"
+    },
+    {
+      "id": "young",
+      "source": "young_diagrams.html",
+      "status": "parity-pending"
+    },
+    {
+      "id": "double-young",
+      "source": "double_young_diagram.html",
+      "status": "parity-pending"
+    },
+    {
+      "id": "production",
+      "source": "double_young_diagram_production_process.html",
+      "status": "parity-pending"
+    },
+    {
+      "id": "dynkin",
+      "source": "dynkin_diagram_calculator.html",
+      "status": "parity-pending"
+    },
+    {
+      "id": "strand",
+      "source": "strand_diagram_calculator.html",
+      "status": "parity-pending"
+    },
+    {
+      "id": "matrix",
+      "source": "matrix_calculator.html",
+      "status": "parity-pending"
+    },
+    {
+      "id": "sheaf",
+      "source": "sheaf_calculator.html",
+      "status": "parity-pending"
+    },
+    {
+      "id": "complex",
+      "source": "sheaf_complex_calculator.html",
+      "status": "parity-pending"
+    },
+    {
+      "id": "mosaic",
+      "source": "mosaic_calculator.html",
+      "status": "parity-pending"
+    },
+    {
+      "id": "category",
+      "source": "category_calculator.html",
+      "status": "parity-pending"
+    },
+    {
+      "id": "ramification",
+      "source": "place_ramification_calculator.html",
+      "status": "parity-pending"
+    }
+  ]
+}

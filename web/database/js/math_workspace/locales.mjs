@@ -1,5 +1,9 @@
 export const messages = {
   en: {
+    loadingWorkspace:'Loading workspace…',
+    mainCanvas:'Main canvas',canvasView:'Canvas view',
+    addCard:'Add card',hideCard:'Hide {{name}}',moveCardUp:'Move {{name}} up',moveCardDown:'Move {{name}} down',cardUnavailable:'{{name}} — unavailable for the current selection',
+    openCalculator:'Open calculator', calculator:'Calculator',assetWorkspace:'Shared assets',closeCalculator:'Close calculator',calculatorTabs:'Calculator and asset tabs',calculatorHint:'Open the original cards and interactive canvas in a workspace tab.',
     title: 'Mathematical Workspace', subtitle: 'Objects · views · reproducible computations', home: 'Toolkit',
     projectName: 'Project name', new: 'New', import: 'Import', export: 'Export', undo: 'Undo', redo: 'Redo', language: 'Language',
     library: 'Assets', search: 'Search assets', create: 'Create object', createObject: 'Create object', emptyLibrary: 'Your mathematical objects will appear here.',
@@ -38,6 +42,10 @@ export const messages = {
     legacyImportNotice:'Supported definitions imported. Original legacy data is retained in whole-project exports; specialised controls and view settings may not yet be mapped.', externalComputation:'This operation queries the existing LMFDB proxy. The returned record is saved with its source and retrieval time.',
   },
   'zh-cn': {
+    loadingWorkspace:'正在加载工作区…',
+    mainCanvas:'主画布',canvasView:'画布视图',
+    addCard:'添加卡片',hideCard:'隐藏 {{name}}',moveCardUp:'上移 {{name}}',moveCardDown:'下移 {{name}}',cardUnavailable:'{{name}} — 当前选择不可用',
+    openCalculator:'打开计算器', calculator:'计算器',assetWorkspace:'共享对象',closeCalculator:'关闭计算器',calculatorTabs:'计算器与对象标签页',calculatorHint:'在工作区标签页中打开原有的卡片和交互画布。',
     title: '数学工作区', subtitle: '对象 · 视图 · 可复现计算', home: '工具集',
     projectName: '项目名称', new: '新建', import: '导入', export: '导出', undo: '撤销', redo: '重做', language: '语言',
     library: '数学对象', search: '搜索对象', create: '创建对象', createObject: '创建对象', emptyLibrary: '创建的数学对象将显示在这里。',

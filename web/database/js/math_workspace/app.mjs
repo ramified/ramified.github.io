@@ -1,5 +1,5 @@
-import { operations } from './kernel.mjs?v=20260913-2';
-import { ProjectStore, newProject, validateProject } from './project.mjs?v=20260913-2';
+import { operations } from './kernel.mjs';
+import { ProjectStore, newProject, validateProject } from './project.mjs';
 import { workerExecutor } from './executor.mjs';
 import { parseRecipe, printRecipe, printValue, literal } from './recipe.mjs';
 import { loadProject, saveProject } from './persistence.mjs';
@@ -8,9 +8,40 @@ import { renderAsset, el, code } from './views.mjs';
 import { families, typeFamily, buildCatalog } from './catalog.mjs';
 import { detectImport, matrixCAS } from './formats.mjs';
 import { examples } from './examples.mjs';
+import nativeEditors from 'workspace:editors';
+import {editors,editorName} from './editors/catalog.mjs';
 
+export async function startWorkspace(){
 const $ = id => document.getElementById(id);
 const store = new ProjectStore(operations, workerExecutor);
+const mountedEditors=new Map();let calculatorSaveTimer;
+function snapshotEditors(){for(const [id,entry] of mountedEditors){const session=store.project.calculatorSessions.find(s=>s.id===id);if(session&&entry.snapshot===session.snapshot){session.snapshot=entry.editor.capture();entry.snapshot=session.snapshot;}}}
+function calculatorChanged(){clearTimeout(calculatorSaveTimer);calculatorSaveTimer=setTimeout(()=>{try{snapshotEditors();persist();}catch(e){report(e);}},450);}
+function drawCalculators(){
+  const p=store.project,active=p.activeCalculator;
+  for(const [id,entry] of mountedEditors)if(!p.calculatorSessions.some(s=>s.id===id)){entry.editor.dispose();mountedEditors.delete(id);}
+  const bar=$('calculator-tabs');bar.replaceChildren();
+  const assetTab=button('assetWorkspace',()=>{snapshotEditors();p.activeCalculator=null;render();persist();});assetTab.setAttribute('role','tab');assetTab.setAttribute('aria-selected',String(active===null));bar.append(assetTab);
+  for(const session of p.calculatorSessions){
+    const tab=el('button',session.name);tab.type='button';tab.setAttribute('role','tab');tab.setAttribute('aria-selected',String(active===session.id));tab.onclick=()=>{snapshotEditors();p.activeCalculator=session.id;render();persist();};bar.append(tab);
+  }
+  document.body.classList.toggle('calculator-active',!!active);$('calculator-area').hidden=!active;
+  for(const [id,entry] of mountedEditors)if(id!==active)entry.editor.deactivate();
+  if(!active)return;
+  const session=p.calculatorSessions.find(s=>s.id===active);let entry=mountedEditors.get(active);
+  if(!entry){
+    const factory=nativeEditors[session.family];if(!factory)throw new Error(`Unknown calculator ${session.family}`);
+    const host=el('section',undefined,'native-calculator');host.dataset.sessionId=active;$('calculator-content').append(host);
+    let editor;try{editor=factory.mount(host,{id:active,snapshot:session.snapshot,onChange:calculatorChanged,onError:report});}catch(error){host.remove();throw error;}
+    entry={editor,snapshot:session.snapshot};mountedEditors.set(active,entry);
+  }else if(entry.snapshot!==session.snapshot&&session.snapshot){entry.editor.restore(session.snapshot);entry.snapshot=session.snapshot;}
+  entry.editor.activate();$('calculator-title').textContent=session.name;
+}
+function openCalculator(family){
+  snapshotEditors();const e=editors.find(e=>e.id===family);if(!e)throw new Error('Unknown calculator');
+  const p=structuredClone(store.project),name=editorName(e,getLocale()),n=p.calculatorSessions.filter(s=>s.family===family).length+1;
+  const session={id:crypto.randomUUID(),family,version:1,name:n>1?`${name} ${n}`:name,snapshot:null};p.calculatorSessions.push(session);p.activeCalculator=session.id;commit(p);
+}
 let selected = null, controller = null, editing = null, saveTimer, renderEpoch = 0;
 const current = () => store.project.assets.find(a => a.id === selected);
 const status = (key, params) => { $('status').textContent = tk(key, params); };
@@ -23,6 +54,7 @@ function report(error) {
   if (dialog) { dialog.querySelector('.dialog-error')?.remove(); const message = el('div', tk('validationFailed'), 'dialog-error'); message.setAttribute('role', 'alert'); message.append(code(error.message)); dialog.append(message); }
 }
 async function persist() {
+  snapshotEditors();
   $('save-status').textContent = tk('saving');
   try { await saveProject(store.project); $('save-status').textContent = tk('saved'); }
   catch (e) { $('save-status').textContent = tk('storageError'); }
@@ -127,6 +159,7 @@ async function drawCanvases(epoch) {
   }
 }
 async function render() {
+  try {
   const epoch = ++renderEpoch, p = store.project;
   $('project-name').value = p.name; $('recipe').value = p.recipeDraft; $('compare').checked = p.compare;
   if (!p.assets.some(a => a.id === selected)) selected = null;
@@ -134,7 +167,9 @@ async function render() {
   const tabs = $('view-tabs'); tabs.replaceChildren();
   p.views.forEach((v, i) => { const b = el('button', tk('view', { n: i + 1 })); b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(p.activeView === i)); b.onclick = () => { const next = structuredClone(p); next.activeView = i; commit(next); }; tabs.append(b); });
   $('undo').disabled = !store.undoStack.length; $('redo').disabled = !store.redoStack.length;
+  drawCalculators();
   await drawCanvases(epoch);
+  } catch(error) { report(error); }
 }
 function run(text, showNames) {
   return action(async signal => {
@@ -213,19 +248,23 @@ $('run').onclick = () => run($('recipe').value);
 $('cancel').onclick = () => controller?.abort();
 $('restore-recipe').onclick = () => { const p = structuredClone(store.project); p.recipeDraft = printRecipe(p.statements); commit(p); };
 $('create').onclick = () => openEditor('create');
+$('open-calculator').onclick=()=>{const select=$('calculator-choice');select.replaceChildren();for(const e of editors){const option=el('option',editorName(e,getLocale()));option.value=e.id;select.append(option);}$('calculator-dialog').showModal();};
+$('calculator-open').onclick=()=>{try{openCalculator($('calculator-choice').value);$('calculator-dialog').close();}catch(e){report(e);}};
+$('calculator-close').onclick=()=>{snapshotEditors();const p=structuredClone(store.project);p.calculatorSessions=p.calculatorSessions.filter(s=>s.id!==p.activeCalculator);p.activeCalculator=p.calculatorSessions.at(-1)?.id||null;commit(p);};
 $('add-view').onclick = () => { store.addView(); render(); persist(); };
 $('compare').onchange = () => { const p = structuredClone(store.project); p.compare = $('compare').checked; commit(p); };
 $('search').oninput = drawLibrary;
-$('undo').onclick = () => { store.undo(); render(); persist(); };
-$('redo').onclick = () => { store.redo(); render(); persist(); };
+$('undo').onclick = () => { snapshotEditors(); store.undo(); render(); persist(); };
+$('redo').onclick = () => { snapshotEditors(); store.redo(); render(); persist(); };
 $('project-name').onchange = () => { const p = structuredClone(store.project); p.name = $('project-name').value || tk('untitled'); commit(p); };
-$('new-project').onclick = () => { if (store.project.assets.length && !confirm(tk('confirmNew'))) return; store.commit(newProject(tk('untitled'))); selected = null; render(); persist(); };
+$('new-project').onclick = () => { if ((store.project.assets.length || store.project.calculatorSessions.length) && !confirm(tk('confirmNew'))) return; snapshotEditors();store.commit(newProject(tk('untitled'))); selected = null; render(); persist(); };
 $('recipe').oninput = () => { store.project.recipeDraft = $('recipe').value; clearTimeout(saveTimer); saveTimer = setTimeout(persist, 350); };
 $('recipe').onkeydown = e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run($('recipe').value); } };
 document.querySelectorAll('[data-close-dialog]').forEach(b => { b.onclick = () => b.closest('dialog').close(); });
 
 let exportValue = '', exportExtension = 'json';
 function refreshExport() {
+  snapshotEditors();
   const kind = $('export-kind').value;
   try {
     exportExtension = kind === 'recipe' ? 'math' : kind === 'sage' ? 'sage' : kind === 'macaulay2' ? 'm2' : 'json';
@@ -266,10 +305,13 @@ function language(value) {
 $('examples').onchange = () => { if ($('examples').value !== '') openExample(examples[Number($('examples').value)]); $('examples').value = ''; };
 $('language').onchange = () => language($('language').value);
 try { setLocale(localStorage.getItem('ramified.site.language') || 'en'); } catch {}
-let restoreError;
-try { const saved = await loadProject(); if (saved) store.project = validateProject(saved, operations); }
-catch (e) { restoreError = e; }
+let restoreError,storageUnavailable=false,saved;
+try { saved = await loadProject(); } catch { storageUnavailable=true; }
+try { if(saved)store.project=validateProject(saved,operations); }catch(e){restoreError=e;}
 language(getLocale());
+busy(false);$('startup-notice').hidden=true;
+if(storageUnavailable)$('save-status').textContent=tk('storageError');
 if (restoreError) report(restoreError);
 // Read-only inspection hook for automated browser acceptance checks.
 globalThis.MathWorkspace = Object.freeze({ snapshot: () => structuredClone(store.project), operations: () => [...operations.keys()] });
+}

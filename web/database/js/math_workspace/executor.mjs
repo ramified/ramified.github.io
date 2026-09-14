@@ -1,9 +1,11 @@
+import workers from 'workspace:workers';
 export function workerExecutor(operation, args, { signal } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new DOMException('Cancelled', 'AbortError'));
-    const worker = new Worker(new URL('./worker.mjs', import.meta.url), { type: 'module' });
+    const url=URL.createObjectURL(new Blob([workers.workspace],{type:'text/javascript'}));
+    const worker = new Worker(url);
     let timer;
-    const finish = (fn, value) => { clearTimeout(timer); worker.terminate(); signal?.removeEventListener('abort', cancel); fn(value); };
+    const finish = (fn, value) => { clearTimeout(timer); worker.terminate(); URL.revokeObjectURL(url); signal?.removeEventListener('abort', cancel); fn(value); };
     const cancel = () => finish(reject, new DOMException('Cancelled', 'AbortError'));
     signal?.addEventListener('abort', cancel, { once: true });
     timer = setTimeout(() => finish(reject, new Error('Computation exceeded the 30 second workspace budget')), 30000);

@@ -9,10 +9,62 @@ import { examples } from './examples.mjs';
 import { detectImport, matrixCAS } from './formats.mjs';
 import { messages, tk, setLocale } from './locales.mjs';
 import { buildCatalog } from './catalog.mjs';
+import {encodeState,decodeState,applyState} from './editors/state.mjs';
+import {loadProject} from './persistence.mjs';
 const store = () => new ProjectStore(operations, execute);
 const get = (s, name) => s.project.assets.find(a => a.name === name);
 const P = rows => execute('partition', [rows]);
 const M = rows => execute('matrix', [rows]);
+
+test('unavailable or blocked local storage rejects without leaving startup pending',async()=>{
+  const original=Object.getOwnPropertyDescriptor(globalThis,'indexedDB');
+  try{
+    Object.defineProperty(globalThis,'indexedDB',{configurable:true,value:{open(){throw new Error('Storage disabled');}}});
+    await assert.rejects(loadProject(),/Storage disabled/);
+    let request,closed=false;
+    Object.defineProperty(globalThis,'indexedDB',{configurable:true,value:{open(){request={result:{close(){closed=true;}}};queueMicrotask(()=>request.onblocked());return request;}}});
+    await assert.rejects(loadProject(),/blocked/);request.onsuccess();assert.equal(closed,true);
+  }finally{if(original)Object.defineProperty(globalThis,'indexedDB',original);else delete globalThis.indexedDB;}
+});
+
+test('v1 migration preserves exact assets, view references and computation history',async()=>{
+  const s=store();await s.runRecipe('A = matrix([["9007199254740993","1/7"]])\nB = transpose(A)');
+  const old=structuredClone(s.project);old.version=1;delete old.calculatorSessions;delete old.activeCalculator;
+  const migrated=validateProject(JSON.parse(JSON.stringify(old)),operations);
+  assert.equal(migrated.version,2);assert.deepEqual(migrated.calculatorSessions,[]);assert.equal(migrated.activeCalculator,null);
+  for(const field of ['assets','computations','statements','views','recipeDraft'])assert.deepEqual(migrated[field],old[field]);
+});
+
+test('mixed projects preserve editor layouts through recipes, merge, close and undo',async()=>{
+  const s=store();await s.runRecipe('lambda = partition([3,2])');
+  const session={id:'session-1',version:1,family:'slice',name:'Slicing',snapshot:{version:1,model:encodeState({objects:[{id:'object-1',size:2}],camera:[1,2,3]}),ui:{dock:{order:['viewport','source'],cards:[{key:'source',hidden:true}]}},storage:{mode:'modify'}}};
+  const p=structuredClone(s.project);p.calculatorSessions=[session];p.activeCalculator=session.id;s.commit(p);
+  const serialized=JSON.parse(JSON.stringify(s.project));assert.deepEqual(validateProject(serialized,operations),s.project);
+  await s.runRecipe('lambda = partition([4,2])');assert.deepEqual(s.project.calculatorSessions,[session]);
+  s.importProject(serialized,true);assert.equal(s.project.calculatorSessions.length,2);assert.notEqual(s.project.calculatorSessions[1].id,session.id);
+  assert.deepEqual(s.project.calculatorSessions[1].snapshot,session.snapshot);
+  s.project.calculatorSessions[1].snapshot.ui.dock.order.reverse();assert.deepEqual(s.project.calculatorSessions[0].snapshot.ui.dock.order,['viewport','source']);
+  const before=structuredClone(s.project),closed=structuredClone(before);closed.calculatorSessions=[];closed.activeCalculator=null;s.commit(closed);s.undo();assert.deepEqual(s.project,before);
+  assert.deepEqual(s.exportSelection([get(s,'lambda').id]).calculatorSessions,[]);
+});
+
+test('session codec restores mathematical classes and collection types without saving runtime resources',()=>{
+  class Rational{constructor(n,d){this.n=n;this.d=d;}text(){return `${this.n}/${this.d}`;}}
+  const classes={Rational},model={value:new Rational(9007199254740993n,7n),map:new Map([['x',new Set([2,3])]]),frame:new Float64Array([.5,1]),callback:()=>{}};
+  const decoded=decodeState(JSON.parse(JSON.stringify(encodeState(model,classes))),classes);
+  assert.equal(decoded.value.text(),'9007199254740993/7');assert.deepEqual(decoded.map,model.map);assert.deepEqual(decoded.frame,model.frame);assert.equal(decoded.callback,undefined);
+  const callback=()=>1,target={...model};applyState(target,decoded);assert.equal(target.callback,model.callback);
+  assert.equal(decodeState(encodeState(Infinity)),Infinity);assert.equal(decodeState(encodeState(1e20)),1e20);
+  assert.throws(()=>decodeState({$kind:'object',entries:[['__proto__',{}]]}),/Invalid session/);
+});
+
+test('malformed calculator imports fail before changing a mixed project',()=>{
+  const s=store(),original=structuredClone(s.project);
+  for(const snapshot of [[],{version:99,ui:{},storage:{}},{version:1,ui:{},storage:{},model:{$kind:'object',entries:[['__proto__',1]]}}]){
+    const p=structuredClone(original);p.calculatorSessions=[{id:'bad',family:'slice',name:'Bad',version:1,snapshot}];
+    assert.throws(()=>s.importProject(p));assert.deepEqual(s.project,original);
+  }
+});
 
 test('recipe roundtrip, comments, quoted exact numbers, nested references', () => {
   const p = parseRecipe('# example\nA = matrix([["9007199254740993", "1/3"]], "QQ")\nB = sample({"v":[A,true,null],"label":"a\\nb"})');
@@ -27,8 +79,10 @@ test('appendStatement creates one object without rerunning existing recipe', asy
   assert.match(s.project.recipeDraft,/B = partition/);
 });
 test('constructor names use an explicit validation path instead of silent browser blocking', () => {
-  assert.match('<form id="editor-form" novalidate>', /novalidate/);
-  assert.match(fs.readFileSync(new URL('../../math_workspace.html', import.meta.url), 'utf8'), /app\.mjs\?v=/);
+  const html=fs.readFileSync(new URL('../../math_workspace.html', import.meta.url), 'utf8');
+  assert.match(html, /<form id="editor-form" novalidate>/);
+  assert.match(html, /<script src="js\/math_workspace\/dist\/workspace.js(?:\?[^" ]*)?"[^>]*><\/script>/);
+  assert.doesNotMatch(html, /<script[^>]*type="module"/);
 });
 test('recipe rejects executable code, unsafe numbers, duplicate names and records', () => {
   for (const input of ['x = eval("alert(1)")\nx = partition([])', 'x = partition([9007199254740993])', 'x = partition([1]); alert(1)', 'x = partition([1+2])', 'x = window.alert(1)', 'x = f({"__proto__":1})', 'x = f({"a":1,"a":2})', 'x = f("unclosed)']) assert.throws(() => parseRecipe(input), undefined, input);

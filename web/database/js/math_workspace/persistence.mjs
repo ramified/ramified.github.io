@@ -1,8 +1,14 @@
 function database() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('pure-math-workspace', 1);
+    let finished=false;
+    const fail=error=>{if(finished)return;finished=true;clearTimeout(timer);reject(error);};
+    const timer=setTimeout(()=>fail(new Error('Local storage did not respond')),4000);
+    let request;
+    try{request=indexedDB.open('pure-math-workspace',1);}catch(error){fail(error);return;}
     request.onupgradeneeded = () => request.result.createObjectStore('projects');
-    request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+    request.onsuccess = () => {if(finished){request.result.close();return;}finished=true;clearTimeout(timer);resolve(request.result);};
+    request.onerror = () => fail(request.error);
+    request.onblocked = () => fail(new Error('Local storage is blocked by another open page'));
   });
 }
 async function transact(mode, value) {

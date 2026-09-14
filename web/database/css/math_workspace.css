@@ -6,3 +6,7 @@
 @media(max-width:650px){.workspace-header{padding:12px;gap:10px}.brand h1{font-size:22px}.toolbar{width:100%}.coverage-banner{padding:8px 12px}.workspace-shell{display:flex;flex-direction:column}.library{border-right:0;border-bottom:1px solid var(--line);max-height:230px}#asset-list{display:flex;gap:18px;overflow:auto}.asset-group{margin-top:10px;min-width:150px}#canvases.comparison{grid-template-columns:1fr}.canvas-pane{padding:12px}.workspace-centre{min-height:550px}.recipe-toolbar{flex-wrap:wrap}.recipe-toolbar select{max-width:100%}.statusbar{position:static;flex-wrap:wrap}.math-workspace button{min-height:36px}}
 
 .math-workspace dialog.dialog-fallback{display:block;position:fixed;inset:5vh auto auto 50%;transform:translateX(-50%);z-index:20}
+#calculator-tabs{display:flex;gap:6px;padding:8px 18px;overflow-x:auto;border-bottom:1px solid var(--line)}
+#calculator-tabs button{white-space:nowrap}#calculator-tabs [aria-selected=true]{background:var(--ink);color:white}
+.calculator-active .workspace-shell{display:none}.calculator-heading{display:flex;align-items:center;justify-content:space-between;padding:8px 18px;background:var(--paper)}.calculator-heading h2{margin:0}
+#calculator-content{min-height:70vh}.native-calculator{display:block;min-height:70vh}.native-calculator[hidden],#calculator-area[hidden]{display:none!important}

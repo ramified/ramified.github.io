@@ -38,8 +38,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 76.4,
-      "y": 81.4,
+      "x": 76.3,
+      "y": 81.2,
       "childGraph": {
         "title": "Sheaf Calculator",
         "nodes": [],
@@ -73,8 +73,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 116.6,
-      "y": 309.7
+      "x": 116.4,
+      "y": 309
     },
     {
       "id": "n39",
@@ -95,8 +95,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 292.2,
-      "y": 370.6
+      "x": 291.8,
+      "y": 369.8
     },
     {
       "id": "n58",
@@ -110,8 +110,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 269.1,
-      "y": 81.4
+      "x": 268.8,
+      "y": 81.2
     },
     {
       "id": "n63",
@@ -132,8 +132,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#8b5f2a",
       "fillColor": "#fff7df",
-      "x": 469.7,
-      "y": 370.6,
+      "x": 469.1,
+      "y": 369.8,
       "childGraph": {
         "title": "double click",
         "nodes": [
@@ -232,8 +232,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 602.1,
-      "y": 181
+      "x": 601.3,
+      "y": 180.6
     },
     {
       "id": "n66",
@@ -254,8 +254,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#2f5f9f",
       "fillColor": "#eef4fb",
-      "x": 475.1,
-      "y": 89.2
+      "x": 474.4,
+      "y": 89
     },
     {
       "id": "n68",
@@ -266,13 +266,13 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "bugs",
           "label": "bugs",
           "type": "checkbox",
-          "text": "- [x] fix wrapped bug\n- [x] wrapped chess game has nearly no animation(and it stucked),\n- [x] For settings, display & sound should be on the first position\n- [ ] Settings can hide many cards\n- [x] add an extra energy game level\n- [x] For the N queens puzzle on the torus, the \"collect\" row should not belong to the whole chart, it should only appear once on the bottom of the scrren, and above the periodic tiles.\n- [x] In the wrapped mode, if a glued boundary is removed from the display, its cursor style should not appear neither\n- [x] 2048 games should be fixed. The heavy stroke inside should be removed.\n- [x] For the 2048, When numbers pass through the glued boundary it should be rotated like the balls in Billiard games.(current rotation is wrong, which is clear from the half_glued preset, according to the glued direction the rotation is trivial, but the realization is wrong)\n- [x] Add some balls for Billiard presets\n- [ ] Add the link to topo-sudoku"
+          "text": "- [x] fix wrapped bug\n- [x] wrapped chess game has nearly no animation(and it stucked),\n- [x] For settings, display & sound should be on the first position\n- [?] Settings can hide many cards\n- [x] add an extra energy game level\n- [x] For the N queens puzzle on the torus, the \"collect\" row should not belong to the whole chart, it should only appear once on the bottom of the scrren, and above the periodic tiles.\n- [x] In the wrapped mode, if a glued boundary is removed from the display, its cursor style should not appear neither\n- [x] 2048 games should be fixed. The heavy stroke inside should be removed.\n- [x] For the 2048, When numbers pass through the glued boundary it should be rotated like the balls in Billiard games.(current rotation is wrong, which is clear from the half_glued preset, according to the glued direction the rotation is trivial, but the realization is wrong)\n- [x] Add some balls for Billiard presets\n- [ ] Add the link to topo-sudoku"
         },
         {
           "id": "more-bugs",
           "label": "more bugs",
           "type": "checkbox",
-          "text": "- [x] glued arrow should emphasize the paired arrow the cursor hover over, when the glued boundary is a CHAIN.\n- [?] Fix some problems with online games. For example there are some ghost rooms, I would like the room to be removed if 5 minutes there is no responding\n- [?] In the advanced mode, export from Mosaic calculator for minigames should allow user to give corresponding Chinese name, and decide if the wrapped board view is allowed and how"
+          "text": "- [x] glued arrow should emphasize the paired arrow the cursor hover over, when the glued boundary is a CHAIN.\n- [x] Fix some problems with online games. For example there are some ghost rooms, I would like the room to be removed if 5 minutes there is no responding\n- [x] In the advanced mode, export from Mosaic calculator for minigames should allow user to give corresponding Chinese name, and decide if the wrapped board view is allowed and how"
         }
       ],
       "setting": "",
@@ -282,8 +282,8 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "citationKeys": [],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 596.5,
-      "y": 273.4
+      "x": 595.7,
+      "y": 272.8
     },
     {
       "id": "n72",
@@ -294,7 +294,7 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
           "id": "goal",
           "label": "goal",
           "type": "checkbox",
-          "text": "Add an action on polynomial card\nallow rational function to have multiple variables"
+          "text": "- [x] Add an action on polynomial card\n- [x] allow rational function to have multiple variables"
         }
       ],
       "setting": "",
@@ -302,10 +302,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
       "result": "",
       "proofSketch": "",
       "citationKeys": [],
-      "color": "#46786e",
-      "fillColor": "#eef7f4",
-      "x": 399.2,
-      "y": 238.2
+      "color": "#2f5f9f",
+      "fillColor": "#eef4fb",
+      "x": 398.7,
+      "y": 237.6
     }
   ],
   "arrows": [
@@ -377,10 +377,10 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     }
   ],
   "view": {
-    "selectedId": "n68",
+    "selectedId": "",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
-    "canvasHeight": 452,
+    "canvasHeight": 451,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 1.6674,
     "relativeNodePositions": {
@@ -443,3 +443,5 @@ window.THEOREM_GRAPH_PRESET_DATA.maintenance_tracker = {
     }
   ]
 };
+
+

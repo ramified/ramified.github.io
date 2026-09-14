@@ -1,12 +1,14 @@
 import { parseRecipe, printRecipe, references, resolveValue, identifier } from './recipe.mjs';
+import {editors} from './editors/catalog.mjs';
+import {decodeState} from './editors/state.mjs';
 
 export const SCHEMA = 'pure-math-workspace';
-export const VERSION = 1;
+export const VERSION = 2;
 const clone = value => structuredClone(value);
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const uid = () => globalThis.crypto.randomUUID();
 export function newProject(name = 'Untitled') {
-  return { schema: SCHEMA, version: VERSION, id: uid(), name, assets: [], computations: [], statements: [], views: [{ id: uid(), assetIds: [], renderer: 'visual', settings: { scale: 1 } }], activeView: 0, compare: false, recipeDraft: '', modified: new Date().toISOString() };
+  return { schema: SCHEMA, version: VERSION, id: uid(), name, assets: [], computations: [], statements: [], views: [{ id: uid(), assetIds: [], renderer: 'visual', settings: { scale: 1 } }], activeView: 0, compare: false, recipeDraft: '', calculatorSessions: [], activeCalculator: null, modified: new Date().toISOString() };
 }
 const fail = message => { throw new Error(message); };
 function safeTree(value, depth = 0) {
@@ -21,7 +23,20 @@ function safeTree(value, depth = 0) {
 export function validateProject(input, registry) {
   safeTree(input);
   const p = clone(input);
+  if(p.schema === SCHEMA && p.version === 1){p.version=2;p.calculatorSessions=[];p.activeCalculator=null;}
   if (p.schema !== SCHEMA || p.version !== VERSION) fail('Unsupported project schema or version');
+  if(!Array.isArray(p.calculatorSessions)||p.calculatorSessions.length>100) fail('Invalid calculator sessions');
+  const sessionIds=new Set();
+  for(const s of p.calculatorSessions){
+    if(!s||typeof s.id!=='string'||!s.id||sessionIds.has(s.id)||!editors.some(e=>e.id===s.family)||typeof s.name!=='string'||s.name.length>200||s.version!==1)fail('Invalid calculator session');
+    if(s.snapshot!==null){
+      const saved=s.snapshot;if(!saved||Array.isArray(saved)||saved.version!==1||!saved.ui||typeof saved.ui!=='object'||Array.isArray(saved.ui)||!saved.storage||typeof saved.storage!=='object')fail('Invalid calculator snapshot');
+      if(saved.model!==null)decodeState(saved.model);
+      if(saved.ui.controls!==undefined&&(!Array.isArray(saved.ui.controls)||saved.ui.controls.some(c=>!c||typeof c.id!=='string'||typeof c.value!=='string')))fail('Invalid saved controls');
+    }
+    sessionIds.add(s.id);
+  }
+  if(p.activeCalculator!==null&&!sessionIds.has(p.activeCalculator))fail('Missing active calculator session');
   if (typeof p.id !== 'string' || typeof p.name !== 'string' || p.name.length > 200) fail('Invalid project identity');
   for (const field of ['assets', 'computations', 'statements', 'views']) if (!Array.isArray(p[field]) || p[field].length > 1000) fail(`Invalid ${field}`);
   const names = new Set(), ids = new Set();
@@ -205,6 +220,7 @@ export class ProjectStore {
     // Whole legacy files may contain unselected objects. Only whole-project
     // exports retain those originals; selection exports contain the native closure.
     delete p.legacyImports;
+    p.calculatorSessions=[];p.activeCalculator=null;
     return p;
   }
   importProject(raw, merge = false) {
@@ -225,6 +241,7 @@ export class ProjectStore {
     p.computations.push(...imported.computations.map(c => ({ ...c, id: uid(), outputId: ids.get(c.outputId), inputs: c.inputs.map(r => ({ ...r, id: ids.get(r.id) })), parameters: c.parameters.map(remap) })));
     p.views.push(...imported.views.map(v => ({ ...v, id: uid(), assetIds: v.assetIds.map(id => ids.get(id)) })));
     p.legacyImports = [...(p.legacyImports || []), ...(imported.legacyImports || [])];
+    p.calculatorSessions.push(...imported.calculatorSessions.map(s=>({...s,id:uid()})));
     p.recipeDraft = printRecipe(p.statements); this.commit(p);
   }
 }
