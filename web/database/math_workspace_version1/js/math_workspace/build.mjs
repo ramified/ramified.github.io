@@ -8,8 +8,13 @@ import * as walk from 'acorn-walk';
 import {parse,serialize} from 'parse5';
 import {editors} from './editors/catalog.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
+// The archived workspace owns its builder/runtime, while calculator source
+// pages remain at the live repository root.  This keeps the generated bundle
+// self-contained without ever adding a runtime dependency to those pages.
+const sourceRoot=process.env.MATH_WORKSPACE_SOURCE_ROOT?path.resolve(process.env.MATH_WORKSPACE_SOURCE_ROOT):root;
 const outputs=new Map(), inputs=new Map();
-const read=async p=>{const text=await fs.readFile(path.resolve(root,p),'utf8');inputs.set(p,text);return text;};
+const workspaceFile=p=>p.startsWith('js/math_workspace/')||p.startsWith('node_modules/')||['package.json','package-lock.json','math_workspace.html','math_workspace_browser_test.html'].includes(p);
+const read=async p=>{const text=await fs.readFile(path.resolve(workspaceFile(p)?root:sourceRoot,p),'utf8');inputs.set(p,text);return text;};
 const clean=s=>s.split(/[?#]/)[0];
 const attr=(n,k)=>n.attrs?.find(a=>a.name===k)?.value;
 const nodes=n=>[n,...(n.childNodes||[]).flatMap(nodes)];
@@ -71,17 +76,20 @@ async function build(){
   for(const file of ['tex-svg-full.js',...(await fs.readdir(path.join(root,'node_modules/mathjax/es5/input/tex/extensions'))).filter(f=>f.endsWith('.js')).map(f=>`input/tex/extensions/${f}`)])outputs.set(`js/math_workspace/dist/mathjax/${file}`,await read(`node_modules/mathjax/es5/${file}`));
   outputs.set('js/math_workspace/dist/mathjax/LICENSE',await read('node_modules/mathjax/LICENSE'));
   const virtual=new Map();for(const e of editors)virtual.set(`editor:${e.id}`,await compileEditor(e));
-  const workerResult=await esbuild.build({entryPoints:[path.join(root,'js/math_workspace/worker.mjs')],bundle:true,write:false,format:'iife',target:'es2022'});
+  const sourceImports={name:'workspace-source-imports',setup(builder){builder.onResolve({filter:/^\.\.\//},args=>{
+    if(args.importer.includes(`${path.sep}js${path.sep}math_workspace${path.sep}`))return {path:path.resolve(sourceRoot,'js',args.path.slice(3))};
+  });}};
+  const workerResult=await esbuild.build({entryPoints:[path.join(root,'js/math_workspace/worker.mjs')],bundle:true,write:false,format:'iife',target:'es2022',plugins:[sourceImports]});
   const workers={workspace:workerResult.outputFiles[0].text};
   for(const f of ['js/toric_cone_worker.js','js/background_homology_worker.js','js/mosaic_hyperbolic_metric_worker.js'])workers[f]=await expandWorker(f);
   virtual.set('workspace:workers',`export default ${JSON.stringify(workers)};`);
   let presetCode='export default {\n';
-  for(const directory of ['category_presets','ramified_minigame_presets'])for(const file of (await fs.readdir(path.join(root,directory))).filter(f=>f.endsWith('.preset.js')).sort()){
+  for(const directory of ['category_presets','ramified_minigame_presets'])for(const file of (await fs.readdir(path.join(sourceRoot,directory))).filter(f=>f.endsWith('.preset.js')).sort()){
     const p=`${directory}/${file}`;presetCode+=`${JSON.stringify(p)}:(window)=>{const globalThis=window,self=window,module=undefined,require=undefined;${await read(p)}\n},\n`;
   }
   virtual.set('workspace:presets',presetCode+'};');
   virtual.set('workspace:editors',editors.map((e,i)=>`import * as e${i} from 'editor:${e.id}';`).join('\n')+`\nexport default {${editors.map((e,i)=>`${JSON.stringify(e.id)}:e${i}`).join(',')}};`);
-  const result=await esbuild.build({entryPoints:[path.join(root,'js/math_workspace/bootstrap.mjs')],bundle:true,write:false,format:'iife',target:'es2022',sourcemap:false,legalComments:'eof',minify:false,plugins:[{name:'calculator-sources',setup(b){b.onResolve({filter:/^(editor:|workspace:)/},a=>({path:a.path,namespace:'calculator'}));b.onLoad({filter:/.*/,namespace:'calculator'},a=>({contents:virtual.get(a.path),loader:'js',resolveDir:path.join(root,'js/math_workspace/editors')}));}}],metafile:true});
+  const result=await esbuild.build({entryPoints:[path.join(root,'js/math_workspace/native_bootstrap.mjs')],bundle:true,write:false,format:'iife',target:'es2022',sourcemap:false,legalComments:'eof',minify:false,plugins:[{name:'calculator-sources',setup(b){b.onResolve({filter:/^(editor:|workspace:)/},a=>({path:a.path,namespace:'calculator'}));b.onLoad({filter:/.*/,namespace:'calculator'},a=>({contents:virtual.get(a.path),loader:'js',resolveDir:path.join(root,'js/math_workspace/editors')}));}}],metafile:true});
   outputs.set('js/math_workspace/dist/workspace.js',result.outputFiles[0].text);
   const revision=createHash('sha256').update(result.outputFiles[0].text).digest('hex');
   for(const file of ['math_workspace.html','math_workspace_browser_test.html']){
@@ -96,7 +104,7 @@ await build();
 if(process.argv.includes('--watch')){
   const stamp=async()=>{
     const files=await Promise.all([...inputs.keys()].map(async p=>`${p}:${(await fs.stat(path.join(root,p)).catch(()=>null))?.mtimeMs}`));
-    for(const directory of ['category_presets','ramified_minigame_presets'])files.push(`${directory}:${(await fs.readdir(path.join(root,directory))).sort().join(',')}`);
+    for(const directory of ['category_presets','ramified_minigame_presets'])files.push(`${directory}:${(await fs.readdir(path.join(sourceRoot,directory))).sort().join(',')}`);
     return files.join('|');
   };
   let last=await stamp(),building=false;

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="title">Mathematical Workspace</title>
+  <link rel="stylesheet" href="css/math_workspace.css">
+</head>
+<body class="math-workspace">
+  <header class="workspace-header">
+    <div class="brand"><a href="index.html" data-i18n="home">Toolkit</a><h1 data-i18n="title">Mathematical Workspace</h1><p data-i18n="subtitle">Objects · views · reproducible computations</p></div>
+    <input id="project-name" maxlength="200" data-i18n-aria-label="projectName" aria-label="Project name">
+    <nav class="toolbar" data-i18n-aria-label="title" aria-label="Mathematical Workspace">
+      <button id="open-calculator" class="primary" data-i18n="openCalculator">Open calculator</button>
+      <button id="new-project" data-i18n="new">New</button><button id="import-project" data-i18n="import">Import</button><button id="export-project" data-i18n="export">Export</button>
+      <button id="undo" data-i18n="undo">Undo</button><button id="redo" data-i18n="redo">Redo</button>
+      <select id="language" data-i18n-aria-label="language" aria-label="Language"><option value="en" lang="en" data-i18n-ignore>English</option><option value="zh-cn" lang="zh-cn" data-i18n-ignore>简体中文</option></select>
+    </nav>
+  </header>
+  <div class="coverage-banner"><span data-i18n="coverageNote">This page is an evolving implementation. Existing calculators remain the full-featured versions.</span><button id="show-coverage" class="text-button" data-i18n="coverage">Migration coverage</button></div>
+  <p id="startup-notice" role="status" data-i18n="loadingWorkspace">Loading workspace… / 正在加载工作区…</p>
+  <div id="calculator-tabs" role="tablist" data-i18n-aria-label="calculatorTabs" aria-label="Calculator and asset tabs"></div>
+  <section id="calculator-area" hidden><div class="calculator-heading"><h2 id="calculator-title"></h2><button id="calculator-close" data-i18n="closeCalculator">Close calculator</button></div><div id="calculator-content"></div></section>
+  <main class="workspace-shell">
+    <aside class="library"><div class="panel-heading"><h2 data-i18n="library">Assets</h2><button id="create" class="primary" data-i18n="create">Create object</button></div>
+      <input id="search" type="search" data-i18n-placeholder="search" data-i18n-aria-label="search" placeholder="Search assets" aria-label="Search assets">
+      <div id="asset-list"></div>
+    </aside>
+    <section class="workspace-centre" data-i18n-aria-label="title" aria-label="Mathematical Workspace">
+      <div class="view-toolbar"><div id="view-tabs" role="tablist" data-i18n-aria-label="viewType" aria-label="View type"></div><button id="add-view" data-i18n="addView">New view</button><label><input id="compare" type="checkbox"><span data-i18n="compare">Compare views</span></label></div>
+      <div id="canvases"></div>
+      <details class="recipe-panel" open><summary data-i18n="recipe">Recipe</summary>
+        <div class="recipe-toolbar"><select id="examples" data-i18n-aria-label="examples" aria-label="Examples"></select><button id="restore-recipe" data-i18n="restoreRecipe">Restore applied recipe</button><button id="run" class="primary" data-i18n="run">Run recipe</button><button id="cancel" disabled data-i18n="cancel">Cancel</button></div>
+        <label for="recipe" class="hint" data-i18n="recipeHelp">Assignments, calls, lists and records. # starts a comment. Running replaces the project’s mathematical definitions; view layout is retained.</label>
+        <textarea id="recipe" spellcheck="false" autocapitalize="off" lang="en" data-i18n-ignore data-i18n-aria-label="recipe" aria-label="Recipe"></textarea>
+      </details>
+    </section>
+    <aside class="inspector"><h2 data-i18n="inspector">Inspector</h2><div id="inspector"></div></aside>
+  </main>
+  <footer class="statusbar"><span id="status" role="status" aria-live="polite"></span><span id="save-status" role="status"></span></footer>
+  <details id="diagnostics" class="diagnostics" hidden><summary data-i18n="engineDetails">Engine details</summary><pre id="error-detail" lang="en" data-i18n-ignore></pre></details>
+  <dialog id="editor-dialog"><form id="editor-form" novalidate><div class="dialog-heading"><h2 id="editor-title" data-i18n="create">Create object</h2><button type="button" data-close-dialog data-i18n="close">Close</button></div>
+    <label><span data-i18n="operation">Operation</span><select id="operation-select"></select></label>
+    <label><span data-i18n="name">Asset name</span><input id="asset-name" required pattern="[A-Za-z][A-Za-z0-9_]*" maxlength="100" autocomplete="off"></label>
+    <p id="signature" lang="en" data-i18n-ignore></p><p id="operation-note" class="hint" hidden></p><label><span data-i18n="arguments">Arguments</span><textarea id="arguments" rows="6" spellcheck="false" lang="en" data-i18n-ignore></textarea></label>
+    <p class="hint" data-i18n="argumentHelp">Edit the arguments inside the constructor call. Asset references use their recipe names.</p><button id="editor-submit" class="primary" type="submit" data-i18n="apply">Apply edit</button>
+  </form></dialog>
+  <dialog id="export-dialog"><div class="dialog-heading"><h2 data-i18n="export">Export</h2><button data-close-dialog data-i18n="close">Close</button></div>
+    <select id="export-kind" data-i18n-aria-label="export" aria-label="Export"><option value="project" data-i18n="exportProject">Whole project JSON</option><option value="selection" data-i18n="exportSelection">Selected asset and dependencies</option><option value="recipe" data-i18n="exportRecipe">Recipe text</option><option value="sage" data-i18n="exportSage">SageMath matrix snippet</option><option value="macaulay2" data-i18n="exportM2">Macaulay2 matrix snippet</option></select>
+    <p class="hint" data-i18n="exportHelp">Matrix snippets support QQ and ZZ. CAS execution has not been verified on this machine.</p><textarea id="export-text" rows="14" readonly lang="en" data-i18n-ignore data-i18n-aria-label="export" aria-label="Export"></textarea><button id="copy-export" data-i18n="copy">Copy</button><button id="download-export" class="primary" data-i18n="download">Download</button>
+  </dialog>
+  <dialog id="import-dialog"><div class="dialog-heading"><h2 data-i18n="import">Import</h2><button data-close-dialog data-i18n="close">Close</button></div><p data-i18n="importHelp">Open workspace JSON, a recipe (.math or .txt), a Young diagram JSON export, a double-Young JSON export, or rational matrix rows.</p>
+    <label><span data-i18n="file">Choose file</span><input type="file" id="import-file" accept=".json,.math,.txt,.tex"></label><label><span data-i18n="importText">Import text</span><textarea id="import-text" rows="12" spellcheck="false" lang="en" data-i18n-ignore></textarea></label>
+    <select id="import-mode" data-i18n-aria-label="importMode" aria-label="Import mode"><option value="merge" data-i18n="merge">Merge assets</option><option value="replace" data-i18n="replace">Replace project</option></select><button id="apply-import" class="primary" data-i18n="applyImport">Import data</button>
+  </dialog>
+  <dialog id="coverage-dialog"><div class="dialog-heading"><h2 data-i18n="coverage">Migration coverage</h2><button data-close-dialog data-i18n="close">Close</button></div><div id="coverage-content"></div></dialog>
+  <dialog id="calculator-dialog"><div class="dialog-heading"><h2 data-i18n="openCalculator">Open calculator</h2><button data-close-dialog data-i18n="close">Close</button></div><p data-i18n="calculatorHint">Open the original cards and interactive canvas in a workspace tab.</p><label><span data-i18n="calculator">Calculator</span><select id="calculator-choice"></select></label><button id="calculator-open" class="primary" data-i18n="openCalculator">Open calculator</button></dialog>
+  <script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']],processEscapes:true},svg:{fontCache:'local'},options:{enableMenu:false,enableAssistiveMml:false},startup:{typeset:false}};</script>
+  <script>document.querySelectorAll('button,input,select,textarea').forEach(function(control){control.disabled=true;});</script>
+  <script src="js/math_workspace/dist/mathjax/tex-svg-full.js"></script>
+  <script src="js/math_workspace/dist/workspace.js?v=f209832d06886b44" onerror="document.getElementById('status').textContent='Workspace build could not load / 无法加载工作区程序';document.getElementById('status').setAttribute('role','alert')"></script>
+</body>
+</html>
