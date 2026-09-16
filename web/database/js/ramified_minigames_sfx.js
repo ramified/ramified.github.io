@@ -4,6 +4,33 @@
   // The catalog is deliberately data-first: a future `source` field may point
   // to a decoded audio file without changing the preference format or UI.
   const VARIANTS = Object.freeze(['physical', 'clear', 'arcade']);
+  const EMPTY_SOUND = 'assets/audio/empty.wav';
+  const ACCEPTED_ACTION_SOUND = 'assets/audio/accepted-action.wav';
+  const JUMP_SOUND = 'assets/audio/jump.wav';
+  const FILE_SOURCES = Object.freeze({
+  // Generic accepted action
+    'shared-action': ACCEPTED_ACTION_SOUND,
+
+  // Placement games
+    'placement-place': ACCEPTED_ACTION_SOUND,
+
+  // Chinese Checkers
+    'checkers-move': ACCEPTED_ACTION_SOUND,
+    'checkers-jump': EMPTY_SOUND,
+    'checkers-land': JUMP_SOUND,
+    'checkers-lake-hop': EMPTY_SOUND,
+
+  // // Go
+  //   'go-capture': ACCEPTED_ACTION_SOUND,
+
+  // Reversi
+    'reversi-flip': ACCEPTED_ACTION_SOUND,
+
+  // // Tile Matching, if desired
+  //   'tile-select': ACCEPTED_ACTION_SOUND,
+  //   'tile-match': ACCEPTED_ACTION_SOUND,
+
+  });
   const EVENTS = Object.freeze([
     ['shared-action', 'sfx.event.action', 'shared'], ['shared-invalid', 'sfx.event.invalid', 'shared'],
     ['shared-win', 'sfx.event.win', 'shared'], ['shared-draw', 'sfx.event.draw', 'shared'],
@@ -11,18 +38,18 @@
     ['2048-slide', 'sfx.event.slide', '2048'], ['2048-merge', 'sfx.event.merge', '2048'], ['2048-bomb', 'sfx.event.bomb', '2048'], ['2048-gameover', 'sfx.event.gameover', '2048'],
     ['placement-place', 'sfx.event.place', 'placement'], ['go-capture', 'sfx.event.capture', 'go'], ['reversi-flip', 'sfx.event.flip', 'reversi'],
     ['chess-move', 'sfx.event.chessMove', 'fide-chess'], ['chess-capture', 'sfx.event.chessCapture', 'fide-chess'],
-    ['checkers-move', 'sfx.event.checkersMove', 'chinese-checkers'], ['checkers-jump', 'sfx.event.checkersJump', 'chinese-checkers'], ['checkers-lake-hop', 'sfx.event.checkersLakeHop', 'chinese-checkers'], ['checkers-goal', 'sfx.event.checkersGoal', 'chinese-checkers'],
+    ['checkers-move', 'sfx.event.checkersMove', 'chinese-checkers'], ['checkers-jump', 'sfx.event.checkersJump', 'chinese-checkers'], ['checkers-lake-hop', 'sfx.event.checkersLakeHop', 'chinese-checkers'], ['checkers-land', 'sfx.event.checkersLake', 'chinese-checkers'], ['checkers-goal', 'sfx.event.checkersGoal', 'chinese-checkers'], 
     ['tile-select', 'sfx.event.tileSelect', 'lianliankan'], ['tile-match', 'sfx.event.tileMatch', 'lianliankan'], ['tile-mismatch', 'sfx.event.tileMismatch', 'lianliankan'], ['tile-shuffle', 'sfx.event.tileShuffle', 'lianliankan'], ['tile-cleared', 'sfx.event.tileCleared', 'lianliankan'],
     ['sokoban-step', 'sfx.event.sokobanStep', 'sokoban'], ['sokoban-push', 'sfx.event.sokobanPush', 'sokoban'], ['sokoban-blocked', 'sfx.event.sokobanBlocked', 'sokoban'], ['sokoban-target', 'sfx.event.sokobanTarget', 'sokoban'], ['sokoban-solved', 'sfx.event.sokobanSolved', 'sokoban'],
     ['billiards-strike', 'sfx.event.billiardsStrike', 'billiards'], ['billiards-ball', 'sfx.event.billiardsBall', 'billiards'], ['billiards-cushion', 'sfx.event.billiardsCushion', 'billiards'], ['billiards-pocket', 'sfx.event.billiardsPocket', 'billiards'], ['billiards-foul', 'sfx.event.billiardsFoul', 'billiards']
-  ].map(([id, labelKey, mode]) => Object.freeze({ id, labelKey, mode, variants: VARIANTS })));
+    ].map(([id, labelKey, mode]) => Object.freeze({ id, labelKey, mode, variants: VARIANTS })));
   const EVENT_BY_ID = new Map(EVENTS.map((event) => [event.id, event]));
   const AUDITION_SEEDS = Object.freeze([
     ['marble-hop-1', 'marble', 'sfx.audition.marbleHopOne', '153421'], ['marble-hop-2', 'marble', 'sfx.audition.marbleHopTwo', '514231'], ['marble-hop-3', 'marble', 'sfx.audition.marbleHopThree', '352414'],
     ['stone-skip-1', 'stone', 'sfx.audition.stoneSkipOne', '841233'], ['stone-skip-2', 'stone', 'sfx.audition.stoneSkipTwo', '284531'], ['stone-skip-3', 'stone', 'sfx.audition.stoneSkipThree', '728154'],
     ['billiards-1', 'billiards', 'sfx.audition.billiardsOne', '451322'], ['billiards-2', 'billiards', 'sfx.audition.billiardsTwo', '162543'], ['billiards-3', 'billiards', 'sfx.audition.billiardsThree', '635214'],
     ['win-1', 'win', 'sfx.audition.winOne', '913542'], ['win-2', 'win', 'sfx.audition.winTwo', '476231'], ['win-3', 'win', 'sfx.audition.winThree', '829315']
-  ].map(([id, category, labelKey, seed]) => Object.freeze({ id, category, labelKey, seed })));
+    ].map(([id, category, labelKey, seed]) => Object.freeze({ id, category, labelKey, seed })));
   const AUDITION_BY_ID = new Map(AUDITION_SEEDS.map((item) => [item.id, item]));
   const lastPlayedAt = new Map();
   let context = null;
@@ -84,7 +111,7 @@
     const buffer = ctx.createBuffer(1, Math.max(1, Math.ceil(ctx.sampleRate * duration)), ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let index = 0; index < data.length; index += 1) data[index] = Math.random() * 2 - 1;
-    return buffer;
+      return buffer;
   }
 
   function recipeFor(eventId, variant) {
@@ -106,17 +133,37 @@
     if (!item) return null;
     let hash = 0;
     for (const character of item.seed) hash = ((hash * 31) + character.charCodeAt(0)) >>> 0;
-    const variation = hash % 120;
+      const variation = hash % 120;
     if (item.category === 'marble') return { waveform: 'triangle', frequency: 340 + variation, duration: 0.075 + (variation % 3) * 0.012, noise: true, sweep: -55 - (variation % 40) };
     if (item.category === 'stone') return { waveform: 'sine', frequency: 250 + variation, duration: 0.11 + (variation % 3) * 0.018, noise: true, sweep: -100 - (variation % 70) };
     if (item.category === 'billiards') return { waveform: 'square', frequency: 420 + variation, duration: 0.04 + (variation % 3) * 0.01, noise: true, sweep: -20 - (variation % 30) };
     return { waveform: 'square', frequency: 620 + variation, duration: 0.18 + (variation % 3) * 0.025, noise: false, sweep: 190 + (variation % 140) };
   }
 
+  function playFileSound(eventId, preferences) {
+    const source = FILE_SOURCES[eventId];
+    if (!source) return false;
+
+    const audio = new Audio(source);
+    audio.volume = Math.max(
+      0,
+      Math.min(1, Number(preferences?.soundVolume ?? 1))
+      );
+
+    audio.play().catch(() => {});
+    return true;
+  }
+
   function play(eventId, preferences, options = {}) {
     if (!EVENT_BY_ID.has(eventId)) return false;
     const preview = !!options.preview;
     if (!preview && (!preferences || !preferences.soundEnabled || !(preferences.soundVolume > 0))) return false;
+// Use a real audio file when one is assigned to this event.
+    if (FILE_SOURCES[eventId]) {
+      return playFileSound(eventId, preferences || { soundVolume: 1 });
+    }
+  // Existing generated Web Audio sounds continue below.
+
     const now = Date.now();
     const throttleMs = eventId.startsWith('billiards-') ? 70 : 28;
     if (!preview && now - (lastPlayedAt.get(eventId) || 0) < throttleMs) return false;
