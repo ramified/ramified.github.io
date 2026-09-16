@@ -76,9 +76,9 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "result": "",
             "proofSketch": "",
             "citationKeys": [],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
-            "x": 321.6,
+            "color": "#2f5f9f",
+            "fillColor": "#eef4fb",
+            "x": 322.1,
             "y": 55.3
           },
           {
@@ -100,7 +100,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "citationKeys": [],
             "color": "#7a6f65",
             "fillColor": "#f7f5f1",
-            "x": 188.6,
+            "x": 188.9,
             "y": 281.7
           },
           {
@@ -112,7 +112,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
                 "id": "check",
                 "label": "check",
                 "type": "checkbox",
-                "text": "Spiegelkarpfen\nwhite fungus\ntiramisu\nantler"
+                "text": "- [x] Spiegelkarpfen\n- [ ] white fungus\n- [?] tiramisu\n- [ ] antler"
               }
             ],
             "setting": "",
@@ -122,7 +122,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "citationKeys": [],
             "color": "#7a6f65",
             "fillColor": "#f7f5f1",
-            "x": 562.3,
+            "x": 563,
             "y": 238.4
           },
           {
@@ -137,7 +137,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "citationKeys": [],
             "color": "#7a6f65",
             "fillColor": "#f7f5f1",
-            "x": 404.9,
+            "x": 405.5,
             "y": 281.7
           },
           {
@@ -152,7 +152,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "citationKeys": [],
             "color": "#7a6f65",
             "fillColor": "#f7f5f1",
-            "x": 132.4,
+            "x": 132.5,
             "y": 81.8
           },
           {
@@ -167,7 +167,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "citationKeys": [],
             "color": "#7a6f65",
             "fillColor": "#f7f5f1",
-            "x": 565.9,
+            "x": 566.7,
             "y": 99.8
           },
           {
@@ -180,63 +180,93 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "result": "",
             "proofSketch": "",
             "citationKeys": [],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
-            "x": 323.3,
+            "color": "#2f5f9f",
+            "fillColor": "#eef4fb",
+            "x": 323.7,
             "y": 173.6
           }
         ],
         "arrows": [],
         "view": {
-          "selectedId": "n6",
+          "selectedId": "",
           "layoutAvoidOverlap": true,
           "layoutRunning": false,
           "canvasHeight": 337,
           "canvasRatioLocked": true,
-          "canvasAspectRatio": 2.2315,
-          "relativeNodePositions": {
-            "n1": {
-              "x": 0.4277,
-              "y": 0.1641
-            },
-            "n2": {
-              "x": 0.2508,
-              "y": 0.8359
-            },
-            "n3": {
-              "x": 0.7477,
-              "y": 0.7074
-            },
-            "n4": {
-              "x": 0.5385,
-              "y": 0.8359
-            },
-            "n5": {
-              "x": 0.176,
-              "y": 0.2426
-            },
-            "n6": {
-              "x": 0.7526,
-              "y": 0.2961
-            },
-            "n7": {
-              "x": 0.4299,
-              "y": 0.515
-            }
-          }
+          "canvasAspectRatio": 2.2315
         }
       }
+    },
+    {
+      "id": "n54",
+      "type": "misc",
+      "label": "Youtube video",
+      "details": [
+        {
+          "id": "check",
+          "label": "check",
+          "type": "checkbox",
+          "text": "\\cite{link1} 48:33"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [
+        "link1"
+      ],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 409.4,
+      "y": 192.9
     }
   ],
   "arrows": [],
   "view": {
-    "selectedId": "",
+    "selectedId": "n54",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasHeight": 300,
     "canvasRatioLocked": true,
     "canvasAspectRatio": 2.5067,
+    "relativeNodePositions": {
+      "n50": {
+        "x": 0.2687,
+        "y": 0.3697
+      },
+      "n51": {
+        "x": 0.2406,
+        "y": 0.7497
+      },
+      "n53": {
+        "x": 0.5056,
+        "y": 0.3207
+      },
+      "n54": {
+        "x": 0.5436,
+        "y": 0.6428
+      }
+    },
     "selectedReferenceKeys": []
   },
-  "references": []
+  "references": [
+    {
+      "key": "link1",
+      "author": "",
+      "title": "Livestream of Heidelberg Laureate Forum Panel Discussion",
+      "year": "",
+      "citeKey": "link1",
+      "url": "https://www.youtube.com/live/-RzGo0GaG2I",
+      "source": "web",
+      "rawBibtex": "",
+      "links": [
+        {
+          "url": "https://www.youtube.com/live/-RzGo0GaG2I",
+          "source": "web",
+          "label": ""
+        }
+      ]
+    }
+  ]
 };
