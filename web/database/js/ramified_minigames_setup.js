@@ -11149,11 +11149,21 @@ function handleChineseCheckersCanvasClick(event) {
       return;
     }
   }
-  if (!target) return;
   if (isChineseCheckersJumping(game)) {
+  // In step-by-step mode, clicking the blank part of
+  // the canvas means "finish jumping".
+    if (!target) {
+      if (!shouldUseChineseCheckersFullChainHints()) {
+        endChineseCheckersJumpFromUi();
+      }
+      return;
+    }
+
     handleChineseCheckersJumpContinuationClick(target, marble);
     return;
   }
+
+  if (!target) return;
   if (!Number.isInteger(game.selectedIndex)) {
     const issue = chineseCheckersSelectionIssue(game, marble);
     if (issue) {
@@ -11471,16 +11481,31 @@ function handleSokobanCanvasClick(event) {
 function handleChineseCheckersJumpContinuationClick(target, marble) {
   const chain = game && game.jumpChain;
   if (!chain || !Number.isInteger(chain.currentIndex)) return;
+  const legalNextMoves =
+  chineseCheckersHintMoveMap(
+    game,
+    chain.currentIndex
+    );
+
+  if (!legalNextMoves.has(target.index)) {
+    if (!shouldUseChineseCheckersFullChainHints()) {
+      endChineseCheckersJumpFromUi();
+      return;
+    }
+
+    syncStatus(
+      'Chinese Checkers jump rejected',
+      `${target.label} is unavailable`,
+      phaseBadge(game.phase)
+      );
+    return;
+  }
   if (onlineIsInRoom() && !onlineStateOwnsRole(game.turn)) {
     const owner = onlineRolePlayerLabel(game.turn, chineseCheckersColorLabel(game.turn));
     syncStatus('online Chinese Checkers blocked', `${owner} is controlled by another player`, 'warn');
     syncOnlineStatus(`${owner} is controlled by another player.`, 'error');
     startOnlineTurnFeedback(onlineTurnFeedbackForRole(game, game.turn));
     syncOnlineControls();
-    return;
-  }
-  if (marble && marble.color === game.turn && target.index !== chain.currentIndex) {
-    syncStatus('Chinese Checkers jumping', 'continue this jump or use end jump', 'ready');
     return;
   }
   const result = moveChineseCheckerMarble(game, chain.currentIndex, target.index, { stepwise: true });
@@ -26787,8 +26812,14 @@ function initializeFideChessOpening(state) {
     }
     const stepwise = !!options.stepwise || activeJump;
     const legal = activeJump
-    ? chineseCheckerImmediateJumpMap(sourceState, from, { jumpDistance: chineseCheckersJumpChainDistance(sourceState.jumpChain) })
-    : (stepwise ? chineseCheckerStepwiseMoveMap(sourceState, from) : chineseCheckerMoveMap(sourceState, from));
+    ? chineseCheckerImmediateJumpMap(
+      sourceState,
+      from,
+      chineseCheckersActiveJumpOptions(sourceState)
+      )
+    : (stepwise
+      ? chineseCheckerStepwiseMoveMap(sourceState, from)
+      : chineseCheckerMoveMap(sourceState, from));
     const move = legal.get(to);
     if (!move) {
       return { changed: false, state: sourceState, message: activeJump ? 'target is not a legal next jump' : 'target is not a legal step or jump' };
@@ -26811,6 +26842,14 @@ function initializeFideChessOpening(state) {
     const moveStart = activeJump && sourceState.jumpChain && Number.isInteger(sourceState.jumpChain.startIndex)
     ? sourceState.jumpChain.startIndex
     : from;
+    const nextJumpOptions =
+    move.kind === 'jump' &&
+    chineseCheckersJumpRuleRequiresUniformDistance(state)
+    ? {
+      jumpDistance:
+      chineseCheckerMoveJumpDistance(move)
+    }
+    : {};
     if (chineseCheckersPlayerWins(state, moving.color)) {
       completeChineseCheckersOpeningTurn(state, moving.color);
       state.selectedIndex = null;
@@ -26820,7 +26859,11 @@ function initializeFideChessOpening(state) {
       state.turn = moving.color;
       state.winner = moving.color;
       state.ending = 'chinese-checkers-win';
-    } else if (stepwise && move.kind === 'jump' && chineseCheckerImmediateJumpMap(state, to).size) {
+    } else if (stepwise && move.kind === 'jump' && chineseCheckerImmediateJumpMap(
+      state,
+      to,
+      nextJumpOptions
+      ).size) {
       state.selectedIndex = to;
       state.jumpChain = {
         marbleId: moving.id,
@@ -27007,7 +27050,22 @@ function initializeFideChessOpening(state) {
     if (normalized === CHINESE_CHECKERS_JUMP_RULES.ADJACENT_OR_TWO) return [1, 2];
     return null;
   }
+  function chineseCheckersActiveJumpOptions(state) {
+  // Only adjacent-or-two requires every hop
+  // in a chain to have the same mirror distance.
+    if (!chineseCheckersJumpRuleRequiresUniformDistance(state)) {
+      return {};
+    }
 
+    const jumpDistance =
+    chineseCheckersJumpChainDistance(
+      state && state.jumpChain
+      );
+
+    return Number.isInteger(jumpDistance)
+    ? { jumpDistance }
+    : {};
+  }
   function chineseCheckersJumpRuleRequiresUniformDistance(state) {
     return normalizeChineseCheckersJumpRule(state && state.jumpRule) === CHINESE_CHECKERS_JUMP_RULES.ADJACENT_OR_TWO;
   }
@@ -28656,14 +28714,25 @@ function sokobanSeaSurfaceSupported(state, index, options = {}) {
   }
 
   function shouldUseChineseCheckersFullChainHints() {
-    return !refs.chineseCheckersFullHints || !!refs.chineseCheckersFullHints.checked;
+    return !!(
+      refs.chineseCheckersFullHints &&
+      refs.chineseCheckersFullHints.checked
+      );
   }
 
   function chineseCheckersHintMoveMap(state, fromIndex) {
     if (isChineseCheckersJumping(state)) {
       const chain = state.jumpChain;
-      return chain && chain.currentIndex === fromIndex ? chineseCheckerImmediateJumpMap(state, fromIndex) : new Map();
+
+      return chain && chain.currentIndex === fromIndex
+      ? chineseCheckerImmediateJumpMap(
+        state,
+        fromIndex,
+        chineseCheckersActiveJumpOptions(state)
+        )
+      : new Map();
     }
+
     return shouldUseChineseCheckersFullChainHints()
     ? chineseCheckerMoveMap(state, fromIndex)
     : chineseCheckerStepwiseMoveMap(state, fromIndex);
