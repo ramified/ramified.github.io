@@ -9,11 +9,11 @@ const SHOP_CONFIG = {
       {
     id: "hair-dryer",
     image: "hair_dryer.jpg",
-    price: 14,
+    price: 10,
     name: { en: "Hair dryer", zh: "吹风机" },
     description: {
-      en: "Reliable hair dryer that has been in regular use for 6 years and still works great. €14.",
-      zh: "稳定使用6年了，贼好用，14欧出。"
+      en: "Reliable hair dryer that has been in regular use for 6 years and still works great. €10.",
+      zh: "稳定使用6年了，贼好用，10欧出。"
     }
   },
   {
@@ -26,16 +26,16 @@ const SHOP_CONFIG = {
       zh: "买来之后就没用过，1欧出。"
     }
   },
-  {
-    id: "esi-49-key-keyboard",
-    image: "esi_49_key_keyboard.jpg",
-    price: 15,
-    name: { en: "ESI 49-key keyboard", zh: "ESI 49键电子琴" },
-    description: {
-      en: "ESI 49-key electronic keyboard, €15.",
-      zh: "ESI 49键电子琴，15欧出。"
-    }
-  },
+  // {
+  //   id: "esi-49-key-keyboard",
+  //   image: "esi_49_key_keyboard.jpg",
+  //   price: 15,
+  //   name: { en: "ESI 49-key keyboard", zh: "ESI 49键电子琴" },
+  //   description: {
+  //     en: "ESI 49-key electronic keyboard, €15.",
+  //     zh: "ESI 49键电子琴，15欧出。"
+  //   }
+  // },
   // {
   //   id: "small-strainer",
   //   image: "strainer.jpg",
@@ -161,11 +161,11 @@ const SHOP_CONFIG = {
   {
     id: "quiet-fan",
     image: "quiet_fan.jpg",
-    price: 18,
+    price: 15,
     name: { en: "Very quiet fan", zh: "静音风扇" },
     description: {
       en: "A very quiet and comfortable fan, suitable for sleeping or working. €19.",
-      zh: "非常舒适的静音风扇，18欧出。"
+      zh: "非常舒适的静音风扇，15欧出。"
     }
   },
   {
@@ -192,7 +192,7 @@ const SHOP_CONFIG = {
   {
     id: "electric-grill",
     image: "electric_grill.jpg",
-    price: 25,
+    price: 22,
     name: { en: "Electric grill", zh: "电烤炉" },
     description: {
       en: "Electric grill only used once, ready for a barbecue party.",
@@ -222,11 +222,11 @@ const SHOP_CONFIG = {
   {
     id: "umeshu",
     image: "Umeshu.jpg",
-    price: 10,
+    price: 9,
     name: { en: "Umeshu", zh: "梅酒" },
     description: {
       en: "Umeshu bottle, offered for 10 euros.",
-      zh: "梅酒一瓶，价格10欧元。"
+      zh: "梅酒一瓶，价格9欧元。"
     }
   },
   // {
