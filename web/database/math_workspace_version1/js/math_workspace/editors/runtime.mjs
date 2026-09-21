@@ -48,7 +48,7 @@ function inlineHandler(source,scope,element,event){
 
 export function createEditorContext(host,definition,{id,onChange=()=>{},onError=console.error,snapshot=null,inspectorHost=null}={}){
   const shadow=host.attachShadow({mode:'open'}),style=realDocument.createElement('style');
-  style.textContent=definition.css+'\n:host{display:block;min-width:0;isolation:isolate}.editor-body{min-height:0!important}.editor-body>.layout{max-width:none;margin:12px auto}.editor-body>header:first-child{display:none}'+dockStyles;
+  style.textContent=definition.css+'\n:host{display:block;min-width:0;height:100%;overflow:hidden;isolation:isolate}.editor-document,.editor-body{height:100%;min-height:0!important;overflow:hidden}.editor-body>.layout{max-width:none;height:100%;min-height:0;margin:0!important}.editor-body>header:first-child{display:none}'+dockStyles;
   const docRoot=realDocument.createElement('div');docRoot.className='editor-document';docRoot.lang=realDocument.documentElement.lang;
   const head=realDocument.createElement('div');head.className='editor-head';
   const body=realDocument.createElement('div');body.className='editor-body';body.innerHTML=definition.html;
@@ -67,7 +67,7 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
   const roots=()=>inspectorShadow?[shadow,inspectorShadow]:[shadow];
   const findOne=selector=>roots().map(root=>root.querySelector(selector)).find(Boolean)||null;
   const findAll=selector=>roots().flatMap(root=>[...root.querySelectorAll(selector)]);
-  let canvasActive=true,inspectorActive=false,disposed=false,ready=false,bridge=null,stateBinding=null,handlers={},link={},saving=false,dock=null;
+  let canvasActive=true,inspectorActive=false,disposed=false,ready=false,bridge=null,stateBinding=null,assetAdapter=null,handlers={},link={},saving=false,dock=null;
   const disposal=[],readyListeners=[],loadListeners=[],listeners=[],rafs=new Map(),timers=new Set(),intervals=new Set(),workerSet=new Set();let sequence=0;
   const error=e=>{onError(e instanceof Error?e:new Error(String(e)));};
   const changed=()=>{if(!saving&&!disposed)onChange();};
@@ -152,8 +152,8 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
   function restoreUi(ui){if(!ui)return;for(const c of ui.controls||[]){const n=findOne(`#${CSS.escape(c.id)}`);if(n&&n.type!=='file'){n.value=c.value;if(c.checked!==undefined)n.checked=c.checked;}}for(const c of ui.cards||[]){const list=findAll('.card'),n=c.key?list.find(n=>n.dataset.workspaceCardId===c.key):list[c.i];if(n){n.classList.toggle('collapsed',c.collapsed);n.hidden=!!c.hidden;n.classList.toggle('calculator-card-user-hidden',!!c.userHidden);n.classList.toggle('is-pinned',!!c.pinned);n.querySelector('.card-head')?.setAttribute('aria-expanded',String(!c.collapsed));if(c.wide&&win.CalculatorCards)win.CalculatorCards.setWide(n,c.wide==='wide');}}dock?.restore(ui.dock);host.scrollTop=ui.scrollTop||0;}
   function capture(){return {version:1,model:bridge?encodeState(bridge.capture()):stateBinding?encodeState(stateBinding.get(),stateBinding.classes):null,ui:uiSnapshot(),storage:Object.fromEntries(localStorageMap)};}
   function restore(s){if(!s)return;saving=true;try{restoreUi(s.ui);if(s.model){if(bridge)bridge.restore(decodeState(s.model));else if(stateBinding)stateBinding.restore(decodeState(s.model,stateBinding.classes));}restoreUi(s.ui);}finally{saving=false;}}
-  const api={host,inspectorHost,shadow,inspectorShadow,environment,applyState,linkGlobals:v=>{link=v;},registerHandlers:v=>{handlers=v;},registerState:v=>{stateBinding=v;},setBridge:v=>{bridge=v;},capture,restore,
-    listCards:()=>dock?.listCards?.()||[],setCardVisible:(key,visible)=>dock?.setVisible?.(key,visible)||false,focusCard:key=>dock?.focusCard?.(key)||false,
+  const api={host,inspectorHost,shadow,inspectorShadow,environment,applyState,linkGlobals:v=>{link=v;},registerHandlers:v=>{handlers=v;},registerState:v=>{stateBinding=v;},setBridge:v=>{bridge=v;},setAssetAdapter:v=>{assetAdapter=v;},applyAssets:(snapshot,activeRef,properties)=>assetAdapter?.apply?.(snapshot,activeRef,properties)??false,focusAssetCard:key=>assetAdapter?.reveal?.(key)??false,captureAssetProperties:()=>assetAdapter?.capture?.()??null,
+    listCards:()=>dock?.listCards?.()||[],setCardVisible:(key,visible)=>dock?.setVisible?.(key,visible)||false,prioritizeCard:key=>dock?.prioritizeCard?.(key)||false,focusCard:key=>dock?.focusCard?.(key)||false,
     setCanvasActive(value){if(disposed)return;canvasActive=!!value;host.hidden=!canvasActive;if(canvasActive){dock?.update();for(const [token,item] of rafs)if(item.native===null)item.native=realWindow.requestAnimationFrame(t=>{rafs.delete(token);if(!disposed)item.fn(t);});bridge?.resize?.();for(const l of listeners.filter(l=>l.target===realWindow&&l.type==='resize'))l.callback(new Event('resize'));}else{bridge?.deactivate?.();for(const l of listeners.filter(l=>l.target===realWindow&&l.type==='blur'))l.callback(new Event('blur'));for(const item of rafs.values()){if(item.native!==null)realWindow.cancelAnimationFrame(item.native);item.native=null;}}},
     setInspectorActive(value){if(disposed)return;inspectorActive=!!value;if(inspectorHost)inspectorHost.hidden=!inspectorActive; if(inspectorActive)dock?.update();},
     activate(){api.setCanvasActive(true);},deactivate(){api.setCanvasActive(false);},

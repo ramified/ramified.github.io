@@ -11823,8 +11823,9 @@
   }
   var dockStyles = `
 .editor-body>.workspace-editor-layout{display:block!important;height:100%!important;min-height:0!important;margin:0!important;padding:0!important;max-width:none!important;overflow:hidden!important}
-.workspace-editor-layout>.canvas-stack,.workspace-editor-layout>.sheaf-main-column,.workspace-editor-layout>.strand-main-column,.workspace-editor-layout>.category-main-column{min-width:0;width:100%}
-.workspace-editor-layout>.workspace-view-card{min-width:0;width:100%;height:100%;min-height:0!important;max-width:100%;margin:0!important;box-sizing:border-box;overflow:auto}
+.workspace-editor-layout>.canvas-stack,.workspace-editor-layout>.sheaf-main-column,.workspace-editor-layout>.strand-main-column,.workspace-editor-layout>.category-main-column{min-width:0;width:100%;height:100%;min-height:0;overflow:hidden}
+.workspace-editor-layout .workspace-view-card{min-width:0;width:100%;height:100%;min-height:0!important;max-width:100%;margin:0!important;box-sizing:border-box;overflow:auto}
+.workspace-editor-layout [id$="-wide-host"]:not(:has(.card)){display:none!important}
 .workspace-editor-inspector-layout{display:block!important;margin:0!important;padding:0!important;max-width:none!important}
 .workspace-editor-inspector-layout>.workspace-card-inspector{display:grid;gap:12px;min-width:0;width:auto!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;max-height:none!important;overflow:visible!important}
 .workspace-card-inspector .card{flex:none;max-width:100%;box-sizing:border-box}
@@ -11985,7 +11986,7 @@
     const roots = () => inspectorShadow ? [shadow, inspectorShadow] : [shadow];
     const findOne = (selector) => roots().map((root) => root.querySelector(selector)).find(Boolean) || null;
     const findAll = (selector) => roots().flatMap((root) => [...root.querySelectorAll(selector)]);
-    let canvasActive = true, inspectorActive = false, disposed = false, ready = false, bridge = null, stateBinding = null, handlers = {}, link = {}, saving = false, dock = null;
+    let canvasActive = true, inspectorActive = false, disposed = false, ready = false, bridge = null, stateBinding = null, assetAdapter = null, handlers = {}, link = {}, saving = false, dock = null;
     const disposal = [], readyListeners = [], loadListeners = [], listeners = [], rafs = /* @__PURE__ */ new Map(), timers = /* @__PURE__ */ new Set(), intervals = /* @__PURE__ */ new Set(), workerSet = /* @__PURE__ */ new Set();
     let sequence = 0;
     const error = (e) => {
@@ -12314,8 +12315,12 @@
       setBridge: (v) => {
         bridge = v;
       },
-      capture,
-      restore,
+      setAssetAdapter: (v) => {
+        assetAdapter = v;
+      },
+      applyAssets: (snapshot2, activeRef, properties) => assetAdapter?.apply?.(snapshot2, activeRef, properties) ?? false,
+      focusAssetCard: (key) => assetAdapter?.reveal?.(key) ?? false,
+      captureAssetProperties: () => assetAdapter?.capture?.() ?? null,
       listCards: () => dock?.listCards?.() || [],
       setCardVisible: (key, visible) => dock?.setVisible?.(key, visible) || false,
       focusCard: (key) => dock?.focusCard?.(key) || false,
@@ -188299,6 +188304,81 @@ ${arrows.join("\n")}` : "";
           timer = setTimeout(() => fn(...args), delay);
         };
       }
+      let __workspaceAssetsApplied = false;
+      const __workspaceAssetKey = (asset) => `${asset?.kind || ""}:${asset?.id || ""}`;
+      const __workspaceNativeId = (kind, id) => `workspace-asset-${kind}-${String(id || "").replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      const __workspaceClone = (value) => value == null ? value : JSON.parse(JSON.stringify(value));
+      const __workspacePropertyFor = (properties, key) => properties?.objects?.[key] || null;
+      function __workspaceVarietyFromAsset(asset, ids, properties) {
+        const data2 = asset.data || {}, key = __workspaceAssetKey(asset), saved = __workspacePropertyFor(properties, key) || {};
+        const factorIds = [data2.first, data2.second].map((ref2) => ids.get(ref2)).filter(Boolean);
+        return { id: __workspaceNativeId("variety", asset.id), __workspaceAssetKey: key, type: asset.type === "product" ? "abstract" : asset.type || "abstract", dim: String(data2.dimension ?? (asset.type === "curve" ? 1 : 3)), name: asset.name || "X", genus: String(data2.genus ?? 2), symmetricProductM: String(data2.power ?? 3), symmetricProductGenus: String(data2.genus ?? 2), ppavGenus: String(data2.genus ?? 2), grassmannianR: String(data2.r ?? 2), grassmannianN: String(data2.n ?? 4), grassmannianYoungBasis: !!saved.grassmannianYoungBasis, ciDegrees: String(data2.degrees ?? ""), nameDirty: true, construction: asset.type === "product" && factorIds.length === 2 ? { type: "product", varietyIds: factorIds } : null, ...saved.homology ? { homology: __workspaceClone(saved.homology) } : {} };
+      }
+      function __workspaceSheafFromAsset(asset, ids, properties) {
+        const data2 = asset.data || {}, key = __workspaceAssetKey(asset), saved = __workspacePropertyFor(properties, key) || {};
+        return { id: __workspaceNativeId("sheaf", asset.id), __workspaceAssetKey: key, type: asset.type || "abstract", name: asset.name || "\\mathcal{E}", twist: String(data2.twist ?? 1), rank: String(data2.rank ?? ""), baseVarietyId: ids.get(data2.base) || null, basis: saved.basis || "chern", nameDirty: true, ...saved.homology ? { homology: __workspaceClone(saved.homology) } : {} };
+      }
+      function __workspaceMapFromAsset(asset, ids, properties) {
+        const data2 = asset.data || {}, key = __workspaceAssetKey(asset), saved = __workspacePropertyFor(properties, key) || {};
+        const endpoint = (ref2) => {
+          const target = (__workspaceAssetsCurrent || []).find((item) => __workspaceAssetKey(item) === ref2);
+          return { kind: target?.kind || null, id: ids.get(ref2) || null };
+        };
+        const domain = endpoint(data2.domain), codomain = endpoint(data2.codomain);
+        return { id: __workspaceNativeId("map", asset.id), __workspaceAssetKey: key, name: asset.name || "f", domainKind: domain.kind, domainId: domain.id, codomainKind: codomain.kind, codomainId: codomain.id, construction: null, curve: null, ...saved.homology ? { homology: __workspaceClone(saved.homology) } : {} };
+      }
+      let __workspaceAssetsCurrent = [];
+      function __workspaceRevealAssetCard(key) {
+        const cards = { "hodge-card": ["hodge", refs.hodgeCard], "betti-card": ["betti", refs.bettiCard], "class-card": ["classes", refs.classCard], "cohomology-card": ["cohomology", refs.cohomologyCard], "homology-card": [null, refs.homologyCard] };
+        const entry = cards[key];
+        if (!entry) return false;
+        if (entry[0]) state.revealedCharts[entry[0]] = true;
+        recompute("assets property card", { immediate: true });
+        if (entry[1]) {
+          entry[1].hidden = false;
+          openUiCard(entry[1]);
+        }
+        return true;
+      }
+      __editor.setAssetAdapter({ apply: (snapshot, activeRef, properties) => {
+        const assets = Array.isArray(snapshot?.assets) ? snapshot.assets : [];
+        __workspaceAssetsCurrent = assets;
+        const ids = new Map(assets.map((asset) => [__workspaceAssetKey(asset), __workspaceNativeId(asset.kind, asset.id)]));
+        const prior = (collection) => new Map(collection.filter((item) => item.__workspaceAssetKey).map((item) => [item.__workspaceAssetKey, item]));
+        const varieties = prior(state.varieties), sheaves = prior(state.sheaves), maps = prior(state.maps);
+        if (!__workspaceAssetsApplied) {
+          state.varieties = [];
+          state.sheaves = [];
+          state.maps = [];
+          state.sequences = [];
+          state.globalInvariants = [];
+          __workspaceAssetsApplied = true;
+        }
+        const merge = (existing, fresh) => Object.assign(existing || {}, fresh);
+        state.varieties = assets.filter((asset) => asset.kind === "variety").map((asset) => merge(varieties.get(__workspaceAssetKey(asset)), __workspaceVarietyFromAsset(asset, ids, properties)));
+        state.sheaves = assets.filter((asset) => asset.kind === "sheaf").map((asset) => merge(sheaves.get(__workspaceAssetKey(asset)), __workspaceSheafFromAsset(asset, ids, properties)));
+        state.maps = assets.filter((asset) => asset.kind === "map").map((asset) => merge(maps.get(__workspaceAssetKey(asset)), __workspaceMapFromAsset(asset, ids, properties)));
+        const key = __workspaceAssetKey(activeRef);
+        state.activeVarietyId = activeRef?.kind === "variety" ? ids.get(key) || null : null;
+        state.activeSheafId = activeRef?.kind === "sheaf" ? ids.get(key) || null : null;
+        state.activeMapId = activeRef?.kind === "map" ? ids.get(key) || null : null;
+        state.activeSequenceId = null;
+        state.activeGlobalInvariantId = null;
+        state.inputMode = "modify";
+        recompute("assets property projection", { immediate: true });
+        return true;
+      }, reveal: __workspaceRevealAssetCard, capture: () => {
+        const objects = {};
+        for (const item of [...state.varieties, ...state.sheaves, ...state.maps]) {
+          if (!item.__workspaceAssetKey) continue;
+          const value = {};
+          if (item.homology) value.homology = __workspaceClone(item.homology);
+          if (item.basis) value.basis = item.basis;
+          if (item.grassmannianYoungBasis) value.grassmannianYoungBasis = true;
+          objects[item.__workspaceAssetKey] = value;
+        }
+        return { objects };
+      } });
       __editor.registerState({ get: () => ({ state, resolvingActiveHomologyMapContext, complexChartSnakeFastResizeObserver, VARS }), restore: (value) => {
         __editor.applyState(state, value.state);
         resolvingActiveHomologyMapContext = __editor.applyState(resolvingActiveHomologyMapContext, value.resolvingActiveHomologyMapContext);

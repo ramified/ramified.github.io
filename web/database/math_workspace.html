@@ -6,7 +6,7 @@
 <title>Mathematical Workspace</title>
 <link rel="stylesheet" href="css/site.css?v=20260903-1">
 <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
-<link rel="stylesheet" href="css/math_workspace.css?v=20260916-2">
+<link rel="stylesheet" href="css/math_workspace.css?v=20260921-5">
 </head>
 <body>
 <header>
@@ -20,7 +20,7 @@
       <span class="panel-title-text">View · <span id="workspace-canvas-name">Choose a calculator</span></span>
       <div class="workspace-canvas-controls">
         <label class="sr-only" for="workspace-open-canvas">Open canvas</label>
-        <select id="workspace-open-canvas" class="workspace-canvas-picker calculator-control" aria-label="Open canvas"></select>
+        <select id="workspace-open-canvas" class="workspace-canvas-picker workspace-control calculator-control" aria-label="Open canvas"></select>
         <button id="workspace-split-view" class="btn btn-ghost" type="button" aria-pressed="false" disabled>split view</button>
       </div>
     </header>
@@ -33,6 +33,7 @@
         <div class="workspace-canvas-pane-slot"></div>
       </section>
     </div>
+    <div id="workspace-canvas-resizer" class="workspace-canvas-resizer" role="separator" aria-orientation="horizontal" aria-label="Resize focused canvas" aria-valuemin="420" aria-valuemax="1600" aria-valuenow="680" tabindex="0"></div>
     <div id="workspace-canvas-parking" hidden aria-hidden="true"></div>
   </section>
 
@@ -56,10 +57,10 @@
           </div>
           <div id="workspace-io-export-panel" class="import-export-tabpanel" role="tabpanel">
             <label class="input-label" for="workspace-io-exporter">Export content</label>
-            <select id="workspace-io-exporter" class="calculator-control" aria-label="Export content"></select>
+            <select id="workspace-io-exporter" class="workspace-control calculator-control" aria-label="Export content"></select>
             <div id="workspace-io-format-row" hidden>
               <label class="input-label" for="workspace-io-format">Format</label>
-              <select id="workspace-io-format" class="calculator-control" aria-label="Export format"></select>
+              <select id="workspace-io-format" class="workspace-control calculator-control" aria-label="Export format"></select>
             </div>
             <div class="workspace-io-actions">
               <button id="workspace-io-export" class="btn" type="button" disabled>refresh</button>
@@ -70,7 +71,7 @@
           </div>
           <div id="workspace-io-import-panel" class="import-export-tabpanel" role="tabpanel" hidden>
             <label class="input-label" for="workspace-io-importer">Import content</label>
-            <select id="workspace-io-importer" class="calculator-control" aria-label="Import content"></select>
+            <select id="workspace-io-importer" class="workspace-control calculator-control" aria-label="Import content"></select>
             <label class="input-label" for="workspace-io-input">Imported data</label>
             <textarea id="workspace-io-input" class="workspace-io-input" placeholder="Paste exported data" spellcheck="false" disabled></textarea>
             <div class="workspace-io-actions"><button id="workspace-io-import" class="btn" type="button" disabled>import</button></div>
@@ -85,7 +86,7 @@
 
 <div id="workspace-card-picker" class="workspace-card-picker" role="dialog" aria-label="Add Inspector cards" hidden>
   <label for="workspace-card-source">Cards from</label>
-  <select id="workspace-card-source" class="calculator-control"></select>
+  <select id="workspace-card-source" class="workspace-control calculator-control"></select>
   <div id="workspace-card-options" class="workspace-card-options"></div>
 </div>
 
@@ -109,7 +110,7 @@
   };
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
-<script src="js/math_workspace_native_editors.js?v=20260916-1"></script>
-<script src="js/math_workspace.js?v=20260916-2"></script>
+<script src="js/math_workspace_native_editors_v5.js?v=20260921-5"></script>
+<script src="js/math_workspace.js?v=20260921-9"></script>
 </body>
 </html>

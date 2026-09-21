@@ -18,14 +18,15 @@
   const canvases = new Map(), sessions = new Map(), liveCards = new Map();
   const paneCanvases = { primary: '', secondary: '' };
   let activeCanvasId = '', focusedPane = 'primary', splitView = false, inspectorSourceId = '';
+  const DEFAULT_CANVAS_HEIGHT = 680, MIN_CANVAS_HEIGHT = 420, MAX_CANVAS_HEIGHT = 1600;
   const ASSET_LAYOUTS = ['icons', 'list', 'details', 'tiles', 'content'];
   const ASSET_KINDS = ['variety', 'sheaf', 'map'];
   const assetState = {
-    ready: true, editorCard: null, editorRecord: null, editorMode: 'create', editorRef: null, view: null,
+    ready: true, editorCard: null, editorRecord: null, editorMode: 'create', editorRef: null, editorDraft: {}, view: null,
     snapshot: { revision: 0, assets: [], capabilities: { variety: true, sheaf: false, map: false } },
     layout: 'icons', sort: 'creation', direction: 'asc', selected: new Set(), anchor: '', metadata: new Map(),
-    creationCounter: 0, nextObjectId: 0, renameKey: '', marquee: null,
-    cards: { input: true, importExport: true }
+    creationCounter: 0, nextObjectId: 0, renameKey: '', marquee: null, canvasHeight: DEFAULT_CANVAS_HEIGHT,
+    cards: { input: true, importExport: true }, propertySession: null, propertyRef: null, propertyData: null
   };
   const $ = (selector) => document.querySelector(selector);
   const assetKey = (asset) => `${asset?.kind || ''}:${asset?.id || ''}`;
@@ -37,17 +38,21 @@
     node.dataset.state = kind;
   }
 
-  function makeNativeCalculator(calculator) {
+  function makeNativeCalculator(calculator, options = {}) {
     const library = window.MathWorkspaceNativeEditors;
     const factory = library?.factories?.[calculator.nativeId];
     if (!factory?.mount) throw new Error(`The native ${calculator.label} editor is unavailable.`);
     const host = document.createElement('section'), inspectorHost = document.createElement('section');
     host.className = 'workspace-native-calculator'; host.dataset.nativeCalculator = calculator.nativeId;
-    inspectorHost.className = 'workspace-native-inspector'; inspectorHost.dataset.nativeInspector = calculator.id; inspectorHost.hidden = true;
-    const editor = factory.mount(host, {
-      id: `workspace-${calculator.id}`,
+    inspectorHost.className = 'workspace-native-inspector'; inspectorHost.dataset.nativeInspector = options.sessionId || calculator.id; inspectorHost.hidden = true;
+    let editor;
+    editor = factory.mount(host, {
+      id: `workspace-${options.sessionId || calculator.id}`,
       inspectorHost,
-      onChange: () => { if (calculator.id === activeCanvasId) updateImportExport(); },
+      onChange: () => {
+        if (options.onChange) options.onChange(editor);
+        else if (calculator.id === activeCanvasId) updateImportExport();
+      },
       onError: (error) => status(error?.message || String(error), 'error')
     });
     $('#workspace-canvas-parking').appendChild(host); $('#workspace-cards').appendChild(inspectorHost);
@@ -57,13 +62,97 @@
 
   function ensureCalculatorSession(definition) {
     let session = sessions.get(definition.id);
-    if (!session) { const created = makeNativeCalculator(definition); session = { kind: 'calculator', definition, ...created }; sessions.set(definition.id, session); }
+    if (!session) { const created = makeNativeCalculator(definition); session = { kind: 'calculator', definition, canvasHeight: DEFAULT_CANVAS_HEIGHT, ...created }; sessions.set(definition.id, session); }
     return session;
+  }
+
+  const ASSET_PROPERTY_CARDS = new Set(['hodge-card', 'betti-card', 'homology-card', 'class-card', 'cohomology-card']);
+  function ensureAssetsPropertySession() {
+    if (assetState.propertySession) return assetState.propertySession;
+    const definition = byId.get('sheaf-complexes');
+    const created = makeNativeCalculator(definition, {
+      sessionId: 'assets-properties',
+      onChange: () => {
+        const properties = assetState.propertySession?.editor.captureAssetProperties?.();
+        if (properties) assetState.propertyData = properties;
+      }
+    });
+    const session = { kind: 'assets-properties', definition, ...created };
+    assetState.propertySession = session;
+    session.editor.listCards?.().forEach((card) => {
+      if (!ASSET_PROPERTY_CARDS.has(card.key)) session.editor.setCardVisible?.(card.key, false);
+      else session.editor.setCardVisible?.(card.key, false);
+    });
+    session.editor.setCanvasActive?.(false);
+    session.editor.setInspectorActive?.(false);
+    return session;
+  }
+
+  const clampCanvasHeight = (height) => Math.max(MIN_CANVAS_HEIGHT, Math.min(MAX_CANVAS_HEIGHT, Math.round(Number(height) || DEFAULT_CANVAS_HEIGHT)));
+  function canvasHeightFor(id) {
+    if (id === 'assets') return clampCanvasHeight(assetState.canvasHeight);
+    return clampCanvasHeight(sessions.get(id)?.canvasHeight);
+  }
+  function visibleCanvasIds() {
+    return (splitView ? [paneCanvases.primary, paneCanvases.secondary] : [paneCanvases.primary]).filter(Boolean);
+  }
+  function updateCanvasHeightLayout() {
+    const view = document.querySelector('.workspace-view-card'), panes = $('#workspace-canvas-panes'), resizer = $('#workspace-canvas-resizer');
+    if (!view || !panes || !resizer) return;
+    const ids = visibleCanvasIds(), outerHeight = ids.length ? Math.max(...ids.map(canvasHeightFor)) : DEFAULT_CANVAS_HEIGHT;
+    view.style.setProperty('--workspace-view-height', `${outerHeight}px`);
+    const focusedHeight = activeCanvasId ? canvasHeightFor(activeCanvasId) : DEFAULT_CANVAS_HEIGHT;
+    resizer.setAttribute('aria-valuenow', String(focusedHeight));
+    resizer.setAttribute('aria-disabled', String(!activeCanvasId));
+    resizer.tabIndex = activeCanvasId ? 0 : -1;
+    const applyPaneHeights = () => {
+      const chromeHeight = Math.max(0, view.getBoundingClientRect().height - panes.getBoundingClientRect().height);
+      ids.forEach((id) => {
+        const node = canvases.get(id)?.node;
+        if (node) node.style.setProperty('--workspace-session-pane-height', `${Math.max(0, canvasHeightFor(id) - chromeHeight)}px`);
+      });
+    };
+    if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(applyPaneHeights); else setTimeout(applyPaneHeights, 0);
+  }
+  function setCanvasHeight(id, height) {
+    const next = clampCanvasHeight(height);
+    if (id === 'assets') assetState.canvasHeight = next;
+    else {
+      const session = sessions.get(id);
+      if (!session) return;
+      session.canvasHeight = next;
+    }
+    updateCanvasHeightLayout();
+  }
+  function beginCanvasResize(event) {
+    if (!activeCanvasId || event.button !== 0) return;
+    event.preventDefault();
+    const resizer = event.currentTarget, id = activeCanvasId, startingHeight = canvasHeightFor(id), startingY = event.clientY;
+    resizer.setPointerCapture?.(event.pointerId);
+    const resize = (move) => setCanvasHeight(id, startingHeight + move.clientY - startingY);
+    const finish = () => {
+      window.removeEventListener('pointermove', resize);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+    };
+    window.addEventListener('pointermove', resize);
+    window.addEventListener('pointerup', finish, { once: true });
+    window.addEventListener('pointercancel', finish, { once: true });
+  }
+  function handleCanvasResizeKeydown(event) {
+    if (!activeCanvasId) return;
+    const step = event.shiftKey ? 80 : 24;
+    if (event.key === 'ArrowUp') { event.preventDefault(); setCanvasHeight(activeCanvasId, canvasHeightFor(activeCanvasId) - step); }
+    else if (event.key === 'ArrowDown') { event.preventDefault(); setCanvasHeight(activeCanvasId, canvasHeightFor(activeCanvasId) + step); }
+    else if (event.key === 'Home') { event.preventDefault(); setCanvasHeight(activeCanvasId, MIN_CANVAS_HEIGHT); }
+    else if (event.key === 'End') { event.preventDefault(); setCanvasHeight(activeCanvasId, MAX_CANVAS_HEIGHT); }
   }
 
   function renderInspector() {
     sessions.forEach((session, id) => session.editor?.setInspectorActive?.(id === inspectorSourceId));
     const assetsActive = inspectorSourceId === 'assets';
+    const propertySession = assetState.propertySession;
+    propertySession?.editor?.setInspectorActive?.(assetsActive && !!assetState.propertyRef);
     $('#workspace-io-card').hidden = !assetsActive || !assetState.cards.importExport;
     if (assetState.editorCard) assetState.editorCard.hidden = !assetsActive || !assetState.cards.input;
     $('#workspace-add-card').setAttribute('aria-expanded', String(!$('#workspace-card-picker').hidden));
@@ -185,7 +274,7 @@
     });
     $('#workspace-canvas-name').textContent = activeCanvasId ? byId.get(activeCanvasId).label : 'Choose a view';
     const split = $('#workspace-split-view'); split.disabled = canvases.size < 2; split.textContent = splitView ? 'single view' : 'split view'; split.setAttribute('aria-pressed', String(splitView));
-    renderCanvasTabs(); renderInspector();
+    renderCanvasTabs(); renderInspector(); updateCanvasHeightLayout();
   }
 
   function availableCardsFor(sourceId) {
@@ -220,7 +309,7 @@
     source.value = preferred;
     const cards = availableCardsFor(preferred); options.replaceChildren();
     cards.forEach((card) => {
-      const row = Object.assign(document.createElement('label'), { className: 'workspace-card-option' });
+      const row = Object.assign(document.createElement('label'), { className: 'workspace-check workspace-card-option' });
       const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !!card.visible, disabled: !card.available });
       check.addEventListener('change', () => setCardVisibility(preferred, card.key, check.checked));
       row.append(check, document.createTextNode(card.available ? card.label : `${card.label} — unavailable for the current selection`)); options.appendChild(row);
@@ -259,19 +348,25 @@
     const identity = 'assets::input', card = document.createElement('section');
     card.className = 'card workspace-live-card workspace-assets-input-card workspace-assets-inspector-card'; card.dataset.workspaceCard = identity; card.dataset.workspaceLabel = 'Assets · Input'; card.hidden = !visible;
     card.innerHTML = `<div class="card-head" role="button" tabindex="0" aria-expanded="true"><span class="drag-handle" aria-hidden="true">⋮⋮</span><span class="card-head-label">Input</span><em class="toggle-icon">▾</em></div>
-      <form class="card-body workspace-assets-native-editor" data-assets-editor novalidate>
-        <div class="workspace-assets-editor-row"><label>Mode<select data-assets-mode><option value="create">Create</option><option value="modify">Modify</option></select></label><label>Object<select data-assets-kind><option value="variety">Variety</option><option value="sheaf">Sheaf</option><option value="map">Map</option></select></label></div>
-        <label>Name<input data-assets-name type="text" value="X" maxlength="80" spellcheck="false"></label>
-        <label>Type<select data-assets-subtype></select></label>
-        <div data-assets-fields></div>
-        <div class="workspace-assets-editor-actions"><button class="btn" type="submit" data-assets-save>add</button><button class="btn btn-ghost" type="button" data-assets-delete hidden>delete</button></div>
+      <form class="card-body workspace-card-form" data-assets-editor novalidate>
+        <div class="workspace-form-grid"><label class="workspace-field workspace-field-inline"><span class="input-label">Mode</span><select class="workspace-control" data-assets-mode><option value="create">Create</option><option value="modify">Modify</option></select></label><label class="workspace-field workspace-field-inline"><span class="input-label">Object</span><select class="workspace-control" data-assets-kind><option value="variety">Variety</option><option value="sheaf">Sheaf</option><option value="map">Map</option></select></label></div>
+        <label class="workspace-field workspace-field-inline"><span class="input-label">Name</span><input class="workspace-control workspace-code-control" data-assets-name type="text" value="X" maxlength="80" spellcheck="false"></label>
+        <label class="workspace-field workspace-field-inline"><span class="input-label">Type</span><select class="workspace-control" data-assets-subtype></select></label>
+        <div class="workspace-form-fields" data-assets-fields></div>
+        <div class="workspace-form-actions"><button class="btn" type="submit" data-assets-save>add</button><button class="btn btn-ghost" type="button" data-assets-delete hidden>delete</button></div>
         <p class="workspace-status" data-assets-editor-status role="status" aria-live="polite"></p>
       </form>`;
     const form = card.querySelector('[data-assets-editor]');
     card.querySelector('.card-head').addEventListener('click', () => { const collapsed = card.classList.toggle('collapsed'); card.querySelector('.card-head').setAttribute('aria-expanded', String(!collapsed)); });
-    form.querySelector('[data-assets-kind]').addEventListener('change', () => { assetState.editorRef = null; renderAssetsEditor(); });
-    form.querySelector('[data-assets-subtype]').addEventListener('change', renderAssetsEditorFields);
-    form.querySelector('[data-assets-mode]').addEventListener('change', (event) => { if (event.target.value === 'create') { assetState.editorMode = 'create'; assetState.editorRef = null; renderAssetsEditor(); } });
+    form.querySelector('[data-assets-kind]').addEventListener('change', () => { assetState.editorRef = null; assetState.editorDraft = {}; renderAssetsEditor(); });
+    form.querySelector('[data-assets-subtype]').addEventListener('change', () => { assetState.editorDraft = assetEditorData(); renderAssetsEditorFields(); });
+    form.querySelector('[data-assets-mode]').addEventListener('change', (event) => { if (event.target.value === 'create') { assetState.editorMode = 'create'; assetState.editorRef = null; assetState.editorDraft = {}; renderAssetsEditor(); } });
+    form.querySelector('[data-assets-fields]').addEventListener('change', (event) => {
+      if (!event.target.matches('[data-assets-field]')) return;
+      const derived = new Set(['genus', 'power', 'r', 'n', 'ambientDimension', 'degrees', 'first', 'second']);
+      if (!derived.has(event.target.dataset.assetsField)) return;
+      assetState.editorDraft = assetEditorData(); renderAssetsEditorFields();
+    });
     form.addEventListener('submit', saveAssetsEditor);
     form.querySelector('[data-assets-delete]').addEventListener('click', () => { if (assetState.editorRef) deleteAssets([assetState.editorRef]); });
     $('#workspace-cards').appendChild(card); liveCards.set(identity, card);
@@ -289,9 +384,40 @@
   const canonicalAssetName = (value) => plainAssetName(value).toLocaleLowerCase().replace(/\s+/g, '');
   const localAssetSnapshot = () => ({ revision: assetState.snapshot.revision, assets: assetState.snapshot.assets.map((asset) => ({ ...asset, dependencies: (asset.dependencies || []).map((ref) => ({ ...ref })), data: { ...(asset.data || {}) } })), capabilities: { variety: true, sheaf: assetState.snapshot.assets.some((asset) => asset.kind === 'variety'), map: assetState.snapshot.assets.some((asset) => asset.kind === 'variety') } });
   const editorForm = () => assetState.editorCard?.querySelector('[data-assets-editor]');
-  const fieldHtml = (label, name, value = '', type = 'text') => `<label>${label}<input data-assets-field="${name}" type="${type}" value="${String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></label>`;
-  function referenceOptions(kind, selected = '') {
-    return assetState.snapshot.assets.filter((asset) => !kind || asset.kind === kind).map((asset) => `<option value="${assetKey(asset)}"${assetKey(asset) === selected ? ' selected' : ''}>${asset.plainName || asset.name}</option>`).join('');
+  const fieldHtml = (label, name, value = '', type = 'text', options = {}) => `<label class="workspace-field workspace-field-inline"><span class="input-label">${label}</span><input class="workspace-control${type === 'text' ? ' workspace-code-control' : ''}" data-assets-field="${name}" type="${type}" value="${String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"${options.readOnly ? ' readonly aria-readonly="true"' : ''}></label>`;
+  const selectFieldHtml = (label, name, options) => `<label class="workspace-field workspace-field-inline"><span class="input-label">${label}</span><select class="workspace-control" data-assets-field="${name}">${options}</select></label>`;
+  const assetByKey = (key, kind = '') => assetState.snapshot.assets.find((asset) => assetKey(asset) === key && (!kind || asset.kind === kind)) || null;
+  const nonnegativeInt = (value, fallback = 0) => Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : fallback;
+  const positiveInt = (value, fallback = 1) => Math.max(1, nonnegativeInt(value, fallback));
+  function degreeList(value) {
+    return String(value ?? '').split(/[,\s]+/).filter(Boolean).map((entry) => positiveInt(entry, 0)).filter(Boolean);
+  }
+  function varietyDimension(asset) {
+    return nonnegativeInt(asset?.data?.dimension, 0);
+  }
+  function normalizedAssetData(kind, type, source = {}) {
+    const data = { ...source };
+    if (kind === 'variety') {
+      if (type === 'point') data.dimension = '0';
+      else if (type === 'curve') { data.dimension = '1'; data.genus = String(nonnegativeInt(data.genus, 2)); }
+      else if (type === 'symmetric-product-curve') { data.power = String(positiveInt(data.power, 3)); data.genus = String(nonnegativeInt(data.genus, 2)); data.dimension = data.power; }
+      else if (type === 'ppav-moduli') { const genus = positiveInt(data.genus, 2); data.genus = String(genus); data.dimension = String((genus * (genus + 1)) / 2); }
+      else if (type === 'grassmannian') { const r = positiveInt(data.r, 2), n = Math.max(r, positiveInt(data.n, 4)); data.r = String(r); data.n = String(n); data.dimension = String(r * (n - r)); }
+      else if (type === 'complete-intersection') { const degrees = degreeList(data.degrees || '2, 3'); const ambient = nonnegativeInt(data.ambientDimension, 4); data.degrees = degrees.join(', '); data.ambientDimension = String(ambient); data.dimension = String(Math.max(0, ambient - degrees.length)); }
+      else if (type === 'product') { const left = assetByKey(data.first, 'variety'), right = assetByKey(data.second, 'variety'); data.dimension = left && right ? String(varietyDimension(left) + varietyDimension(right)) : ''; }
+      else data.dimension = String(nonnegativeInt(data.dimension, 3));
+    } else if (kind === 'sheaf') {
+      if (['abstract', 'locally-free'].includes(type)) data.rank = String(positiveInt(data.rank, 1));
+      if (type === 'twist') data.twist = String(Math.round(Number(data.twist) || 0));
+    }
+    return data;
+  }
+  function referenceOptions(kind, selected = '', options = {}) {
+    const excluded = new Set(options.exclude || []);
+    const entries = assetState.snapshot.assets.filter((asset) => (!kind || asset.kind === kind) && !excluded.has(assetKey(asset)));
+    const selectedValid = entries.some((asset) => assetKey(asset) === selected);
+    const placeholder = options.placeholder || `Choose ${kind || 'an object'}…`;
+    return `<option value=""${selectedValid ? '' : ' selected'}>${placeholder}</option>${entries.map((asset) => `<option value="${assetKey(asset)}"${assetKey(asset) === selected ? ' selected' : ''}>${asset.plainName || asset.name}</option>`).join('')}`;
   }
   function renderAssetsEditor() {
     const form = editorForm(); if (!form) return;
@@ -300,6 +426,7 @@
     assetState.editorMode = record ? 'modify' : 'create';
     const kind = record?.kind || form.querySelector('[data-assets-kind]').value || 'variety';
     const subtype = record?.type || ASSET_SUBTYPES[kind][0][0];
+    if (record) assetState.editorDraft = { ...(record.data || {}) };
     form.querySelector('[data-assets-mode]').value = assetState.editorMode;
     form.querySelector('[data-assets-kind]').value = kind; form.querySelector('[data-assets-kind]').disabled = !!record;
     form.querySelector('[data-assets-name]').value = record?.name || (kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
@@ -311,24 +438,26 @@
     const form = editorForm(); if (!form) return;
     const kind = form.querySelector('[data-assets-kind]').value, type = form.querySelector('[data-assets-subtype]').value;
     const record = assetState.editorRef ? assetState.snapshot.assets.find((asset) => assetKey(asset) === assetKey(assetState.editorRef)) : null;
-    const data = record?.data || {}, fields = form.querySelector('[data-assets-fields]'); let html = '';
+    const currentKey = record ? assetKey(record) : '', data = normalizedAssetData(kind, type, { ...(record?.data || {}), ...assetState.editorDraft }), fields = form.querySelector('[data-assets-fields]'); let html = '';
     if (kind === 'variety') {
-      if (type !== 'point') html += fieldHtml('Dimension', 'dimension', data.dimension ?? (type === 'curve' ? 1 : 3), 'number');
+      const derivedDimension = ['curve', 'symmetric-product-curve', 'ppav-moduli', 'grassmannian', 'complete-intersection', 'product'].includes(type);
+      html += fieldHtml('Dimension', 'dimension', data.dimension ?? 3, 'number', { readOnly: type === 'point' || derivedDimension });
       if (['curve', 'symmetric-product-curve', 'ppav-moduli'].includes(type)) html += fieldHtml('Genus', 'genus', data.genus ?? 2, 'number');
       if (type === 'symmetric-product-curve') html += fieldHtml('Symmetric power m', 'power', data.power ?? 3, 'number');
       if (type === 'grassmannian') html += fieldHtml('r', 'r', data.r ?? 2, 'number') + fieldHtml('n', 'n', data.n ?? 4, 'number');
       if (type === 'complete-intersection') html += fieldHtml('Ambient dimension', 'ambientDimension', data.ambientDimension ?? 4, 'number') + fieldHtml('Degrees', 'degrees', data.degrees ?? '2, 3');
-      if (type === 'product') html += `<label>First factor<select data-assets-field="first">${referenceOptions('variety', data.first)}</select></label><label>Second factor<select data-assets-field="second">${referenceOptions('variety', data.second)}</select></label>`;
+      if (type === 'product') html += selectFieldHtml('First factor', 'first', referenceOptions('variety', data.first, { exclude: [currentKey] })) + selectFieldHtml('Second factor', 'second', referenceOptions('variety', data.second, { exclude: [currentKey] }));
     } else if (kind === 'sheaf') {
-      html += `<label>Base variety<select data-assets-field="base">${referenceOptions('variety', data.base)}</select></label>`;
+      html += selectFieldHtml('Base variety', 'base', referenceOptions('variety', data.base));
       if (['abstract', 'locally-free'].includes(type)) html += fieldHtml('Rank', 'rank', data.rank ?? 1, 'number');
       if (type === 'twist') html += fieldHtml('Twist r', 'twist', data.twist ?? 1, 'number');
-      if (['direct-sum', 'tensor', 'internal-hom'].includes(type)) html += `<label>First sheaf<select data-assets-field="first">${referenceOptions('sheaf', data.first)}</select></label><label>Second sheaf<select data-assets-field="second">${referenceOptions('sheaf', data.second)}</select></label>`;
-      if (['dual', 'self-direct-sum', 'self-tensor-product', 'schur'].includes(type)) html += `<label>Parent sheaf<select data-assets-field="parent">${referenceOptions('sheaf', data.parent)}</select></label>`;
+      if (['direct-sum', 'tensor', 'internal-hom'].includes(type)) html += selectFieldHtml('First sheaf', 'first', referenceOptions('sheaf', data.first, { exclude: [currentKey] })) + selectFieldHtml('Second sheaf', 'second', referenceOptions('sheaf', data.second, { exclude: [currentKey] }));
+      if (['dual', 'self-direct-sum', 'self-tensor-product', 'schur'].includes(type)) html += selectFieldHtml('Parent sheaf', 'parent', referenceOptions('sheaf', data.parent, { exclude: [currentKey] }));
       if (type === 'schur') html += fieldHtml('Partition', 'partition', data.partition ?? '2,1');
     } else {
       const endpointKind = type === 'sheaf' ? 'sheaf' : type === 'composition' ? 'map' : 'variety';
-      html += `<label>${type === 'composition' ? 'First map' : 'Domain'}<select data-assets-field="domain">${referenceOptions(endpointKind, data.domain)}</select></label><label>${type === 'composition' ? 'Second map' : 'Codomain'}<select data-assets-field="codomain">${referenceOptions(endpointKind, data.codomain)}</select></label>`;
+      const exclude = endpointKind === 'map' ? [currentKey] : [];
+      html += selectFieldHtml(type === 'composition' ? 'First map' : 'Domain', 'domain', referenceOptions(endpointKind, data.domain, { exclude })) + selectFieldHtml(type === 'composition' ? 'Second map' : 'Codomain', 'codomain', referenceOptions(endpointKind, data.codomain, { exclude }));
     }
     fields.innerHTML = html;
   }
@@ -336,6 +465,29 @@
     const form = editorForm(), data = {};
     form.querySelectorAll('[data-assets-field]').forEach((field) => { data[field.dataset.assetsField] = field.value; });
     return data;
+  }
+  function validateAssetData(kind, type, data, currentKey) {
+    const requireReference = (field, expectedKind, label) => {
+      const ref = assetByKey(data[field], expectedKind);
+      if (!ref) throw new Error(`${label} must reference an existing ${expectedKind}.`);
+      if (assetKey(ref) === currentKey) throw new Error(`${label} cannot reference the asset being edited.`);
+      return ref;
+    };
+    if (kind === 'variety') {
+      if (type === 'complete-intersection' && nonnegativeInt(data.ambientDimension, 0) < degreeList(data.degrees).length) throw new Error('Ambient dimension must be at least the number of defining degrees.');
+      if (type === 'product') { requireReference('first', 'variety', 'First factor'); requireReference('second', 'variety', 'Second factor'); }
+    } else if (kind === 'sheaf') {
+      requireReference('base', 'variety', 'Base variety');
+      if (['direct-sum', 'tensor', 'internal-hom'].includes(type)) {
+        const first = requireReference('first', 'sheaf', 'First sheaf'), second = requireReference('second', 'sheaf', 'Second sheaf');
+        if (assetKey(first) === assetKey(second)) throw new Error('Use a self construction instead of selecting the same sheaf twice.');
+      }
+      if (['dual', 'self-direct-sum', 'self-tensor-product', 'schur'].includes(type)) requireReference('parent', 'sheaf', 'Parent sheaf');
+    } else {
+      const endpointKind = type === 'sheaf' ? 'sheaf' : type === 'composition' ? 'map' : 'variety';
+      requireReference('domain', endpointKind, type === 'composition' ? 'First map' : 'Domain');
+      requireReference('codomain', endpointKind, type === 'composition' ? 'Second map' : 'Codomain');
+    }
   }
   function assetDependencies(kind, type, data) {
     const keys = kind === 'sheaf' ? ['base', 'first', 'second', 'parent'] : kind === 'map' ? ['domain', 'codomain'] : type === 'product' ? ['first', 'second'] : [];
@@ -359,20 +511,23 @@
       if (!name) throw new Error('An asset name cannot be empty.');
       const currentKey = assetState.editorRef ? assetKey(assetState.editorRef) : '';
       if (assetState.snapshot.assets.some((asset) => assetKey(asset) !== currentKey && canonicalAssetName(asset.name) === canonicalAssetName(name))) throw new Error('Another asset already has that name.');
-      const data = assetEditorData(), dependencies = assetDependencies(kind, type, data), prefix = kind === 'variety' ? 'X' : kind === 'sheaf' ? 'E' : 'M';
+      const data = normalizedAssetData(kind, type, assetEditorData());
+      validateAssetData(kind, type, data, currentKey);
+      const dependencies = assetDependencies(kind, type, data), prefix = kind === 'variety' ? 'X' : kind === 'sheaf' ? 'E' : 'M';
       let record = currentKey ? assetState.snapshot.assets.find((asset) => assetKey(asset) === currentKey) : null;
       if (!record) { record = { id: `${prefix}${++assetState.nextObjectId}`, kind }; assetState.snapshot.assets.push(record); }
       Object.assign(record, { name, plainName: plainAssetName(name), type, typeLabel: ASSET_SUBTYPES[kind].find(([value]) => value === type)?.[1] || kind, definition: assetDefinitionFor(kind, type, data), dependencies, data });
       record.fingerprint = JSON.stringify({ name, type, data, dependencies }); assetState.snapshot.revision += 1; assetState.snapshot.capabilities = localAssetSnapshot().capabilities;
       assetState.editorRef = { kind: record.kind, id: record.id }; assetState.selected = new Set([assetKey(record)]); assetState.anchor = assetKey(record);
+      assetState.editorDraft = { ...data };
       applyAssetSnapshot(localAssetSnapshot()); renderAssetsEditor(); message.textContent = 'Asset saved.'; status('Asset saved.', 'success');
     } catch (error) { message.textContent = error.message; status(error.message, 'error'); }
   }
 
   async function assetRequest(action, payload = {}) {
     if (action === 'snapshot') return localAssetSnapshot();
-    if (action === 'prepare-create') { ensureAssetsEditor(false); assetState.editorMode = 'create'; assetState.editorRef = null; editorForm().querySelector('[data-assets-kind]').value = payload.kind; renderAssetsEditor(); return localAssetSnapshot(); }
-    if (action === 'select-for-modify') { ensureAssetsEditor(false); const record = assetState.snapshot.assets.find((asset) => assetKey(asset) === assetKey(payload.ref)); if (!record) throw new Error('The selected asset no longer exists.'); assetState.editorRef = { kind: record.kind, id: record.id }; renderAssetsEditor(); return localAssetSnapshot(); }
+    if (action === 'prepare-create') { ensureAssetsEditor(false); assetState.editorMode = 'create'; assetState.editorRef = null; assetState.editorDraft = {}; editorForm().querySelector('[data-assets-kind]').value = payload.kind; renderAssetsEditor(); return localAssetSnapshot(); }
+    if (action === 'select-for-modify') { ensureAssetsEditor(false); const record = assetState.snapshot.assets.find((asset) => assetKey(asset) === assetKey(payload.ref)); if (!record) throw new Error('The selected asset no longer exists.'); assetState.editorRef = { kind: record.kind, id: record.id }; assetState.editorDraft = { ...(record.data || {}) }; renderAssetsEditor(); return localAssetSnapshot(); }
     if (action === 'rename') { const record = assetState.snapshot.assets.find((asset) => assetKey(asset) === assetKey(payload.ref)); const name = String(payload.name || '').trim(); if (!record) throw new Error('The selected asset no longer exists.'); if (!name) throw new Error('An asset name cannot be empty.'); if (assetState.snapshot.assets.some((asset) => asset !== record && canonicalAssetName(asset.name) === canonicalAssetName(name))) throw new Error('Another asset already has that name.'); record.name = name; record.plainName = plainAssetName(name); record.fingerprint = JSON.stringify({ name, type: record.type, data: record.data, dependencies: record.dependencies }); assetState.snapshot.revision += 1; if (assetKey(assetState.editorRef) === assetKey(record)) renderAssetsEditor(); return localAssetSnapshot(); }
     if (action === 'plan-delete') {
       const selectedKeys = new Set((payload.refs || []).map(assetKey)), deleting = new Set(selectedKeys); let changed = true;
@@ -396,7 +551,16 @@
     assetState.selected = new Set(Array.from(assetState.selected).filter((key) => present.has(key)));
     if (!present.has(assetState.anchor)) assetState.anchor = '';
     if (!present.has(assetState.renameKey)) assetState.renameKey = '';
-    assetState.snapshot = snapshot; renderAssets();
+    if (assetState.propertyData?.objects) {
+      Object.keys(assetState.propertyData.objects).forEach((key) => { if (!present.has(key)) delete assetState.propertyData.objects[key]; });
+    }
+    if (assetState.propertyRef && !present.has(assetKey(assetState.propertyRef))) assetState.propertyRef = null;
+    assetState.snapshot = snapshot;
+    if (assetState.propertySession && assetState.propertyRef) {
+      assetState.propertySession.editor.applyAssets?.(localAssetSnapshot(), assetState.propertyRef, assetState.propertyData);
+      assetState.propertyData = assetState.propertySession.editor.captureAssetProperties?.() || assetState.propertyData;
+    }
+    renderAssets(); renderInspector();
   }
 
   function orderedAssets() {
@@ -440,7 +604,7 @@
     if (!assetState.view) return;
     const content = assetState.view.querySelector('[data-assets-content]'), entries = orderedAssets();
     assetState.view.querySelector('[data-assets-count]').textContent = `${entries.length} object${entries.length === 1 ? '' : 's'}${assetState.selected.size ? ` · ${assetState.selected.size} selected` : ''}`;
-    content.dataset.layout = assetState.layout; content.replaceChildren();
+    content.dataset.layout = assetState.layout; content.dataset.assetsEmpty = !assetState.ready ? 'loading' : !entries.length ? 'empty' : 'false'; content.replaceChildren();
     if (!assetState.ready) { content.appendChild(Object.assign(document.createElement('p'), { className: 'workspace-assets-empty', textContent: 'Loading Assets…' })); return; }
     if (!entries.length) {
       const empty = Object.assign(document.createElement('div'), { className: 'workspace-assets-empty' }); empty.innerHTML = '<strong>This Assets view is empty.</strong><span>Right-click here to create a variety.</span>'; content.appendChild(empty); return;
@@ -490,20 +654,103 @@
   }
   const selectedAssetRecords = () => orderedAssets().filter((asset) => assetState.selected.has(assetKey(asset)));
 
+  function revealAssetsEditor() {
+    assetState.cards.input = true;
+    selectInspectorSource('assets');
+    const record = ensureAssetsEditor(true);
+    promoteInspectorCard(record.card);
+    renderInspector();
+    record.card.scrollIntoView?.({ block: 'nearest' });
+    return record;
+  }
+
+  // The card requested by an Assets action should be the first thing the
+  // user sees in the independent workspace Inspector.  Keep this ownership
+  // local to the workspace instead of changing historical calculator cards.
+  function promoteInspectorCard(card) {
+    const parent = card?.parentElement;
+    if (parent && parent.firstElementChild !== card) parent.insertBefore(card, parent.firstElementChild);
+  }
+
   async function openSelectedAsset() {
     const selected = selectedAssetRecords();
     if (selected.length !== 1) return;
-    ensureAssetsEditor(true).card.scrollIntoView?.({ block: 'nearest' });
+    revealAssetsEditor();
     try {
       applyAssetSnapshot(await assetRequest('select-for-modify', { ref: assetRef(selected[0]) }));
       status(`Editing ${selected[0].plainName || selected[0].name}.`, 'success');
     } catch (error) { status(error.message, 'error'); }
   }
-  async function createAsset(kind) {
-    closeAssetsContextMenu(); ensureAssetsEditor(true).card.scrollIntoView?.({ block: 'nearest' });
+
+  const ASSET_PROPERTIES_BY_KIND = {
+    variety: [['Hodge Numbers', 'hodge-card'], ['Betti Table', 'betti-card'], ['Homology Classes', 'homology-card']],
+    sheaf: [['Characteristic Classes', 'class-card'], ['Homology Classes', 'homology-card'], ['Sheaf Cohomology', 'cohomology-card']],
+    map: [['Homology Classes', 'homology-card']]
+  };
+  function openAssetProperty(cardKey) {
+    const selected = selectedAssetRecords();
+    if (selected.length !== 1) return;
+      const asset = selected[0], session = ensureAssetsPropertySession();
+    closeAssetsContextMenu();
     try {
-      applyAssetSnapshot(await assetRequest('prepare-create', { kind }));
-      status(`Create a ${kind} in the Input card.`, 'success');
+      session.editor.applyAssets?.(localAssetSnapshot(), assetRef(asset), assetState.propertyData);
+      assetState.propertyRef = assetRef(asset);
+      session.editor.focusAssetCard?.(cardKey);
+      session.editor.setCardVisible?.(cardKey, true);
+      session.editor.prioritizeCard?.(cardKey);
+      promoteInspectorCard(session.inspectorHost);
+      renderInspector();
+      session.editor.focusCard?.(cardKey);
+      assetState.propertyData = session.editor.captureAssetProperties?.() || assetState.propertyData;
+      status(`Showing ${ASSET_PROPERTIES_BY_KIND[asset.kind]?.find(([, key]) => key === cardKey)?.[0] || 'properties'} for ${asset.plainName || asset.name}.`, 'success');
+    } catch (error) { status(error?.message || String(error), 'error'); }
+  }
+  function assetPropertiesMenuItems() {
+    const selected = selectedAssetRecords();
+    if (selected.length !== 1) return [menuButton('Choose one object', () => {}, { disabled: true })];
+    return (ASSET_PROPERTIES_BY_KIND[selected[0].kind] || []).map(([label, key]) => menuButton(label, () => openAssetProperty(key)));
+  }
+
+  function uniqueDefaultAssetName(kind) {
+    const base = kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f';
+    const numbered = (number) => kind === 'sheaf' ? `\\mathcal{E}_{${number}}` : `${base}_{${number}}`;
+    let name = base, number = 2;
+    const isTaken = (candidate) => assetState.snapshot.assets.some((asset) => canonicalAssetName(asset.name) === canonicalAssetName(candidate));
+    while (isTaken(name)) name = numbered(number++);
+    return name;
+  }
+  function createDefaultAsset(kind) {
+    const type = kind === 'map' ? 'ordinary' : 'abstract';
+    const firstVariety = assetState.snapshot.assets.find((asset) => asset.kind === 'variety');
+    const data = kind === 'variety'
+      ? { dimension: '3' }
+      : kind === 'sheaf'
+        ? { base: firstVariety ? assetKey(firstVariety) : '', rank: '1' }
+        : { domain: firstVariety ? assetKey(firstVariety) : '', codomain: firstVariety ? assetKey(firstVariety) : '' };
+    const prefix = kind === 'variety' ? 'X' : kind === 'sheaf' ? 'E' : 'M';
+    const record = { id: `${prefix}${++assetState.nextObjectId}`, kind, name: uniqueDefaultAssetName(kind), type, data };
+    record.plainName = plainAssetName(record.name);
+    record.typeLabel = ASSET_SUBTYPES[kind].find(([value]) => value === type)?.[1] || kind;
+    record.dependencies = assetDependencies(kind, type, data);
+    record.definition = assetDefinitionFor(kind, type, data);
+    record.fingerprint = JSON.stringify({ name: record.name, type, data, dependencies: record.dependencies });
+    assetState.snapshot.assets.push(record);
+    assetState.snapshot.revision += 1;
+    assetState.snapshot.capabilities = localAssetSnapshot().capabilities;
+    assetState.editorRef = assetRef(record);
+    assetState.editorDraft = { ...data };
+    assetState.selected = new Set([assetKey(record)]);
+    assetState.anchor = assetKey(record);
+    return record;
+  }
+  async function createAsset(kind) {
+    closeAssetsContextMenu(); revealAssetsEditor();
+    try {
+      const record = createDefaultAsset(kind);
+      applyAssetSnapshot(localAssetSnapshot());
+      renderAssetsEditor();
+      editorForm()?.querySelector('[data-assets-name]')?.focus();
+      status(`Created ${record.plainName || record.name}. Edit it in the Input card.`, 'success');
     } catch (error) { status(error.message, 'error'); }
   }
   function beginAssetRename() {
@@ -588,14 +835,15 @@
     button.setAttribute('role', 'menuitem'); if (options.checked) button.dataset.checked = 'true';
     button.addEventListener('click', () => { action(); closeAssetsContextMenu(); }); return button;
   }
-  function menuCascade(label, children) {
+  function menuCascade(label, children, options = {}) {
     const wrapper = Object.assign(document.createElement('div'), { className: 'workspace-assets-menu-cascade' });
-    const trigger = Object.assign(document.createElement('button'), { type: 'button' });
+    const trigger = Object.assign(document.createElement('button'), { type: 'button', disabled: !!options.disabled });
     trigger.setAttribute('role', 'menuitem'); trigger.setAttribute('aria-haspopup', 'menu'); trigger.setAttribute('aria-expanded', 'false');
     trigger.append(document.createTextNode(label), Object.assign(document.createElement('span'), { className: 'workspace-assets-menu-arrow', textContent: '›' }));
     const submenu = Object.assign(document.createElement('div'), { className: 'workspace-assets-submenu' }); submenu.setAttribute('role', 'menu'); children.forEach((child) => submenu.appendChild(child));
     const setOpen = (open) => { wrapper.dataset.open = String(open); trigger.setAttribute('aria-expanded', String(open)); };
     const openExclusive = () => {
+      if (trigger.disabled) return;
       wrapper.parentElement?.querySelectorAll('.workspace-assets-menu-cascade').forEach((item) => {
         item.dataset.open = 'false'; item.querySelector(':scope > button')?.setAttribute('aria-expanded', 'false');
       });
@@ -613,7 +861,12 @@
   function showAssetsContextMenu(x, y, kind) {
     const menu = $('#workspace-assets-context-menu'); menu.replaceChildren();
     if (kind === 'item') {
-      menu.append(menuButton('Open', openSelectedAsset, { disabled: assetState.selected.size !== 1 }), menuButton('Rename', beginAssetRename, { disabled: assetState.selected.size !== 1 }), menuButton(`Delete${assetState.selected.size > 1 ? ` ${assetState.selected.size} assets` : ''}`, () => deleteAssets(selectedAssetRecords().map(assetRef)), { disabled: !assetState.selected.size }));
+      menu.append(
+        menuButton('Open', openSelectedAsset, { disabled: assetState.selected.size !== 1 }),
+        menuCascade('Properties', assetPropertiesMenuItems(), { disabled: assetState.selected.size !== 1 }),
+        menuButton('Rename', beginAssetRename, { disabled: assetState.selected.size !== 1 }),
+        menuButton(`Delete${assetState.selected.size > 1 ? ` ${assetState.selected.size} assets` : ''}`, () => deleteAssets(selectedAssetRecords().map(assetRef)), { disabled: !assetState.selected.size })
+      );
     } else {
       const viewItems = ASSET_LAYOUTS.map((layout) => menuButton(layout[0].toUpperCase() + layout.slice(1), () => { assetState.layout = layout; renderAssets(); }, { checked: assetState.layout === layout }));
       const sortItems = [['creation', 'Creation order'], ['name', 'Name'], ['type', 'Object type'], ['modified', 'Date modified']].map(([value, label]) => menuButton(label, () => { assetState.sort = value; renderAssets(); }, { checked: assetState.sort === value }));
@@ -676,13 +929,15 @@
     $('#workspace-add-card').addEventListener('click', () => $('#workspace-card-picker').hidden ? openCardPicker() : closeCardPicker());
     $('#workspace-card-source').addEventListener('change', (event) => selectInspectorSource(event.currentTarget.value));
     document.querySelectorAll('[data-pane]').forEach((pane) => pane.addEventListener('pointerdown', () => focusCanvasPane(pane.dataset.pane)));
+    $('#workspace-canvas-resizer').addEventListener('pointerdown', beginCanvasResize);
+    $('#workspace-canvas-resizer').addEventListener('keydown', handleCanvasResizeKeydown);
     $('#workspace-io-head').addEventListener('click', toggleImportExportCard); $('#workspace-io-head').addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleImportExportCard(); } });
     document.addEventListener('pointerdown', (event) => { if (!$('#workspace-assets-context-menu').hidden && !$('#workspace-assets-context-menu').contains(event.target)) closeAssetsContextMenu(); if (!$('#workspace-card-picker').hidden && !$('#workspace-card-picker').contains(event.target) && !$('#workspace-add-card').contains(event.target)) closeCardPicker(); }, true);
     window.addEventListener('blur', () => { closeAssetsContextMenu(); closeCardPicker(); }); window.addEventListener('resize', () => { closeAssetsContextMenu(); closeCardPicker(); });
     document.querySelectorAll('[data-workspace-io-tab]').forEach((tab) => tab.addEventListener('click', () => { const name = tab.dataset.workspaceIoTab; document.querySelectorAll('[data-workspace-io-tab]').forEach((item) => item.setAttribute('aria-selected', String(item === tab))); $('#workspace-io-export-panel').hidden = name !== 'export'; $('#workspace-io-import-panel').hidden = name !== 'import'; }));
-    renderCanvasView();
+    openCanvas('assets');
   }
 
-  window.MathWorkspaceAssetsTest = { assetKey, layouts: ASSET_LAYOUTS.slice(), selectAssetKey, orderedAssets, state: assetState, assetRequest, canonicalAssetName };
+  window.MathWorkspaceAssetsTest = { assetKey, layouts: ASSET_LAYOUTS.slice(), selectAssetKey, orderedAssets, state: assetState, assetRequest, canonicalAssetName, normalizedAssetData, validateAssetData, DEFAULT_CANVAS_HEIGHT, MIN_CANVAS_HEIGHT, MAX_CANVAS_HEIGHT, canvasHeightFor, sessions };
   document.addEventListener('DOMContentLoaded', initialise);
 }());

@@ -46,7 +46,8 @@ export function createCardDock(body,{changed,resize,inspectorLayout=null}) {
   if(inspectorLayout)inspectorLayout.append(side);
   update();
   const setVisible=(key,visible)=>{const card=cards.find(item=>item.dataset.workspaceCardId===key);if(!card||!available(card))return false;card.classList.toggle('workspace-card-hidden',!visible);if(visible){card.classList.remove('calculator-card-user-hidden');card.removeAttribute('aria-hidden');delete card.dataset.cardUserAriaHidden;}changed();resize();update();return true;};
-  return {update,listCards:()=>cards.map(card=>({key:card.dataset.workspaceCardId,label:label(card),available:available(card),visible:!card.classList.contains('workspace-card-hidden')&&!card.classList.contains('calculator-card-user-hidden')})),setVisible,focusCard:key=>{const card=cards.find(item=>item.dataset.workspaceCardId===key);if(!card)return false;setVisible(key,true);card.scrollIntoView?.({block:'nearest'});card.querySelector('input,select,textarea,button,[tabindex]')?.focus?.();return true;},capture:()=>({cards:cards.map(card=>({key:card.dataset.workspaceCardId,hidden:card.classList.contains('workspace-card-hidden')})),order:[...side.querySelectorAll('.card')].map(c=>c.dataset.workspaceCardId),scrollTop:side.scrollTop}),
+  const prioritizeCard=key=>{const card=cards.find(item=>item.dataset.workspaceCardId===key);if(!card)return false;setVisible(key,true);const parent=card.parentElement,first=[...parent.children].find(item=>item!==card&&cards.includes(item));if(first)parent.insertBefore(card,first);changed();resize();return true;};
+  return {update,listCards:()=>cards.map(card=>({key:card.dataset.workspaceCardId,label:label(card),available:available(card),visible:!card.classList.contains('workspace-card-hidden')&&!card.classList.contains('calculator-card-user-hidden')})),setVisible,prioritizeCard,focusCard:key=>{const card=cards.find(item=>item.dataset.workspaceCardId===key);if(!card)return false;setVisible(key,true);card.scrollIntoView?.({block:'nearest'});card.querySelector('input,select,textarea,button,[tabindex]')?.focus?.();return true;},capture:()=>({cards:cards.map(card=>({key:card.dataset.workspaceCardId,hidden:card.classList.contains('workspace-card-hidden')})),order:[...side.querySelectorAll('.card')].map(c=>c.dataset.workspaceCardId),scrollTop:side.scrollTop}),
     restore(value){if(!value)return;for(const saved of value.cards||[]){const card=cards.find(c=>c.dataset.workspaceCardId===saved.key);if(card)card.classList.toggle('workspace-card-hidden',!!saved.hidden);}
       // Only reorder cards already in this inspector. Original wide-card hosts
       // and conditional diagrams keep their own parent and behavior.
@@ -56,9 +57,10 @@ export function createCardDock(body,{changed,resize,inspectorLayout=null}) {
 }
 
 export const dockStyles=`
-.editor-body>.workspace-editor-layout{display:block!important;margin:0!important;padding:0!important;max-width:none!important}
-.workspace-editor-layout>.canvas-stack,.workspace-editor-layout>.sheaf-main-column,.workspace-editor-layout>.strand-main-column,.workspace-editor-layout>.category-main-column{min-width:0;width:100%}
-.workspace-view-card{min-width:0;max-width:100%;box-sizing:border-box}
+.editor-body>.workspace-editor-layout{display:block!important;height:100%!important;min-height:0!important;margin:0!important;padding:0!important;max-width:none!important;overflow:hidden!important}
+.workspace-editor-layout>.canvas-stack,.workspace-editor-layout>.sheaf-main-column,.workspace-editor-layout>.strand-main-column,.workspace-editor-layout>.category-main-column{min-width:0;width:100%;height:100%;min-height:0;overflow:hidden}
+.workspace-editor-layout .workspace-view-card{min-width:0;width:100%;height:100%;min-height:0!important;max-width:100%;margin:0!important;box-sizing:border-box;overflow:auto}
+.workspace-editor-layout [id$="-wide-host"]:not(:has(.card)){display:none!important}
 .workspace-editor-inspector-layout{display:block!important;margin:0!important;padding:0!important;max-width:none!important}
 .workspace-editor-inspector-layout>.workspace-card-inspector{display:grid;gap:12px;min-width:0;width:auto!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;max-height:none!important;overflow:visible!important}
 .workspace-card-inspector .card{flex:none;max-width:100%;box-sizing:border-box}
