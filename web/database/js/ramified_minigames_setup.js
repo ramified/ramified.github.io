@@ -1421,6 +1421,7 @@
                         if (document.hidden) clearWrappedViewGestures();
                       });
                       window.addEventListener('resize', handleWindowResize);
+                      window.addEventListener('orientationchange', handleWindowResize);
                       if (window.visualViewport && typeof window.visualViewport.addEventListener === 'function') {
                         window.visualViewport.addEventListener('resize', handleWindowResize);
                       }
@@ -10054,7 +10055,11 @@ function positionFullscreenActionBar() {
   }
   shell.hidden = false;
   if (refs.fullscreenActionBar) refs.fullscreenActionBar.hidden = !fullscreenPreferences.showActionRow;
-  clearFullscreenActionGutter();
+  const gutterActive = !!(
+    refs.canvasWrap.classList
+    && refs.canvasWrap.classList.contains('fullscreen-action-gutter')
+  );
+  if (!gutterActive) clearFullscreenActionGutter();
 
   const wrapRect = refs.canvasWrap.getBoundingClientRect ? refs.canvasWrap.getBoundingClientRect() : null;
   const canvasRect = refs.canvas.getBoundingClientRect ? refs.canvas.getBoundingClientRect() : null;
@@ -10063,7 +10068,13 @@ function positionFullscreenActionBar() {
   shell.classList.toggle('is-fallback', !!placement.fallback);
   shell.style.setProperty('--fullscreen-action-left', `${Math.round(placement.left)}px`);
   shell.style.setProperty('--fullscreen-action-top', `${Math.round(placement.top)}px`);
-  if (placement.fallback && fullscreenPreferences.showActionRow) applyFullscreenActionGutter();
+  if (placement.fallback && fullscreenPreferences.showActionRow) {
+    applyFullscreenActionGutter();
+    if (!gutterActive) render();
+  } else if (!fullscreenPreferences.showActionRow && gutterActive) {
+    clearFullscreenActionGutter();
+    render();
+  }
 }
 
 function chooseFullscreenActionPlacement(wrapRect, canvasRect, actionsVisible) {
@@ -16101,16 +16112,24 @@ function render() {
 
   function immersiveCanvasAvailableBox(wrap) {
     const visualViewport = typeof window !== 'undefined' ? window.visualViewport : null;
-    const viewportWidth = Math.floor(
-      (visualViewport && Number(visualViewport.width))
-      || (typeof window !== 'undefined' && Number(window.innerWidth))
-      || 720
-    );
-    const viewportHeight = Math.floor(
-      (visualViewport && Number(visualViewport.height))
-      || (typeof window !== 'undefined' && Number(window.innerHeight))
-      || 540
-    );
+    const layoutViewportWidth = typeof window !== 'undefined' ? Number(window.innerWidth) : 0;
+    const layoutViewportHeight = typeof window !== 'undefined' ? Number(window.innerHeight) : 0;
+    const visibleViewportWidth = (visualViewport && Number(visualViewport.width)) || layoutViewportWidth || 720;
+    const visibleViewportHeight = (visualViewport && Number(visualViewport.height)) || layoutViewportHeight || 540;
+    const viewportWidth = Math.max(1, Math.floor(
+      Math.min(visibleViewportWidth, layoutViewportWidth || visibleViewportWidth)
+    ));
+    const viewportHeight = Math.max(1, Math.floor(
+      Math.min(visibleViewportHeight, layoutViewportHeight || visibleViewportHeight)
+    ));
+    const visibleLeft = visualViewport && Number.isFinite(Number(visualViewport.offsetLeft))
+      ? Number(visualViewport.offsetLeft)
+      : 0;
+    const visibleTop = visualViewport && Number.isFinite(Number(visualViewport.offsetTop))
+      ? Number(visualViewport.offsetTop)
+      : 0;
+    const visibleRight = visibleLeft + viewportWidth;
+    const visibleBottom = visibleTop + viewportHeight;
     const rect = wrap && wrap.getBoundingClientRect ? wrap.getBoundingClientRect() : null;
     const computed = wrap
       && typeof window !== 'undefined'
@@ -16125,11 +16144,26 @@ function render() {
       : 0;
     const rawWidth = Math.floor((rect && rect.width) || (wrap && wrap.clientWidth) || viewportWidth);
     const rawHeight = Math.floor((rect && rect.height) || (wrap && wrap.clientHeight) || viewportHeight);
-    const width = Math.min(rawWidth, viewportWidth) - paddingX;
-    const height = Math.min(rawHeight, viewportHeight) - paddingY;
+    const hasRect = !!(
+      rect
+      && Number.isFinite(Number(rect.left))
+      && Number.isFinite(Number(rect.top))
+    );
+    const contentLeft = hasRect ? Number(rect.left) + paddingX : visibleLeft;
+    const contentTop = hasRect ? Number(rect.top) + paddingY : visibleTop;
+    const contentRight = hasRect ? Number(rect.left) + rawWidth - paddingX : contentLeft + rawWidth - paddingX;
+    const contentBottom = hasRect ? Number(rect.top) + rawHeight - paddingY : contentTop + rawHeight - paddingY;
+    const width = Math.min(
+      Math.max(1, Math.min(contentRight, visibleRight) - Math.max(contentLeft, visibleLeft)),
+      viewportWidth
+    );
+    const height = Math.min(
+      Math.max(1, Math.min(contentBottom, visibleBottom) - Math.max(contentTop, visibleTop)),
+      viewportHeight
+    );
     return {
-      width: Math.max(1, Math.floor(width || viewportWidth)),
-      height: Math.max(1, Math.floor(height || viewportHeight))
+      width: Math.max(1, Math.floor(width)),
+      height: Math.max(1, Math.floor(height))
     };
   }
 
