@@ -720,6 +720,7 @@
   let hexNeighborHintStartedAt = 0;
   let hexNeighborHintFrame = null;
   let hexLastPointerType = null;
+  let hexActiveTouchPointerId = null;
   let swipeGesture = null;
   let billiardsPointer = null;
   let billiardsAim = { x: 1, y: 0 };
@@ -1379,7 +1380,7 @@
                         refs.canvas.addEventListener('pointerup', handleCanvasPointerUp);
                         refs.canvas.addEventListener('pointercancel', handleCanvasPointerCancel);
                         refs.canvas.addEventListener('pointerleave', (event) => {
-                          clearHexHoverForNonMousePointer(event);
+                          clearHexTouchHover(event);
                           clearPlacementReachAssist(true);
                           clearPlacementHover();
                           billiardsLastPointerClient = null;
@@ -6197,11 +6198,12 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleCanvasPointerDown(event) {
-    clearHexHoverForNonMousePointer(event);
+    rememberHexPointerType(event);
     if (handleWrappedViewPointerDown(event)) return;
     if (event.isPrimary === false) return;
     if (Number.isInteger(event.button) && event.button !== 0) return;
     if (handleBilliardsPointerDown(event)) return;
+    startHexTouchHover(event);
     if (isFideChessGame(game) && fideChessPendingPromotion) return;
     if (beginFideChessPieceDrag(event)) return;
     beginPlacementReachPress(event);
@@ -6220,9 +6222,10 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleCanvasPointerMove(event) {
-    clearHexHoverForNonMousePointer(event);
+    rememberHexPointerType(event);
     if (handleWrappedViewPointerMove(event)) return;
     if (handleBilliardsPointerMove(event)) return;
+    updateHexTouchHover(event);
     if (activeFideChessDragEvent(event)) {
       clearPlacementReachAssist();
       updateFideChessPieceDrag(event);
@@ -6241,7 +6244,8 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleCanvasPointerUp(event) {
-    clearHexHoverForNonMousePointer(event);
+    rememberHexPointerType(event);
+    clearHexTouchHover(event);
     if (handleWrappedViewPointerUp(event)) return;
     if (handleBilliardsPointerUp(event)) return;
     if (activeFideChessDragEvent(event)) {
@@ -6267,7 +6271,8 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleCanvasPointerCancel(event) {
-    clearHexHoverForNonMousePointer(event);
+    rememberHexPointerType(event);
+    clearHexTouchHover(event);
     if (handleWrappedViewPointerCancel(event)) return;
     if (handleBilliardsPointerCancel(event)) return;
     if (activeFideChessDragEvent(event)) {
@@ -6282,7 +6287,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleCanvasLostPointerCapture(event) {
-    if (event && (event.pointerType === 'touch' || event.pointerType === 'pen')) clearHexHover();
+    if (event && (event.pointerType === 'touch' || event.pointerType === 'pen')) clearHexTouchHover(event);
     if (wrappedTouchTakingOver) return;
     if (handleWrappedViewPointerCancel(event)) return;
     if (handleBilliardsPointerCancel(event)) return;
@@ -10657,11 +10662,32 @@ function isHexTouchLikePointer(event) {
   return !!event && (event.pointerType === 'touch' || event.pointerType === 'pen');
 }
 
-function clearHexHoverForNonMousePointer(event) {
+function rememberHexPointerType(event) {
   const pointerType = event && event.pointerType;
-  if (pointerType !== 'mouse' && !isHexTouchLikePointer(event)) return;
-  hexLastPointerType = pointerType;
-  if (isHexTouchLikePointer(event)) clearHexHover();
+  if (pointerType === 'mouse' || isHexTouchLikePointer(event)) hexLastPointerType = pointerType;
+}
+
+function startHexTouchHover(event) {
+  if (!isHexTouchLikePointer(event) || !isHexGame(game)) return false;
+  if (hexActiveTouchPointerId != null && hexActiveTouchPointerId !== event.pointerId) return false;
+  hexActiveTouchPointerId = event.pointerId;
+  handleCanvasHover(event, { allowTouch: true });
+  return true;
+}
+
+function updateHexTouchHover(event) {
+  if (!isHexTouchLikePointer(event) || !isHexGame(game)) return false;
+  if (hexActiveTouchPointerId !== event.pointerId) return false;
+  handleCanvasHover(event, { allowTouch: true });
+  return true;
+}
+
+function clearHexTouchHover(event) {
+  if (!isHexTouchLikePointer(event)) return false;
+  if (hexActiveTouchPointerId !== event.pointerId) return false;
+  hexActiveTouchPointerId = null;
+  clearHexHover();
+  return true;
 }
 
 function shouldSuppressHexHover(event) {
@@ -10672,14 +10698,14 @@ function shouldSuppressHexHover(event) {
   ) || hexLastPointerType === 'touch' || hexLastPointerType === 'pen';
 }
 
-function handleCanvasHover(event) {
+function handleCanvasHover(event, options = {}) {
   if (!geometry || !geometry.cells || !geometry.cells.length) return;
   const preset = game ? game.preset : selectedPreset();
   setGlueHover(glueHoverInteractionAvailable(preset)
     ? hoveredGlueBoundaryAtPoint(preset, geometry, canvasPointFromEvent(event))
     : null);
   if (!isHexGame(game)) updatePlacementHover(event);
-  if (isHexGame(game) && shouldSuppressHexHover(event)) {
+  if (isHexGame(game) && !options.allowTouch && shouldSuppressHexHover(event)) {
     clearHexHover();
     return;
   }
@@ -16074,14 +16100,36 @@ function render() {
   }
 
   function immersiveCanvasAvailableBox(wrap) {
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 720;
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 540;
+    const visualViewport = typeof window !== 'undefined' ? window.visualViewport : null;
+    const viewportWidth = Math.floor(
+      (visualViewport && Number(visualViewport.width))
+      || (typeof window !== 'undefined' && Number(window.innerWidth))
+      || 720
+    );
+    const viewportHeight = Math.floor(
+      (visualViewport && Number(visualViewport.height))
+      || (typeof window !== 'undefined' && Number(window.innerHeight))
+      || 540
+    );
     const rect = wrap && wrap.getBoundingClientRect ? wrap.getBoundingClientRect() : null;
-    const width = Math.floor((rect && rect.width) || (wrap && wrap.clientWidth) || viewportWidth);
-    const height = Math.floor((rect && rect.height) || (wrap && wrap.clientHeight) || viewportHeight);
+    const computed = wrap
+      && typeof window !== 'undefined'
+      && typeof window.getComputedStyle === 'function'
+      ? window.getComputedStyle(wrap)
+      : null;
+    const paddingX = computed
+      ? (Number.parseFloat(computed.paddingLeft) || 0) + (Number.parseFloat(computed.paddingRight) || 0)
+      : 0;
+    const paddingY = computed
+      ? (Number.parseFloat(computed.paddingTop) || 0) + (Number.parseFloat(computed.paddingBottom) || 0)
+      : 0;
+    const rawWidth = Math.floor((rect && rect.width) || (wrap && wrap.clientWidth) || viewportWidth);
+    const rawHeight = Math.floor((rect && rect.height) || (wrap && wrap.clientHeight) || viewportHeight);
+    const width = Math.min(rawWidth, viewportWidth) - paddingX;
+    const height = Math.min(rawHeight, viewportHeight) - paddingY;
     return {
-      width: Math.max(220, width || viewportWidth),
-      height: Math.max(220, height || viewportHeight)
+      width: Math.max(1, Math.floor(width || viewportWidth)),
+      height: Math.max(1, Math.floor(height || viewportHeight))
     };
   }
 
