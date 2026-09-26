@@ -804,6 +804,11 @@
   const wrappedTouchConsumed = new Set();
   let calculatorInputSession = null;
   let fullscreenActionPlacementFrame = null;
+  const fullscreenDebugEnabled = typeof window !== 'undefined'
+    && new URLSearchParams(window.location?.search || '').get('fullscreenDebug') === '1';
+  let fullscreenSizingTrace = null;
+  let fullscreenDebugFrame = null;
+  const fullscreenSizingEvents = [];
   let fullscreenRestartPending = false;
   let fullscreenRestartConfirmTimer = null;
   let lianliankanHint = null;
@@ -1424,6 +1429,17 @@
                       window.addEventListener('orientationchange', handleWindowResize);
                       if (window.visualViewport && typeof window.visualViewport.addEventListener === 'function') {
                         window.visualViewport.addEventListener('resize', handleWindowResize);
+                        window.visualViewport.addEventListener('scroll', handleWindowResize);
+                      }
+                      if (typeof window.ResizeObserver === 'function') {
+                        const observer = new window.ResizeObserver((entries) => {
+                          if (!currentFullscreenElement()) return;
+                          recordFullscreenSizingEvent('ResizeObserver');
+                          if (entries.some((entry) => entry.target === refs.canvasWrap)) renderAfterCanvasLayoutChange();
+                          else requestFullscreenActionPlacement();
+                        });
+                        if (refs.canvasWrap) observer.observe(refs.canvasWrap);
+                        if (refs.fullscreenActionShell) observer.observe(refs.fullscreenActionShell);
                       }
 
                       syncSpeedOutput();
@@ -5903,9 +5919,13 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     forgetKeyboardKey(normalizeKeyboardKey(event.code || event.key));
   }
 
-  function handleWindowResize() {
-    render();
-    requestFullscreenActionPlacement();
+  function handleWindowResize(event) {
+    const source = event?.currentTarget === window.visualViewport ? 'visualViewport.' : 'window.';
+    recordFullscreenSizingEvent(source + (event?.type || 'resize'));
+    // Re-evaluate letterboxing after rotation; a previously required gutter
+    // must not permanently reduce the new canvas area.
+    clearFullscreenActionGutter();
+    renderAfterCanvasLayoutChange();
   }
 
   function handleGameShortcutKey(event, key) {
@@ -9174,6 +9194,7 @@ function setCanvasDisplayMode(mode) {
 }
 
 function toggleCanvasFullscreen() {
+  recordFullscreenSizingEvent('fullscreen-button');
   if (currentFullscreenElement()) {
     const exit = exitDocumentFullscreen();
     if (exit && typeof exit.catch === 'function') exit.catch(() => {});
@@ -9222,6 +9243,7 @@ function requestElementFullscreen(element) {
     ? element.webkitRequestFullscreen
     : null;
   if (!request) return null;
+  recordFullscreenSizingEvent(request === element.requestFullscreen ? 'requestFullscreen' : 'webkitRequestFullscreen');
   try {
     return request.call(element);
   } catch (error) {
@@ -9247,6 +9269,102 @@ function exitDocumentFullscreen() {
 function currentFullscreenElement() {
   if (typeof document === 'undefined') return null;
   return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+// Opt-in device evidence. This records independent viewport APIs rather than
+// claiming that a desktop emulation tells us what iPad Safari actually reports.
+function getFullscreenDiagnostics() {
+  if (!fullscreenDebugEnabled || !refs.canvas || !refs.canvasWrap) return null;
+  const vv = window.visualViewport;
+  const rect = (element) => {
+    const r = element.getBoundingClientRect();
+    return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+  };
+  const properties = ['width', 'height', 'maxWidth', 'maxHeight', 'minWidth', 'minHeight',
+    'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'borderTopWidth', 'borderBottomWidth',
+    'borderLeftWidth', 'borderRightWidth', 'boxSizing', 'display', 'position', 'overflow', 'aspectRatio',
+    'flex', 'flexGrow', 'flexShrink', 'alignItems', 'justifyContent'];
+  const inspect = (element) => {
+    const style = window.getComputedStyle(element);
+    return { element: element.id || element.tagName, rect: rect(element),
+      computed: Object.fromEntries(properties.map((key) => [key, style[key]])),
+      client: { width: element.clientWidth, height: element.clientHeight },
+      scroll: { width: element.scrollWidth, height: element.scrollHeight } };
+  };
+  const visible = { left: vv?.offsetLeft || 0, top: vv?.offsetTop || 0,
+    width: vv?.width || window.innerWidth, height: vv?.height || window.innerHeight };
+  visible.right = visible.left + visible.width;
+  visible.bottom = visible.top + visible.height;
+  const ancestry = [];
+  for (let element = refs.canvas; element; element = element.parentElement) ancestry.push(inspect(element));
+  const fullscreen = currentFullscreenElement();
+  const inFullscreen = [];
+  for (const item of ancestry) {
+    inFullscreen.push(item);
+    if (item.element === fullscreen?.id) break;
+  }
+  const outside = (r) => r.left < visible.left - 1 || r.top < visible.top - 1
+    || r.right > visible.right + 1 || r.bottom > visible.bottom + 1;
+  const supports = (selector) => !!window.CSS?.supports?.(`selector(${selector})`);
+  return {
+    screen: { width: window.screen.width, height: window.screen.height },
+    inner: { width: window.innerWidth, height: window.innerHeight },
+    visual: vv ? { width: vv.width, height: vv.height, offsetLeft: vv.offsetLeft, offsetTop: vv.offsetTop, scale: vv.scale } : null,
+    visible, fullscreenElement: fullscreen?.id || fullscreen?.tagName || null,
+    fullscreenAPI: document.fullscreenElement ? 'standard' : document.webkitFullscreenElement ? 'webkit' : null,
+    selectorSupport: { standard: supports(':fullscreen'), webkit: supports(':-webkit-full-screen') },
+    ...fullscreenSizingTrace,
+    requested: { width: refs.canvas.style.getPropertyValue('--canvas-display-width'), height: refs.canvas.style.getPropertyValue('--canvas-display-height') },
+    drawingBuffer: { width: refs.canvas.width, height: refs.canvas.height },
+    canvas: ancestry[0], wrap: inspect(refs.canvasWrap),
+    action: refs.fullscreenActionShell ? inspect(refs.fullscreenActionShell) : null,
+    firstOverflow: fullscreen ? inFullscreen.reverse().find((item) => outside(item.rect))?.element || null : null,
+    ancestry, events: fullscreenSizingEvents.slice()
+  };
+}
+
+function recordFullscreenSizingEvent(type) {
+  if (!fullscreenDebugEnabled) return;
+  fullscreenSizingEvents.push({ type, time: Math.round(performance.now()) });
+  if (fullscreenSizingEvents.length > 40) fullscreenSizingEvents.shift();
+  if (fullscreenDebugFrame != null) return;
+  fullscreenDebugFrame = window.requestAnimationFrame(() => {
+    fullscreenDebugFrame = null;
+    const report = getFullscreenDiagnostics();
+    if (!report) return;
+    let overlay = document.getElementById('fullscreen-sizing-debug');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'fullscreen-sizing-debug';
+      const title = document.createElement('div');
+      title.setAttribute('data-i18n', 'debug.fullscreenSizing');
+      const data = document.createElement('pre');
+      // API/DOM identifiers are literal diagnostic data, not UI prose.
+      data.lang = 'en';
+      data.setAttribute('data-i18n-ignore', '');
+      overlay.append(title, data);
+      refs.canvasWrap.appendChild(overlay);
+    }
+    overlay.hidden = !currentFullscreenElement();
+    overlay.firstChild.textContent = tk('debug.fullscreenSizing', 'Fullscreen sizing diagnostics');
+    const n = (value) => Number.isFinite(value) ? Math.round(value * 100) / 100 : value;
+    const box = (r) => r ? `${n(r.width)} x ${n(r.height)} @ ${n(r.left || 0)},${n(r.top || 0)}` : 'null';
+    overlay.lastChild.textContent = [
+      `inner: ${box(report.inner)}  screen: ${box(report.screen)}`,
+      `visual: ${box(report.visible)} scale=${n(report.visual?.scale)}`,
+      `fullscreen: ${report.fullscreenElement} (${report.fullscreenAPI})`,
+      `selectors: standard=${report.selectorSupport.standard} webkit=${report.selectorSupport.webkit}`,
+      `wrap: ${box(report.wrap.rect)} display=${report.wrap.computed.display}`,
+      `available: ${box(report.available)}`,
+      `logical: ${box(report.logical)} fit: ${box(report.fit)}`,
+      `requested: ${report.requested.width} x ${report.requested.height}`,
+      `canvas: ${box(report.canvas.rect)}`,
+      `bottom: ${n(report.canvas.rect.bottom)} / ${n(report.visible.bottom)} right: ${n(report.canvas.rect.right)} / ${n(report.visible.right)}`,
+      `action bottom: ${n(report.action?.rect.bottom)} paddingTop: ${report.wrap.computed.paddingTop}`,
+      `buffer: ${box(report.drawingBuffer)} firstOverflow: ${report.firstOverflow || 'none'}`,
+      `event: ${type}`
+    ].join('\n');
+  });
 }
 
 function normalizeFullscreenPreferences(value) {
@@ -9780,7 +9898,8 @@ function exitFromFullscreenSettings() {
   if (currentFullscreenElement()) toggleCanvasFullscreen();
 }
 
-function handleFullscreenChange() {
+function handleFullscreenChange(event) {
+  recordFullscreenSizingEvent(event?.type || 'fullscreenchange');
   if (currentFullscreenElement()) {
     canvasDisplayMode = 'fullscreen';
   } else if (canvasDisplayMode === 'fullscreen') {
@@ -9793,7 +9912,7 @@ function handleFullscreenChange() {
 }
 
 function syncCanvasDisplayModeUi() {
-  const fullscreenActive = !!currentFullscreenElement();
+  const fullscreenActive = currentFullscreenElement() === (refs.canvasWrap || refs.canvas);
   const activeMode = fullscreenActive ? 'fullscreen' : canvasDisplayMode;
   if (typeof document !== 'undefined' && document.body && document.body.classList) {
     document.body.classList.toggle('canvas-fit-viewport', activeMode === 'fit-viewport');
@@ -10045,6 +10164,7 @@ function requestFullscreenActionPlacement() {
 }
 
 function positionFullscreenActionBar() {
+  recordFullscreenSizingEvent('positionFullscreenActionBar');
   const shell = refs.fullscreenActionShell;
   if (!shell) return;
   const fullscreenActive = !!currentFullscreenElement();
@@ -10063,14 +10183,17 @@ function positionFullscreenActionBar() {
 
   const wrapRect = refs.canvasWrap.getBoundingClientRect ? refs.canvasWrap.getBoundingClientRect() : null;
   const canvasRect = refs.canvas.getBoundingClientRect ? refs.canvas.getBoundingClientRect() : null;
-  const placement = chooseFullscreenActionPlacement(wrapRect, canvasRect, fullscreenPreferences.showActionRow);
+  // Once reserved, the top gutter owns the controls. Re-measure in their final
+  // orientation rather than alternating between side and top measurements.
+  const placement = gutterActive && fullscreenPreferences.showActionRow
+    ? { edge: 'top', left: FULLSCREEN_ACTION_PAD, top: FULLSCREEN_ACTION_PAD, fallback: true }
+    : chooseFullscreenActionPlacement(wrapRect, canvasRect, fullscreenPreferences.showActionRow);
   shell.dataset.placement = placement.edge;
   shell.classList.toggle('is-fallback', !!placement.fallback);
   shell.style.setProperty('--fullscreen-action-left', `${Math.round(placement.left)}px`);
   shell.style.setProperty('--fullscreen-action-top', `${Math.round(placement.top)}px`);
   if (placement.fallback && fullscreenPreferences.showActionRow) {
-    applyFullscreenActionGutter();
-    if (!gutterActive) render();
+    if (applyFullscreenActionGutter()) render();
   } else if (!fullscreenPreferences.showActionRow && gutterActive) {
     clearFullscreenActionGutter();
     render();
@@ -10160,15 +10283,25 @@ function clampFullscreenActionPosition(value, total, size) {
 }
 
 function applyFullscreenActionGutter() {
-  if (!refs.canvasWrap || !refs.canvasWrap.classList) return;
+  if (!refs.canvasWrap || !refs.canvasWrap.classList || !refs.fullscreenActionShell) return false;
+  const wrapRect = refs.canvasWrap.getBoundingClientRect();
+  const shellRect = refs.fullscreenActionShell.getBoundingClientRect();
+  const height = Math.max(0, Math.ceil(shellRect.bottom - wrapRect.top + FULLSCREEN_ACTION_PAD));
+  const previous = Number.parseFloat(refs.canvasWrap.style.getPropertyValue('--fullscreen-action-gutter-height')) || 0;
+  const changed = !refs.canvasWrap.classList.contains('fullscreen-action-gutter') || previous !== height;
   refs.canvasWrap.classList.add('fullscreen-action-gutter');
   refs.canvasWrap.setAttribute('data-fullscreen-action-gutter', 'top');
+  refs.canvasWrap.style.setProperty('--fullscreen-action-gutter-height', `${height}px`);
+  if (changed) recordFullscreenSizingEvent('gutter-change');
+  return changed;
 }
 
 function clearFullscreenActionGutter() {
   if (!refs.canvasWrap || !refs.canvasWrap.classList) return;
+  if (refs.canvasWrap.classList.contains('fullscreen-action-gutter')) recordFullscreenSizingEvent('gutter-clear');
   refs.canvasWrap.classList.remove('fullscreen-action-gutter');
   refs.canvasWrap.removeAttribute('data-fullscreen-action-gutter');
+  refs.canvasWrap.style.removeProperty('--fullscreen-action-gutter-height');
 }
 
 function renderAfterCanvasLayoutChange() {
@@ -16094,12 +16227,14 @@ function render() {
       };
     }
     const box = immersiveCanvasAvailableBox(wrap);
+    if (fullscreenDebugEnabled) fullscreenSizingTrace = { mode, available: box };
     const shortSide = Math.min(box.width, box.height);
     return {
       widthAvailable: box.width,
       heightAvailable: box.height,
       displayWidth: box.width,
       displayHeight: box.height,
+      fullscreenBox: mode === 'fullscreen' ? box : null,
       margin: shortSide < 430 ? 12 : 18,
       immersive: true
     };
@@ -16136,11 +16271,8 @@ function render() {
       && typeof window.getComputedStyle === 'function'
       ? window.getComputedStyle(wrap)
       : null;
-    const paddingX = computed
-      ? (Number.parseFloat(computed.paddingLeft) || 0) + (Number.parseFloat(computed.paddingRight) || 0)
-      : 0;
-    const paddingY = computed
-      ? (Number.parseFloat(computed.paddingTop) || 0) + (Number.parseFloat(computed.paddingBottom) || 0)
+    const inset = (side) => computed
+      ? (Number.parseFloat(computed[`padding${side}`]) || 0) + (Number.parseFloat(computed[`border${side}Width`]) || 0)
       : 0;
     const rawWidth = Math.floor((rect && rect.width) || (wrap && wrap.clientWidth) || viewportWidth);
     const rawHeight = Math.floor((rect && rect.height) || (wrap && wrap.clientHeight) || viewportHeight);
@@ -16149,10 +16281,14 @@ function render() {
       && Number.isFinite(Number(rect.left))
       && Number.isFinite(Number(rect.top))
     );
-    const contentLeft = hasRect ? Number(rect.left) + paddingX : visibleLeft;
-    const contentTop = hasRect ? Number(rect.top) + paddingY : visibleTop;
-    const contentRight = hasRect ? Number(rect.left) + rawWidth - paddingX : contentLeft + rawWidth - paddingX;
-    const contentBottom = hasRect ? Number(rect.top) + rawHeight - paddingY : contentTop + rawHeight - paddingY;
+    // Each edge has its own inset. Subtracting paddingTop + paddingBottom
+    // from BOTH edges double-counted the action gutter.
+    const originLeft = hasRect ? Number(rect.left) : visibleLeft;
+    const originTop = hasRect ? Number(rect.top) : visibleTop;
+    const contentLeft = originLeft + inset('Left');
+    const contentTop = originTop + inset('Top');
+    const contentRight = originLeft + rawWidth - inset('Right');
+    const contentBottom = originTop + rawHeight - inset('Bottom');
     const width = Math.min(
       Math.max(1, Math.min(contentRight, visibleRight) - Math.max(contentLeft, visibleLeft)),
       viewportWidth
@@ -16163,12 +16299,20 @@ function render() {
     );
     return {
       width: Math.max(1, Math.floor(width)),
-      height: Math.max(1, Math.floor(height))
+      height: Math.max(1, Math.floor(height)),
+      left: Math.max(contentLeft, visibleLeft),
+      top: Math.max(contentTop, visibleTop),
+      right: Math.min(contentRight, visibleRight),
+      bottom: Math.min(contentBottom, visibleBottom)
     };
   }
 
   function applyCanvasDisplaySize(logicalWidth, logicalHeight, sizing) {
     if (!refs.canvas) return;
+    if (!sizing?.fullscreenBox) {
+      refs.canvas.style.removeProperty('--canvas-display-left');
+      refs.canvas.style.removeProperty('--canvas-display-top');
+    }
     if (!sizing || !sizing.immersive || !sizing.displayHeight) {
       refs.canvas.style.removeProperty('--canvas-display-width');
       refs.canvas.style.removeProperty('--canvas-display-height');
@@ -16177,6 +16321,24 @@ function render() {
     const display = fitCanvasDisplaySize(logicalWidth, logicalHeight, sizing.displayWidth, sizing.displayHeight);
     refs.canvas.style.setProperty('--canvas-display-width', `${Math.max(1, Math.floor(display.width))}px`);
     refs.canvas.style.setProperty('--canvas-display-height', `${Math.max(1, Math.floor(display.height))}px`);
+    if (sizing.fullscreenBox && refs.canvasWrap) {
+      // Use the SAME visible content rectangle for position and contain size.
+      // Flex centering in the whole fullscreen root is incorrect when the
+      // visible viewport is smaller or offset relative to that root.
+      const box = sizing.fullscreenBox;
+      const wrapRect = refs.canvasWrap.getBoundingClientRect();
+      const style = window.getComputedStyle(refs.canvasWrap);
+      const left = box.left - wrapRect.left - (Number.parseFloat(style.borderLeftWidth) || 0)
+        + (box.width - Math.floor(display.width)) / 2;
+      const top = box.top - wrapRect.top - (Number.parseFloat(style.borderTopWidth) || 0)
+        + (box.height - Math.floor(display.height)) / 2;
+      refs.canvas.style.setProperty('--canvas-display-left', `${left}px`);
+      refs.canvas.style.setProperty('--canvas-display-top', `${top}px`);
+    }
+    if (fullscreenDebugEnabled) {
+      fullscreenSizingTrace = { ...fullscreenSizingTrace, logical: { width: logicalWidth, height: logicalHeight }, fit: display };
+      recordFullscreenSizingEvent('applyCanvasDisplaySize');
+    }
   }
 
   function fitCanvasDisplaySize(logicalWidth, logicalHeight, maxWidth, maxHeight) {
@@ -34288,6 +34450,7 @@ const api = {
   spawnRoundValue,
   stateSummary,
   surfaceSuccessor,
+  getFullscreenDiagnostics,
   __test: {
     backgroundPresetForExport,
     backgroundBoundarySourceEnabled,

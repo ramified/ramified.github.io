@@ -2,6 +2,7 @@
   'use strict';
 
   const pairs = {
+    'debug.fullscreenSizing': ['Fullscreen sizing diagnostics', '全屏尺寸诊断'],
     'meta.title': ['Ramified Minigames', '歧趣游境｜Ramified Minigames'],
     'meta.heading': ['Ramified Minigames', '歧趣游境'],
     'common.language': ['Language', '语言'],
