@@ -52,7 +52,12 @@
 .workspace-card-option { min-width: 0; padding: 8px 2px; font-size: .82rem; }
 .workspace-card-option:has(input:disabled) { color: var(--muted); }
 .workspace-card-option input { width: auto !important; }
+.workspace-card-options-unavailable { margin-top: 4px; padding: 9px 2px 4px; border-top: 1px solid var(--border); color: var(--muted); font: .65rem 'JetBrains Mono', monospace; letter-spacing: .05em; text-transform: uppercase; }
+.workspace-card-options-legacy { margin-top: 4px; padding: 9px 2px 4px; border-top: 1px solid var(--border); color: var(--accent2); font: .65rem 'JetBrains Mono', monospace; letter-spacing: .05em; text-transform: uppercase; }
+.workspace-native-calculator[data-asset-drop='valid'] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.workspace-native-calculator[data-asset-drop='invalid'] { outline: 2px solid var(--accent2); outline-offset: -2px; }
 .workspace-assets-inspector-card[hidden] { display: none; }
+.workspace-assets-inspector-card .card-head-label mjx-container { text-transform: none; }
 
 .workspace-io-target { display: block; margin-bottom: 8px; color: var(--muted); font-size: 0.82rem; }
 .workspace-io-card .import-export-panel { padding: 2px 0; }
@@ -61,6 +66,9 @@
 .workspace-status { min-height: 1.5em; color: var(--muted); font-size: 0.85rem; }
 .workspace-status[data-state='error'] { color: var(--accent2); }
 .workspace-status[data-state='success'] { color: var(--accent); }
+.workspace-autosave-status { margin-left: auto; color: var(--muted); font-size: 0.76rem; font-style: normal; font-weight: 600; white-space: nowrap; }
+.workspace-card-form[data-autosave-state='saving-'] .workspace-autosave-status { color: var(--accent); }
+.workspace-card-form[data-autosave-state='invalid-draft'] [aria-invalid='true'], .workspace-card-form[data-autosave-state='conflict'] [aria-invalid='true'] { border-color: var(--accent2); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent2) 18%, transparent); }
 
 /*
  * Workspace card standard. New workspace-owned cards must use these
@@ -79,10 +87,37 @@
 .workspace-code-control { font-family: 'JetBrains Mono', 'Noto Sans SC', 'Microsoft YaHei', Consolas, monospace; font-size: 0.78rem; }
 .workspace-control:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
 .workspace-control:disabled { cursor: not-allowed; color: var(--muted); background: color-mix(in srgb, var(--bg) 75%, var(--surface)); }
+.workspace-reference-control { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--border); text-align: left; cursor: pointer; }
+.workspace-reference-control:hover { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
+.workspace-reference-derived { cursor: default; color: var(--muted); }
+.workspace-reference-derived:hover { border-color: var(--border); }
+.workspace-reference-control[data-drop-state='valid'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, var(--bg)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.workspace-reference-control[data-drop-state='invalid'] { border-color: var(--accent2); background: color-mix(in srgb, var(--accent2) 12%, var(--bg)); animation: workspace-reference-reject .18s ease-in-out 2; }
+.workspace-reference-value { min-width: 0; overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.workspace-reference-math { color: var(--text); }
+.workspace-reference-math mjx-container { margin: 0 !important; }
+.workspace-reference-arrow { flex: 0 0 auto; color: var(--muted); font-size: 1rem; line-height: 1; }
+.workspace-reference-picker { position: fixed; z-index: 10016; display: grid; min-width: min(245px, calc(100vw - 12px)); max-width: min(360px, calc(100vw - 12px)); max-height: min(320px, calc(100vh - 12px)); overflow: auto; padding: 5px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); box-shadow: 0 9px 30px rgba(0, 0, 0, .2); }
+.workspace-reference-option { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; min-width: 0; border: 0; border-radius: 3px; background: transparent; color: var(--text); padding: 7px 8px; text-align: left; cursor: pointer; }
+.workspace-reference-option:hover, .workspace-reference-option:focus-visible, .workspace-reference-option[aria-selected='true'] { outline: none; background: color-mix(in srgb, var(--accent) 11%, var(--surface)); }
+.workspace-reference-option-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-reference-option-name mjx-container { margin: 0 !important; }
+.workspace-reference-option small { color: var(--muted); font: .65rem 'JetBrains Mono', monospace; white-space: nowrap; }
+.workspace-reference-picker-empty { margin: 5px; color: var(--muted); font-size: .82rem; }
+@keyframes workspace-reference-reject { 50% { transform: translateX(2px); } }
 .workspace-check { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--text); cursor: pointer; user-select: none; }
 .workspace-check input[type='checkbox'] { flex: 0 0 auto; width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .workspace-check:has(input:disabled) { cursor: not-allowed; color: var(--muted); }
 .workspace-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.workspace-assets-inspector-card .workspace-card-tools { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
+.workspace-assets-inspector-card .workspace-card-tool { border: 0; border-radius: 3px; background: transparent; color: inherit; cursor: pointer; padding: 3px 5px; font: 14px system-ui; }
+.workspace-assets-inspector-card .workspace-card-tool:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.workspace-assets-inspector-card .workspace-card-tool:focus-visible { outline: 2px solid var(--accent); }
+.workspace-assets-inspector-card .workspace-card-tool:disabled { cursor: not-allowed; opacity: .35; background: transparent; }
+.workspace-assets-inspector-card .drag-handle { padding: 0 6px 0 0; color: var(--border); cursor: grab; user-select: none; }
+.workspace-assets-inspector-card .drag-handle:hover { color: var(--muted); }
+.workspace-assets-inspector-card .drag-handle:active { cursor: grabbing; }
+.workspace-assets-inspector-card.workspace-card-dragging, .workspace-native-inspector.workspace-card-dragging { opacity: .58; box-shadow: 0 0 0 2px var(--accent); }
 
 /* Assets view */
 .workspace-assets-view { width: 100%; height: var(--workspace-session-pane-height, 100%); max-height: 100%; min-height: 0; overflow: auto; background: var(--surface); outline: none; user-select: none; }
@@ -92,6 +127,8 @@
 .workspace-assets-empty { display: grid; place-content: center; gap: 5px; min-height: 430px; color: var(--muted); text-align: center; }
 .workspace-assets-empty strong { color: var(--text); font-size: 1.05rem; font-weight: 500; }
 .workspace-asset-item { position: relative; min-width: 0; border: 1px solid transparent; border-radius: 4px; color: var(--text); cursor: default; }
+.workspace-asset-item[draggable='true'] { cursor: grab; }
+.workspace-asset-item[draggable='true']:active { cursor: grabbing; }
 .workspace-asset-item:hover { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
 .workspace-asset-item[aria-selected='true'] { border-color: color-mix(in srgb, var(--accent) 62%, var(--border)); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
 .workspace-asset-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

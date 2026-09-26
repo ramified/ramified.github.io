@@ -46,7 +46,7 @@ function inlineHandler(source,scope,element,event){
   let result;for(const n of ast.body)result=statement(n);if(result===false)event.preventDefault();
 }
 
-export function createEditorContext(host,definition,{id,onChange=()=>{},onError=console.error,snapshot=null,inspectorHost=null}={}){
+export function createEditorContext(host,definition,{id,onChange=()=>{},onError=console.error,snapshot=null,inspectorHost=null,onCardAction=null,getCardActionState=null}={}){
   const shadow=host.attachShadow({mode:'open'}),style=realDocument.createElement('style');
   style.textContent=definition.css+'\n:host{display:block;min-width:0;height:100%;overflow:hidden;isolation:isolate}.editor-document,.editor-body{height:100%;min-height:0!important;overflow:hidden}.editor-body>.layout{max-width:none;height:100%;min-height:0;margin:0!important}.editor-body>header:first-child{display:none}'+dockStyles;
   const docRoot=realDocument.createElement('div');docRoot.className='editor-document';docRoot.lang=realDocument.documentElement.lang;
@@ -67,10 +67,11 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
   const roots=()=>inspectorShadow?[shadow,inspectorShadow]:[shadow];
   const findOne=selector=>roots().map(root=>root.querySelector(selector)).find(Boolean)||null;
   const findAll=selector=>roots().flatMap(root=>[...root.querySelectorAll(selector)]);
-  let canvasActive=true,inspectorActive=false,disposed=false,ready=false,bridge=null,stateBinding=null,assetAdapter=null,handlers={},link={},saving=false,dock=null;
-  const disposal=[],readyListeners=[],loadListeners=[],listeners=[],rafs=new Map(),timers=new Set(),intervals=new Set(),workerSet=new Set();let sequence=0;
+  let canvasActive=true,inspectorActive=false,disposed=false,ready=false,bridge=null,stateBinding=null,assetAdapter=null,handlers={},link={},saving=false,dock=null,bindingToken=null,forcedInteraction='',forcedInteractionGeneration=0;
+  const disposal=[],readyListeners=[],loadListeners=[],listeners=[],rafs=new Map(),timers=new Set(),intervals=new Set(),workerSet=new Set(),eventBindingTokens=new WeakMap(),eventChangeDetails=new WeakMap();let sequence=0;
   const error=e=>{onError(e instanceof Error?e:new Error(String(e)));};
-  const changed=()=>{if(!saving&&!disposed)onChange();};
+  const changed=(emittedBindingToken=bindingToken,detail={})=>{if(!saving&&!disposed)onChange({bindingToken:emittedBindingToken,...(!detail?.interaction&&forcedInteraction?{interaction:forcedInteraction}:{}),...(detail||{})});};
+  const markInteraction=interaction=>{const generation=++forcedInteractionGeneration;forcedInteraction=String(interaction||'');realWindow.queueMicrotask(()=>{if(generation===forcedInteractionGeneration)forcedInteraction='';});};
   const local={};
   const mathApi=realWindow.MathJax?.typesetPromise?new Proxy(realWindow.MathJax,{get(target,key){
     if(key==='typesetPromise')return (elements=[body])=>{
@@ -87,12 +88,13 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
     if(type==='DOMContentLoaded'){readyListeners.push(fn);return;}
     if(type==='load'&&target===realWindow){loadListeners.push(fn);return;}
     const callback=e=>{
+      const emittedBindingToken=eventBindingTokens.get(e)??bindingToken;
       if(disposed||(!(canvasActive||inspectorActive)&&['keydown','keyup','pointerdown','pointermove','pointerup','mousedown','mouseup','mousemove','wheel','resize'].includes(type)))return;
       if(['keydown','keyup'].includes(type)&&!roots().some(root=>root.contains(realDocument.activeElement))&&realDocument.activeElement!==host&&realDocument.activeElement!==inspectorHost)return;
       if(['pointerdown','mousedown','click'].includes(type)&&!e.composedPath().includes(host)&&!e.composedPath().includes(inspectorHost))return;
       const actual=e.composedPath?.()[0];
       const event=actual&&actual!==e.target?new Proxy(e,{get(t,k){if(k==='target')return actual;const v=Reflect.get(t,k,t);return typeof v==='function'?v.bind(t):v;}}):e;
-      try{typeof fn==='function'?fn.call(environment.window,event):fn.handleEvent(event);}catch(e){error(e);}finally{if(!['resize','mousemove','pointermove'].includes(type))changed();}
+      try{typeof fn==='function'?fn.call(environment.window,event):fn.handleEvent(event);}catch(e){error(e);}finally{if(!['resize','mousemove','pointermove','pointerenter','pointerleave','mousedown','pointerdown','focus','blur','focusin','focusout'].includes(type))changed(emittedBindingToken,eventChangeDetails.get(e)||changeDetailForEvent(e));}
     };
     target.addEventListener(type,callback,opts);listeners.push({target,type,fn,callback,opts});
   }
@@ -143,22 +145,26 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
   environment.window=win;
   function bindInline(){
     for(const node of findAll('*'))for(const a of [...node.attributes])if(/^on[a-z]+$/.test(a.name)){
-      const type=a.name.slice(2),source=a.value;node.removeAttribute(a.name);node.addEventListener(type,e=>{try{inlineHandler(source,{...link,...handlers,...local,window:win,document:facadeDocument,Math,Number,String,parseInt,parseFloat,JSON},node,e);}catch(e){error(e);}finally{changed();}});
+      const type=a.name.slice(2),source=a.value;node.removeAttribute(a.name);node.addEventListener(type,e=>{const emittedBindingToken=eventBindingTokens.get(e)??bindingToken;try{inlineHandler(source,{...link,...handlers,...local,window:win,document:facadeDocument,Math,Number,String,parseInt,parseFloat,JSON},node,e);}catch(e){error(e);}finally{changed(emittedBindingToken,eventChangeDetails.get(e)||changeDetailForEvent(e));}});
     }
   }
   const inlineObserver=new realWindow.MutationObserver(bindInline);inlineObserver.observe(body,{subtree:true,childList:true});if(inspectorBody)inlineObserver.observe(inspectorBody,{subtree:true,childList:true});disposal.push(()=>inlineObserver.disconnect());
-  for(const type of ['input','change','click','pointerup','keyup']){body.addEventListener(type,changed);inspectorBody?.addEventListener(type,changed);}
+  const changeDetailForEvent=e=>{const chrome=e.target.closest?.('.workspace-card-tool,.card-pin-btn,.card-head,.drag-handle');const appearance=e.target.closest?.('[data-workspace-canvas-appearance-control],[data-map-control],[data-object-kind][data-object-id]');return chrome?{interaction:'card-chrome'}:appearance?{interaction:'canvas-appearance'}:{}};
+  for(const type of ['input','change','click','pointerup','keyup']){const mark=e=>{eventBindingTokens.set(e,bindingToken);eventChangeDetails.set(e,changeDetailForEvent(e));},notify=e=>{const token=eventBindingTokens.get(e)??bindingToken,detail=eventChangeDetails.get(e)||changeDetailForEvent(e);if(type==='pointerup')timeout(()=>changed(token,detail),0);else changed(token,detail);};body.addEventListener(type,mark,true);body.addEventListener(type,notify);inspectorBody?.addEventListener(type,mark,true);inspectorBody?.addEventListener(type,notify);}
   function uiSnapshot(){return {controls:findAll('input[id],select[id],textarea[id]').filter(n=>n.type!=='file').map(n=>({id:n.id,value:n.value,checked:n.checked})),cards:findAll('.card').map((n,i)=>({i,key:n.dataset.workspaceCardId,collapsed:n.classList.contains('collapsed'),hidden:n.hidden,userHidden:n.classList.contains('calculator-card-user-hidden'),pinned:n.classList.contains('is-pinned'),wide:n.dataset.cardWideState})),dock:dock?.capture(),scrollTop:host.scrollTop};}
   function restoreUi(ui){if(!ui)return;for(const c of ui.controls||[]){const n=findOne(`#${CSS.escape(c.id)}`);if(n&&n.type!=='file'){n.value=c.value;if(c.checked!==undefined)n.checked=c.checked;}}for(const c of ui.cards||[]){const list=findAll('.card'),n=c.key?list.find(n=>n.dataset.workspaceCardId===c.key):list[c.i];if(n){n.classList.toggle('collapsed',c.collapsed);n.hidden=!!c.hidden;n.classList.toggle('calculator-card-user-hidden',!!c.userHidden);n.classList.toggle('is-pinned',!!c.pinned);n.querySelector('.card-head')?.setAttribute('aria-expanded',String(!c.collapsed));if(c.wide&&win.CalculatorCards)win.CalculatorCards.setWide(n,c.wide==='wide');}}dock?.restore(ui.dock);host.scrollTop=ui.scrollTop||0;}
   function capture(){return {version:1,model:bridge?encodeState(bridge.capture()):stateBinding?encodeState(stateBinding.get(),stateBinding.classes):null,ui:uiSnapshot(),storage:Object.fromEntries(localStorageMap)};}
   function restore(s){if(!s)return;saving=true;try{restoreUi(s.ui);if(s.model){if(bridge)bridge.restore(decodeState(s.model));else if(stateBinding)stateBinding.restore(decodeState(s.model,stateBinding.classes));}restoreUi(s.ui);}finally{saving=false;}}
-  const api={host,inspectorHost,shadow,inspectorShadow,environment,applyState,linkGlobals:v=>{link=v;},registerHandlers:v=>{handlers=v;},registerState:v=>{stateBinding=v;},setBridge:v=>{bridge=v;},setAssetAdapter:v=>{assetAdapter=v;},applyAssets:(snapshot,activeRef,properties)=>assetAdapter?.apply?.(snapshot,activeRef,properties)??false,focusAssetCard:key=>assetAdapter?.reveal?.(key)??false,captureAssetProperties:()=>assetAdapter?.capture?.()??null,
-    listCards:()=>dock?.listCards?.()||[],setCardVisible:(key,visible)=>dock?.setVisible?.(key,visible)||false,prioritizeCard:key=>dock?.prioritizeCard?.(key)||false,focusCard:key=>dock?.focusCard?.(key)||false,
+  const api={host,inspectorHost,shadow,inspectorShadow,environment,applyState,linkGlobals:v=>{link=v;},registerHandlers:v=>{handlers=v;},registerState:v=>{stateBinding=v;},setBridge:v=>{bridge=v;},setAssetAdapter:v=>{assetAdapter={...(assetAdapter||{}),...(v||{})};},markInteraction,notifyChange:detail=>changed(bindingToken,detail),applyAssets:(snapshot,activeRef,properties,binding)=>assetAdapter?.apply?.(snapshot,activeRef,properties,binding)??false,focusAssetCard:key=>assetAdapter?.reveal?.(key)??false,captureAssetProperties:()=>assetAdapter?.capture?.()??null,captureAssetLayout:()=>assetAdapter?.layout?.()??[],captureSceneGeometry:()=>assetAdapter?.scene?.()??null,captureCanvasAppearance:()=>assetAdapter?.appearance?.()??null,setCanvasAppearanceTarget:(ref,context)=>assetAdapter?.appearanceTarget?.(ref,context)??false,assetPositionFromClient:(x,y)=>assetAdapter?.scenePoint?.(x,y)??null,collectAssets:()=>assetAdapter?.collect?.()??null,restoreAssetPayloads:snapshot=>assetAdapter?.restore?.(snapshot)??false,positionAsset:(ref,point)=>assetAdapter?.position?.(ref,point)??false,
+    setBindingToken:value=>{bindingToken=value??null;},
+    listCards:()=>dock?.listCards?.()||[],setCardVisible:(key,visible)=>dock?.setVisible?.(key,visible)||false,prioritizeCard:key=>dock?.prioritizeCard?.(key)||false,focusCard:key=>dock?.focusCard?.(key)||false,refreshCardDock:()=>dock?.update?.(),
+    getCardPresentation:key=>dock?.getPresentation?.(key)||null,setCardPresentation:(key,value)=>dock?.setPresentation?.(key,value)||false,
+    setCardLabel(key,text,ariaLabel){const node=dock?.labelNode?.(key);if(!node)return false;mathApi?.typesetClear?.([node]);dock.setLabel?.(key,text,ariaLabel);const typeset=mathApi?.typesetPromise?.([node]);typeset?.catch(error);return true;},
     setCanvasActive(value){if(disposed)return;canvasActive=!!value;host.hidden=!canvasActive;if(canvasActive){dock?.update();for(const [token,item] of rafs)if(item.native===null)item.native=realWindow.requestAnimationFrame(t=>{rafs.delete(token);if(!disposed)item.fn(t);});bridge?.resize?.();for(const l of listeners.filter(l=>l.target===realWindow&&l.type==='resize'))l.callback(new Event('resize'));}else{bridge?.deactivate?.();for(const l of listeners.filter(l=>l.target===realWindow&&l.type==='blur'))l.callback(new Event('blur'));for(const item of rafs.values()){if(item.native!==null)realWindow.cancelAnimationFrame(item.native);item.native=null;}}},
     setInspectorActive(value){if(disposed)return;inspectorActive=!!value;if(inspectorHost)inspectorHost.hidden=!inspectorActive; if(inspectorActive)dock?.update();},
     activate(){api.setCanvasActive(true);},deactivate(){api.setCanvasActive(false);},
     dispose(){if(disposed)return;api.setCanvasActive(false);api.setInspectorActive(false);disposed=true;mathApi?.typesetClear();for(const l of listeners)l.target.removeEventListener(l.type,l.callback,l.opts);timers.forEach(realWindow.clearTimeout);intervals.forEach(realWindow.clearInterval);workerSet.forEach(w=>w.terminate());disposal.forEach(f=>f());host.remove();inspectorHost?.remove();},
-    start(){bindInline();ready=true;for(const fn of readyListeners){try{fn.call(facadeDocument,new Event('DOMContentLoaded'));}catch(e){error(e);}}for(const fn of loadListeners){try{fn.call(win,new Event('load'));}catch(e){error(e);}}bindInline();dock=createCardDock(body,{changed,resize:()=>bridge?.resize?.(),inspectorLayout});if(snapshot)restore(snapshot);mathApi?.typesetPromise?.([body,inspectorBody].filter(Boolean)).catch(error);return api;}
+    start(){bindInline();ready=true;for(const fn of readyListeners){try{fn.call(facadeDocument,new Event('DOMContentLoaded'));}catch(e){error(e);}}for(const fn of loadListeners){try{fn.call(win,new Event('load'));}catch(e){error(e);}}bindInline();dock=createCardDock(body,{changed:detail=>changed(bindingToken,detail),resize:()=>bridge?.resize?.(),inspectorLayout,onCardAction,getCardActionState});if(snapshot)restore(snapshot);mathApi?.typesetPromise?.([body,inspectorBody].filter(Boolean)).catch(error);return api;}
   };
   return api;
 }

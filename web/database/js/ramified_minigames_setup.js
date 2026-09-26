@@ -716,8 +716,10 @@
   let hexNeighborHoverIndex = null;
   let hexNeighborHintIndex = null;
   let hexNeighborHintTimer = null;
+  let hexNeighborHintGeneration = 0;
   let hexNeighborHintStartedAt = 0;
   let hexNeighborHintFrame = null;
+  let hexLastPointerType = null;
   let swipeGesture = null;
   let billiardsPointer = null;
   let billiardsAim = { x: 1, y: 0 };
@@ -1376,7 +1378,8 @@
                         refs.canvas.addEventListener('pointermove', handleCanvasPointerMove);
                         refs.canvas.addEventListener('pointerup', handleCanvasPointerUp);
                         refs.canvas.addEventListener('pointercancel', handleCanvasPointerCancel);
-                        refs.canvas.addEventListener('pointerleave', () => {
+                        refs.canvas.addEventListener('pointerleave', (event) => {
+                          clearHexHoverForNonMousePointer(event);
                           clearPlacementReachAssist(true);
                           clearPlacementHover();
                           billiardsLastPointerClient = null;
@@ -1391,6 +1394,13 @@
                       document.addEventListener('keydown', handleKeydown);
                       document.addEventListener('keyup', handleKeyup);
                       document.addEventListener('fullscreenchange', handleFullscreenChange);
+                      if (
+                        'onwebkitfullscreenchange' in document
+                        || 'webkitFullscreenElement' in document
+                        || typeof document.webkitExitFullscreen === 'function'
+                      ) {
+                        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+                      }
                       document.addEventListener('site-language-change', () => {
                         syncControls();
                         syncStats();
@@ -6187,6 +6197,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleCanvasPointerDown(event) {
+    clearHexHoverForNonMousePointer(event);
     if (handleWrappedViewPointerDown(event)) return;
     if (event.isPrimary === false) return;
     if (Number.isInteger(event.button) && event.button !== 0) return;
@@ -6209,6 +6220,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleCanvasPointerMove(event) {
+    clearHexHoverForNonMousePointer(event);
     if (handleWrappedViewPointerMove(event)) return;
     if (handleBilliardsPointerMove(event)) return;
     if (activeFideChessDragEvent(event)) {
@@ -6229,6 +6241,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleCanvasPointerUp(event) {
+    clearHexHoverForNonMousePointer(event);
     if (handleWrappedViewPointerUp(event)) return;
     if (handleBilliardsPointerUp(event)) return;
     if (activeFideChessDragEvent(event)) {
@@ -6254,6 +6267,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleCanvasPointerCancel(event) {
+    clearHexHoverForNonMousePointer(event);
     if (handleWrappedViewPointerCancel(event)) return;
     if (handleBilliardsPointerCancel(event)) return;
     if (activeFideChessDragEvent(event)) {
@@ -6268,6 +6282,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleCanvasLostPointerCapture(event) {
+    if (event && (event.pointerType === 'touch' || event.pointerType === 'pen')) clearHexHover();
     if (wrappedTouchTakingOver) return;
     if (handleWrappedViewPointerCancel(event)) return;
     if (handleBilliardsPointerCancel(event)) return;
@@ -9143,8 +9158,8 @@ function setCanvasDisplayMode(mode) {
   }
   fullscreenReturnMode = nextMode;
   canvasDisplayMode = nextMode;
-  if (currentFullscreenElement() && document.exitFullscreen) {
-    const exit = document.exitFullscreen();
+  if (currentFullscreenElement()) {
+    const exit = exitDocumentFullscreen();
     if (exit && typeof exit.catch === 'function') exit.catch(() => {});
   }
   syncCanvasDisplayModeUi();
@@ -9154,21 +9169,26 @@ function setCanvasDisplayMode(mode) {
 
 function toggleCanvasFullscreen() {
   if (currentFullscreenElement()) {
-    if (document.exitFullscreen) {
-      const exit = document.exitFullscreen();
-      if (exit && typeof exit.catch === 'function') exit.catch(() => {});
-    }
+    const exit = exitDocumentFullscreen();
+    if (exit && typeof exit.catch === 'function') exit.catch(() => {});
     return;
   }
   const target = refs.canvasWrap || refs.canvas;
-  if (!target || typeof target.requestFullscreen !== 'function') {
+  if (!target) {
     syncStatus('fullscreen unavailable', 'this browser does not allow fullscreen for the canvas', 'warn');
     return;
   }
   fullscreenReturnMode = canvasDisplayMode === 'fullscreen' ? 'normal' : canvasDisplayMode;
   canvasDisplayMode = 'fullscreen';
   syncCanvasDisplayModeUi();
-  const request = target.requestFullscreen();
+  const request = requestElementFullscreen(target);
+  if (request === null) {
+    canvasDisplayMode = fullscreenReturnMode || 'normal';
+    syncCanvasDisplayModeUi();
+    renderAfterCanvasLayoutChange();
+    syncStatus('fullscreen unavailable', 'this browser does not allow fullscreen for the canvas', 'warn');
+    return;
+  }
   if (request && typeof request.then === 'function') {
     request
     .then(() => {
@@ -9188,8 +9208,39 @@ function toggleCanvasFullscreen() {
   }
 }
 
+function requestElementFullscreen(element) {
+  if (!element) return null;
+  const request = typeof element.requestFullscreen === 'function'
+    ? element.requestFullscreen
+    : typeof element.webkitRequestFullscreen === 'function'
+    ? element.webkitRequestFullscreen
+    : null;
+  if (!request) return null;
+  try {
+    return request.call(element);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
+
+function exitDocumentFullscreen() {
+  if (typeof document === 'undefined') return null;
+  const exit = typeof document.exitFullscreen === 'function'
+    ? document.exitFullscreen
+    : typeof document.webkitExitFullscreen === 'function'
+    ? document.webkitExitFullscreen
+    : null;
+  if (!exit) return null;
+  try {
+    return exit.call(document);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
+
 function currentFullscreenElement() {
-  return typeof document !== 'undefined' ? document.fullscreenElement : null;
+  if (typeof document === 'undefined') return null;
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
 }
 
 function normalizeFullscreenPreferences(value) {
@@ -10602,6 +10653,25 @@ function debugSetBombAtTarget(target, tool) {
   refreshDebugExportIfNeeded();
 }
 
+function isHexTouchLikePointer(event) {
+  return !!event && (event.pointerType === 'touch' || event.pointerType === 'pen');
+}
+
+function clearHexHoverForNonMousePointer(event) {
+  const pointerType = event && event.pointerType;
+  if (pointerType !== 'mouse' && !isHexTouchLikePointer(event)) return;
+  hexLastPointerType = pointerType;
+  if (isHexTouchLikePointer(event)) clearHexHover();
+}
+
+function shouldSuppressHexHover(event) {
+  return !!(
+    event
+    && event.sourceCapabilities
+    && event.sourceCapabilities.firesTouchEvents
+  ) || hexLastPointerType === 'touch' || hexLastPointerType === 'pen';
+}
+
 function handleCanvasHover(event) {
   if (!geometry || !geometry.cells || !geometry.cells.length) return;
   const preset = game ? game.preset : selectedPreset();
@@ -10609,6 +10679,10 @@ function handleCanvasHover(event) {
     ? hoveredGlueBoundaryAtPoint(preset, geometry, canvasPointFromEvent(event))
     : null);
   if (!isHexGame(game)) updatePlacementHover(event);
+  if (isHexGame(game) && shouldSuppressHexHover(event)) {
+    clearHexHover();
+    return;
+  }
   const target = isHexGame(game) ? tileFromCanvasEvent(event) : null;
   const playableTarget = target && !game.removed.has(target.index) ? target : null;
   updateHexNeighborHover(playableTarget ? playableTarget.index : null);
@@ -10634,6 +10708,7 @@ function updateHexNeighborHover(index) {
   if (hexNeighborHoverIndex === next) return;
   if (hexNeighborHintTimer != null) clearTimeout(hexNeighborHintTimer);
   hexNeighborHintTimer = null;
+  const hintGeneration = ++hexNeighborHintGeneration;
   const hintWasVisible = Number.isInteger(hexNeighborHintIndex);
   hexNeighborHoverIndex = next;
   hexNeighborHintIndex = null;
@@ -10641,8 +10716,13 @@ function updateHexNeighborHover(index) {
   if (!Number.isInteger(next) || !isHexGame(game)) return;
   const targetState = game;
   hexNeighborHintTimer = setTimeout(() => {
+    if (
+      hintGeneration !== hexNeighborHintGeneration
+      || game !== targetState
+      || !isHexGame(game)
+      || hexNeighborHoverIndex !== next
+    ) return;
     hexNeighborHintTimer = null;
-    if (game !== targetState || !isHexGame(game) || hexNeighborHoverIndex !== next) return;
     hexNeighborHintIndex = next;
     hexNeighborHintStartedAt = now();
     render();
@@ -10652,6 +10732,7 @@ function updateHexNeighborHover(index) {
 function clearHexNeighborHint(shouldRender = true) {
   if (hexNeighborHintTimer != null) clearTimeout(hexNeighborHintTimer);
   hexNeighborHintTimer = null;
+  hexNeighborHintGeneration += 1;
   if (hexNeighborHintFrame != null) cancelFrame(hexNeighborHintFrame);
   hexNeighborHintFrame = null;
   const changed = Number.isInteger(hexNeighborHoverIndex) || Number.isInteger(hexNeighborHintIndex);

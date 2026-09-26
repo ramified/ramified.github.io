@@ -11711,7 +11711,7 @@
   }
 
   // js/math_workspace/editors/dock.mjs
-  function createCardDock(body, { changed, resize, inspectorLayout = null, onCardAction = null, getCardActionState = null }) {
+  function createCardDock(body, { changed, resize, inspectorLayout = null }) {
     const side = body.querySelector(".layout .side");
     if (!side) return null;
     const layout = side.closest(".layout");
@@ -11739,48 +11739,34 @@
           button.title = text;
           button.setAttribute("aria-label", text);
         }
-        const siblings = [...card.parentElement.children].filter((c) => cards.includes(c) && available(c) && !c.classList.contains("workspace-card-hidden") && !c.classList.contains("calculator-card-user-hidden"));
-        const index = siblings.indexOf(card), external = getCardActionState?.(card.dataset.workspaceCardId) || null;
-        const up = card.querySelector('[data-workspace-card-action="move-up"]'), down = card.querySelector('[data-workspace-card-action="move-down"]');
-        if (up) up.disabled = external ? external.canMoveUp === false : index <= 0;
-        if (down) down.disabled = external ? external.canMoveDown === false : index < 0 || index >= siblings.length - 1;
       }
     }
     function move(card, delta) {
-      if (onCardAction?.({ action: "move", key: card.dataset.workspaceCardId, delta }) === true) {
-        changed({ interaction: "card-chrome", action: "move" });
-        resize();
-        update();
-        return;
-      }
       const siblings = [...card.parentElement.children].filter((c) => cards.includes(c) && available(c) && !c.classList.contains("workspace-card-hidden") && !c.classList.contains("calculator-card-user-hidden"));
       const i = siblings.indexOf(card), other = siblings[i + delta];
       if (!other) return;
       card.parentElement.insertBefore(card, delta < 0 ? other : other.nextSibling);
-      changed({ interaction: "card-chrome", action: "move" });
+      changed();
       resize();
-      update();
     }
     for (const card of cards) {
       const head = card.querySelector(".card-head"), tools = document.createElement("span");
       tools.className = "workspace-card-tools";
-      for (const [key, text, handler, actionKey] of [
-        ["moveCardUp", "\u2191", () => move(card, -1), "move-up"],
-        ["moveCardDown", "\u2193", () => move(card, 1), "move-down"],
+      for (const [key, text, handler] of [
+        ["moveCardUp", "\u2191", () => move(card, -1)],
+        ["moveCardDown", "\u2193", () => move(card, 1)],
         ["hideCard", "\xD7", () => {
           card.classList.add("workspace-card-hidden");
-          onCardAction?.({ action: "hide", key: card.dataset.workspaceCardId });
-          changed({ interaction: "card-chrome", action: "hide" });
+          changed();
           resize();
           update();
-        }, "hide"]
+        }]
       ]) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "workspace-card-tool";
         button.dataset.i18n = key;
         button.textContent = text;
-        button.dataset.workspaceCardAction = actionKey;
         for (const event of ["pointerdown", "mousedown", "touchstart", "keydown"]) button.addEventListener(event, (e) => e.stopPropagation());
         button.addEventListener("click", (e) => {
           e.preventDefault();
@@ -11817,42 +11803,11 @@
       resize();
       return true;
     };
-    const cardFor = (key) => cards.find((item) => item.dataset.workspaceCardId === key) || null;
-    const getPresentation = (key) => {
-      const card = cardFor(key);
-      return card ? { collapsed: card.classList.contains("collapsed"), pinned: card.classList.contains("is-pinned"), displayMode: card.dataset.cardWideState || "normal" } : null;
-    };
-    const setPresentation = (key, value = {}) => {
-      const card = cardFor(key);
-      if (!card) return false;
-      if (Object.hasOwn(value, "collapsed")) {
-        card.classList.toggle("collapsed", !!value.collapsed);
-        card.querySelector(".card-head")?.setAttribute("aria-expanded", String(!value.collapsed));
-      }
-      if (Object.hasOwn(value, "pinned")) card.classList.toggle("is-pinned", !!value.pinned);
-      if (value.displayMode) card.dataset.cardWideState = value.displayMode;
-      resize();
-      update();
-      return true;
-    };
-    const labelNode = (key) => cardFor(key)?.querySelector(".card-head-label") || null;
-    const setLabel = (key, text, ariaLabel) => {
-      const node = labelNode(key), card = cardFor(key);
-      if (!node || !card) return false;
-      node.textContent = text;
-      const head = card.querySelector(".card-head");
-      if (head && ariaLabel) head.setAttribute("aria-label", ariaLabel);
-      return true;
-    };
     return {
       update,
       listCards: () => cards.map((card) => ({ key: card.dataset.workspaceCardId, label: label(card), available: available(card), visible: !card.classList.contains("workspace-card-hidden") && !card.classList.contains("calculator-card-user-hidden") })),
       setVisible,
       prioritizeCard,
-      getPresentation,
-      setPresentation,
-      labelNode,
-      setLabel,
       focusCard: (key) => {
         const card = cards.find((item) => item.dataset.workspaceCardId === key);
         if (!card) return false;
@@ -11886,10 +11841,8 @@
 .workspace-editor-inspector-layout>.workspace-card-inspector{display:grid;gap:12px;min-width:0;width:auto!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;max-height:none!important;overflow:visible!important}
 .workspace-card-inspector .card{flex:none;max-width:100%;box-sizing:border-box}
 .workspace-card-hidden{display:none!important}
-.workspace-card-tools{display:inline-flex;gap:2px;margin-left:auto;align-items:center}.workspace-card-tool{border:0;background:transparent;color:inherit;cursor:pointer;padding:3px 5px;font:14px system-ui;border-radius:3px}.workspace-card-tool:hover{background:#64756b25}.workspace-card-tool:focus-visible{outline:2px solid #b17835}.workspace-card-tool:disabled{cursor:not-allowed;opacity:.35;background:transparent}
-.workspace-card-inspector .card-head{flex-wrap:wrap}.workspace-card-inspector .card-head-label{flex:1;min-width:80px}.workspace-card-inspector .card-head-label mjx-container{text-transform:none}
-.workspace-canvas-appearance-empty{margin:0;padding:8px 2px;color:var(--muted,#68736d);font-size:.9rem;line-height:1.35}.workspace-canvas-appearance-card [data-canvas-appearance-map][hidden],.workspace-canvas-appearance-card [data-canvas-appearance-empty][hidden]{display:none!important}
-.workspace-canvas-appearance-card [data-canvas-appearance-map]{display:grid;grid-template-columns:minmax(64px,118px) max-content minmax(0,1fr) minmax(36px,48px);column-gap:7px}.workspace-canvas-appearance-card .map-curve-row{grid-column:1/-1;grid-template-columns:subgrid;column-gap:0}.workspace-canvas-appearance-card .map-curve-control{display:contents}.workspace-canvas-appearance-card .map-curve-control input[type=range]{min-width:0;width:100%;max-width:100%}
+.workspace-card-tools{display:inline-flex;gap:2px;margin-left:auto;align-items:center}.workspace-card-tool{border:0;background:transparent;color:inherit;cursor:pointer;padding:3px 5px;font:14px system-ui;border-radius:3px}.workspace-card-tool:hover{background:#64756b25}.workspace-card-tool:focus-visible{outline:2px solid #b17835}
+.workspace-card-inspector .card-head{flex-wrap:wrap}.workspace-card-inspector .card-head-label{flex:1;min-width:80px}
 @media(max-width:760px){.workspace-card-tool{padding:8px}}
 `;
 
@@ -12009,7 +11962,7 @@
     if (result === false) event.preventDefault();
   }
   function createEditorContext(host, definition, { id, onChange = () => {
-  }, onError = console.error, snapshot = null, inspectorHost = null, onCardAction = null, getCardActionState = null } = {}) {
+  }, onError = console.error, snapshot = null, inspectorHost = null } = {}) {
     const shadow = host.attachShadow({ mode: "open" }), style = realDocument.createElement("style");
     style.textContent = definition.css + "\n:host{display:block;min-width:0;height:100%;overflow:hidden;isolation:isolate}.editor-document,.editor-body{height:100%;min-height:0!important;overflow:hidden}.editor-body>.layout{max-width:none;height:100%;min-height:0;margin:0!important}.editor-body>header:first-child{display:none}" + dockStyles;
     const docRoot = realDocument.createElement("div");
@@ -12044,21 +11997,14 @@
     const roots = () => inspectorShadow ? [shadow, inspectorShadow] : [shadow];
     const findOne = (selector) => roots().map((root) => root.querySelector(selector)).find(Boolean) || null;
     const findAll = (selector) => roots().flatMap((root) => [...root.querySelectorAll(selector)]);
-    let canvasActive = true, inspectorActive = false, disposed = false, ready = false, bridge = null, stateBinding = null, assetAdapter = null, handlers = {}, link = {}, saving = false, dock = null, bindingToken = null, forcedInteraction = "", forcedInteractionGeneration = 0;
-    const disposal = [], readyListeners = [], loadListeners = [], listeners = [], rafs = /* @__PURE__ */ new Map(), timers = /* @__PURE__ */ new Set(), intervals = /* @__PURE__ */ new Set(), workerSet = /* @__PURE__ */ new Set(), eventBindingTokens = /* @__PURE__ */ new WeakMap(), eventChangeDetails = /* @__PURE__ */ new WeakMap();
+    let canvasActive = true, inspectorActive = false, disposed = false, ready = false, bridge = null, stateBinding = null, assetAdapter = null, handlers = {}, link = {}, saving = false, dock = null;
+    const disposal = [], readyListeners = [], loadListeners = [], listeners = [], rafs = /* @__PURE__ */ new Map(), timers = /* @__PURE__ */ new Set(), intervals = /* @__PURE__ */ new Set(), workerSet = /* @__PURE__ */ new Set();
     let sequence = 0;
     const error = (e) => {
       onError(e instanceof Error ? e : new Error(String(e)));
     };
-    const changed = (emittedBindingToken = bindingToken, detail = {}) => {
-      if (!saving && !disposed) onChange({ bindingToken: emittedBindingToken, ...!detail?.interaction && forcedInteraction ? { interaction: forcedInteraction } : {}, ...detail || {} });
-    };
-    const markInteraction = (interaction) => {
-      const generation = ++forcedInteractionGeneration;
-      forcedInteraction = String(interaction || "");
-      realWindow.queueMicrotask(() => {
-        if (generation === forcedInteractionGeneration) forcedInteraction = "";
-      });
+    const changed = () => {
+      if (!saving && !disposed) onChange();
     };
     const local = {};
     const mathApi = realWindow.MathJax?.typesetPromise ? new Proxy(realWindow.MathJax, { get(target, key) {
@@ -12099,7 +12045,6 @@
         return;
       }
       const callback = (e) => {
-        const emittedBindingToken = eventBindingTokens.get(e) ?? bindingToken;
         if (disposed || !(canvasActive || inspectorActive) && ["keydown", "keyup", "pointerdown", "pointermove", "pointerup", "mousedown", "mouseup", "mousemove", "wheel", "resize"].includes(type)) return;
         if (["keydown", "keyup"].includes(type) && !roots().some((root) => root.contains(realDocument.activeElement)) && realDocument.activeElement !== host && realDocument.activeElement !== inspectorHost) return;
         if (["pointerdown", "mousedown", "click"].includes(type) && !e.composedPath().includes(host) && !e.composedPath().includes(inspectorHost)) return;
@@ -12114,7 +12059,7 @@
         } catch (e2) {
           error(e2);
         } finally {
-          if (!["resize", "mousemove", "pointermove", "pointerenter", "pointerleave", "mousedown", "pointerdown", "focus", "blur", "focusin", "focusout"].includes(type)) changed(emittedBindingToken, eventChangeDetails.get(e) || changeDetailForEvent(e));
+          if (!["resize", "mousemove", "pointermove"].includes(type)) changed();
         }
       };
       target.addEventListener(type, callback, opts);
@@ -12301,13 +12246,12 @@
         const type = a.name.slice(2), source = a.value;
         node.removeAttribute(a.name);
         node.addEventListener(type, (e) => {
-          const emittedBindingToken = eventBindingTokens.get(e) ?? bindingToken;
           try {
             inlineHandler(source, { ...link, ...handlers, ...local, window: win, document: facadeDocument, Math, Number, String, parseInt, parseFloat, JSON }, node, e);
           } catch (e2) {
             error(e2);
           } finally {
-            changed(emittedBindingToken, eventChangeDetails.get(e) || changeDetailForEvent(e));
+            changed();
           }
         });
       }
@@ -12316,24 +12260,9 @@
     inlineObserver.observe(body, { subtree: true, childList: true });
     if (inspectorBody) inlineObserver.observe(inspectorBody, { subtree: true, childList: true });
     disposal.push(() => inlineObserver.disconnect());
-    const changeDetailForEvent = (e) => {
-      const chrome = e.target.closest?.(".workspace-card-tool,.card-pin-btn,.card-head,.drag-handle");
-      const appearance = e.target.closest?.("[data-workspace-canvas-appearance-control],[data-map-control],[data-object-kind][data-object-id]");
-      return chrome ? { interaction: "card-chrome" } : appearance ? { interaction: "canvas-appearance" } : {};
-    };
     for (const type of ["input", "change", "click", "pointerup", "keyup"]) {
-      const mark = (e) => {
-        eventBindingTokens.set(e, bindingToken);
-        eventChangeDetails.set(e, changeDetailForEvent(e));
-      }, notify = (e) => {
-        const token = eventBindingTokens.get(e) ?? bindingToken, detail = eventChangeDetails.get(e) || changeDetailForEvent(e);
-        if (type === "pointerup") timeout(() => changed(token, detail), 0);
-        else changed(token, detail);
-      };
-      body.addEventListener(type, mark, true);
-      body.addEventListener(type, notify);
-      inspectorBody?.addEventListener(type, mark, true);
-      inspectorBody?.addEventListener(type, notify);
+      body.addEventListener(type, changed);
+      inspectorBody?.addEventListener(type, changed);
     }
     function uiSnapshot() {
       return { controls: findAll("input[id],select[id],textarea[id]").filter((n) => n.type !== "file").map((n) => ({ id: n.id, value: n.value, checked: n.checked })), cards: findAll(".card").map((n, i) => ({ i, key: n.dataset.workspaceCardId, collapsed: n.classList.contains("collapsed"), hidden: n.hidden, userHidden: n.classList.contains("calculator-card-user-hidden"), pinned: n.classList.contains("is-pinned"), wide: n.dataset.cardWideState })), dock: dock?.capture(), scrollTop: host.scrollTop };
@@ -12400,38 +12329,16 @@
       setAssetAdapter: (v) => {
         assetAdapter = { ...assetAdapter || {}, ...v || {} };
       },
-      markInteraction,
-      notifyChange: (detail) => changed(bindingToken, detail),
-      applyAssets: (snapshot2, activeRef, properties, binding) => assetAdapter?.apply?.(snapshot2, activeRef, properties, binding) ?? false,
+      applyAssets: (snapshot2, activeRef, properties) => assetAdapter?.apply?.(snapshot2, activeRef, properties) ?? false,
       focusAssetCard: (key) => assetAdapter?.reveal?.(key) ?? false,
       captureAssetProperties: () => assetAdapter?.capture?.() ?? null,
-      captureAssetLayout: () => assetAdapter?.layout?.() ?? [],
-      captureSceneGeometry: () => assetAdapter?.scene?.() ?? null,
-      captureCanvasAppearance: () => assetAdapter?.appearance?.() ?? null,
-      setCanvasAppearanceTarget: (ref2, context) => assetAdapter?.appearanceTarget?.(ref2, context) ?? false,
-      assetPositionFromClient: (x, y) => assetAdapter?.scenePoint?.(x, y) ?? null,
       collectAssets: () => assetAdapter?.collect?.() ?? null,
       restoreAssetPayloads: (snapshot2) => assetAdapter?.restore?.(snapshot2) ?? false,
       positionAsset: (ref2, point) => assetAdapter?.position?.(ref2, point) ?? false,
-      setBindingToken: (value) => {
-        bindingToken = value ?? null;
-      },
       listCards: () => dock?.listCards?.() || [],
       setCardVisible: (key, visible) => dock?.setVisible?.(key, visible) || false,
       prioritizeCard: (key) => dock?.prioritizeCard?.(key) || false,
       focusCard: (key) => dock?.focusCard?.(key) || false,
-      refreshCardDock: () => dock?.update?.(),
-      getCardPresentation: (key) => dock?.getPresentation?.(key) || null,
-      setCardPresentation: (key, value) => dock?.setPresentation?.(key, value) || false,
-      setCardLabel(key, text, ariaLabel) {
-        const node = dock?.labelNode?.(key);
-        if (!node) return false;
-        mathApi?.typesetClear?.([node]);
-        dock.setLabel?.(key, text, ariaLabel);
-        const typeset = mathApi?.typesetPromise?.([node]);
-        typeset?.catch(error);
-        return true;
-      },
       setCanvasActive(value) {
         if (disposed) return;
         canvasActive = !!value;
@@ -12497,7 +12404,7 @@
           }
         }
         bindInline();
-        dock = createCardDock(body, { changed: (detail) => changed(bindingToken, detail), resize: () => bridge?.resize?.(), inspectorLayout, onCardAction, getCardActionState });
+        dock = createCardDock(body, { changed, resize: () => bridge?.resize?.(), inspectorLayout });
         if (snapshot) restore(snapshot);
         mathApi?.typesetPromise?.([body, inspectorBody].filter(Boolean)).catch(error);
         return api;
@@ -188453,7 +188360,7 @@ ${arrows.join("\n")}` : "";
         __workspaceAssetsCurrent = assets;
         const ids = new Map(assets.map((asset) => [__workspaceAssetKey(asset), __workspaceNativeId(asset.kind, asset.id)]));
         const prior = (collection) => new Map(collection.filter((item) => item.__workspaceAssetKey).map((item) => [item.__workspaceAssetKey, item]));
-        const varieties = prior(state.varieties), sheaves = prior(state.sheaves), maps = prior(state.maps), sheafBases = new Map(state.sheaves.filter((item) => item.__workspaceAssetKey).map((item) => [item.__workspaceAssetKey, item.baseVarietyId]));
+        const varieties = prior(state.varieties), sheaves = prior(state.sheaves), maps = prior(state.maps);
         if (!__workspaceAssetsApplied) {
           state.varieties = [];
           state.sheaves = [];
@@ -188465,12 +188372,6 @@ ${arrows.join("\n")}` : "";
         const merge = (existing, fresh) => Object.assign(existing || {}, fresh);
         state.varieties = assets.filter((asset) => asset.kind === "variety").map((asset) => merge(varieties.get(__workspaceAssetKey(asset)), __workspaceVarietyFromAsset(asset, ids, properties)));
         state.sheaves = assets.filter((asset) => asset.kind === "sheaf").map((asset) => merge(sheaves.get(__workspaceAssetKey(asset)), __workspaceSheafFromAsset(asset, ids, properties)));
-        state.sheaves.forEach((sheaf) => {
-          if (sheafBases.get(sheaf.__workspaceAssetKey) !== sheaf.baseVarietyId) {
-            positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
-            avoidCanvasLabelOverlap(sheaf);
-          }
-        });
         state.maps = assets.filter((asset) => asset.kind === "map").map((asset) => merge(maps.get(__workspaceAssetKey(asset)), __workspaceMapFromAsset(asset, ids, properties)));
         const key = __workspaceAssetKey(activeRef);
         state.activeVarietyId = activeRef?.kind === "variety" ? ids.get(key) || null : null;
@@ -188576,508 +188477,6 @@ ${arrows.join("\n")}` : "";
         button.addEventListener("click", () => options.onCollectAssets?.());
         actions.append(button);
       });
-      function __workspaceProjectionProperties(asset, properties) {
-        resolvingActiveHomologyMapContext = null;
-        return asset?.properties || properties?.objects?.[__workspaceAssetKey(asset)] || {};
-      }
-      function __workspaceProjectionLayout(item, asset) {
-        const point = asset?.viewPosition;
-        if (!Number.isFinite(point?.x) || !Number.isFinite(point?.y)) return item;
-        if (point.mode === "map-curve" && __workspaceRecordKind(item) === "map") {
-          item.labelT = Math.max(0.06, Math.min(0.94, point.x));
-          item.labelOffset = point.y;
-          if (point.curve) item.curve = __workspaceClone(point.curve);
-          if (Number.isFinite(point.defaultBendPx)) item.defaultBendPx = point.defaultBendPx;
-          item.modified = point.modified === true;
-          return item;
-        }
-        item.labelX = Math.max(0.08, Math.min(0.92, point.x));
-        item.labelY = Math.max(0.08, Math.min(0.92, point.y));
-        item.labelPositionDirty = true;
-        return item;
-      }
-      function __workspaceSetProjectionReadOnly(locked) {
-        for (const node of document2.querySelectorAll("#input-card input,#input-card select,#input-card textarea,#input-card button")) node.disabled = !!locked;
-        for (const node of [refs.clearCanvas, refs.deleteObject]) if (node) node.disabled = !!locked;
-      }
-      function __workspaceSyncHomologyPromotionLabels() {
-        const sheaf = state.sheaves.find((item) => item.id === state.activeSheafId), base = sheaf && state.varieties.find((item) => item.id === sheaf.baseVarietyId), label = base?.namePlain || base?.name || "the base variety";
-        for (const node of refs.homologyRules?.querySelectorAll?.("[data-add-sheaf-chern-class],[data-add-tangent-chern-class]") || []) node.title = "Add this Chern class to homology of " + label;
-      }
-      const __workspaceAppearanceCard = document2.createElement("section");
-      __workspaceAppearanceCard.id = "canvas-appearance-card";
-      __workspaceAppearanceCard.className = "card workspace-canvas-appearance-card";
-      __workspaceAppearanceCard.innerHTML = "<div class='card-head' role='button' tabindex='0' aria-expanded='true' aria-label='Sheaf Complex \xB7 Canvas Appearance'><span class='drag-handle' title='drag card' aria-hidden='true'>\u22EE\u22EE</span><span class='card-head-label'>Sheaf Complex \xB7 Canvas Appearance</span><em class='toggle-icon'>\u25BE</em></div><div class='card-body'><p class='workspace-canvas-appearance-empty' data-canvas-appearance-empty>No canvas object selected.</p><div data-canvas-appearance-map hidden><div class='sheaf-field-row map-curve-row'><label class='input-label' for='workspace-map-point-count'>curve</label><label class='map-curve-control' for='workspace-map-point-count'><span>points</span><input id='workspace-map-point-count' data-workspace-canvas-appearance-control data-canvas-appearance-point-count type='range' min='0' max='4' step='1' value='0'><output data-canvas-appearance-point-count-value for='workspace-map-point-count'>0</output></label></div><div class='sheaf-field-row map-curve-row'><label class='input-label' for='workspace-map-label-offset'>label</label><label class='map-curve-control' for='workspace-map-label-offset'><span>offset</span><input id='workspace-map-label-offset' data-workspace-canvas-appearance-control data-canvas-appearance-label-offset type='range' min='-25' max='25' step='1' value='-18'><output data-canvas-appearance-label-offset-value for='workspace-map-label-offset'>-18px</output></label></div></div></div>";
-      for (const node of document2.querySelectorAll("#map-curve-row,#map-label-offset-row")) node.remove();
-      document2.querySelector(".layout .side")?.append(__workspaceAppearanceCard);
-      const __workspaceAppearanceEmpty = __workspaceAppearanceCard.querySelector("[data-canvas-appearance-empty]");
-      const __workspaceAppearanceMap = __workspaceAppearanceCard.querySelector("[data-canvas-appearance-map]");
-      const __workspaceAppearancePointCount = __workspaceAppearanceCard.querySelector("[data-canvas-appearance-point-count]");
-      const __workspaceAppearancePointCountValue = __workspaceAppearanceCard.querySelector("[data-canvas-appearance-point-count-value]");
-      const __workspaceAppearanceLabelOffset = __workspaceAppearanceCard.querySelector("[data-canvas-appearance-label-offset]");
-      const __workspaceAppearanceLabelOffsetValue = __workspaceAppearanceCard.querySelector("[data-canvas-appearance-label-offset-value]");
-      let __workspaceAppearanceTargetKey = "", __workspaceAppearanceEpoch = 0, __workspaceAppearanceRenderedTitle = "";
-      function __workspaceAppearanceObject() {
-        return [...state.varieties, ...state.sheaves, ...state.maps].find((item) => item.__workspaceAssetKey === __workspaceAppearanceTargetKey) || null;
-      }
-      function __workspaceAppearanceKind(item) {
-        return item ? __workspaceRecordKind(item) : "";
-      }
-      function __workspaceAppearancePlainName(item) {
-        const fallback = __workspaceAppearanceKind(item) === "sheaf" ? "E" : __workspaceAppearanceKind(item) === "map" ? "f" : "X";
-        const value = String(item?.name || fallback);
-        try {
-          return latexToPlain(value) || fallback;
-        } catch (_) {
-          return value.replace(/[{}$\\]/g, "").trim() || fallback;
-        }
-      }
-      function __workspaceRenderAppearanceTitle(item) {
-        const label = __workspaceAppearanceCard.querySelector(".card-head-label"), head = __workspaceAppearanceCard.querySelector(".card-head"), plain = item ? __workspaceAppearancePlainName(item) + " \xB7 Canvas Appearance" : "Sheaf Complex \xB7 Canvas Appearance", math = item ? String(item.name || "X") : "";
-        head?.setAttribute("aria-label", plain);
-        const signature = __workspaceAppearanceTargetKey + "\n" + math;
-        if (__workspaceAppearanceRenderedTitle === signature) return;
-        __workspaceAppearanceRenderedTitle = signature;
-        const epoch = __workspaceAppearanceEpoch, key = __workspaceAppearanceTargetKey;
-        label.textContent = item ? "\\(" + sanitizeMathLabel(math, __workspaceAppearanceKind(item) === "sheaf" ? "\\mathcal{E}" : __workspaceAppearanceKind(item) === "map" ? "f" : "X") + "\\) \xB7 Canvas Appearance" : plain;
-        if (!item || !window.MathJax?.typesetPromise) return;
-        state.mathJaxQueue = (state.mathJaxQueue || Promise.resolve()).then(() => {
-          if (epoch !== __workspaceAppearanceEpoch || key !== __workspaceAppearanceTargetKey || signature !== __workspaceAppearanceRenderedTitle) return;
-          if (window.MathJax.typesetClear) window.MathJax.typesetClear([label]);
-          return window.MathJax.typesetPromise([label]);
-        }).catch(() => {
-        });
-      }
-      function __workspaceSyncCanvasAppearance() {
-        const item = __workspaceAppearanceObject(), kind = __workspaceAppearanceKind(item), map = kind === "map" ? item : null;
-        __workspaceRenderAppearanceTitle(item);
-        __workspaceAppearanceMap.hidden = !map;
-        __workspaceAppearanceEmpty.hidden = !!map;
-        __workspaceAppearanceEmpty.textContent = item ? "No existing appearance controls apply to this object." : "No canvas object selected.";
-        const count = mapCurveAnchorCount(map), offset2 = normalizedMapLabelOffset(map?.labelOffset);
-        __workspaceAppearancePointCount.value = String(mapPointCountSliderValue(count));
-        __workspaceAppearancePointCountValue.textContent = formatMapPointCount(count);
-        __workspaceAppearanceLabelOffset.value = String(offset2);
-        __workspaceAppearanceLabelOffsetValue.textContent = String(offset2) + "px";
-        for (const control of [__workspaceAppearancePointCount, __workspaceAppearanceLabelOffset]) control.disabled = !map;
-        return !!item;
-      }
-      function __workspaceSetCanvasAppearanceTarget(ref2) {
-        const key = __workspaceAssetKey(ref2), item = [...state.varieties, ...state.sheaves, ...state.maps].find((entry) => entry.__workspaceAssetKey === key) || null, next = item ? key : "";
-        if (next !== __workspaceAppearanceTargetKey) {
-          __workspaceAppearanceTargetKey = next;
-          __workspaceAppearanceEpoch += 1;
-          __workspaceAppearanceRenderedTitle = "";
-        }
-        __workspaceSyncCanvasAppearance();
-        return !!item;
-      }
-      function __workspaceSetCanvasAppearanceTargetFromNative(kind, id) {
-        const item = objectByKind(kind, id);
-        return __workspaceSetCanvasAppearanceTarget(item?.__workspaceAssetKey ? { kind: __workspaceAppearanceKind(item), id: item.__workspaceAssetKey.slice(item.__workspaceAssetKey.indexOf(":") + 1) } : null);
-      }
-      function __workspaceAppearanceBinding() {
-        const item = __workspaceAppearanceObject();
-        return { key: __workspaceAppearanceTargetKey, epoch: __workspaceAppearanceEpoch, item };
-      }
-      function __workspaceAppearanceBindingCurrent(binding) {
-        return !!binding?.item && binding.key === __workspaceAppearanceTargetKey && binding.epoch === __workspaceAppearanceEpoch && binding.item === __workspaceAppearanceObject();
-      }
-      function __workspaceApplyCurveCount() {
-        __editor.markInteraction("canvas-appearance");
-        const binding = __workspaceAppearanceBinding();
-        if (!__workspaceAppearanceBindingCurrent(binding) || __workspaceAppearanceKind(binding.item) !== "map") return;
-        const count = mapPointCountFromSliderValue(__workspaceAppearancePointCount.value);
-        if (mapCurveAnchorCount(binding.item) === count) {
-          __workspaceSyncCanvasAppearance();
-          return;
-        }
-        applyStandardMapCurve(binding.item, count);
-        renderCanvas(state.lastResult);
-        __workspaceSyncCanvasAppearance();
-      }
-      function __workspaceApplyLabelOffset() {
-        __editor.markInteraction("canvas-appearance");
-        const binding = __workspaceAppearanceBinding();
-        if (!__workspaceAppearanceBindingCurrent(binding) || __workspaceAppearanceKind(binding.item) !== "map") return;
-        const offset2 = normalizedMapLabelOffset(__workspaceAppearanceLabelOffset.value);
-        if (normalizedMapLabelOffset(binding.item.labelOffset) === offset2) {
-          __workspaceSyncCanvasAppearance();
-          return;
-        }
-        setMapLabelOffset(binding.item, offset2);
-        updateMapOverlayPositions(binding.item);
-        __workspaceSyncCanvasAppearance();
-      }
-      __workspaceAppearancePointCount.addEventListener("input", __workspaceApplyCurveCount);
-      __workspaceAppearancePointCount.addEventListener("change", __workspaceApplyCurveCount);
-      __workspaceAppearanceLabelOffset.addEventListener("input", __workspaceApplyLabelOffset);
-      __workspaceAppearanceLabelOffset.addEventListener("change", __workspaceApplyLabelOffset);
-      const __workspaceNativeSyncMapCurveControls = syncMapCurveControls;
-      syncMapCurveControls = function(map) {
-        __workspaceNativeSyncMapCurveControls(map);
-        __workspaceSyncCanvasAppearance();
-      };
-      const __workspaceNativeSelectObject = selectObject;
-      selectObject = function(kind, id) {
-        const result = __workspaceNativeSelectObject(kind, id);
-        __workspaceSetCanvasAppearanceTargetFromNative(kind, id);
-        return result;
-      };
-      const __workspaceAppearanceNativeStartLabelDrag = startCanvasLabelDrag;
-      startCanvasLabelDrag = function(target, event) {
-        __workspaceSetCanvasAppearanceTargetFromNative(target?.dataset?.objectKind, target?.dataset?.objectId);
-        return __workspaceAppearanceNativeStartLabelDrag(target, event);
-      };
-      const __workspaceAppearanceNativeStartControlDrag = startMapControlDrag;
-      startMapControlDrag = function(target, event) {
-        const map = state.maps.find((item) => item.id === target?.dataset?.mapId);
-        if (map) __workspaceSetCanvasAppearanceTarget({ kind: "map", id: map.__workspaceAssetKey.slice(map.__workspaceAssetKey.indexOf(":") + 1) });
-        return __workspaceAppearanceNativeStartControlDrag(target, event);
-      };
-      finishCanvasLabelDrag = function(event) {
-        const drag = state.labelDrag;
-        document2.removeEventListener("pointermove", updateCanvasLabelDrag);
-        document2.removeEventListener("pointerup", finishCanvasLabelDrag);
-        document2.removeEventListener("pointercancel", finishCanvasLabelDrag);
-        if (!drag) return;
-        drag.target.classList.remove("is-dragging");
-        try {
-          drag.target.releasePointerCapture?.(drag.pointerId);
-        } catch (_) {
-        }
-        const moved = drag.moved, outside = event && pointOutsideRect(event.clientX, event.clientY, drag.canvasRect);
-        state.labelDrag = null;
-        if (moved && outside) {
-          state.suppressLabelClickUntil = Date.now() + 180;
-          removeCanvasObject(drag.kind, drag.id);
-          return;
-        }
-        if (!moved && event?.type !== "pointercancel" && !outside) {
-          state.suppressLabelClickUntil = Date.now() + 180;
-          selectObject(drag.kind, drag.id);
-          return;
-        }
-        if (moved) {
-          state.suppressLabelClickUntil = Date.now() + 180;
-          __workspaceSyncCanvasAppearance();
-        }
-      };
-      finishMapControlDrag = function(event) {
-        const drag = state.mapControlDrag;
-        document2.removeEventListener("pointermove", updateMapControlDrag);
-        document2.removeEventListener("pointerup", finishMapControlDrag);
-        document2.removeEventListener("pointercancel", finishMapControlDrag);
-        if (!drag) return;
-        drag.target.classList.remove("is-dragging");
-        try {
-          drag.target.releasePointerCapture?.(drag.pointerId);
-        } catch (_) {
-        }
-        const moved = drag.moved;
-        state.mapControlDrag = null;
-        if (moved) {
-          state.suppressLabelClickUntil = Date.now() + 180;
-          __workspaceSyncCanvasAppearance();
-        }
-      };
-      handleMapControlKey = function(event, target) {
-        const map = state.maps.find((item) => item.id === target.dataset.mapId), control = parseMapControlRef(target.dataset.mapControl);
-        if (!map || !control) return;
-        const step = event.shiftKey ? 18 : 6;
-        let dx = 0, dy = 0;
-        if (event.key === "ArrowLeft") dx = -step;
-        else if (event.key === "ArrowRight") dx = step;
-        else if (event.key === "ArrowUp") dy = -step;
-        else if (event.key === "ArrowDown") dy = step;
-        else return;
-        event.preventDefault();
-        __workspaceSetCanvasAppearanceTarget({ kind: "map", id: map.__workspaceAssetKey.slice(map.__workspaceAssetKey.indexOf(":") + 1) });
-        const width = __workspaceSceneCanonical.width, height = __workspaceSceneCanonical.height, endpoints = mapEndpointLabels(map, canvasObjectLabels(width, height));
-        if (!endpoints) return;
-        moveMapControl(map, control, dx, dy, width, height);
-        updateMapOverlayPositions(map);
-        __workspaceSyncCanvasAppearance();
-      };
-      __workspaceSyncCanvasAppearance();
-      const __workspaceSceneCanonical = Object.freeze({ width: 880, height: 280, fontSize: 16, mapFontSize: 13.44, labelPaddingX: 8, labelPaddingY: 2, dependencyLineWidth: 1.6, mapLineWidth: 2, dashLength: 5, dashGap: 5, arrowhead: 10, handleSize: 12, anchorSize: 14, handleHitInset: 8, selectionOutline: 1 });
-      let __workspaceSceneView = null, __workspaceSceneObserver = null, __workspaceSceneResizeOnly = false, __workspaceSceneResizeTimer = null;
-      function __workspaceSceneStage() {
-        return refs.canvas?.closest?.(".sheaf-stage") || null;
-      }
-      function __workspaceUpdateSceneTransform() {
-        const stage = __workspaceSceneStage(), scene = __workspaceSceneView?.scene;
-        if (!stage || !scene || !stage.isConnected || stage.hidden) return false;
-        const width = stage.clientWidth, height = stage.clientHeight;
-        if (!(width > 0 && height > 0)) return false;
-        const scale = Math.min(width / __workspaceSceneCanonical.width, height / __workspaceSceneCanonical.height), offsetX = (width - __workspaceSceneCanonical.width * scale) / 2, offsetY = (height - __workspaceSceneCanonical.height * scale) / 2;
-        if (!(scale > 0 && Number.isFinite(offsetX) && Number.isFinite(offsetY))) return false;
-        scene.style.transform = "translate(" + offsetX + "px," + offsetY + "px) scale(" + scale + ")";
-        __workspaceSceneView = { ...__workspaceSceneView, width, height, scale, offsetX, offsetY };
-        return true;
-      }
-      function __workspaceScenePoint(clientX, clientY) {
-        if (!__workspaceUpdateSceneTransform() || !__workspaceSceneView) return null;
-        const rect = __workspaceSceneView.scene.getBoundingClientRect(), view = __workspaceSceneView;
-        return { x: (clientX - rect.left) / view.scale, y: (clientY - rect.top) / view.scale };
-      }
-      function __workspaceSceneAssetPoint(clientX, clientY) {
-        const point = __workspaceScenePoint(clientX, clientY);
-        return point ? { x: Math.max(0.08, Math.min(0.92, point.x / __workspaceSceneCanonical.width)), y: Math.max(0.08, Math.min(0.92, point.y / __workspaceSceneCanonical.height)) } : null;
-      }
-      function __workspaceGetObjectCenter(sourceObject) {
-        return sourceObject && Number.isFinite(sourceObject.x) && Number.isFinite(sourceObject.y) ? { x: sourceObject.x, y: sourceObject.y } : null;
-      }
-      function __workspaceCurveWithObjectCenters(path, sourceObject, targetObject) {
-        if (!path?.segments?.length) return path;
-        const startCanonical = __workspaceGetObjectCenter(sourceObject), endCanonical = __workspaceGetObjectCenter(targetObject);
-        if (!startCanonical || !endCanonical) return path;
-        const anchors = (path.anchors || []).map((point) => ({ ...point })), segments = path.segments.map((segment) => ({ ...segment, start: { ...segment.start }, c1: { ...segment.c1 }, c2: { ...segment.c2 }, end: { ...segment.end } }));
-        anchors[0] = startCanonical;
-        anchors[anchors.length - 1] = endCanonical;
-        segments[0].start = startCanonical;
-        segments[segments.length - 1].end = endCanonical;
-        return { ...path, anchors, segments };
-      }
-      const __workspaceNativeMapRawCurveGeometry = mapRawCurveGeometry;
-      mapRawCurveGeometry = function(map, from, to, width, height) {
-        return __workspaceCurveWithObjectCenters(__workspaceNativeMapRawCurveGeometry(map, from, to, width, height), from, to);
-      };
-      mapCurveGeometry = function(map, from, to, width, height) {
-        return mapRawCurveGeometry(map, from, to, width, height);
-      };
-      function __workspaceCurveAnchorMetrics() {
-        const width = __workspaceSceneCanonical.width, height = __workspaceSceneCanonical.height, labels = canvasObjectLabels(width, height), map = visibleCanvasMaps().find((item) => !isStraightMapCurve(item.curve));
-        if (!map) return null;
-        const endpoints = mapEndpointLabels(map, labels);
-        if (!endpoints) return null;
-        const sourceCenter = __workspaceGetObjectCenter(endpoints.from), targetCenter = __workspaceGetObjectCenter(endpoints.to), raw = mapRawCurveGeometry(map, endpoints.from, endpoints.to, width, height), path = mapCurveGeometry(map, endpoints.from, endpoints.to, width, height), first = path?.segments?.[0], last = path?.segments?.[path.segments.length - 1], view = __workspaceSceneView, rect = view?.scene?.getBoundingClientRect?.(), screen = (point) => point && rect ? { x: rect.left + point.x * view.scale, y: rect.top + point.y * view.scale } : null;
-        return { mapKey: map.__workspaceAssetKey || "", sourceCenter, targetCenter, rawStart: raw?.segments?.[0]?.start || null, rawEnd: raw?.segments?.[raw.segments.length - 1]?.end || null, pathStart: first?.start || null, pathEnd: last?.end || null, firstControl: first?.c1 || null, lastControl: last?.c2 || null, controlStart: raw?.anchors?.[0] || null, controlEnd: raw?.anchors?.[raw.anchors.length - 1] || null, sourceCenterScreen: screen(sourceCenter), targetCenterScreen: screen(targetCenter), pathStartScreen: screen(first?.start), pathEndScreen: screen(last?.end) };
-      }
-      function __workspaceSceneMetrics() {
-        if (!__workspaceUpdateSceneTransform() || !__workspaceSceneView) return null;
-        const view = __workspaceSceneView, c = __workspaceSceneCanonical;
-        return { canonical: { ...c }, view: { width: view.width, height: view.height, scale: view.scale, offsetX: view.offsetX, offsetY: view.offsetY }, screen: { fontSize: c.fontSize * view.scale, mapFontSize: c.mapFontSize * view.scale, labelPaddingX: c.labelPaddingX * view.scale, labelPaddingY: c.labelPaddingY * view.scale, dependencyLineWidth: c.dependencyLineWidth * view.scale, mapLineWidth: c.mapLineWidth * view.scale, dashLength: c.dashLength * view.scale, dashGap: c.dashGap * view.scale, arrowhead: c.arrowhead * view.scale, handleSize: c.handleSize * view.scale, anchorSize: c.anchorSize * view.scale, handleHitRadius: (c.handleSize / 2 + c.handleHitInset) * view.scale, selectionOutline: c.selectionOutline * view.scale }, curveAnchor: __workspaceCurveAnchorMetrics() };
-      }
-      function __workspaceInstallSceneTransform() {
-        if (__workspaceSceneView?.scene?.isConnected) return __workspaceUpdateSceneTransform();
-        const stage = __workspaceSceneStage();
-        if (!stage || !refs.canvas || !refs.canvasLabels) return false;
-        const style = document2.createElement("style");
-        style.textContent = ".sheaf-stage[data-workspace-scene-stage]{height:280px!important;min-height:0!important}.workspace-sheaf-scene{position:absolute;left:0;top:0;width:880px;height:280px;transform-origin:0 0;z-index:1}.workspace-sheaf-scene>#sheaf-canvas{width:880px!important;height:280px!important;min-height:0!important}.workspace-sheaf-scene>.sheaf-canvas-labels{width:880px;height:280px;inset:0!important}.workspace-sheaf-scene .sheaf-map-control{width:28px;height:28px;border:0;background:transparent;box-shadow:none}.workspace-sheaf-scene .sheaf-map-control::before{inset:8px;border:2px solid #8b3a2a;border-radius:50%;background:#fffdf8;box-shadow:0 1px 5px rgba(40,34,20,.18);pointer-events:none}.workspace-sheaf-scene .sheaf-map-control.is-anchor::before{inset:7px;border-radius:2px;background:#fff7f3}.workspace-sheaf-scene .sheaf-map-control:hover,.workspace-sheaf-scene .sheaf-map-control:focus-visible,.workspace-sheaf-scene .sheaf-map-control.is-dragging{background:transparent;box-shadow:none}.workspace-sheaf-scene .sheaf-map-control:hover::before,.workspace-sheaf-scene .sheaf-map-control:focus-visible::before,.workspace-sheaf-scene .sheaf-map-control.is-dragging::before{background:#fff7f3;box-shadow:0 0 0 3px rgba(139,58,42,.18)}.sheaf-stage[data-workspace-scene-stage]>.canvas-corner-actions{z-index:3}";
-        document2.head.appendChild(style);
-        const scene = document2.createElement("div");
-        scene.className = "workspace-sheaf-scene";
-        scene.dataset.workspaceScene = "true";
-        stage.dataset.workspaceSceneStage = "true";
-        stage.insertBefore(scene, refs.canvas);
-        scene.appendChild(refs.canvas);
-        scene.appendChild(refs.canvasLabels);
-        __workspaceSceneView = { scene, width: 0, height: 0, scale: 1, offsetX: 0, offsetY: 0 };
-        __workspaceNativeRenderCanvas(state.lastResult);
-        __workspaceUpdateSceneTransform();
-        if (window.ResizeObserver) {
-          __workspaceSceneObserver = new window.ResizeObserver(() => __workspaceUpdateSceneTransform());
-          __workspaceSceneObserver.observe(stage);
-        }
-        return true;
-      }
-      const __workspaceNativeRenderCanvas = renderCanvas;
-      renderCanvas = function(result) {
-        if (__workspaceSceneResizeOnly && __workspaceSceneView && (state.labelDrag || state.mapControlDrag || state.sequenceTailDrag || state.mapDrag)) {
-          __workspaceUpdateSceneTransform();
-          return;
-        }
-        return __workspaceNativeRenderCanvas(result);
-      };
-      const __workspaceNativeStartCanvasLabelDrag = startCanvasLabelDrag;
-      startCanvasLabelDrag = function(target, event) {
-        __workspaceNativeStartCanvasLabelDrag(target, event);
-        const drag = state.labelDrag, point = __workspaceScenePoint(event.clientX, event.clientY);
-        if (!drag || !point) return;
-        const left = Number.parseFloat(target.style.left), top = Number.parseFloat(target.style.top);
-        drag.workspaceOffsetX = point.x - (Number.isFinite(left) ? left : target.offsetLeft);
-        drag.workspaceOffsetY = point.y - (Number.isFinite(top) ? top : target.offsetTop);
-        drag.lastLabelX = Number.isFinite(left) ? left : target.offsetLeft;
-        drag.lastLabelY = Number.isFinite(top) ? top : target.offsetTop;
-        drag.canvasRect = refs.canvas.getBoundingClientRect();
-      };
-      updateCanvasLabelDrag = function(event) {
-        const drag = state.labelDrag;
-        if (!drag || drag.pointerId !== event.pointerId) return;
-        event.preventDefault();
-        const point = __workspaceScenePoint(event.clientX, event.clientY);
-        if (!point) return;
-        const width = __workspaceSceneCanonical.width, height = __workspaceSceneCanonical.height, x = point.x - drag.workspaceOffsetX, y = point.y - drag.workspaceOffsetY, clampedX = clamp(x, 24, width - 24), clampedY = clamp(y, 24, height - 24);
-        drag.canvasRect = refs.canvas.getBoundingClientRect();
-        if (drag.kind === "map") updateMapLabelDragPosition(drag.item, clampedX, clampedY, width, height);
-        else {
-          preserveEndpointHandlesForMovedObject(drag.kind, drag.id, clampedX - drag.lastLabelX, clampedY - drag.lastLabelY, width, height);
-          setCanvasLabelPosition(drag.item, clampedX, clampedY, width, height);
-          drag.item.labelPositionDirty = true;
-          drag.lastLabelX = clampedX;
-          drag.lastLabelY = clampedY;
-        }
-        drag.target.style.left = clampedX + "px";
-        drag.target.style.top = clampedY + "px";
-        if (Math.abs(event.clientX - drag.startX) > 2 || Math.abs(event.clientY - drag.startY) > 2) {
-          drag.moved = true;
-          const affectedMaps = drag.kind === "map" ? [] : state.maps.filter((map) => map.domainKind === drag.kind && map.domainId === drag.id || map.codomainKind === drag.kind && map.codomainId === drag.id);
-          if (affectedMaps.length) affectedMaps.forEach(updateMapOverlayPositions);
-          else redrawCanvasSurface();
-          __workspaceSyncCanvasAppearance();
-          __editor.notifyChange({ interaction: "canvas-appearance-live" });
-        }
-      };
-      updateMapControlDrag = function(event) {
-        const drag = state.mapControlDrag;
-        if (!drag || drag.pointerId !== event.pointerId) return;
-        event.preventDefault();
-        const point = __workspaceScenePoint(event.clientX, event.clientY);
-        if (!point) return;
-        drag.canvasRect = refs.canvas.getBoundingClientRect();
-        setMapControlPoint(drag.map, drag.control, point.x, point.y, __workspaceSceneCanonical.width, __workspaceSceneCanonical.height);
-        if (Math.abs(event.clientX - drag.startX) > 2 || Math.abs(event.clientY - drag.startY) > 2) drag.moved = true;
-        updateMapOverlayPositions(drag.map);
-        __workspaceSyncCanvasAppearance();
-        __editor.notifyChange({ interaction: "canvas-appearance-live" });
-      };
-      startMapCanvasDrag = function(target, event) {
-        const kind = target.dataset.objectKind, id = target.dataset.objectId, point = __workspaceScenePoint(event.clientX, event.clientY);
-        if (kind !== "variety" && kind !== "sheaf" || !point) return;
-        state.mapDrag = { domainKind: kind, domainId: id, target, pointerId: event.pointerId, canvasRect: refs.canvas.getBoundingClientRect(), x: point.x, y: point.y, startX: event.clientX, startY: event.clientY, moved: false };
-        document2.addEventListener("pointermove", updateMapCanvasDrag);
-        document2.addEventListener("pointerup", finishMapCanvasDrag);
-        document2.addEventListener("pointercancel", finishMapCanvasDrag);
-      };
-      updateMapCanvasDrag = function(event) {
-        const drag = state.mapDrag;
-        if (!drag || drag.pointerId !== event.pointerId) return;
-        const point = __workspaceScenePoint(event.clientX, event.clientY);
-        if (!point) return;
-        drag.canvasRect = refs.canvas.getBoundingClientRect();
-        drag.x = point.x;
-        drag.y = point.y;
-        if (!drag.moved && (Math.abs(event.clientX - drag.startX) > 5 || Math.abs(event.clientY - drag.startY) > 5)) {
-          event.preventDefault();
-          drag.moved = true;
-          try {
-            drag.target?.setPointerCapture?.(drag.pointerId);
-          } catch (_) {
-          }
-          state.mapDraft = { type: "ordinary", domainKind: drag.domainKind, domainId: drag.domainId };
-          state.mapPickTarget = "codomain";
-          updateMapPickStatus();
-          updateMapDraftControls();
-          renderCanvas(state.lastResult);
-          return;
-        }
-        if (!drag.moved) return;
-        event.preventDefault();
-        redrawCanvasSurface();
-      };
-      startSequenceTailDrag = function(target, event) {
-        const sequence = sequenceFromTailControl(target), control = target?.dataset?.sequenceTailControl || "end";
-        if (!sequence || !refs.canvas || control === "label") return;
-        event.preventDefault();
-        activateObject("sequence", sequence.id, { mode: "modify", loadDraft: true });
-        ensureSequenceTailCurveState(sequence, __workspaceSceneCanonical.width, __workspaceSceneCanonical.height);
-        state.sequenceTailDrag = { sequence, control, target, canvasRect: refs.canvas.getBoundingClientRect(), pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, moved: false };
-        target.classList.add("is-dragging");
-        try {
-          target.setPointerCapture?.(event.pointerId);
-        } catch (_) {
-        }
-        document2.addEventListener("pointermove", updateSequenceTailDrag);
-        document2.addEventListener("pointerup", finishSequenceTailDrag);
-        document2.addEventListener("pointercancel", finishSequenceTailDrag);
-      };
-      updateSequenceTailDrag = function(event) {
-        const drag = state.sequenceTailDrag;
-        if (!drag || drag.pointerId !== event.pointerId) return;
-        event.preventDefault();
-        const point = __workspaceScenePoint(event.clientX, event.clientY);
-        if (!point) return;
-        drag.canvasRect = refs.canvas.getBoundingClientRect();
-        setSequenceTailPoint(drag.sequence, drag.control, point.x, point.y, __workspaceSceneCanonical.width, __workspaceSceneCanonical.height, { labelPosition: drag.control === "label" });
-        if (Math.abs(event.clientX - drag.startX) > 2 || Math.abs(event.clientY - drag.startY) > 2) drag.moved = true;
-        redrawCanvasSurface();
-        updateSequenceTailOverlayPositions(drag.sequence);
-      };
-      window.addEventListener("resize", () => {
-        __workspaceSceneResizeOnly = true;
-        __workspaceUpdateSceneTransform();
-        if (__workspaceSceneResizeTimer) clearTimeout(__workspaceSceneResizeTimer);
-        __workspaceSceneResizeTimer = setTimeout(() => {
-          __workspaceSceneResizeOnly = false;
-        }, 140);
-      });
-      document2.addEventListener("DOMContentLoaded", () => {
-        __workspaceInstallSceneTransform();
-        requestAnimationFrame(() => __workspaceUpdateSceneTransform());
-      });
-      function __workspaceCapturePropertyObjects() {
-        const objects = {};
-        for (const item of [...state.varieties, ...state.sheaves, ...state.maps]) {
-          if (!item.__workspaceAssetKey) continue;
-          const value = {};
-          if (Object.prototype.hasOwnProperty.call(item, "homology")) value.homology = __workspaceClone(item.homology);
-          if (Object.prototype.hasOwnProperty.call(item, "basis")) value.basis = item.basis;
-          if (Object.prototype.hasOwnProperty.call(item, "grassmannianYoungBasis")) value.grassmannianYoungBasis = !!item.grassmannianYoungBasis;
-          objects[item.__workspaceAssetKey] = value;
-        }
-        return objects;
-      }
-      let __workspacePropertyBaseline = { sourceRef: null, revision: 0, objects: {} };
-      function __workspaceCapturePropertyCommand() {
-        if (!__workspacePropertyBaseline.sourceRef) return null;
-        return options.createAssetPropertyCommand?.({ sourceRef: __workspacePropertyBaseline.sourceRef, revision: __workspacePropertyBaseline.revision, before: { objects: __workspacePropertyBaseline.objects }, after: { objects: __workspaceCapturePropertyObjects() }, reason: "homology" }) || null;
-      }
-      document2.addEventListener("DOMContentLoaded", () => {
-        if (refs.homologyRules) new MutationObserver(__workspaceSyncHomologyPromotionLabels).observe(refs.homologyRules, { childList: true, subtree: true });
-      });
-      __editor.setAssetAdapter({ apply: (snapshot, activeRef, properties, binding) => {
-        if (binding?.cardType && !options.validateAssetCardBinding?.(binding.cardType, activeRef?.kind)) return false;
-        const assets = Array.isArray(snapshot?.assets) ? snapshot.assets : [];
-        __workspaceAssetsCurrent = assets;
-        const ids = new Map(assets.map((asset) => [__workspaceAssetKey(asset), __workspaceNativeId(asset.kind, asset.id)]));
-        const scoped = { objects: Object.fromEntries(assets.map((asset) => [__workspaceAssetKey(asset), __workspaceProjectionProperties(asset, properties)])) };
-        if (!__workspaceAssetsApplied) {
-          state.sequences = [];
-          state.globalInvariants = [];
-          __workspaceAssetsApplied = true;
-        }
-        const project = (asset, make) => __workspaceProjectionLayout(make(asset, ids, scoped), asset);
-        const previousBases = new Map(state.sheaves.filter((item) => item.__workspaceAssetKey).map((item) => [item.__workspaceAssetKey, item.baseVarietyId]));
-        state.varieties = assets.filter((asset) => asset.kind === "variety").map((asset) => project(asset, __workspaceVarietyFromAsset));
-        state.sheaves = assets.filter((asset) => asset.kind === "sheaf").map((asset) => project(asset, __workspaceSheafFromAsset));
-        state.maps = assets.filter((asset) => asset.kind === "map").map((asset) => project(asset, __workspaceMapFromAsset));
-        state.sheaves.forEach((sheaf) => {
-          if (previousBases.get(sheaf.__workspaceAssetKey) !== sheaf.baseVarietyId && !Number.isFinite(sheaf.labelX)) {
-            positionSheafNearBase(sheaf, baseVarietyForSheaf(sheaf));
-            avoidCanvasLabelOverlap(sheaf);
-          }
-        });
-        const key = __workspaceAssetKey(activeRef);
-        state.activeVarietyId = activeRef?.kind === "variety" ? ids.get(key) || null : null;
-        state.activeSheafId = activeRef?.kind === "sheaf" ? ids.get(key) || null : null;
-        state.activeMapId = activeRef?.kind === "map" ? ids.get(key) || null : null;
-        state.activeSequenceId = null;
-        state.activeGlobalInvariantId = null;
-        state.inputMode = "modify";
-        __workspaceSetProjectionReadOnly(!activeRef);
-        recompute("workspace Asset projection", { immediate: true });
-        __workspaceSyncHomologyPromotionLabels();
-        __workspaceSyncCanvasAppearance();
-        __workspacePropertyBaseline = { sourceRef: activeRef ? { kind: activeRef.kind, id: activeRef.id } : null, revision: Number(snapshot?.revision) || 0, objects: __workspaceCapturePropertyObjects() };
-        return true;
-      }, capture: __workspaceCapturePropertyCommand, layout: () => [...state.varieties, ...state.sheaves, ...state.maps].filter((item) => item.__workspaceAssetKey).map((item) => {
-        const kind = __workspaceRecordKind(item);
-        return { key: item.__workspaceAssetKey, active: item.__workspaceAssetKey === __workspaceAppearanceTargetKey, point: kind === "map" ? { x: Number(item.labelT), y: Number(item.labelOffset), mode: "map-curve", curve: __workspaceClone(item.curve), defaultBendPx: Number(item.defaultBendPx), modified: item.modified === true } : { x: Number(item.labelX), y: Number(item.labelY) } };
-      }), appearance: () => {
-        const item = __workspaceAppearanceObject();
-        return { targetKey: __workspaceAppearanceTargetKey, rendererEpoch: __workspaceAppearanceEpoch, kind: __workspaceAppearanceKind(item), recomputeJobId: state.recomputeJobId, cardVisible: !__workspaceAppearanceCard.classList.contains("workspace-card-hidden") && !__workspaceAppearanceCard.classList.contains("calculator-card-user-hidden") };
-      }, appearanceTarget: (ref2) => __workspaceSetCanvasAppearanceTarget(ref2), scene: __workspaceSceneMetrics, scenePoint: __workspaceSceneAssetPoint });
     })();
     (() => {
       "use strict";
