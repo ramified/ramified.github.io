@@ -8,6 +8,8 @@ const vm = require('vm');
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'ramified_minigames.html'), 'utf8');
 const setup = fs.readFileSync(path.join(__dirname, 'ramified_minigames_setup.js'), 'utf8');
+const archive = fs.readFileSync(path.join(root, 'ramified_minigames_archive.html'), 'utf8');
+const player = fs.readFileSync(path.join(__dirname, 'ramified_minigames_player.js'), 'utf8');
 const localeSource = fs.readFileSync(path.join(__dirname, 'i18n', 'ramified_minigames_locales.js'), 'utf8');
 const catalogs = {};
 
@@ -50,6 +52,8 @@ function placeholders(value) {
 
 const usedKeys = Array.from(new Set([
   ...explicitHtmlKeys(html),
+  ...explicitHtmlKeys(archive),
+  ...literalTkKeys(player),
   ...literalTkKeys(setup)
 ])).sort();
 

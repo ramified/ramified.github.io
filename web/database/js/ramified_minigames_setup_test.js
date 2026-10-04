@@ -4968,6 +4968,7 @@ function createHeadlessDomHarness(options = {}) {
     Buffer,
     Math: Object.create(Math),
     performance: { now: () => timerNow },
+    CustomEvent: class CustomEvent { constructor(type) { this.type = type; } },
     setTimeout(callback, delay) {
       return scheduleTimer(callback, delay);
     },
@@ -4978,6 +4979,8 @@ function createHeadlessDomHarness(options = {}) {
     URLSearchParams,
     fetch: options.fetch || (() => Promise.reject(new Error('fetch not configured'))),
     document: {
+      body: options.playerShell ? { classList: { contains: (name) => name === 'ramified-player', toggle() {} } } : undefined,
+      dispatchEvent() {},
       head: {
         appendChild(script) {
           const entry = presetRegistry.find((item) => String(script.src || '').includes(item.file));
@@ -9070,7 +9073,9 @@ async function run() {
   console.log('ramified_minigames_setup_test: all tests passed');
 }
 
-run().catch((error) => {
+module.exports = { createHeadlessDomHarness };
+
+if (require.main === module) run().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

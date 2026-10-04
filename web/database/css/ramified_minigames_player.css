@@ -1,0 +1,132 @@
+/* The player shell reuses the original board and controls. */
+body.ramified-player {
+  --player-frame-height: min(720px, calc((100vw - 32px) * 3 / 4), calc(100dvh - 32px));
+  margin: 0; overflow: hidden; min-height: 100vh; min-height: 100dvh;
+  display: grid; place-items: center;
+}
+body.ramified-player [hidden] { display: none !important; }
+.ramified-player > header,
+.ramified-player > footer,
+.ramified-player .side,
+.ramified-player .canvas-panel > .panel-title { display: none !important; }
+body.ramified-player .mosaic-layout {
+  display: block; width: min(960px, calc(100vw - 32px), calc((100dvh - 32px) * 4 / 3));
+  max-width: none; height: auto; aspect-ratio: 4 / 3;
+  margin: 0; padding: 0; border: 1px solid var(--border); box-sizing: border-box;
+}
+body.ramified-player .canvas-panel {
+  display: flex; flex-direction: column; width: 100%; height: 100%;
+  min-width: 0; min-height: 0; border: 0; border-radius: 0; background: var(--bg);
+}
+body.ramified-player #canvas-wrap {
+  position: relative; flex: 1; min-height: 0; width: 100%; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center;
+  padding: 56px 8px 44px; overflow: hidden; background: var(--bg, #f7f4ef);
+}
+body.ramified-player #mosaic-canvas { flex: none; }
+body.ramified-player #canvas-wrap:fullscreen #mosaic-canvas {
+  position: static; transform: none;
+}
+body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: border-box; padding: 6px 12px; overflow: auto; }
+#player-toolbar {
+  position: absolute; top: 8px; left: 8px; z-index: 10;
+}
+.ramified-player #fullscreen-action-shell {
+  display: flex !important; position: static !important; flex: none;
+  flex-direction: row !important; transform: none !important;
+}
+.ramified-player #fullscreen-action-bar { flex-direction: row !important; margin-bottom: 8px; }
+.ramified-player #fullscreen-action-bar svg {
+  width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; pointer-events: none;
+}
+.ramified-player #player-action-controls .fullscreen-lianliankan-actions {
+  display: flex; position: static; margin-top: 8px;
+}
+.ramified-player #fullscreen-action-shell[hidden] { display: none !important; }
+.ramified-player:not(.canvas-fullscreen-active) #fullscreen-exit,
+.ramified-player:not(.canvas-fullscreen-active) #fullscreen-settings-exit { display: none; }
+.ramified-player #fullscreen-exit,
+.ramified-player.canvas-fullscreen-active #player-fullscreen { display: none; }
+.ramified-player #fullscreen-settings-overlay { z-index: 40; padding: 0; background: var(--bg); }
+.ramified-player .fullscreen-settings-dialog {
+  display: flex; flex-direction: column; width: 100%; height: 100%; max-height: none;
+  overflow: hidden; border: 0; border-radius: 0; box-shadow: none; background: var(--bg);
+}
+.ramified-player .fullscreen-settings-header,
+.ramified-player .fullscreen-settings-tabs { flex: none; }
+.ramified-player .fullscreen-settings-header { padding: 16px 24px; border: 0; }
+.ramified-player .fullscreen-settings-tabs { padding-inline: 24px; }
+.ramified-player .fullscreen-settings-panel {
+  flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain;
+  padding: 16px 24px 24px; box-sizing: border-box;
+}
+.ramified-player .fullscreen-settings-panel > * { max-width: 720px; }
+.ramified-player .fullscreen-settings-footer { flex-wrap: wrap; justify-content: flex-start; gap: 8px; }
+.ramified-player .player-settings-extra { padding: 12px 0; }
+.ramified-player .player-settings-extra p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+#player-menu {
+  position: absolute; inset: 0; z-index: 30; overflow: hidden;
+  background: var(--bg, #f7f4ef); display: flex; padding: 0; box-sizing: border-box;
+}
+#player-menu[hidden], .player-page[hidden], #player-message[hidden], #player-back[hidden] { display: none !important; }
+.player-menu-sheet {
+  display: flex; flex-direction: column; width: 100%; height: 100%; margin: 0;
+  min-width: 0; min-height: 0; padding: 0; box-sizing: border-box;
+}
+.player-menu-header {
+  display: flex; flex: none; gap: 16px; align-items: center; margin: 0;
+  padding: 16px 24px; border: 0; border-bottom: 3px solid var(--accent);
+  background: var(--text); color: var(--bg); box-shadow: none;
+}
+.player-menu-header h1 { font: inherit; font-size: 26px; margin: 0; flex: 1; color: inherit; }
+.player-page {
+  flex: 1; min-width: 0; min-height: 0; width: 100%; margin: 0;
+  padding: 24px; overflow: auto; overscroll-behavior: contain; box-sizing: border-box;
+}
+#player-home, #player-game-menu {
+  display: grid; grid-template-columns: minmax(0, 300px); justify-content: center;
+  align-content: center; align-content: safe center; gap: 12px;
+}
+#player-home > .btn, #player-game-menu > .btn { width: 100%; min-height: 44px; }
+#player-setup-controls, #player-display > section, #player-online > section,
+#player-files > section, #player-stats > section { max-width: 720px; }
+.player-page .card-body { display: block !important; padding: 0; }
+.player-page .mosaic-inline-row { flex-wrap: wrap; }
+.player-page select, .player-page input, .player-page textarea { max-width: 100%; }
+#player-setup-controls > #begin-game { margin: 16px 0 8px; }
+#player-view-board { width: 100%; max-width: 720px; margin-top: 8px; }
+#player-message { flex: none; color: var(--text); border: 1px solid var(--border); padding: 10px; font-size: 14px; }
+#player-actions { position: absolute; bottom: 8px; left: 12px; z-index: 9; max-width: calc(100% - 24px); }
+#player-actions > summary { cursor: pointer; padding: 6px 12px; background: var(--surface, white); border: 1px solid var(--border); border-radius: 5px; }
+#player-action-controls {
+  position: absolute; bottom: 100%; left: 0; padding: 12px; width: 300px;
+  max-width: calc(100vw - 48px);
+  max-height: min(45vh, max(72px, calc(var(--player-frame-height) - 156px))); overflow: auto;
+  border: 1px solid var(--border); background: var(--surface, white); border-radius: 5px;
+}
+.ramified-player #debug-tools,
+.ramified-player .mosaic-debug-actions,
+.ramified-player .mosaic-history-actions,
+.ramified-player #billiards-debug-row { display: none !important; }
+.ramified-player.player-menu-open #canvas-start-overlay { visibility: hidden; }
+.ramified-player.player-menu-open .mosaic-underbar { visibility: hidden; }
+/* Cover the status strip without resizing the board behind the page. */
+.ramified-player:not(.canvas-fullscreen-active) #player-menu,
+.ramified-player:not(.canvas-fullscreen-active) #fullscreen-settings-overlay { bottom: -44px; }
+.ramified-player.player-menu-open #canvas-wrap,
+.ramified-player #canvas-wrap:has(> #fullscreen-settings-overlay:not([hidden])) { overflow: visible; }
+.ramified-player.player-menu-open #player-toolbar,
+.ramified-player.player-menu-open #player-actions { visibility: hidden; }
+.ramified-player .btn:focus-visible, .ramified-player summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.ramified-player.canvas-fullscreen-active { --player-frame-height: 100dvh; }
+@media (max-width: 600px) {
+  body.ramified-player:not(.canvas-fullscreen-active) { --player-frame-height: min(calc((100vw - 12px) * 3 / 4), calc(100dvh - 12px)); }
+  body.ramified-player .mosaic-layout { width: min(calc(100vw - 12px), calc((100dvh - 12px) * 4 / 3)); }
+  .player-menu-header, .player-page { padding: 16px; }
+  .ramified-player .fullscreen-settings-header { padding: 8px 16px; }
+  .ramified-player .fullscreen-settings-tabs { padding-inline: 16px; }
+  .ramified-player .fullscreen-settings-panel { padding: 12px 16px 16px; }
+  .ramified-player .mosaic-underbar { font-size: 12px; }
+  .ramified-player .fullscreen-action-button, .ramified-player .fullscreen-settings-button { width: 34px; height: 34px; }
+}

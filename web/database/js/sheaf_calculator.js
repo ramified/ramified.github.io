@@ -2732,18 +2732,24 @@
     };
   }
 
-  function setChartCardVisible(scope, visible) {
-    const card = scope === 'hodge'
+  function chartCardForScope(scope) {
+    return scope === 'hodge'
       ? refs.hodgeCard
       : scope === 'betti'
         ? refs.bettiCard
       : scope === 'classes'
         ? refs.classCard
         : refs.cohomologyCard;
+  }
+
+  function setChartCardVisible(scope, visible) {
+    const card = chartCardForScope(scope);
     if (!card) return;
+    const wasHidden = card.hidden;
     if (scope === 'hodge' && !visible && state.hodgeWide) setHodgeWide(false);
     card.hidden = !visible;
-    if (visible) openUiCard(card);
+    // Recomputing must not reopen a manually collapsed chart or evict other cards.
+    if (visible && wasHidden) openUiCard(card);
   }
 
   function openUiCard(card, options = {}) {
@@ -2790,6 +2796,14 @@
     const available = chartRevealAvailability();
     if (!available[scope]) return;
     state.revealedCharts[scope] = !state.revealedCharts[scope];
+    if (state.revealedCharts[scope]) {
+      const card = chartCardForScope(scope);
+      if (card) {
+        // An explicit show action overrides this browser's saved Cards preference.
+        const saved = window.CalculatorInputSettings?.setCardVisible?.('sheaf', card.dataset.cardSettingsId || card.id, true);
+        if (!saved) window.CalculatorCards?.setCardUserVisible?.(card, true);
+      }
+    }
     syncChartRevealControls();
     if (scope === 'betti') renderBettiTableChart();
   }

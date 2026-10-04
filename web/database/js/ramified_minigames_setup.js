@@ -786,6 +786,8 @@
   let fullscreenReturnMode = 'normal';
   let fullscreenPreferences = { ...FULLSCREEN_SETTINGS_DEFAULTS };
   let fullscreenSettingsOpen = false;
+  const playerShellEnabled = typeof document !== 'undefined' && !!document.body?.classList.contains('ramified-player');
+  let playerMenuOpen = playerShellEnabled;
   let fullscreenSettingsReturnFocus = null;
   let fullscreenSettingsPanel = 'display';
   let wrappedViewPreferences = {
@@ -3822,7 +3824,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
       syncGameModeSelectOptions();
       syncImportGameModeSelectOptions();
       if (importPresetFromUrlParams()) return;
-      if (applyRandomSetupChoice(randomSetupChoice(), { focus: false })) return;
+      if (!playerShellEnabled && applyRandomSetupChoice(randomSetupChoice(), { focus: false })) return;
       syncBoardSizeInputForGameMode();
       applyDefaultPlacementDisplayForMode();
       applyDefaultPlacementPieceSizeForMode();
@@ -5879,6 +5881,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleKeydown(event) {
+    if (playerMenuOpen && !fullscreenSettingsOpen) return;
     updateBilliardsSnapModifier(event, true);
     const key = normalizeKeyboardKey(event.code || event.key);
     if (fullscreenSettingsOpen) {
@@ -9829,6 +9832,7 @@ function openFullscreenSettings(panel = 'display', trigger = null) {
   if (!refs.fullscreenSettingsOverlay) return;
   fullscreenSettingsReturnFocus = trigger || (typeof document !== 'undefined' ? document.activeElement : null);
   fullscreenSettingsOpen = true;
+  if (playerShellEnabled) cancelLocalAiWork();
   refs.fullscreenSettingsOverlay.hidden = false;
   if (refs.fullscreenSettingsOpen) refs.fullscreenSettingsOpen.setAttribute('aria-expanded', 'true');
   clearKeyboardState();
@@ -9845,6 +9849,7 @@ function openFullscreenSettings(panel = 'display', trigger = null) {
 function closeFullscreenSettings(options = {}) {
   const wasOpen = fullscreenSettingsOpen;
   fullscreenSettingsOpen = false;
+  if (playerShellEnabled && !playerMenuOpen) syncLocalAiAfterStableTurn();
   if (calculatorInputSession) {
     calculatorInputSession.capture = null;
     calculatorInputSession.pendingConflict = null;
@@ -9928,13 +9933,13 @@ function syncCanvasDisplayModeUi() {
   }
   if (refs.fullscreenLianliankanActions) {
     refs.fullscreenLianliankanActions.hidden = !(
-      fullscreenActive
+      (fullscreenActive || playerShellEnabled)
       && fullscreenPreferences.showGameTools
       && isLianliankanGame(game)
       );
   }
   if (refs.fullscreenActionBar) {
-    refs.fullscreenActionBar.hidden = !fullscreenActive || !fullscreenPreferences.showActionRow;
+    refs.fullscreenActionBar.hidden = !(fullscreenActive || playerShellEnabled) || !fullscreenPreferences.showActionRow;
   }
   requestFullscreenActionPlacement();
 }
@@ -10148,6 +10153,7 @@ function resetLianliankanFromFullscreenAction() {
 
 function requestFullscreenActionPlacement() {
   if (!refs.fullscreenActionShell) return;
+  if (playerShellEnabled) { positionFullscreenActionBar(); return; }
   if (!currentFullscreenElement()) {
     if (!refs.fullscreenActionShell.hidden) positionFullscreenActionBar();
     return;
@@ -10167,6 +10173,13 @@ function positionFullscreenActionBar() {
   recordFullscreenSizingEvent('positionFullscreenActionBar');
   const shell = refs.fullscreenActionShell;
   if (!shell) return;
+  if (playerShellEnabled) {
+    shell.hidden = false;
+    shell.dataset.placement = 'top';
+    if (refs.fullscreenActionBar) refs.fullscreenActionBar.hidden = !fullscreenPreferences.showActionRow;
+    clearFullscreenActionGutter();
+    return;
+  }
   const fullscreenActive = !!currentFullscreenElement();
   if (!fullscreenActive || !refs.canvasWrap || !refs.canvas) {
     shell.hidden = true;
@@ -32709,7 +32722,7 @@ function syncControls() {
   if (refs.fullscreenRedo) refs.fullscreenRedo.disabled = onlineHistoryBlocked || !redoStack.length;
   if (refs.fullscreenRestart) refs.fullscreenRestart.disabled = onlineRoomActive || !game;
   syncFullscreenActionText();
-  const lianliankanFullscreenActions = !!currentFullscreenElement()
+  const lianliankanFullscreenActions = (!!currentFullscreenElement() || playerShellEnabled)
   && fullscreenPreferences.showGameTools
   && isLianliankanGame(game);
   const lianliankanFullscreenMatch = lianliankanFullscreenActions && Lianliankan
@@ -32755,6 +32768,7 @@ function syncControls() {
   }
   if (!onlineRoomActive && !(onlineState && onlineState.connecting)) syncOnlineRoleOptions(selectedGameMode());
   syncOnlineControls();
+  if (playerShellEnabled) document.dispatchEvent(new CustomEvent('ramified-player-state'));
 }
 
 function syncSpeedOutput() {
@@ -33406,6 +33420,7 @@ function syncThinkingControls() {
 }
 
 function scheduleLocalAiTurn(delay = 80) {
+  if (playerShellEnabled && (playerMenuOpen || fullscreenSettingsOpen)) return;
   if (!game || currentAnimation || localAiPauseReason || localAiThinking || onlineIsInRoom() || !localAiOwnsCurrentTurn()) return;
   const requestId = ++localAiRequestSerial;
   const revision = localAiRevision;
@@ -34315,6 +34330,68 @@ const nodeStartupPresetItems = loadNodePresetCatalogItems();
 if (nodeStartupPresetItems) installPresetCatalog(nodeStartupPresetItems);
 
 const api = {
+  // Small adapter for the player shell; the archive keeps its original lifecycle.
+  player: {
+    state() {
+      return {
+        ready: presetCatalogReady && !selectionLoading && !!game,
+        active: !!game && game.phase !== 'setup',
+        online: onlineIsInRoom()
+      };
+    },
+    setMenuOpen(open) {
+      playerMenuOpen = !!open;
+      clearKeyboardState();
+      if (open) cancelLocalAiWork();
+      else syncLocalAiAfterStableTurn();
+    },
+    fit() { setCanvasDisplayMode('fit-viewport'); },
+    fullscreen() { toggleCanvasFullscreen(); },
+    settings() {
+      if (calculatorInputSession) calculatorInputSession.open();
+      else openFullscreenSettings();
+    },
+    closeSettings() { closeFullscreenSettings(); },
+    prepare() {
+      if (onlineIsInRoom()) return false;
+      stopGameFromUi();
+      return true;
+    },
+    snapshot() {
+      if (!game || game.phase === 'setup' || onlineIsInRoom() || selectionLoading
+        || currentAnimation || billiardsShotPending || sokobanMoveSession
+        || (eventQueue.length && eventIndex < eventQueue.length)) return null;
+      return {
+        version: 1,
+        payload: debugExportPayload(),
+        controllers: [refs.gomokuBlackController, refs.gomokuWhiteController, refs.connectFourRedController, refs.connectFourYellowController]
+          .filter(Boolean).map((control) => [control.id, control.value]),
+        checkersControllers: Array.from(chineseCheckersControllers),
+        aiPauseReason: localAiPauseReason
+      };
+    },
+    async restore(saved) {
+      if (!saved || saved.version !== 1 || !saved.payload || onlineIsInRoom()) throw new Error('Invalid player save');
+      await ensureModeDependencies(saved.payload.gameMode);
+      const imported = gameStateFromDebugImportPayload(saved.payload);
+      applyImportedDebugState(imported, { recordHistory: false, focus: false });
+      undoStack = [];
+      redoStack = [];
+      const controllerIds = new Set(['gomoku-black-controller', 'gomoku-white-controller', 'connect-four-red-controller', 'connect-four-yellow-controller']);
+      for (const [id, value] of saved.controllers || []) {
+        if (!controllerIds.has(id)) continue;
+        const control = document.getElementById(id);
+        if (control && Array.from(control.options).some((option) => option.value === value)) control.value = value;
+      }
+      for (const [color, value] of saved.checkersControllers || []) {
+        if (chineseCheckersControllers.has(color)) chineseCheckersControllers.set(color, value === LOCAL_AI_CONTROLLER ? LOCAL_AI_CONTROLLER : HUMAN_CONTROLLER);
+      }
+      localAiPauseReason = saved.aiPauseReason || '';
+      syncControls();
+      syncStatusForCurrentGame();
+      render();
+    }
+  },
   DIRS,
   CONNECT_FOUR_WIN_LENGTH,
   GAME_MODES,

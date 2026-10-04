@@ -2,6 +2,23 @@
   'use strict';
 
   const pairs = {
+    'player.menu': ['Menu', '菜单'],
+    'player.returnMenu': ['Return to menu', '返回菜单'],
+    'player.start': ['Start game', '开始游戏'],
+    'player.continue': ['Continue game', '继续游戏'],
+    'player.resume': ['Return to game', '返回游戏'],
+    'player.back': ['Back', '返回'],
+    'player.home': ['Main menu', '主菜单'],
+    'player.gameOptions': ['Game options', '游戏选项'],
+    'player.changeGame': ['Change game', '更换游戏'],
+    'player.files': ['Import / export', '导入／导出'],
+    'player.viewBoard': ['View board', '查看棋盘'],
+    'player.archive': ['Archive / debug', '旧版／调试'],
+    'player.controls': ['Controls', '按键设置'],
+    'player.replace': ['Start a new game? The next game will replace the saved game.', '开始新游戏？新游戏开始后将覆盖原来的存档。'],
+    'player.saveNote': ['Local games are saved in this browser. Undo history is not restored after reloading. Online rooms are not saved locally.', '本地游戏自动保存在当前浏览器中；刷新后不保留撤销记录。联网房间不存为本地存档。'],
+    'player.saveError': ['This browser could not save progress. Keep this tab open, or export the game from the menu.', '当前浏览器无法保存进度。请保留此页面，或在菜单中导出棋局。'],
+    'player.loadError': ['The saved game could not be loaded. You can start a new game.', '存档无法读取，可以开始新游戏。'],
     'debug.fullscreenSizing': ['Fullscreen sizing diagnostics', '全屏尺寸诊断'],
     'meta.title': ['Ramified Minigames', '歧趣游境｜Ramified Minigames'],
     'meta.heading': ['Ramified Minigames', '歧趣游境'],

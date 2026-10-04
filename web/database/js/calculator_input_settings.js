@@ -825,6 +825,13 @@
     MAX_BINDINGS,
     register,
     getSession: (pageId) => sessions.get(String(pageId || '')) || null,
+    setCardVisible(pageId, cardId, visible) {
+      const session = sessions.get(String(pageId || ''));
+      if (!session || !currentCards(session).some((descriptor) => descriptor.id === cardId)) return false;
+      setCardVisibility(session, cardId, visible);
+      if (session.isOpen()) render(session);
+      return true;
+    },
     normalizeBindingString,
     bindingFromEvent,
     displayBinding,
