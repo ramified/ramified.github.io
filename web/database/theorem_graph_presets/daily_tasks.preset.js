@@ -46,13 +46,13 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 181.2,
-      "y": 224.9
+      "x": 209.9,
+      "y": 182.3
     },
     {
       "id": "n53",
       "type": "misc",
-      "label": "daily works",
+      "label": "Hamburg works",
       "details": [],
       "setting": "",
       "condition": "",
@@ -64,117 +64,20 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
       "x": 380.7,
       "y": 96.2,
       "childGraph": {
-        "title": "daily works",
+        "title": "Hamburg works",
         "nodes": [
-          {
-            "id": "n1",
-            "type": "misc",
-            "label": "hair cutting",
-            "details": [],
-            "setting": "",
-            "condition": "",
-            "result": "",
-            "proofSketch": "",
-            "citationKeys": [],
-            "color": "#2f5f9f",
-            "fillColor": "#eef4fb",
-            "x": 322.1,
-            "y": 55.3
-          },
-          {
-            "id": "n2",
-            "type": "misc",
-            "label": "clean the house",
-            "details": [
-              {
-                "id": "check",
-                "label": "check",
-                "type": "checkbox",
-                "text": "wall\nclothes"
-              }
-            ],
-            "setting": "",
-            "condition": "",
-            "result": "",
-            "proofSketch": "",
-            "citationKeys": [],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
-            "x": 188.9,
-            "y": 281.7
-          },
-          {
-            "id": "n3",
-            "type": "misc",
-            "label": "cook",
-            "details": [
-              {
-                "id": "check",
-                "label": "check",
-                "type": "checkbox",
-                "text": "- [x] Spiegelkarpfen\n- [ ] white fungus\n- [?] tiramisu\n- [ ] antler"
-              }
-            ],
-            "setting": "",
-            "condition": "",
-            "result": "",
-            "proofSketch": "",
-            "citationKeys": [],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
-            "x": 563,
-            "y": 238.4
-          },
-          {
-            "id": "n4",
-            "type": "misc",
-            "label": "prepare talks",
-            "details": [],
-            "setting": "",
-            "condition": "",
-            "result": "",
-            "proofSketch": "",
-            "citationKeys": [],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
-            "x": 405.5,
-            "y": 281.7
-          },
-          {
-            "id": "n5",
-            "type": "misc",
-            "label": "buy flight tickets",
-            "details": [],
-            "setting": "",
-            "condition": "",
-            "result": "",
-            "proofSketch": "",
-            "citationKeys": [],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
-            "x": 132.5,
-            "y": 81.8
-          },
           {
             "id": "n6",
             "type": "misc",
             "label": "add websites for Hamburg",
-            "details": [],
-            "setting": "",
-            "condition": "",
-            "result": "",
-            "proofSketch": "",
-            "citationKeys": [],
-            "color": "#7a6f65",
-            "fillColor": "#f7f5f1",
-            "x": 566.7,
-            "y": 99.8
-          },
-          {
-            "id": "n7",
-            "type": "misc",
-            "label": "save scanned documents",
-            "details": [],
+            "details": [
+              {
+                "id": "web-lists",
+                "label": "web lists",
+                "type": "checkbox",
+                "text": "- [x] https://www.math.uni-hamburg.de/\n- [x] https://www.kus.uni-hamburg.de/en.html\n- [x] https://www.rrz.uni-hamburg.de/"
+              }
+            ],
             "setting": "",
             "condition": "",
             "result": "",
@@ -182,8 +85,30 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "citationKeys": [],
             "color": "#2f5f9f",
             "fillColor": "#eef4fb",
-            "x": 323.7,
-            "y": 173.6
+            "x": 237.4,
+            "y": 101.1
+          },
+          {
+            "id": "n8",
+            "type": "misc",
+            "label": "softwares",
+            "details": [
+              {
+                "id": "tools",
+                "label": "tools",
+                "type": "checkbox",
+                "text": "- [ ] chatgpt and codex\n- [ ] everything\n- [ ] snipaste\neverything\n- [x] 小狼毫\nbandzip\ngithub"
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 505.1,
+            "y": 162.1
           }
         ],
         "arrows": [],
@@ -218,13 +143,13 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
       ],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 409.4,
-      "y": 192.9
+      "x": 409.3,
+      "y": 192.8
     }
   ],
   "arrows": [],
   "view": {
-    "selectedId": "n54",
+    "selectedId": "",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasHeight": 300,
@@ -236,8 +161,8 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
         "y": 0.3697
       },
       "n51": {
-        "x": 0.2406,
-        "y": 0.7497
+        "x": 0.2787,
+        "y": 0.6075
       },
       "n53": {
         "x": 0.5056,
