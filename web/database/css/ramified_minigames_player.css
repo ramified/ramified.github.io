@@ -1,6 +1,13 @@
 /* The player shell reuses the original board and controls. */
 body.ramified-player {
   --player-frame-height: min(720px, calc((100vw - 32px) * 3 / 4), calc(100dvh - 32px));
+  --player-page-inset: 24px;
+  --player-header-inset: 16px;
+  --player-gap: 12px;
+  --player-small-gap: 8px;
+  --player-control-height: 40px;
+  --player-icon-size: 42px;
+  --player-menu-button-height: 44px;
   margin: 0; overflow: hidden; min-height: 100vh; min-height: 100dvh;
   display: grid; place-items: center;
 }
@@ -35,13 +42,13 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
   display: flex !important; position: static !important; flex: none;
   flex-direction: row !important; transform: none !important;
 }
-.ramified-player #fullscreen-action-bar { flex-direction: row !important; margin-bottom: 8px; }
+.ramified-player #fullscreen-action-bar { flex-direction: row !important; flex-wrap: wrap; gap: var(--player-small-gap); margin: 0; max-width: 100%; }
 .ramified-player #fullscreen-action-bar svg {
   width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2;
   stroke-linecap: round; stroke-linejoin: round; pointer-events: none;
 }
 .ramified-player #player-action-controls .fullscreen-lianliankan-actions {
-  display: flex; position: static; margin-top: 8px;
+  display: flex; position: static; flex-wrap: wrap; gap: var(--player-small-gap); margin: 0;
 }
 .ramified-player #fullscreen-action-shell[hidden] { display: none !important; }
 .ramified-player:not(.canvas-fullscreen-active) #fullscreen-exit,
@@ -55,16 +62,30 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
 }
 .ramified-player .fullscreen-settings-header,
 .ramified-player .fullscreen-settings-tabs { flex: none; }
-.ramified-player .fullscreen-settings-header { padding: 16px 24px; border: 0; }
-.ramified-player .fullscreen-settings-tabs { padding-inline: 24px; }
+.ramified-player .fullscreen-settings-tabs { gap: var(--player-small-gap); padding: var(--player-small-gap) var(--player-page-inset) 0; }
+.ramified-player :is(.fullscreen-settings-tab, .import-export-tab) { min-height: var(--player-control-height); line-height: 1.4; }
 .ramified-player .fullscreen-settings-panel {
-  flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain;
-  padding: 16px 24px 24px; box-sizing: border-box;
+  flex: 1; min-height: 0; max-height: none; overflow: auto; overscroll-behavior: contain;
+  padding: var(--player-page-inset); box-sizing: border-box;
 }
 .ramified-player .fullscreen-settings-panel > * { max-width: 720px; }
-.ramified-player .fullscreen-settings-footer { flex-wrap: wrap; justify-content: flex-start; gap: 8px; }
-.ramified-player .player-settings-extra { padding: 12px 0; }
-.ramified-player .player-settings-extra p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.ramified-player .fullscreen-settings-footer,
+.ramified-player .calculator-input-footer {
+  display: flex; flex-wrap: wrap; justify-content: flex-start; gap: var(--player-small-gap);
+  margin-top: 16px; padding: 16px 0 0;
+}
+.ramified-player .fullscreen-settings-footer > .btn { flex: 1 1 180px; width: auto; }
+.ramified-player .player-settings-extra { display: grid; gap: var(--player-gap); padding: 0 0 16px; }
+.ramified-player .player-settings-extra p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.ramified-player .fullscreen-settings-options { padding: 0; }
+.ramified-player .fullscreen-setting-row {
+  min-height: 58px; gap: var(--player-gap); padding: var(--player-small-gap) 0; box-sizing: border-box;
+  line-height: 1.5;
+}
+.ramified-player .fullscreen-setting-row > * { min-width: 0; }
+.ramified-player .fullscreen-setting-row > select { max-width: 100%; }
+.ramified-player .fullscreen-volume-control { width: min(190px, 40vw); min-width: 0; grid-template-columns: minmax(0, 1fr) 4ch; gap: var(--player-small-gap); }
+#player-language .site-language-control { display: flex; width: 100%; margin: 0; justify-content: space-between; gap: var(--player-gap); }
 #player-menu {
   position: absolute; inset: 0; z-index: 30; overflow: hidden;
   background: var(--bg, #f7f4ef); display: flex; padding: 0; box-sizing: border-box;
@@ -74,21 +95,23 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
   display: flex; flex-direction: column; width: 100%; height: 100%; margin: 0;
   min-width: 0; min-height: 0; padding: 0; box-sizing: border-box;
 }
-.player-menu-header {
-  display: flex; flex: none; gap: 16px; align-items: center; margin: 0;
-  padding: 16px 24px; border: 0; border-bottom: 3px solid var(--accent);
+.player-menu-header, .ramified-player .fullscreen-settings-header {
+  display: flex; flex: none; gap: var(--player-gap); align-items: center; margin: 0;
+  min-height: 77px; box-sizing: border-box;
+  padding: var(--player-header-inset) var(--player-page-inset); border: 0; border-bottom: 3px solid var(--accent);
   background: var(--text); color: var(--bg); box-shadow: none;
 }
-.player-menu-header h1 { font: inherit; font-size: 26px; margin: 0; flex: 1; color: inherit; }
+.player-menu-header h1, .ramified-player .fullscreen-settings-title { font: inherit; font-size: 26px; line-height: 1.2; margin: 0; flex: 1; min-width: 0; color: inherit; }
+.ramified-player .fullscreen-settings-close { color: inherit; }
 .player-page {
   flex: 1; min-width: 0; min-height: 0; width: 100%; margin: 0;
-  padding: 24px; overflow: auto; overscroll-behavior: contain; box-sizing: border-box;
+  padding: var(--player-page-inset); overflow: auto; overscroll-behavior: contain; box-sizing: border-box;
 }
 #player-home, #player-game-menu {
   display: grid; grid-template-columns: minmax(0, 300px); justify-content: center;
-  align-content: center; align-content: safe center; gap: 12px;
+  align-content: center; align-content: safe center; gap: var(--player-gap);
 }
-#player-home > .btn, #player-game-menu > .btn { width: 100%; min-height: 44px; }
+#player-home > .btn, #player-game-menu > .btn { width: 100%; }
 #player-setup-controls, #player-display > section, #player-online > section,
 #player-files > section, #player-stats > section { max-width: 720px; }
 .player-page .card-body { display: block !important; padding: 0; }
@@ -97,14 +120,54 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
 #player-setup-controls > #begin-game { margin: 16px 0 8px; }
 #player-view-board { width: 100%; max-width: 720px; margin-top: 8px; }
 #player-message { flex: none; color: var(--text); border: 1px solid var(--border); padding: 10px; font-size: 14px; }
-#player-actions { position: absolute; bottom: 8px; left: 12px; z-index: 9; max-width: calc(100% - 24px); }
-#player-actions > summary { cursor: pointer; padding: 6px 12px; background: var(--surface, white); border: 1px solid var(--border); border-radius: 5px; }
+#player-actions {
+  position: absolute; top: 8px; left: calc(8px + var(--player-icon-size) + var(--player-small-gap));
+  right: 8px; z-index: 9;
+}
+#player-actions > summary {
+  width: fit-content; box-sizing: border-box; min-height: var(--player-icon-size);
+  cursor: pointer; padding: 10px 12px; line-height: 20px;
+  background: var(--surface, white); border: 1px solid var(--border); border-radius: 5px;
+}
 #player-action-controls {
-  position: absolute; bottom: 100%; left: 0; padding: 12px; width: 300px;
-  max-width: calc(100vw - 48px);
-  max-height: min(45vh, max(72px, calc(var(--player-frame-height) - 156px))); overflow: auto;
+  position: absolute; top: calc(100% + var(--player-small-gap)); left: 0;
+  display: flex; flex-direction: column; gap: var(--player-gap);
+  padding: var(--player-gap); width: 300px; max-width: 100%; box-sizing: border-box;
+  max-height: max(0px, calc(var(--player-frame-height) - 116px)); overflow: auto; overscroll-behavior: contain;
   border: 1px solid var(--border); background: var(--surface, white); border-radius: 5px;
 }
+/* Shared player controls. Game-specific direction pad geometry stays intact. */
+.ramified-player :is(.player-menu-header, .player-page, .fullscreen-settings-panel, #player-action-controls) .btn,
+.ramified-player :is(.calculator-input-binding, .calculator-input-add) {
+  box-sizing: border-box; min-height: var(--player-control-height); padding: 8px 14px;
+  font-size: 0.78rem; line-height: 1.4; white-space: normal; overflow-wrap: anywhere;
+}
+.ramified-player .import-export-file-picker { box-sizing: border-box; min-height: var(--player-control-height); padding: 8px 14px; }
+.ramified-player .import-export-field-value { min-height: var(--player-control-height); padding: 8px; line-height: 1.4; }
+.ramified-player :is(.import-export-panel, .import-export-tabpanel, .import-export-field-row) { gap: var(--player-gap); }
+/* The shared import/export widget declares its own padding with !important. */
+.ramified-player .import-export-panel :is(select, input[type="text"], input[type="number"]) { padding: 8px !important; }
+.ramified-player :is(#player-home, #player-game-menu) > .btn { min-height: var(--player-menu-button-height); }
+.ramified-player :is(.fullscreen-settings-button, .fullscreen-action-button, .fullscreen-lianliankan-button, .fullscreen-settings-close) {
+  box-sizing: border-box; width: var(--player-icon-size); height: var(--player-icon-size);
+  min-width: var(--player-icon-size); padding: 0; flex: none;
+}
+.ramified-player :is(.player-page, .fullscreen-settings-panel, #player-action-controls) :is(select, input[type="number"], input[type="text"]) {
+  box-sizing: border-box; min-height: var(--player-control-height); min-width: 0; max-width: 100%;
+  padding: 8px; font-size: 0.9rem; line-height: 1.4;
+  border: 1px solid var(--border); border-radius: 3px; background: var(--bg); color: var(--text);
+}
+.ramified-player :is(.player-page, #player-action-controls) .mosaic-inline-row { gap: var(--player-gap); margin-top: var(--player-gap); }
+.ramified-player :is(.player-page, #player-action-controls) .input-label { white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
+.ramified-player :is(.player-page, #player-action-controls) :is(.display-style-controls, .glue-flap-controls, .billiard-controls, .local-ai-player-options) { flex-wrap: wrap; gap: var(--player-small-gap); }
+.ramified-player #player-action-controls > .mosaic-inline-row { grid-template-columns: minmax(0, 1fr); margin: 0; gap: var(--player-small-gap); }
+.ramified-player #player-action-controls > * { flex-shrink: 0; }
+.ramified-player .calculator-input-action { gap: var(--player-gap); padding: var(--player-gap) 0; line-height: 1.5; }
+.ramified-player .calculator-input-bindings { gap: var(--player-small-gap); }
+.ramified-player .calculator-input-section { padding-top: 16px; }
+.ramified-player .calculator-input-section + .calculator-input-section { margin-top: 16px; }
+.ramified-player .calculator-input-profile, .ramified-player .calculator-input-help { margin: 0 0 var(--player-gap); line-height: 1.5; }
+.ramified-player :is(button, select, input):disabled { opacity: 0.48; cursor: not-allowed; transform: none; }
 .ramified-player #debug-tools,
 .ramified-player .mosaic-debug-actions,
 .ramified-player .mosaic-history-actions,
@@ -118,15 +181,16 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
 .ramified-player #canvas-wrap:has(> #fullscreen-settings-overlay:not([hidden])) { overflow: visible; }
 .ramified-player.player-menu-open #player-toolbar,
 .ramified-player.player-menu-open #player-actions { visibility: hidden; }
-.ramified-player .btn:focus-visible, .ramified-player summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.ramified-player :is(button, select, input, textarea, summary, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .ramified-player.canvas-fullscreen-active { --player-frame-height: 100dvh; }
 @media (max-width: 600px) {
+  body.ramified-player { --player-page-inset: 16px; --player-header-inset: 12px; }
   body.ramified-player:not(.canvas-fullscreen-active) { --player-frame-height: min(calc((100vw - 12px) * 3 / 4), calc(100dvh - 12px)); }
   body.ramified-player .mosaic-layout { width: min(calc(100vw - 12px), calc((100dvh - 12px) * 4 / 3)); }
-  .player-menu-header, .player-page { padding: 16px; }
-  .ramified-player .fullscreen-settings-header { padding: 8px 16px; }
-  .ramified-player .fullscreen-settings-tabs { padding-inline: 16px; }
-  .ramified-player .fullscreen-settings-panel { padding: 12px 16px 16px; }
+  .player-menu-header, .ramified-player .fullscreen-settings-header { min-height: 70px; }
+  .player-menu-header h1, .ramified-player .fullscreen-settings-title { font-size: 22px; }
+  .ramified-player .fullscreen-setting-row:has(> select) { grid-template-columns: minmax(0, 1fr); }
+  .ramified-player .calculator-input-action { grid-template-columns: minmax(0, 1fr); }
+  .ramified-player .calculator-input-bindings { justify-content: flex-start; }
   .ramified-player .mosaic-underbar { font-size: 12px; }
-  .ramified-player .fullscreen-action-button, .ramified-player .fullscreen-settings-button { width: 34px; height: 34px; }
 }
