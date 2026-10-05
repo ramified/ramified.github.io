@@ -53,7 +53,6 @@
       if (node) byId('player-action-controls').append(node);
     });
     byId('player-toolbar').append(byId('fullscreen-action-shell'));
-    byId('player-action-controls').prepend(byId('fullscreen-action-bar'));
     byId('player-action-controls').append(byId('fullscreen-lianliankan-actions'));
     const language = document.querySelector('body > header .site-language-control');
     if (language) byId('player-language').append(language);

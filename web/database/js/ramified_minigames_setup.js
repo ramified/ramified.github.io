@@ -6785,6 +6785,16 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     : null;
   }
 
+  function restartDefaultBindings(profiles = {}, profile = '') {
+    // New defaults must not take a key already assigned by the player.
+    const usedByAnotherAction = ['__global__', profile].some((key) => (
+      Object.entries(profiles[key] || {}).some(([id, bindings]) => (
+        id !== 'restart' && Array.isArray(bindings) && bindings.some((binding) => String(binding).toLowerCase() === 'r')
+      ))
+    ));
+    return usedByAnotherAction ? [] : ['r'];
+  }
+
   function setupCalculatorInputSettings() {
     const api = typeof window !== 'undefined' ? window.CalculatorInputSettings : null;
     if (!api || api.getSession('ramified-minigames')) return;
@@ -6844,7 +6854,8 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
           }
         }),
         action('restart', 'controls.groupGame', 'Game', 'controls.restart', 'Restart game', 'controls.restartDescription', 'Uses the existing two-step restart confirmation.', {
-          defaultBindings: [], storageProfile: 'global', enabled: () => !!game,
+          defaultBindings: restartDefaultBindings(calculatorInputSession?.data?.profiles, calculatorInputSession?.profile()),
+          storageProfile: 'global', enabled: () => !!game && !onlineIsInRoom(),
           trigger: restartFromInputShortcut
         })
         ];
@@ -6915,7 +6926,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function restartFromInputShortcut() {
-    if (!game) return false;
+    if (!game || playerMenuOpen || fullscreenSettingsOpen || onlineIsInRoom()) return false;
     if (!fullscreenRestartPending) {
       setFullscreenRestartConfirmation(true);
       syncStatus(
@@ -34529,6 +34540,7 @@ const api = {
   surfaceSuccessor,
   getFullscreenDiagnostics,
   __test: {
+    restartDefaultBindings,
     backgroundPresetForExport,
     backgroundBoundarySourceEnabled,
     buildMosaicCalculatorHref,
