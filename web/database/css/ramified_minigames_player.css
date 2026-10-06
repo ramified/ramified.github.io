@@ -118,8 +118,39 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
   align-content: center; align-content: safe center; gap: var(--player-gap);
 }
 #player-home > .btn, #player-game-menu > .btn { width: 100%; }
+#player-game-list {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--player-gap); max-width: 800px; margin: 0 auto;
+}
+#player-game-list > .btn { min-height: var(--player-menu-button-height); }
+#player-gomoku-setup {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: var(--player-gap); align-items: center; max-width: 880px; margin: 0 auto;
+}
+.player-board-picker { min-width: 0; }
+.player-board-preview {
+  display: flex; justify-content: center; align-items: center;
+  height: clamp(140px, calc(var(--player-frame-height) * .47), 350px);
+}
+#player-board-preview { display: block; width: 100% !important; height: 100% !important; object-fit: contain; background: transparent; cursor: default; }
+.player-board-navigation {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center; gap: var(--player-small-gap); margin-top: var(--player-gap);
+}
+#player-board-name { text-align: center; overflow-wrap: anywhere; }
+#player-gomoku-fields { min-width: 0; }
+.ramified-player #player-gomoku-fields > .mosaic-inline-row {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--player-small-gap);
+  margin: 0 0 var(--player-gap);
+}
+#player-gomoku-fields :is(select, input) { width: 100%; }
+#player-gomoku-fields .background-slider-controls { display: flex; min-width: 0; gap: var(--player-small-gap); }
+#player-gomoku-fields .local-ai-player-options { display: grid; grid-template-columns: minmax(0, 1fr); }
+#player-gomoku-fields .local-ai-player-option { display: grid; grid-template-columns: 3.5em minmax(0, 1fr); align-items: center; }
+#player-begin { grid-column: 1 / -1; width: min(100%, 300px); justify-self: center; }
 #player-setup-controls, #player-display > section, #player-online > section,
 #player-files > section, #player-stats > section { max-width: 720px; }
+#player-setup-controls .mosaic-inline-row:has(> #game-mode-select) { display: none; }
 .player-page .card-body { display: block !important; padding: 0; }
 .player-page .online-play-panel { display: grid !important; gap: var(--player-gap); }
 #player-online.player-page .online-play-panel > .mosaic-inline-row { margin-top: 0; }
@@ -196,6 +227,8 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
 .ramified-player :is(button, select, input, textarea, summary, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .ramified-player.canvas-fullscreen-active { --player-frame-height: 100dvh; }
 @media (max-width: 600px) {
+  #player-game-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #player-gomoku-setup { grid-template-columns: minmax(0, 1fr); }
   body.ramified-player { --player-page-inset: 16px; --player-header-inset: 12px; }
   body.ramified-player:not(.canvas-fullscreen-active) { --player-frame-height: min(calc((100vw - 12px) * 3 / 4), calc(100dvh - 12px)); }
   body.ramified-player .mosaic-layout { width: min(calc(100vw - 12px), calc((100dvh - 12px) * 4 / 3)); }

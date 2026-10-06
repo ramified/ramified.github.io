@@ -51,6 +51,8 @@
       [GAME_MODES.CHINESE_CHECKERS]: 'games.checkers',
       [GAME_MODES.REVERSI]: 'games.reversi',
       [GAME_MODES.GO]: 'games.go',
+      [GAME_MODES.NUMBER_2048]: 'games.2048',
+      [GAME_MODES.CONNECT_FOUR]: 'games.connectFour',
       [GAME_MODES.HEX]: 'games.hex',
       [GAME_MODES.GOMOKU]: 'games.gomoku'
     };
@@ -704,6 +706,11 @@
   let soundAuditionSeeds = [];
   let undoStack = [];
   let redoStack = [];
+  // A setup draft temporarily uses the renderer; the live game and history stay
+  // in memory until a new game has actually started successfully.
+  let playerSetupSession = null;
+  let playerSetupCommitting = false;
+  let playerSetupError = false;
   let importedPreset = null;
   let hexCoverOffset = { x: HEX_COVER_OFFSET_DEFAULT, y: HEX_COVER_OFFSET_DEFAULT };
   let hexCoverOffsetPresetId = '';
@@ -3789,6 +3796,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
 
     function loadSelectionAndReset(options = {}) {
       const serial = ++selectionLoadSerial;
+      playerSetupError = false;
       const mode = options.mode || selectedGameMode();
       const preset = options.preset || selectedPreset();
       if ((!preset || !preset.__lazyPreset) && modeDependenciesReady(mode)) {
@@ -3814,6 +3822,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
       .catch((error) => {
         if (serial !== selectionLoadSerial) return false;
         selectionLoading = false;
+        playerSetupError = !!playerSetupSession;
         syncStatus('setup load failed', error && error.message ? error.message : 'could not load setup', 'error');
         syncControls();
         return false;
@@ -4549,6 +4558,10 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function beginGameFromUi() {
+    if (playerSetupSession && !playerSetupCommitting) {
+      document.dispatchEvent(new CustomEvent('ramified-player-start-request'));
+      return;
+    }
     hideCanvasStartPrompt();
     clearCanvasStartPromptTimer();
     resetLocalResultPromptDismissal();
@@ -4646,6 +4659,9 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     } else if (selectedGameMode() === GAME_MODES.HEX && isHexGame(game)) {
       // The preview already owns a fully initialized runtime from the worker.
       // Reusing it avoids repeating the cellular-homology calculation here.
+      game.phase = 'ready';
+    } else if (playerSetupSession && isGomokuGame(game)) {
+      // Start exactly the board being previewed, including a random gluing.
       game.phase = 'ready';
     } else {
       game = beginSelectedGame(selectedPreset(), selectedGameOptions({
@@ -5560,7 +5576,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handlePresetSelectChange() {
-    syncRememberedAiControllersToHuman();
+    if (!playerSetupSession) syncRememberedAiControllersToHuman();
     if (refs.select && refs.select.value === RANDOM_PRESET_CHOICE_ID) {
       resolveRandomPresetFromUi();
       return;
@@ -5576,7 +5592,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     }
     setImportToolsVisible(false);
     const preset = selectedPreset();
-    loadSelectionAndReset({ preset, onReady() {
+    return loadSelectionAndReset({ preset, onReady() {
       if (selectedGameMode() === GAME_MODES.BILLIARDS && refs.billiardsRules) {
         const block = selectedPreset() && selectedPreset().billiards;
         refs.billiardsRules.value = Billiards ? Billiards.normalizeRules(block && block.rules) : 'solo';
@@ -15270,7 +15286,7 @@ function render() {
   if (placementReachAssistData && (!placementReachInteractionAvailable() || placementReachAssistState !== game)) clearPlacementReachAssist();
   if (placementHover && (!placementHoverInteractionAvailable() || placementHover.state !== game)) clearPlacementHover(false);
   const preset = game ? game.preset : selectedPreset();
-  if (!preset) return;
+  if (!preset || preset.__lazyPreset) return;
   if (hoveredGlue && (!glueHoverInteractionAvailable(preset) || !activeGlueHoverForPreset(preset, hoveredGlue))) {
     hoveredGlue = null;
     syncCanvasCursor();
@@ -34340,6 +34356,107 @@ function stateSummary(state) {
 const nodeStartupPresetItems = loadNodePresetCatalogItems();
 if (nodeStartupPresetItems) installPresetCatalog(nodeStartupPresetItems);
 
+function playerMoveIsPending() {
+  return !!(currentAnimation || billiardsShotPending || sokobanMoveSession
+    || (eventQueue.length && eventIndex < eventQueue.length));
+}
+
+function playerBoardLabel(preset) {
+  const label = preset.label || preset.id;
+  // Explicit keys for the boards exposed by the new Gomoku picker.
+  switch (preset.id) {
+    case 'boundary-glue-board': return tk('presets.boundary', label);
+    case 'rubiks-cube-3x3x3': return tk('presets.rubiksCube', label);
+    case 'gomoku-tic-tac-toe': return tk('presets.tictactoe', label);
+    case 'gomoku-strange-corner': return tk('presets.strangeCorner', label);
+    case 'gomoku-small-holes': return tk('presets.smallHoles', label);
+    case 'gomoku-big-hole': return tk('presets.bigHole', label);
+    case 'wormhole': return tk('presets.wormhole', label);
+    case 'gomoku-m4-15x15': return tk('presets.genus4', label);
+    case 'trefoil': return tk('presets.trefoil', label);
+    case 'xi': return tk('presets.xi', label);
+    case 'tunnels': return tk('presets.tunnels', label);
+    case 'octahedron-with-square-holes': return tk('presets.octaHoles', label);
+    case 'octahedron-with-square-glues': return tk('presets.octaGlues', label);
+    case 'dodecahedron-with-pentagon-holes': return tk('presets.dodeca', label);
+    default: {
+      const chinese = typeof window !== 'undefined' && window.SiteI18n?.getLocale() === 'zh-CN';
+      return tk('player.boardName', '{{name}}', { name: chinese && preset.labelZh ? preset.labelZh : label });
+    }
+  }
+}
+
+function capturePlayerSetupSession() {
+  return {
+    game, undoStack, redoStack, importedPreset,
+    snapshot: api.player.snapshot(),
+    controls: Array.from(new Set(Object.values(refs)))
+      .filter((node) => node && typeof node.value !== 'undefined')
+      .map((node) => ({ node, value: node.value, checked: node.checked })),
+    controllers: Array.from(chineseCheckersControllers),
+    checkersPlayers: chineseCheckersSelectedPlayers,
+    checkersPlayersKey: chineseCheckersSelectedPlayersPresetKey,
+    checkersControllerKey: chineseCheckersControllerPresetKey,
+    localAiPauseReason, noMoveDirs: new Set(noMoveDirs),
+    pendingBonusGameOver, pendingBonusBlockedByBombs, fideChessPendingPromotion,
+    localResultPromptDismissed, hexCoverOffset: { ...hexCoverOffset }, hexCoverOffsetPresetId,
+    billiards: {
+      elevation: billiardsElevationDeg, telemetry: billiardsTelemetry,
+      selection: billiardsBallSelection, rack: billiardsRackSelection, center: billiardsRackCenter,
+      tileLength: billiardsTileEdgeLengthM, guidanceDismissed: billiardsCueGuidanceDismissed
+    }
+  };
+}
+
+function cancelPlayerSetup() {
+  if (!playerSetupSession) return;
+  const previous = playerSetupSession;
+  ++selectionLoadSerial; // Ignore a late preset response after Back/Cancel.
+  selectionLoading = false;
+  playerSetupError = false;
+  cancelHexHomologyRequest();
+  cancelLocalAiWork();
+  stopPlayback();
+  clearFideChessPendingPromotion({ render: false });
+  game = previous.game;
+  importedPreset = previous.importedPreset;
+  const restoreControls = () => previous.controls.forEach(({ node, value, checked }) => {
+    node.value = value;
+    if (typeof checked === 'boolean') node.checked = checked;
+  });
+  restoreControls();
+  syncPresetSelectOptions();
+  restoreControls();
+  undoStack = previous.undoStack;
+  redoStack = previous.redoStack;
+  chineseCheckersControllers.clear();
+  previous.controllers.forEach(([color, value]) => chineseCheckersControllers.set(color, value));
+  chineseCheckersSelectedPlayers = previous.checkersPlayers;
+  chineseCheckersSelectedPlayersPresetKey = previous.checkersPlayersKey;
+  chineseCheckersControllerPresetKey = previous.checkersControllerKey;
+  localAiPauseReason = previous.localAiPauseReason;
+  noMoveDirs = previous.noMoveDirs;
+  pendingBonusGameOver = previous.pendingBonusGameOver;
+  pendingBonusBlockedByBombs = previous.pendingBonusBlockedByBombs;
+  fideChessPendingPromotion = previous.fideChessPendingPromotion;
+  localResultPromptDismissed = previous.localResultPromptDismissed;
+  hexCoverOffset = previous.hexCoverOffset;
+  hexCoverOffsetPresetId = previous.hexCoverOffsetPresetId;
+  billiardsElevationDeg = previous.billiards.elevation;
+  billiardsTelemetry = previous.billiards.telemetry;
+  billiardsBallSelection = previous.billiards.selection;
+  billiardsRackSelection = previous.billiards.rack;
+  billiardsRackCenter = previous.billiards.center;
+  billiardsTileEdgeLengthM = previous.billiards.tileLength;
+  billiardsCueGuidanceDismissed = previous.billiards.guidanceDismissed;
+  playerSetupSession = null;
+  clearSetupAlert();
+  render();
+  syncStatusForCurrentGame();
+  syncControls();
+  if (isHexGame(game) && game.hexTopologyState === 'pending') scheduleHexHomologyRequest(game);
+}
+
 const api = {
   // Small adapter for the player shell; the archive keeps its original lifecycle.
   player: {
@@ -34347,8 +34464,79 @@ const api = {
       return {
         ready: presetCatalogReady && !selectionLoading && !!game,
         active: !!game && game.phase !== 'setup',
-        online: onlineIsInRoom()
+        online: onlineIsInRoom(),
+        browsing: !!playerSetupSession,
+        canPrepare: presetCatalogReady && !selectionLoading && !!game && !playerMoveIsPending(),
+        setupError: playerSetupError,
+        mode: selectedGameMode(),
+        presetId: refs.select && refs.select.value
       };
+    },
+    games() { return orderedCatalogGameModes().map((mode) => ({ mode, label: localizedGameName(mode) })); },
+    presets() {
+      const presets = presetListForMode();
+      if (importedPreset && presetMatchesGameMode(importedPreset)) presets.push(importedPreset);
+      return presets.map((preset) => ({ id: preset.id, label: playerBoardLabel(preset) }));
+    },
+    async beginSetup(mode) {
+      if (onlineIsInRoom() || !presetCatalogReady || selectionLoading || playerMoveIsPending()) return false;
+      if (!orderedCatalogGameModes().includes(mode)) return false;
+      cancelPlayerSetup();
+      playerSetupSession = capturePlayerSetupSession();
+      try {
+        refs.gameMode.value = mode;
+        syncRememberedAiControllersToHuman();
+        syncBoardSizeInputForGameMode();
+        applyDefaultPlacementDisplayForMode();
+        applyDefaultPlacementPieceSizeForMode();
+        syncPresetSelectOptions(mode === GAME_MODES.GOMOKU ? BOUNDARY_GLUE_BOARD_PRESET_ID : defaultPresetIdForMode(mode));
+        if (mode === GAME_MODES.GOMOKU) {
+          refs.boundaryGlueMode.value = BOUNDARY_GLUE_MODES.OPEN;
+          refs.boundaryGlueShape.value = 'square';
+          refs.gomokuSize.value = '15';
+          refs.boundaryGlueRows.value = '15';
+          refs.boundaryGlueCols.value = '15';
+          refs.gomokuBlackController.value = HUMAN_CONTROLLER;
+          refs.gomokuWhiteController.value = LOCAL_AI_CONTROLLER;
+        }
+        syncOnlineRoleOptions();
+        if (refs.importGameMode) refs.importGameMode.value = mode;
+        buildSoundEffectsDebugControls();
+        const session = playerSetupSession;
+        const loaded = await loadSelectionAndReset();
+        if (playerSetupSession !== session) return false;
+        if (!loaded) cancelPlayerSetup();
+        return loaded;
+      } catch (error) {
+        cancelPlayerSetup();
+        throw error;
+      }
+    },
+    cancelSetup: cancelPlayerSetup,
+    commitSetup() {
+      if (!playerSetupSession || selectionLoading || playerSetupError || onlineIsInRoom()) return false;
+      playerSetupCommitting = true;
+      try {
+        beginGameFromUi();
+        if (!game || game.phase === 'setup') return false;
+        playerSetupSession = null;
+        syncControls();
+        return true;
+      } catch (error) {
+        cancelPlayerSetup();
+        throw error;
+      } finally { playerSetupCommitting = false; }
+    },
+    selectPreset(id) {
+      if (!playerSetupSession || selectionLoading || !api.player.presets().some((preset) => preset.id === id)) return Promise.resolve(false);
+      refs.select.value = id;
+      return handlePresetSelectChange();
+    },
+    paintPreview(canvas) {
+      if (!playerSetupSession || selectionLoading || playerSetupError || !refs.canvas || !canvas) return;
+      canvas.width = refs.canvas.width;
+      canvas.height = refs.canvas.height;
+      canvas.getContext('2d').drawImage(refs.canvas, 0, 0);
     },
     setMenuOpen(open) {
       playerMenuOpen = !!open;
@@ -34369,6 +34557,7 @@ const api = {
       return true;
     },
     snapshot() {
+      if (playerSetupSession) return playerSetupSession.snapshot;
       if (!game || game.phase === 'setup' || onlineIsInRoom() || selectionLoading
         || currentAnimation || billiardsShotPending || sokobanMoveSession
         || (eventQueue.length && eventIndex < eventQueue.length)) return null;
