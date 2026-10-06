@@ -75,7 +75,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
                 "id": "web-lists",
                 "label": "web lists",
                 "type": "checkbox",
-                "text": "- [x] https://www.math.uni-hamburg.de/\n- [x] https://www.kus.uni-hamburg.de/en.html\n- [x] https://www.rrz.uni-hamburg.de/"
+                "text": "- [x] https://www.math.uni-hamburg.de/\n- [x] https://www.kus.uni-hamburg.de/en.html\n- [x] https://www.rrz.uni-hamburg.de/\n- [?] https://wcms-fakmin.rrz.uni-hamburg.de/fakmin/NPS/\n- [x] https://docata.min.uni-hamburg.de/home\n- [x] https://start.voip-centrex.dfn.de/main/telephone"
               }
             ],
             "setting": "",
@@ -83,8 +83,8 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "result": "",
             "proofSketch": "",
             "citationKeys": [],
-            "color": "#2f5f9f",
-            "fillColor": "#eef4fb",
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
             "x": 237.4,
             "y": 101.1
           },
@@ -97,7 +97,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
                 "id": "tools",
                 "label": "tools",
                 "type": "checkbox",
-                "text": "- [ ] chatgpt and codex\n- [ ] everything\n- [ ] snipaste\neverything\n- [x] 小狼毫\nbandzip\ngithub"
+                "text": "- [x] chatgpt and codex\n- [x] snipaste\n- [x] everything\n- [x] 小狼毫\n- [?] bandzip\n- [ ] github"
               }
             ],
             "setting": "",
@@ -109,6 +109,56 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "fillColor": "#f7f5f1",
             "x": 505.1,
             "y": 162.1
+          },
+          {
+            "id": "n9",
+            "type": "misc",
+            "label": "questions",
+            "details": [
+              {
+                "id": "problems",
+                "label": "problems",
+                "type": "checkbox",
+                "text": "- [x] How to scan the document and how much does it cost\n- [x] Fiona link\n- [x] Promotionsordnungen has nothing with math subject\n- [x] My office room number: +49 40239520458"
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#2f5f9f",
+            "fillColor": "#eef4fb",
+            "x": 331.8,
+            "y": 231.4
+          },
+          {
+            "id": "n10",
+            "type": "misc",
+            "label": "email",
+            "details": [
+              {
+                "id": "content",
+                "label": "content",
+                "type": "textbox",
+                "text": "I'm Part of the group in thw Prof. TH .. in the research area ad. My employment is financed by funding of cluster of excellence Quantum Universe. Does this have any implications on how to apply for admission for the doctor procedures? (structured program like SFB 1624)"
+              },
+              {
+                "id": "contact-person",
+                "label": "contact person",
+                "type": "textbox",
+                "text": "Josephine Großgoerge\nSteffi Voß"
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 465.4,
+            "y": 84
           }
         ],
         "arrows": [],
