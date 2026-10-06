@@ -426,6 +426,16 @@
     },
     {
       "gameTypes": [
+        "Chinese Checkers"
+        ],
+      "id": "small-classic",
+      "label": "small classic",
+      "labelZh": "小型经典",
+      "key": "small_classic",
+      "file": "small_classic.preset.js"
+    },
+    {
+      "gameTypes": [
         "Gomoku",
         "Go",
         "Chinese Checkers"
