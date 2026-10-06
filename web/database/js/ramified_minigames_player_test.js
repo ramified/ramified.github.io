@@ -62,6 +62,28 @@ async function run() {
   assert.strictEqual(await player.selectPreset('wormhole'), true);
   assert.strictEqual(elements.get('gomoku-white-controller').value, 'local-ai-aggressive');
   await player.selectPreset('boundary-glue-board');
+  assert.strictEqual(engine.__test.getGame().preset.rows, 15, 'returning to the default board preserves 15 rows');
+  assert.strictEqual(engine.__test.getGame().preset.cols, 15, 'returning to the default board preserves 15 columns');
+  assert.strictEqual(engine.__test.getGame().preset.boundaryGlueMode, 'open');
+  // Board browsing must also preserve a player's custom square and rectangular dimensions.
+  elements.get('gomoku-board-size').value = '9';
+  elements.get('gomoku-board-size').listeners.change();
+  await player.selectPreset('wormhole');
+  await player.selectPreset('boundary-glue-board');
+  assert.strictEqual(engine.__test.getGame().preset.rows, 9, 'custom size is not replaced by either source or player defaults');
+  elements.get('boundary-glue-shape').value = 'rectangle';
+  elements.get('boundary-glue-shape').listeners.change();
+  elements.get('boundary-glue-rows').value = '9';
+  elements.get('boundary-glue-cols').value = '13';
+  elements.get('boundary-glue-rows').listeners.change();
+  elements.get('boundary-glue-mode').value = 'torus';
+  elements.get('boundary-glue-mode').listeners.change();
+  for (const id of ['wormhole', 'boundary-glue-board', 'wormhole', 'boundary-glue-board']) await player.selectPreset(id);
+  assert.strictEqual(elements.get('boundary-glue-shape').value, 'rectangle');
+  assert.strictEqual(engine.__test.getGame().preset.rows, 9);
+  assert.strictEqual(engine.__test.getGame().preset.cols, 13);
+  assert.strictEqual(engine.__test.getGame().preset.boundaryGlueMode, 'torus');
+  assert.strictEqual(elements.get('gomoku-white-controller').value, 'local-ai-aggressive');
   elements.get('boundary-glue-mode').value = 'random';
   elements.get('boundary-glue-mode').listeners.change();
   const randomBoard = JSON.stringify(engine.__test.getGame().preset.gluedEdges);
@@ -70,6 +92,10 @@ async function run() {
 
   // Start an ordinary board, make a move, then browse and cancel without losing undo.
   assert.strictEqual(await player.beginSetup('gomoku'), true);
+  assert.strictEqual(engine.__test.getGame().preset.rows, 15, 'a new preparation uses the approved defaults, not the previous draft');
+  assert.strictEqual(engine.__test.getGame().preset.cols, 15);
+  assert.strictEqual(engine.__test.getGame().preset.boundaryGlueMode, 'open');
+  assert.strictEqual(elements.get('boundary-glue-shape').value, 'square');
   elements.get('gomoku-white-controller').value = 'human';
   assert.strictEqual(player.commitSetup(), true);
   player.setMenuOpen(false);

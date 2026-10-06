@@ -5597,7 +5597,9 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
         const block = selectedPreset() && selectedPreset().billiards;
         refs.billiardsRules.value = Billiards ? Billiards.normalizeRules(block && block.rules) : 'solo';
       }
-      syncBoardSizeInputForSelectedPreset();
+      const savedSettings = playerSetupSession?.boardSettings.get(`${selectedGameMode()}:${refs.select.value}`);
+      if (savedSettings) savedSettings.forEach(({ node, value }) => { node.value = value; });
+      else syncBoardSizeInputForSelectedPreset();
       syncOnlineRoleOptions();
     } });
   }
@@ -34389,6 +34391,7 @@ function playerBoardLabel(preset) {
 function capturePlayerSetupSession() {
   return {
     game, undoStack, redoStack, importedPreset,
+    boardSettings: new Map(),
     snapshot: api.player.snapshot(),
     controls: Array.from(new Set(Object.values(refs)))
       .filter((node) => node && typeof node.value !== 'undefined')
@@ -34529,6 +34532,13 @@ const api = {
     },
     selectPreset(id) {
       if (!playerSetupSession || selectionLoading || !api.player.presets().some((preset) => preset.id === id)) return Promise.resolve(false);
+      // Keep each Gomoku board's choices for this preparation only. A failed load
+      // still has the previous board's controls, so it must not create an entry.
+      if (selectedGameMode() === GAME_MODES.GOMOKU && !playerSetupError) {
+        playerSetupSession.boardSettings.set(`${selectedGameMode()}:${refs.select.value}`,
+          [refs.gomokuSize, refs.boundaryGlueMode, refs.boundaryGlueShape, refs.boundaryGlueRows, refs.boundaryGlueCols]
+            .filter(Boolean).map((node) => ({ node, value: node.value })));
+      }
       refs.select.value = id;
       return handlePresetSelectChange();
     },
