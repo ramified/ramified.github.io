@@ -45,7 +45,7 @@
       byId(id).append(card);
     });
     const gomokuRows = ['boundary-glue-mode-row', 'boundary-glue-shape-row', 'gomoku-size-row',
-      'boundary-glue-rect-row', 'gomoku-controllers-row'].map((id) => {
+      'boundary-glue-rect-row'].map((id) => {
       const node = byId(id);
       const anchor = document.createComment(id);
       node.before(anchor);
@@ -87,14 +87,17 @@
         });
       }
       byId('player-gomoku-setup').hidden = !gomokuLayout;
+      byId('player-setup').classList.toggle('player-gomoku-page', gomokuLayout);
       byId('player-setup-controls').hidden = gomokuLayout;
       byId('player-view-board').hidden = gomokuLayout;
       byId('player-gomoku-fields').inert = setupBusy || !state.ready;
+      byId('player-more').disabled = setupBusy || !state.ready || state.setupError || !gomokuRows.some(({ node }) => !node.hidden);
       byId('player-begin').disabled = setupBusy || !state.ready || state.setupError;
       byId('player-confirm-new').disabled = setupBusy || !state.ready || state.setupError;
       byId('player-board-previous').disabled = byId('player-board-next').disabled = setupBusy || !state.ready;
       for (const button of byId('player-game-list').children) button.disabled = setupBusy || !state.canPrepare || state.online;
       if (gomokuLayout) {
+        syncPlayerControllers(state);
         byId('player-board-name').textContent = engine.presets().find((preset) => preset.id === state.presetId)?.label || '';
         byId('player-board-preview').hidden = !state.ready || state.setupError;
         if (!previewFrame) previewFrame = requestAnimationFrame(() => {
@@ -104,6 +107,36 @@
       }
       byId('player-actions').hidden = !Array.from(byId('player-action-controls').children).some((node) => !node.hidden);
       if (!restoring && state.active && !state.online && !saveTimer) saveTimer = setTimeout(save, 250);
+    }
+
+    function syncPlayerControllers(state) {
+      const labels = {
+        human: ['ai.human', tk('ai.human', 'Human')],
+        'local-ai-challenging': ['player.aiChallenging', tk('player.aiChallenging', 'AI — Challenging')],
+        'local-ai-aggressive': ['player.aiAggressive', tk('player.aiAggressive', 'AI — Aggressive')]
+      };
+      for (const color of ['black', 'white']) {
+        const control = byId(`gomoku-${color}-controller`);
+        const output = byId(`player-${color}-controller`);
+        const [key, text] = labels[control.value] || labels.human;
+        output.dataset.i18n = key;
+        output.textContent = text;
+        for (const direction of ['previous', 'next']) {
+          byId(`player-${color}-${direction}`).disabled = setupBusy || !state.ready || state.setupError || control.disabled;
+        }
+      }
+    }
+
+    function changePlayerController(color, direction) {
+      const state = engine.state();
+      const control = byId(`gomoku-${color}-controller`);
+      if (setupBusy || !state.ready || state.setupError || !state.browsing || control.disabled) return;
+      const options = Array.from(control.options).filter((option) => !option.disabled);
+      const index = options.findIndex((option) => option.value === control.value);
+      if (!options.length) return;
+      control.value = options[(index + direction + options.length) % options.length].value;
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      sync();
     }
 
     function save() {
@@ -141,14 +174,14 @@
       if (!open) canvas.focus();
     }
 
-    function show(next, parent = page) {
+    function show(next, parent = page, focusId = null) {
       page = next;
       backPage = parent;
       pages.forEach((node) => { node.hidden = node.id !== `player-${next}`; });
       byId('player-back').hidden = next === 'home' || next === 'game-menu';
       const titleKeys = {
         home: 'meta.heading', 'game-menu': 'player.menu', games: 'player.chooseGame',
-        setup: engine.state().mode === 'gomoku' ? 'games.gomoku' : 'player.gameOptions', confirm: 'player.start',
+        setup: engine.state().mode === 'gomoku' ? 'games.gomoku' : 'player.gameOptions', 'board-options': 'player.moreOptions', confirm: 'player.start',
         display: 'setup.display', online: 'online.title', files: 'player.files', stats: 'status.stats'
       };
       byId('player-menu-title').dataset.i18n = titleKeys[next];
@@ -156,7 +189,8 @@
       message(storageFailed ? tk('player.saveError', 'This browser could not save progress. Keep this tab open, or export the game from the menu.') : '');
       setOpen(true);
       sync();
-      const focus = pages.find((node) => !node.hidden)?.querySelector('button:not(:disabled), select:not(:disabled), input:not(:disabled)');
+      const focus = (focusId && byId(focusId)) || Array.from(pages.find((node) => !node.hidden)?.querySelectorAll('button:not(:disabled), select:not(:disabled), input:not(:disabled)') || [])
+        .find((node) => node.getClientRects().length);
       (focus || byId('player-back')).focus();
       pages.find((node) => !node.hidden)?.scrollTo(0, 0);
     }
@@ -174,7 +208,8 @@
         setupBusy = false;
         engine.cancelSetup();
         show('games', newGameParent);
-      } else if (page === 'confirm') show('setup', 'games');
+      } else if (page === 'board-options') show('setup', 'games', 'player-more');
+      else if (page === 'confirm') show('setup', 'games');
       else if (page === 'games') show(newGameParent);
       else show(backPage, 'home');
     }
@@ -271,6 +306,11 @@
     }
     byId('player-board-previous').addEventListener('click', () => changeBoard(-1));
     byId('player-board-next').addEventListener('click', () => changeBoard(1));
+    byId('player-more').addEventListener('click', () => show('board-options', 'setup'));
+    for (const color of ['black', 'white']) {
+      byId(`player-${color}-previous`).addEventListener('click', () => changePlayerController(color, -1));
+      byId(`player-${color}-next`).addEventListener('click', () => changePlayerController(color, 1));
+    }
     byId('player-begin').addEventListener('click', requestStart);
     document.addEventListener('ramified-player-start-request', requestStart);
     byId('player-confirm-new').addEventListener('click', startPreparedGame);

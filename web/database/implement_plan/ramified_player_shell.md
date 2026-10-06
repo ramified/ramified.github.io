@@ -8,7 +8,7 @@
 - 菜单与设置填满游戏外框；黑底白字标题栏固定在页顶，主菜单和游戏菜单按钮居中。长内容在页面内部滚动，不改变菜单包装层尺寸。窄屏操作面板在设置按钮下方的可用空间内滚动。
 - `js/ramified_minigames_player.js`：页面切换、原控件迁移、菜单输入隔离、本地存档。左上角设置内提供返回菜单和全屏；设置右侧的“对局控制栏”包含撤销、重做、重置；方向键等专用控件保留在左下角“游戏操作”内。
 - `RamifiedMinigames.player`：共享引擎提供的小型接口。规则和棋盘绘制仍由原引擎负责，旧版不会启用玩家页面逻辑。
-- R08 首批：开始游戏先进入游戏列表；五子棋使用同页棋盘预览、左右切换、尺寸／边界和黑白双方控制者选择。默认 boundary glue board、open/classic、15×15、人类／AI—挑战。其他游戏保留原有配置页。
+- R08 首批：开始游戏先进入游戏列表；五子棋预览两侧切换棋盘，下方并排选择黑白双方，尺寸／边界收进可选的“更多”完整页面；底部固定“更多”和开始按钮。默认 boundary glue board、open/classic、15×15、人类／AI—挑战。其他游戏保留原有配置页。
 
 ## 存档范围
 
@@ -20,6 +20,7 @@
 
 ```text
 node js/ramified_minigames_player_test.js
+node js/ramified_minigames_player_ui_test.js
 node js/ramified_minigames_i18n_test.js
 node js/ramified_minigames_import_export_test.js
 node js/ramified_minigames_touch_test.js
@@ -27,6 +28,8 @@ node js/ramified_minigames_glue_flap_test.js
 node js/ramified_minigames_ai_test.js
 node js/ramified_minigames_sfx_test.js
 ```
+
+`player_ui_test` 使用仓库现有的独立 Edge／Chromium 浏览器测试工具，需要 Node 22+ 和已安装的 Edge／Chromium，不使用用户浏览器存档。可设置 `RAMIFIED_UI_SCREENSHOTS` 输出布局截图；默认仅运行断言。
 
 另行运行的 `ramified_minigames_setup_test.js` 在 Hex 同一格悬停计时测试处失败；本次修改前的 HEAD 引擎也复现相同失败。此问题未混入本次 UI 改动。
 
