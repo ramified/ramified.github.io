@@ -61,7 +61,66 @@ async function run() {
     await resize(1280);
     await ready();
     assert.strictEqual(await read('document.querySelector("#player-continue").disabled'), true);
-    await click('#player-new'); await click('[data-game-mode="gomoku"]'); await ready();
+    await click('#player-new');
+    await waitFor(() => read(`(() => {
+      const images = [...document.querySelectorAll('#player-game-list img')];
+      return images.length === 11 && images.every(img => img.complete && img.naturalWidth > 0);
+    })()`), 15000, 'all game pictures loaded');
+    const gameChoices = await read(`(() => {
+      window.originalGamePictures = [...document.querySelectorAll('#player-game-list img')];
+      return [...document.querySelectorAll('#player-game-list > button')].map(button => {
+        const img = button.querySelector('img'), style = getComputedStyle(img);
+        return { mode: button.dataset.gameMode, file: img.getAttribute('src').split('/').pop(), alt: img.alt,
+          width: img.clientWidth, height: img.clientHeight, fit: style.objectFit, label: button.textContent.trim() };
+      });
+    })()`);
+    assert.strictEqual(gameChoices.length, 11);
+    for (const game of gameChoices) {
+      const file = game.mode === 'fide-chess' ? 'chess.png' : game.mode.replaceAll('-', '_') + '.png';
+      assert.strictEqual(game.file, file, `${game.mode}: matching picture`);
+      assert.strictEqual(game.alt, '', 'visible game name labels the decorative picture');
+      assert.deepStrictEqual([game.width, game.height, game.fit], [80, 80, 'contain']);
+      assert(game.label);
+    }
+    await shot('games-desktop-en');
+    await read('SiteI18n.setLocale("zh-CN")');
+    assert.strictEqual(await read(`window.originalGamePictures.every((img, index) => img === document.querySelectorAll('#player-game-list img')[index])`), true, 'language changes keep pictures in place');
+    assert.deepStrictEqual(await read(`[...document.querySelectorAll('#player-game-list .player-game-name')].map(node => node.textContent)`), await read('RamifiedMinigames.player.games().map(game => game.label)'));
+    await shot('games-desktop-zh');
+    for (const width of [390, 320]) {
+      await resize(width);
+      assert.strictEqual(await read(`document.documentElement.scrollWidth <= innerWidth && document.querySelector('#player-games').scrollWidth <= document.querySelector('#player-games').clientWidth`), true);
+      await shot(`games-${width}-top`);
+      await click(`#player-game-list [data-game-mode="${gameChoices.at(-1).mode}"] img`); await ready();
+      assert.strictEqual(await read('RamifiedMinigames.player.state().mode'), gameChoices.at(-1).mode);
+      await click('#player-back');
+      await read(`document.querySelector('#player-game-list > button:last-child').scrollIntoView({block: 'nearest'})`);
+      await shot(`games-${width}-bottom`);
+      await read(`document.querySelector('#player-games').scrollTop = 0`);
+      await read('SiteI18n.setLocale("en")');
+      assert.strictEqual(await read(`[...document.querySelectorAll('#player-game-list .player-game-name')].every(node => node.scrollWidth <= node.clientWidth)`), true, 'English names fit narrow buttons');
+      await shot(`games-${width}-en`);
+      await read('SiteI18n.setLocale("zh-CN")');
+    }
+    await resize(1280);
+    await read('SiteI18n.setLocale("en")');
+    await read(`document.querySelector('#player-game-list > button').focus()`);
+    await key('Tab', 'Tab', 9);
+    assert.strictEqual(await read('document.activeElement.dataset.gameMode'), gameChoices[1].mode);
+    await key('Enter', 'Enter', 13); await ready();
+    assert.strictEqual(await read('RamifiedMinigames.player.state().mode'), gameChoices[1].mode);
+    await click('#player-back');
+    for (const game of gameChoices) {
+      await click(`#player-game-list [data-game-mode="${game.mode}"] img`); await ready();
+      assert.strictEqual(await read('RamifiedMinigames.player.state().mode'), game.mode, 'picture click opens its game');
+      await click('#player-back');
+    }
+    // A failed image retains the button's name and click target.
+    await read(`document.querySelector('[data-game-mode="gomoku"] img').src = 'assets/ramified_minigames/board_game_stickers/missing-ui-test.png'`);
+    await waitFor(() => read(`getComputedStyle(document.querySelector('[data-game-mode="gomoku"] img')).visibility === 'hidden'`), 5000, 'missing picture fallback');
+    assert.strictEqual(await read(`document.querySelector('[data-game-mode="gomoku"] .player-game-name').textContent`), 'Gomoku');
+    await click('[data-game-mode="gomoku"]'); await ready();
+    await read(`(() => { const img = document.querySelector('[data-game-mode="gomoku"] img'); img.src = 'assets/ramified_minigames/board_game_stickers/gomoku.png'; img.style.visibility = ''; })()`);
     assert.deepStrictEqual(await board(), ['boundary-glue-board', 15, 15, 'open']);
     assert.strictEqual(await read('document.querySelector("#player-white-controller").textContent'), 'AI — Challenging');
     const layout = await dimensions();
@@ -137,7 +196,7 @@ async function run() {
 
     await menuHome(); await click('#player-settings'); await click('#player-fullscreen');
     await waitFor(() => read('!!document.fullscreenElement'), 5000, 'fullscreen');
-    await click('#player-new'); await click('[data-game-mode="gomoku"]'); await ready();
+    await click('#player-new'); await shot('games-fullscreen'); await click('[data-game-mode="gomoku"]'); await ready();
     assert.strictEqual(await read('document.querySelector("#player-menu").clientWidth === innerWidth'), true);
     await click('#player-more'); await click('#player-back'); await shot('fullscreen');
     await read('document.exitFullscreen()');
@@ -149,7 +208,7 @@ async function run() {
     await click('#player-action-controls [data-move-dir="E"]');
     await waitFor(() => read(`RamifiedMinigames.__test.getGame().round > ${beforeMove}`), 5000, 'Sokoban move');
     assert.deepStrictEqual(errors, []);
-    console.log('ramified_minigames_player_ui_test: layout, controllers, More/back/focus, board retention, cancel, narrow screens, fullscreen and Sokoban passed');
+    console.log('ramified_minigames_player_ui_test: all game pictures/entries, i18n, keyboard, layout, controllers, More/back/focus, board retention, cancel, narrow screens, fullscreen and Sokoban passed');
   } finally {
     if (session) {
       session.client.close();

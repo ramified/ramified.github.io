@@ -1,6 +1,11 @@
 (() => {
   'use strict';
   const SAVE_KEY = 'ramified.minigames.player.save.v1';
+  const GAME_STICKERS = {
+    hex: 'hex.png', gomoku: 'gomoku.png', go: 'go.png', 'connect-four': 'connect_four.png',
+    '2048': '2048.png', reversi: 'reversi.png', 'chinese-checkers': 'chinese_checkers.png',
+    sokoban: 'sokoban.png', 'fide-chess': 'chess.png', billiards: 'billiards.png', lianliankan: 'lianliankan.png'
+  };
   const tk = (key, fallback) => window.SiteI18n?.t(key) || fallback;
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -235,10 +240,26 @@
           button.type = 'button';
           button.className = 'btn';
           button.dataset.gameMode = item.mode;
+          if (GAME_STICKERS[item.mode]) {
+            const image = document.createElement('img');
+            image.className = 'player-game-picture';
+            image.src = `assets/ramified_minigames/board_game_stickers/${GAME_STICKERS[item.mode]}`;
+            // The adjacent localized name labels the whole button, including its image.
+            image.alt = '';
+            image.setAttribute('aria-hidden', 'true');
+            image.width = image.height = 80;
+            image.decoding = 'async';
+            image.draggable = false;
+            image.addEventListener('error', () => { image.style.visibility = 'hidden'; });
+            button.append(image);
+          }
+          const label = document.createElement('span');
+          label.className = 'player-game-name';
+          button.append(label);
           button.addEventListener('click', () => chooseGame(item.mode));
           byId('player-game-list').append(button);
         }
-        button.textContent = item.label;
+        button.querySelector('.player-game-name').textContent = item.label;
       }
     }
     async function chooseGame(mode) {
