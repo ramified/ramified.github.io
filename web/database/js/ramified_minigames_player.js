@@ -7,6 +7,21 @@
     '2048': '2048.png', reversi: 'reversi.png', 'chinese-checkers': 'chinese_checkers.png',
     sokoban: 'sokoban.png', 'fide-chess': 'chess.png', billiards: 'billiards.png', lianliankan: 'lianliankan.png'
   };
+  const PREPARATION_LAYOUTS = {
+    gomoku: {
+      title: 'games.gomoku', colors: ['black', 'white'],
+      fields: ['boundary-glue-mode-row', 'boundary-glue-shape-row', 'gomoku-size-row', 'boundary-glue-rect-row']
+    },
+    'connect-four': {
+      title: 'games.connectFour', colors: ['red', 'yellow'], fields: ['connect-four-fall-row']
+    }
+  };
+  const PLAYER_SIDES = {
+    black: { label: 'status.black', previous: 'player.previousBlackController', next: 'player.nextBlackController' },
+    white: { label: 'status.white', previous: 'player.previousWhiteController', next: 'player.nextWhiteController' },
+    red: { label: 'status.red', previous: 'player.previousRedController', next: 'player.nextRedController' },
+    yellow: { label: 'status.yellow', previous: 'player.previousYellowController', next: 'player.nextYellowController' }
+  };
   const tk = (key, fallback) => window.SiteI18n?.t(key) || fallback;
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -26,7 +41,7 @@
     let gameListPage = 0;
     let setupBusy = false;
     let setupRequest = 0;
-    let gomokuLayout = false;
+    let preparationLayout = null;
     let previewFrame = null;
 
     function message(text = '') {
@@ -51,8 +66,7 @@
       card.removeAttribute('aria-hidden');
       byId(id).append(card);
     });
-    const gomokuRows = ['boundary-glue-mode-row', 'boundary-glue-shape-row', 'gomoku-size-row',
-      'boundary-glue-rect-row'].map((id) => {
+    const preparationRows = [...new Set(Object.values(PREPARATION_LAYOUTS).flatMap((layout) => layout.fields))].map((id) => {
       const node = byId(id);
       const anchor = document.createComment(id);
       node.before(anchor);
@@ -85,26 +99,26 @@
       const state = engine.state();
       byId('player-new').disabled = !state.ready || restoring || state.online || setupBusy;
       byId('player-continue').disabled = !state.ready || restoring || !(state.active || saved || state.online);
-      const useGomokuLayout = state.browsing && state.mode === 'gomoku';
-      if (gomokuLayout !== useGomokuLayout) {
-        gomokuLayout = useGomokuLayout;
-        gomokuRows.forEach(({ node, anchor }) => {
-          if (gomokuLayout) byId('player-gomoku-fields').append(node);
+      const layout = state.browsing ? PREPARATION_LAYOUTS[state.mode] || null : null;
+      if (preparationLayout !== layout) {
+        preparationLayout = layout;
+        preparationRows.forEach(({ node, anchor }) => {
+          if (layout?.fields.includes(node.id)) byId('player-board-fields').append(node);
           else anchor.after(node);
         });
       }
-      byId('player-gomoku-setup').hidden = !gomokuLayout;
-      byId('player-setup').classList.toggle('player-gomoku-page', gomokuLayout);
-      byId('player-setup-controls').hidden = gomokuLayout;
-      byId('player-view-board').hidden = gomokuLayout;
-      byId('player-gomoku-fields').inert = setupBusy || !state.ready;
-      byId('player-more').disabled = setupBusy || !state.ready || state.setupError || !gomokuRows.some(({ node }) => !node.hidden);
+      byId('player-board-setup').hidden = !layout;
+      byId('player-setup').classList.toggle('player-board-page', !!layout);
+      byId('player-setup-controls').hidden = !!layout;
+      byId('player-view-board').hidden = !!layout;
+      byId('player-board-fields').inert = setupBusy || !state.ready;
+      byId('player-more').disabled = setupBusy || !state.ready || state.setupError || !layout?.fields.some((id) => !byId(id).hidden);
       byId('player-begin').disabled = setupBusy || !state.ready || state.setupError;
       byId('player-confirm-new').disabled = setupBusy || !state.ready || state.setupError;
       byId('player-board-previous').disabled = byId('player-board-next').disabled = setupBusy || !state.ready;
       for (const button of byId('player-game-list').children) button.disabled = setupBusy || !state.canPrepare || state.online;
       syncGameListPage(state);
-      if (gomokuLayout) {
+      if (layout) {
         syncPlayerControllers(state);
         byId('player-board-name').textContent = engine.presets().find((preset) => preset.id === state.presetId)?.label || '';
         byId('player-board-preview').hidden = !state.ready || state.setupError;
@@ -123,21 +137,32 @@
         'local-ai-challenging': ['player.aiChallenging', tk('player.aiChallenging', 'AI — Challenging')],
         'local-ai-aggressive': ['player.aiAggressive', tk('player.aiAggressive', 'AI — Aggressive')]
       };
-      for (const color of ['black', 'white']) {
-        const control = byId(`gomoku-${color}-controller`);
-        const output = byId(`player-${color}-controller`);
+      for (const [index, slot] of ['first', 'second'].entries()) {
+        const color = preparationLayout.colors[index];
+        const side = PLAYER_SIDES[color];
+        const control = byId(`${state.mode}-${color}-controller`);
+        const output = byId(`player-${slot}-controller`);
+        const label = byId(`player-${slot}-label`);
+        label.dataset.i18n = side.label;
+        label.textContent = tk(side.label, color);
+        label.previousElementSibling.className = `player-stone player-stone-${color}`;
         const [key, text] = labels[control.value] || labels.human;
         output.dataset.i18n = key;
         output.textContent = text;
         for (const direction of ['previous', 'next']) {
-          byId(`player-${color}-${direction}`).disabled = setupBusy || !state.ready || state.setupError || control.disabled;
+          const button = byId(`player-${slot}-${direction}`);
+          button.dataset.i18nAriaLabel = side[direction];
+          button.setAttribute('aria-label', tk(side[direction]));
+          button.disabled = setupBusy || !state.ready || state.setupError || control.disabled;
         }
       }
     }
 
-    function changePlayerController(color, direction) {
+    function changePlayerController(sideIndex, direction) {
       const state = engine.state();
-      const control = byId(`gomoku-${color}-controller`);
+      if (!preparationLayout) return;
+      const color = preparationLayout.colors[sideIndex];
+      const control = byId(`${state.mode}-${color}-controller`);
       if (setupBusy || !state.ready || state.setupError || !state.browsing || control.disabled) return;
       const options = Array.from(control.options).filter((option) => !option.disabled);
       const index = options.findIndex((option) => option.value === control.value);
@@ -189,7 +214,7 @@
       byId('player-back').hidden = next === 'home' || next === 'game-menu';
       const titleKeys = {
         home: 'meta.heading', 'game-menu': 'player.menu', games: 'player.chooseGame',
-        setup: engine.state().mode === 'gomoku' ? 'games.gomoku' : 'player.gameOptions', 'board-options': 'player.moreOptions', confirm: 'player.start',
+        setup: PREPARATION_LAYOUTS[engine.state().mode]?.title || 'player.gameOptions', 'board-options': 'player.moreOptions', confirm: 'player.start',
         display: 'setup.display', online: 'online.title', files: 'player.files', stats: 'status.stats'
       };
       byId('player-menu-title').dataset.i18n = titleKeys[next];
@@ -353,9 +378,9 @@
     byId('player-board-previous').addEventListener('click', () => changeBoard(-1));
     byId('player-board-next').addEventListener('click', () => changeBoard(1));
     byId('player-more').addEventListener('click', () => show('board-options', 'setup'));
-    for (const color of ['black', 'white']) {
-      byId(`player-${color}-previous`).addEventListener('click', () => changePlayerController(color, -1));
-      byId(`player-${color}-next`).addEventListener('click', () => changePlayerController(color, 1));
+    for (const [index, slot] of ['first', 'second'].entries()) {
+      byId(`player-${slot}-previous`).addEventListener('click', () => changePlayerController(index, -1));
+      byId(`player-${slot}-next`).addEventListener('click', () => changePlayerController(index, 1));
     }
     byId('player-begin').addEventListener('click', requestStart);
     document.addEventListener('ramified-player-start-request', requestStart);

@@ -4846,8 +4846,8 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('boundary-glue-rows', { value: '15' }),
     makeElement('boundary-glue-cols', { value: '15' }),
     makeElement('gomoku-board-size', { value: '15' }),
-    makeElement('gomoku-black-controller', { value: 'human' }),
-    makeElement('gomoku-white-controller', { value: 'human' }),
+    makeElement('gomoku-black-controller', { value: 'human', options: ['human', 'local-ai-challenging', 'local-ai-aggressive'].map(value => makeElement('', { tagName: 'OPTION', value })) }),
+    makeElement('gomoku-white-controller', { value: 'human', options: ['human', 'local-ai-challenging', 'local-ai-aggressive'].map(value => makeElement('', { tagName: 'OPTION', value })) }),
     makeElement('display-card-body'),
     makeElement('gomoku-display-row'),
     makeElement('gomoku-display-style', { value: 'vertex' }),
@@ -4867,11 +4867,11 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('chinese-checkers-player-options'),
     makeElement('connect-four-fall-dir', {
       value: 'S',
-      options: ['S', 'E', 'W', 'N', 'SE', 'SW', 'NW', 'NE'].map((value) => ({ value, textContent: '', hidden: false, disabled: false }))
+      options: ['S', 'E', 'W', 'N', 'SE', 'SW', 'NW', 'NE'].map((value) => makeElement('', { tagName: 'OPTION', value }))
     }),
     makeElement('connect-four-align-fall', { checked: true }),
-    makeElement('connect-four-red-controller', { value: 'human' }),
-    makeElement('connect-four-yellow-controller', { value: 'human' }),
+    makeElement('connect-four-red-controller', { value: 'human', options: ['human', 'local-ai-challenging'].map(value => makeElement('', { tagName: 'OPTION', value })) }),
+    makeElement('connect-four-yellow-controller', { value: 'human', options: ['human', 'local-ai-challenging'].map(value => makeElement('', { tagName: 'OPTION', value })) }),
     makeElement('local-ai-pause-row', { hidden: true }),
     makeElement('local-ai-pause'),
     makeElement('sokoban-object-size', { value: '70' }),
@@ -6987,7 +6987,7 @@ function testHeadlessDomStepControls() {
     makeElement('go-pass'),
     makeElement('connect-four-fall-dir', {
       value: 'S',
-      options: ['S', 'E', 'W', 'N', 'SE', 'SW', 'NW', 'NE'].map((value) => ({ value, textContent: '', hidden: false, disabled: false }))
+      options: ['S', 'E', 'W', 'N', 'SE', 'SW', 'NW', 'NE'].map((value) => makeElement('', { tagName: 'OPTION', value }))
     }),
     makeElement('connect-four-align-fall', { checked: true }),
     makeElement('number-box-style', { value: 'paper' }),

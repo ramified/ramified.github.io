@@ -31199,13 +31199,24 @@ function syncConnectFourFallOptions() {
   if (!presetCatalogReady || !PRESETS.length) return;
   const preset = game ? game.preset : selectedPreset();
   const lattice = latticeForPreset(preset);
+  const directions = {
+    right: ['games.right', tk('games.right', 'right')], down: ['games.down', tk('games.down', 'down')],
+    left: ['games.left', tk('games.left', 'left')], up: ['games.up', tk('games.up', 'up')],
+    east: ['games.east', tk('games.east', 'east')], west: ['games.west', tk('games.west', 'west')],
+    southeast: ['games.southeast', tk('games.southeast', 'southeast')], southwest: ['games.southwest', tk('games.southwest', 'southwest')],
+    northwest: ['games.northwest', tk('games.northwest', 'northwest')], northeast: ['games.northeast', tk('games.northeast', 'northeast')]
+  };
   const options = refs.connectFourFall.options ? Array.from(refs.connectFourFall.options) : [];
   options.forEach((option) => {
     const dir = dirFromName(option.value, preset);
     const valid = Number.isInteger(dir);
     option.hidden = !valid;
     option.disabled = !valid;
-    if (valid) option.textContent = lattice.dirLabels[dir] || lattice.dirNames[dir] || option.value;
+    if (valid) {
+      const [key, label] = directions[lattice.dirLabels[dir]];
+      option.setAttribute('data-i18n', key);
+      option.textContent = label;
+    }
   });
   if (!Number.isInteger(dirFromName(refs.connectFourFall.value, preset))) {
     refs.connectFourFall.value = lattice.dirNames[defaultConnectFourFallDir(preset)];
@@ -34365,7 +34376,7 @@ function playerMoveIsPending() {
 
 function playerBoardLabel(preset) {
   const label = preset.label || preset.id;
-  // Explicit keys for the boards exposed by the new Gomoku picker.
+  // Explicit keys for the boards exposed by the player preparation pages.
   switch (preset.id) {
     case 'boundary-glue-board': return tk('presets.boundary', label);
     case 'rubiks-cube-3x3x3': return tk('presets.rubiksCube', label);
@@ -34381,6 +34392,20 @@ function playerBoardLabel(preset) {
     case 'octahedron-with-square-holes': return tk('presets.octaHoles', label);
     case 'octahedron-with-square-glues': return tk('presets.octaGlues', label);
     case 'dodecahedron-with-pentagon-holes': return tk('presets.dodeca', label);
+    case 'connect-four-6x7': return tk('presets.connect67', label);
+    case 'connect-four-high-hit': return tk('presets.highHit', label);
+    case 'connect-four-high-hit-2': return tk('presets.highHit2', label);
+    case 'connect-four-all-horizontal': return tk('presets.horizontal', label);
+    case 'connect-four-top-fight': return tk('presets.topFight', label);
+    case 'connect-four-exchange': return tk('presets.exchange', label);
+    case 'connect-four-across': return tk('presets.across', label);
+    case 'connect-four-usual-strip': return tk('presets.usualStrip', label);
+    case 'connect-four-mobius-strip': return tk('presets.mobius', label);
+    case 'connect-four-hex-usual-strip': return tk('presets.hexStrip', label);
+    case 'falling-in-two-ways': return tk('presets.twoWays', label);
+    case 'connect-four-hex-bad-mobius-strip': return tk('presets.badMobius', label);
+    case 'connect-four-hex-good-mobius-strip': return tk('presets.goodMobius', label);
+    case 'r': return tk('presets.rBoard', label);
     default: {
       const chinese = typeof window !== 'undefined' && window.SiteI18n?.getLocale() === 'zh-CN';
       return tk('player.boardName', '{{name}}', { name: chinese && preset.labelZh ? preset.labelZh : label });
@@ -34492,7 +34517,9 @@ const api = {
         syncBoardSizeInputForGameMode();
         applyDefaultPlacementDisplayForMode();
         applyDefaultPlacementPieceSizeForMode();
-        syncPresetSelectOptions(mode === GAME_MODES.GOMOKU ? BOUNDARY_GLUE_BOARD_PRESET_ID : defaultPresetIdForMode(mode));
+        const playerDefaultPreset = mode === GAME_MODES.GOMOKU ? BOUNDARY_GLUE_BOARD_PRESET_ID
+          : mode === GAME_MODES.CONNECT_FOUR ? 'connect-four-6x7' : defaultPresetIdForMode(mode);
+        syncPresetSelectOptions(playerDefaultPreset);
         if (mode === GAME_MODES.GOMOKU) {
           refs.boundaryGlueMode.value = BOUNDARY_GLUE_MODES.OPEN;
           refs.boundaryGlueShape.value = 'square';
@@ -34501,12 +34528,19 @@ const api = {
           refs.boundaryGlueCols.value = '15';
           refs.gomokuBlackController.value = HUMAN_CONTROLLER;
           refs.gomokuWhiteController.value = LOCAL_AI_CONTROLLER;
+        } else if (mode === GAME_MODES.CONNECT_FOUR) {
+          refs.connectFourRedController.value = HUMAN_CONTROLLER;
+          refs.connectFourYellowController.value = LOCAL_AI_CONTROLLER;
         }
         syncOnlineRoleOptions();
         if (refs.importGameMode) refs.importGameMode.value = mode;
         buildSoundEffectsDebugControls();
         const session = playerSetupSession;
-        const loaded = await loadSelectionAndReset();
+        const loaded = await loadSelectionAndReset({ onReady() {
+          // A lazy load may still synchronize direction options from the old board.
+          // Apply the approved square-board default immediately before the new preview.
+          if (mode === GAME_MODES.CONNECT_FOUR) refs.connectFourFall.value = 'S';
+        } });
         if (playerSetupSession !== session) return false;
         if (!loaded) cancelPlayerSetup();
         return loaded;
@@ -34532,12 +34566,14 @@ const api = {
     },
     selectPreset(id) {
       if (!playerSetupSession || selectionLoading || !api.player.presets().some((preset) => preset.id === id)) return Promise.resolve(false);
-      // Keep each Gomoku board's choices for this preparation only. A failed load
+      // Keep each supported board's choices for this preparation only. A failed load
       // still has the previous board's controls, so it must not create an entry.
-      if (selectedGameMode() === GAME_MODES.GOMOKU && !playerSetupError) {
+      const boardControls = selectedGameMode() === GAME_MODES.GOMOKU
+        ? [refs.gomokuSize, refs.boundaryGlueMode, refs.boundaryGlueShape, refs.boundaryGlueRows, refs.boundaryGlueCols]
+        : selectedGameMode() === GAME_MODES.CONNECT_FOUR ? [refs.connectFourFall] : [];
+      if (boardControls.length && !playerSetupError) {
         playerSetupSession.boardSettings.set(`${selectedGameMode()}:${refs.select.value}`,
-          [refs.gomokuSize, refs.boundaryGlueMode, refs.boundaryGlueShape, refs.boundaryGlueRows, refs.boundaryGlueCols]
-            .filter(Boolean).map((node) => ({ node, value: node.value })));
+          boardControls.filter(Boolean).map((node) => ({ node, value: node.value })));
       }
       refs.select.value = id;
       return handlePresetSelectChange();

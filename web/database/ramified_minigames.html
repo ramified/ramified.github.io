@@ -2054,7 +2054,7 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="css/ramified_minigames_player.css?v=20261007-4">
+  <link rel="stylesheet" href="css/ramified_minigames_player.css?v=20261007-5">
 </head>
 <body class="ramified-player player-menu-open">
 
@@ -2114,8 +2114,8 @@
             <button class="btn player-game-page-arrow" id="player-games-next" type="button" aria-controls="player-game-list" data-i18n-aria-label="player.nextGamesPage" aria-label="Next page of games">&#9654;</button>
           </section>
           <section id="player-setup" class="player-page" hidden>
-            <div id="player-gomoku-setup" hidden>
-              <div class="player-gomoku-main">
+            <div id="player-board-setup" hidden>
+              <div class="player-setup-main">
                 <div class="player-board-picker">
                   <div class="player-board-navigation">
                     <button class="btn" id="player-board-previous" type="button" data-i18n-aria-label="player.previousBoard" aria-label="Previous board">&#9664;</button>
@@ -2126,23 +2126,23 @@
                   </div>
                   <div id="player-board-name" aria-live="polite"></div>
                 </div>
-                <div id="player-gomoku-players">
-                  <div class="player-side" role="group" aria-labelledby="player-black-label">
+                <div id="player-setup-players">
+                  <div class="player-side" role="group" aria-labelledby="player-first-label">
                     <span class="player-stone player-stone-black" aria-hidden="true"></span>
-                    <span class="player-visually-hidden" id="player-black-label" data-i18n="status.black">Black</span>
+                    <span class="player-visually-hidden" id="player-first-label" data-i18n="status.black">Black</span>
                     <div class="player-controller-picker">
-                      <button class="btn" id="player-black-previous" type="button" data-i18n-aria-label="player.previousBlackController" aria-label="Previous black player type">&#9664;</button>
-                      <output id="player-black-controller" aria-live="polite" data-i18n="ai.human">Human</output>
-                      <button class="btn" id="player-black-next" type="button" data-i18n-aria-label="player.nextBlackController" aria-label="Next black player type">&#9654;</button>
+                      <button class="btn" id="player-first-previous" type="button" data-i18n-aria-label="player.previousBlackController" aria-label="Previous black player type">&#9664;</button>
+                      <output id="player-first-controller" aria-live="polite" data-i18n="ai.human">Human</output>
+                      <button class="btn" id="player-first-next" type="button" data-i18n-aria-label="player.nextBlackController" aria-label="Next black player type">&#9654;</button>
                     </div>
                   </div>
-                  <div class="player-side" role="group" aria-labelledby="player-white-label">
+                  <div class="player-side" role="group" aria-labelledby="player-second-label">
                     <span class="player-stone player-stone-white" aria-hidden="true"></span>
-                    <span class="player-visually-hidden" id="player-white-label" data-i18n="status.white">White</span>
+                    <span class="player-visually-hidden" id="player-second-label" data-i18n="status.white">White</span>
                     <div class="player-controller-picker">
-                      <button class="btn" id="player-white-previous" type="button" data-i18n-aria-label="player.previousWhiteController" aria-label="Previous white player type">&#9664;</button>
-                      <output id="player-white-controller" aria-live="polite" data-i18n="player.aiChallenging">AI — Challenging</output>
-                      <button class="btn" id="player-white-next" type="button" data-i18n-aria-label="player.nextWhiteController" aria-label="Next white player type">&#9654;</button>
+                      <button class="btn" id="player-second-previous" type="button" data-i18n-aria-label="player.previousWhiteController" aria-label="Previous white player type">&#9664;</button>
+                      <output id="player-second-controller" aria-live="polite" data-i18n="player.aiChallenging">AI — Challenging</output>
+                      <button class="btn" id="player-second-next" type="button" data-i18n-aria-label="player.nextWhiteController" aria-label="Next white player type">&#9654;</button>
                     </div>
                   </div>
                 </div>
@@ -2156,7 +2156,7 @@
             <button class="btn" id="player-view-board" type="button" data-i18n="player.viewBoard">View board</button>
           </section>
           <section id="player-board-options" class="player-page" hidden>
-            <div id="player-gomoku-fields"></div>
+            <div id="player-board-fields"></div>
           </section>
           <section id="player-confirm" class="player-page" hidden>
             <p data-i18n="player.replace">Start a new game? The next game will replace the saved game.</p>
@@ -2681,16 +2681,16 @@
           <button class="btn go-score-action-button" id="go-confirm-score" type="button">confirm score</button>
         </div>
         <div class="mosaic-inline-row" id="connect-four-fall-row" data-mode-control="connect-four" hidden>
-          <span class="input-label">Fall</span>
-          <select id="connect-four-fall-dir" aria-label="Connect Four fall direction">
-            <option value="S" selected>down</option>
-            <option value="E">right</option>
-            <option value="W">left</option>
-            <option value="N">up</option>
-            <option value="SE">southeast</option>
-            <option value="SW">southwest</option>
-            <option value="NW">northwest</option>
-            <option value="NE">northeast</option>
+          <span class="input-label" data-i18n="setup.fall">Fall</span>
+          <select id="connect-four-fall-dir" data-i18n-aria-label="access.connectFall" aria-label="Connect Four fall direction">
+            <option value="S" selected data-i18n="games.down">down</option>
+            <option value="E" data-i18n="games.right">right</option>
+            <option value="W" data-i18n="games.left">left</option>
+            <option value="N" data-i18n="games.up">up</option>
+            <option value="SE" data-i18n="games.southeast">southeast</option>
+            <option value="SW" data-i18n="games.southwest">southwest</option>
+            <option value="NW" data-i18n="games.northwest">northwest</option>
+            <option value="NE" data-i18n="games.northeast">northeast</option>
           </select>
         </div>
         <div class="mosaic-inline-row" id="connect-four-align-row" data-mode-control="connect-four" hidden>
@@ -3175,15 +3175,15 @@
 <script src="js/calculator_input_settings.js?v=20260903-1"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20261007-4"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20261007-5"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
 <script src="js/ramified_minigames_sfx.js?v=20260913-2"></script>
-<script src="js/ramified_minigames_setup.js?v=20261007-1"></script>
-<script src="js/ramified_minigames_player.js?v=20261007-4"></script>
+<script src="js/ramified_minigames_setup.js?v=20261007-5"></script>
+<script src="js/ramified_minigames_player.js?v=20261007-5"></script>
 <script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
 </body>

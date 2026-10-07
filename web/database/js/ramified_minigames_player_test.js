@@ -136,6 +136,61 @@ async function run() {
     player.cancelSetup();
     assert.strictEqual(engine.__test.getGame(), afterUndo, `${mode}: cancellation preserves previous game`);
   }
+  // Four-in-a-row uses its own approved defaults and retains each board's fall direction.
+  assert.strictEqual(await player.beginSetup('connect-four'), true);
+  const fallControl = elements.get('connect-four-fall-dir');
+  const redControl = elements.get('connect-four-red-controller');
+  const yellowControl = elements.get('connect-four-yellow-controller');
+  assert.strictEqual(engine.defaultPresetIdForMode('connect-four'), 'connect-four-exchange', 'the shared/archive default is unchanged');
+  assert.strictEqual(engine.__test.getGame().preset.id, 'connect-four-6x7');
+  assert.strictEqual(engine.__test.getGame().preset.rows, 6);
+  assert.strictEqual(engine.__test.getGame().preset.cols, 7);
+  assert.strictEqual(engine.__test.getGame().fallDir, engine.DIRS.S);
+  assert.strictEqual(redControl.value, 'human');
+  assert.strictEqual(yellowControl.value, 'local-ai-challenging');
+  redControl.value = 'local-ai-challenging';
+  yellowControl.value = 'human';
+  fallControl.value = 'W';
+  fallControl.listeners.change();
+  await player.selectPreset('connect-four-hex-good-mobius-strip');
+  assert.strictEqual(redControl.value, 'local-ai-challenging');
+  assert.strictEqual(yellowControl.value, 'human');
+  assert.strictEqual(fallControl.options.find(option => option.value === 'W').getAttribute('data-i18n'), 'games.west');
+  assert.strictEqual(fallControl.options.find(option => option.value === 'S').disabled, true, 'hex boards expose only valid directions');
+  fallControl.value = 'NE';
+  fallControl.listeners.change();
+  await player.selectPreset('connect-four-6x7');
+  assert.strictEqual(fallControl.value, 'W');
+  assert.strictEqual(engine.__test.getGame().fallDir, engine.DIRS.W);
+  assert.strictEqual(fallControl.options.find(option => option.value === 'W').getAttribute('data-i18n'), 'games.left');
+  await player.selectPreset('connect-four-hex-good-mobius-strip');
+  assert.strictEqual(fallControl.value, 'NE');
+  player.cancelSetup();
+  assert.strictEqual(engine.__test.getGame(), afterUndo, 'canceling four-in-a-row keeps the original Gomoku game and history');
+  assert.strictEqual(elements.get('redo-step').disabled, false);
+  assert.strictEqual(await player.beginSetup('connect-four'), true);
+  assert.strictEqual(fallControl.value, 'S', 'a new preparation resets the fall direction');
+  assert.strictEqual(redControl.value, 'human');
+  assert.strictEqual(yellowControl.value, 'local-ai-challenging');
+  // Every existing board stays available; a new preparation after a hex board still falls down.
+  for (const preset of player.presets()) {
+    assert.strictEqual(await player.selectPreset(preset.id), true, `${preset.id}: four-in-a-row preview remains available`);
+    assert.strictEqual(engine.__test.getGame().phase, 'setup');
+  }
+  await player.selectPreset('connect-four-hex-good-mobius-strip');
+  assert.strictEqual(await player.beginSetup('connect-four'), true);
+  assert.strictEqual(fallControl.value, 'S');
+  fallControl.value = 'W';
+  fallControl.listeners.change();
+  assert.strictEqual(player.commitSetup(), true);
+  assert.strictEqual(engine.__test.getGame().preset.id, 'connect-four-6x7');
+  assert.strictEqual(engine.__test.getGame().fallDir, engine.DIRS.W, 'start uses the selected direction');
+  const connectSave = JSON.parse(JSON.stringify(player.snapshot()));
+  await player.beginSetup('gomoku');
+  player.cancelSetup();
+  await player.restore(connectSave);
+  assert.strictEqual(engine.__test.getGame().fallDir, engine.DIRS.W);
+  assert.strictEqual(yellowControl.value, 'local-ai-challenging', 'save/restore keeps the configured AI');
   const lazy = createHeadlessDomHarness({ playerShell: true, gameMode: 'gomoku', preset: 'boundary-glue-board', preloadPresetData: false, loadLazyPresetScripts: true });
   const lazyEngine = lazy.context.window.RamifiedMinigames;
   assert.doesNotThrow(() => lazyEngine.player.fit(), 'initial layout must not render an unloaded preset');
@@ -159,6 +214,9 @@ async function run() {
   assert.strictEqual(await pending, false, 'a late load is ignored after cancellation');
   assert.strictEqual(lazyEngine.__test.getGame(), retained);
   assert.strictEqual(lazyEngine.player.state().browsing, false);
+  assert.strictEqual(await lazyEngine.player.beginSetup('connect-four'), true, 'lazy loading applies four-in-a-row defaults');
+  assert.strictEqual(lazyEngine.__test.getGame().preset.id, 'connect-four-6x7');
+  assert.strictEqual(lazyEngine.__test.getGame().fallDir, lazyEngine.DIRS.S);
   console.log('ramified_minigames_player_test: defaults, draft preview, cancel/failure history, exact start and save/restore passed');
 }
 
