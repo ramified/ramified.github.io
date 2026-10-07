@@ -18,6 +18,8 @@
     'presets.xi': ['囍', '囍'],
     'player.previousBoard': ['Previous board', '上一个棋盘'],
     'player.nextBoard': ['Next board', '下一个棋盘'],
+    'player.previousGamesPage': ['Previous page of games', '上一页游戏'],
+    'player.nextGamesPage': ['Next page of games', '下一页游戏'],
     'player.more': ['More', '更多'],
     'player.moreOptions': ['More options', '更多设置'],
     'player.aiChallenging': ['AI — Challenging', 'AI—挑战'],

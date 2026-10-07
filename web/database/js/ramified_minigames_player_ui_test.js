@@ -46,6 +46,7 @@ async function run() {
     };
     const shot = async name => {
       if (!process.env.RAMIFIED_UI_SCREENSHOTS) return;
+      await read(`Promise.all([...document.querySelectorAll('#player-game-list img')].filter(img => img.getClientRects().length).map(img => img.decode().catch(() => {})))`);
       const output = path.resolve(process.env.RAMIFIED_UI_SCREENSHOTS);
       fs.mkdirSync(output, { recursive: true });
       const { data } = await client.send('Page.captureScreenshot', { format: 'png' });
@@ -57,6 +58,26 @@ async function run() {
     })()`);
     const menuHome = async () => {
       await click('#fullscreen-settings-open'); await click('#player-menu-button'); await click('#player-home-button');
+    };
+    const visibleGames = () => read(`[...document.querySelectorAll('#player-game-list > button:not([hidden])')].map(button => button.dataset.gameMode)`);
+    const revealGame = async mode => {
+      while (await read(`document.querySelector('[data-game-mode="${mode}"]').hidden`)) {
+        const before = await read(`(() => { const buttons = [...document.querySelector('#player-game-list').children]; return buttons.findIndex(b => b.dataset.gameMode === '${mode}') < buttons.findIndex(b => !b.hidden); })()`);
+        await click(before ? '#player-games-previous' : '#player-games-next');
+      }
+    };
+    const checkGamePage = async count => {
+      const layout = await read(`(() => {
+        const page = document.querySelector('#player-games'), bounds = page.getBoundingClientRect();
+        const buttons = [...document.querySelectorAll('#player-game-list > button:not([hidden])')];
+        return { count: buttons.length, columns: new Set(buttons.map(b => Math.round(b.getBoundingClientRect().x))).size,
+          rows: new Set(buttons.map(b => Math.round(b.getBoundingClientRect().y))).size,
+          contained: buttons.every(b => { const r = b.getBoundingClientRect(); return r.x >= bounds.x && r.right <= bounds.right && r.y >= bounds.y && r.bottom <= bounds.bottom; }),
+          labelsFit: buttons.every(b => { const n = b.querySelector('.player-game-name'); return n.scrollWidth <= n.clientWidth && n.scrollHeight <= n.clientHeight + 1; }),
+          noScroll: page.scrollWidth <= page.clientWidth && page.scrollHeight <= page.clientHeight,
+          arrows: ['player-games-previous', 'player-games-next'].map(id => { const r = document.getElementById(id).getBoundingClientRect(); return r.y >= bounds.y && r.bottom <= bounds.bottom; }) };
+      })()`);
+      assert.deepStrictEqual(layout, { count, columns: 3, rows: 2, contained: true, labelsFit: true, noScroll: true, arrows: [true, true] });
     };
     await resize(1280);
     await ready();
@@ -79,27 +100,40 @@ async function run() {
       const file = game.mode === 'fide-chess' ? 'chess.png' : game.mode.replaceAll('-', '_') + '.png';
       assert.strictEqual(game.file, file, `${game.mode}: matching picture`);
       assert.strictEqual(game.alt, '', 'visible game name labels the decorative picture');
-      assert.deepStrictEqual([game.width, game.height, game.fit], [80, 80, 'contain']);
+      assert.strictEqual(game.fit, 'contain');
+      if (game.width) assert(Math.min(game.width, game.height) > 150, 'desktop pictures are larger than the old 80px size');
       assert(game.label);
     }
+    assert.deepStrictEqual(await visibleGames(), gameChoices.slice(0, 6).map(game => game.mode));
+    assert.strictEqual(await read('document.querySelector("#player-games-previous").disabled'), true);
+    await checkGamePage(6);
     await shot('games-desktop-en');
     await read('SiteI18n.setLocale("zh-CN")');
     assert.strictEqual(await read(`window.originalGamePictures.every((img, index) => img === document.querySelectorAll('#player-game-list img')[index])`), true, 'language changes keep pictures in place');
     assert.deepStrictEqual(await read(`[...document.querySelectorAll('#player-game-list .player-game-name')].map(node => node.textContent)`), await read('RamifiedMinigames.player.games().map(game => game.label)'));
     await shot('games-desktop-zh');
+    await read('document.querySelector("#player-games-next").focus()');
+    await key('Enter', 'Enter', 13);
+    assert.deepStrictEqual(await visibleGames(), gameChoices.slice(6).map(game => game.mode));
+    assert.strictEqual(await read('document.querySelector("#player-games-next").disabled'), true);
+    assert.strictEqual(await read('document.activeElement.dataset.gameMode'), gameChoices[6].mode, 'end-page arrow transfers focus to a visible game');
+    await checkGamePage(5); await shot('games-desktop-page-2');
+    await read('SiteI18n.setLocale("en")');
+    assert.deepStrictEqual(await visibleGames(), gameChoices.slice(6).map(game => game.mode), 'language change keeps page');
+    await read('SiteI18n.setLocale("zh-CN")');
+    await click('#player-games-previous');
     for (const width of [390, 320]) {
       await resize(width);
-      assert.strictEqual(await read(`document.documentElement.scrollWidth <= innerWidth && document.querySelector('#player-games').scrollWidth <= document.querySelector('#player-games').clientWidth`), true);
-      await shot(`games-${width}-top`);
+      await checkGamePage(6); await shot(`games-${width}-page-1`);
+      await click('#player-games-next'); await checkGamePage(5);
       await click(`#player-game-list [data-game-mode="${gameChoices.at(-1).mode}"] img`); await ready();
       assert.strictEqual(await read('RamifiedMinigames.player.state().mode'), gameChoices.at(-1).mode);
       await click('#player-back');
-      await read(`document.querySelector('#player-game-list > button:last-child').scrollIntoView({block: 'nearest'})`);
-      await shot(`games-${width}-bottom`);
-      await read(`document.querySelector('#player-games').scrollTop = 0`);
+      assert.deepStrictEqual(await visibleGames(), gameChoices.slice(6).map(game => game.mode), 'Back keeps the selected game page');
+      await shot(`games-${width}-page-2`);
       await read('SiteI18n.setLocale("en")');
-      assert.strictEqual(await read(`[...document.querySelectorAll('#player-game-list .player-game-name')].every(node => node.scrollWidth <= node.clientWidth)`), true, 'English names fit narrow buttons');
-      await shot(`games-${width}-en`);
+      await checkGamePage(5); await shot(`games-${width}-en-page-2`);
+      await click('#player-games-previous'); await checkGamePage(6);
       await read('SiteI18n.setLocale("zh-CN")');
     }
     await resize(1280);
@@ -111,10 +145,12 @@ async function run() {
     assert.strictEqual(await read('RamifiedMinigames.player.state().mode'), gameChoices[1].mode);
     await click('#player-back');
     for (const game of gameChoices) {
+      await revealGame(game.mode);
       await click(`#player-game-list [data-game-mode="${game.mode}"] img`); await ready();
       assert.strictEqual(await read('RamifiedMinigames.player.state().mode'), game.mode, 'picture click opens its game');
       await click('#player-back');
     }
+    await revealGame('gomoku');
     // A failed image retains the button's name and click target.
     await read(`document.querySelector('[data-game-mode="gomoku"] img').src = 'assets/ramified_minigames/board_game_stickers/missing-ui-test.png'`);
     await waitFor(() => read(`getComputedStyle(document.querySelector('[data-game-mode="gomoku"] img')).visibility === 'hidden'`), 5000, 'missing picture fallback');
@@ -196,11 +232,13 @@ async function run() {
 
     await menuHome(); await click('#player-settings'); await click('#player-fullscreen');
     await waitFor(() => read('!!document.fullscreenElement'), 5000, 'fullscreen');
-    await click('#player-new'); await shot('games-fullscreen'); await click('[data-game-mode="gomoku"]'); await ready();
+    await click('#player-new'); await checkGamePage(6); await shot('games-fullscreen');
+    await click('#player-games-next'); await checkGamePage(5); await click('#player-games-previous');
+    await click('[data-game-mode="gomoku"]'); await ready();
     assert.strictEqual(await read('document.querySelector("#player-menu").clientWidth === innerWidth'), true);
     await click('#player-more'); await click('#player-back'); await shot('fullscreen');
     await read('document.exitFullscreen()');
-    await click('#player-back'); await click('[data-game-mode="sokoban"]'); await ready();
+    await click('#player-back'); await revealGame('sokoban'); await click('[data-game-mode="sokoban"]'); await ready();
     assert.strictEqual(await read('document.querySelector("#player-gomoku-fields").children.length'), 0, 'original controls return for other games');
     await click('#begin-game'); await click('#player-confirm-new');
     await click('#player-actions > summary');
@@ -208,7 +246,7 @@ async function run() {
     await click('#player-action-controls [data-move-dir="E"]');
     await waitFor(() => read(`RamifiedMinigames.__test.getGame().round > ${beforeMove}`), 5000, 'Sokoban move');
     assert.deepStrictEqual(errors, []);
-    console.log('ramified_minigames_player_ui_test: all game pictures/entries, i18n, keyboard, layout, controllers, More/back/focus, board retention, cancel, narrow screens, fullscreen and Sokoban passed');
+    console.log('ramified_minigames_player_ui_test: six-game pagination, all pictures/entries, i18n, keyboard, layout, controllers, More/back/focus, board retention, cancel, narrow screens, fullscreen and Sokoban passed');
   } finally {
     if (session) {
       session.client.close();

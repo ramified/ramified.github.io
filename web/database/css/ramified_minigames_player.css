@@ -118,16 +118,24 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
   align-content: center; align-content: safe center; gap: var(--player-gap);
 }
 #player-home > .btn, #player-game-menu > .btn { width: 100%; }
+#player-games {
+  display: grid; grid-template-columns: var(--player-icon-size) minmax(0, 1fr) var(--player-icon-size);
+  gap: var(--player-gap); align-items: center; overflow: hidden;
+}
+.ramified-player #player-games > .player-game-page-arrow.btn {
+  width: 100%; min-width: 0; height: var(--player-icon-size); padding: 0;
+}
 #player-game-list {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--player-gap); max-width: 800px; margin: 0 auto;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: var(--player-gap); width: 100%; height: 100%; min-height: 0; max-width: 800px; margin: 0 auto;
 }
-#player-game-list > .btn {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: var(--player-small-gap); min-width: 0; min-height: var(--player-menu-button-height);
+#player-games #player-game-list > .btn {
+  display: grid; grid-template-rows: minmax(0, 1fr) auto; justify-items: center;
+  gap: var(--player-small-gap); min-width: 0; min-height: 0; padding: 12px;
 }
-.player-game-picture { display: block; flex: none; width: 80px; height: 80px; object-fit: contain; }
-.player-game-name { display: flex; align-items: center; justify-content: center; min-height: 2.8em; width: 100%; }
+.player-game-picture { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
+.player-game-name { display: flex; align-items: center; justify-content: center; line-height: 1.4; width: 100%; }
 .player-page.player-gomoku-page { padding: 0; overflow: hidden; }
 #player-gomoku-setup { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .player-gomoku-main {
@@ -255,7 +263,6 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
 .ramified-player :is(button, select, input, textarea, summary, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .ramified-player.canvas-fullscreen-active { --player-frame-height: 100dvh; }
 @media (max-width: 600px) {
-  #player-game-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #player-gomoku-players { gap: var(--player-gap); }
   .player-controller-picker { grid-template-columns: 26px minmax(0, 1fr) 26px; gap: 2px; min-height: 56px; }
   .player-controller-picker output { font-size: 0.78rem; }
@@ -268,4 +275,9 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
   .ramified-player .calculator-input-action { grid-template-columns: minmax(0, 1fr); }
   .ramified-player .calculator-input-bindings { justify-content: flex-start; }
   .ramified-player .mosaic-underbar { font-size: 12px; }
+}
+@media (max-width: 600px), (max-height: 500px) {
+  #player-games { grid-template-columns: 26px minmax(0, 1fr) 26px; padding: 6px; gap: 4px; }
+  #player-game-list { gap: 6px; }
+  #player-games #player-game-list > .btn { padding: 4px; gap: 2px; font-size: 0.7rem; }
 }

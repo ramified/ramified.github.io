@@ -1,6 +1,7 @@
 (() => {
   'use strict';
   const SAVE_KEY = 'ramified.minigames.player.save.v1';
+  const GAMES_PER_PAGE = 6;
   const GAME_STICKERS = {
     hex: 'hex.png', gomoku: 'gomoku.png', go: 'go.png', 'connect-four': 'connect_four.png',
     '2048': '2048.png', reversi: 'reversi.png', 'chinese-checkers': 'chinese_checkers.png',
@@ -22,6 +23,7 @@
     let storageFailed = false;
     let lastSave = '';
     let newGameParent = 'home';
+    let gameListPage = 0;
     let setupBusy = false;
     let setupRequest = 0;
     let gomokuLayout = false;
@@ -101,6 +103,7 @@
       byId('player-confirm-new').disabled = setupBusy || !state.ready || state.setupError;
       byId('player-board-previous').disabled = byId('player-board-next').disabled = setupBusy || !state.ready;
       for (const button of byId('player-game-list').children) button.disabled = setupBusy || !state.canPrepare || state.online;
+      syncGameListPage(state);
       if (gomokuLayout) {
         syncPlayerControllers(state);
         byId('player-board-name').textContent = engine.presets().find((preset) => preset.id === state.presetId)?.label || '';
@@ -228,6 +231,7 @@
     byId('player-game-settings').addEventListener('click', () => engine.settings());
     function requestNewGame(parent) {
       newGameParent = parent;
+      gameListPage = 0;
       save();
       updateGameList();
       show('games', parent);
@@ -247,8 +251,8 @@
             // The adjacent localized name labels the whole button, including its image.
             image.alt = '';
             image.setAttribute('aria-hidden', 'true');
-            image.width = image.height = 80;
-            image.decoding = 'async';
+            image.width = image.height = 240;
+            image.decoding = 'sync';
             image.draggable = false;
             image.addEventListener('error', () => { image.style.visibility = 'hidden'; });
             button.append(image);
@@ -261,7 +265,28 @@
         }
         button.querySelector('.player-game-name').textContent = item.label;
       }
+      syncGameListPage();
     }
+    function syncGameListPage(state = engine.state()) {
+      const buttons = Array.from(byId('player-game-list').children);
+      const lastPage = Math.max(0, Math.ceil(buttons.length / GAMES_PER_PAGE) - 1);
+      gameListPage = Math.max(0, Math.min(gameListPage, lastPage));
+      buttons.forEach((button, index) => { button.hidden = Math.floor(index / GAMES_PER_PAGE) !== gameListPage; });
+      const busy = setupBusy || !state.canPrepare || state.online;
+      byId('player-games-previous').disabled = busy || gameListPage === 0;
+      byId('player-games-next').disabled = busy || gameListPage === lastPage;
+    }
+    function changeGamesPage(direction) {
+      if (page !== 'games' || byId(direction < 0 ? 'player-games-previous' : 'player-games-next').disabled) return;
+      gameListPage += direction;
+      syncGameListPage();
+      // Keep keyboard focus usable when an end-of-list arrow becomes disabled.
+      if (document.activeElement?.disabled || document.activeElement?.hidden) {
+        byId('player-game-list').querySelector('button:not([hidden]):not(:disabled)')?.focus();
+      }
+    }
+    byId('player-games-previous').addEventListener('click', () => changeGamesPage(-1));
+    byId('player-games-next').addEventListener('click', () => changeGamesPage(1));
     async function chooseGame(mode) {
       if (setupBusy || !engine.state().canPrepare) return;
       save();
