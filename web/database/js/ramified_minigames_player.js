@@ -1,6 +1,12 @@
 (() => {
   'use strict';
   const SAVE_KEY = 'ramified.minigames.player.save.v1';
+  const GAMES_PER_PAGE = 6;
+  const GAME_STICKERS = {
+    hex: 'hex.png', gomoku: 'gomoku.png', go: 'go.png', 'connect-four': 'connect_four.png',
+    '2048': '2048.png', reversi: 'reversi.png', 'chinese-checkers': 'chinese_checkers.png',
+    sokoban: 'sokoban.png', 'fide-chess': 'chess.png', billiards: 'billiards.png', lianliankan: 'lianliankan.png'
+  };
   const tk = (key, fallback) => window.SiteI18n?.t(key) || fallback;
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -17,6 +23,11 @@
     let storageFailed = false;
     let lastSave = '';
     let newGameParent = 'home';
+    let gameListPage = 0;
+    let setupBusy = false;
+    let setupRequest = 0;
+    let gomokuLayout = false;
+    let previewFrame = null;
 
     function message(text = '') {
       byId('player-message').textContent = text;
@@ -40,6 +51,13 @@
       card.removeAttribute('aria-hidden');
       byId(id).append(card);
     });
+    const gomokuRows = ['boundary-glue-mode-row', 'boundary-glue-shape-row', 'gomoku-size-row',
+      'boundary-glue-rect-row'].map((id) => {
+      const node = byId(id);
+      const anchor = document.createComment(id);
+      node.before(anchor);
+      return { node, anchor };
+    });
     const actionIds = [
       'move-row', 'go-action-row', 'go-score-view-row', 'go-scoring-method-row',
       'go-mark-dead-row', 'go-edit-territory-row', 'go-score-compare-row',
@@ -53,7 +71,6 @@
       if (node) byId('player-action-controls').append(node);
     });
     byId('player-toolbar').append(byId('fullscreen-action-shell'));
-    byId('player-action-controls').prepend(byId('fullscreen-action-bar'));
     byId('player-action-controls').append(byId('fullscreen-lianliankan-actions'));
     const language = document.querySelector('body > header .site-language-control');
     if (language) byId('player-language').append(language);
@@ -66,10 +83,68 @@
 
     function sync() {
       const state = engine.state();
-      byId('player-new').disabled = !state.ready || restoring || state.online;
+      byId('player-new').disabled = !state.ready || restoring || state.online || setupBusy;
       byId('player-continue').disabled = !state.ready || restoring || !(state.active || saved || state.online);
+      const useGomokuLayout = state.browsing && state.mode === 'gomoku';
+      if (gomokuLayout !== useGomokuLayout) {
+        gomokuLayout = useGomokuLayout;
+        gomokuRows.forEach(({ node, anchor }) => {
+          if (gomokuLayout) byId('player-gomoku-fields').append(node);
+          else anchor.after(node);
+        });
+      }
+      byId('player-gomoku-setup').hidden = !gomokuLayout;
+      byId('player-setup').classList.toggle('player-gomoku-page', gomokuLayout);
+      byId('player-setup-controls').hidden = gomokuLayout;
+      byId('player-view-board').hidden = gomokuLayout;
+      byId('player-gomoku-fields').inert = setupBusy || !state.ready;
+      byId('player-more').disabled = setupBusy || !state.ready || state.setupError || !gomokuRows.some(({ node }) => !node.hidden);
+      byId('player-begin').disabled = setupBusy || !state.ready || state.setupError;
+      byId('player-confirm-new').disabled = setupBusy || !state.ready || state.setupError;
+      byId('player-board-previous').disabled = byId('player-board-next').disabled = setupBusy || !state.ready;
+      for (const button of byId('player-game-list').children) button.disabled = setupBusy || !state.canPrepare || state.online;
+      syncGameListPage(state);
+      if (gomokuLayout) {
+        syncPlayerControllers(state);
+        byId('player-board-name').textContent = engine.presets().find((preset) => preset.id === state.presetId)?.label || '';
+        byId('player-board-preview').hidden = !state.ready || state.setupError;
+        if (!previewFrame) previewFrame = requestAnimationFrame(() => {
+          previewFrame = null;
+          if (page === 'setup') engine.paintPreview(byId('player-board-preview'));
+        });
+      }
       byId('player-actions').hidden = !Array.from(byId('player-action-controls').children).some((node) => !node.hidden);
       if (!restoring && state.active && !state.online && !saveTimer) saveTimer = setTimeout(save, 250);
+    }
+
+    function syncPlayerControllers(state) {
+      const labels = {
+        human: ['ai.human', tk('ai.human', 'Human')],
+        'local-ai-challenging': ['player.aiChallenging', tk('player.aiChallenging', 'AI — Challenging')],
+        'local-ai-aggressive': ['player.aiAggressive', tk('player.aiAggressive', 'AI — Aggressive')]
+      };
+      for (const color of ['black', 'white']) {
+        const control = byId(`gomoku-${color}-controller`);
+        const output = byId(`player-${color}-controller`);
+        const [key, text] = labels[control.value] || labels.human;
+        output.dataset.i18n = key;
+        output.textContent = text;
+        for (const direction of ['previous', 'next']) {
+          byId(`player-${color}-${direction}`).disabled = setupBusy || !state.ready || state.setupError || control.disabled;
+        }
+      }
+    }
+
+    function changePlayerController(color, direction) {
+      const state = engine.state();
+      const control = byId(`gomoku-${color}-controller`);
+      if (setupBusy || !state.ready || state.setupError || !state.browsing || control.disabled) return;
+      const options = Array.from(control.options).filter((option) => !option.disabled);
+      const index = options.findIndex((option) => option.value === control.value);
+      if (!options.length) return;
+      control.value = options[(index + direction + options.length) % options.length].value;
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      sync();
     }
 
     function save() {
@@ -107,13 +182,14 @@
       if (!open) canvas.focus();
     }
 
-    function show(next, parent = page) {
+    function show(next, parent = page, focusId = null) {
       page = next;
       backPage = parent;
       pages.forEach((node) => { node.hidden = node.id !== `player-${next}`; });
       byId('player-back').hidden = next === 'home' || next === 'game-menu';
       const titleKeys = {
-        home: 'meta.heading', 'game-menu': 'player.menu', setup: 'player.gameOptions', confirm: 'player.start',
+        home: 'meta.heading', 'game-menu': 'player.menu', games: 'player.chooseGame',
+        setup: engine.state().mode === 'gomoku' ? 'games.gomoku' : 'player.gameOptions', 'board-options': 'player.moreOptions', confirm: 'player.start',
         display: 'setup.display', online: 'online.title', files: 'player.files', stats: 'status.stats'
       };
       byId('player-menu-title').dataset.i18n = titleKeys[next];
@@ -121,18 +197,31 @@
       message(storageFailed ? tk('player.saveError', 'This browser could not save progress. Keep this tab open, or export the game from the menu.') : '');
       setOpen(true);
       sync();
-      const focus = pages.find((node) => !node.hidden)?.querySelector('button:not(:disabled), select:not(:disabled), input:not(:disabled)');
+      const focus = (focusId && byId(focusId)) || Array.from(pages.find((node) => !node.hidden)?.querySelectorAll('button:not(:disabled), select:not(:disabled), input:not(:disabled)') || [])
+        .find((node) => node.getClientRects().length);
       (focus || byId('player-back')).focus();
+      pages.find((node) => !node.hidden)?.scrollTo(0, 0);
     }
 
     byId('player-menu-button').addEventListener('click', () => {
       engine.closeSettings();
       save();
-      show(engine.state().active || engine.state().online ? 'game-menu' : 'home');
+      show(engine.state().browsing ? 'setup' : engine.state().active || engine.state().online ? 'game-menu' : 'home');
     });
     byId('player-resume').addEventListener('click', () => setOpen(false));
     byId('player-home-button').addEventListener('click', () => { save(); show('home'); });
-    byId('player-back').addEventListener('click', () => show(backPage, 'home'));
+    function goBack() {
+      if (page === 'setup') {
+        ++setupRequest;
+        setupBusy = false;
+        engine.cancelSetup();
+        show('games', newGameParent);
+      } else if (page === 'board-options') show('setup', 'games', 'player-more');
+      else if (page === 'confirm') show('setup', 'games');
+      else if (page === 'games') show(newGameParent);
+      else show(backPage, 'home');
+    }
+    byId('player-back').addEventListener('click', goBack);
     byId('player-fullscreen').addEventListener('click', () => {
       engine.closeSettings();
       engine.fullscreen();
@@ -140,20 +229,141 @@
     byId('player-view-board').addEventListener('click', () => setOpen(false));
     byId('player-settings').addEventListener('click', () => engine.settings());
     byId('player-game-settings').addEventListener('click', () => engine.settings());
-    function prepareNewGame() {
-      save();
-      if (engine.prepare()) show('setup', newGameParent);
-    }
     function requestNewGame(parent) {
       newGameParent = parent;
-      if (engine.state().active || saved) show('confirm', parent);
-      else prepareNewGame();
+      gameListPage = 0;
+      save();
+      updateGameList();
+      show('games', parent);
     }
-    byId('player-confirm-new').addEventListener('click', prepareNewGame);
-    byId('player-cancel-new').addEventListener('click', () => show(newGameParent));
+    function updateGameList() {
+      for (const item of engine.games()) {
+        let button = byId('player-game-list').querySelector(`[data-game-mode="${item.mode}"]`);
+        if (!button) {
+          button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'btn';
+          button.dataset.gameMode = item.mode;
+          if (GAME_STICKERS[item.mode]) {
+            const image = document.createElement('img');
+            image.className = 'player-game-picture';
+            image.src = `assets/ramified_minigames/board_game_stickers/${GAME_STICKERS[item.mode]}`;
+            // The adjacent localized name labels the whole button, including its image.
+            image.alt = '';
+            image.setAttribute('aria-hidden', 'true');
+            image.width = image.height = 240;
+            image.decoding = 'sync';
+            image.draggable = false;
+            image.addEventListener('error', () => { image.style.visibility = 'hidden'; });
+            button.append(image);
+          }
+          const label = document.createElement('span');
+          label.className = 'player-game-name';
+          button.append(label);
+          button.addEventListener('click', () => chooseGame(item.mode));
+          byId('player-game-list').append(button);
+        }
+        button.querySelector('.player-game-name').textContent = item.label;
+      }
+      syncGameListPage();
+    }
+    function syncGameListPage(state = engine.state()) {
+      const buttons = Array.from(byId('player-game-list').children);
+      const lastPage = Math.max(0, Math.ceil(buttons.length / GAMES_PER_PAGE) - 1);
+      gameListPage = Math.max(0, Math.min(gameListPage, lastPage));
+      buttons.forEach((button, index) => { button.hidden = Math.floor(index / GAMES_PER_PAGE) !== gameListPage; });
+      const busy = setupBusy || !state.canPrepare || state.online;
+      byId('player-games-previous').disabled = busy || gameListPage === 0;
+      byId('player-games-next').disabled = busy || gameListPage === lastPage;
+    }
+    function changeGamesPage(direction) {
+      if (page !== 'games' || byId(direction < 0 ? 'player-games-previous' : 'player-games-next').disabled) return;
+      gameListPage += direction;
+      syncGameListPage();
+      // Keep keyboard focus usable when an end-of-list arrow becomes disabled.
+      if (document.activeElement?.disabled || document.activeElement?.hidden) {
+        byId('player-game-list').querySelector('button:not([hidden]):not(:disabled)')?.focus();
+      }
+    }
+    byId('player-games-previous').addEventListener('click', () => changeGamesPage(-1));
+    byId('player-games-next').addEventListener('click', () => changeGamesPage(1));
+    async function chooseGame(mode) {
+      if (setupBusy || !engine.state().canPrepare) return;
+      save();
+      const request = ++setupRequest;
+      setupBusy = true;
+      try {
+        const loading = engine.beginSetup(mode);
+        show('setup', 'games');
+        const loaded = await loading;
+        if (request !== setupRequest) return;
+        if (!loaded) throw new Error('Setup could not be loaded');
+        setupBusy = false;
+        show('setup', 'games');
+      } catch (_) {
+        if (request !== setupRequest) return;
+        engine.cancelSetup();
+        show('games', newGameParent);
+        message(tk('player.setupLoadError', 'This board could not be loaded. Your previous game is still available.'));
+      } finally {
+        if (request === setupRequest) { setupBusy = false; sync(); }
+      }
+    }
+    async function changeBoard(direction) {
+      if (setupBusy || !engine.state().ready) return;
+      const presets = engine.presets();
+      const index = presets.findIndex((preset) => preset.id === engine.state().presetId);
+      const next = presets[(index + direction + presets.length) % presets.length];
+      if (!next) return;
+      const request = setupRequest;
+      setupBusy = true;
+      message();
+      sync();
+      try {
+        const loaded = await engine.selectPreset(next.id);
+        if (request !== setupRequest) return;
+        if (!loaded) message(tk('player.setupLoadError', 'This board could not be loaded. Your previous game is still available.'));
+      } catch (_) {
+        if (request === setupRequest) message(tk('player.setupLoadError', 'This board could not be loaded. Your previous game is still available.'));
+      } finally {
+        if (request === setupRequest) { setupBusy = false; sync(); }
+      }
+    }
+    function startPreparedGame() {
+      if (setupBusy || !engine.state().browsing) return;
+      try {
+        if (!engine.commitSetup()) {
+          show('setup', 'games');
+          message(tk('player.startError', 'The game could not start. Check the board settings. Your previous save is unchanged.'));
+          return;
+        }
+        setOpen(false);
+        save();
+        sync();
+      } catch (_) {
+        show('games', newGameParent);
+        message(tk('player.startError', 'The game could not start. Check the board settings. Your previous save is unchanged.'));
+      }
+    }
+    function requestStart() {
+      if (setupBusy || !engine.state().ready || engine.state().setupError) return;
+      if (saved) show('confirm', 'setup');
+      else startPreparedGame();
+    }
+    byId('player-board-previous').addEventListener('click', () => changeBoard(-1));
+    byId('player-board-next').addEventListener('click', () => changeBoard(1));
+    byId('player-more').addEventListener('click', () => show('board-options', 'setup'));
+    for (const color of ['black', 'white']) {
+      byId(`player-${color}-previous`).addEventListener('click', () => changePlayerController(color, -1));
+      byId(`player-${color}-next`).addEventListener('click', () => changePlayerController(color, 1));
+    }
+    byId('player-begin').addEventListener('click', requestStart);
+    document.addEventListener('ramified-player-start-request', requestStart);
+    byId('player-confirm-new').addEventListener('click', startPreparedGame);
+    byId('player-cancel-new').addEventListener('click', () => show('setup', 'games'));
     menu.querySelectorAll('[data-player-page]').forEach((button) => {
       button.addEventListener('click', () => {
-        if (button.dataset.playerPage === 'setup' && engine.state().active && !engine.state().online) {
+        if (button.dataset.playerPage === 'setup' && !engine.state().online) {
           requestNewGame('game-menu');
           return;
         }
@@ -178,9 +388,6 @@
         sync();
       }
     });
-    byId('begin-game').addEventListener('click', () => {
-      if (engine.state().active) { setOpen(false); save(); }
-    });
 
     // Capture before game shortcuts, but leave settings key binding capture alone.
     window.addEventListener('keydown', (event) => {
@@ -189,7 +396,7 @@
         if (event.key === 'Escape') {
           event.preventDefault();
           if (page === 'game-menu') setOpen(false);
-          else if (page !== 'home') show(backPage, 'home');
+          else if (page !== 'home') goBack();
         } else if (event.key === 'Tab') {
           const focusable = Array.from(menu.querySelectorAll('button, select, input, textarea, a[href], summary'))
             .filter((node) => !node.disabled && node.getClientRects().length);
@@ -206,7 +413,12 @@
       }
     }, true);
     document.addEventListener('ramified-player-state', sync);
-    document.addEventListener('site-language-change', sync);
+    document.addEventListener('site-language-change', () => {
+      updateGameList();
+      sync();
+    });
+    window.addEventListener('resize', sync);
+    document.addEventListener('fullscreenchange', sync);
     new MutationObserver(() => {
       syncModalInput();
       if (byId('fullscreen-settings-overlay').hidden
