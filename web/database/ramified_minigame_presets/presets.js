@@ -503,7 +503,7 @@
       "id": "classic-fans",
       "label": "classic_fans",
       "key": "classic_fans",
-      "file": "classic_fans.preset.js"
+      "file": "sokoban/classic_fans.preset.js"
     },
     {
       "gameTypes": [
@@ -512,7 +512,7 @@
       "id": "pedestrian",
       "label": "Pedestrian",
       "key": "pedestrian",
-      "file": "pedestrian.preset.js"
+      "file": "sokoban/pedestrian.preset.js"
     },
     {
       "gameTypes": [
@@ -521,7 +521,7 @@
       "id": "classic-fans-glue",
       "label": "classic_fans_glue",
       "key": "classic_fans_glue",
-      "file": "classic_fans_glue.preset.js"
+      "file": "sokoban/classic_fans_glue.preset.js"
     },
     {
       "gameTypes": [
@@ -530,7 +530,7 @@
       "id": "ice-test",
       "label": "ice_test",
       "key": "ice_test",
-      "file": "ice_test.preset.js"
+      "file": "sokoban/ice_test.preset.js"
     },
     {
       "gameTypes": [
@@ -539,7 +539,7 @@
       "id": "curling-on-cube",
       "label": "curling on Cube",
       "key": "curling_on_cube",
-      "file": "curling_on_cube.preset.js"
+      "file": "sokoban/curling_on_cube.preset.js"
     },
     {
       "gameTypes": [
@@ -548,7 +548,7 @@
       "id": "easy-energy-bridge",
       "label": "easy energy bridge",
       "key": "easy_energy_bridge",
-      "file": "easy_energy_bridge.preset.js"
+      "file": "sokoban/easy_energy_bridge.preset.js"
     },
     {
       "gameTypes": [
@@ -557,7 +557,7 @@
       "id": "energy-test",
       "label": "energy_test",
       "key": "energy_test",
-      "file": "energy_test.preset.js"
+      "file": "sokoban/energy_test.preset.js"
     },
     {
       "gameTypes": [
@@ -566,7 +566,7 @@
       "id": "cross",
       "label": "cross",
       "key": "cross",
-      "file": "cross.preset.js"
+      "file": "sokoban/cross.preset.js"
     },
     {
       "gameTypes": [
@@ -575,7 +575,7 @@
       "id": "expand",
       "label": "expand",
       "key": "expand",
-      "file": "expand.preset.js"
+      "file": "sokoban/expand.preset.js"
     },
     {
       "gameTypes": [
@@ -584,7 +584,7 @@
       "id": "expand2",
       "label": "expand2",
       "key": "expand2",
-      "file": "expand2.preset.js"
+      "file": "sokoban/expand2.preset.js"
     },
     {
       "gameTypes": [
@@ -593,7 +593,7 @@
       "id": "expand3",
       "label": "expand3",
       "key": "expand3",
-      "file": "expand3.preset.js"
+      "file": "sokoban/expand3.preset.js"
     },
     {
       "gameTypes": [
@@ -602,7 +602,7 @@
       "id": "bridges-blocking",
       "label": "bridges_blocking",
       "key": "bridges_blocking",
-      "file": "bridges_blocking.preset.js"
+      "file": "sokoban/bridges_blocking.preset.js"
     },
     {
       "gameTypes": [
@@ -611,7 +611,7 @@
       "id": "orbox-b",
       "label": "Orbox B",
       "key": "orbox_b",
-      "file": "orbox_b.preset.js"
+      "file": "sokoban/orbox_b.preset.js"
     },
     {
       "gameTypes": [
@@ -620,7 +620,7 @@
       "id": "orbox-b-glued",
       "label": "Orbox B glued",
       "key": "orbox_b_glued",
-      "file": "orbox_b_glued.preset.js"
+      "file": "sokoban/orbox_b_glued.preset.js"
     },
     {
       "gameTypes": [
@@ -629,7 +629,7 @@
       "id": "loop",
       "label": "loop",
       "key": "loop",
-      "file": "loop.preset.js"
+      "file": "sokoban/loop.preset.js"
     },
     {
       "gameTypes": [
@@ -638,7 +638,7 @@
       "id": "curling",
       "label": "curling",
       "key": "curling",
-      "file": "curling.preset.js"
+      "file": "sokoban/curling.preset.js"
     },
     {
       "gameTypes": [
@@ -647,7 +647,7 @@
       "id": "remote-rotate",
       "label": "remote rotate",
       "key": "remote_rotate",
-      "file": "remote_rotate.preset.js"
+      "file": "sokoban/remote_rotate.preset.js"
     },
     {
       "gameTypes": [
@@ -656,7 +656,7 @@
       "id": "remote-control",
       "label": "remote control",
       "key": "remote_control",
-      "file": "remote_control.preset.js"
+      "file": "sokoban/remote_control.preset.js"
     },
     {
       "gameTypes": [
@@ -665,7 +665,7 @@
       "id": "islands",
       "label": "islands",
       "key": "islands",
-      "file": "islands.preset.js"
+      "file": "sokoban/islands.preset.js"
     },
     {
       "gameTypes": [

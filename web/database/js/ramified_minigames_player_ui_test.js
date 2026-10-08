@@ -151,7 +151,8 @@ async function run() {
         assert.strictEqual(await read('document.querySelector("#player-chess-category").hidden'), false);
         await click('[data-chess-category="game"]'); await ready();
       }
-      assert.strictEqual(await read('RamifiedMinigames.player.state().mode'), game.mode, 'picture click opens its game');
+      if (game.mode === 'sokoban') assert.strictEqual(await read('document.querySelector("#player-levels").hidden'), false, 'Sokoban opens the level list without changing the live board');
+      else assert.strictEqual(await read('RamifiedMinigames.player.state().mode'), game.mode, 'picture click opens its game');
       await click('#player-back');
       if (game.mode === 'fide-chess') await click('#player-back');
     }
@@ -332,7 +333,7 @@ async function run() {
     await read('document.exitFullscreen()');
     await click('#player-back'); await revealGame('sokoban'); await click('[data-game-mode="sokoban"]'); await ready();
     assert.strictEqual(await read('document.querySelector("#player-board-fields").children.length'), 0, 'original controls return for other games');
-    await click('#begin-game'); await click('#player-confirm-new');
+    await click('#player-level-1'); await click('#player-confirm-new');
     await click('#player-actions > summary');
     const beforeMove = await read('RamifiedMinigames.__test.getGame().round');
     await click('#player-action-controls [data-move-dir="E"]');

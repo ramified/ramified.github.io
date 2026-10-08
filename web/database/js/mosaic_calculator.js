@@ -3841,7 +3841,7 @@
       key: metadata.key,
       ...(metadata.wrappedView ? { wrappedView: metadata.wrappedView } : {}),
       ...(metadata.fideChessVariant ? { fideChessVariant: metadata.fideChessVariant } : {}),
-      file: `${metadata.key}.preset.js`
+      file: `${metadata.gameTypes.includes('Sokoban') ? 'sokoban/' : ''}${metadata.key}.preset.js`
     };
   }
 

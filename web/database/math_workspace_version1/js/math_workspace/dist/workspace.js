@@ -6379,30 +6379,6 @@
         };
       });
     },
-    "ramified_minigame_presets/bridges_blocking.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["bridges_blocking"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "bridges-blocking",
-          "label": "bridges_blocking",
-          "lattice": "square",
-          "size": "7x7",
-          "surface": "Sigma_0,1",
-          "sokoban": {
-            "targets": "1,1; 1,4; 1,7; 4,1; 4,7; 7,1; 7,4; 7,7",
-            "energyBridges": "2,4; 3,3; 3,5; 4,2; 4,6; 5,3; 5,5; 6,4",
-            "players": "6,6"
-          }
-        };
-      });
-    },
     "ramified_minigame_presets/classic_chinese_checkers.preset.js": (window) => {
       const globalThis2 = window, self = window, module = void 0, require2 = void 0;
       (function(root, factory) {
@@ -6933,58 +6909,6 @@
         };
       });
     },
-    "ramified_minigame_presets/classic_fans.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["classic_fans"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "classic-fans",
-          "label": "classic_fans",
-          "lattice": "square",
-          "size": "6x6",
-          "surface": "Sigma_0,1",
-          "removed": "1,1; 1,2; 1,4; 1,5; 1,6; 2,1; 2,2; 2,4; 2,5; 2,6; 3,1; 3,2; 4,5; 4,6; 5,1; 5,2; 5,3; 5,5; 5,6; 6,1; 6,2; 6,3; 6,5; 6,6",
-          "sokoban": {
-            "targets": "1,3; 3,6; 4,1; 6,4",
-            "boxes": "3,3; 3,5; 4,3; 4,4",
-            "players": "3,4"
-          }
-        };
-      });
-    },
-    "ramified_minigame_presets/classic_fans_glue.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["classic_fans_glue"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "classic-fans-glue",
-          "label": "classic_fans_glue",
-          "lattice": "square",
-          "size": "10x10",
-          "surface": "Sigma_11.5,1^1",
-          "removed": "1,1; 1,2; 1,4; 1,5; 1,6; 1,8; 1,9; 1,10; 2,1; 2,2; 2,4; 2,5; 2,6; 2,8; 2,9; 2,10; 3,1; 3,2; 4,9; 4,10; 5,1; 5,2; 5,5; 5,6; 5,9; 5,10; 6,1; 6,2; 6,5; 6,6; 6,9; 6,10; 7,1; 7,2; 8,9; 8,10; 9,1; 9,2; 9,3; 9,5; 9,6; 9,7; 9,9; 9,10; 10,1; 10,2; 10,3; 10,5; 10,6; 10,7; 10,9; 10,10",
-          "cuts": "3,4=4,4; 3,5=4,5; 3,6=3,7; 3,6=4,6; 3,8=4,8; 4,3=5,3; 4,4=4,5; 4,7=5,7; 5,3=5,4; 5,7=5,8; 6,3=6,4; 6,4=7,4; 6,7=6,8; 6,8=7,8; 7,4=8,4; 7,5=8,5; 7,6=7,7; 7,6=8,6; 7,8=8,8; 8,4=8,5",
-          "glue": "g1:7,4,S=8,8,N; g3:3,4,S=8,4,N; g4:7,8,S=4,8,N; g5:3,8,S=4,4,N",
-          "sokoban": {
-            "targets": "1,3; 1,7; 3,6; 3,10; 4,1; 4,5; 5,3; 5,7; 6,4; 6,8; 7,6; 7,10; 8,1; 8,5; 10,4; 10,8",
-            "boxes": "3,3; 3,5; 3,7; 3,8; 4,3; 4,4; 4,7; 4,8; 7,3; 7,4; 7,7; 7,8; 8,3; 8,4; 8,7; 8,8",
-            "players": "3,4"
-          }
-        };
-      });
-    },
     "ramified_minigame_presets/classic_hex.preset.js": (window) => {
       const globalThis2 = window, self = window, module = void 0, require2 = void 0;
       (function(root, factory) {
@@ -7430,86 +7354,6 @@
         };
       });
     },
-    "ramified_minigame_presets/cross.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["cross"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "cross",
-          "label": "cross",
-          "lattice": "square",
-          "size": "4x4",
-          "surface": "M_1",
-          "glue": "g0:1..4,4,E=1..4,1,W; g1:1,1..4,N=4,1..4,S",
-          "sokoban": {
-            "targets": "3,2",
-            "energyBridges": "2,3",
-            "players": "4,1"
-          }
-        };
-      });
-    },
-    "ramified_minigame_presets/curling.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["curling"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "curling",
-          "label": "curling",
-          "lattice": "square",
-          "size": "6x10",
-          "surface": "Sigma_0,2",
-          "removed": "1,1; 1,2; 1,3; 1,4; 1,5; 1,6; 1,7; 2,1; 2,2; 2,3; 2,4; 2,5; 2,6; 2,7; 6,1",
-          "glue": "g0:3,2..7,N=6,2..7,S",
-          "sokoban": {
-            "targets": "4,3; 4,5; 4,7; 6,2",
-            "ice": "3,2; 3,3; 3,4; 3,5; 3,6; 3,7; 4,2; 4,3; 4,4; 4,5; 4,6; 4,7; 5,2; 5,3; 5,4; 5,5; 5,6; 5,7",
-            "energyBridges": "2,9",
-            "boxes": "3,9; 4,9; 5,9",
-            "players": "2,10"
-          }
-        };
-      });
-    },
-    "ramified_minigame_presets/curling_on_cube.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["curling_on_cube"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "curling-on-cube",
-          "label": "curling on Cube",
-          "lattice": "square",
-          "size": "9x12",
-          "surface": "M_0,8",
-          "removed": "1,1; 1,2; 1,3; 1,7; 1,8; 1,9; 1,10; 1,11; 1,12; 2,1; 2,2; 2,3; 2,7; 2,8; 2,9; 2,10; 2,11; 2,12; 3,1; 3,2; 3,3; 3,7; 3,8; 3,9; 3,10; 3,11; 3,12; 7,1; 7,2; 7,3; 7,7; 7,8; 7,9; 7,10; 7,11; 7,12; 8,1; 8,2; 8,3; 8,7; 8,8; 8,9; 8,10; 8,11; 8,12; 9,1; 9,2; 9,3; 9,7; 9,8; 9,9; 9,10; 9,11; 9,12",
-          "glue": "g0:4..6,1,W=4..6,12,E; g1:4,3..1,N=3..1,4,W; g2:1,6..4,N=4,10..12,N; g3:3..1,6,E=4,7..9,N; g4:6,1..3,S=9..7,4,W; g5:6,7..9,S=7..9,6,E; g6:9,4..6,S=6,12..10,S",
-          "sokoban": {
-            "targets": "3,6; 4,6; 4,7",
-            "ice": "1,4; 1,5; 1,6; 2,4; 2,5; 2,6; 3,4; 3,5; 3,6; 4,4; 4,5; 4,6; 4,7; 4,8; 4,9; 5,4; 5,5; 5,6; 5,7; 5,8; 5,9; 6,4; 6,5; 6,6; 6,7; 6,8; 6,9",
-            "boxes": "5,2; 5,11; 8,5",
-            "players": "5,10"
-          }
-        };
-      });
-    },
     "ramified_minigame_presets/dodecahedron_with_pentagon_holes.preset.js": (window) => {
       const globalThis2 = window, self = window, module = void 0, require2 = void 0;
       (function(root, factory) {
@@ -7637,132 +7481,6 @@
                 }
               ]
             }
-          }
-        };
-      });
-    },
-    "ramified_minigame_presets/easy_energy_bridge.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["easy_energy_bridge"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "easy-energy-bridge",
-          "label": "easy energy bridge",
-          "lattice": "square",
-          "size": "3x5",
-          "surface": "Sigma_0,1",
-          "removed": "1,1; 1,2; 3,1; 3,2",
-          "sokoban": {
-            "targets": "1,3; 3,5",
-            "energyBridges": "1,3; 3,3",
-            "players": "2,1"
-          },
-          "billiards": {
-            "pockets": []
-          }
-        };
-      });
-    },
-    "ramified_minigame_presets/energy_test.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["energy_test"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "energy-test",
-          "label": "energy_test",
-          "lattice": "square",
-          "size": "4x6",
-          "surface": "Sigma_0,1",
-          "removed": "3,1; 3,2; 3,5; 3,6; 4,1; 4,2; 4,5; 4,6",
-          "sokoban": {
-            "targets": "1,2; 4,4",
-            "energyBridges": "2,2; 4,3",
-            "players": "2,1"
-          }
-        };
-      });
-    },
-    "ramified_minigame_presets/expand.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["expand"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "expand",
-          "label": "expand",
-          "lattice": "square",
-          "size": "7x7",
-          "surface": "Sigma_0,1",
-          "sokoban": {
-            "targets": "1,1; 1,7; 4,4; 7,1; 7,7",
-            "energyBridges": "3,3; 3,5; 4,4; 5,3; 5,5",
-            "players": "6,6"
-          }
-        };
-      });
-    },
-    "ramified_minigame_presets/expand2.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["expand2"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "expand2",
-          "label": "expand2",
-          "lattice": "square",
-          "size": "7x7",
-          "surface": "Sigma_0,1",
-          "sokoban": {
-            "targets": "1,1; 1,7; 2,2; 2,6; 4,4; 6,2; 6,6; 7,1; 7,7",
-            "energyBridges": "2,2; 2,6; 3,3; 3,5; 4,4; 5,3; 5,5; 6,2; 6,6",
-            "players": "7,7"
-          }
-        };
-      });
-    },
-    "ramified_minigame_presets/expand3.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["expand3"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "expand3",
-          "label": "expand3",
-          "lattice": "hexagonal",
-          "size": "7x7",
-          "surface": "Sigma_0,1",
-          "removed": "1,1; 1,2; 1,7; 2,1; 2,7; 3,1; 5,1; 6,1; 6,7; 7,1; 7,2; 7,7",
-          "sokoban": {
-            "targets": "1,3; 1,6; 4,1; 4,7; 7,3; 7,6",
-            "energyBridges": "3,4; 3,5; 4,3; 4,5; 5,4; 5,5",
-            "players": "4,4"
           }
         };
       });
@@ -9517,57 +9235,6 @@
         };
       });
     },
-    "ramified_minigame_presets/ice_test.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["ice_test"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "ice-test",
-          "label": "ice_test",
-          "lattice": "square",
-          "size": "6x6",
-          "surface": "Sigma_0,1",
-          "sokoban": {
-            "targets": "3,3; 3,4; 4,3; 4,4",
-            "ice": "3,3; 3,4; 4,3; 4,4",
-            "boxes": "2,4; 3,2; 4,5; 5,3",
-            "players": "3,3"
-          }
-        };
-      });
-    },
-    "ramified_minigame_presets/islands.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["islands"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "islands",
-          "label": "islands",
-          "lattice": "square",
-          "size": "8x10",
-          "surface": "Sigma_0,1",
-          "sokoban": {
-            "sea": "1,1; 1,2; 1,3; 1,4; 1,5; 1,6; 1,7; 1,8; 1,9; 1,10; 2,1; 2,10; 3,1; 3,5; 3,6; 3,10; 4,1; 4,5; 4,6; 4,10; 5,1; 5,2; 5,3; 5,4; 5,5; 5,6; 5,7; 5,8; 5,9; 5,10; 6,1; 6,4; 6,5; 6,6; 6,7; 6,10; 7,1; 7,4; 7,5; 7,6; 7,7; 7,10; 8,1; 8,2; 8,3; 8,4; 8,5; 8,6; 8,7; 8,8; 8,9; 8,10",
-            "targets": "7,2",
-            "energyBridges": "3,3; 3,8",
-            "boxes": "6,8",
-            "players": "2,3"
-          }
-        };
-      });
-    },
     "ramified_minigame_presets/knights_on_rubik_s_cube.preset.js": (window) => {
       const globalThis2 = window, self = window, module = void 0, require2 = void 0;
       (function(root, factory) {
@@ -9704,32 +9371,6 @@
     },
     "ramified_minigame_presets/last_supper_on_rubik_s_cube.preset.js": (window) => {
       const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-    },
-    "ramified_minigame_presets/loop.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["loop"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "loop",
-          "label": "loop",
-          "lattice": "square",
-          "size": "2x5",
-          "surface": "Sigma_0,2",
-          "glue": "g0:1..2,5,E=1..2,1,W",
-          "sokoban": {
-            "targets": "2,2",
-            "ice": "1,1; 1,2; 1,3; 1,4; 1,5; 2,1; 2,2; 2,3; 2,4; 2,5",
-            "boxes": "2,4",
-            "players": "1,3"
-          }
-        };
-      });
     },
     "ramified_minigame_presets/mobius_strip.preset.js": (window) => {
       const globalThis2 = window, self = window, module = void 0, require2 = void 0;
@@ -10195,86 +9836,6 @@
         };
       });
     },
-    "ramified_minigame_presets/orbox_b.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["orbox_b"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "orbox-b",
-          "label": "Orbox B",
-          "lattice": "square",
-          "size": "11x14",
-          "surface": "Sigma_0,1",
-          "sokoban": {
-            "targets": "5,14",
-            "ice": "1,1; 1,2; 1,3; 1,4; 1,5; 1,6; 1,7; 1,8; 1,9; 1,10; 1,11; 1,12; 1,13; 1,14; 2,1; 2,2; 2,3; 2,4; 2,5; 2,6; 2,8; 2,9; 2,10; 2,11; 2,12; 2,13; 2,14; 3,1; 3,2; 3,3; 3,4; 3,5; 3,6; 3,7; 3,8; 3,9; 3,10; 3,12; 3,13; 3,14; 4,1; 4,2; 4,3; 4,6; 4,7; 4,8; 4,9; 4,10; 4,11; 4,12; 4,13; 4,14; 5,1; 5,3; 5,4; 5,6; 5,7; 5,8; 5,9; 5,10; 5,11; 5,12; 5,13; 5,14; 6,1; 6,2; 6,3; 6,4; 6,5; 6,6; 6,7; 6,8; 6,9; 6,11; 6,12; 6,13; 6,14; 7,1; 7,2; 7,3; 7,4; 7,5; 7,7; 7,8; 7,9; 7,10; 7,11; 7,13; 7,14; 8,1; 8,2; 8,3; 8,4; 8,5; 8,6; 8,7; 8,9; 8,10; 8,11; 8,12; 8,13; 8,14; 9,1; 9,2; 9,4; 9,5; 9,6; 9,7; 9,8; 9,9; 9,10; 9,12; 9,13; 9,14; 10,1; 10,2; 10,3; 10,4; 10,5; 10,6; 10,7; 10,8; 10,10; 10,11; 10,12; 10,13; 10,14; 11,1; 11,2; 11,3; 11,4; 11,5; 11,6; 11,7; 11,8; 11,9; 11,10; 11,11; 11,12; 11,13; 11,14",
-            "walls": "2,7; 3,11; 4,4; 4,5; 5,2; 5,5; 6,10; 7,6; 7,12; 8,8; 9,3; 9,11; 10,9",
-            "boxes": "5,13",
-            "players": "6,9"
-          }
-        };
-      });
-    },
-    "ramified_minigame_presets/orbox_b_glued.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["orbox_b_glued"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "orbox-b-glued",
-          "label": "Orbox B glued",
-          "lattice": "square",
-          "size": "14x18",
-          "surface": "Sigma_3.5,5^1",
-          "removed": "7,11; 7,12; 7,13; 7,14; 7,15; 8,10; 8,11; 8,12; 8,16; 9,2; 9,3; 9,9; 9,12; 9,17; 10,2; 10,5; 10,8; 10,13; 10,17; 11,8; 11,12; 11,17; 12,2; 12,8; 12,9; 12,10; 12,11; 12,12; 12,16; 12,17; 13,2; 13,3; 13,7; 13,8; 13,13; 13,14; 13,15; 13,16",
-          "glue": "g0:10,14,W=10,4,E; g1:11,13,N=9,5,S; g2:10,12,E=10,6,W; g3:9,13,S=11,5,N; g4:9,8,E=9,8,S; g5:8,9,E=8,9,S; g6:7,10,E=7,10,S",
-          "sokoban": {
-            "targets": "6,9",
-            "ice": "1,1; 1,2; 1,3; 1,4; 1,5; 1,6; 1,7; 1,8; 1,9; 1,10; 1,11; 1,12; 1,13; 1,14; 1,15; 1,16; 1,17; 1,18; 2,1; 2,9; 2,10; 2,11; 2,12; 2,13; 2,14; 2,15; 2,16; 2,17; 2,18; 3,1; 3,5; 3,6; 3,7; 3,9; 3,10; 3,11; 3,12; 3,13; 3,14; 3,15; 3,16; 3,17; 3,18; 4,1; 4,3; 4,4; 4,5; 4,6; 4,7; 4,9; 4,10; 4,11; 4,12; 4,13; 4,14; 4,15; 4,16; 4,17; 4,18; 5,1; 5,3; 5,4; 5,5; 5,6; 5,7; 5,8; 5,9; 5,10; 5,11; 5,12; 5,13; 5,14; 5,16; 5,17; 5,18; 6,1; 6,4; 6,5; 6,6; 6,7; 6,9; 6,10; 6,11; 6,12; 6,13; 6,14; 6,15; 6,16; 6,17; 6,18; 7,1; 7,5; 7,6; 7,9; 7,10; 7,16; 7,17; 7,18; 8,1; 8,2; 8,3; 8,4; 8,5; 8,6; 8,7; 8,8; 8,9; 8,13; 8,14; 8,15; 8,17; 8,18; 9,1; 9,4; 9,5; 9,6; 9,7; 9,8; 9,10; 9,11; 9,13; 9,14; 9,15; 9,16; 9,18; 10,1; 10,3; 10,4; 10,6; 10,7; 10,9; 10,10; 10,11; 10,12; 10,14; 10,15; 10,16; 10,18; 11,1; 11,2; 11,3; 11,4; 11,5; 11,6; 11,7; 11,9; 11,10; 11,11; 11,13; 11,14; 11,15; 11,16; 11,18; 12,1; 12,3; 12,4; 12,5; 12,6; 12,7; 12,13; 12,14; 12,15; 12,18; 13,1; 13,4; 13,5; 13,6; 13,9; 13,10; 13,11; 13,12; 13,17; 13,18; 14,1; 14,2; 14,3; 14,4; 14,5; 14,6; 14,7; 14,8; 14,9; 14,10; 14,11; 14,12; 14,13; 14,14; 14,15; 14,16; 14,17; 14,18",
-            "walls": "2,2; 2,3; 2,4; 2,5; 2,6; 2,7; 2,8; 3,2; 3,3; 3,4; 3,8; 4,2; 4,8; 5,2; 5,15; 6,2; 6,3; 6,8; 7,2; 7,3; 7,4; 7,7; 7,8",
-            "boxes": "6,13",
-            "players": "9,10"
-          }
-        };
-      });
-    },
-    "ramified_minigame_presets/pedestrian.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["pedestrian"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "pedestrian",
-          "label": "Pedestrian",
-          "lattice": "square",
-          "size": "8x7",
-          "surface": "Sigma_0,1",
-          "removed": "1,1; 1,2; 1,4; 1,5; 1,6; 1,7; 2,1; 2,2; 2,3; 2,4; 2,5; 2,6; 2,7; 3,1; 3,2; 3,4; 3,5; 3,6; 3,7; 4,1; 4,2; 4,4; 5,1; 5,2; 5,3; 5,4; 5,5; 5,6; 5,7; 6,3; 6,6; 6,7; 7,1; 7,2; 7,3; 7,4; 7,6; 7,7; 8,1; 8,2; 8,3; 8,4; 8,6; 8,7",
-          "glue": "g0:1,3,S=3,3,N; g3:4,3,S=6,4,N; g5:6,2,E=6,4,W; g6:4,5,W=4,3,E; g7:4,5,S=6,5,N",
-          "sokoban": {
-            "targets": "1,3; 4,7; 6,1; 8,5",
-            "boxes": "4,3; 4,6; 6,4; 6,5",
-            "players": "4,5"
-          }
-        };
-      });
-    },
     "ramified_minigame_presets/queens_on_double_cover.preset.js": (window) => {
       const globalThis2 = window, self = window, module = void 0, require2 = void 0;
       (function(root, factory) {
@@ -10631,58 +10192,6 @@
         };
       });
     },
-    "ramified_minigame_presets/remote_control.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["remote_control"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "remote-control",
-          "label": "remote control",
-          "lattice": "square",
-          "size": "13x13",
-          "surface": "Sigma_0,1",
-          "removed": "1,1; 1,2; 1,3; 1,4; 1,5; 1,6; 1,7; 1,8; 1,9; 1,10; 1,13; 2,13; 3,13; 4,1; 4,13; 5,1; 5,13; 6,1; 6,13; 7,1; 7,13; 8,1; 8,13; 9,1; 9,13; 10,1; 10,13; 11,1; 12,1; 13,1; 13,4; 13,5; 13,6; 13,7; 13,8; 13,9; 13,10; 13,11; 13,12; 13,13",
-          "sokoban": {
-            "sea": "4,4; 4,5; 4,6; 4,7; 4,8; 4,9; 4,10; 5,4; 5,5; 5,9; 5,10; 6,4; 6,7; 6,10; 7,4; 7,6; 7,8; 7,10; 8,4; 8,6; 8,7; 8,10; 9,4; 9,5; 9,9; 9,10; 10,4; 10,5; 10,6; 10,7; 10,8; 10,9; 10,10",
-            "targets": "7,7; 8,2; 8,5",
-            "energyBridges": "7,7; 9,6; 12,6",
-            "players": "11,5"
-          }
-        };
-      });
-    },
-    "ramified_minigame_presets/remote_rotate.preset.js": (window) => {
-      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
-      (function(root, factory) {
-        const preset = factory();
-        if (typeof module !== "undefined" && module.exports) module.exports = preset;
-        if (root) {
-          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-          root.RAMIFIED_MINIGAME_PRESET_DATA["remote_rotate"] = preset;
-        }
-      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-        return {
-          "id": "remote-rotate",
-          "label": "remote rotate",
-          "lattice": "square",
-          "size": "10x10",
-          "surface": "Sigma_1,1",
-          "glue": "g1:10,9..10,S=1,8..9,N; g2:8..9,1,W=9..10,10,E",
-          "sokoban": {
-            "sea": "1,1; 1,2; 1,3; 1,4; 1,5; 1,6; 1,7; 1,10; 2,1; 2,2; 2,5; 2,6; 2,7; 2,10; 3,1; 3,2; 3,3; 3,5; 3,7; 3,10; 4,1; 4,4; 4,7; 4,10; 5,1; 5,3; 5,5; 5,6; 5,7; 5,10; 6,1; 6,2; 6,3; 6,6; 6,7; 6,10; 7,1; 7,2; 7,3; 7,4; 7,5; 7,6; 7,7; 7,10; 10,1; 10,2; 10,3; 10,4; 10,5; 10,6; 10,7",
-            "targets": "2,3; 3,6; 5,2; 6,5; 9,9",
-            "energyBridges": "3,4; 4,3; 4,5; 5,4; 8,8",
-            "players": "10,10"
-          }
-        };
-      });
-    },
     "ramified_minigame_presets/rubik_s_cube_2_2_2.preset.js": (window) => {
       const globalThis2 = window, self = window, module = void 0, require2 = void 0;
       (function(root, factory) {
@@ -10897,7 +10406,910 @@
         };
       });
     },
-    "ramified_minigame_presets/sokoban_square.preset.js": (window) => {
+    "ramified_minigame_presets/small_classic.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["small_classic"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "small-classic",
+          "label": "small classic",
+          "labelZh": "\u5C0F\u578B\u7ECF\u5178",
+          "lattice": "hexagonal",
+          "size": "13x10",
+          "surface": "Sigma_0,1",
+          "removed": "1,1; 1,2; 1,3; 1,4; 1,5; 1,7; 1,8; 1,9; 1,10; 2,1; 2,2; 2,3; 2,4; 2,7; 2,8; 2,9; 2,10; 3,1; 3,2; 3,3; 3,4; 3,8; 3,9; 3,10; 5,1; 6,1; 6,10; 7,1; 7,2; 7,10; 8,1; 8,10; 9,1; 11,1; 11,2; 11,3; 11,4; 11,8; 11,9; 11,10; 12,1; 12,2; 12,3; 12,4; 12,7; 12,8; 12,9; 12,10; 13,1; 13,2; 13,3; 13,4; 13,5; 13,7; 13,8; 13,9; 13,10",
+          "pieceSets": {
+            "starts": {
+              "black": [
+                {
+                  "row": 4,
+                  "col": 8
+                },
+                {
+                  "row": 4,
+                  "col": 9
+                },
+                {
+                  "row": 4,
+                  "col": 10
+                },
+                {
+                  "row": 5,
+                  "col": 9
+                },
+                {
+                  "row": 5,
+                  "col": 10
+                },
+                {
+                  "row": 6,
+                  "col": 9
+                }
+              ],
+              "white": [
+                {
+                  "row": 8,
+                  "col": 2
+                },
+                {
+                  "row": 9,
+                  "col": 2
+                },
+                {
+                  "row": 9,
+                  "col": 3
+                },
+                {
+                  "row": 10,
+                  "col": 1
+                },
+                {
+                  "row": 10,
+                  "col": 2
+                },
+                {
+                  "row": 10,
+                  "col": 3
+                }
+              ],
+              "red": [
+                {
+                  "row": 1,
+                  "col": 6
+                },
+                {
+                  "row": 2,
+                  "col": 5
+                },
+                {
+                  "row": 2,
+                  "col": 6
+                },
+                {
+                  "row": 3,
+                  "col": 5
+                },
+                {
+                  "row": 3,
+                  "col": 6
+                },
+                {
+                  "row": 3,
+                  "col": 7
+                }
+              ],
+              "yellow": [
+                {
+                  "row": 11,
+                  "col": 5
+                },
+                {
+                  "row": 11,
+                  "col": 6
+                },
+                {
+                  "row": 11,
+                  "col": 7
+                },
+                {
+                  "row": 12,
+                  "col": 5
+                },
+                {
+                  "row": 12,
+                  "col": 6
+                },
+                {
+                  "row": 13,
+                  "col": 6
+                }
+              ],
+              "blue": [
+                {
+                  "row": 4,
+                  "col": 1
+                },
+                {
+                  "row": 4,
+                  "col": 2
+                },
+                {
+                  "row": 4,
+                  "col": 3
+                },
+                {
+                  "row": 5,
+                  "col": 2
+                },
+                {
+                  "row": 5,
+                  "col": 3
+                },
+                {
+                  "row": 6,
+                  "col": 2
+                }
+              ],
+              "green": [
+                {
+                  "row": 8,
+                  "col": 9
+                },
+                {
+                  "row": 9,
+                  "col": 9
+                },
+                {
+                  "row": 9,
+                  "col": 10
+                },
+                {
+                  "row": 10,
+                  "col": 8
+                },
+                {
+                  "row": 10,
+                  "col": 9
+                },
+                {
+                  "row": 10,
+                  "col": 10
+                }
+              ]
+            },
+            "targets": {}
+          },
+          "pieces": [
+            {
+              "row": 4,
+              "col": 1,
+              "role": "start",
+              "color": "blue"
+            },
+            {
+              "row": 4,
+              "col": 2,
+              "role": "start",
+              "color": "blue"
+            },
+            {
+              "row": 4,
+              "col": 3,
+              "role": "start",
+              "color": "blue"
+            },
+            {
+              "row": 5,
+              "col": 3,
+              "role": "start",
+              "color": "blue"
+            },
+            {
+              "row": 5,
+              "col": 2,
+              "role": "start",
+              "color": "blue"
+            },
+            {
+              "row": 6,
+              "col": 2,
+              "role": "start",
+              "color": "blue"
+            },
+            {
+              "row": 1,
+              "col": 6,
+              "role": "start",
+              "color": "red"
+            },
+            {
+              "row": 2,
+              "col": 5,
+              "role": "start",
+              "color": "red"
+            },
+            {
+              "row": 3,
+              "col": 5,
+              "role": "start",
+              "color": "red"
+            },
+            {
+              "row": 3,
+              "col": 6,
+              "role": "start",
+              "color": "red"
+            },
+            {
+              "row": 2,
+              "col": 6,
+              "role": "start",
+              "color": "red"
+            },
+            {
+              "row": 3,
+              "col": 7,
+              "role": "start",
+              "color": "red"
+            },
+            {
+              "row": 4,
+              "col": 8,
+              "role": "start",
+              "color": "black",
+              "side": "black"
+            },
+            {
+              "row": 4,
+              "col": 9,
+              "role": "start",
+              "color": "black",
+              "side": "black"
+            },
+            {
+              "row": 4,
+              "col": 10,
+              "role": "start",
+              "color": "black",
+              "side": "black"
+            },
+            {
+              "row": 5,
+              "col": 10,
+              "role": "start",
+              "color": "black",
+              "side": "black"
+            },
+            {
+              "row": 5,
+              "col": 9,
+              "role": "start",
+              "color": "black",
+              "side": "black"
+            },
+            {
+              "row": 6,
+              "col": 9,
+              "role": "start",
+              "color": "black",
+              "side": "black"
+            },
+            {
+              "row": 8,
+              "col": 9,
+              "role": "start",
+              "color": "green"
+            },
+            {
+              "row": 9,
+              "col": 9,
+              "role": "start",
+              "color": "green"
+            },
+            {
+              "row": 10,
+              "col": 8,
+              "role": "start",
+              "color": "green"
+            },
+            {
+              "row": 10,
+              "col": 9,
+              "role": "start",
+              "color": "green"
+            },
+            {
+              "row": 9,
+              "col": 10,
+              "role": "start",
+              "color": "green"
+            },
+            {
+              "row": 10,
+              "col": 10,
+              "role": "start",
+              "color": "green"
+            },
+            {
+              "row": 11,
+              "col": 5,
+              "role": "start",
+              "color": "yellow"
+            },
+            {
+              "row": 11,
+              "col": 6,
+              "role": "start",
+              "color": "yellow"
+            },
+            {
+              "row": 11,
+              "col": 7,
+              "role": "start",
+              "color": "yellow"
+            },
+            {
+              "row": 12,
+              "col": 6,
+              "role": "start",
+              "color": "yellow"
+            },
+            {
+              "row": 12,
+              "col": 5,
+              "role": "start",
+              "color": "yellow"
+            },
+            {
+              "row": 13,
+              "col": 6,
+              "role": "start",
+              "color": "yellow"
+            },
+            {
+              "row": 8,
+              "col": 2,
+              "role": "start",
+              "color": "white",
+              "side": "white"
+            },
+            {
+              "row": 9,
+              "col": 3,
+              "role": "start",
+              "color": "white",
+              "side": "white"
+            },
+            {
+              "row": 10,
+              "col": 3,
+              "role": "start",
+              "color": "white",
+              "side": "white"
+            },
+            {
+              "row": 10,
+              "col": 2,
+              "role": "start",
+              "color": "white",
+              "side": "white"
+            },
+            {
+              "row": 9,
+              "col": 2,
+              "role": "start",
+              "color": "white",
+              "side": "white"
+            },
+            {
+              "row": 10,
+              "col": 1,
+              "role": "start",
+              "color": "white",
+              "side": "white"
+            }
+          ]
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/bridges_blocking.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["bridges_blocking"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "bridges-blocking",
+          "label": "bridges_blocking",
+          "lattice": "square",
+          "size": "7x7",
+          "surface": "Sigma_0,1",
+          "sokoban": {
+            "targets": "1,1; 1,4; 1,7; 4,1; 4,7; 7,1; 7,4; 7,7",
+            "energyBridges": "2,4; 3,3; 3,5; 4,2; 4,6; 5,3; 5,5; 6,4",
+            "players": "6,6"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/classic_fans.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["classic_fans"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "classic-fans",
+          "label": "classic_fans",
+          "lattice": "square",
+          "size": "6x6",
+          "surface": "Sigma_0,1",
+          "removed": "1,1; 1,2; 1,4; 1,5; 1,6; 2,1; 2,2; 2,4; 2,5; 2,6; 3,1; 3,2; 4,5; 4,6; 5,1; 5,2; 5,3; 5,5; 5,6; 6,1; 6,2; 6,3; 6,5; 6,6",
+          "sokoban": {
+            "targets": "1,3; 3,6; 4,1; 6,4",
+            "boxes": "3,3; 3,5; 4,3; 4,4",
+            "players": "3,4"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/classic_fans_glue.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["classic_fans_glue"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "classic-fans-glue",
+          "label": "classic_fans_glue",
+          "lattice": "square",
+          "size": "10x10",
+          "surface": "Sigma_11.5,1^1",
+          "removed": "1,1; 1,2; 1,4; 1,5; 1,6; 1,8; 1,9; 1,10; 2,1; 2,2; 2,4; 2,5; 2,6; 2,8; 2,9; 2,10; 3,1; 3,2; 4,9; 4,10; 5,1; 5,2; 5,5; 5,6; 5,9; 5,10; 6,1; 6,2; 6,5; 6,6; 6,9; 6,10; 7,1; 7,2; 8,9; 8,10; 9,1; 9,2; 9,3; 9,5; 9,6; 9,7; 9,9; 9,10; 10,1; 10,2; 10,3; 10,5; 10,6; 10,7; 10,9; 10,10",
+          "cuts": "3,4=4,4; 3,5=4,5; 3,6=3,7; 3,6=4,6; 3,8=4,8; 4,3=5,3; 4,4=4,5; 4,7=5,7; 5,3=5,4; 5,7=5,8; 6,3=6,4; 6,4=7,4; 6,7=6,8; 6,8=7,8; 7,4=8,4; 7,5=8,5; 7,6=7,7; 7,6=8,6; 7,8=8,8; 8,4=8,5",
+          "glue": "g1:7,4,S=8,8,N; g3:3,4,S=8,4,N; g4:7,8,S=4,8,N; g5:3,8,S=4,4,N",
+          "sokoban": {
+            "targets": "1,3; 1,7; 3,6; 3,10; 4,1; 4,5; 5,3; 5,7; 6,4; 6,8; 7,6; 7,10; 8,1; 8,5; 10,4; 10,8",
+            "boxes": "3,3; 3,5; 3,7; 3,8; 4,3; 4,4; 4,7; 4,8; 7,3; 7,4; 7,7; 7,8; 8,3; 8,4; 8,7; 8,8",
+            "players": "3,4"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/cross.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["cross"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "cross",
+          "label": "cross",
+          "lattice": "square",
+          "size": "4x4",
+          "surface": "M_1",
+          "glue": "g0:1..4,4,E=1..4,1,W; g1:1,1..4,N=4,1..4,S",
+          "sokoban": {
+            "targets": "3,2",
+            "energyBridges": "2,3",
+            "players": "4,1"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/curling.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["curling"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "curling",
+          "label": "curling",
+          "lattice": "square",
+          "size": "6x10",
+          "surface": "Sigma_0,2",
+          "removed": "1,1; 1,2; 1,3; 1,4; 1,5; 1,6; 1,7; 2,1; 2,2; 2,3; 2,4; 2,5; 2,6; 2,7; 6,1",
+          "glue": "g0:3,2..7,N=6,2..7,S",
+          "sokoban": {
+            "targets": "4,3; 4,5; 4,7; 6,2",
+            "ice": "3,2; 3,3; 3,4; 3,5; 3,6; 3,7; 4,2; 4,3; 4,4; 4,5; 4,6; 4,7; 5,2; 5,3; 5,4; 5,5; 5,6; 5,7",
+            "energyBridges": "2,9",
+            "boxes": "3,9; 4,9; 5,9",
+            "players": "2,10"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/curling_on_cube.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["curling_on_cube"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "curling-on-cube",
+          "label": "curling on Cube",
+          "lattice": "square",
+          "size": "9x12",
+          "surface": "M_0,8",
+          "removed": "1,1; 1,2; 1,3; 1,7; 1,8; 1,9; 1,10; 1,11; 1,12; 2,1; 2,2; 2,3; 2,7; 2,8; 2,9; 2,10; 2,11; 2,12; 3,1; 3,2; 3,3; 3,7; 3,8; 3,9; 3,10; 3,11; 3,12; 7,1; 7,2; 7,3; 7,7; 7,8; 7,9; 7,10; 7,11; 7,12; 8,1; 8,2; 8,3; 8,7; 8,8; 8,9; 8,10; 8,11; 8,12; 9,1; 9,2; 9,3; 9,7; 9,8; 9,9; 9,10; 9,11; 9,12",
+          "glue": "g0:4..6,1,W=4..6,12,E; g1:4,3..1,N=3..1,4,W; g2:1,6..4,N=4,10..12,N; g3:3..1,6,E=4,7..9,N; g4:6,1..3,S=9..7,4,W; g5:6,7..9,S=7..9,6,E; g6:9,4..6,S=6,12..10,S",
+          "sokoban": {
+            "targets": "3,6; 4,6; 4,7",
+            "ice": "1,4; 1,5; 1,6; 2,4; 2,5; 2,6; 3,4; 3,5; 3,6; 4,4; 4,5; 4,6; 4,7; 4,8; 4,9; 5,4; 5,5; 5,6; 5,7; 5,8; 5,9; 6,4; 6,5; 6,6; 6,7; 6,8; 6,9",
+            "boxes": "5,2; 5,11; 8,5",
+            "players": "5,10"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/easy_energy_bridge.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["easy_energy_bridge"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "easy-energy-bridge",
+          "label": "easy energy bridge",
+          "lattice": "square",
+          "size": "3x5",
+          "surface": "Sigma_0,1",
+          "removed": "1,1; 1,2; 3,1; 3,2",
+          "sokoban": {
+            "targets": "1,3; 3,5",
+            "energyBridges": "1,3; 3,3",
+            "players": "2,1"
+          },
+          "billiards": {
+            "pockets": []
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/energy_test.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["energy_test"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "energy-test",
+          "label": "energy_test",
+          "lattice": "square",
+          "size": "4x6",
+          "surface": "Sigma_0,1",
+          "removed": "3,1; 3,2; 3,5; 3,6; 4,1; 4,2; 4,5; 4,6",
+          "sokoban": {
+            "targets": "1,2; 4,4",
+            "energyBridges": "2,2; 4,3",
+            "players": "2,1"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/expand.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["expand"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "expand",
+          "label": "expand",
+          "lattice": "square",
+          "size": "7x7",
+          "surface": "Sigma_0,1",
+          "sokoban": {
+            "targets": "1,1; 1,7; 4,4; 7,1; 7,7",
+            "energyBridges": "3,3; 3,5; 4,4; 5,3; 5,5",
+            "players": "6,6"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/expand2.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["expand2"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "expand2",
+          "label": "expand2",
+          "lattice": "square",
+          "size": "7x7",
+          "surface": "Sigma_0,1",
+          "sokoban": {
+            "targets": "1,1; 1,7; 2,2; 2,6; 4,4; 6,2; 6,6; 7,1; 7,7",
+            "energyBridges": "2,2; 2,6; 3,3; 3,5; 4,4; 5,3; 5,5; 6,2; 6,6",
+            "players": "7,7"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/expand3.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["expand3"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "expand3",
+          "label": "expand3",
+          "lattice": "hexagonal",
+          "size": "7x7",
+          "surface": "Sigma_0,1",
+          "removed": "1,1; 1,2; 1,7; 2,1; 2,7; 3,1; 5,1; 6,1; 6,7; 7,1; 7,2; 7,7",
+          "sokoban": {
+            "targets": "1,3; 1,6; 4,1; 4,7; 7,3; 7,6",
+            "energyBridges": "3,4; 3,5; 4,3; 4,5; 5,4; 5,5",
+            "players": "4,4"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/ice_test.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["ice_test"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "ice-test",
+          "label": "ice_test",
+          "lattice": "square",
+          "size": "6x6",
+          "surface": "Sigma_0,1",
+          "sokoban": {
+            "targets": "3,3; 3,4; 4,3; 4,4",
+            "ice": "3,3; 3,4; 4,3; 4,4",
+            "boxes": "2,4; 3,2; 4,5; 5,3",
+            "players": "3,3"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/islands.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["islands"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "islands",
+          "label": "islands",
+          "lattice": "square",
+          "size": "8x10",
+          "surface": "Sigma_0,1",
+          "sokoban": {
+            "sea": "1,1; 1,2; 1,3; 1,4; 1,5; 1,6; 1,7; 1,8; 1,9; 1,10; 2,1; 2,10; 3,1; 3,5; 3,6; 3,10; 4,1; 4,5; 4,6; 4,10; 5,1; 5,2; 5,3; 5,4; 5,5; 5,6; 5,7; 5,8; 5,9; 5,10; 6,1; 6,4; 6,5; 6,6; 6,7; 6,10; 7,1; 7,4; 7,5; 7,6; 7,7; 7,10; 8,1; 8,2; 8,3; 8,4; 8,5; 8,6; 8,7; 8,8; 8,9; 8,10",
+            "targets": "7,2",
+            "energyBridges": "3,3; 3,8",
+            "boxes": "6,8",
+            "players": "2,3"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/loop.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["loop"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "loop",
+          "label": "loop",
+          "lattice": "square",
+          "size": "2x5",
+          "surface": "Sigma_0,2",
+          "glue": "g0:1..2,5,E=1..2,1,W",
+          "sokoban": {
+            "targets": "2,2",
+            "ice": "1,1; 1,2; 1,3; 1,4; 1,5; 2,1; 2,2; 2,3; 2,4; 2,5",
+            "boxes": "2,4",
+            "players": "1,3"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/orbox_b.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["orbox_b"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "orbox-b",
+          "label": "Orbox B",
+          "lattice": "square",
+          "size": "11x14",
+          "surface": "Sigma_0,1",
+          "sokoban": {
+            "targets": "5,14",
+            "ice": "1,1; 1,2; 1,3; 1,4; 1,5; 1,6; 1,7; 1,8; 1,9; 1,10; 1,11; 1,12; 1,13; 1,14; 2,1; 2,2; 2,3; 2,4; 2,5; 2,6; 2,8; 2,9; 2,10; 2,11; 2,12; 2,13; 2,14; 3,1; 3,2; 3,3; 3,4; 3,5; 3,6; 3,7; 3,8; 3,9; 3,10; 3,12; 3,13; 3,14; 4,1; 4,2; 4,3; 4,6; 4,7; 4,8; 4,9; 4,10; 4,11; 4,12; 4,13; 4,14; 5,1; 5,3; 5,4; 5,6; 5,7; 5,8; 5,9; 5,10; 5,11; 5,12; 5,13; 5,14; 6,1; 6,2; 6,3; 6,4; 6,5; 6,6; 6,7; 6,8; 6,9; 6,11; 6,12; 6,13; 6,14; 7,1; 7,2; 7,3; 7,4; 7,5; 7,7; 7,8; 7,9; 7,10; 7,11; 7,13; 7,14; 8,1; 8,2; 8,3; 8,4; 8,5; 8,6; 8,7; 8,9; 8,10; 8,11; 8,12; 8,13; 8,14; 9,1; 9,2; 9,4; 9,5; 9,6; 9,7; 9,8; 9,9; 9,10; 9,12; 9,13; 9,14; 10,1; 10,2; 10,3; 10,4; 10,5; 10,6; 10,7; 10,8; 10,10; 10,11; 10,12; 10,13; 10,14; 11,1; 11,2; 11,3; 11,4; 11,5; 11,6; 11,7; 11,8; 11,9; 11,10; 11,11; 11,12; 11,13; 11,14",
+            "walls": "2,7; 3,11; 4,4; 4,5; 5,2; 5,5; 6,10; 7,6; 7,12; 8,8; 9,3; 9,11; 10,9",
+            "boxes": "5,13",
+            "players": "6,9"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/orbox_b_glued.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["orbox_b_glued"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "orbox-b-glued",
+          "label": "Orbox B glued",
+          "lattice": "square",
+          "size": "14x18",
+          "surface": "Sigma_3.5,5^1",
+          "removed": "7,11; 7,12; 7,13; 7,14; 7,15; 8,10; 8,11; 8,12; 8,16; 9,2; 9,3; 9,9; 9,12; 9,17; 10,2; 10,5; 10,8; 10,13; 10,17; 11,8; 11,12; 11,17; 12,2; 12,8; 12,9; 12,10; 12,11; 12,12; 12,16; 12,17; 13,2; 13,3; 13,7; 13,8; 13,13; 13,14; 13,15; 13,16",
+          "glue": "g0:10,14,W=10,4,E; g1:11,13,N=9,5,S; g2:10,12,E=10,6,W; g3:9,13,S=11,5,N; g4:9,8,E=9,8,S; g5:8,9,E=8,9,S; g6:7,10,E=7,10,S",
+          "sokoban": {
+            "targets": "6,9",
+            "ice": "1,1; 1,2; 1,3; 1,4; 1,5; 1,6; 1,7; 1,8; 1,9; 1,10; 1,11; 1,12; 1,13; 1,14; 1,15; 1,16; 1,17; 1,18; 2,1; 2,9; 2,10; 2,11; 2,12; 2,13; 2,14; 2,15; 2,16; 2,17; 2,18; 3,1; 3,5; 3,6; 3,7; 3,9; 3,10; 3,11; 3,12; 3,13; 3,14; 3,15; 3,16; 3,17; 3,18; 4,1; 4,3; 4,4; 4,5; 4,6; 4,7; 4,9; 4,10; 4,11; 4,12; 4,13; 4,14; 4,15; 4,16; 4,17; 4,18; 5,1; 5,3; 5,4; 5,5; 5,6; 5,7; 5,8; 5,9; 5,10; 5,11; 5,12; 5,13; 5,14; 5,16; 5,17; 5,18; 6,1; 6,4; 6,5; 6,6; 6,7; 6,9; 6,10; 6,11; 6,12; 6,13; 6,14; 6,15; 6,16; 6,17; 6,18; 7,1; 7,5; 7,6; 7,9; 7,10; 7,16; 7,17; 7,18; 8,1; 8,2; 8,3; 8,4; 8,5; 8,6; 8,7; 8,8; 8,9; 8,13; 8,14; 8,15; 8,17; 8,18; 9,1; 9,4; 9,5; 9,6; 9,7; 9,8; 9,10; 9,11; 9,13; 9,14; 9,15; 9,16; 9,18; 10,1; 10,3; 10,4; 10,6; 10,7; 10,9; 10,10; 10,11; 10,12; 10,14; 10,15; 10,16; 10,18; 11,1; 11,2; 11,3; 11,4; 11,5; 11,6; 11,7; 11,9; 11,10; 11,11; 11,13; 11,14; 11,15; 11,16; 11,18; 12,1; 12,3; 12,4; 12,5; 12,6; 12,7; 12,13; 12,14; 12,15; 12,18; 13,1; 13,4; 13,5; 13,6; 13,9; 13,10; 13,11; 13,12; 13,17; 13,18; 14,1; 14,2; 14,3; 14,4; 14,5; 14,6; 14,7; 14,8; 14,9; 14,10; 14,11; 14,12; 14,13; 14,14; 14,15; 14,16; 14,17; 14,18",
+            "walls": "2,2; 2,3; 2,4; 2,5; 2,6; 2,7; 2,8; 3,2; 3,3; 3,4; 3,8; 4,2; 4,8; 5,2; 5,15; 6,2; 6,3; 6,8; 7,2; 7,3; 7,4; 7,7; 7,8",
+            "boxes": "6,13",
+            "players": "9,10"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/pedestrian.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["pedestrian"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "pedestrian",
+          "label": "Pedestrian",
+          "lattice": "square",
+          "size": "8x7",
+          "surface": "Sigma_0,1",
+          "removed": "1,1; 1,2; 1,4; 1,5; 1,6; 1,7; 2,1; 2,2; 2,3; 2,4; 2,5; 2,6; 2,7; 3,1; 3,2; 3,4; 3,5; 3,6; 3,7; 4,1; 4,2; 4,4; 5,1; 5,2; 5,3; 5,4; 5,5; 5,6; 5,7; 6,3; 6,6; 6,7; 7,1; 7,2; 7,3; 7,4; 7,6; 7,7; 8,1; 8,2; 8,3; 8,4; 8,6; 8,7",
+          "glue": "g0:1,3,S=3,3,N; g3:4,3,S=6,4,N; g5:6,2,E=6,4,W; g6:4,5,W=4,3,E; g7:4,5,S=6,5,N",
+          "sokoban": {
+            "targets": "1,3; 4,7; 6,1; 8,5",
+            "boxes": "4,3; 4,6; 6,4; 6,5",
+            "players": "4,5"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/remote_control.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["remote_control"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "remote-control",
+          "label": "remote control",
+          "lattice": "square",
+          "size": "13x13",
+          "surface": "Sigma_0,1",
+          "removed": "1,1; 1,2; 1,3; 1,4; 1,5; 1,6; 1,7; 1,8; 1,9; 1,10; 1,13; 2,13; 3,13; 4,1; 4,13; 5,1; 5,13; 6,1; 6,13; 7,1; 7,13; 8,1; 8,13; 9,1; 9,13; 10,1; 10,13; 11,1; 12,1; 13,1; 13,4; 13,5; 13,6; 13,7; 13,8; 13,9; 13,10; 13,11; 13,12; 13,13",
+          "sokoban": {
+            "sea": "4,4; 4,5; 4,6; 4,7; 4,8; 4,9; 4,10; 5,4; 5,5; 5,9; 5,10; 6,4; 6,7; 6,10; 7,4; 7,6; 7,8; 7,10; 8,4; 8,6; 8,7; 8,10; 9,4; 9,5; 9,9; 9,10; 10,4; 10,5; 10,6; 10,7; 10,8; 10,9; 10,10",
+            "targets": "7,7; 8,2; 8,5",
+            "energyBridges": "7,7; 9,6; 12,6",
+            "players": "11,5"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/remote_rotate.preset.js": (window) => {
+      const globalThis2 = window, self = window, module = void 0, require2 = void 0;
+      (function(root, factory) {
+        const preset = factory();
+        if (typeof module !== "undefined" && module.exports) module.exports = preset;
+        if (root) {
+          root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+          root.RAMIFIED_MINIGAME_PRESET_DATA["remote_rotate"] = preset;
+        }
+      })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
+        return {
+          "id": "remote-rotate",
+          "label": "remote rotate",
+          "lattice": "square",
+          "size": "10x10",
+          "surface": "Sigma_1,1",
+          "glue": "g1:10,9..10,S=1,8..9,N; g2:8..9,1,W=9..10,10,E",
+          "sokoban": {
+            "sea": "1,1; 1,2; 1,3; 1,4; 1,5; 1,6; 1,7; 1,10; 2,1; 2,2; 2,5; 2,6; 2,7; 2,10; 3,1; 3,2; 3,3; 3,5; 3,7; 3,10; 4,1; 4,4; 4,7; 4,10; 5,1; 5,3; 5,5; 5,6; 5,7; 5,10; 6,1; 6,2; 6,3; 6,6; 6,7; 6,10; 7,1; 7,2; 7,3; 7,4; 7,5; 7,6; 7,7; 7,10; 10,1; 10,2; 10,3; 10,4; 10,5; 10,6; 10,7",
+            "targets": "2,3; 3,6; 5,2; 6,5; 9,9",
+            "energyBridges": "3,4; 4,3; 4,5; 5,4; 8,8",
+            "players": "10,10"
+          }
+        };
+      });
+    },
+    "ramified_minigame_presets/sokoban/sokoban_square.preset.js": (window) => {
       const globalThis2 = window, self = window, module = void 0, require2 = void 0;
       (function(root, factory) {
         const preset = factory();
@@ -16660,6 +17072,13 @@
         MAX_BINDINGS,
         register,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
+        setCardVisible(pageId, cardId, visible) {
+          const session = sessions.get(String(pageId || ""));
+          if (!session || !currentCards(session).some((descriptor) => descriptor.id === cardId)) return false;
+          setCardVisibility(session, cardId, visible);
+          if (session.isOpen()) render(session);
+          return true;
+        },
         normalizeBindingString,
         bindingFromEvent,
         displayBinding,
@@ -37381,6 +37800,13 @@ ${body}`;
         MAX_BINDINGS,
         register,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
+        setCardVisible(pageId, cardId, visible) {
+          const session = sessions.get(String(pageId || ""));
+          if (!session || !currentCards(session).some((descriptor) => descriptor.id === cardId)) return false;
+          setCardVisibility(session, cardId, visible);
+          if (session.isOpen()) render(session);
+          return true;
+        },
         normalizeBindingString,
         bindingFromEvent,
         displayBinding,
@@ -49516,6 +49942,13 @@ ${body}`;
         MAX_BINDINGS,
         register,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
+        setCardVisible(pageId, cardId, visible) {
+          const session = sessions.get(String(pageId || ""));
+          if (!session || !currentCards(session).some((descriptor) => descriptor.id === cardId)) return false;
+          setCardVisibility(session, cardId, visible);
+          if (session.isOpen()) render(session);
+          return true;
+        },
         normalizeBindingString,
         bindingFromEvent,
         displayBinding,
@@ -61942,6 +62375,13 @@ ${body}`;
         MAX_BINDINGS,
         register,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
+        setCardVisible(pageId, cardId, visible) {
+          const session = sessions.get(String(pageId || ""));
+          if (!session || !currentCards(session).some((descriptor) => descriptor.id === cardId)) return false;
+          setCardVisibility(session, cardId, visible);
+          if (session.isOpen()) render(session);
+          return true;
+        },
         normalizeBindingString,
         bindingFromEvent,
         displayBinding,
@@ -70102,6 +70542,13 @@ ${body}`;
         MAX_BINDINGS,
         register,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
+        setCardVisible(pageId, cardId, visible) {
+          const session = sessions.get(String(pageId || ""));
+          if (!session || !currentCards(session).some((descriptor) => descriptor.id === cardId)) return false;
+          setCardVisibility(session, cardId, visible);
+          if (session.isOpen()) render(session);
+          return true;
+        },
         normalizeBindingString,
         bindingFromEvent,
         displayBinding,
@@ -82702,6 +83149,13 @@ ${rows.join("\\\\\n")}
         MAX_BINDINGS,
         register,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
+        setCardVisible(pageId, cardId, visible) {
+          const session = sessions.get(String(pageId || ""));
+          if (!session || !currentCards(session).some((descriptor) => descriptor.id === cardId)) return false;
+          setCardVisibility(session, cardId, visible);
+          if (session.isOpen()) render(session);
+          return true;
+        },
         normalizeBindingString,
         bindingFromEvent,
         displayBinding,
@@ -90856,7 +91310,7 @@ ${rows}
   </div>
 
   <aside class="side" id="cards">
-    <section class="card" id="input-card">
+    <section class="card" id="input-card" data-card-limit="off">
       <div class="card-head"><span class="drag-handle" title="drag card">\u22EE\u22EE</span><span class="card-head-label">Input</span><em class="toggle-icon">\u25BE</em></div>
       <div class="card-body">
         <div class="sheaf-input-toolbar">
@@ -97439,6 +97893,13 @@ ${rows}
         MAX_BINDINGS,
         register,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
+        setCardVisible(pageId, cardId, visible) {
+          const session = sessions.get(String(pageId || ""));
+          if (!session || !currentCards(session).some((descriptor) => descriptor.id === cardId)) return false;
+          setCardVisibility(session, cardId, visible);
+          if (session.isOpen()) render(session);
+          return true;
+        },
         normalizeBindingString,
         bindingFromEvent,
         displayBinding,
@@ -100183,12 +100644,16 @@ ${rows}
           cohomology: modifying && kind === "sheaf" && !!result?.cohomology?.dimensions?.length
         };
       }
+      function chartCardForScope(scope) {
+        return scope === "hodge" ? refs.hodgeCard : scope === "betti" ? refs.bettiCard : scope === "classes" ? refs.classCard : refs.cohomologyCard;
+      }
       function setChartCardVisible(scope, visible) {
-        const card = scope === "hodge" ? refs.hodgeCard : scope === "betti" ? refs.bettiCard : scope === "classes" ? refs.classCard : refs.cohomologyCard;
+        const card = chartCardForScope(scope);
         if (!card) return;
+        const wasHidden = card.hidden;
         if (scope === "hodge" && !visible && state.hodgeWide) setHodgeWide(false);
         card.hidden = !visible;
-        if (visible) openUiCard(card);
+        if (visible && wasHidden) openUiCard(card);
       }
       function openUiCard(card, options2 = {}) {
         if (!card) return;
@@ -100225,6 +100690,13 @@ ${rows}
         const available = chartRevealAvailability();
         if (!available[scope]) return;
         state.revealedCharts[scope] = !state.revealedCharts[scope];
+        if (state.revealedCharts[scope]) {
+          const card = chartCardForScope(scope);
+          if (card) {
+            const saved = window.CalculatorInputSettings?.setCardVisible?.("sheaf", card.dataset.cardSettingsId || card.id, true);
+            if (!saved) window.CalculatorCards?.setCardUserVisible?.(card, true);
+          }
+        }
         syncChartRevealControls();
         if (scope === "betti") renderBettiTableChart();
       }
@@ -146068,6 +146540,13 @@ ${arrows.join("\n")}` : "";
         MAX_BINDINGS,
         register,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
+        setCardVisible(pageId, cardId, visible) {
+          const session = sessions.get(String(pageId || ""));
+          if (!session || !currentCards(session).some((descriptor) => descriptor.id === cardId)) return false;
+          setCardVisibility(session, cardId, visible);
+          if (session.isOpen()) render(session);
+          return true;
+        },
         normalizeBindingString,
         bindingFromEvent,
         displayBinding,
@@ -196176,7 +196655,7 @@ ${arrows.join("\n")}` : "";
       if (typeof module !== "undefined" && module.exports) module.exports = presets;
       if (root) root.RAMIFIED_MINIGAME_PRESETS = presets;
     })(typeof window !== "undefined" ? window : typeof globalThis2 !== "undefined" ? globalThis2 : null, function() {
-      const defaultForEntries = [
+      const featuredDefaultEntries = [
         ["hex", "classic-hex", "center"],
         ["gomoku", "wormhole", "vertex"],
         ["go", "gomoku-big-hole", "vertex"],
@@ -196190,9 +196669,23 @@ ${arrows.join("\n")}` : "";
         ["lianliankan", "rubiks-cube-3x3x3", "center"]
       ];
       return {
-        gameOrder: defaultForEntries.map(([mode]) => mode),
-        defaultFor: Object.fromEntries(defaultForEntries.map(([mode, presetId]) => [mode, presetId])),
-        defaultDisplayFor: Object.fromEntries(defaultForEntries.map(([mode, _presetId, display]) => [mode, display])),
+        gameOrder: ["hex", "gomoku", "go", "connect-four", "2048", "reversi", "chinese-checkers", "sokoban", "fide-chess", "billiards", "lianliankan"],
+        // Player defaults are independent from the topology-focused archive defaults.
+        playerDefaults: {
+          hex: { presetId: "classic-hex", controls: { hexPieRule: false } },
+          gomoku: { presetId: "boundary-glue-board", controls: { boundaryGlueMode: "open", boundaryGlueShape: "square", gomokuSize: 15, boundaryGlueRows: 15, boundaryGlueCols: 15, gomokuBlackController: "human", gomokuWhiteController: "local-ai-challenging" } },
+          go: { presetId: "boundary-glue-board", controls: { boundaryGlueMode: "open", boundaryGlueShape: "square", gomokuSize: 19, boundaryGlueRows: 19, boundaryGlueCols: 19, goKomi: 6.5 } },
+          "connect-four": { presetId: "connect-four-6x7", controls: { connectFourFall: "S", connectFourRedController: "human", connectFourYellowController: "local-ai-challenging" } },
+          "2048": { presetId: "boundary-glue-board", controls: { boundaryGlueMode: "open", boundaryGlueShape: "square", gomokuSize: 4, boundaryGlueRows: 4, boundaryGlueCols: 4 } },
+          reversi: { presetId: "boundary-glue-board", controls: { boundaryGlueMode: "open", boundaryGlueShape: "square", gomokuSize: 8, boundaryGlueRows: 8, boundaryGlueCols: 8 } },
+          "chinese-checkers": { presetId: "small-classic", humanColor: "black", controls: { chineseCheckersJumpRule: "unlimited" } },
+          "fide-chess": { presetId: "fide-chess-8x8", categories: { game: "fide-chess-8x8", "kingless-puzzle": "n-queens-puzzle" } },
+          billiards: { presetId: "half-glued", controls: { billiardsRules: "solo" } },
+          lianliankan: { presetId: "boundary-glue-board", controls: { boundaryGlueMode: "open", boundaryGlueShape: "square", gomokuSize: 6, boundaryGlueRows: 6, boundaryGlueCols: 6, lianliankanTileSet: "chinese" } }
+        },
+        featuredDefaultFor: Object.fromEntries(featuredDefaultEntries.map(([mode, presetId]) => [mode, presetId])),
+        defaultFor: Object.fromEntries(featuredDefaultEntries.map(([mode, presetId]) => [mode, presetId])),
+        defaultDisplayFor: Object.fromEntries(featuredDefaultEntries.map(([mode, _presetId, display]) => [mode, display])),
         presets: [
           {
             "gameTypes": [
@@ -196206,6 +196699,7 @@ ${arrows.join("\n")}` : "";
               "Billiard"
             ],
             "id": "boundary-glue-board",
+            "fideChessVariant": "game",
             "label": "boundary glue board",
             "key": "boundary_glue_board",
             "file": "boundary_glue_board.preset.js"
@@ -196215,6 +196709,7 @@ ${arrows.join("\n")}` : "";
               "FIDE Chess"
             ],
             "id": "fide-chess-8x8",
+            "fideChessVariant": "game",
             "label": "FIDE chess 8x8",
             "key": "fide_chess_8x8",
             "file": "fide_chess_8x8.preset.js"
@@ -196224,6 +196719,7 @@ ${arrows.join("\n")}` : "";
               "FIDE Chess"
             ],
             "id": "between-two-fires",
+            "fideChessVariant": "game",
             "label": "between two fires",
             "key": "between_two_fires",
             "wrappedView": { "x": "repeat", "y": "repeat" },
@@ -196234,6 +196730,7 @@ ${arrows.join("\n")}` : "";
               "FIDE Chess"
             ],
             "id": "n-queens-puzzle",
+            "fideChessVariant": "kingless-puzzle",
             "label": "N queens puzzle",
             "key": "n_queens_puzzle",
             "file": "n_queens_puzzle.preset.js"
@@ -196243,6 +196740,7 @@ ${arrows.join("\n")}` : "";
               "FIDE Chess"
             ],
             "id": "n-queens-torus-puzzle",
+            "fideChessVariant": "kingless-puzzle",
             "label": "N queens puzzle on torus",
             "key": "n_queens_torus_puzzle",
             "wrappedView": { "x": "repeat", "y": "repeat" },
@@ -196602,6 +197100,16 @@ ${arrows.join("\n")}` : "";
           },
           {
             "gameTypes": [
+              "Chinese Checkers"
+            ],
+            "id": "small-classic",
+            "label": "small classic",
+            "labelZh": "\u5C0F\u578B\u7ECF\u5178",
+            "key": "small_classic",
+            "file": "small_classic.preset.js"
+          },
+          {
+            "gameTypes": [
               "Gomoku",
               "Go",
               "Chinese Checkers"
@@ -196650,7 +197158,7 @@ ${arrows.join("\n")}` : "";
             "id": "classic-fans",
             "label": "classic_fans",
             "key": "classic_fans",
-            "file": "classic_fans.preset.js"
+            "file": "sokoban/classic_fans.preset.js"
           },
           {
             "gameTypes": [
@@ -196659,7 +197167,7 @@ ${arrows.join("\n")}` : "";
             "id": "pedestrian",
             "label": "Pedestrian",
             "key": "pedestrian",
-            "file": "pedestrian.preset.js"
+            "file": "sokoban/pedestrian.preset.js"
           },
           {
             "gameTypes": [
@@ -196668,7 +197176,7 @@ ${arrows.join("\n")}` : "";
             "id": "classic-fans-glue",
             "label": "classic_fans_glue",
             "key": "classic_fans_glue",
-            "file": "classic_fans_glue.preset.js"
+            "file": "sokoban/classic_fans_glue.preset.js"
           },
           {
             "gameTypes": [
@@ -196677,7 +197185,7 @@ ${arrows.join("\n")}` : "";
             "id": "ice-test",
             "label": "ice_test",
             "key": "ice_test",
-            "file": "ice_test.preset.js"
+            "file": "sokoban/ice_test.preset.js"
           },
           {
             "gameTypes": [
@@ -196686,7 +197194,7 @@ ${arrows.join("\n")}` : "";
             "id": "curling-on-cube",
             "label": "curling on Cube",
             "key": "curling_on_cube",
-            "file": "curling_on_cube.preset.js"
+            "file": "sokoban/curling_on_cube.preset.js"
           },
           {
             "gameTypes": [
@@ -196695,7 +197203,7 @@ ${arrows.join("\n")}` : "";
             "id": "easy-energy-bridge",
             "label": "easy energy bridge",
             "key": "easy_energy_bridge",
-            "file": "easy_energy_bridge.preset.js"
+            "file": "sokoban/easy_energy_bridge.preset.js"
           },
           {
             "gameTypes": [
@@ -196704,7 +197212,7 @@ ${arrows.join("\n")}` : "";
             "id": "energy-test",
             "label": "energy_test",
             "key": "energy_test",
-            "file": "energy_test.preset.js"
+            "file": "sokoban/energy_test.preset.js"
           },
           {
             "gameTypes": [
@@ -196713,7 +197221,7 @@ ${arrows.join("\n")}` : "";
             "id": "cross",
             "label": "cross",
             "key": "cross",
-            "file": "cross.preset.js"
+            "file": "sokoban/cross.preset.js"
           },
           {
             "gameTypes": [
@@ -196722,7 +197230,7 @@ ${arrows.join("\n")}` : "";
             "id": "expand",
             "label": "expand",
             "key": "expand",
-            "file": "expand.preset.js"
+            "file": "sokoban/expand.preset.js"
           },
           {
             "gameTypes": [
@@ -196731,7 +197239,7 @@ ${arrows.join("\n")}` : "";
             "id": "expand2",
             "label": "expand2",
             "key": "expand2",
-            "file": "expand2.preset.js"
+            "file": "sokoban/expand2.preset.js"
           },
           {
             "gameTypes": [
@@ -196740,7 +197248,7 @@ ${arrows.join("\n")}` : "";
             "id": "expand3",
             "label": "expand3",
             "key": "expand3",
-            "file": "expand3.preset.js"
+            "file": "sokoban/expand3.preset.js"
           },
           {
             "gameTypes": [
@@ -196749,7 +197257,7 @@ ${arrows.join("\n")}` : "";
             "id": "bridges-blocking",
             "label": "bridges_blocking",
             "key": "bridges_blocking",
-            "file": "bridges_blocking.preset.js"
+            "file": "sokoban/bridges_blocking.preset.js"
           },
           {
             "gameTypes": [
@@ -196758,7 +197266,7 @@ ${arrows.join("\n")}` : "";
             "id": "orbox-b",
             "label": "Orbox B",
             "key": "orbox_b",
-            "file": "orbox_b.preset.js"
+            "file": "sokoban/orbox_b.preset.js"
           },
           {
             "gameTypes": [
@@ -196767,7 +197275,7 @@ ${arrows.join("\n")}` : "";
             "id": "orbox-b-glued",
             "label": "Orbox B glued",
             "key": "orbox_b_glued",
-            "file": "orbox_b_glued.preset.js"
+            "file": "sokoban/orbox_b_glued.preset.js"
           },
           {
             "gameTypes": [
@@ -196776,7 +197284,7 @@ ${arrows.join("\n")}` : "";
             "id": "loop",
             "label": "loop",
             "key": "loop",
-            "file": "loop.preset.js"
+            "file": "sokoban/loop.preset.js"
           },
           {
             "gameTypes": [
@@ -196785,7 +197293,7 @@ ${arrows.join("\n")}` : "";
             "id": "curling",
             "label": "curling",
             "key": "curling",
-            "file": "curling.preset.js"
+            "file": "sokoban/curling.preset.js"
           },
           {
             "gameTypes": [
@@ -196794,7 +197302,7 @@ ${arrows.join("\n")}` : "";
             "id": "remote-rotate",
             "label": "remote rotate",
             "key": "remote_rotate",
-            "file": "remote_rotate.preset.js"
+            "file": "sokoban/remote_rotate.preset.js"
           },
           {
             "gameTypes": [
@@ -196803,7 +197311,7 @@ ${arrows.join("\n")}` : "";
             "id": "remote-control",
             "label": "remote control",
             "key": "remote_control",
-            "file": "remote_control.preset.js"
+            "file": "sokoban/remote_control.preset.js"
           },
           {
             "gameTypes": [
@@ -196812,13 +197320,14 @@ ${arrows.join("\n")}` : "";
             "id": "islands",
             "label": "islands",
             "key": "islands",
-            "file": "islands.preset.js"
+            "file": "sokoban/islands.preset.js"
           },
           {
             "gameTypes": [
               "FIDE Chess"
             ],
             "id": "knights-on-rubik-s-cube",
+            "fideChessVariant": "kingless-puzzle",
             "label": "knights on Rubik's Cube",
             "key": "knights_on_rubik_s_cube",
             "file": "knights_on_rubik_s_cube.preset.js"
@@ -196828,6 +197337,7 @@ ${arrows.join("\n")}` : "";
               "FIDE Chess"
             ],
             "id": "queens-on-double-cover",
+            "fideChessVariant": "kingless-puzzle",
             "label": "queens on double cover",
             "key": "queens_on_double_cover",
             "file": "queens_on_double_cover.preset.js"
@@ -198269,6 +198779,13 @@ ${arrows.join("\n")}` : "";
         MAX_BINDINGS,
         register,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
+        setCardVisible(pageId, cardId, visible) {
+          const session = sessions.get(String(pageId || ""));
+          if (!session || !currentCards(session).some((descriptor) => descriptor.id === cardId)) return false;
+          setCardVisibility(session, cardId, visible);
+          if (session.isOpen()) render(session);
+          return true;
+        },
         normalizeBindingString,
         bindingFromEvent,
         displayBinding,
@@ -208387,6 +208904,7 @@ ${arrows.join("\n")}` : "";
           label: "",
           gameTypes: ["2048"]
         },
+        exportFideChessVariant: "",
         exportPresetCustomGroups: []
       };
       const refs = {};
@@ -210792,6 +211310,7 @@ ${arrows.join("\n")}` : "";
           label: metadata13.label,
           ...metadata13.labelZh ? { labelZh: metadata13.labelZh } : {},
           ...metadata13.wrappedView ? { wrappedView: metadata13.wrappedView } : {},
+          ...metadata13.fideChessVariant ? { fideChessVariant: metadata13.fideChessVariant } : {},
           lattice: state.lattice,
           rows: state.rows,
           cols: state.cols,
@@ -210816,7 +211335,8 @@ ${arrows.join("\n")}` : "";
           id: metadata13.id,
           label: metadata13.label,
           ...metadata13.labelZh ? { labelZh: metadata13.labelZh } : {},
-          ...metadata13.wrappedView ? { wrappedView: metadata13.wrappedView } : {}
+          ...metadata13.wrappedView ? { wrappedView: metadata13.wrappedView } : {},
+          ...metadata13.fideChessVariant ? { fideChessVariant: metadata13.fideChessVariant } : {}
         } : {};
         compact.lattice = state.lattice;
         compact.size = `${state.rows}x${state.cols}`;
@@ -210874,7 +211394,8 @@ ${arrows.join("\n")}` : "";
           ...metadata13.labelZh ? { labelZh: metadata13.labelZh } : {},
           key: metadata13.key,
           ...metadata13.wrappedView ? { wrappedView: metadata13.wrappedView } : {},
-          file: `${metadata13.key}.preset.js`
+          ...metadata13.fideChessVariant ? { fideChessVariant: metadata13.fideChessVariant } : {},
+          file: `${metadata13.gameTypes.includes("Sokoban") ? "sokoban/" : ""}${metadata13.key}.preset.js`
         };
       }
       function knotPresetPayloadForCurrentLattice(preset) {
@@ -210943,7 +211464,7 @@ ${arrows.join("\n")}` : "";
           const file = String(entry && entry.file || `${key}.preset.js`).trim();
           const label = String(entry && (entry.label || id) || "").trim();
           const gameTypes = gameTypesFromPresetLike(entry);
-          return id && key && file && label && gameTypes.length ? { id, key, file, label, gameTypes } : null;
+          return id && key && file && label && gameTypes.length ? { id, key, file, label, gameTypes, fideChessVariant: normalizedExportChessVariant(entry.fideChessVariant) } : null;
         }).filter(Boolean);
       }
       function syncMinigameTypeOptions() {
@@ -234798,6 +235319,7 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         const format = exportImportFormatForPayload(payload, source, sourceKind, type);
         const gameTypes = metadata13.gameTypes.length ? metadata13.gameTypes : ["2048"];
         state.exportPresetCustomGroups = type === EXPORT_TYPES.MINIGAME ? gameTypes.slice() : [];
+        state.exportFideChessVariant = metadata13.fideChessVariant || "";
         if (refs.exportType) refs.exportType.value = type;
         if (refs.exportFormat) refs.exportFormat.value = format;
         if (refs.exportPresetAdvanced) {
@@ -234865,7 +235387,8 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
           label,
           ...labelZh ? { labelZh } : {},
           ...wrappedView ? { wrappedView } : {},
-          gameTypes: groups
+          gameTypes: groups,
+          fideChessVariant: normalizedExportChessVariant(registryMetadata?.fideChessVariant || source?.fideChessVariant || payload?.fideChessVariant)
         };
       }
       function exportGameTypeForImportedMinigameMode(value) {
@@ -235744,6 +236267,15 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         const normalized = normalizedExportWrappedView(profile);
         return { x: normalized ? normalized.x || "" : "", y: normalized ? normalized.y || "" : "" };
       }
+      function normalizedExportChessVariant(value) {
+        return value === "game" || value === "kingless-puzzle" ? value : "";
+      }
+      function exportChessVariant() {
+        const pieces = presetPiecesForExport().filter((piece) => ["king", "queen", "rook", "bishop", "knight", "pawn"].includes(piece.kind || piece.value));
+        if (!pieces.length) return state.exportFideChessVariant || "game";
+        const sides = new Set(pieces.filter((piece) => (piece.kind || piece.value) === "king").map((piece) => piece.side || piece.color));
+        return sides.has("white") && sides.has("black") ? state.exportFideChessVariant || "game" : "kingless-puzzle";
+      }
       function currentExportPresetMetadata() {
         const defaults = defaultExportPresetMetadata();
         const rawLabel = refs.exportPresetLabel && refs.exportPresetLabel.value.trim() ? refs.exportPresetLabel.value.trim() : defaults.label;
@@ -235763,7 +236295,8 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
           label: rawLabel,
           ...labelZh ? { labelZh } : {},
           ...wrappedView ? { wrappedView } : {},
-          gameTypes
+          gameTypes,
+          ...gameTypes.includes("FIDE Chess") ? { fideChessVariant: exportChessVariant() } : {}
         };
       }
       function updateExportTestLink(type = normalizeExportType(refs.exportType && refs.exportType.value)) {
@@ -237373,6 +237906,7 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         state.gluedEdges = importGluedEdges({ gluedEdges: options2.gluedEdges || options2.glue || [] }, rows, cols);
         clearGluedBoundaryHover();
         state.presetPieces = importPresetPieces({ pieceSets: options2.pieceSets, pieces: options2.pieces || [] }, rows, cols);
+        state.exportFideChessVariant = normalizedExportChessVariant(options2.fideChessVariant);
         state.sokoban = importSokobanDecorations(options2, rows, cols);
         pruneInputHoles();
         pruneLianliankanEmptyCells();
@@ -243261,6 +243795,13 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         MAX_BINDINGS,
         register,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
+        setCardVisible(pageId, cardId, visible) {
+          const session = sessions.get(String(pageId || ""));
+          if (!session || !currentCards(session).some((descriptor) => descriptor.id === cardId)) return false;
+          setCardVisibility(session, cardId, visible);
+          if (session.isOpen()) render(session);
+          return true;
+        },
         normalizeBindingString,
         bindingFromEvent,
         displayBinding,
@@ -250097,6 +250638,13 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         MAX_BINDINGS,
         register,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
+        setCardVisible(pageId, cardId, visible) {
+          const session = sessions.get(String(pageId || ""));
+          if (!session || !currentCards(session).some((descriptor) => descriptor.id === cardId)) return false;
+          setCardVisibility(session, cardId, visible);
+          if (session.isOpen()) render(session);
+          return true;
+        },
         normalizeBindingString,
         bindingFromEvent,
         displayBinding,

@@ -1,4 +1,4 @@
-// Save this file as ramified_minigame_presets/cross.preset.js
+// Save this file as ramified_minigame_presets/sokoban/cross.preset.js
 // Add this entry to ramified_minigame_presets/presets.js:
 // {
 //   "gameTypes": [
@@ -7,7 +7,7 @@
 //   "id": "cross",
 //   "label": "cross",
 //   "key": "cross",
-//   "file": "cross.preset.js"
+//   "file": "sokoban/cross.preset.js"
 // };
 // Store gameTypes in presets.js only; do not repeat them in this preset file.
 (function(root, factory) {

@@ -1,4 +1,4 @@
-// Save this file as ramified_minigame_presets/remote_control.preset.js
+// Save this file as ramified_minigame_presets/sokoban/remote_control.preset.js
 // Add this entry to ramified_minigame_presets/presets.js:
 // {
 //   "gameTypes": [
@@ -7,7 +7,7 @@
 //   "id": "remote-control",
 //   "label": "remote control",
 //   "key": "remote_control",
-//   "file": "remote_control.preset.js"
+//   "file": "sokoban/remote_control.preset.js"
 // },
 // Store gameTypes in presets.js only; do not repeat them in this preset file.
 (function(root, factory) {

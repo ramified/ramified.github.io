@@ -1,4 +1,4 @@
-// Save this file as ramified_minigame_presets/classic_fans_glue.preset.js
+// Save this file as ramified_minigame_presets/sokoban/classic_fans_glue.preset.js
 // Add this entry to ramified_minigame_presets/presets.js:
 // {
 //   "gameTypes": [
@@ -7,7 +7,7 @@
 //   "id": "classic-fans-glue",
 //   "label": "classic_fans_glue",
 //   "key": "classic_fans_glue",
-//   "file": "classic_fans_glue.preset.js"
+//   "file": "sokoban/classic_fans_glue.preset.js"
 // }
 // Store gameTypes in presets.js only; do not repeat them in this preset file.
 (function(root, factory) {

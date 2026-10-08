@@ -4683,6 +4683,9 @@ function makeElement(id, extra = {}) {
     getAttribute(name) {
       return this.attributes[name] || null;
     },
+    removeAttribute(name) {
+      delete this.attributes[name];
+    },
     matches(selector) {
       return selector === 'select[data-color]' && this.tagName === 'SELECT' && !!this.dataset.color;
     },

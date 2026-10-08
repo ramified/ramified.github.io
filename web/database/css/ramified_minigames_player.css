@@ -57,6 +57,8 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
   display: flex; position: static; flex-wrap: wrap; gap: var(--player-small-gap); margin: 0;
 }
 .ramified-player #fullscreen-action-shell[hidden] { display: none !important; }
+/* Result actions must stay above an expanded direction pad, including narrow frames. */
+.ramified-player #canvas-start-overlay { z-index: 20; }
 .ramified-player:not(.canvas-fullscreen-active) #fullscreen-exit,
 .ramified-player:not(.canvas-fullscreen-active) #fullscreen-settings-exit { display: none; }
 .ramified-player #fullscreen-exit,
@@ -121,6 +123,18 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
 #player-home > .btn, #player-game-menu > .btn { width: 100%; }
 #player-confirm { text-align: center; }
 #player-confirm > p { max-width: 720px; margin-inline: auto; }
+#player-level-list {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+  gap: var(--player-gap); max-width: 720px; margin-inline: auto;
+}
+.ramified-player #player-level-list > .player-level {
+  display: grid; justify-items: center; align-content: center; gap: 4px;
+  min-height: 80px; padding: 8px; background: transparent; color: var(--text);
+  border: 1px solid var(--border);
+}
+.ramified-player #player-level-list > .player-level[data-completed="true"] { border-color: var(--accent); }
+.player-level-number { font-size: 1.4rem; }
+.player-level-state { font-size: 0.75rem; }
 #player-games {
   display: grid; grid-template-columns: var(--player-icon-size) minmax(0, 1fr) var(--player-icon-size);
   gap: var(--player-gap); align-items: center; overflow: hidden;

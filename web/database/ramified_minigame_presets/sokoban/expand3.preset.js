@@ -1,13 +1,13 @@
-// Save this file as ramified_minigame_presets/loop.preset.js
+// Save this file as ramified_minigame_presets/sokoban/expand3.preset.js
 // Add this entry to ramified_minigame_presets/presets.js:
 // {
 //   "gameTypes": [
 //     "Sokoban"
 //   ],
-//   "id": "loop",
-//   "label": "loop",
-//   "key": "loop",
-//   "file": "loop.preset.js"
+//   "id": "expand3",
+//   "label": "expand3",
+//   "key": "expand3",
+//   "file": "sokoban/expand3.preset.js"
 // },
 // Store gameTypes in presets.js only; do not repeat them in this preset file.
 (function(root, factory) {
@@ -15,21 +15,20 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = preset;
   if (root) {
     root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-    root.RAMIFIED_MINIGAME_PRESET_DATA["loop"] = preset;
+    root.RAMIFIED_MINIGAME_PRESET_DATA["expand3"] = preset;
   }
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
   return {
-    "id": "loop",
-    "label": "loop",
-    "lattice": "square",
-    "size": "2x5",
-    "surface": "Sigma_0,2",
-    "glue": "g0:1..2,5,E=1..2,1,W",
+    "id": "expand3",
+    "label": "expand3",
+    "lattice": "hexagonal",
+    "size": "7x7",
+    "surface": "Sigma_0,1",
+    "removed": "1,1; 1,2; 1,7; 2,1; 2,7; 3,1; 5,1; 6,1; 6,7; 7,1; 7,2; 7,7",
     "sokoban": {
-      "targets": "2,2",
-      "ice": "1,1; 1,2; 1,3; 1,4; 1,5; 2,1; 2,2; 2,3; 2,4; 2,5",
-      "boxes": "2,4",
-      "players": "1,3"
+      "targets": "1,3; 1,6; 4,1; 4,7; 7,3; 7,6",
+      "energyBridges": "3,4; 3,5; 4,3; 4,5; 5,4; 5,5",
+      "players": "4,4"
     }
   };
 });

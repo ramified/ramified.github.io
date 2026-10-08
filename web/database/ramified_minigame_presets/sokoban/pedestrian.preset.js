@@ -1,4 +1,4 @@
-// Save this file as ramified_minigame_presets/pedestrian.preset.js
+// Save this file as ramified_minigame_presets/sokoban/pedestrian.preset.js
 // Add this entry to ramified_minigame_presets/presets.js:
 // {
 //   "gameTypes": [
@@ -7,7 +7,7 @@
 //   "id": "pedestrian",
 //   "label": "Pedestrian",
 //   "key": "pedestrian",
-//   "file": "pedestrian.preset.js"
+//   "file": "sokoban/pedestrian.preset.js"
 // },
 // Store gameTypes in presets.js only; do not repeat them in this preset file.
 (function(root, factory) {

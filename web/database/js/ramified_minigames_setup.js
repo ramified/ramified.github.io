@@ -712,6 +712,7 @@
   let playerDefaults = {};
   let playerSetupCommitting = false;
   let playerSetupError = false;
+  let playerSokobanCompleted = new Set();
   let importedPreset = null;
   let hexCoverOffset = { x: HEX_COVER_OFFSET_DEFAULT, y: HEX_COVER_OFFSET_DEFAULT };
   let hexCoverOffsetPresetId = '';
@@ -4818,6 +4819,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     } else {
       game = beginSelectedGame(previous.preset || selectedPreset(), options);
     }
+    if (isSokobanGame(game) && previous.playerSokobanLevelId) game.playerSokobanLevelId = previous.playerSokobanLevelId;
     if (game.phase !== 'gameover') game.phase = 'ready';
     clearUndoHistory();
     clearDebugExport();
@@ -10378,6 +10380,10 @@ function handleCanvasStartBeginClick(event) {
   if (event && event.preventDefault) event.preventDefault();
   const action = canvasPromptAction || 'begin';
   hideCanvasStartPrompt();
+  if (action === 'sokoban-next' || action === 'sokoban-levels') {
+    document.dispatchEvent(new CustomEvent('ramified-player-sokoban-action', { detail: { action } }));
+    return;
+  }
   if (action === 'restart') {
     resetCurrentGameFromShortcut();
     return;
@@ -10400,6 +10406,10 @@ function handleCanvasStartBeginClick(event) {
 function handleCanvasStartCloseClick(event) {
   if (event && event.preventDefault) event.preventDefault();
   if (!game || onlineIsInRoom() || !['gameover', 'complete'].includes(game.phase)) return;
+  if (playerShellEnabled && game.playerSokobanLevelId) {
+    document.dispatchEvent(new CustomEvent('ramified-player-sokoban-action', { detail: { action: 'sokoban-levels' } }));
+    return;
+  }
   localResultPromptDismissed = true;
   hideCanvasStartPrompt();
   if (refs.canvas) refs.canvas.focus();
@@ -10459,16 +10469,18 @@ function showCanvasStartPrompt(options = {}) {
     return;
   }
   const copy = options.copy || canvasStartPromptCopy(game);
-  if (refs.canvasStartTitle) refs.canvasStartTitle.textContent = tr(copy.title);
-  if (refs.canvasStartContext) refs.canvasStartContext.textContent = tr(copy.context);
-  if (refs.canvasStartRules) refs.canvasStartRules.textContent = tr(copy.rules);
+  const promptText = value => copy.localized ? value : tr(value);
+  if (copy.localized) [refs.canvasStartTitle, refs.canvasStartBegin, refs.canvasStartClose].filter(Boolean).forEach(node => node.removeAttribute('data-i18n'));
+  if (refs.canvasStartTitle) refs.canvasStartTitle.textContent = promptText(copy.title);
+  if (refs.canvasStartContext) refs.canvasStartContext.textContent = promptText(copy.context);
+  if (refs.canvasStartRules) refs.canvasStartRules.textContent = promptText(copy.rules);
   if (refs.canvasStartBegin) {
-    refs.canvasStartBegin.textContent = tr(copy.action || 'begin the game');
+    refs.canvasStartBegin.textContent = promptText(copy.action || 'begin the game');
     refs.canvasStartBegin.disabled = false;
   }
   if (refs.canvasStartClose) {
     refs.canvasStartClose.hidden = !options.dismissible;
-    refs.canvasStartClose.textContent = tr(copy.closeAction || 'view completed board');
+    refs.canvasStartClose.textContent = promptText(copy.closeAction || 'view completed board');
   }
   canvasPromptAction = options.action || 'begin';
   refs.canvasStartOverlay.hidden = false;
@@ -10481,7 +10493,7 @@ function refreshCanvasPromptForLanguage() {
     syncOnlineCanvasPrompt();
     return;
   }
-  if (canvasPromptAction === 'restart') {
+  if (canvasPromptAction === 'restart' || canvasPromptAction.startsWith('sokoban-')) {
     showLocalReplayPrompt();
     return;
   }
@@ -10496,6 +10508,25 @@ function showLocalReplayPrompt() {
     || currentAnimation
     || localResultPromptDismissed
     ) return;
+    if (playerShellEnabled && isSokobanGame(game) && game.playerSokobanLevelId && !playerSetupSession && !playerMoveIsPending()) {
+      const levels = api.player.sokobanLevels();
+      const index = levels.findIndex(level => level.id === game.playerSokobanLevelId);
+      if (index >= 0) {
+        const hasNext = index + 1 < levels.length;
+        const allCompleted = levels.every(level => playerSokobanCompleted.has(level.id));
+        showCanvasStartPrompt({ force: true, action: hasNext ? 'sokoban-next' : 'sokoban-levels', dismissible: hasNext,
+          copy: {
+            localized: true,
+            title: allCompleted ? tk('player.allLevelsComplete', 'All levels complete') : tk('player.levelComplete', 'Level {{number}} complete', { number: index + 1 }),
+            context: tk('player.sokobanResult', '{{moves}} moves · {{pushes}} pushes', { moves: game.moves || 0, pushes: game.pushes || 0 }),
+            rules: '',
+            action: hasNext ? tk('player.nextLevel', 'Next level') : tk('player.chooseLevel', 'Choose a level'),
+            closeAction: tk('player.chooseLevel', 'Choose a level')
+          }
+        });
+        return;
+      }
+    }
     showCanvasStartPrompt({
       force: true,
       action: 'restart',
@@ -12202,7 +12233,7 @@ function restoreHistorySnapshot(snapshot, status, info) {
   if (isGoGame(game) && game.scoringReview) activateGoScoringReviewControls();
     // A finished Hex round opens a restart overlay.  Restoring a pre-win
     // snapshot must close that overlay before redrawing the active board.
-  if (isHexGame(game) && !['gameover', 'complete'].includes(game.phase)) hideCanvasStartPrompt();
+  if ((isHexGame(game) || isSokobanGame(game)) && !['gameover', 'complete'].includes(game.phase)) hideCanvasStartPrompt();
   syncStatus(status, info, phaseBadge(game.phase));
   showLocalReplayPrompt();
   render();
@@ -24410,8 +24441,8 @@ function initializeFideChessOpening(state) {
       syncControls();
       return;
     }
-    sokobanMoveSession = start.session;
-    const firstStep = nextSokobanSessionStep(game, sokobanMoveSession);
+    const moveSession = start.session;
+    const firstStep = nextSokobanSessionStep(game, moveSession);
     if (!firstStep.event) {
       playSoundEffect('sokoban-blocked');
       const message = firstStep.message || 'move rejected';
@@ -24424,6 +24455,8 @@ function initializeFideChessOpening(state) {
       return;
     }
     pushUndoSnapshot(`Sokoban move ${game.moves + 1}: ${dirLabel(dir, game.preset)}`);
+    // History must contain the idle state, not the movement session about to start.
+    sokobanMoveSession = moveSession;
     playSoundEffect(Number(firstStep.event.pushes) > 0 ? 'sokoban-push' : 'sokoban-step');
     clearNoMoveTrial();
     initializeSokobanMoveCounters(game, game);
@@ -30595,6 +30628,7 @@ function cloneGameState(source) {
   if (isSokobanGame(source)) {
     return {
       gameMode: GAME_MODES.SOKOBAN,
+      ...(source.playerSokobanLevelId ? { playerSokobanLevelId: source.playerSokobanLevelId } : {}),
       preset: source.preset,
       phase: source.phase,
       removed: new Set(source.removed),
@@ -34495,6 +34529,7 @@ function restorePlayerBoardPreview() {
 function capturePlayerSetupSession() {
   return {
     game, undoStack, redoStack, importedPreset,
+    status: statusSnapshot(),
     boardSettings: new Map(),
     snapshot: api.player.snapshot(),
     controls: Array.from(new Set(Object.values(refs)))
@@ -34559,7 +34594,7 @@ function cancelPlayerSetup() {
   playerSetupSession = null;
   clearSetupAlert();
   render();
-  syncStatusForCurrentGame();
+  syncStatus(previous.status.status, previous.status.info, previous.status.badge);
   syncControls();
   if (isHexGame(game) && game.hexTopologyState === 'pending') scheduleHexHomologyRequest(game);
 }
@@ -34576,11 +34611,18 @@ const api = {
         canPrepare: presetCatalogReady && !selectionLoading && !!game && !playerMoveIsPending(),
         canStart: presetCatalogReady && !selectionLoading && !!game && !playerSetupError && !refs.begin?.disabled,
         setupError: playerSetupError,
+        sokobanLevelId: isSokobanGame(game) && !playerSetupSession ? game.playerSokobanLevelId || null : null,
+        solved: isSokobanGame(game) && game.phase === 'gameover' && game.winner === 'solved' && !playerSetupSession && !playerMoveIsPending(),
         mode: selectedGameMode(),
         presetId: refs.select && refs.select.value
       };
     },
     games() { return orderedCatalogGameModes().map((mode) => ({ mode, label: localizedGameName(mode) })); },
+    sokobanLevels() { return presetRegistry.filter(entry => entry.gameTypes.includes('Sokoban')).map(entry => ({ id: entry.id })); },
+    setSokobanProgress(completed) {
+      playerSokobanCompleted = new Set(completed);
+      if (canvasPromptAction.startsWith('sokoban-')) showLocalReplayPrompt();
+    },
     presets() {
       const presets = presetListForMode();
       if (importedPreset && presetMatchesGameMode(importedPreset)) presets.push(importedPreset);
@@ -34590,9 +34632,10 @@ const api = {
       const defaults = playerDefaults[mode] || {};
       return defaults.categories?.[category] || defaults.presetId || defaultPresetIdForMode(mode);
     },
-    async beginSetup(mode, { category } = {}) {
+    async beginSetup(mode, { category, presetId } = {}) {
       if (onlineIsInRoom() || !presetCatalogReady || selectionLoading || playerMoveIsPending()) return false;
       if (!orderedCatalogGameModes().includes(mode)) return false;
+      if (presetId && !presetListForMode(mode).some(preset => preset.id === presetId)) return false;
       cancelPlayerSetup();
       playerSetupSession = capturePlayerSetupSession();
       try {
@@ -34602,7 +34645,7 @@ const api = {
         applyDefaultPlacementDisplayForMode();
         applyDefaultPlacementPieceSizeForMode();
         const defaults = playerDefaults[mode] || {};
-        syncPresetSelectOptions(api.player.defaultPreset(mode, category));
+        syncPresetSelectOptions(presetId || api.player.defaultPreset(mode, category));
         chineseCheckersSelectedPlayers = null;
         chineseCheckersSelectedPlayersPresetKey = '';
         chineseCheckersControllerPresetKey = '';
@@ -34624,12 +34667,15 @@ const api = {
       }
     },
     cancelSetup: cancelPlayerSetup,
-    commitSetup() {
+    commitSetup({ sokobanLevelId } = {}) {
       if (!playerSetupSession || selectionLoading || playerSetupError || onlineIsInRoom()) return false;
       playerSetupCommitting = true;
       try {
         beginGameFromUi();
         if (!game || game.phase === 'setup') return false;
+        if (playerShellEnabled && isSokobanGame(game) && sokobanLevelId === game.preset.id && api.player.sokobanLevels().some(level => level.id === sokobanLevelId)) {
+          game.playerSokobanLevelId = sokobanLevelId;
+        }
         playerSetupSession = null;
         syncControls();
         return true;
@@ -34678,6 +34724,7 @@ const api = {
       return {
         version: 1,
         payload: debugExportPayload(),
+        ...(game.playerSokobanLevelId ? { sokobanLevelId: game.playerSokobanLevelId } : {}),
         controllers: [refs.gomokuBlackController, refs.gomokuWhiteController, refs.connectFourRedController, refs.connectFourYellowController]
           .filter(Boolean).map((control) => [control.id, control.value]),
         checkersControllers: Array.from(chineseCheckersControllers),
@@ -34688,6 +34735,10 @@ const api = {
       if (!saved || saved.version !== 1 || !saved.payload || onlineIsInRoom()) throw new Error('Invalid player save');
       await ensureModeDependencies(saved.payload.gameMode);
       const imported = gameStateFromDebugImportPayload(saved.payload);
+      if (playerShellEnabled && isSokobanGame(imported.state) && api.player.sokobanLevels().some(level => level.id === saved.sokobanLevelId)) {
+        imported.state.playerSokobanLevelId = saved.sokobanLevelId;
+        imported.state.preset.id = saved.sokobanLevelId;
+      }
       applyImportedDebugState(imported, { recordHistory: false, focus: false });
       undoStack = [];
       redoStack = [];

@@ -2,6 +2,19 @@
   'use strict';
 
   const pairs = {
+    'player.chooseLevel': ['Choose a level', '选择关卡'],
+    'player.sokobanLevels': ['Sokoban levels', '推箱子关卡'],
+    'player.levelCompleted': ['Completed', '已通关'],
+    'player.levelAvailable': ['Available', '可游玩'],
+    'player.levelLocked': ['Locked', '未解锁'],
+    'player.levelLabel': ['Level {{number}} — {{status}}', '第 {{number}} 关，{{status}}'],
+    'player.levelLoading': ['Loading level…', '正在加载关卡…'],
+    'player.levelLoadError': ['The level could not be loaded. Select it to retry, or go back. Your previous game is unchanged.', '关卡加载失败，请重新选择以重试，或返回。原来的游戏仍然保留。'],
+    'player.levelSaveError': ['Level progress could not be saved in this browser. Keep this tab open.', '当前浏览器无法保存关卡进度，请保留此页面。'],
+    'player.levelComplete': ['Level {{number}} complete', '第 {{number}} 关通关'],
+    'player.allLevelsComplete': ['All levels complete', '全部通关'],
+    'player.sokobanResult': ['{{moves}} moves · {{pushes}} pushes', '{{moves}} 步 · {{pushes}} 次推动'],
+    'player.nextLevel': ['Next level', '下一关'],
     'player.chessGame': ['Game', '对局'],
     'player.chessPuzzle': ['Puzzle', '谜题'],
     'player.editBalls': ['Arrange balls', '摆球'],

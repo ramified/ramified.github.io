@@ -31,7 +31,7 @@
     red: { label: 'status.red', previous: 'player.previousRedController', next: 'player.nextRedController' },
     yellow: { label: 'status.yellow', previous: 'player.previousYellowController', next: 'player.nextYellowController' }
   };
-  const tk = (key, fallback) => window.SiteI18n?.t(key) || fallback;
+  const tk = (key, fallback, parameters) => window.SiteI18n?.t(key, parameters) || fallback;
 
   document.addEventListener('DOMContentLoaded', () => {
     const engine = window.RamifiedMinigames.player;
@@ -54,6 +54,13 @@
     let previewFrame = null;
     let chessCategory = null;
     const chessBoards = new Map();
+    const levelIds = window.RAMIFIED_MINIGAME_PRESETS.presets.filter(entry => entry.gameTypes.includes('Sokoban')).map(entry => entry.id);
+    const levelProgress = window.RamifiedSokobanProgress.create(levelIds, {
+      getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value)
+    });
+    let levelsParent = 'games';
+    let pendingLevelId = null;
+    engine.setSokobanProgress(levelProgress.snapshot().completed);
 
     function message(text = '') {
       byId('player-message').textContent = text;
@@ -108,6 +115,14 @@
 
     function sync() {
       const state = engine.state();
+      if (!state.online && state.solved && state.sokobanLevelId) {
+        if (levelProgress.complete(state.sokobanLevelId)) {
+          engine.setSokobanProgress(levelProgress.snapshot().completed);
+          save();
+        }
+      }
+      syncLevels(state);
+      byId('player-choose-level').hidden = state.mode !== 'sokoban' || state.online;
       byId('player-new').disabled = !state.ready || restoring || state.online || setupBusy;
       byId('player-continue').disabled = !state.ready || restoring || !(state.active || saved || state.online);
       const layout = state.browsing ? PREPARATION_LAYOUTS[state.mode] || null : null;
@@ -144,6 +159,68 @@
       }
       byId('player-actions').hidden = !Array.from(byId('player-action-controls').children).some((node) => !node.hidden);
       if (!restoring && state.active && !state.online && !saveTimer) saveTimer = setTimeout(save, 250);
+    }
+
+    function syncLevels(state) {
+      const progress = levelProgress.snapshot();
+      levelIds.forEach((id, index) => {
+        let button = byId(`player-level-${index + 1}`);
+        if (!button) {
+          button = document.createElement('button');
+          button.type = 'button';
+          button.id = `player-level-${index + 1}`;
+          button.className = 'btn player-level';
+          button.dataset.levelId = id;
+          const number = document.createElement('span');
+          number.className = 'player-level-number';
+          number.textContent = String(index + 1);
+          const status = document.createElement('span');
+          status.className = 'player-level-state';
+          button.append(number, status);
+          button.addEventListener('click', () => chooseLevel(id));
+          byId('player-level-list').append(button);
+        }
+        const unlocked = progress.unlocked.includes(id), completed = progress.completed.includes(id);
+        const label = completed ? tk('player.levelCompleted', 'Completed') : unlocked ? tk('player.levelAvailable', 'Available') : tk('player.levelLocked', 'Locked');
+        button.dataset.completed = String(completed);
+        button.querySelector('.player-level-state').textContent = label;
+        button.setAttribute('aria-label', tk('player.levelLabel', 'Level {{number}} — {{status}}', { number: index + 1, status: label }));
+        button.disabled = !unlocked || setupBusy || !state.canPrepare || state.online;
+      });
+    }
+
+    function showLevels(parent = levelsParent) {
+      ++setupRequest;
+      setupBusy = false;
+      engine.cancelSetup();
+      pendingLevelId = null;
+      levelsParent = parent;
+      save();
+      show('levels', parent);
+    }
+
+    async function chooseLevel(id, { next = false } = {}) {
+      if (setupBusy || !engine.state().canPrepare || engine.state().online || !levelProgress.snapshot().unlocked.includes(id)) return;
+      save();
+      const request = ++setupRequest;
+      pendingLevelId = id;
+      setupBusy = true;
+      show('levels', levelsParent);
+      message(tk('player.levelLoading', 'Loading level…'));
+      try {
+        const loaded = await engine.beginSetup('sokoban', { presetId: id });
+        if (request !== setupRequest) return;
+        if (!loaded) throw new Error('Level could not be loaded');
+        setupBusy = false;
+        if (saved && !next && !['gameover', 'complete'].includes(saved.payload.phase)) show('confirm', 'levels');
+        else startPreparedGame();
+      } catch (_) {
+        if (request !== setupRequest) return;
+        showLevels();
+        message(tk('player.levelLoadError', 'The level could not be loaded. Select it to retry, or go back. Your previous game is unchanged.'));
+      } finally {
+        if (request === setupRequest) { setupBusy = false; sync(); }
+      }
     }
 
     function syncPlayerControllers(state) {
@@ -230,11 +307,13 @@
       const titleKeys = {
         home: 'meta.heading', 'game-menu': 'player.menu', games: 'player.chooseGame',
         setup: PREPARATION_LAYOUTS[engine.state().mode]?.title || 'player.gameOptions', 'chess-category': 'games.chess', 'board-options': 'player.moreOptions', confirm: 'player.start',
+        levels: 'player.chooseLevel',
         display: 'setup.display', online: 'online.title', files: 'player.files', stats: 'status.stats'
       };
       byId('player-menu-title').dataset.i18n = titleKeys[next];
       byId('player-menu-title').textContent = window.SiteI18n.t(titleKeys[next]);
-      message(storageFailed ? tk('player.saveError', 'This browser could not save progress. Keep this tab open, or export the game from the menu.') : '');
+      message(levelProgress.failed() ? tk('player.levelSaveError', 'Level progress could not be saved in this browser. Keep this tab open.')
+        : storageFailed ? tk('player.saveError', 'This browser could not save progress. Keep this tab open, or export the game from the menu.') : '');
       setOpen(true);
       sync();
       const focus = (focusId && byId(focusId)) || Array.from(pages.find((node) => !node.hidden)?.querySelectorAll('button:not(:disabled), select:not(:disabled), input:not(:disabled)') || [])
@@ -250,8 +329,26 @@
     });
     byId('player-resume').addEventListener('click', () => setOpen(false));
     byId('player-home-button').addEventListener('click', () => { save(); show('home'); });
+    byId('player-choose-level').addEventListener('click', () => showLevels('game-menu'));
+    document.addEventListener('ramified-player-sokoban-action', event => {
+      const state = engine.state();
+      if (state.online || !state.solved || !state.sokobanLevelId) return;
+      const next = levelIds[levelIds.indexOf(state.sokobanLevelId) + 1];
+      if (event.detail.action === 'sokoban-next' && next) {
+        levelsParent = 'game-menu';
+        chooseLevel(next, { next: true });
+      } else showLevels('game-menu');
+    });
     function goBack() {
-      if (page === 'setup') {
+      if (page === 'levels') {
+        ++setupRequest;
+        setupBusy = false;
+        engine.cancelSetup();
+        pendingLevelId = null;
+        show(levelsParent, levelsParent === 'games' ? newGameParent : 'home');
+      } else if (page === 'confirm' && pendingLevelId) {
+        showLevels();
+      } else if (page === 'setup') {
         if (engine.state().mode === 'fide-chess' && !setupBusy) {
           chessBoards.set(chessCategory, engine.state().presetId);
           show('chess-category', 'games');
@@ -343,6 +440,7 @@
     byId('player-games-next').addEventListener('click', () => changeGamesPage(1));
     async function chooseGame(mode, category = null) {
       if (setupBusy || !engine.state().canPrepare) return;
+      if (mode === 'sokoban') { showLevels('games'); return; }
       if (mode === 'fide-chess' && !category) {
         chessCategory = null;
         chessBoards.clear();
@@ -396,16 +494,19 @@
     function startPreparedGame() {
       if (setupBusy || !engine.state().browsing) return;
       try {
-        if (!engine.commitSetup()) {
-          show('setup', 'games');
+        if (!engine.commitSetup({ sokobanLevelId: pendingLevelId })) {
+          if (pendingLevelId) showLevels();
+          else show('setup', 'games');
           message(tk('player.startError', 'The game could not start. Check the board settings. Your previous save is unchanged.'));
           return;
         }
+        pendingLevelId = null;
         setOpen(false);
         save();
         sync();
       } catch (_) {
-        show('games', newGameParent);
+        if (pendingLevelId) showLevels();
+        else show('games', newGameParent);
         message(tk('player.startError', 'The game could not start. Check the board settings. Your previous save is unchanged.'));
       }
     }
@@ -424,7 +525,7 @@
     byId('player-begin').addEventListener('click', requestStart);
     document.addEventListener('ramified-player-start-request', requestStart);
     byId('player-confirm-new').addEventListener('click', startPreparedGame);
-    byId('player-cancel-new').addEventListener('click', () => show('setup', 'games'));
+    byId('player-cancel-new').addEventListener('click', () => pendingLevelId ? showLevels() : show('setup', 'games'));
     menu.querySelectorAll('[data-player-page]').forEach((button) => {
       button.addEventListener('click', () => {
         if (button.dataset.playerPage === 'setup' && !engine.state().online) {

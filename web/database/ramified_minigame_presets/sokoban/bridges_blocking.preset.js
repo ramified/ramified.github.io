@@ -1,13 +1,13 @@
-// Save this file as ramified_minigame_presets/easy_energy_bridge.preset.js
+// Save this file as ramified_minigame_presets/sokoban/bridges_blocking.preset.js
 // Add this entry to ramified_minigame_presets/presets.js:
 // {
 //   "gameTypes": [
 //     "Sokoban"
 //   ],
-//   "id": "easy-energy-bridge",
-//   "label": "easy energy bridge",
-//   "key": "easy_energy_bridge",
-//   "file": "easy_energy_bridge.preset.js"
+//   "id": "bridges-blocking",
+//   "label": "bridges_blocking",
+//   "key": "bridges_blocking",
+//   "file": "sokoban/bridges_blocking.preset.js"
 // },
 // Store gameTypes in presets.js only; do not repeat them in this preset file.
 (function(root, factory) {
@@ -15,23 +15,19 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = preset;
   if (root) {
     root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
-    root.RAMIFIED_MINIGAME_PRESET_DATA["easy_energy_bridge"] = preset;
+    root.RAMIFIED_MINIGAME_PRESET_DATA["bridges_blocking"] = preset;
   }
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
   return {
-    "id": "easy-energy-bridge",
-    "label": "easy energy bridge",
+    "id": "bridges-blocking",
+    "label": "bridges_blocking",
     "lattice": "square",
-    "size": "3x5",
+    "size": "7x7",
     "surface": "Sigma_0,1",
-    "removed": "1,1; 1,2; 3,1; 3,2",
     "sokoban": {
-      "targets": "1,3; 3,5",
-      "energyBridges": "1,3; 3,3",
-      "players": "2,1"
-    },
-    "billiards": {
-      "pockets": []
+      "targets": "1,1; 1,4; 1,7; 4,1; 4,7; 7,1; 7,4; 7,7",
+      "energyBridges": "2,4; 3,3; 3,5; 4,2; 4,6; 5,3; 5,5; 6,4",
+      "players": "6,6"
     }
   };
 });
