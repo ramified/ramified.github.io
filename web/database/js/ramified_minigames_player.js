@@ -7,7 +7,16 @@
     '2048': '2048.png', reversi: 'reversi.png', 'chinese-checkers': 'chinese_checkers.png',
     sokoban: 'sokoban.png', 'fide-chess': 'chess.png', billiards: 'billiards.png', lianliankan: 'lianliankan.png'
   };
+  const BOARD_FIELDS = ['boundary-glue-mode-row', 'boundary-glue-shape-row', 'gomoku-size-row', 'boundary-glue-rect-row'];
   const PREPARATION_LAYOUTS = {
+    hex: { title: 'games.hex', fields: [...BOARD_FIELDS, 'hex-pie-rule-row'] },
+    go: { title: 'games.go', fields: [...BOARD_FIELDS, 'go-komi-row'] },
+    reversi: { title: 'games.reversi', fields: BOARD_FIELDS },
+    '2048': { title: 'games.2048', fields: BOARD_FIELDS },
+    'chinese-checkers': { title: 'games.checkers', fields: ['chinese-checkers-jump-rule-row'], main: ['chinese-checkers-players-row'] },
+    'fide-chess': { title: 'games.chess', fields: BOARD_FIELDS },
+    billiards: { title: 'games.billiards', fields: [...BOARD_FIELDS, 'billiards-physics-row', 'billiards-equipment-row', 'billiards-tile-length-row', 'billiards-friction-row'], main: ['billiards-rules-row'] },
+    lianliankan: { title: 'games.lianliankan', fields: BOARD_FIELDS, main: ['lianliankan-tile-set-row', 'lianliankan-tile-level-row'] },
     gomoku: {
       title: 'games.gomoku', colors: ['black', 'white'],
       fields: ['boundary-glue-mode-row', 'boundary-glue-shape-row', 'gomoku-size-row', 'boundary-glue-rect-row']
@@ -43,6 +52,8 @@
     let setupRequest = 0;
     let preparationLayout = null;
     let previewFrame = null;
+    let chessCategory = null;
+    const chessBoards = new Map();
 
     function message(text = '') {
       byId('player-message').textContent = text;
@@ -66,7 +77,7 @@
       card.removeAttribute('aria-hidden');
       byId(id).append(card);
     });
-    const preparationRows = [...new Set(Object.values(PREPARATION_LAYOUTS).flatMap((layout) => layout.fields))].map((id) => {
+    const preparationRows = [...new Set(Object.values(PREPARATION_LAYOUTS).flatMap((layout) => [...layout.fields, ...(layout.main || [])]))].map((id) => {
       const node = byId(id);
       const anchor = document.createComment(id);
       node.before(anchor);
@@ -104,6 +115,7 @@
         preparationLayout = layout;
         preparationRows.forEach(({ node, anchor }) => {
           if (layout?.fields.includes(node.id)) byId('player-board-fields').append(node);
+          else if (layout?.main?.includes(node.id)) byId('player-setup-options').append(node);
           else anchor.after(node);
         });
       }
@@ -112,14 +124,17 @@
       byId('player-setup-controls').hidden = !!layout;
       byId('player-view-board').hidden = !!layout;
       byId('player-board-fields').inert = setupBusy || !state.ready;
-      byId('player-more').disabled = setupBusy || !state.ready || state.setupError || !layout?.fields.some((id) => !byId(id).hidden);
-      byId('player-begin').disabled = setupBusy || !state.ready || state.setupError;
-      byId('player-confirm-new').disabled = setupBusy || !state.ready || state.setupError;
+      byId('player-edit-balls').hidden = !layout || state.mode !== 'billiards';
+      byId('player-more').disabled = setupBusy || !state.ready || state.setupError || !(state.mode === 'billiards' || layout?.fields.some((id) => !byId(id).hidden));
+      byId('player-begin').disabled = setupBusy || !state.ready || state.setupError || state.canStart === false;
+      byId('player-confirm-new').disabled = setupBusy || !state.ready || state.setupError || state.canStart === false;
       byId('player-board-previous').disabled = byId('player-board-next').disabled = setupBusy || !state.ready;
       for (const button of byId('player-game-list').children) button.disabled = setupBusy || !state.canPrepare || state.online;
       syncGameListPage(state);
       if (layout) {
-        syncPlayerControllers(state);
+        byId('player-setup-players').hidden = !layout.colors;
+        byId('player-setup-options').hidden = !layout.main;
+        if (layout.colors) syncPlayerControllers(state);
         byId('player-board-name').textContent = engine.presets().find((preset) => preset.id === state.presetId)?.label || '';
         byId('player-board-preview').hidden = !state.ready || state.setupError;
         if (!previewFrame) previewFrame = requestAnimationFrame(() => {
@@ -160,7 +175,7 @@
 
     function changePlayerController(sideIndex, direction) {
       const state = engine.state();
-      if (!preparationLayout) return;
+      if (!preparationLayout?.colors) return;
       const color = preparationLayout.colors[sideIndex];
       const control = byId(`${state.mode}-${color}-controller`);
       if (setupBusy || !state.ready || state.setupError || !state.browsing || control.disabled) return;
@@ -214,7 +229,7 @@
       byId('player-back').hidden = next === 'home' || next === 'game-menu';
       const titleKeys = {
         home: 'meta.heading', 'game-menu': 'player.menu', games: 'player.chooseGame',
-        setup: PREPARATION_LAYOUTS[engine.state().mode]?.title || 'player.gameOptions', 'board-options': 'player.moreOptions', confirm: 'player.start',
+        setup: PREPARATION_LAYOUTS[engine.state().mode]?.title || 'player.gameOptions', 'chess-category': 'games.chess', 'board-options': 'player.moreOptions', confirm: 'player.start',
         display: 'setup.display', online: 'online.title', files: 'player.files', stats: 'status.stats'
       };
       byId('player-menu-title').dataset.i18n = titleKeys[next];
@@ -237,6 +252,16 @@
     byId('player-home-button').addEventListener('click', () => { save(); show('home'); });
     function goBack() {
       if (page === 'setup') {
+        if (engine.state().mode === 'fide-chess' && !setupBusy) {
+          chessBoards.set(chessCategory, engine.state().presetId);
+          show('chess-category', 'games');
+          return;
+        }
+        ++setupRequest;
+        setupBusy = false;
+        engine.cancelSetup();
+        show('games', newGameParent);
+      } else if (page === 'chess-category') {
         ++setupRequest;
         setupBusy = false;
         engine.cancelSetup();
@@ -252,6 +277,10 @@
       engine.fullscreen();
     });
     byId('player-view-board').addEventListener('click', () => setOpen(false));
+    byId('player-edit-balls').addEventListener('click', () => setOpen(false));
+    for (const button of byId('player-chess-category').querySelectorAll('[data-chess-category]')) {
+      button.addEventListener('click', () => chooseGame('fide-chess', button.dataset.chessCategory));
+    }
     byId('player-settings').addEventListener('click', () => engine.settings());
     byId('player-game-settings').addEventListener('click', () => engine.settings());
     function requestNewGame(parent) {
@@ -312,13 +341,23 @@
     }
     byId('player-games-previous').addEventListener('click', () => changeGamesPage(-1));
     byId('player-games-next').addEventListener('click', () => changeGamesPage(1));
-    async function chooseGame(mode) {
+    async function chooseGame(mode, category = null) {
       if (setupBusy || !engine.state().canPrepare) return;
+      if (mode === 'fide-chess' && !category) {
+        chessCategory = null;
+        chessBoards.clear();
+        show('chess-category', 'games');
+        return;
+      }
       save();
       const request = ++setupRequest;
       setupBusy = true;
       try {
-        const loading = engine.beginSetup(mode);
+        const resumeChess = mode === 'fide-chess' && engine.state().browsing && engine.state().mode === mode;
+        chessCategory = category;
+        const loading = resumeChess
+          ? engine.selectPreset(chessBoards.get(category) || engine.defaultPreset(mode, category))
+          : engine.beginSetup(mode, { category });
         show('setup', 'games');
         const loaded = await loading;
         if (request !== setupRequest) return;
@@ -336,7 +375,7 @@
     }
     async function changeBoard(direction) {
       if (setupBusy || !engine.state().ready) return;
-      const presets = engine.presets();
+      const presets = engine.presets().filter(preset => engine.state().mode !== 'fide-chess' || preset.fideChessVariant === chessCategory);
       const index = presets.findIndex((preset) => preset.id === engine.state().presetId);
       const next = presets[(index + direction + presets.length) % presets.length];
       if (!next) return;

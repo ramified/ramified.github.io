@@ -2,6 +2,9 @@
   'use strict';
 
   const pairs = {
+    'player.chessGame': ['Game', '对局'],
+    'player.chessPuzzle': ['Puzzle', '谜题'],
+    'player.editBalls': ['Arrange balls', '摆球'],
     'player.menu': ['Menu', '菜单'],
     'player.returnMenu': ['Return to menu', '返回菜单'],
     'player.start': ['Start game', '开始游戏'],

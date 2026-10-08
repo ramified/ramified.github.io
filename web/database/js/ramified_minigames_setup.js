@@ -709,6 +709,7 @@
   // A setup draft temporarily uses the renderer; the live game and history stay
   // in memory until a new game has actually started successfully.
   let playerSetupSession = null;
+  let playerDefaults = {};
   let playerSetupCommitting = false;
   let playerSetupError = false;
   let importedPreset = null;
@@ -3803,6 +3804,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
         selectionLoading = false;
         if (typeof options.onReady === 'function') options.onReady();
         resetToPreview();
+        if (typeof options.afterReset === 'function') options.afterReset();
         if (options.focus && refs.canvas) refs.canvas.focus();
         return Promise.resolve(true);
       }
@@ -3816,6 +3818,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
         selectionLoading = false;
         if (typeof options.onReady === 'function') options.onReady();
         resetToPreview();
+        if (typeof options.afterReset === 'function') options.afterReset();
         if (options.focus && refs.canvas) refs.canvas.focus();
         return true;
       })
@@ -4048,6 +4051,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     if (!nextPresets.length) throw new Error('No ramified minigame presets were loaded.');
     PRESETS.splice(0, PRESETS.length, ...nextPresets);
     presetRegistry = nextRegistry;
+    playerDefaults = catalog.playerDefaults || {};
     presetDefaultByMode = resolvePresetDefaultMap(catalog.defaultFor, nextPresets);
     presetDefaultDisplayByMode = catalog.defaultDisplayFor;
     presetGameModeOrder = orderedCatalogGameModes(catalog.defaultFor, nextPresets, catalog.gameOrder);
@@ -4060,6 +4064,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
       id: entry.id,
       label: entry.label,
       ...(entry.labelZh ? { labelZh: entry.labelZh } : {}),
+      ...(entry.fideChessVariant ? { fideChessVariant: entry.fideChessVariant } : {}),
       gameTypes: entry.gameTypes.slice(),
       ...(entry.wrappedView ? { wrappedView: { ...entry.wrappedView } } : {}),
       ...(entry.wrappedCoverFit ? { wrappedCoverFit: entry.wrappedCoverFit } : {}),
@@ -4078,7 +4083,8 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
       if (!spec) return null;
       items.push({ entry, spec });
     }
-    return { items, defaultFor: catalog.defaultFor, defaultDisplayFor: catalog.defaultDisplayFor, gameOrder: catalog.gameOrder };
+    return { items, playerDefaults: catalog.playerDefaults,
+      defaultFor: catalog.defaultFor, defaultDisplayFor: catalog.defaultDisplayFor, gameOrder: catalog.gameOrder };
   }
 
   function loadBrowserPresetCatalogItems() {
@@ -4093,6 +4099,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     }
     return Promise.resolve({
       items: registry.map((entry) => ({ entry, spec: readPreloadedPresetSpec(entry) })),
+      playerDefaults: catalog.playerDefaults,
       defaultFor: catalog.defaultFor,
       defaultDisplayFor: catalog.defaultDisplayFor,
       gameOrder: catalog.gameOrder
@@ -4157,6 +4164,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     const folder = path.join(__dirname, '..', PRESET_FOLDER_URL);
     const catalog = normalizeMinigamePresetCatalog(require(path.join(folder, 'presets.js')));
     return {
+      playerDefaults: catalog.playerDefaults,
       defaultFor: catalog.defaultFor,
       defaultDisplayFor: catalog.defaultDisplayFor,
       gameOrder: catalog.gameOrder,
@@ -4171,6 +4179,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     if (Array.isArray(catalogInput)) return { items: catalogInput, defaultFor: {}, defaultDisplayFor: {}, gameOrder: [] };
     if (catalogInput && typeof catalogInput === 'object') {
       return {
+        playerDefaults: catalogInput.playerDefaults || {},
         items: Array.isArray(catalogInput.items) ? catalogInput.items : [],
         defaultFor: catalogInput.defaultFor && typeof catalogInput.defaultFor === 'object' ? catalogInput.defaultFor : {},
         defaultDisplayFor: normalizeDefaultDisplayMap(catalogInput.defaultDisplayFor),
@@ -4185,6 +4194,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     ? registry
     : { presets: registry };
     return {
+      playerDefaults: source.playerDefaults || {},
       entries: normalizeMinigamePresetRegistry(source.presets),
       defaultFor: normalizePresetDefaultMap(source.defaultFor),
       defaultDisplayFor: normalizeDefaultDisplayMap(source.defaultDisplayFor),
@@ -4232,6 +4242,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
         file,
         label,
         labelZh: sanitizeImportedText(entry.labelZh, ''),
+        fideChessVariant: normalizeFideChessVariant(entry.fideChessVariant),
         gameTypes: cleanPresetGameTypes(entry.gameTypes, entry.groups, entry.group),
         wrappedView: normalizeWrappedViewProfile(entry.wrappedView),
         wrappedCoverFit: entry.wrappedCoverFit === 'glued' ? 'glued' : '',
@@ -4660,9 +4671,15 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
       // The preview already owns a fully initialized runtime from the worker.
       // Reusing it avoids repeating the cellular-homology calculation here.
       game.phase = 'ready';
-    } else if (playerSetupSession && isGomokuGame(game)) {
-      // Start exactly the board being previewed, including a random gluing.
+    } else if (playerSetupSession && !isSokobanGame(game)) {
+      // Preserve the prepared topology and edited pieces; only perform start transitions.
+      if (is2048Game(game)) spawnNumbers(game, 2, Math.random, spawnInitialValue, []);
+      if (isFideChessGame(game)) {
+        game.fideChessVariant = inferFideChessVariantFromPieces(game.pieces, game.fideChessVariant);
+        if (isFideChessPuzzle(game)) prepareFideChessPuzzleState(game);
+      }
       game.phase = 'ready';
+      if (isFideChessPuzzle(game)) finalizeFideChessPuzzlePosition(game);
     } else {
       game = beginSelectedGame(selectedPreset(), selectedGameOptions({
         rng: Math.random,
@@ -5598,10 +5615,10 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
         refs.billiardsRules.value = Billiards ? Billiards.normalizeRules(block && block.rules) : 'solo';
       }
       const savedSettings = playerSetupSession?.boardSettings.get(`${selectedGameMode()}:${refs.select.value}`);
-      if (savedSettings) savedSettings.forEach(({ node, value }) => { node.value = value; });
+      if (savedSettings) restorePlayerBoardControls(savedSettings);
       else syncBoardSizeInputForSelectedPreset();
       syncOnlineRoleOptions();
-    } });
+    }, afterReset() { restorePlayerBoardPreview(); } });
   }
 
   function syncBoardSizeInputForSelectedPreset() {
@@ -31548,7 +31565,7 @@ function normalizePresetPayload(payload, options = {}) {
   if (source.dynamicGomokuSize === true || payload.dynamicGomokuSize === true) normalized.dynamicGomokuSize = true;
   const dynamicLabel = firstPresentValue(source, ['dynamicGomokuLabelPrefix']) || firstPresentValue(payload, ['dynamicGomokuLabelPrefix']);
   if (dynamicLabel) normalized.dynamicGomokuLabelPrefix = sanitizeImportedText(dynamicLabel, '');
-  const fideVariant = normalizeFideChessVariant(firstPresentValue(source, ['fideChessVariant', 'chessVariant', 'variant']) || firstPresentValue(payload, ['fideChessVariant', 'chessVariant', 'variant']));
+  const fideVariant = normalizeFideChessVariant(firstPresentValue(source, ['fideChessVariant', 'chessVariant', 'variant']) || firstPresentValue(payload, ['fideChessVariant', 'chessVariant', 'variant']) || registryEntry.fideChessVariant);
   if (fideVariant) normalized.fideChessVariant = fideVariant;
   const fidePuzzle = normalizeFideChessPuzzleKind(firstPresentValue(source, ['fideChessPuzzle', 'chessPuzzle', 'puzzle']) || firstPresentValue(payload, ['fideChessPuzzle', 'chessPuzzle', 'puzzle']));
   if (fidePuzzle) normalized.fideChessPuzzle = fidePuzzle;
@@ -33137,6 +33154,7 @@ function syncChineseCheckersControls(modeChineseCheckers) {
 
 function syncChineseCheckersPlayerOptions(modeChineseCheckers) {
   if (!refs.chineseCheckersPlayerOptions) return;
+  const focusedColor = playerShellEnabled ? document.activeElement?.dataset?.color : null;
   refs.chineseCheckersPlayerOptions.textContent = '';
   if (!modeChineseCheckers || !presetCatalogReady || !PRESETS.length) return;
   const preset = game && isChineseCheckersGame(game) ? game.preset : selectedPreset();
@@ -33154,13 +33172,19 @@ function syncChineseCheckersPlayerOptions(modeChineseCheckers) {
     const label = document.createElement('label');
     label.className = 'local-ai-player-option';
     const colorName = chineseCheckersColorLabel(color);
+    if (playerShellEnabled) {
+      const stone = document.createElement('span');
+      stone.className = `player-stone player-stone-${color}`;
+      stone.setAttribute('aria-hidden', 'true');
+      label.appendChild(stone);
+    }
     label.appendChild(document.createTextNode(colorName));
     const select = document.createElement('select');
     select.dataset.color = color;
     select.setAttribute('aria-label', tk('ai.access.colorController', '{{side}} controller', { side: colorName }));
     [
       [HUMAN_CONTROLLER, tk('ai.human', 'Human')],
-      [LOCAL_AI_CONTROLLER, tk('ai.localChallenging', 'Local AI — Challenging')],
+      [LOCAL_AI_CONTROLLER, playerShellEnabled ? tk('player.aiChallenging', 'AI — Challenging') : tk('ai.localChallenging', 'Local AI — Challenging')],
       [HIDDEN_CONTROLLER, tk('ai.hidden', 'Not shown')]
       ].forEach(([value, text]) => {
         const option = document.createElement('option');
@@ -33172,6 +33196,7 @@ function syncChineseCheckersPlayerOptions(modeChineseCheckers) {
       select.disabled = !setupEditable || onlineIsInRoom();
       label.appendChild(select);
       refs.chineseCheckersPlayerOptions.appendChild(label);
+      if (focusedColor === color) select.focus();
     });
 }
 
@@ -33297,7 +33322,10 @@ function ensureChineseCheckersControllerPreset(preset, available = chineseChecke
   const key = chineseCheckersPlayerSelectionKey(preset, available);
   if (chineseCheckersControllerPresetKey === key) return;
   chineseCheckersControllers.clear();
-  available.forEach((color) => chineseCheckersControllers.set(color, HUMAN_CONTROLLER));
+  const preferred = playerDefaults['chinese-checkers']?.humanColor;
+  const human = available.includes(preferred) ? preferred : available[0];
+  available.forEach((color) => chineseCheckersControllers.set(color,
+    playerSetupSession && color !== human ? LOCAL_AI_CONTROLLER : HUMAN_CONTROLLER));
   chineseCheckersControllerPresetKey = key;
 }
 
@@ -34413,6 +34441,57 @@ function playerBoardLabel(preset) {
   }
 }
 
+// Explicit allowlist: catalog defaults may configure preparation controls only.
+const PLAYER_BOARD_CONTROLS = ['gomokuSize', 'boundaryGlueMode', 'boundaryGlueShape', 'boundaryGlueRows', 'boundaryGlueCols', 'connectFourFall', 'hexPieRule', 'goKomi', 'chineseCheckersJumpRule', 'billiardsRules', 'billiardsPhysicsProfile', 'billiardsEquipment', 'billiardsTileLength', 'billiardsFriction', 'lianliankanTileSet', 'lianliankanTileLevel'];
+const PLAYER_DEFAULT_CONTROLS = [...PLAYER_BOARD_CONTROLS, 'gomokuBlackController', 'gomokuWhiteController', 'connectFourRedController', 'connectFourYellowController'];
+
+function applyPlayerDefaultControls(defaults) {
+  for (const [key, value] of Object.entries(defaults.controls || {})) {
+    if (!PLAYER_DEFAULT_CONTROLS.includes(key) || !refs[key]) continue;
+    if (typeof value === 'boolean') refs[key].checked = value;
+    else refs[key].value = String(value);
+  }
+  syncLianliankanTileLevelControl();
+}
+
+function rememberPlayerBoard() {
+  if (!playerSetupSession || playerSetupError || !game || game.preset.id !== refs.select.value) return;
+  playerSetupSession.boardSettings.set(`${selectedGameMode()}:${refs.select.value}`, {
+    game,
+    controls: PLAYER_BOARD_CONTROLS.map(key => refs[key]).filter(Boolean).map(node => ({ node, value: node.value, checked: node.checked })),
+    controllers: Array.from(chineseCheckersControllers),
+    players: chineseCheckersSelectedPlayers,
+    playersKey: chineseCheckersSelectedPlayersPresetKey,
+    controllerKey: chineseCheckersControllerPresetKey,
+    billiardsTileLength: billiardsTileEdgeLengthM
+  });
+}
+
+function restorePlayerBoardControls(saved) {
+  saved.controls.forEach(({ node, value, checked }) => {
+    node.value = value;
+    if (typeof checked === 'boolean') node.checked = checked;
+  });
+  chineseCheckersControllers.clear();
+  saved.controllers.forEach(([color, value]) => chineseCheckersControllers.set(color, value));
+  chineseCheckersSelectedPlayers = saved.players;
+  chineseCheckersSelectedPlayersPresetKey = saved.playersKey;
+  chineseCheckersControllerPresetKey = saved.controllerKey;
+  billiardsTileEdgeLengthM = saved.billiardsTileLength;
+}
+
+function restorePlayerBoardPreview() {
+  const saved = playerSetupSession?.boardSettings.get(`${selectedGameMode()}:${refs.select.value}`);
+  if (!saved) return;
+  cancelHexHomologyRequest();
+  game = saved.game;
+  restorePlayerBoardControls(saved);
+  render();
+  syncStatusForCurrentGame();
+  syncControls();
+  if (isHexGame(game) && game.hexTopologyState === 'pending') scheduleHexHomologyRequest(game);
+}
+
 function capturePlayerSetupSession() {
   return {
     game, undoStack, redoStack, importedPreset,
@@ -34495,6 +34574,7 @@ const api = {
         online: onlineIsInRoom(),
         browsing: !!playerSetupSession,
         canPrepare: presetCatalogReady && !selectionLoading && !!game && !playerMoveIsPending(),
+        canStart: presetCatalogReady && !selectionLoading && !!game && !playerSetupError && !refs.begin?.disabled,
         setupError: playerSetupError,
         mode: selectedGameMode(),
         presetId: refs.select && refs.select.value
@@ -34504,9 +34584,13 @@ const api = {
     presets() {
       const presets = presetListForMode();
       if (importedPreset && presetMatchesGameMode(importedPreset)) presets.push(importedPreset);
-      return presets.map((preset) => ({ id: preset.id, label: playerBoardLabel(preset) }));
+      return presets.map((preset) => ({ id: preset.id, label: playerBoardLabel(preset), fideChessVariant: normalizeFideChessVariant(preset.fideChessVariant) || (isFideChessPuzzlePreset(preset) ? FIDE_CHESS_VARIANTS.KINGLESS_PUZZLE : FIDE_CHESS_VARIANTS.GAME) }));
     },
-    async beginSetup(mode) {
+    defaultPreset(mode, category) {
+      const defaults = playerDefaults[mode] || {};
+      return defaults.categories?.[category] || defaults.presetId || defaultPresetIdForMode(mode);
+    },
+    async beginSetup(mode, { category } = {}) {
       if (onlineIsInRoom() || !presetCatalogReady || selectionLoading || playerMoveIsPending()) return false;
       if (!orderedCatalogGameModes().includes(mode)) return false;
       cancelPlayerSetup();
@@ -34517,29 +34601,19 @@ const api = {
         syncBoardSizeInputForGameMode();
         applyDefaultPlacementDisplayForMode();
         applyDefaultPlacementPieceSizeForMode();
-        const playerDefaultPreset = mode === GAME_MODES.GOMOKU ? BOUNDARY_GLUE_BOARD_PRESET_ID
-          : mode === GAME_MODES.CONNECT_FOUR ? 'connect-four-6x7' : defaultPresetIdForMode(mode);
-        syncPresetSelectOptions(playerDefaultPreset);
-        if (mode === GAME_MODES.GOMOKU) {
-          refs.boundaryGlueMode.value = BOUNDARY_GLUE_MODES.OPEN;
-          refs.boundaryGlueShape.value = 'square';
-          refs.gomokuSize.value = '15';
-          refs.boundaryGlueRows.value = '15';
-          refs.boundaryGlueCols.value = '15';
-          refs.gomokuBlackController.value = HUMAN_CONTROLLER;
-          refs.gomokuWhiteController.value = LOCAL_AI_CONTROLLER;
-        } else if (mode === GAME_MODES.CONNECT_FOUR) {
-          refs.connectFourRedController.value = HUMAN_CONTROLLER;
-          refs.connectFourYellowController.value = LOCAL_AI_CONTROLLER;
-        }
+        const defaults = playerDefaults[mode] || {};
+        syncPresetSelectOptions(api.player.defaultPreset(mode, category));
+        chineseCheckersSelectedPlayers = null;
+        chineseCheckersSelectedPlayersPresetKey = '';
+        chineseCheckersControllerPresetKey = '';
+        applyPlayerDefaultControls(defaults);
         syncOnlineRoleOptions();
         if (refs.importGameMode) refs.importGameMode.value = mode;
         buildSoundEffectsDebugControls();
         const session = playerSetupSession;
         const loaded = await loadSelectionAndReset({ onReady() {
-          // A lazy load may still synchronize direction options from the old board.
-          // Apply the approved square-board default immediately before the new preview.
-          if (mode === GAME_MODES.CONNECT_FOUR) refs.connectFourFall.value = 'S';
+          syncBoardSizeInputForSelectedPreset();
+          applyPlayerDefaultControls(defaults);
         } });
         if (playerSetupSession !== session) return false;
         if (!loaded) cancelPlayerSetup();
@@ -34566,16 +34640,10 @@ const api = {
     },
     selectPreset(id) {
       if (!playerSetupSession || selectionLoading || !api.player.presets().some((preset) => preset.id === id)) return Promise.resolve(false);
-      // Keep each supported board's choices for this preparation only. A failed load
-      // still has the previous board's controls, so it must not create an entry.
-      const boardControls = selectedGameMode() === GAME_MODES.GOMOKU
-        ? [refs.gomokuSize, refs.boundaryGlueMode, refs.boundaryGlueShape, refs.boundaryGlueRows, refs.boundaryGlueCols]
-        : selectedGameMode() === GAME_MODES.CONNECT_FOUR ? [refs.connectFourFall] : [];
-      if (boardControls.length && !playerSetupError) {
-        playerSetupSession.boardSettings.set(`${selectedGameMode()}:${refs.select.value}`,
-          boardControls.filter(Boolean).map((node) => ({ node, value: node.value })));
-      }
-      refs.select.value = id;
+      rememberPlayerBoard();
+      // Loaded metadata and restored saves can change the catalog's options.
+      // Refresh the original selector before assigning a player-list choice.
+      syncPresetSelectOptions(id);
       return handlePresetSelectChange();
     },
     paintPreview(canvas) {

@@ -1217,6 +1217,7 @@
       label: '',
       gameTypes: ['2048']
     },
+    exportFideChessVariant: '',
     exportPresetCustomGroups: []
   };
 
@@ -3748,6 +3749,7 @@
       label: metadata.label,
       ...(metadata.labelZh ? { labelZh: metadata.labelZh } : {}),
       ...(metadata.wrappedView ? { wrappedView: metadata.wrappedView } : {}),
+      ...(metadata.fideChessVariant ? { fideChessVariant: metadata.fideChessVariant } : {}),
       lattice: state.lattice,
       rows: state.rows,
       cols: state.cols,
@@ -3774,7 +3776,8 @@
         id: metadata.id,
         label: metadata.label,
         ...(metadata.labelZh ? { labelZh: metadata.labelZh } : {}),
-        ...(metadata.wrappedView ? { wrappedView: metadata.wrappedView } : {})
+        ...(metadata.wrappedView ? { wrappedView: metadata.wrappedView } : {}),
+        ...(metadata.fideChessVariant ? { fideChessVariant: metadata.fideChessVariant } : {})
       }
       : {};
     compact.lattice = state.lattice;
@@ -3837,6 +3840,7 @@
       ...(metadata.labelZh ? { labelZh: metadata.labelZh } : {}),
       key: metadata.key,
       ...(metadata.wrappedView ? { wrappedView: metadata.wrappedView } : {}),
+      ...(metadata.fideChessVariant ? { fideChessVariant: metadata.fideChessVariant } : {}),
       file: `${metadata.key}.preset.js`
     };
   }
@@ -3910,7 +3914,7 @@
       const file = String(entry && entry.file || `${key}.preset.js`).trim();
       const label = String(entry && (entry.label || id) || '').trim();
       const gameTypes = gameTypesFromPresetLike(entry);
-      return id && key && file && label && gameTypes.length ? { id, key, file, label, gameTypes } : null;
+      return id && key && file && label && gameTypes.length ? { id, key, file, label, gameTypes, fideChessVariant: normalizedExportChessVariant(entry.fideChessVariant) } : null;
     }).filter(Boolean);
   }
 
@@ -30741,6 +30745,7 @@
     const format = exportImportFormatForPayload(payload, source, sourceKind, type);
     const gameTypes = metadata.gameTypes.length ? metadata.gameTypes : ['2048'];
     state.exportPresetCustomGroups = type === EXPORT_TYPES.MINIGAME ? gameTypes.slice() : [];
+    state.exportFideChessVariant = metadata.fideChessVariant || '';
 
     if (refs.exportType) refs.exportType.value = type;
     if (refs.exportFormat) refs.exportFormat.value = format;
@@ -30816,7 +30821,8 @@
       label,
       ...(labelZh ? { labelZh } : {}),
       ...(wrappedView ? { wrappedView } : {}),
-      gameTypes: groups
+      gameTypes: groups,
+      fideChessVariant: normalizedExportChessVariant(registryMetadata?.fideChessVariant || source?.fideChessVariant || payload?.fideChessVariant)
     };
   }
 
@@ -31816,6 +31822,19 @@
     return { x: normalized ? normalized.x || '' : '', y: normalized ? normalized.y || '' : '' };
   }
 
+  function normalizedExportChessVariant(value) {
+    return value === 'game' || value === 'kingless-puzzle' ? value : '';
+  }
+
+  function exportChessVariant() {
+    const pieces = presetPiecesForExport().filter(piece =>
+      ['king', 'queen', 'rook', 'bishop', 'knight', 'pawn'].includes(piece.kind || piece.value));
+    // An empty preset receives the engine's ordinary initial chess position.
+    if (!pieces.length) return state.exportFideChessVariant || 'game';
+    const sides = new Set(pieces.filter(piece => (piece.kind || piece.value) === 'king').map(piece => piece.side || piece.color));
+    return sides.has('white') && sides.has('black') ? state.exportFideChessVariant || 'game' : 'kingless-puzzle';
+  }
+
   function currentExportPresetMetadata() {
     const defaults = defaultExportPresetMetadata();
     const rawLabel = refs.exportPresetLabel && refs.exportPresetLabel.value.trim()
@@ -31841,7 +31860,8 @@
       label: rawLabel,
       ...(labelZh ? { labelZh } : {}),
       ...(wrappedView ? { wrappedView } : {}),
-      gameTypes
+      gameTypes,
+      ...(gameTypes.includes('FIDE Chess') ? { fideChessVariant: exportChessVariant() } : {})
     };
   }
 
@@ -33732,6 +33752,7 @@
     state.gluedEdges = importGluedEdges({ gluedEdges: options.gluedEdges || options.glue || [] }, rows, cols);
     clearGluedBoundaryHover();
     state.presetPieces = importPresetPieces({ pieceSets: options.pieceSets, pieces: options.pieces || [] }, rows, cols);
+    state.exportFideChessVariant = normalizedExportChessVariant(options.fideChessVariant);
     state.sokoban = importSokobanDecorations(options, rows, cols);
     pruneInputHoles();
     pruneLianliankanEmptyCells();

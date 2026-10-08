@@ -217,6 +217,40 @@ async function run() {
   assert.strictEqual(await lazyEngine.player.beginSetup('connect-four'), true, 'lazy loading applies four-in-a-row defaults');
   assert.strictEqual(lazyEngine.__test.getGame().preset.id, 'connect-four-6x7');
   assert.strictEqual(lazyEngine.__test.getGame().fallDir, lazyEngine.DIRS.S);
+  // The built-in catalog classifies every chess board without materializing it.
+  const catalog = require('../ramified_minigame_presets/presets.js');
+  assert.deepStrictEqual(catalog.featuredDefaultFor, catalog.defaultFor);
+  for (const preset of catalog.presets.filter(p => p.gameTypes.includes('FIDE Chess'))) {
+    assert.ok(['game', 'kingless-puzzle'].includes(preset.fideChessVariant), preset.id);
+  }
+  for (const [mode, id, size] of [['go', 'boundary-glue-board', 19], ['reversi', 'boundary-glue-board', 8], ['2048', 'boundary-glue-board', 4], ['fide-chess', 'fide-chess-8x8', 8]]) {
+    await player.beginSetup(mode);
+    const prepared = engine.__test.getGame();
+    assert.strictEqual(prepared.preset.id, id);
+    assert.strictEqual(prepared.preset.rows, size);
+    for (const entry of player.presets()) assert.strictEqual(await player.selectPreset(entry.id), true, `${mode}: ${entry.id}`);
+    await player.selectPreset(id);
+    assert.strictEqual(engine.__test.getGame(), prepared, 'draft board is retained, including random topology');
+    assert.strictEqual(player.commitSetup(), true);
+    assert.strictEqual(engine.__test.getGame(), prepared, 'start transitions the prepared board');
+    assert.ok(player.snapshot());
+  }
+  await player.beginSetup('fide-chess', { category: 'kingless-puzzle' });
+  assert.strictEqual(engine.__test.getGame().preset.id, 'n-queens-puzzle');
+  assert.strictEqual(engine.__test.getGame().fideChessVariant, 'kingless-puzzle');
+  assert.strictEqual(player.commitSetup(), true);
+  await player.beginSetup('chinese-checkers');
+  assert.strictEqual(engine.__test.getGame().preset.id, 'small-classic');
+  for (const entry of player.presets()) assert.strictEqual(await player.selectPreset(entry.id), true, entry.id);
+  await player.selectPreset('small-classic');
+  assert.strictEqual(player.commitSetup(), true);
+  const checkersSave = JSON.parse(JSON.stringify(player.snapshot()));
+  assert.strictEqual(new Map(checkersSave.checkersControllers).get('black'), 'human');
+  assert.strictEqual(new Map(checkersSave.checkersControllers).get('white'), 'local-ai-challenging');
+  await player.beginSetup('go'); player.cancelSetup();
+  const canceledCheckers = JSON.parse(JSON.stringify(player.snapshot()));
+  for (const key of ['marbles', 'playerColors', 'turn', 'round', 'jumpRule']) assert.deepStrictEqual(canceledCheckers.payload[key], checkersSave.payload[key], key);
+  assert.deepStrictEqual(canceledCheckers.checkersControllers, checkersSave.checkersControllers);
   console.log('ramified_minigames_player_test: defaults, draft preview, cancel/failure history, exact start and save/restore passed');
 }
 

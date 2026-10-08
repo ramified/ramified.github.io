@@ -147,8 +147,13 @@ async function run() {
     for (const game of gameChoices) {
       await revealGame(game.mode);
       await click(`#player-game-list [data-game-mode="${game.mode}"] img`); await ready();
+      if (game.mode === 'fide-chess') {
+        assert.strictEqual(await read('document.querySelector("#player-chess-category").hidden'), false);
+        await click('[data-chess-category="game"]'); await ready();
+      }
       assert.strictEqual(await read('RamifiedMinigames.player.state().mode'), game.mode, 'picture click opens its game');
       await click('#player-back');
+      if (game.mode === 'fide-chess') await click('#player-back');
     }
     await revealGame('gomoku');
     // A failed image retains the button's name and click target.
@@ -332,6 +337,7 @@ async function run() {
     const beforeMove = await read('RamifiedMinigames.__test.getGame().round');
     await click('#player-action-controls [data-move-dir="E"]');
     await waitFor(() => read(`RamifiedMinigames.__test.getGame().round > ${beforeMove}`), 5000, 'Sokoban move');
+    await require('./ramified_minigames_preparation_ui_checks.js')({ client, mouse, read, click, ready, set, resize, shot, menuHome, revealGame });
     assert.deepStrictEqual(errors, []);
     console.log('ramified_minigames_player_ui_test: pagination, Gomoku/Connect Four preparation, defaults, direction retention, AI play/save, i18n, keyboard, cancel, narrow/fullscreen and Sokoban passed');
   } finally {

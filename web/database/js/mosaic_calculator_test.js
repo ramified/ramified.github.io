@@ -1242,7 +1242,35 @@ function testPrecomputedDataRequiresManualRefresh() {
   assert.strictEqual(exported.hex.homology.version, 1);
 }
 
+function testChessClassificationAtExport() {
+  const cases = [
+    [[], 'game'],
+    [[{ row: 1, col: 1, color: 'white', side: 'white', kind: 'queen' }], 'kingless-puzzle'],
+    [[{ row: 1, col: 1, color: 'white', side: 'white', kind: 'king' }, { row: 8, col: 8, color: 'black', side: 'black', kind: 'king' }], 'game']
+  ];
+  for (const [pieces, variant] of cases) {
+    mosaic.setTestBoard({ rows: 8, cols: 8, lattice: 'square', pieces });
+    mosaic.setTestExportControls({ type: 'minigame', group: 'FIDE Chess', label: 'Classification test' });
+    assert.strictEqual(mosaic.currentExportPresetMetadata().fideChessVariant, variant);
+    assert.strictEqual(mosaic.minigamePresetRegistryEntry().fideChessVariant, variant);
+    assert.strictEqual(mosaic.buildCompactBackgroundExport(true).fideChessVariant, variant);
+    assert.strictEqual(mosaic.buildMinigamePresetExport().fideChessVariant, variant);
+    const exported = loadPresetJs(mosaic.buildMinigamePresetJsExport());
+    assert.strictEqual(exported.fideChessVariant, variant);
+    assert.strictEqual(mosaic.exportImportMetadataFromPayload(exported).fideChessVariant, variant);
+    const normalized = minigames.normalizePresetPayload(exported);
+    assert.strictEqual(minigames.createFideChessState(normalized).fideChessVariant, variant);
+  }
+  mosaic.setTestBoard({ rows: 8, cols: 8, fideChessVariant: 'kingless-puzzle' });
+  assert.strictEqual(mosaic.currentExportPresetMetadata().fideChessVariant, 'kingless-puzzle', 'explicit imported classification survives export');
+  mosaic.setTestBoard({ rows: 8, cols: 8, fideChessVariant: 'game', pieces: cases[1][0] });
+  assert.strictEqual(mosaic.currentExportPresetMetadata().fideChessVariant, 'kingless-puzzle', 'removing kings from an imported game updates its export classification');
+  mosaic.setTestExportControls({ type: 'minigame', group: '2048' });
+  assert.strictEqual(mosaic.currentExportPresetMetadata().fideChessVariant, undefined, 'unrelated exports do not inherit a chess category');
+}
+
 const tests = [
+  testChessClassificationAtExport,
   testFullExportIncludesMarkers,
   testBackgroundFormats,
   testMinigameFormats,

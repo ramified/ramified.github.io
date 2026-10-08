@@ -167,6 +167,18 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
 .player-stone-white { background: #fff; }
 .player-stone-red { background: #d83a3a; border-color: #841f24; }
 .player-stone-yellow { background: #f0c84b; border-color: #9a7117; }
+.player-stone-blue { background: #4285d4; }
+.player-stone-green { background: #3b9955; }
+#player-setup-options { width: min(100%, 560px); min-width: 0; }
+#player-setup-options > .mosaic-inline-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--player-small-gap); margin: 0 0 var(--player-small-gap); }
+#player-setup-options select { width: 100%; min-width: 0; }
+#player-setup-options #chinese-checkers-players-row > .input-label { display: none; }
+#player-setup-options #chinese-checkers-player-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--player-gap); }
+#player-setup-options .local-ai-player-option { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--player-small-gap); min-width: 0; }
+.player-setup-main:has(#chinese-checkers-players-row:not([hidden])) .player-board-preview { height: clamp(130px, calc(var(--player-frame-height) * .3), 220px); }
+#player-chess-category { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--player-gap); }
+#player-chess-category .btn { width: min(100%, 280px); }
+#player-edit-balls { display: block; margin: var(--player-gap) auto; }
 .player-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .player-controller-picker {
   display: grid; grid-template-columns: 36px minmax(0, 1fr) 36px;
@@ -265,6 +277,7 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
 .ramified-player :is(button, select, input, textarea, summary, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .ramified-player.canvas-fullscreen-active { --player-frame-height: 100dvh; }
 @media (max-width: 600px) {
+  #player-setup-options #chinese-checkers-player-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #player-setup-players { gap: var(--player-gap); }
   .player-controller-picker { grid-template-columns: 26px minmax(0, 1fr) 26px; gap: 2px; min-height: 56px; }
   .player-controller-picker output { font-size: 0.78rem; }

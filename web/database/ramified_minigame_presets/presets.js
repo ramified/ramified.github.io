@@ -3,7 +3,7 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = presets;
   if (root) root.RAMIFIED_MINIGAME_PRESETS = presets;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
-  const defaultForEntries = [
+  const featuredDefaultEntries = [
     ["hex", "classic-hex", "center"],
     ["gomoku", "wormhole", "vertex"],
     ["go", "gomoku-big-hole", "vertex"],
@@ -17,9 +17,23 @@
     ["lianliankan", "rubiks-cube-3x3x3", "center"]
   ];
   return {
-    gameOrder: defaultForEntries.map(([mode]) => mode),
-    defaultFor: Object.fromEntries(defaultForEntries.map(([mode, presetId]) => [mode, presetId])),
-    defaultDisplayFor: Object.fromEntries(defaultForEntries.map(([mode, _presetId, display]) => [mode, display])),
+    gameOrder: ['hex', 'gomoku', 'go', 'connect-four', '2048', 'reversi', 'chinese-checkers', 'sokoban', 'fide-chess', 'billiards', 'lianliankan'],
+    // Player defaults are independent from the topology-focused archive defaults.
+    playerDefaults: {
+      hex: { presetId: 'classic-hex', controls: { hexPieRule: false } },
+      gomoku: { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 15, boundaryGlueRows: 15, boundaryGlueCols: 15, gomokuBlackController: 'human', gomokuWhiteController: 'local-ai-challenging' } },
+      go: { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 19, boundaryGlueRows: 19, boundaryGlueCols: 19, goKomi: 6.5 } },
+      'connect-four': { presetId: 'connect-four-6x7', controls: { connectFourFall: 'S', connectFourRedController: 'human', connectFourYellowController: 'local-ai-challenging' } },
+      '2048': { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 4, boundaryGlueRows: 4, boundaryGlueCols: 4 } },
+      reversi: { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 8, boundaryGlueRows: 8, boundaryGlueCols: 8 } },
+      'chinese-checkers': { presetId: 'small-classic', humanColor: 'black', controls: { chineseCheckersJumpRule: 'unlimited' } },
+      'fide-chess': { presetId: 'fide-chess-8x8', categories: { game: 'fide-chess-8x8', 'kingless-puzzle': 'n-queens-puzzle' } },
+      billiards: { presetId: 'half-glued', controls: { billiardsRules: 'solo' } },
+      lianliankan: { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 6, boundaryGlueRows: 6, boundaryGlueCols: 6, lianliankanTileSet: 'chinese' } }
+    },
+    featuredDefaultFor: Object.fromEntries(featuredDefaultEntries.map(([mode, presetId]) => [mode, presetId])),
+    defaultFor: Object.fromEntries(featuredDefaultEntries.map(([mode, presetId]) => [mode, presetId])),
+    defaultDisplayFor: Object.fromEntries(featuredDefaultEntries.map(([mode, _presetId, display]) => [mode, display])),
     presets: [
     {
       "gameTypes": [
@@ -33,6 +47,7 @@
         "Billiard"
       ],
       "id": "boundary-glue-board",
+      "fideChessVariant": "game",
       "label": "boundary glue board",
       "key": "boundary_glue_board",
       "file": "boundary_glue_board.preset.js"
@@ -42,6 +57,7 @@
         "FIDE Chess"
       ],
       "id": "fide-chess-8x8",
+      "fideChessVariant": "game",
       "label": "FIDE chess 8x8",
       "key": "fide_chess_8x8",
       "file": "fide_chess_8x8.preset.js"
@@ -51,6 +67,7 @@
         "FIDE Chess"
         ],
       "id": "between-two-fires",
+      "fideChessVariant": "game",
       "label": "between two fires",
       "key": "between_two_fires",
       "wrappedView": { "x": "repeat", "y": "repeat" },
@@ -61,6 +78,7 @@
         "FIDE Chess"
       ],
       "id": "n-queens-puzzle",
+      "fideChessVariant": "kingless-puzzle",
       "label": "N queens puzzle",
       "key": "n_queens_puzzle",
       "file": "n_queens_puzzle.preset.js"
@@ -70,6 +88,7 @@
         "FIDE Chess"
       ],
       "id": "n-queens-torus-puzzle",
+      "fideChessVariant": "kingless-puzzle",
       "label": "N queens puzzle on torus",
       "key": "n_queens_torus_puzzle",
       "wrappedView": { "x": "repeat", "y": "repeat" },
@@ -653,6 +672,7 @@
         "FIDE Chess"
         ],
       "id": "knights-on-rubik-s-cube",
+      "fideChessVariant": "kingless-puzzle",
       "label": "knights on Rubik's Cube",
       "key": "knights_on_rubik_s_cube",
       "file": "knights_on_rubik_s_cube.preset.js"
@@ -662,6 +682,7 @@
         "FIDE Chess"
         ],
       "id": "queens-on-double-cover",
+      "fideChessVariant": "kingless-puzzle",
       "label": "queens on double cover",
       "key": "queens_on_double_cover",
       "file": "queens_on_double_cover.preset.js"
