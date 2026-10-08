@@ -82,15 +82,17 @@ function testDisabledWithoutEndpointOrWithGpc() {
   assert.deepStrictEqual(env.requests, []);
 }
 
-function testPageWiringAndDisclosure() {
-  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
-  assert.ok(html.includes('data-i18n="analytics.notice"'));
-  assert.ok(html.includes('js/ramified_minigames_analytics.js?v='));
-  assert.ok(html.indexOf('window.RAMIFIED_MINIGAMES_ONLINE_URL') < html.indexOf('js/ramified_minigames_analytics.js'));
+function testPageWiring() {
+  for (const page of ['ramified_minigames.html', 'ramified_minigames_archive.html']) {
+    const html = fs.readFileSync(require.resolve('../' + page), 'utf8');
+    assert.strictEqual(html.includes('data-i18n="analytics.notice"'), page.includes('archive'), 'R11 removes the player notice while retaining archive content');
+    assert.ok(html.includes('js/ramified_minigames_analytics.js?v='));
+    assert.ok(html.indexOf('window.RAMIFIED_MINIGAMES_ONLINE_URL') < html.indexOf('js/ramified_minigames_analytics.js'));
+  }
 }
 
 testPrivacyPreferences();
 testActivePlaytimeAndModeAttribution();
 testDisabledWithoutEndpointOrWithGpc();
-testPageWiringAndDisclosure();
+testPageWiring();
 console.log('ramified_minigames_analytics_test: all tests passed');

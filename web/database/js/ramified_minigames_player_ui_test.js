@@ -338,6 +338,38 @@ async function run() {
     const beforeMove = await read('RamifiedMinigames.__test.getGame().round');
     await click('#player-action-controls [data-move-dir="E"]');
     await waitFor(() => read(`RamifiedMinigames.__test.getGame().round > ${beforeMove}`), 5000, 'Sokoban move');
+    await waitFor(() => read('!!RamifiedMinigames.player.snapshot()'), 5000, 'saved move');
+    const beforeMenus = await read('RamifiedMinigames.__test.getGame().moves');
+    for (const locale of ['en', 'zh-CN']) {
+      await read(`SiteI18n.setLocale('${locale}')`);
+      for (const [width, fullscreen] of [[1280, false], [390, false], [320, false], [1920, true]]) {
+        await resize(width);
+        await click('#fullscreen-settings-open'); await click('#player-menu-button');
+        if (fullscreen) {
+          await click('#player-game-settings'); await click('#player-fullscreen');
+          await waitFor(() => read('!!document.fullscreenElement'), 5000, 'menu fullscreen');
+        }
+        assert.deepStrictEqual(await read(`[...document.querySelectorAll('#player-game-menu > button:not([hidden])')].map(n=>n.dataset.i18n)`),
+          ['player.resume', 'player.chooseLevel', 'player.changeGame', 'setup.display', 'online.title', 'fullscreen.settings', 'player.home']);
+        assert.strictEqual(await read(`!document.querySelector('#player-menu [data-player-page="files"], #player-menu [data-player-page="stats"], #player-files, #player-stats')`), true);
+        assert.strictEqual(await read(`[...document.querySelectorAll('.side button, .side input, .side select')].every(n=>!n.getClientRects().length)`), true, 'remaining debug controls are outside the player flow');
+        assert.strictEqual(await read(`(() => {const p=document.querySelector('#player-game-menu'),r=p.getBoundingClientRect();return p.scrollWidth<=p.clientWidth&&[...p.querySelectorAll('button:not([hidden])')].every(n=>{const b=n.getBoundingClientRect();return Math.abs(b.x+b.width/2-(r.x+p.clientWidth/2))<1;});})()`), true, 'menu stays centered without horizontal overflow');
+        await read('document.querySelector("#player-home-button").focus()'); await key('Tab', 'Tab', 9);
+        assert.strictEqual(await read('document.activeElement.id'), 'player-resume', 'removed pages leave no stale keyboard stop');
+        await shot(`menu-r11-${width}-${locale}`);
+        await click('#player-game-settings');
+        assert.strictEqual(await read(`(() => {const p=document.querySelector('#fullscreen-settings-display'),n=document.querySelector('#player-language select'),r=n.getBoundingClientRect(),b=p.getBoundingClientRect();return p.scrollTop===0&&document.activeElement===n&&r.y>=b.y&&r.bottom<=b.bottom;})()`), true, 'settings opens at language without clipping the first control');
+        assert.strictEqual(await read(`!document.querySelector('#fullscreen-settings-overlay [data-i18n="player.saveNote"], #fullscreen-settings-overlay [data-i18n="player.archive"], #fullscreen-settings-overlay [data-i18n="analytics.notice"]')`), true);
+        assert.strictEqual(await read(`!!window.RamifiedMinigamesAnalytics && !!document.querySelector('script[src*="ramified_minigames_analytics.js"]')`), true, 'analytics still loads');
+        await shot(`settings-r11-${width}-${locale}`);
+        await click('#fullscreen-settings-controls-tab'); await shot(`controls-r11-${width}-${locale}`);
+        await key('Escape', 'Escape', 27); await click('#player-resume');
+        if (fullscreen) await read('document.exitFullscreen()');
+      }
+    }
+    assert.strictEqual(await read('RamifiedMinigames.__test.getGame().moves'), beforeMenus, 'menu cleanup preserves the active game');
+    assert.strictEqual(await read('document.querySelector(".mosaic-underbar").getClientRects().length > 0 && !!document.querySelector("#status-line").textContent'), true, 'in-game feedback remains visible');
+    await resize(1280);
     await require('./ramified_minigames_preparation_ui_checks.js')({ client, mouse, read, click, ready, set, resize, shot, menuHome, revealGame });
     assert.deepStrictEqual(errors, []);
     console.log('ramified_minigames_player_ui_test: pagination, Gomoku/Connect Four preparation, defaults, direction retention, AI play/save, i18n, keyboard, cancel, narrow/fullscreen and Sokoban passed');

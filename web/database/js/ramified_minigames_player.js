@@ -76,7 +76,7 @@
 
     // Move the existing nodes, preserving their listeners, IDs and styling.
     const cards = Array.from(document.querySelectorAll('.side > .card'));
-    ['player-setup-controls', 'player-display', 'player-online', 'player-files', 'player-stats'].forEach((id, index) => {
+    ['player-setup-controls', 'player-display', 'player-online'].forEach((id, index) => {
       const card = cards[index];
       if (!card) return;
       card.querySelector('.card-head')?.remove();
@@ -106,12 +106,6 @@
     byId('player-action-controls').append(byId('fullscreen-lianliankan-actions'));
     const language = document.querySelector('body > header .site-language-control');
     if (language) byId('player-language').append(language);
-    const notice = document.querySelector('body > footer [data-i18n="analytics.notice"]');
-    if (notice) {
-      const paragraph = document.createElement('p');
-      paragraph.append(notice);
-      byId('player-settings-extra').append(paragraph);
-    }
 
     function sync() {
       const state = engine.state();
@@ -308,12 +302,12 @@
         home: 'meta.heading', 'game-menu': 'player.menu', games: 'player.chooseGame',
         setup: PREPARATION_LAYOUTS[engine.state().mode]?.title || 'player.gameOptions', 'chess-category': 'games.chess', 'board-options': 'player.moreOptions', confirm: 'player.start',
         levels: 'player.chooseLevel',
-        display: 'setup.display', online: 'online.title', files: 'player.files', stats: 'status.stats'
+        display: 'setup.display', online: 'online.title'
       };
       byId('player-menu-title').dataset.i18n = titleKeys[next];
       byId('player-menu-title').textContent = window.SiteI18n.t(titleKeys[next]);
       message(levelProgress.failed() ? tk('player.levelSaveError', 'Level progress could not be saved in this browser. Keep this tab open.')
-        : storageFailed ? tk('player.saveError', 'This browser could not save progress. Keep this tab open, or export the game from the menu.') : '');
+        : storageFailed ? tk('player.saveError', 'This browser could not save progress. Keep this tab open.') : '');
       setOpen(true);
       sync();
       const focus = (focusId && byId(focusId)) || Array.from(pages.find((node) => !node.hidden)?.querySelectorAll('button:not(:disabled), select:not(:disabled), input:not(:disabled)') || [])
@@ -586,7 +580,11 @@
     document.addEventListener('fullscreenchange', sync);
     new MutationObserver(() => {
       syncModalInput();
-      if (byId('fullscreen-settings-overlay').hidden
+      if (!byId('fullscreen-settings-overlay').hidden && !byId('fullscreen-settings-display').hidden) {
+        // The player page starts with language; the shared engine initially focuses sound.
+        byId('player-language').querySelector('select')?.focus({ preventScroll: true });
+        byId('fullscreen-settings-display').scrollTo(0, 0);
+      } else if (byId('fullscreen-settings-overlay').hidden
         && (document.activeElement === document.body || document.activeElement?.closest('#fullscreen-settings-overlay'))) {
         const target = menu.hidden ? 'fullscreen-settings-open'
           : page === 'home' ? 'player-settings' : page === 'game-menu' ? 'player-game-settings' : 'player-back';

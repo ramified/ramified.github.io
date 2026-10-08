@@ -2104,8 +2104,6 @@
             <button class="btn" data-player-page="setup" type="button" data-i18n="player.changeGame">Change game</button>
             <button class="btn" data-player-page="display" type="button" data-i18n="setup.display">Display</button>
             <button class="btn" data-player-page="online" type="button" data-i18n="online.title">Online Play</button>
-            <button class="btn" data-player-page="files" type="button" data-i18n="player.files">Import / export</button>
-            <button class="btn" data-player-page="stats" type="button" data-i18n="status.stats">Game Stats</button>
             <button class="btn" id="player-game-settings" type="button" data-i18n="fullscreen.settings">Settings</button>
             <button class="btn" id="player-home-button" type="button" data-i18n="player.home">Main menu</button>
           </section>
@@ -2175,8 +2173,6 @@
           </section>
           <section id="player-display" class="player-page" hidden></section>
           <section id="player-online" class="player-page" hidden></section>
-          <section id="player-files" class="player-page" hidden></section>
-          <section id="player-stats" class="player-page" hidden></section>
         </div>
       </div>
       <details id="player-actions">
@@ -2296,8 +2292,6 @@
           <div class="fullscreen-settings-panel" id="fullscreen-settings-display" role="tabpanel" aria-labelledby="fullscreen-settings-display-tab">
             <div class="player-settings-extra" id="player-settings-extra">
               <div id="player-language"></div>
-              <p data-i18n="player.saveNote">Local games are saved in this browser. Undo history is not restored after reloading. Online rooms are not saved locally.</p>
-              <p><a href="ramified_minigames_archive.html" target="_blank" rel="noopener" data-i18n="player.archive">Archive / debug</a></p>
             </div>
             <div class="fullscreen-settings-options">
               <div class="fullscreen-setting-row" id="fullscreen-wrapped-view-row" hidden>
@@ -3178,14 +3172,13 @@
 <footer>
   Browser-side minigames on glued mosaic background spaces.
   <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
-  <span data-i18n="analytics.notice">Anonymous visit, country, and active playtime statistics are collected; no IP addresses, names, room codes, persistent visitor IDs, or game states are stored.</span>
 </footer>
 
 <script src="ramified_minigame_presets/presets.js?v=20261008-3"></script>
 <script src="js/calculator_input_settings.js?v=20260903-1"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20261008-3"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20261008-4"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
@@ -3194,7 +3187,7 @@
 <script src="js/ramified_minigames_sfx.js?v=20260913-2"></script>
 <script src="js/ramified_minigames_setup.js?v=20261008-3"></script>
 <script src="js/ramified_minigames_sokoban_progress.js?v=20261008-3"></script>
-<script src="js/ramified_minigames_player.js?v=20261008-3"></script>
+<script src="js/ramified_minigames_player.js?v=20261008-4"></script>
 <script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
 </body>
