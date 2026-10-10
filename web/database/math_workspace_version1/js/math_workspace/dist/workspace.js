@@ -197236,33 +197236,6 @@ ${arrows.join("\n")}` : "";
             "gameTypes": [
               "Sokoban"
             ],
-            "id": "expand2",
-            "label": "expand2",
-            "key": "expand2",
-            "file": "sokoban/expand2.preset.js"
-          },
-          {
-            "gameTypes": [
-              "Sokoban"
-            ],
-            "id": "expand3",
-            "label": "expand3",
-            "key": "expand3",
-            "file": "sokoban/expand3.preset.js"
-          },
-          {
-            "gameTypes": [
-              "Sokoban"
-            ],
-            "id": "bridges-blocking",
-            "label": "bridges_blocking",
-            "key": "bridges_blocking",
-            "file": "sokoban/bridges_blocking.preset.js"
-          },
-          {
-            "gameTypes": [
-              "Sokoban"
-            ],
             "id": "orbox-b",
             "label": "Orbox B",
             "key": "orbox_b",
@@ -197321,6 +197294,33 @@ ${arrows.join("\n")}` : "";
             "label": "islands",
             "key": "islands",
             "file": "sokoban/islands.preset.js"
+          },
+          {
+            "gameTypes": [
+              "Sokoban"
+            ],
+            "id": "expand2",
+            "label": "expand2",
+            "key": "expand2",
+            "file": "sokoban/expand2.preset.js"
+          },
+          {
+            "gameTypes": [
+              "Sokoban"
+            ],
+            "id": "expand3",
+            "label": "expand3",
+            "key": "expand3",
+            "file": "sokoban/expand3.preset.js"
+          },
+          {
+            "gameTypes": [
+              "Sokoban"
+            ],
+            "id": "bridges-blocking",
+            "label": "bridges_blocking",
+            "key": "bridges_blocking",
+            "file": "sokoban/bridges_blocking.preset.js"
           },
           {
             "gameTypes": [

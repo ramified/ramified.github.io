@@ -123,6 +123,17 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
 #player-home > .btn, #player-game-menu > .btn { width: 100%; }
 #player-confirm { text-align: center; }
 #player-confirm > p { max-width: 720px; margin-inline: auto; }
+#player-slot-list { max-width: 720px; margin-inline: auto; }
+.player-slot-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  gap: var(--player-gap); padding-block: var(--player-gap); border-bottom: 1px solid var(--border);
+}
+.player-slot-choice { display: grid; gap: 4px; width: 100%; text-align: left; }
+.player-slot-name { font-size: 1rem; }
+.player-slot-summary, .player-slot-progress { font-size: 0.78rem; }
+.player-slot-actions { display: flex; gap: var(--player-small-gap); }
+#player-slot-warning { max-width: 720px; margin: 0 auto var(--player-gap); line-height: 1.6; }
+.player-slot-confirm-actions { display: flex; justify-content: center; gap: var(--player-gap); }
 #player-level-list {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
   gap: var(--player-gap); max-width: 720px; margin-inline: auto;
@@ -301,6 +312,8 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
 .ramified-player :is(button, select, input, textarea, summary, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .ramified-player.canvas-fullscreen-active { --player-frame-height: 100dvh; }
 @media (max-width: 600px) {
+  .player-slot-row { grid-template-columns: minmax(0, 1fr); }
+  .player-slot-actions > button { flex: 1; }
   #player-setup-options #chinese-checkers-player-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #player-setup-players { gap: var(--player-gap); }
   .player-controller-picker { grid-template-columns: 26px minmax(0, 1fr) 26px; gap: 2px; min-height: 56px; }

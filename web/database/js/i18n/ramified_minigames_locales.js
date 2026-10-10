@@ -2,6 +2,21 @@
   'use strict';
 
   const pairs = {
+    'player.chooseSave': ['Choose a save', '选择存档'],
+    'player.slotName': ['Save {{number}}', '存档 {{number}}'],
+    'player.slotLabel': ['Save {{number}} — {{detail}}', '存档 {{number}}，{{detail}}'],
+    'player.slotEmpty': ['Empty', '空存档'],
+    'player.slotNoGame': ['No current game', '尚未开始游戏'],
+    'player.slotProgress': ['Sokoban: {{completed}}/{{total}} completed', '推箱子：已通关 {{completed}}／{{total}}'],
+    'player.slotRestart': ['Restart save', '重开存档'],
+    'player.slotDelete': ['Delete', '删除'],
+    'player.slotRestartLabel': ['Restart save {{number}}', '重开存档 {{number}}'],
+    'player.slotDeleteLabel': ['Delete save {{number}}', '删除存档 {{number}}'],
+    'player.slotRestartWarning': ['Restart save {{number}}? Its current game and Sokoban progress will be cleared, starting again with the first three levels. Other saves are unchanged.', '重开存档 {{number}}？该档的当前棋局和推箱子通关记录将清空，关卡恢复为初始前三关。其他存档不受影响。'],
+    'player.slotDeleteWarning': ['Delete save {{number}}? Its current game and Sokoban progress will be deleted. Other saves are unchanged.', '删除存档 {{number}}？该档的当前棋局和推箱子通关记录将删除。其他存档不受影响。'],
+    'player.slotChangeError': ['The save could not be changed. Please try again.', '未能修改存档，请重试。'],
+    'player.slotReadError': ['Some save data could not be read. The original data has been kept.', '部分存档数据无法读取，原始数据已保留。'],
+    'player.replaceSlot': ['Start a new game in save {{number}}? This replaces its current game. Sokoban progress is kept.', '在存档 {{number}} 中开始新游戏？这会替换该档的当前棋局，推箱子通关记录仍会保留。'],
     'player.chooseLevel': ['Choose a level', '选择关卡'],
     'player.sokobanLevels': ['Sokoban levels', '推箱子关卡'],
     'player.levelCompleted': ['Completed', '已通关'],

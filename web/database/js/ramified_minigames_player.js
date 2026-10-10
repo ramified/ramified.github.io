@@ -1,6 +1,5 @@
 (() => {
   'use strict';
-  const SAVE_KEY = 'ramified.minigames.player.save.v1';
   const GAMES_PER_PAGE = 6;
   const GAME_STICKERS = {
     hex: 'hex.png', gomoku: 'gomoku.png', go: 'go.png', 'connect-four': 'connect_four.png',
@@ -41,11 +40,13 @@
     const canvas = byId('mosaic-canvas');
     let page = 'home';
     let backPage = 'home';
-    let saved = null;
+    let activeSlot = null;
+    let selectedSlot = null;
+    let slotPurpose = 'continue';
+    let slotGameMode = null;
+    let slotAction = null;
     let restoring = false;
     let saveTimer = null;
-    let storageFailed = false;
-    let lastSave = '';
     let newGameParent = 'home';
     let gameListPage = 0;
     let setupBusy = false;
@@ -55,23 +56,16 @@
     let chessCategory = null;
     const chessBoards = new Map();
     const levelIds = window.RAMIFIED_MINIGAME_PRESETS.presets.filter(entry => entry.gameTypes.includes('Sokoban')).map(entry => entry.id);
-    const levelProgress = window.RamifiedSokobanProgress.create(levelIds, {
+    const slots = window.RamifiedSaveSlots.create(levelIds, {
       getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value)
     });
     let levelsParent = 'games';
     let pendingLevelId = null;
-    engine.setSokobanProgress(levelProgress.snapshot().completed);
+    engine.setSokobanProgress([]);
 
     function message(text = '') {
       byId('player-message').textContent = text;
       byId('player-message').hidden = !text;
-    }
-
-    try {
-      const value = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
-      if (value?.version === 1 && value.payload) saved = value;
-    } catch (_) {
-      storageFailed = true;
     }
 
     // Move the existing nodes, preserving their listeners, IDs and styling.
@@ -109,16 +103,15 @@
 
     function sync() {
       const state = engine.state();
-      if (!state.online && state.solved && state.sokobanLevelId) {
-        if (levelProgress.complete(state.sokobanLevelId)) {
-          engine.setSokobanProgress(levelProgress.snapshot().completed);
-          save();
-        }
-      }
+      if (!restoring && activeSlot !== null && !state.online && state.solved && state.sokobanLevelId) save();
       syncLevels(state);
-      byId('player-choose-level').hidden = state.mode !== 'sokoban' || state.online;
+      if (page === 'slots') syncSlots(state);
+      if (page === 'slot-confirm') syncSlotConfirmation();
+      if (page === 'confirm') byId('player-replace-text').textContent = tk('player.replaceSlot', 'Start a new game in save {{number}}? This replaces its current game. Sokoban progress is kept.', { number: selectedSlot + 1 });
+      byId('player-choose-level').hidden = activeSlot === null || state.mode !== 'sokoban' || state.online;
+      byId('player-resume').disabled = activeSlot === null && !state.online;
       byId('player-new').disabled = !state.ready || restoring || state.online || setupBusy;
-      byId('player-continue').disabled = !state.ready || restoring || !(state.active || saved || state.online);
+      byId('player-continue').disabled = !state.ready || restoring || !(slots.hasAny() || state.online);
       const layout = state.browsing ? PREPARATION_LAYOUTS[state.mode] || null : null;
       if (preparationLayout !== layout) {
         preparationLayout = layout;
@@ -152,11 +145,14 @@
         });
       }
       byId('player-actions').hidden = !Array.from(byId('player-action-controls').children).some((node) => !node.hidden);
-      if (!restoring && state.active && !state.online && !saveTimer) saveTimer = setTimeout(save, 250);
+      if (!restoring && activeSlot !== null && state.active && !state.online && !saveTimer) {
+        const owner = activeSlot;
+        saveTimer = setTimeout(() => save(owner), 250);
+      }
     }
 
     function syncLevels(state) {
-      const progress = levelProgress.snapshot();
+      const progress = slots.progress(selectedSlot);
       levelIds.forEach((id, index) => {
         let button = byId(`player-level-${index + 1}`);
         if (!button) {
@@ -189,12 +185,13 @@
       engine.cancelSetup();
       pendingLevelId = null;
       levelsParent = parent;
+      if (parent === 'game-menu') selectedSlot = activeSlot;
       save();
       show('levels', parent);
     }
 
     async function chooseLevel(id, { next = false } = {}) {
-      if (setupBusy || !engine.state().canPrepare || engine.state().online || !levelProgress.snapshot().unlocked.includes(id)) return;
+      if (selectedSlot === null || setupBusy || !engine.state().canPrepare || engine.state().online || !slots.progress(selectedSlot).unlocked.includes(id)) return;
       save();
       const request = ++setupRequest;
       pendingLevelId = id;
@@ -206,6 +203,7 @@
         if (request !== setupRequest) return;
         if (!loaded) throw new Error('Level could not be loaded');
         setupBusy = false;
+        const saved = slots.slot(selectedSlot)?.game;
         if (saved && !next && !['gameover', 'complete'].includes(saved.payload.phase)) show('confirm', 'levels');
         else startPreparedGame();
       } catch (_) {
@@ -258,20 +256,21 @@
       sync();
     }
 
-    function save() {
+    function save(owner = activeSlot) {
       clearTimeout(saveTimer);
       saveTimer = null;
-      if (restoring) return;
+      if (restoring || owner === null || owner !== activeSlot) return;
       const snapshot = engine.snapshot();
       if (!snapshot) return; // Finish the current move before committing a save.
-      saved = snapshot;
-      const comparable = JSON.stringify({ ...snapshot, payload: { ...snapshot.payload, exportedAt: '' } });
-      if (comparable === lastSave) return;
-      try {
-        localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot));
-        lastSave = comparable;
-        storageFailed = false;
-      } catch (_) { storageFailed = true; }
+      const state = engine.state();
+      const completedId = !state.online && state.solved ? state.sokobanLevelId : null;
+      const before = slots.progress(owner).completed.length;
+      const previous = slots.slot(owner)?.game;
+      const comparable = value => value && JSON.stringify({ ...value, payload: { ...value.payload, exportedAt: '' } });
+      if (!slots.error() && comparable(previous) === comparable(snapshot)
+        && (!completedId || slots.progress(owner).completed.includes(completedId))) return;
+      slots.save(owner, snapshot, completedId);
+      if (slots.progress(owner).completed.length !== before) engine.setSokobanProgress(slots.progress(owner).completed);
     }
 
     function syncModalInput() {
@@ -285,7 +284,126 @@
       }
     }
 
+    function syncSlots(state = engine.state()) {
+      slots.slots().forEach((slot, index) => {
+        const number = index + 1;
+        let row = byId(`player-slot-row-${number}`);
+        if (!row) {
+          row = document.createElement('div'); row.id = `player-slot-row-${number}`; row.className = 'player-slot-row';
+          const choose = document.createElement('button'); choose.type = 'button'; choose.className = 'btn player-slot-choice'; choose.id = `player-slot-${number}`;
+          for (const name of ['name', 'summary', 'progress']) {
+            const span = document.createElement('span'); span.className = `player-slot-${name}`; choose.append(span);
+          }
+          choose.addEventListener('click', () => selectSlot(index));
+          row.append(choose);
+          const actions = document.createElement('div'); actions.className = 'player-slot-actions';
+          for (const action of ['restart', 'delete']) {
+            const button = document.createElement('button'); button.type = 'button'; button.className = 'btn'; button.id = `player-slot-${action}-${number}`;
+            button.addEventListener('click', () => confirmSlotAction(index, action)); actions.append(button);
+          }
+          row.append(actions); byId('player-slot-list').append(row);
+        }
+        const name = tk('player.slotName', 'Save {{number}}', { number });
+        const mode = slot?.game?.payload?.gameMode;
+        const detail = slot ? engine.games().find(item => item.mode === mode)?.label || tk('player.slotNoGame', 'No current game') : tk('player.slotEmpty', 'Empty');
+        row.querySelector('.player-slot-name').textContent = name;
+        row.querySelector('.player-slot-summary').textContent = detail;
+        const progress = row.querySelector('.player-slot-progress');
+        const completed = slot?.sokoban.completed.length || 0;
+        progress.hidden = !slot || (!completed && mode !== 'sokoban');
+        progress.textContent = tk('player.slotProgress', 'Sokoban: {{completed}}/{{total}} completed', { completed, total: levelIds.length });
+        const busy = setupBusy || restoring || !state.canPrepare || state.online;
+        byId(`player-slot-${number}`).disabled = busy || (slotPurpose === 'continue' && !slot);
+        byId(`player-slot-${number}`).setAttribute('aria-label', tk('player.slotLabel', 'Save {{number}} — {{detail}}', { number, detail }));
+        for (const action of ['restart', 'delete']) {
+          const button = byId(`player-slot-${action}-${number}`);
+          button.hidden = !slot; button.disabled = busy;
+          button.textContent = action === 'restart' ? tk('player.slotRestart', 'Restart save') : tk('player.slotDelete', 'Delete');
+          button.setAttribute('aria-label', action === 'restart'
+            ? tk('player.slotRestartLabel', 'Restart save {{number}}', { number })
+            : tk('player.slotDeleteLabel', 'Delete save {{number}}', { number }));
+        }
+      });
+    }
+
+    function showSlots(purpose = slotPurpose, mode = slotGameMode) {
+      ++setupRequest;
+      setupBusy = false; restoring = false;
+      engine.cancelSetup();
+      save();
+      pendingLevelId = null; selectedSlot = null; slotAction = null;
+      slotPurpose = purpose; slotGameMode = mode;
+      show('slots', purpose === 'new' ? 'games' : 'home');
+    }
+
+    async function selectSlot(index) {
+      if (setupBusy || restoring || !engine.state().canPrepare || engine.state().online) return;
+      save();
+      if (slotPurpose === 'new') {
+        selectedSlot = index;
+        chooseGame(slotGameMode);
+        return;
+      }
+      const slot = slots.slot(index);
+      if (!slot) return;
+      if (!slot.game) { requestNewGame('home', index); return; }
+      const request = ++setupRequest;
+      restoring = true;
+      sync();
+      try {
+        if (activeSlot !== index || !engine.state().active) {
+          const restored = await engine.restore(slot.game, { isCurrent: () => request === setupRequest });
+          if (!restored || request !== setupRequest) return;
+        }
+        activeSlot = selectedSlot = index;
+        engine.setSokobanProgress(slots.progress(index).completed);
+        restoring = false;
+        setOpen(false);
+        save();
+      } catch (_) {
+        if (request === setupRequest) message(tk('player.loadError', 'The saved game could not be loaded. You can start a new game.'));
+      } finally {
+        if (request === setupRequest) { restoring = false; sync(); }
+      }
+    }
+
+    function confirmSlotAction(index, action) {
+      if (setupBusy || restoring || !engine.state().canPrepare || engine.state().online || !slots.slot(index)) return;
+      save();
+      slotAction = { index, action };
+      show('slot-confirm', 'slots', 'player-slot-cancel');
+    }
+
+    function syncSlotConfirmation() {
+      if (!slotAction) return;
+      const { index, action } = slotAction;
+      byId('player-slot-warning').textContent = action === 'restart'
+        ? tk('player.slotRestartWarning', 'Restart save {{number}}? Its current game and Sokoban progress will be cleared, starting again with the first three levels. Other saves are unchanged.', { number: index + 1 })
+        : tk('player.slotDeleteWarning', 'Delete save {{number}}? Its current game and Sokoban progress will be deleted. Other saves are unchanged.', { number: index + 1 });
+      byId('player-slot-confirm-action').textContent = action === 'restart' ? tk('player.slotRestart', 'Restart save') : tk('player.slotDelete', 'Delete');
+      byId('player-slot-confirm-action').dataset.i18n = action === 'restart' ? 'player.slotRestart' : 'player.slotDelete';
+    }
+
+    byId('player-slot-cancel').addEventListener('click', () => showSlots());
+    byId('player-slot-confirm-action').addEventListener('click', () => {
+      if (!slotAction || restoring || setupBusy || engine.state().online) return;
+      const { index, action } = slotAction;
+      if (!slots.clear(index, action === 'restart')) {
+        message(tk('player.slotChangeError', 'The save could not be changed. Please try again.'));
+        return;
+      }
+      clearTimeout(saveTimer); saveTimer = null;
+      if (activeSlot === index) activeSlot = null;
+      selectedSlot = null; slotAction = null;
+      if (action === 'restart') {
+        if (slotPurpose === 'new') { selectedSlot = index; chooseGame(slotGameMode); }
+        else requestNewGame('home', index);
+      } else showSlots();
+    });
+
     function setOpen(open) {
+      // Canceling another slot's preparation must not redirect the live game's next level.
+      if (!open && !engine.state().browsing) selectedSlot = activeSlot;
       menu.hidden = !open;
       document.body.classList.toggle('player-menu-open', open);
       engine.setMenuOpen(open);
@@ -302,12 +420,14 @@
         home: 'meta.heading', 'game-menu': 'player.menu', games: 'player.chooseGame',
         setup: PREPARATION_LAYOUTS[engine.state().mode]?.title || 'player.gameOptions', 'chess-category': 'games.chess', 'board-options': 'player.moreOptions', confirm: 'player.start',
         levels: 'player.chooseLevel',
+        slots: 'player.chooseSave', 'slot-confirm': 'player.chooseSave',
         display: 'setup.display', online: 'online.title'
       };
       byId('player-menu-title').dataset.i18n = titleKeys[next];
       byId('player-menu-title').textContent = window.SiteI18n.t(titleKeys[next]);
-      message(levelProgress.failed() ? tk('player.levelSaveError', 'Level progress could not be saved in this browser. Keep this tab open.')
-        : storageFailed ? tk('player.saveError', 'This browser could not save progress. Keep this tab open.') : '');
+      message(slots.error() === 'read' || slots.error() === 'legacy'
+        ? tk('player.slotReadError', 'Some save data could not be read. The original data has been kept.')
+        : slots.error() ? tk('player.saveError', 'This browser could not save progress. Keep this tab open.') : '');
       setOpen(true);
       sync();
       const focus = (focusId && byId(focusId)) || Array.from(pages.find((node) => !node.hidden)?.querySelectorAll('button:not(:disabled), select:not(:disabled), input:not(:disabled)') || [])
@@ -319,7 +439,7 @@
     byId('player-menu-button').addEventListener('click', () => {
       engine.closeSettings();
       save();
-      show(engine.state().browsing ? 'setup' : engine.state().active || engine.state().online ? 'game-menu' : 'home');
+      show(engine.state().browsing ? 'setup' : activeSlot !== null || engine.state().online ? 'game-menu' : 'home');
     });
     byId('player-resume').addEventListener('click', () => setOpen(false));
     byId('player-home-button').addEventListener('click', () => { save(); show('home'); });
@@ -334,12 +454,17 @@
       } else showLevels('game-menu');
     });
     function goBack() {
-      if (page === 'levels') {
+      if (page === 'slot-confirm') { showSlots();
+      } else if (page === 'slots') {
+        ++setupRequest; restoring = false; setupBusy = false; selectedSlot = null;
+        show(slotPurpose === 'new' ? 'games' : 'home', newGameParent);
+      } else if (page === 'levels') {
         ++setupRequest;
         setupBusy = false;
         engine.cancelSetup();
         pendingLevelId = null;
-        show(levelsParent, levelsParent === 'games' ? newGameParent : 'home');
+        if (levelsParent === 'slots') showSlots('new', 'sokoban');
+        else show(levelsParent, 'home');
       } else if (page === 'confirm' && pendingLevelId) {
         showLevels();
       } else if (page === 'setup') {
@@ -351,12 +476,12 @@
         ++setupRequest;
         setupBusy = false;
         engine.cancelSetup();
-        show('games', newGameParent);
+        showSlots('new', slotGameMode);
       } else if (page === 'chess-category') {
         ++setupRequest;
         setupBusy = false;
         engine.cancelSetup();
-        show('games', newGameParent);
+        showSlots('new', 'fide-chess');
       } else if (page === 'board-options') show('setup', 'games', 'player-more');
       else if (page === 'confirm') show('setup', 'games');
       else if (page === 'games') show(newGameParent);
@@ -374,10 +499,12 @@
     }
     byId('player-settings').addEventListener('click', () => engine.settings());
     byId('player-game-settings').addEventListener('click', () => engine.settings());
-    function requestNewGame(parent) {
+    function requestNewGame(parent, index = null) {
       newGameParent = parent;
       gameListPage = 0;
       save();
+      selectedSlot = index;
+      slotGameMode = null;
       updateGameList();
       show('games', parent);
     }
@@ -434,7 +561,9 @@
     byId('player-games-next').addEventListener('click', () => changeGamesPage(1));
     async function chooseGame(mode, category = null) {
       if (setupBusy || !engine.state().canPrepare) return;
-      if (mode === 'sokoban') { showLevels('games'); return; }
+      if (selectedSlot === null) { showSlots('new', mode); return; }
+      slotGameMode = mode;
+      if (mode === 'sokoban') { showLevels('slots'); return; }
       if (mode === 'fide-chess' && !category) {
         chessCategory = null;
         chessBoards.clear();
@@ -458,8 +587,7 @@
         show('setup', 'games');
       } catch (_) {
         if (request !== setupRequest) return;
-        engine.cancelSetup();
-        show('games', newGameParent);
+        showSlots('new', mode);
         message(tk('player.setupLoadError', 'This board could not be loaded. Your previous game is still available.'));
       } finally {
         if (request === setupRequest) { setupBusy = false; sync(); }
@@ -486,19 +614,25 @@
       }
     }
     function startPreparedGame() {
-      if (setupBusy || !engine.state().browsing) return;
+      if (selectedSlot === null || setupBusy || !engine.state().browsing) return;
       try {
+        restoring = true; // Ignore state events until the new game has an owner.
         if (!engine.commitSetup({ sokobanLevelId: pendingLevelId })) {
+          restoring = false;
           if (pendingLevelId) showLevels();
           else show('setup', 'games');
           message(tk('player.startError', 'The game could not start. Check the board settings. Your previous save is unchanged.'));
           return;
         }
+        activeSlot = selectedSlot;
+        engine.setSokobanProgress(slots.progress(activeSlot).completed);
+        restoring = false;
         pendingLevelId = null;
         setOpen(false);
         save();
         sync();
       } catch (_) {
+        restoring = false;
         if (pendingLevelId) showLevels();
         else show('games', newGameParent);
         message(tk('player.startError', 'The game could not start. Check the board settings. Your previous save is unchanged.'));
@@ -506,7 +640,7 @@
     }
     function requestStart() {
       if (setupBusy || !engine.state().ready || engine.state().setupError) return;
-      if (saved) show('confirm', 'setup');
+      if (slots.slot(selectedSlot)?.game) show('confirm', 'setup');
       else startPreparedGame();
     }
     byId('player-board-previous').addEventListener('click', () => changeBoard(-1));
@@ -532,20 +666,9 @@
     byId('player-new').addEventListener('click', () => {
       requestNewGame('home');
     });
-    byId('player-continue').addEventListener('click', async () => {
-      if (engine.state().active || engine.state().online) { setOpen(false); return; }
-      if (!saved || restoring) return;
-      restoring = true;
-      sync();
-      try {
-        await engine.restore(saved);
-        setOpen(false);
-      } catch (_) {
-        message(tk('player.loadError', 'The saved game could not be loaded. You can start a new game.'));
-      } finally {
-        restoring = false;
-        sync();
-      }
+    byId('player-continue').addEventListener('click', () => {
+      if (engine.state().online) { setOpen(false); return; }
+      if (!restoring) showSlots('continue', null);
     });
 
     // Capture before game shortcuts, but leave settings key binding capture alone.
@@ -591,7 +714,7 @@
         byId(target).focus();
       }
     }).observe(byId('fullscreen-settings-overlay'), { attributes: true, attributeFilter: ['hidden'] });
-    window.addEventListener('pagehide', save);
+    window.addEventListener('pagehide', () => save());
     engine.fit();
     show('home');
   });

@@ -15,13 +15,15 @@
 
 本地游戏在一步操作稳定完成后，使用原来的状态导出格式保存到当前浏览器的 `localStorage`。跨刷新恢复棋局和 AI 玩家配置；不保存撤销栈，也不把联网房间作为本地存档。菜单内往返直接保留内存中的棋局与撤销栈。打开菜单或设置会阻止本地 AI 开始下一步，正在播放的一步动画可以完成。
 
-整个游戏集保留一份进度。`beginSetup / cancelSetup / commitSetup` 将新局准备与当前棋局分开；预览借用原渲染，当前棋局、撤销／重做及相关控件值保留在内存中。浏览不覆盖存档，返回或失败恢复原局；仅在正式开局前确认替换，成功后自动保存新局。具体范围见 [R08 实施记录](ramified_R08_start_flow.md)。
+整个游戏集共用三个存档，每档保存一局当前游戏及独立的推箱子进度。选择游戏后先选档，再进入原准备／选关页；继续游戏先选已有档。`beginSetup / cancelSetup / commitSetup` 将新局准备与当前棋局分开；预览借用原渲染，当前棋局、撤销／重做及相关控件值保留在内存中。浏览不覆盖存档，返回或失败恢复原局；仅在正式开局前确认替换，成功后自动保存新局。具体范围见 [R08 实施记录](ramified_R08_start_flow.md)。
 
-推箱子的解锁和完成记录独立持久保存，开始新局不会清空；三份存档和从头开始尚未实施，登记于需求表 R17。按用户确认，匿名统计继续采集，玩家设置中不显示说明；旧版页面保留原入口及内容。
+推箱子的解锁和完成记录按档持久保存，开始另一局不会清空；“重开存档”清空该档棋局和通关记录、恢复前三关，“删除”使该档变为空档，其他档不受影响。旧单份数据迁入第一档，保留旧键作备份；详见 [R17 实施记录](ramified_R17_save_slots.md)。分档数据层为 `js/ramified_minigames_save_slots.js`。按用户确认，匿名统计继续采集，玩家设置中不显示说明；旧版页面保留原入口及内容。
 
 ## 验证
 
 ```text
+node js/ramified_minigames_save_slots_test.js
+node js/ramified_minigames_save_slots_ui_test.js
 node js/ramified_minigames_player_test.js
 node js/ramified_minigames_player_ui_test.js
 node js/ramified_minigames_i18n_test.js

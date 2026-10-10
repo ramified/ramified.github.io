@@ -4,7 +4,7 @@ const assert = require('assert');
 const { waitFor } = require('./math_workspace_drag_regression_test.js');
 
 // Runs in the real browser session used by the player UI regression suite.
-module.exports = async function checkPreparationPages({ client, mouse, read, click, ready, set, resize, shot, menuHome, revealGame }) {
+module.exports = async function checkPreparationPages({ client, mouse, read, click, chooseGame, backToGames, ready, set, resize, shot, menuHome, revealGame }) {
   const defaults = [
     ['hex', 'classic-hex', 12, 17], ['go', 'boundary-glue-board', 19, 19],
     ['reversi', 'boundary-glue-board', 8, 8], ['2048', 'boundary-glue-board', 4, 4],
@@ -13,12 +13,11 @@ module.exports = async function checkPreparationPages({ client, mouse, read, cli
   ];
   const state = () => read('RamifiedMinigames.player.state()');
   const exitPreparation = async mode => {
-    await click('#player-back');
-    if (mode === 'fide-chess') await click('#player-back');
+    await backToGames();
   };
   for (const [mode, preset, rows, cols] of defaults) {
     await menuHome(); await click('#player-new'); await revealGame(mode);
-    await click(`[data-game-mode="${mode}"]`);
+    await chooseGame(`[data-game-mode="${mode}"]`);
     if (mode === 'fide-chess') {
       // Merely opening the category page must not load chess boards.
       assert.strictEqual(await read('document.querySelector("#player-chess-category").hidden'), false);
@@ -124,10 +123,10 @@ module.exports = async function checkPreparationPages({ client, mouse, read, cli
       assert.strictEqual(await read('JSON.stringify(RamifiedMinigames.__test.getGame().balls)'), arranged, 'browsing retains the arrangement');
       await click('#player-begin'); await click('#player-confirm-new');
       assert.strictEqual(await read('JSON.stringify(RamifiedMinigames.__test.getGame().balls)'), arranged, 'start uses the arrangement');
-      await menuHome(); await click('#player-new'); await revealGame(mode); await click(`[data-game-mode="${mode}"]`); await ready();
+      await menuHome(); await click('#player-new'); await revealGame(mode); await chooseGame(`[data-game-mode="${mode}"]`); await ready();
     }
     // Leaving the preparation completely, then reentering, restores defaults.
-    await exitPreparation(mode); await click(`[data-game-mode="${mode}"]`);
+    await exitPreparation(mode); await chooseGame(`[data-game-mode="${mode}"]`);
     if (mode === 'fide-chess') await click('[data-chess-category="game"]');
     await ready();
     assert.strictEqual((await state()).presetId, preset);
@@ -138,7 +137,7 @@ module.exports = async function checkPreparationPages({ client, mouse, read, cli
     assert.strictEqual(await read('JSON.stringify(RamifiedMinigames.__test.getGame().preset.gluedEdges)'), before);
     assert.strictEqual(await read('RamifiedMinigames.player.snapshot().payload.gameMode'), mode, mode + ': save');
     if (mode === 'chinese-checkers') {
-      await menuHome(); await click('#player-new'); await revealGame(mode); await click(`[data-game-mode="${mode}"]`); await ready();
+      await menuHome(); await click('#player-new'); await revealGame(mode); await chooseGame(`[data-game-mode="${mode}"]`); await ready();
       await read(`(() => { const n = document.querySelector('#chinese-checkers-player-options select[data-color="black"]'); n.value = 'local-ai-challenging'; n.dispatchEvent(new Event('change', { bubbles:true })); })()`);
       await click('#player-begin'); await click('#player-confirm-new');
       await waitFor(() => read('RamifiedMinigames.__test.getGame().round > 0'), 20000, 'checkers AI makes an actual move');

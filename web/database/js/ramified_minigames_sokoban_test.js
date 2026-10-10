@@ -8,7 +8,7 @@ const levels = catalog.presets.filter(p => p.gameTypes.includes('Sokoban'));
 const ids = levels.map(p => p.id);
 
 async function run() {
-  assert.deepStrictEqual(ids, ['classic-fans', 'pedestrian', 'classic-fans-glue', 'ice-test', 'curling-on-cube', 'easy-energy-bridge', 'energy-test', 'cross', 'expand', 'expand2', 'expand3', 'bridges-blocking', 'orbox-b', 'orbox-b-glued', 'loop', 'curling', 'remote-rotate', 'remote-control', 'islands']);
+  assert.deepStrictEqual(ids, ['classic-fans', 'pedestrian', 'classic-fans-glue', 'ice-test', 'curling-on-cube', 'easy-energy-bridge', 'energy-test', 'cross', 'expand', 'orbox-b', 'orbox-b-glued', 'loop', 'curling', 'remote-rotate', 'remote-control', 'islands', 'expand2', 'expand3', 'bridges-blocking']);
   for (const level of levels) {
     assert(level.file.startsWith('sokoban/'));
     assert.strictEqual(require('../ramified_minigame_presets/' + level.file).id, level.id);

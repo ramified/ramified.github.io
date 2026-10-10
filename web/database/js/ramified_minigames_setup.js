@@ -34731,10 +34731,15 @@ const api = {
         aiPauseReason: localAiPauseReason
       };
     },
-    async restore(saved) {
+    async restore(saved, { isCurrent = () => true } = {}) {
       if (!saved || saved.version !== 1 || !saved.payload || onlineIsInRoom()) throw new Error('Invalid player save');
+      for (const values of [saved.controllers, saved.checkersControllers]) {
+        if (values != null && (!Array.isArray(values) || !values.every(value => Array.isArray(value) && value.length === 2))) throw new Error('Invalid saved controllers');
+      }
       await ensureModeDependencies(saved.payload.gameMode);
+      if (!isCurrent()) return false;
       const imported = gameStateFromDebugImportPayload(saved.payload);
+      imported.settings = saved.payload.settings;
       if (playerShellEnabled && isSokobanGame(imported.state) && api.player.sokobanLevels().some(level => level.id === saved.sokobanLevelId)) {
         imported.state.playerSokobanLevelId = saved.sokobanLevelId;
         imported.state.preset.id = saved.sokobanLevelId;
@@ -34755,6 +34760,7 @@ const api = {
       syncControls();
       syncStatusForCurrentGame();
       render();
+      return true;
     }
   },
   DIRS,

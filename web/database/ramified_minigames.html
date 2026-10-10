@@ -2054,7 +2054,7 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="css/ramified_minigames_player.css?v=20261008-3">
+  <link rel="stylesheet" href="css/ramified_minigames_player.css?v=20261010-1">
 </head>
 <body class="ramified-player player-menu-open">
 
@@ -2115,6 +2115,16 @@
           <section id="player-levels" class="player-page" hidden>
             <div id="player-level-list" role="group" data-i18n-aria-label="player.sokobanLevels" aria-label="Sokoban levels"></div>
           </section>
+          <section id="player-slots" class="player-page" hidden>
+            <div id="player-slot-list" role="group" data-i18n-aria-label="player.chooseSave" aria-label="Choose a save"></div>
+          </section>
+          <section id="player-slot-confirm" class="player-page" hidden>
+            <p id="player-slot-warning"></p>
+            <div class="player-slot-confirm-actions">
+              <button class="btn" id="player-slot-confirm-action" type="button" data-i18n="player.slotDelete">Delete</button>
+              <button class="btn" id="player-slot-cancel" type="button" data-i18n="common.cancel">Cancel</button>
+            </div>
+          </section>
           <section id="player-chess-category" class="player-page" hidden>
             <button class="btn" type="button" data-chess-category="game" data-i18n="player.chessGame">Game</button>
             <button class="btn" type="button" data-chess-category="kingless-puzzle" data-i18n="player.chessPuzzle">Puzzle</button>
@@ -2167,7 +2177,7 @@
             <button class="btn" id="player-edit-balls" type="button" data-i18n="player.editBalls" hidden>Arrange balls</button>
           </section>
           <section id="player-confirm" class="player-page" hidden>
-            <p data-i18n="player.replace">Start a new game? The next game will replace the saved game.</p>
+            <p id="player-replace-text"></p>
             <button class="btn" id="player-confirm-new" type="button" data-i18n="player.start">Start game</button>
             <button class="btn" id="player-cancel-new" type="button" data-i18n="common.cancel">Cancel</button>
           </section>
@@ -3178,16 +3188,17 @@
 <script src="js/calculator_input_settings.js?v=20260903-1"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20261008-4"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20261010-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
 <script src="js/ramified_minigames_sfx.js?v=20260913-2"></script>
-<script src="js/ramified_minigames_setup.js?v=20261008-3"></script>
+<script src="js/ramified_minigames_setup.js?v=20261010-1"></script>
 <script src="js/ramified_minigames_sokoban_progress.js?v=20261008-3"></script>
-<script src="js/ramified_minigames_player.js?v=20261008-4"></script>
+<script src="js/ramified_minigames_save_slots.js?v=20261010-1"></script>
+<script src="js/ramified_minigames_player.js?v=20261010-1"></script>
 <script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
 </body>

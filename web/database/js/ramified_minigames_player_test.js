@@ -33,14 +33,20 @@ async function run() {
     engine.player.prepare();
     assert.strictEqual(engine.player.state().active, false, `${mode}: new game preview`);
     assert.strictEqual(engine.player.snapshot(), null, 'a new preview must not replace the last game');
+    elements.get('gomoku-display-style').value = 'center';
     await engine.player.restore(saved);
     assert.strictEqual(engine.player.state().active, true, `${mode}: restore`);
     const restored = JSON.parse(JSON.stringify(engine.player.snapshot()));
+    assert.deepStrictEqual(restored.payload.settings, saved.payload.settings, `${mode}: restore saved display settings`);
     for (const key of ['gameMode', 'round', 'phase', 'boxes', 'stones', 'sokoban', 'removed']) {
       assert.deepStrictEqual(restored.payload[key], saved.payload[key], `${mode}: preserved ${key}`);
     }
     const beforeInvalid = engine.__test.getGame();
+    assert.strictEqual(await engine.player.restore(saved, { isCurrent: () => false }), false);
+    assert.strictEqual(engine.__test.getGame(), beforeInvalid, 'a canceled restore never replaces the live game');
     await assert.rejects(engine.player.restore({ version: 0 }));
+    await assert.rejects(engine.player.restore({ ...saved, controllers: {} }));
+    await assert.rejects(engine.player.restore({ ...saved, checkersControllers: [null] }));
     assert.strictEqual(engine.__test.getGame(), beforeInvalid, 'invalid save must not replace the game');
   }
   const harness = createHeadlessDomHarness({ playerShell: true, gameMode: 'gomoku', preset: 'boundary-glue-board' });

@@ -24,6 +24,8 @@ async function run() {
       const p = await waitFor(() => read(`(() => { const n = [...document.querySelectorAll(${JSON.stringify(selector)})].find(n => n.getClientRects().length && !n.disabled); if (!n) return null; n.scrollIntoView({block:'nearest',inline:'nearest'}); const r=n.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2; return n.contains(document.elementFromPoint(x,y))?{x,y}:null; })()`), 5000, selector);
       await mouse(client, 'mousePressed', p.x, p.y, 1); await mouse(client, 'mouseReleased', p.x, p.y, 0);
     };
+    // Existing game regressions explicitly use the first of the three collection saves.
+    const chooseGame = async selector => { await click(selector); await click('#player-slot-1'); };
     const key = async (key, code, virtualKey) => {
       await client.send('Input.dispatchKeyEvent', { type:'keyDown',key,code,windowsVirtualKeyCode:virtualKey, ...(key==='Enter'?{text:'\r'}:{}) });
       await client.send('Input.dispatchKeyEvent', { type:'keyUp',key,code,windowsVirtualKeyCode:virtualKey });
@@ -34,8 +36,8 @@ async function run() {
       const { data } = await client.send('Page.captureScreenshot', { format:'png' });
       fs.writeFileSync(path.join(process.env.RAMIFIED_UI_SCREENSHOTS, name+'.png'), Buffer.from(data,'base64'));
     };
-    const progress = () => read('JSON.parse(localStorage.getItem(RamifiedSokobanProgress.SAVE_KEY))');
-    const saveContents = () => read(`(() => { const s=JSON.parse(localStorage.getItem('ramified.minigames.player.save.v1')); if(s)delete s.payload.exportedAt; return s; })()`);
+    const progress = () => read('JSON.parse(localStorage.getItem(RamifiedSaveSlots.SAVE_KEY))?.slots[0]?.sokoban');
+    const saveContents = () => read(`(() => { const s=JSON.parse(localStorage.getItem(RamifiedSaveSlots.SAVE_KEY))?.slots[0]?.game; if(s)delete s.payload.exportedAt; return s; })()`);
     const openMenu = async () => { await click('#fullscreen-settings-open'); await click('#player-menu-button'); };
     const levelSelect = async number => {
       await click('#player-level-'+number); await ready();
@@ -51,10 +53,10 @@ async function run() {
       }
       await waitFor(() => read('RamifiedMinigames.player.state().solved && !document.querySelector("#canvas-start-overlay").hidden'), 5000, 'solved');
     };
-    await ready(); await click('#player-new'); await click('#player-games-next'); await click('[data-game-mode="sokoban"]');
+    await ready(); await click('#player-new'); await click('#player-games-next'); await chooseGame('[data-game-mode="sokoban"]');
     assert.strictEqual(await read('document.querySelectorAll("#player-level-list > button").length'),19);
     assert.deepStrictEqual(await read('[...document.querySelectorAll("#player-level-list > button:not(:disabled)")].map(n=>n.dataset.levelId)'), ['classic-fans','pedestrian','classic-fans-glue']);
-    assert.strictEqual(await read('localStorage.getItem("ramified.minigames.player.save.v1")'),null, 'browsing does not create a save');
+    assert.strictEqual(await read('localStorage.getItem(RamifiedSaveSlots.SAVE_KEY)'),null, 'browsing does not create a save');
     for (const locale of ['en','zh-CN']) {
       await read(`SiteI18n.setLocale('${locale}')`);
       for (const [width,fullscreen] of [[1280,false],[390,false],[320,false],[1920,true],[320,true]]) {
@@ -100,7 +102,7 @@ async function run() {
     assert.strictEqual(await read('document.querySelector("#canvas-start-overlay").hidden'),true);
     await click('#fullscreen-redo-step'); await ready();
     assert.strictEqual((await progress()).unlocked.length,5);
-    await client.send('Page.reload'); await ready(); await click('#player-continue'); await ready();
+    await client.send('Page.reload'); await ready(); await click('#player-continue'); await click('#player-slot-1'); await ready();
     assert.strictEqual(await read('RamifiedMinigames.player.state().sokobanLevelId'),'classic-fans');
     assert.strictEqual(await read('document.querySelector("#canvas-start-begin").textContent'),'下一关');
     assert.strictEqual((await progress()).unlocked.length,5);
@@ -111,10 +113,10 @@ async function run() {
     await key('r','KeyR',82); await key('r','KeyR',82); await ready();
     assert.strictEqual(await read('RamifiedMinigames.__test.getGame().moves'),0);
     assert.strictEqual(await read('RamifiedMinigames.player.state().sokobanLevelId'),'classic-fans');
-    await openMenu(); await click('#player-home-button'); await click('#player-new'); await click('[data-game-mode="gomoku"]'); await ready();
+    await openMenu(); await click('#player-home-button'); await click('#player-new'); await chooseGame('[data-game-mode="gomoku"]'); await ready();
     await click('#player-begin'); await click('#player-confirm-new');
     assert.strictEqual((await progress()).unlocked.length,5,'another game preserves progress');
-    await openMenu(); await click('#player-home-button'); await click('#player-new'); await click('#player-games-next'); await click('[data-game-mode="sokoban"]');
+    await openMenu(); await click('#player-home-button'); await click('#player-new'); await click('#player-games-next'); await chooseGame('[data-game-mode="sokoban"]');
     assert.strictEqual(await read('document.querySelectorAll("#player-level-list > button:not(:disabled)").length'),5);
     // Fail the first request for a not-yet-loaded level, then retry normally.
     await client.send('Network.enable'); await client.send('Network.setBlockedURLs',{urls:['*sokoban/ice_test.preset.js*']});
