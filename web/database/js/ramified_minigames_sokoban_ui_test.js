@@ -25,7 +25,7 @@ async function run() {
       await mouse(client, 'mousePressed', p.x, p.y, 1); await mouse(client, 'mouseReleased', p.x, p.y, 0);
     };
     // Existing game regressions explicitly use the first of the three collection saves.
-    const chooseGame = async selector => { await click(selector); await click('#player-slot-1'); };
+    const chooseGame = selector => click(selector);
     const key = async (key, code, virtualKey) => {
       await client.send('Input.dispatchKeyEvent', { type:'keyDown',key,code,windowsVirtualKeyCode:virtualKey, ...(key==='Enter'?{text:'\r'}:{}) });
       await client.send('Input.dispatchKeyEvent', { type:'keyUp',key,code,windowsVirtualKeyCode:virtualKey });
@@ -53,7 +53,7 @@ async function run() {
       }
       await waitFor(() => read('RamifiedMinigames.player.state().solved && !document.querySelector("#canvas-start-overlay").hidden'), 5000, 'solved');
     };
-    await ready(); await click('#player-new'); await click('#player-games-next'); await chooseGame('[data-game-mode="sokoban"]');
+    await ready(); await click('#player-new'); await click('#player-slot-1'); await click('#player-games-next'); await chooseGame('[data-game-mode="sokoban"]');
     assert.strictEqual(await read('document.querySelectorAll("#player-level-list > button").length'),19);
     assert.deepStrictEqual(await read('[...document.querySelectorAll("#player-level-list > button:not(:disabled)")].map(n=>n.dataset.levelId)'), ['classic-fans','pedestrian','classic-fans-glue']);
     assert.strictEqual(await read('localStorage.getItem(RamifiedSaveSlots.SAVE_KEY)'),null, 'browsing does not create a save');
@@ -102,7 +102,7 @@ async function run() {
     assert.strictEqual(await read('document.querySelector("#canvas-start-overlay").hidden'),true);
     await click('#fullscreen-redo-step'); await ready();
     assert.strictEqual((await progress()).unlocked.length,5);
-    await client.send('Page.reload'); await ready(); await click('#player-continue'); await click('#player-slot-1'); await ready();
+    await client.send('Page.reload'); await ready(); await click('#player-new'); await click('#player-slot-1'); await click('#player-continue'); await ready();
     assert.strictEqual(await read('RamifiedMinigames.player.state().sokobanLevelId'),'classic-fans');
     assert.strictEqual(await read('document.querySelector("#canvas-start-begin").textContent'),'下一关');
     assert.strictEqual((await progress()).unlocked.length,5);
@@ -113,10 +113,10 @@ async function run() {
     await key('r','KeyR',82); await key('r','KeyR',82); await ready();
     assert.strictEqual(await read('RamifiedMinigames.__test.getGame().moves'),0);
     assert.strictEqual(await read('RamifiedMinigames.player.state().sokobanLevelId'),'classic-fans');
-    await openMenu(); await click('#player-home-button'); await click('#player-new'); await chooseGame('[data-game-mode="gomoku"]'); await ready();
+    await openMenu(); await click('#player-home-button'); await click('#player-new'); await click('#player-slot-1'); await chooseGame('[data-game-mode="gomoku"]'); await ready();
     await click('#player-begin'); await click('#player-confirm-new');
     assert.strictEqual((await progress()).unlocked.length,5,'another game preserves progress');
-    await openMenu(); await click('#player-home-button'); await click('#player-new'); await click('#player-games-next'); await chooseGame('[data-game-mode="sokoban"]');
+    await openMenu(); await click('#player-home-button'); await click('#player-new'); await click('#player-slot-1'); await click('#player-games-next'); await chooseGame('[data-game-mode="sokoban"]');
     assert.strictEqual(await read('document.querySelectorAll("#player-level-list > button:not(:disabled)").length'),5);
     // Fail the first request for a not-yet-loaded level, then retry normally.
     await client.send('Network.enable'); await client.send('Network.setBlockedURLs',{urls:['*sokoban/ice_test.preset.js*']});

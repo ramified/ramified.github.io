@@ -27,6 +27,17 @@ async function run() {
       })()`), 6000, selector);
       await mouse(client, 'mousePressed', p.x, p.y, 1); await mouse(client, 'mouseReleased', p.x, p.y, 0);
     };
+    const enter = async () => {
+      await client.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r'});
+      await client.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+    };
+    const tap = async selector => {
+      const point=await read(`(() => {const n=document.querySelector(${JSON.stringify(selector)});n.scrollIntoView({block:'nearest'});const r=n.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+      await client.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+      await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...point,id:0}]});
+      await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      await client.send('Emulation.setTouchEmulationEnabled',{enabled:false});
+    };
     // Export metadata includes translated status text; compare the actual game/progress instead.
     const stored = () => read(`(() => {const s=JSON.parse(localStorage.getItem(RamifiedSaveSlots.SAVE_KEY)); for(const slot of s?.slots||[])if(slot?.game){delete slot.game.payload.exportedAt;delete slot.game.payload.status;}return s;})()`);
     const reload = async () => { await client.send('Page.reload'); await ready(); };
@@ -35,8 +46,8 @@ async function run() {
       if (await read(`document.querySelector('[data-game-mode="${mode}"]').hidden`)) await click('#player-games-next');
       await click(`[data-game-mode="${mode}"]`);
     };
-    const prepare = async (mode, slot) => { await click('#player-new'); await selectGame(mode); await click('#player-slot-'+slot); await ready(); };
-    const continueSlot = async slot => { await click('#player-continue'); await click('#player-slot-'+slot); await waitFor(()=>visible('player-menu').then(v=>!v),10000,'continued'); await ready(); };
+    const prepare = async (mode, slot) => { await click('#player-new'); await click('#player-slot-'+slot); assert.strictEqual(await visible('player-games'),true); await selectGame(mode); await ready(); };
+    const continueSlot = async slot => { await click('#player-new'); await read('window.beforeSelect=RamifiedMinigames.__test.getGame()'); await click('#player-slot-'+slot); assert.strictEqual(await visible('player-games'),true); assert.strictEqual(await read('RamifiedMinigames.__test.getGame()===window.beforeSelect'),true,'selecting a saved slot does not restore it'); await click('#player-continue'); await waitFor(()=>visible('player-menu').then(v=>!v),10000,'continued'); await ready(); };
     const startLevel = async level => {
       await click('#player-level-'+level); await ready();
       if (await visible('player-confirm')) await click('#player-confirm-new');
@@ -56,6 +67,18 @@ async function run() {
     };
     await ready();
     assert.strictEqual(await read('document.querySelector("#player-continue").disabled'),true);
+    assert.deepStrictEqual(await read('[...document.querySelectorAll("#player-home button")].map(n=>n.id)'),['player-new','player-settings'],'one game entry on the home page');
+    assert.strictEqual(await read('document.querySelector("#player-new").disabled'),false,'fresh players can enter');
+    await click('#player-new');
+    assert.strictEqual(await visible('player-slots'),true,'Start opens saves before any game list');
+    await enter();
+    assert.strictEqual(await visible('player-games'),true,'keyboard opens an empty save game list');
+    assert.strictEqual(await visible('player-continue'),false);
+    await click('#player-back'); await tap('#player-slot-3');
+    await waitFor(()=>visible('player-games'),5000,'touch selects a save');
+    assert.strictEqual(await visible('player-continue'),false);
+    assert.strictEqual(await stored(),null,'selecting empty saves creates no data');
+    await click('#player-back'); await click('#player-back');
     await prepare('sokoban',1);
     assert.strictEqual(await stored(),null,'browsing an empty slot does not save');
     await startLevel(1);
@@ -76,7 +99,7 @@ async function run() {
     assert.strictEqual(await read('RamifiedMinigames.player.state().sokobanLevelId'),'pedestrian');
     await home(); await continueSlot(1);
     assert.strictEqual(await read('RamifiedMinigames.player.state().solved'),true);
-    await home(); await click('#player-continue');
+    await home(); await click('#player-new');
     // Every control is reachable at narrow widths; content stays centered in fullscreen.
     for(const locale of ['en','zh-CN']) {
       await read(`SiteI18n.setLocale('${locale}')`);
@@ -91,6 +114,28 @@ async function run() {
         assert.strictEqual(await read('document.activeElement.id'),'player-slot-cancel');
         assert.strictEqual(await read('document.querySelector("#player-slot-warning").textContent.includes("2")'),true);
         await shot(`restart-${locale}-${width}-${full}`); await click('#player-slot-cancel');
+        await click('#player-slot-1');
+        assert.strictEqual(await visible('player-games'),true);
+        assert.strictEqual(await read('document.querySelector("#player-continue span").textContent'),locale==='en'?'Continue last game':'继续上次游戏');
+        assert.strictEqual(await read('document.querySelector("#player-continue-game").textContent'),locale==='en'?'Sokoban':'推箱子');
+        assert.strictEqual(await read(`(() => {
+          const p=document.querySelector('#player-games'), b=p.getBoundingClientRect(), n=document.querySelector('#player-continue'), r=n.getBoundingClientRect();
+          const g=document.querySelector('#player-game-list'), gr=g.getBoundingClientRect(), buttons=[...g.children].filter(n=>!n.hidden);
+          return p.scrollWidth<=p.clientWidth && Math.abs(r.x+r.width/2-(b.x+p.clientWidth/2))<1
+            && r.y>=b.y && r.bottom<=b.bottom && Math.abs(gr.x+gr.width/2-(b.x+p.clientWidth/2))<1
+            && buttons.length===6 && new Set(buttons.map(n=>Math.round(n.getBoundingClientRect().x))).size===3
+            && new Set(buttons.map(n=>Math.round(n.getBoundingClientRect().y))).size===2
+            && buttons.every(n=>{const t=n.querySelector('.player-game-name');return t.scrollWidth<=t.clientWidth&&t.scrollHeight<=t.clientHeight+1;});
+        })()`),true,'saved-game list keeps a centered continue button and readable 2x3 pagination');
+        await shot(`games-with-save-${locale}-${width}-${full}`);
+        await click('#player-games-next');
+        assert.strictEqual(await read('[...document.querySelectorAll("#player-game-list button")].filter(n=>!n.hidden).length'),5);
+        await tap('[data-game-mode="sokoban"]'); await waitFor(()=>visible('player-levels'),5000,'touch game choice');
+        assert.strictEqual(await read('[...document.querySelectorAll("#player-level-list button:not(:disabled)")].length'),4,'selected slot progress is used');
+        await click('#player-back');
+        assert.strictEqual(await visible('player-games'),true,'level Back returns to the same game list');
+        assert.strictEqual(await read('document.querySelector("#player-games-next").disabled'),true,'Back keeps the page');
+        await click('#player-back');
       }
     }
     if(await read('!!document.fullscreenElement'))await read('document.exitFullscreen()');
@@ -108,7 +153,7 @@ async function run() {
     assert.strictEqual(after.slots[0].game,null);
     assert.deepStrictEqual(after.slots[0].sokoban.completed,[]);
     assert.deepStrictEqual(after.slots.slice(1),all.slots.slice(1),'restart affects only its target');
-    await reload(); await continueSlot(3); await home(); await click('#player-continue');
+    await reload(); await continueSlot(3); await home(); await click('#player-new');
     assert.strictEqual((await stored()).slots[2].game.payload.settings.displayStyle,'vertex','switching from Sokoban restores Gomoku display');
     const beforeDelete=await stored();
     // Failed destructive writes keep the original slot and confirmation open.
@@ -122,8 +167,8 @@ async function run() {
     await click('#player-slot-confirm-action');
     assert.strictEqual((await stored()).slots[2],null);
     // Active-slot autosave/pagehide must not resurrect a deleted game.
-    await reload(); await click('#player-continue');
-    assert.strictEqual(await read('document.querySelector("#player-slot-3").disabled'),true);
+    await reload(); await click('#player-new');
+    assert.strictEqual(await read('document.querySelector("#player-slot-3").disabled'),false,'empty slots remain selectable');
     assert.strictEqual((await stored()).slots[2],null);
     await click('#player-slot-1');
     assert.strictEqual(await visible('player-games'),true,'blank restarted slot can choose a game');
@@ -132,13 +177,23 @@ async function run() {
     await prepare('gomoku',2); await click('#player-begin'); await click('#player-cancel-new');
     assert.deepStrictEqual(await stored(),beforeBrowse,'preparation and replacement cancel do not change another slot');
     await click('#player-back'); await click('#player-back'); await click('#player-back');
+    await click('#player-new');
+    await click('#player-slot-2');
+    await read(`window.actualRestore=RamifiedMinigames.player.restore;RamifiedMinigames.player.restore=async()=>{throw Error('test read failure');};`);
     await click('#player-continue');
+    await waitFor(()=>visible('player-message'),5000,'restore failure message');
+    assert.strictEqual(await visible('player-games'),true,'failed restore stays in the selected save game list');
+    assert.strictEqual(await read('document.querySelector("#player-continue").disabled'),false,'restore can be retried');
+    assert.deepStrictEqual(await stored(),beforeBrowse,'failed restore preserves every save');
     // A late restore may finish loading but cannot replace the game after Back.
-    await read(`window.actualRestore=RamifiedMinigames.player.restore;RamifiedMinigames.player.restore=async function(...args){await new Promise(resolve=>window.releaseRestore=resolve);return window.actualRestore.apply(this,args);};window.beforeLate=RamifiedMinigames.__test.getGame();`);
-    await click('#player-slot-2'); await click('#player-back');
+    await read(`RamifiedMinigames.player.restore=async function(...args){await new Promise(resolve=>window.releaseRestore=resolve);return window.actualRestore.apply(this,args);};window.beforeLate=RamifiedMinigames.__test.getGame();`);
+    await click('#player-continue');
+    assert.strictEqual(await read('[...document.querySelectorAll("#player-game-list button")].every(n=>n.disabled)'),true,'loading prevents concurrent new-game selection');
+    await click('#player-back');
     await read('window.releaseRestore();RamifiedMinigames.player.restore=window.actualRestore'); await delay(100);
     assert.strictEqual(await read('RamifiedMinigames.__test.getGame()===window.beforeLate'),true);
-    assert.strictEqual(await visible('player-home'),true);
+    assert.strictEqual(await visible('player-slots'),true);
+    await click('#player-back');
     assert.deepStrictEqual(await stored(),beforeBrowse);
     // Resume after canceling a different slot's preparation: Next level still belongs to slot 1.
     await continueSlot(1);
@@ -146,9 +201,10 @@ async function run() {
     const beforeNext=await stored();
     await click('#fullscreen-settings-open'); await click('#player-menu-button');
     await click('#player-game-menu [data-player-page="setup"]');
-    await selectGame('gomoku'); await click('#player-slot-2'); await ready();
-    await click('#player-back'); await click('#player-back'); await click('#player-back');
-    await click('#player-resume'); await click('#canvas-start-begin'); await ready();
+    assert.strictEqual(await visible('player-games'),true,'Change game skips selecting the active slot again');
+    await click('#player-back'); await click('#player-slot-2'); await selectGame('gomoku'); await ready();
+    await click('#player-back'); await click('#player-back'); await click('#player-slot-1');
+    await click('#player-continue'); await click('#canvas-start-begin'); await ready();
     assert.strictEqual(await read('RamifiedMinigames.player.state().sokobanLevelId'),'pedestrian');
     assert.deepStrictEqual((await stored()).slots.slice(1),beforeNext.slots.slice(1),'next after canceled cross-slot preparation keeps other slots untouched');
     console.log('Save slots: independent games/progress, real solve, cancel, restart, delete, quota and late restore verified');
@@ -163,13 +219,26 @@ async function run() {
     assert.deepStrictEqual((await stored()).slots.map(s=>s?.game?.payload.gameMode||null),['sokoban',null,null]);
     assert.deepStrictEqual((await stored()).slots[0].sokoban,legacyProgress);
     await continueSlot(1); assert.strictEqual(await read('RamifiedMinigames.player.state().solved'),true);
-    await home(); await click('#player-continue'); await click('#player-slot-delete-1'); await click('#player-slot-confirm-action');
+    await home(); await click('#player-new'); await click('#player-slot-delete-1'); await click('#player-slot-confirm-action');
     await reload();
     assert.strictEqual(await read('document.querySelector("#player-continue").disabled'),true);
     assert.deepStrictEqual((await stored()).slots,[null,null,null]);
     assert.deepStrictEqual(await read('JSON.parse(localStorage.getItem(RamifiedSaveSlots.LEGACY_SAVE_KEY))'),legacyGame,'legacy backup retained, never reimported');
+    // A migrated progress-only save gets the same list without offering a nonexistent game.
+    await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/robots.txt`});
+    await waitFor(()=>read('document.readyState==="complete"'));
+    await read(`localStorage.removeItem('ramified.minigames.player.slots.v1');localStorage.removeItem('ramified.minigames.player.save.v1');`);
+    await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/ramified_minigames.html`}); await ready();
+    const progressOnly=await stored();
+    assert.strictEqual(progressOnly.slots[0].game,null);
+    await click('#player-new'); await click('#player-slot-1');
+    assert.strictEqual(await visible('player-games'),true);
+    assert.strictEqual(await visible('player-continue'),false);
+    await selectGame('sokoban');
+    assert.strictEqual(await read('[...document.querySelectorAll("#player-level-list button:not(:disabled)")].length'),4);
+    assert.deepStrictEqual(await stored(),progressOnly,'browsing keeps progress-only data unchanged');
     assert.deepStrictEqual(errors,[]);
-    console.log('ramified_minigames_save_slots_ui_test: three slots, bilingual desktop/narrow/fullscreen, actual progress, isolated restart/delete, failures, canceled restore, migration and refresh passed');
+    console.log('ramified_minigames_save_slots_ui_test: save-first entry, explicit continue, keyboard/touch, bilingual paginated lists, isolated progress, restart/delete, failures, canceled restore, migration and refresh passed');
   } finally {
     if(session) {
       session.client.close();

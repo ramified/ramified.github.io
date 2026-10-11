@@ -35,7 +35,7 @@ async function run() {
       await mouse(client, 'mouseReleased', point.x, point.y, 0);
     };
     // Existing game regressions explicitly use the first of the three collection saves.
-    const chooseGame = async selector => { await click(selector); await click('#player-slot-1'); };
+    const chooseGame = selector => click(selector);
     const backToGames = async () => {
       for (let i = 0; i < 4 && await read('document.querySelector("#player-games").hidden'); i++) await click('#player-back');
       assert.strictEqual(await read('document.querySelector("#player-games").hidden'), false);
@@ -88,7 +88,7 @@ async function run() {
     await resize(1280);
     await ready();
     assert.strictEqual(await read('document.querySelector("#player-continue").disabled'), true);
-    await click('#player-new');
+    await click('#player-new'); await click('#player-slot-1');
     await waitFor(() => read(`(() => {
       const images = [...document.querySelectorAll('#player-game-list img')];
       return images.length === 11 && images.every(img => img.complete && img.naturalWidth > 0);
@@ -147,7 +147,7 @@ async function run() {
     await read(`document.querySelector('#player-game-list > button').focus()`);
     await key('Tab', 'Tab', 9);
     assert.strictEqual(await read('document.activeElement.dataset.gameMode'), gameChoices[1].mode);
-    await key('Enter', 'Enter', 13); await click('#player-slot-1'); await ready();
+    await key('Enter', 'Enter', 13); await ready();
     assert.strictEqual(await read('RamifiedMinigames.player.state().mode'), gameChoices[1].mode);
     await backToGames();
     for (const game of gameChoices) {
@@ -236,13 +236,13 @@ async function run() {
     assert.strictEqual(await read('RamifiedMinigames.player.state().active && !RamifiedMinigames.player.state().browsing'), true);
     assert.deepStrictEqual(await board(), ['boundary-glue-board', 9, 13, 'torus']);
     await read('window.retainedPlayerGame = RamifiedMinigames.__test.getGame()');
-    await menuHome(); await click('#player-new'); await chooseGame('[data-game-mode="gomoku"]'); await ready();
+    await menuHome(); await click('#player-new'); await click('#player-slot-1'); await chooseGame('[data-game-mode="gomoku"]'); await ready();
     await click('#player-more'); await set('gomoku-board-size', '7'); await click('#player-back');
-    await backToGames(); await click('#player-back'); await click('#player-continue'); await click('#player-slot-1');
+    await backToGames(); await click('#player-continue');
     assert.strictEqual(await read('RamifiedMinigames.__test.getGame() === window.retainedPlayerGame'), true, 'cancel from More keeps the old game');
 
     // Connect Four shares the same page geometry, with its own defaults and controllers.
-    await menuHome(); await click('#player-new'); await chooseGame('[data-game-mode="connect-four"]'); await ready();
+    await menuHome(); await click('#player-new'); await click('#player-slot-1'); await chooseGame('[data-game-mode="connect-four"]'); await ready();
     await read('SiteI18n.setLocale("en")');
     assert.deepStrictEqual((await board()).slice(0, 3), ['connect-four-6x7', 6, 7]);
     assert.strictEqual(await read('document.querySelector("#connect-four-fall-dir").value'), 'S');
@@ -318,15 +318,16 @@ async function run() {
     assert.deepStrictEqual(await read('RamifiedMinigames.__test.getGame().tokens.map(t => t.color).sort()'), ['red', 'yellow']);
     await menuHome();
     await client.send('Page.reload'); await ready();
+    await click('#player-new'); await click('#player-slot-1');
     await waitFor(() => read('!document.querySelector("#player-continue").disabled'), 5000, 'saved four-in-a-row');
-    await click('#player-continue'); await click('#player-slot-1');
+    await click('#player-continue');
     await waitFor(() => read('RamifiedMinigames.player.state().mode === "connect-four" && document.querySelector("#player-menu").hidden'), 15000, 'restore four-in-a-row');
     assert.strictEqual(await read('document.querySelector("#connect-four-yellow-controller").value'), 'local-ai-challenging');
     assert.strictEqual(await read('RamifiedMinigames.__test.getGame().round'), 2);
 
     await menuHome(); await click('#player-settings'); await click('#player-fullscreen');
     await waitFor(() => read('!!document.fullscreenElement'), 5000, 'fullscreen');
-    await click('#player-new'); await checkGamePage(6); await shot('games-fullscreen');
+    await click('#player-new'); await click('#player-slot-1'); await checkGamePage(6); await shot('games-fullscreen');
     await click('#player-games-next'); await checkGamePage(5); await click('#player-games-previous');
     await chooseGame('[data-game-mode="gomoku"]'); await ready();
     assert.strictEqual(await read('document.querySelector("#player-menu").clientWidth === innerWidth'), true);

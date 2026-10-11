@@ -16,7 +16,7 @@ module.exports = async function checkPreparationPages({ client, mouse, read, cli
     await backToGames();
   };
   for (const [mode, preset, rows, cols] of defaults) {
-    await menuHome(); await click('#player-new'); await revealGame(mode);
+    await menuHome(); await click('#player-new'); await click('#player-slot-1'); await revealGame(mode);
     await chooseGame(`[data-game-mode="${mode}"]`);
     if (mode === 'fide-chess') {
       // Merely opening the category page must not load chess boards.
@@ -56,6 +56,9 @@ module.exports = async function checkPreparationPages({ client, mouse, read, cli
     assert.strictEqual(await read('document.querySelector("#player-menu").clientWidth === innerWidth'), true);
     await shot(`preparation-${mode}-fullscreen`);
     await read('document.exitFullscreen()');
+    await waitFor(() => read('!document.fullscreenElement && !document.body.classList.contains("canvas-fullscreen-active")'), 5000, mode + ': exited fullscreen');
+    // Wait for the resized preview to settle before targeting an arrow by screen coordinates.
+    await read('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
     if (mode === 'chinese-checkers') {
       assert.deepStrictEqual(await read('[...document.querySelectorAll("#chinese-checkers-player-options select")].map(n => [n.dataset.color, n.value])'),
         ['black', 'white', 'red', 'yellow', 'blue', 'green'].map(color => [color, color === 'black' ? 'human' : 'local-ai-challenging']));
@@ -69,7 +72,9 @@ module.exports = async function checkPreparationPages({ client, mouse, read, cli
     // Browse every board through the actual arrows, returning to the draft.
     const count = await read(`RamifiedMinigames.player.presets().filter(p => '${mode}' !== 'fide-chess' || p.fideChessVariant === 'game').length`);
     for (let i = 0; i < count; i++) {
+      const before = (await state()).presetId;
       await click('#player-board-next'); await ready();
+      await waitFor(async () => (await state()).presetId !== before, 5000, mode + ': arrow changes ' + before);
       assert.strictEqual((await state()).setupError, false, mode + ': preset load');
     }
     assert.strictEqual((await state()).presetId, preset, JSON.stringify(await read('({mode:RamifiedMinigames.player.state().mode,presets:RamifiedMinigames.player.presets(),options:[...document.querySelector("#surface-preset-select").options].map(o=>o.value)})')));
@@ -123,7 +128,7 @@ module.exports = async function checkPreparationPages({ client, mouse, read, cli
       assert.strictEqual(await read('JSON.stringify(RamifiedMinigames.__test.getGame().balls)'), arranged, 'browsing retains the arrangement');
       await click('#player-begin'); await click('#player-confirm-new');
       assert.strictEqual(await read('JSON.stringify(RamifiedMinigames.__test.getGame().balls)'), arranged, 'start uses the arrangement');
-      await menuHome(); await click('#player-new'); await revealGame(mode); await chooseGame(`[data-game-mode="${mode}"]`); await ready();
+      await menuHome(); await click('#player-new'); await click('#player-slot-1'); await revealGame(mode); await chooseGame(`[data-game-mode="${mode}"]`); await ready();
     }
     // Leaving the preparation completely, then reentering, restores defaults.
     await exitPreparation(mode); await chooseGame(`[data-game-mode="${mode}"]`);
@@ -137,7 +142,7 @@ module.exports = async function checkPreparationPages({ client, mouse, read, cli
     assert.strictEqual(await read('JSON.stringify(RamifiedMinigames.__test.getGame().preset.gluedEdges)'), before);
     assert.strictEqual(await read('RamifiedMinigames.player.snapshot().payload.gameMode'), mode, mode + ': save');
     if (mode === 'chinese-checkers') {
-      await menuHome(); await click('#player-new'); await revealGame(mode); await chooseGame(`[data-game-mode="${mode}"]`); await ready();
+      await menuHome(); await click('#player-new'); await click('#player-slot-1'); await revealGame(mode); await chooseGame(`[data-game-mode="${mode}"]`); await ready();
       await read(`(() => { const n = document.querySelector('#chinese-checkers-player-options select[data-color="black"]'); n.value = 'local-ai-challenging'; n.dispatchEvent(new Event('change', { bubbles:true })); })()`);
       await click('#player-begin'); await click('#player-confirm-new');
       await waitFor(() => read('RamifiedMinigames.__test.getGame().round > 0'), 20000, 'checkers AI makes an actual move');

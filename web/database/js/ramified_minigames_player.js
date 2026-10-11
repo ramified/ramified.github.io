@@ -42,12 +42,9 @@
     let backPage = 'home';
     let activeSlot = null;
     let selectedSlot = null;
-    let slotPurpose = 'continue';
-    let slotGameMode = null;
     let slotAction = null;
     let restoring = false;
     let saveTimer = null;
-    let newGameParent = 'home';
     let gameListPage = 0;
     let setupBusy = false;
     let setupRequest = 0;
@@ -106,12 +103,12 @@
       if (!restoring && activeSlot !== null && !state.online && state.solved && state.sokobanLevelId) save();
       syncLevels(state);
       if (page === 'slots') syncSlots(state);
+      if (page === 'games') syncGameEntry(state);
       if (page === 'slot-confirm') syncSlotConfirmation();
       if (page === 'confirm') byId('player-replace-text').textContent = tk('player.replaceSlot', 'Start a new game in save {{number}}? This replaces its current game. Sokoban progress is kept.', { number: selectedSlot + 1 });
       byId('player-choose-level').hidden = activeSlot === null || state.mode !== 'sokoban' || state.online;
       byId('player-resume').disabled = activeSlot === null && !state.online;
-      byId('player-new').disabled = !state.ready || restoring || state.online || setupBusy;
-      byId('player-continue').disabled = !state.ready || restoring || !(slots.hasAny() || state.online);
+      byId('player-new').disabled = !state.ready || restoring || setupBusy;
       const layout = state.browsing ? PREPARATION_LAYOUTS[state.mode] || null : null;
       if (preparationLayout !== layout) {
         preparationLayout = layout;
@@ -131,7 +128,7 @@
       byId('player-begin').disabled = setupBusy || !state.ready || state.setupError || state.canStart === false;
       byId('player-confirm-new').disabled = setupBusy || !state.ready || state.setupError || state.canStart === false;
       byId('player-board-previous').disabled = byId('player-board-next').disabled = setupBusy || !state.ready;
-      for (const button of byId('player-game-list').children) button.disabled = setupBusy || !state.canPrepare || state.online;
+      for (const button of byId('player-game-list').children) button.disabled = setupBusy || restoring || !state.canPrepare || state.online;
       syncGameListPage(state);
       if (layout) {
         byId('player-setup-players').hidden = !layout.colors;
@@ -313,7 +310,7 @@
         progress.hidden = !slot || (!completed && mode !== 'sokoban');
         progress.textContent = tk('player.slotProgress', 'Sokoban: {{completed}}/{{total}} completed', { completed, total: levelIds.length });
         const busy = setupBusy || restoring || !state.canPrepare || state.online;
-        byId(`player-slot-${number}`).disabled = busy || (slotPurpose === 'continue' && !slot);
+        byId(`player-slot-${number}`).disabled = busy;
         byId(`player-slot-${number}`).setAttribute('aria-label', tk('player.slotLabel', 'Save {{number}} — {{detail}}', { number, detail }));
         for (const action of ['restart', 'delete']) {
           const button = byId(`player-slot-${action}-${number}`);
@@ -326,27 +323,38 @@
       });
     }
 
-    function showSlots(purpose = slotPurpose, mode = slotGameMode) {
+    function showSlots() {
       ++setupRequest;
       setupBusy = false; restoring = false;
       engine.cancelSetup();
       save();
       pendingLevelId = null; selectedSlot = null; slotAction = null;
-      slotPurpose = purpose; slotGameMode = mode;
-      show('slots', purpose === 'new' ? 'games' : 'home');
+      show('slots', 'home');
     }
 
-    async function selectSlot(index) {
+    function selectSlot(index) {
       if (setupBusy || restoring || !engine.state().canPrepare || engine.state().online) return;
+      selectedSlot = index;
+      showGames({ resetPage: true });
+    }
+
+    function syncGameEntry(state) {
+      const saved = slots.slot(selectedSlot)?.game;
+      const button = byId('player-continue');
+      button.hidden = !saved;
+      button.disabled = !saved || restoring || setupBusy || !state.canPrepare || state.online;
+      byId('player-games').classList.toggle('has-saved-game', !!saved);
+      const label = engine.games().find(item => item.mode === saved?.payload.gameMode)?.label || '';
+      byId('player-continue-game').textContent = label;
+      button.setAttribute('aria-label', tk('player.continueSavedGame', 'Continue last game: {{game}}', { game: label }));
+    }
+
+    async function continueSelectedGame() {
+      if (selectedSlot === null || setupBusy || restoring || !engine.state().canPrepare || engine.state().online) return;
       save();
-      if (slotPurpose === 'new') {
-        selectedSlot = index;
-        chooseGame(slotGameMode);
-        return;
-      }
+      const index = selectedSlot;
       const slot = slots.slot(index);
-      if (!slot) return;
-      if (!slot.game) { requestNewGame('home', index); return; }
+      if (!slot?.game) return;
       const request = ++setupRequest;
       restoring = true;
       sync();
@@ -395,10 +403,8 @@
       clearTimeout(saveTimer); saveTimer = null;
       if (activeSlot === index) activeSlot = null;
       selectedSlot = null; slotAction = null;
-      if (action === 'restart') {
-        if (slotPurpose === 'new') { selectedSlot = index; chooseGame(slotGameMode); }
-        else requestNewGame('home', index);
-      } else showSlots();
+      if (action === 'restart') selectSlot(index);
+      else showSlots();
     });
 
     function setOpen(open) {
@@ -457,13 +463,13 @@
       if (page === 'slot-confirm') { showSlots();
       } else if (page === 'slots') {
         ++setupRequest; restoring = false; setupBusy = false; selectedSlot = null;
-        show(slotPurpose === 'new' ? 'games' : 'home', newGameParent);
+        show('home');
       } else if (page === 'levels') {
         ++setupRequest;
         setupBusy = false;
         engine.cancelSetup();
         pendingLevelId = null;
-        if (levelsParent === 'slots') showSlots('new', 'sokoban');
+        if (levelsParent === 'games') showGames();
         else show(levelsParent, 'home');
       } else if (page === 'confirm' && pendingLevelId) {
         showLevels();
@@ -476,15 +482,15 @@
         ++setupRequest;
         setupBusy = false;
         engine.cancelSetup();
-        showSlots('new', slotGameMode);
+        showGames();
       } else if (page === 'chess-category') {
         ++setupRequest;
         setupBusy = false;
         engine.cancelSetup();
-        showSlots('new', 'fide-chess');
+        showGames();
       } else if (page === 'board-options') show('setup', 'games', 'player-more');
       else if (page === 'confirm') show('setup', 'games');
-      else if (page === 'games') show(newGameParent);
+      else if (page === 'games') showSlots();
       else show(backPage, 'home');
     }
     byId('player-back').addEventListener('click', goBack);
@@ -499,14 +505,16 @@
     }
     byId('player-settings').addEventListener('click', () => engine.settings());
     byId('player-game-settings').addEventListener('click', () => engine.settings());
-    function requestNewGame(parent, index = null) {
-      newGameParent = parent;
-      gameListPage = 0;
+    function showGames({ resetPage = false } = {}) {
+      if (selectedSlot === null) { showSlots(); return; }
+      ++setupRequest;
+      setupBusy = false; restoring = false;
+      engine.cancelSetup();
+      pendingLevelId = null;
       save();
-      selectedSlot = index;
-      slotGameMode = null;
+      if (resetPage) gameListPage = 0;
       updateGameList();
-      show('games', parent);
+      show('games', 'slots');
     }
     function updateGameList() {
       for (const item of engine.games()) {
@@ -544,7 +552,7 @@
       const lastPage = Math.max(0, Math.ceil(buttons.length / GAMES_PER_PAGE) - 1);
       gameListPage = Math.max(0, Math.min(gameListPage, lastPage));
       buttons.forEach((button, index) => { button.hidden = Math.floor(index / GAMES_PER_PAGE) !== gameListPage; });
-      const busy = setupBusy || !state.canPrepare || state.online;
+      const busy = setupBusy || restoring || !state.canPrepare || state.online;
       byId('player-games-previous').disabled = busy || gameListPage === 0;
       byId('player-games-next').disabled = busy || gameListPage === lastPage;
     }
@@ -560,10 +568,9 @@
     byId('player-games-previous').addEventListener('click', () => changeGamesPage(-1));
     byId('player-games-next').addEventListener('click', () => changeGamesPage(1));
     async function chooseGame(mode, category = null) {
-      if (setupBusy || !engine.state().canPrepare) return;
-      if (selectedSlot === null) { showSlots('new', mode); return; }
-      slotGameMode = mode;
-      if (mode === 'sokoban') { showLevels('slots'); return; }
+      if (setupBusy || restoring || !engine.state().canPrepare || engine.state().online) return;
+      if (selectedSlot === null) { showSlots(); return; }
+      if (mode === 'sokoban') { showLevels('games'); return; }
       if (mode === 'fide-chess' && !category) {
         chessCategory = null;
         chessBoards.clear();
@@ -587,7 +594,7 @@
         show('setup', 'games');
       } catch (_) {
         if (request !== setupRequest) return;
-        showSlots('new', mode);
+        showGames();
         message(tk('player.setupLoadError', 'This board could not be loaded. Your previous game is still available.'));
       } finally {
         if (request === setupRequest) { setupBusy = false; sync(); }
@@ -634,7 +641,7 @@
       } catch (_) {
         restoring = false;
         if (pendingLevelId) showLevels();
-        else show('games', newGameParent);
+        else showGames();
         message(tk('player.startError', 'The game could not start. Check the board settings. Your previous save is unchanged.'));
       }
     }
@@ -657,19 +664,18 @@
     menu.querySelectorAll('[data-player-page]').forEach((button) => {
       button.addEventListener('click', () => {
         if (button.dataset.playerPage === 'setup' && !engine.state().online) {
-          requestNewGame('game-menu');
+          selectedSlot = activeSlot;
+          showGames({ resetPage: true });
           return;
         }
         show(button.dataset.playerPage, 'game-menu');
       });
     });
     byId('player-new').addEventListener('click', () => {
-      requestNewGame('home');
-    });
-    byId('player-continue').addEventListener('click', () => {
       if (engine.state().online) { setOpen(false); return; }
-      if (!restoring) showSlots('continue', null);
+      showSlots();
     });
+    byId('player-continue').addEventListener('click', continueSelectedGame);
 
     // Capture before game shortcuts, but leave settings key binding capture alone.
     window.addEventListener('keydown', (event) => {

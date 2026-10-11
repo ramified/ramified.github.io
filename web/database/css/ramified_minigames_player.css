@@ -147,10 +147,18 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
 .player-level-number { font-size: 1.4rem; }
 .player-level-state { font-size: 0.75rem; }
 #player-games {
-  display: grid; grid-template-columns: var(--player-icon-size) minmax(0, 1fr) var(--player-icon-size);
-  gap: var(--player-gap); align-items: center; overflow: hidden;
+  display: flex; flex-direction: column; gap: var(--player-gap);
 }
-.ramified-player #player-games > .player-game-page-arrow.btn {
+#player-continue {
+  flex: none; align-self: center; max-width: 100%;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px var(--player-small-gap);
+}
+#player-game-browser {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: var(--player-icon-size) minmax(0, 1fr) var(--player-icon-size);
+  gap: var(--player-gap); align-items: center;
+}
+.ramified-player #player-game-browser > .player-game-page-arrow.btn {
   width: 100%; min-width: 0; height: var(--player-icon-size); padding: 0;
 }
 #player-game-list {
@@ -312,6 +320,7 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
 .ramified-player :is(button, select, input, textarea, summary, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .ramified-player.canvas-fullscreen-active { --player-frame-height: 100dvh; }
 @media (max-width: 600px) {
+  #player-games.has-saved-game #player-game-browser { min-height: 180px; }
   .player-slot-row { grid-template-columns: minmax(0, 1fr); }
   .player-slot-actions > button { flex: 1; }
   #player-setup-options #chinese-checkers-player-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -329,7 +338,8 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
   .ramified-player .mosaic-underbar { font-size: 12px; }
 }
 @media (max-width: 600px), (max-height: 500px) {
-  #player-games { grid-template-columns: 26px minmax(0, 1fr) 26px; padding: 6px; gap: 4px; }
+  #player-games { padding: 6px; gap: 4px; }
+  #player-game-browser { grid-template-columns: 26px minmax(0, 1fr) 26px; gap: 4px; }
   #player-game-list { gap: 6px; }
   #player-games #player-game-list > .btn { padding: 4px; gap: 2px; font-size: 0.7rem; }
 }

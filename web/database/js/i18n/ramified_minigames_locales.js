@@ -37,6 +37,8 @@
     'player.returnMenu': ['Return to menu', '返回菜单'],
     'player.start': ['Start game', '开始游戏'],
     'player.continue': ['Continue game', '继续游戏'],
+    'player.continueLast': ['Continue last game', '继续上次游戏'],
+    'player.continueSavedGame': ['Continue last game: {{game}}', '继续上次游戏：{{game}}'],
     'player.resume': ['Return to game', '返回游戏'],
     'player.back': ['Back', '返回'],
     'player.home': ['Main menu', '主菜单'],
