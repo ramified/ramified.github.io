@@ -343,3 +343,33 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
   #player-game-list { gap: 6px; }
   #player-games #player-game-list > .btn { padding: 4px; gap: 2px; font-size: 0.7rem; }
 }
+/* R19 uses complete pages inside the same game frame. */
+#player-lobby, #player-room { display: flex; flex-direction: column; gap: var(--player-gap); width: 100%; min-height: 0; overflow: hidden; }
+.player-online-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; width: 100%; max-width: 58rem; margin-inline: auto; }
+.player-online-heading input { flex: 1; min-width: 5rem; max-width: 14rem; }
+.player-lobby-columns { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(12rem, 2fr); gap: 1.5rem; width: 100%; max-width: 58rem; margin-inline: auto; min-height: 0; overflow: auto; }
+.player-lobby-columns h2 { font-size: 1rem; margin: .6rem 0; }
+.player-lobby-columns ul, #player-room-members { padding-inline-start: 1.2rem; overflow-wrap: anywhere; }
+#player-lobby-rooms { display: flex; flex-direction: column; gap: .75rem; padding-bottom: .7rem; }
+.player-lobby-room { border-bottom: 1px solid #aaa; padding: .5rem 0 .8rem; }
+.player-lobby-room p { margin: .3rem 0; overflow-wrap: anywhere; }
+.player-room-body { width: 100%; max-width: 48rem; margin-inline: auto; overflow: auto; flex: 1; min-height: 0; }
+.player-room-actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-block: .8rem; }
+#player-room-seat-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+#player-room-seat-options label { display: flex; align-items: center; gap: .5rem; padding: .5rem; min-height: 2.6rem; }
+#player-room-seat-options input { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; }
+#player-room-seats { border: 0; padding: 0; margin: .7rem 0; }
+.player-room-footer { margin-top: auto; display: flex; justify-content: flex-end; width: 100%; max-width: 48rem; margin-inline: auto; padding-top: .7rem; }
+#player-time-fields { display: grid; gap: .65rem; width: 100%; max-width: 38rem; margin: .7rem auto; }
+#player-time-fields label { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .7rem; }
+#player-time-fields input { width: 8rem; }
+#player-online-clock { position: absolute; z-index: 7; right: .6rem; top: .6rem; padding: .35rem .6rem; background: #fff; color: #111; border: 1px solid #444; max-width: 70%; font: 600 .9rem monospace; white-space: pre-wrap; pointer-events: none; }
+.player-menu-open #player-online-clock { display: none; }
+.player-online-preparing #chinese-checkers-players-row select option[value^="local-ai"] { display: none; }
+@media (max-width: 480px) {
+  #player-lobby { overflow: auto; }
+  .player-lobby-columns { grid-template-columns: 1fr; gap: .4rem; flex-shrink: 0; overflow: visible; }
+  .player-online-heading { gap: .4rem; flex-shrink: 0; }
+  #player-room-seat-options { grid-template-columns: 1fr; }
+  #player-online-clock { font-size: .75rem; max-width: 65%; }
+}

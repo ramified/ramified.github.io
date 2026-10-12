@@ -67,7 +67,7 @@ async function run() {
     };
     await ready();
     assert.strictEqual(await read('document.querySelector("#player-continue").disabled'),true);
-    assert.deepStrictEqual(await read('[...document.querySelectorAll("#player-home button")].map(n=>n.id)'),['player-new','player-settings'],'one game entry on the home page');
+    assert.deepStrictEqual(await read('[...document.querySelectorAll("#player-home button")].map(n=>n.id)'),['player-new','player-online-open','player-settings'],'one local entry plus independent online entry');
     assert.strictEqual(await read('document.querySelector("#player-new").disabled'),false,'fresh players can enter');
     await click('#player-new');
     assert.strictEqual(await visible('player-slots'),true,'Start opens saves before any game list');

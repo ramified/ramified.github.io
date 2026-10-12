@@ -124,7 +124,7 @@ async function testCreationAndJoinAlarm(worker) {
       })
     }));
     assert.strictEqual(response.status, 200);
-    assert.strictEqual(storage.alarm, now + FIVE_MINUTES, 'creation starts the empty-room grace period');
+    assert.strictEqual(storage.alarm, now + 60000, 'creator seat reservation precedes the five-minute empty-room expiry');
 
     const socket = makeSocket('creator-1234', { joined: false });
     room.sessions.set(socket, socket.deserializeAttachment());
@@ -144,9 +144,9 @@ async function testFinalSocketStartsGracePeriod(worker) {
     room.room = makeRoom({ roles: { black: 'player-a-1234', white: 'player-b-5678' } });
 
     await room.webSocketClose(first);
-    assert.strictEqual(storage.alarm, null, 'one remaining joined socket keeps the room alive');
+    assert.strictEqual(storage.alarm, now + 60000, 'seat grace runs while the other player keeps the room alive');
     await room.webSocketClose(second);
-    assert.strictEqual(storage.alarm, now + FIVE_MINUTES);
+    assert.strictEqual(storage.alarm, now + 60000, 'seat expiry is earlier than empty-room deletion');
     assert.strictEqual(room.room.emptySince, new Date(now).toISOString());
     assert.deepStrictEqual(room.room.roles, { black: 'player-a-1234', white: 'player-b-5678' }, 'disconnect grace preserves roles');
 
@@ -155,7 +155,7 @@ async function testFinalSocketStartsGracePeriod(worker) {
     const errorRoom = new worker.GameRoom(makeContext(errorStorage, [errorSocket]), {});
     errorRoom.room = makeRoom();
     await errorRoom.webSocketError(errorSocket);
-    assert.strictEqual(errorStorage.alarm, now + FIVE_MINUTES, 'socket errors start the same grace period');
+    assert.strictEqual(errorStorage.alarm, now + 60000, 'socket errors retain identity for 60 seconds');
 
     const leaveStorage = new FakeStorage();
     const leavingSocket = makeSocket('player-d-3456', { role: 'black', leaving: true });

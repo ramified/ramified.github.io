@@ -8905,6 +8905,15 @@ function testBilliardsReplayRestoresRoundSetup() {
 }
 
 async function run() {
+  if (process.argv.includes('--online-only')) {
+    testOnlinePublicPresencePreservesLocalRole();
+    await testOnlineControlsVisibleForSinglePlayerModes();
+    await testOnlineRoomSearchPopulatesSelect();
+    await testOnlineRoomSearchEmptyResults();
+    await testOnlineRoomSearchFailureHidesSelect();
+    console.log('ramified_minigames_setup_test: legacy online controls, discovery, errors and role preservation passed');
+    return;
+  }
   testFullscreenSettingsPreferencesAndMarkup();
   testReusableLocalizationWiring();
   testRuntimeChineseLocaleCatalog();

@@ -2054,7 +2054,7 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="css/ramified_minigames_player.css?v=20261011-1">
+  <link rel="stylesheet" href="css/ramified_minigames_player.css?v=20261012-1">
 </head>
 <body class="ramified-player player-menu-open">
 
@@ -2095,6 +2095,7 @@
           <p id="player-message" role="status" hidden></p>
           <section id="player-home" class="player-page">
             <button class="btn" id="player-new" type="button" data-i18n="player.start" disabled>Start game</button>
+            <button class="btn" id="player-online-open" type="button" data-i18n="online.title">Online Play</button>
             <button class="btn" id="player-settings" type="button" data-i18n="fullscreen.settings">Settings</button>
           </section>
           <section id="player-game-menu" class="player-page" hidden>
@@ -2179,6 +2180,17 @@
           </section>
           <section id="player-board-options" class="player-page" hidden>
             <div id="player-board-fields"></div>
+            <div id="player-time-fields" hidden>
+              <label for="player-time-mode" data-i18n="lobby.timeControl">Time control</label>
+              <select id="player-time-mode">
+                <option value="unlimited" data-i18n="lobby.unlimited">Unlimited</option>
+                <option value="total" data-i18n="lobby.total">Total time per side</option>
+                <option value="move" data-i18n="lobby.move">Time per action</option>
+                <option value="byoyomi" data-i18n="lobby.byoyomi">Total time + 3 periods</option>
+              </select>
+              <label id="player-time-main-row"><span data-i18n="lobby.totalSeconds">Total time per side (seconds)</span><input id="player-time-main" type="number" min="1" max="86400" step="1" inputmode="numeric"></label>
+              <label id="player-time-action-row"><span id="player-time-action-label" data-i18n="lobby.actionSeconds">Time per action (seconds)</span><input id="player-time-action" type="number" min="1" max="86400" step="1" inputmode="numeric"></label>
+            </div>
             <button class="btn" id="player-edit-balls" type="button" data-i18n="player.editBalls" hidden>Arrange balls</button>
           </section>
           <section id="player-confirm" class="player-page" hidden>
@@ -2188,6 +2200,44 @@
           </section>
           <section id="player-display" class="player-page" hidden></section>
           <section id="player-online" class="player-page" hidden></section>
+          <section id="player-lobby" class="player-page" hidden>
+            <div class="player-online-heading">
+              <label for="player-lobby-name" data-i18n="lobby.name">Nickname</label>
+              <input id="player-lobby-name" type="text" maxlength="32" autocomplete="nickname">
+              <button class="btn" id="player-lobby-rename" type="button" data-i18n="lobby.rename">Set nickname</button>
+              <button class="btn" id="player-lobby-refresh" type="button" data-i18n="lobby.refresh">Refresh</button>
+              <button class="btn" id="player-lobby-create" type="button" data-i18n="lobby.create">Create room</button>
+            </div>
+            <div class="player-lobby-columns">
+              <div><h2 data-i18n="lobby.players">Online players</h2><ul id="player-lobby-players"></ul></div>
+              <div><h2 data-i18n="lobby.rooms">Rooms</h2><div id="player-lobby-rooms"></div></div>
+            </div>
+          </section>
+          <section id="player-room" class="player-page" hidden>
+            <div class="player-room-body">
+              <p id="player-room-summary"></p>
+              <p id="player-room-state" role="status"></p>
+              <p id="player-room-time"></p>
+              <ul id="player-room-members"></ul>
+              <fieldset id="player-room-seats"><legend data-i18n="lobby.seats">Choose a seat</legend><div id="player-room-seat-options"></div></fieldset>
+              <div class="player-room-actions">
+                <button class="btn" id="player-room-claim" type="button" data-i18n="lobby.claim">Confirm seats</button>
+                <button class="btn" id="player-room-ready" type="button" data-i18n="lobby.ready">Ready</button>
+                <button class="btn" id="player-room-watch" type="button" data-i18n="player.viewBoard">View board</button>
+                <button class="btn" id="player-room-retry" type="button" data-i18n="lobby.refresh" hidden>Refresh</button>
+                <button class="btn" id="player-room-change" type="button" data-i18n="lobby.change">Change game or board</button>
+              </div>
+              <div id="player-room-proposal" hidden>
+                <p id="player-room-proposal-text"></p>
+                <div class="player-room-actions">
+                  <button class="btn" id="player-proposal-accept" type="button" data-i18n="lobby.accept">Agree</button>
+                  <button class="btn" id="player-proposal-reject" type="button" data-i18n="lobby.reject">Disagree and leave</button>
+                  <button class="btn" id="player-proposal-cancel" type="button" data-i18n="common.cancel">Cancel</button>
+                </div>
+              </div>
+            </div>
+            <div class="player-room-footer"><button class="btn" id="player-room-leave" type="button" data-i18n="lobby.leave">Leave room</button></div>
+          </section>
         </div>
       </div>
       <details id="player-actions">
@@ -2195,6 +2245,7 @@
         <div id="player-action-controls"></div>
       </details>
       <canvas id="mosaic-canvas" tabindex="0" aria-label="Ramified minigame mosaic canvas"></canvas>
+      <output id="player-online-clock" hidden data-i18n-aria-label="lobby.clocks" aria-label="Game clocks"></output>
       <div class="fullscreen-lianliankan-actions" id="fullscreen-lianliankan-actions" data-i18n-aria-label="access.fullscreenGameTools" aria-label="Fullscreen game tools" hidden>
         <button class="fullscreen-lianliankan-button" id="fullscreen-lianliankan-hint" type="button" data-i18n-aria-label="common.showHint" aria-label="Show hint" data-i18n-title="common.hint" title="Hint">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -3193,17 +3244,18 @@
 <script src="js/calculator_input_settings.js?v=20260903-1"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20261011-1"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20261012-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
 <script src="js/ramified_minigames_sfx.js?v=20260913-2"></script>
-<script src="js/ramified_minigames_setup.js?v=20261010-1"></script>
+<script src="js/ramified_minigames_setup.js?v=20261012-1"></script>
 <script src="js/ramified_minigames_sokoban_progress.js?v=20261008-3"></script>
 <script src="js/ramified_minigames_save_slots.js?v=20261010-1"></script>
-<script src="js/ramified_minigames_player.js?v=20261011-1"></script>
+<script src="js/ramified_minigames_online.js?v=20261012-1"></script>
+<script src="js/ramified_minigames_player.js?v=20261012-1"></script>
 <script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
 </body>

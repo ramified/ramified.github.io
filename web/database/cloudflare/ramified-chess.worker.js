@@ -1,3 +1,6 @@
+import { timeControl, startClock, settleClock, finishClockAction, clockDeadline, endRound } from './ramified-room-clock.js';
+import { resolveRoomShot } from './ramified-room-billiards.js';
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -86,6 +89,12 @@ export default {
 
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS_HEADERS });
 
+      if (path === '/ws/lobby' && request.headers.get('Upgrade') === 'websocket') return roomIndexStub(env).fetch(request);
+
+      if (path === '/api/presence' && ['POST', 'GET'].includes(request.method)) {
+        return addCors(await roomIndexStub(env).fetch(new Request(`https://room-index/presence`, request)));
+      }
+
       if (request.method === 'POST' && path === '/api/rooms') {
         return await createRoom(request, env);
       }
@@ -135,6 +144,8 @@ export class GameRoom {
   async fetch(request) {
     try {
       const url = new URL(request.url);
+      if (url.pathname === '/ws/lobby' && request.headers.get('Upgrade') === 'websocket') return this.handleLobbySocket(request);
+      if (url.pathname === '/presence') return this.handleLobbyPresence(request);
       if (url.pathname === '/analytics/record' && request.method === 'POST') return this.handleAnalyticsRecord(request);
       if (url.pathname === '/analytics/report' && request.method === 'GET') return this.handleAnalyticsReport();
       if (url.pathname === '/room-index/register' && request.method === 'POST') return this.handleRoomIndexRegister(request);
@@ -157,7 +168,10 @@ export class GameRoom {
     const roomCode = normalizeRoomCode(body.roomCode);
     if (!roomCode) return jsonResponse({ error: 'Invalid room code.' }, 400);
     await this.loadRoom();
-    if (this.room) return jsonResponse({ error: 'Room already exists.' }, 409);
+    if (this.room) {
+      if (body.creationId && this.room.creationId === body.creationId && this.room.creatorId === body.clientId) return jsonResponse(publicRoomPayload(this.room));
+      return jsonResponse({ error: 'Room already exists.' }, 409);
+    }
 
     const gameMode = normalizeGameMode(body.gameMode);
     if (!SUPPORTED_GAME_MODES.has(gameMode)) {
@@ -173,7 +187,7 @@ export class GameRoom {
     const rolesAssigned = assignRequestedRoles(roles, gameMode, body.rolesRequested || body.role, clientId, snapshot);
     const playerName = normalizePlayerName(body.playerName, clientId);
     playerNames[clientId] = playerName;
-    const now = new Date().toISOString();
+    const now = new Date(Date.now()).toISOString();
     this.room = {
       roomCode,
       gameMode,
@@ -182,6 +196,15 @@ export class GameRoom {
       summary: sanitizeText(body.summary, 220),
       roles,
       playerNames,
+      creationId: sanitizeText(body.creationId, 100),
+      creatorId: clientId,
+      hostId: clientId,
+      members: { [clientId]: { order: 1, online: false } },
+      nextJoinOrder: 2,
+      roundId: crypto.randomUUID(),
+      timeControl: timeControl(body.timeControl),
+      clock: null,
+      proposal: null,
       readyToPlay: false,
       roundState: 'waiting',
       readyClientIds: [],
@@ -189,14 +212,14 @@ export class GameRoom {
       roundStartSnapshot: snapshot,
       pendingApproval: null,
       approvedHistory: null,
-      disconnected: {},
+      disconnected: { [clientId]: { disconnectedAt: now, playerName, rolesAssigned } },
       emptySince: now,
       createdAt: now,
       updatedAt: now
     };
     updateRoomReadiness(this.room);
     await this.saveRoom();
-    await this.ctx.storage.setAlarm(Date.now() + ROOM_EMPTY_TTL_MS);
+    await this.scheduleRoomAlarm();
     return jsonResponse(publicRoomPayload(this.room, {
       role: rolesAssigned[0] || 'spectator',
       rolesAssigned
@@ -215,7 +238,7 @@ export class GameRoom {
     if (!event) return jsonResponse({ error: 'Invalid analytics event.' }, 400);
     const current = normalizeAnalyticsAggregate(await this.ctx.storage.get(ANALYTICS_STORAGE_KEY), event.day);
     current.events += 1;
-    current.updatedAt = new Date().toISOString();
+    current.updatedAt = new Date(Date.now()).toISOString();
     const game = analyticsMetricBucket(current.byGame, event.gameMode);
     const country = analyticsMetricBucket(current.byCountry, event.country);
     if (event.type === 'visit') {
@@ -313,7 +336,7 @@ export class GameRoom {
         this.room.emptySince = null;
         await this.saveRoom();
       }
-      await this.ctx.storage.deleteAlarm();
+      await this.scheduleRoomAlarm();
       return jsonResponse({ exists: true, connected, room: publicRoomPayload(this.room), expiresAt: '' });
     }
     const expiresAt = await this.ensureEmptyRoomExpiry({ inferExisting: true, publish: false });
@@ -333,7 +356,7 @@ export class GameRoom {
       role: '',
       roles: [],
       joined: false,
-      connectedAt: new Date().toISOString()
+      connectedAt: new Date(Date.now()).toISOString()
     };
     this.sessions.set(server, attachment);
     this.ctx.acceptWebSocket(server);
@@ -345,6 +368,20 @@ export class GameRoom {
   }
 
   async webSocketMessage(ws, message) {
+    if (safeAttachment(ws).lobby) {
+      try {
+        const value = JSON.parse(String(message));
+        if (value.type === 'presence') {
+          const old = safeAttachment(ws);
+          const next = { ...old, playerName: normalizePlayerName(value.playerName, old.clientId), roomCode: normalizeRoomCode(value.roomCode) };
+          this.sessions.set(ws, next);
+          ws.serializeAttachment(next);
+          this.broadcastLobby();
+        }
+        if (value.type === 'ping') this.safeSend(ws, { type: 'pong' });
+      } catch (_) {}
+      return;
+    }
     await this.loadRoom();
     if (!this.room) {
       this.safeSend(ws, { type: 'error', error: 'Room not found.' });
@@ -364,6 +401,12 @@ export class GameRoom {
     const size = byteLength(JSON.stringify(payload));
     if (size > MAX_JSON_BYTES) {
       this.safeSend(ws, { type: 'error', error: 'Message is too large.' });
+      return;
+    }
+
+    await this.advanceRoom(Date.now());
+    if (['proposeConfiguration', 'configurationResponse', 'cancelConfiguration'].includes(payload.type)) {
+      await this.handleConfiguration(ws, payload);
       return;
     }
 
@@ -393,6 +436,18 @@ export class GameRoom {
     }
     if (payload.type === 'proposeMove') {
       await this.handleProposeMove(ws, payload);
+      return;
+    }
+    if (payload.type === 'billiardsShot') {
+      const a = safeAttachment(ws);
+      if (this.room.gameMode !== 'billiards' || this.room.roundState !== 'playing' || Number(payload.baseVersion) !== this.room.version || !attachmentRoles(a).includes(this.room.snapshot.turn) || this.room.snapshot.phase !== 'ready') return this.safeSend(ws, { type: 'error', error: 'Shot unavailable.' });
+      try {
+        const result = resolveRoomShot(this.room.snapshot, { ...payload.action, shooter: this.room.snapshot.turn });
+        // Synchronous server computation and subsequent deterministic playback
+        // are engine time, not the next player's decision time.
+        if (this.room.clock) this.room.clock.at = Date.now();
+        await this.handleProposeMove(ws, { ...payload, ...result }, { serverShot: true });
+      } catch (error) { this.safeSend(ws, { type: 'error', error: error.message }); }
       return;
     }
     if (payload.type === 'historyRequest') {
@@ -430,23 +485,25 @@ export class GameRoom {
   async alarm() {
     await this.loadRoom();
     if (!this.room) return;
+    await this.advanceRoom(Date.now());
     if (this.playerSockets().length > 0) {
       this.room.emptySince = null;
       await this.saveRoom();
       try {
         await this.publishRoomIndex({ throwOnError: true });
       } catch (_) {
-        await this.ctx.storage.setAlarm(Date.now() + ROOM_EXPIRY_RETRY_MS);
+        await this.scheduleRoomAlarm(Date.now() + ROOM_EXPIRY_RETRY_MS);
         return;
       }
-      await this.ctx.storage.deleteAlarm();
+      await this.scheduleRoomAlarm();
       return;
     }
 
     const emptySince = roomEmptySinceTime(this.room, Date.now());
+    if (!this.room.emptySince) this.room.emptySince = new Date(emptySince).toISOString();
     const expiresAt = emptySince + ROOM_EMPTY_TTL_MS;
     if (Date.now() < expiresAt) {
-      await this.ctx.storage.setAlarm(expiresAt);
+      await this.scheduleRoomAlarm();
       return;
     }
 
@@ -455,7 +512,7 @@ export class GameRoom {
     try {
       await unregisterRoomFromIndex(this.env, roomCode);
     } catch (_) {
-      await this.ctx.storage.setAlarm(Date.now() + ROOM_EXPIRY_RETRY_MS);
+      await this.scheduleRoomAlarm(Date.now() + ROOM_EXPIRY_RETRY_MS);
       return;
     }
 
@@ -465,10 +522,10 @@ export class GameRoom {
       try {
         await this.publishRoomIndex({ throwOnError: true });
       } catch (_) {
-        await this.ctx.storage.setAlarm(Date.now() + ROOM_EXPIRY_RETRY_MS);
+        await this.scheduleRoomAlarm(Date.now() + ROOM_EXPIRY_RETRY_MS);
         return;
       }
-      await this.ctx.storage.deleteAlarm();
+      await this.scheduleRoomAlarm();
       return;
     }
 
@@ -477,18 +534,18 @@ export class GameRoom {
   }
 
   async handleHello(ws, payload) {
-    const clientId = normalizeClientId(payload.clientId) || safeAttachment(ws).clientId;
+    await this.advanceRoom(Date.now());
+    const boundId = safeAttachment(ws).clientId;
+    const clientId = normalizeClientId(payload.clientId) || boundId;
+    if (!clientId || (boundId && clientId !== boundId)) return this.safeSend(ws, { type: 'error', error: 'Client id does not match this connection.' });
     const playerName = normalizePlayerName(payload.playerName, clientId);
     if (!this.room.playerNames || typeof this.room.playerNames !== 'object') this.room.playerNames = {};
     this.room.playerNames[clientId] = playerName;
     const reconnected = !!(this.room.disconnected && this.room.disconnected[clientId]);
-    const rolesAssigned = assignRequestedRoles(
-      this.room.roles,
-      this.room.gameMode,
-      payload.rolesRequested || payload.role,
-      clientId,
-      this.room.snapshot
-    );
+    const existing = rolesForGame(this.room.gameMode, this.room.snapshot).filter(role => this.room.roles[role] === clientId);
+    // Opening/reopening a room never takes an unclaimed seat. Existing owners
+    // (including the creator and a reconnect within grace) retain their seats.
+    const rolesAssigned = existing.length ? existing : ['spectator'];
     const attachment = {
       ...safeAttachment(ws),
       clientId,
@@ -499,11 +556,11 @@ export class GameRoom {
     };
     this.sessions.set(ws, attachment);
     ws.serializeAttachment(attachment);
-    this.room.updatedAt = new Date().toISOString();
+    this.joinMember(clientId);
+    this.room.updatedAt = new Date(Date.now()).toISOString();
     this.room.emptySince = null;
     if (reconnected && this.room.disconnected) delete this.room.disconnected[clientId];
     updateRoomReadiness(this.room);
-    await this.ctx.storage.deleteAlarm();
     await this.saveRoom();
     await this.publishRoomIndex();
     this.safeSend(ws, {
@@ -529,12 +586,8 @@ export class GameRoom {
       this.safeSend(ws, { type: 'error', error: 'Join the room before choosing colors.' });
       return;
     }
-    if (this.room.gameMode !== 'chinese-checkers') {
-      this.safeSend(ws, { type: 'error', error: 'Color claiming is only available for Chinese Checkers.' });
-      return;
-    }
-    if (this.room.readyToPlay !== false) {
-      this.safeSend(ws, { type: 'error', error: 'Chinese Checkers has already begun.' });
+    if (this.room.proposal) {
+      this.safeSend(ws, { type: 'error', error: 'Wait for the configuration proposal to finish.' });
       return;
     }
     const clientId = normalizeClientId(payload.clientId) || attachment.clientId;
@@ -543,13 +596,24 @@ export class GameRoom {
       return;
     }
     if (!this.room.playerNames || typeof this.room.playerNames !== 'object') this.room.playerNames = {};
-    this.room.playerNames[clientId] = normalizePlayerName(payload.playerName, clientId);
-    const rolesAssigned = claimRequestedChineseCheckersRoles(
-      this.room.roles,
-      payload.rolesRequested || payload.role,
-      clientId,
-      this.room.snapshot
-    );
+    this.room.playerNames[clientId] = normalizePlayerName(payload.playerName || this.room.playerNames[clientId], clientId);
+    const available = rolesForGame(this.room.gameMode, this.room.snapshot);
+    let requested = normalizeRoles(payload.rolesRequested || payload.role).filter(role => available.includes(role));
+    if (this.room.gameMode !== 'chinese-checkers') requested = requested.slice(0, 1);
+    if (requested.some(role => this.room.roles[role] && this.room.roles[role] !== clientId)) return this.safeSend(ws, { type: 'error', error: 'This seat is occupied.' });
+    // During a round players may fill an empty seat, but cannot change away from
+    // an occupied seat to escape a running clock. Leaving is a separate action.
+    if (this.room.roundState === 'playing' && attachmentRoles(attachment).some(role => !requested.includes(role))) return this.safeSend(ws, { type: 'error', error: 'Leave the room to release a seat during play.' });
+    available.forEach(role => { if (this.room.roles[role] === clientId) delete this.room.roles[role]; });
+    requested.forEach(role => { this.room.roles[role] = clientId; });
+    const rolesAssigned = requested;
+    if (!rolesAssigned.length && this.room.hostId === clientId && attachmentRoles(attachment).length) {
+      this.room.hostId = this.nextHost();
+    }
+    this.joinMember(clientId);
+    if (rolesAssigned.length && !this.room.hostId) this.room.hostId = clientId;
+    if (this.room.outcome?.type === 'aborted' && rolesAssigned.length) this.resetRound(this.room.roundStartSnapshot, this.room.gameMode, this.room.timeControl, false);
+    this.room.readyClientIds = [];
     const nextAttachment = {
       ...attachment,
       playerName: this.room.playerNames[clientId],
@@ -559,7 +623,8 @@ export class GameRoom {
     };
     this.sessions.set(ws, nextAttachment);
     ws.serializeAttachment(nextAttachment);
-    this.room.updatedAt = new Date().toISOString();
+    this.refreshSessionRoles();
+    this.room.updatedAt = new Date(Date.now()).toISOString();
     updateRoomReadiness(this.room);
     await this.saveRoom();
     this.safeSend(ws, {
@@ -575,6 +640,9 @@ export class GameRoom {
       unclaimedRoles: unclaimedRoomRoles(this.room)
     });
     this.broadcastPresence();
+    this.playerSockets().forEach(({ ws: target, attachment: member }) => {
+      if (this.room.roundState === 'waiting' || member.clientId === clientId) this.sendState(target);
+    });
   }
 
   async handleUpdateName(ws, payload) {
@@ -594,7 +662,7 @@ export class GameRoom {
     const nextAttachment = { ...attachment, playerName };
     this.sessions.set(ws, nextAttachment);
     ws.serializeAttachment(nextAttachment);
-    this.room.updatedAt = new Date().toISOString();
+    this.room.updatedAt = new Date(Date.now()).toISOString();
     await this.saveRoom();
     this.safeSend(ws, {
       type: 'nameUpdated',
@@ -632,12 +700,14 @@ export class GameRoom {
     if (payload.ready === false) ready.delete(attachment.clientId);
     else ready.add(attachment.clientId);
     this.room.readyClientIds = Array.from(ready);
-    if (current.length && current.every((clientId) => ready.has(clientId))) {
+    if (current.length >= 2 && !unclaimedRoomRoles(this.room).length && Object.values(this.room.roles).every(id => current.includes(id) && ready.has(id))) {
       this.room.roundState = 'playing';
       this.room.readyToPlay = true;
       this.room.readyClientIds = [];
+      this.room.outcome = null;
+      startClock(this.room, rolesForGame(this.room.gameMode, this.room.snapshot), Date.now());
     }
-    this.room.updatedAt = new Date().toISOString();
+    this.room.updatedAt = new Date(Date.now()).toISOString();
     await this.saveRoom();
     this.broadcastPresence();
   }
@@ -659,7 +729,7 @@ export class GameRoom {
       proposerName: normalizePlayerName(attachment.playerName, attachment.clientId),
       acceptedClientIds: [attachment.clientId]
     };
-    this.room.updatedAt = new Date().toISOString();
+    this.room.updatedAt = new Date(Date.now()).toISOString();
     await this.saveRoom();
     this.broadcastPresence();
   }
@@ -678,8 +748,8 @@ export class GameRoom {
     const accepted = new Set(normalizeClientIds(this.room.rematch.acceptedClientIds).filter((clientId) => players.includes(clientId)));
     accepted.add(attachment.clientId);
     this.room.rematch.acceptedClientIds = Array.from(accepted);
-    if (!players.length || !players.every((clientId) => accepted.has(clientId))) {
-      this.room.updatedAt = new Date().toISOString();
+    if (players.length < 2 || unclaimedRoomRoles(this.room).length || !players.every((clientId) => accepted.has(clientId))) {
+      this.room.updatedAt = new Date(Date.now()).toISOString();
       await this.saveRoom();
       this.broadcastPresence();
       return;
@@ -692,8 +762,11 @@ export class GameRoom {
     this.room.readyToPlay = true;
     this.room.readyClientIds = [];
     this.room.rematch = null;
+    this.room.roundId = crypto.randomUUID();
+    this.room.outcome = null;
+    startClock(this.room, rolesForGame(this.room.gameMode, this.room.snapshot), Date.now());
     this.room.summary = 'Rematch started.';
-    this.room.updatedAt = new Date().toISOString();
+    this.room.updatedAt = new Date(Date.now()).toISOString();
     await this.saveRoom();
     this.playerSockets().forEach(({ ws: target, attachment: targetAttachment }) => {
       this.safeSend(target, {
@@ -714,7 +787,8 @@ export class GameRoom {
     });
   }
 
-  async handleProposeMove(ws, payload) {
+  async handleProposeMove(ws, payload, { serverShot = false } = {}) {
+    await this.advanceRoom(Date.now());
     const attachment = safeAttachment(ws);
     if (!attachment.joined) {
       this.safeSend(ws, { type: 'rejected', error: 'Join the room before moving.', version: this.room.version, snapshot: this.room.snapshot });
@@ -734,7 +808,12 @@ export class GameRoom {
       this.safeSend(ws, { type: 'rejected', error: 'Stale move; resyncing current room state.', version: this.room.version, snapshot: this.room.snapshot });
       return;
     }
+    if (payload.roundId && payload.roundId !== this.room.roundId) return this.safeSend(ws, { type: 'rejected', error: 'The round has changed.' });
     const action = normalizeAction(payload.action);
+    if (action.type === 'billiards-shot' && !serverShot) return this.safeSend(ws, { type: 'error', error: 'Submit the shot before simulation.' });
+    // Fixed online playback durations are shared with the renderer; arbitrary
+    // client durations are discarded.
+    action.animationMs = serverShot ? payload.action.animationMs : (['drop', 'fide-move', 'fide-promotion', 'chinese-checkers-move'].includes(action.type) || (this.room.gameMode === 'reversi' && action.type === 'place') ? 350 : 0);
     const historyIssue = this.historyActionIssue(action, attachment.clientId);
     if (historyIssue) {
       this.safeSend(ws, { type: 'rejected', error: historyIssue, version: this.room.version, snapshot: this.room.snapshot });
@@ -764,10 +843,11 @@ export class GameRoom {
       this.refreshSessionRoles();
     }
 
+    const previousSnapshot = this.room.snapshot;
     this.room.version += 1;
     this.room.snapshot = payload.snapshot;
     this.room.summary = sanitizeText(payload.summary, 220);
-    this.room.updatedAt = new Date().toISOString();
+    this.room.updatedAt = new Date(Date.now()).toISOString();
     if (historyActionType(action.type)) this.room.approvedHistory = null;
     if (payload.snapshot && ['gameover', 'complete'].includes(payload.snapshot.phase)) {
       this.room.roundState = 'finished';
@@ -776,6 +856,7 @@ export class GameRoom {
       this.room.rematch = null;
     }
     updateRoomReadiness(this.room);
+    finishClockAction(this.room, action, previousSnapshot, Date.now());
     await this.saveRoom();
 
     const stateMessage = {
@@ -1000,10 +1081,8 @@ export class GameRoom {
     if (!attachment || !attachment.clientId || !this.room || !this.room.roles) return;
     const rolesReleased = attachmentRoles(attachment);
     const playerName = normalizePlayerName(attachment.playerName, attachment.clientId);
-    Object.keys(this.room.roles).forEach((role) => {
-      if (this.room.roles[role] === attachment.clientId) delete this.room.roles[role];
-    });
-    this.room.updatedAt = new Date().toISOString();
+    this.departMember(attachment.clientId);
+    this.room.updatedAt = new Date(Date.now()).toISOString();
     updateRoomReadiness(this.room);
     await this.saveRoom();
     if (options.announce) {
@@ -1027,6 +1106,9 @@ export class GameRoom {
     await this.loadRoom();
     const attachment = safeAttachment(ws);
     if (!this.room || !attachment || !attachment.joined || attachment.leaving) return;
+    if (this.playerSockets().some(item => item.ws !== ws && item.attachment.clientId === attachment.clientId)) return;
+    this.ensureMembers();
+    if (this.room.members[attachment.clientId]) this.room.members[attachment.clientId].online = false;
     const rolesAssigned = attachmentRoles(attachment);
     const playerName = normalizePlayerName(attachment.playerName, attachment.clientId);
     if (!this.room.disconnected || typeof this.room.disconnected !== 'object' || Array.isArray(this.room.disconnected)) {
@@ -1036,9 +1118,9 @@ export class GameRoom {
       playerName,
       rolesAssigned,
       reason: sanitizeText(reason, 80),
-      disconnectedAt: new Date().toISOString()
+      disconnectedAt: new Date(Date.now()).toISOString()
     };
-    this.room.updatedAt = new Date().toISOString();
+    this.room.updatedAt = new Date(Date.now()).toISOString();
     await this.saveRoom();
     this.broadcast({
       type: 'playerDisconnected',
@@ -1057,6 +1139,7 @@ export class GameRoom {
 
   async finishSocket(ws, reason) {
     if (!this.sessions.has(ws)) return;
+    if (safeAttachment(ws).lobby) { this.sessions.delete(ws); this.broadcastLobby(); return; }
     await this.announceSocketDisconnect(ws, reason);
     this.sessions.delete(ws);
     this.broadcastPresence();
@@ -1076,7 +1159,7 @@ export class GameRoom {
     if (options.reset) this.room.updatedAt = emptySinceIso;
     if (changed || options.reset) await this.saveRoom();
     const expiresAt = emptySince + ROOM_EMPTY_TTL_MS;
-    await this.ctx.storage.setAlarm(Math.max(now, expiresAt));
+    await this.scheduleRoomAlarm();
     if (options.publish) await this.publishRoomIndex();
     return new Date(expiresAt).toISOString();
   }
@@ -1084,7 +1167,7 @@ export class GameRoom {
   async publishRoomIndex(options = {}) {
     if (!this.room || !hasRoomNamespace(this.env)) return false;
     try {
-      await registerRoomInIndex(this.env, this.room);
+      await registerRoomInIndex(this.env, { ...publicRoomPayload(this.room), emptySince: this.room.emptySince });
       return true;
     } catch (_) {
       if (options.throwOnError) throw _;
@@ -1156,7 +1239,7 @@ export class GameRoom {
   playerSockets() {
     const sockets = [];
     this.sessions.forEach((attachment, ws) => {
-      if (attachment.joined) sockets.push({ ws, attachment });
+      if (attachment.joined && !attachment.leaving && !attachment.lobby) sockets.push({ ws, attachment });
     });
     return sockets;
   }
@@ -1187,11 +1270,178 @@ export class GameRoom {
   async loadRoom() {
     if (this.room) return;
     this.room = await this.ctx.storage.get('room');
+    if (this.room) this.ensureMembers();
   }
 
   async saveRoom() {
     await this.ctx.storage.put('room', this.room);
+    await this.scheduleRoomAlarm();
+    await this.publishRoomIndex();
   }
+
+  ensureMembers() {
+    const room = this.room;
+    if (!room.members) room.members = {};
+    room.nextJoinOrder ||= 1;
+    for (const id of new Set(Object.values(room.roles || {}))) {
+      room.members[id] ||= { order: room.nextJoinOrder++, online: !!this.findSocketByClientId(id) };
+    }
+    if (!Object.hasOwn(room, 'hostId')) room.hostId = Object.keys(room.members).find(id => Object.values(room.roles).includes(id)) || null;
+    room.timeControl ||= { mode: 'unlimited' };
+    room.roundId ||= crypto.randomUUID();
+    room.proposal ||= null;
+    updateRoomReadiness(room);
+  }
+
+  joinMember(id) {
+    this.ensureMembers();
+    this.room.members[id] ||= { order: this.room.nextJoinOrder++ };
+    this.room.members[id].online = true;
+    if (!this.room.hostId && Object.values(this.room.roles).includes(id)) this.room.hostId = id;
+  }
+
+  departMember(id) {
+    this.ensureMembers();
+    const wasPlayer = Object.values(this.room.roles).includes(id);
+    Object.keys(this.room.roles).forEach(role => { if (this.room.roles[role] === id) delete this.room.roles[role]; });
+    delete this.room.members[id];
+    if (this.room.disconnected) delete this.room.disconnected[id];
+    this.room.readyClientIds = (this.room.readyClientIds || []).filter(value => value !== id);
+    if (this.room.hostId === id) {
+      this.room.proposal = null;
+      this.room.hostId = this.nextHost();
+    }
+    // A browser identity can have several tabs. Explicit departure releases it
+    // once and closes every room connection for that identity.
+    for (const { ws, attachment } of this.playerSockets()) if (attachment.clientId === id) {
+      const next = { ...attachment, joined: false, leaving: true, roles: [], role: 'spectator' };
+      this.sessions.set(ws, next);
+      ws.serializeAttachment(next);
+      this.safeSend(ws, { type: 'departed' });
+      ws.close(1000, 'left room');
+    }
+    if (wasPlayer && !Object.values(this.room.roles).length && this.room.roundState !== 'finished') endRound(this.room, { type: 'aborted', losers: [] });
+    this.refreshSessionRoles();
+  }
+
+  nextHost() {
+    return Object.entries(this.room.members)
+      .filter(([key, member]) => member.online && Object.values(this.room.roles).includes(key))
+      .sort((a, b) => a[1].order - b[1].order)[0]?.[0] || null;
+  }
+
+  async advanceRoom(now) {
+    if (!this.room) return;
+    this.ensureMembers();
+    const expired = settleClock(this.room, now);
+    if (expired.length) endRound(this.room, { type: 'timeout', losers: expired });
+    let changed = expired.length > 0;
+    for (const [id, entry] of Object.entries(this.room.disconnected || {})) {
+      if (Date.parse(entry.disconnectedAt) + 60000 <= now) { this.departMember(id); changed = true; }
+    }
+    if (this.room.proposal && this.room.proposal.expiresAt <= now) { this.room.proposal = null; changed = true; }
+    if (this.applyAgreedConfiguration()) changed = true;
+    if (changed) {
+      this.room.updatedAt = new Date(now).toISOString();
+      await this.saveRoom();
+      this.playerSockets().forEach(({ ws }) => this.sendState(ws));
+      this.broadcastPresence();
+    }
+  }
+
+  async scheduleRoomAlarm(retryAt = Infinity) {
+    if (!this.room) return;
+    const deadlines = [clockDeadline(this.room), retryAt];
+    if (this.room.emptySince) deadlines.push(Math.max(Date.parse(this.room.emptySince) + ROOM_EMPTY_TTL_MS, Number.isFinite(retryAt) ? retryAt : -Infinity));
+    for (const entry of Object.values(this.room.disconnected || {})) deadlines.push(Date.parse(entry.disconnectedAt) + 60000);
+    if (this.room.proposal) deadlines.push(this.room.proposal.expiresAt);
+    const deadline = Math.min(...deadlines.filter(Number.isFinite));
+    if (Number.isFinite(deadline)) await this.ctx.storage.setAlarm(Math.max(Date.now(), deadline));
+    else await this.ctx.storage.deleteAlarm();
+  }
+
+  resetRound(snapshot, mode, config, releaseSeats = true) {
+    this.room.snapshot = structuredClone(snapshot);
+    this.room.roundStartSnapshot = structuredClone(snapshot);
+    this.room.gameMode = mode;
+    this.room.timeControl = config;
+    this.room.roundId = crypto.randomUUID();
+    this.room.version++;
+    this.room.roundState = 'waiting';
+    this.room.readyToPlay = false;
+    this.room.readyClientIds = [];
+    this.room.clock = null;
+    this.room.outcome = null;
+    this.room.pendingApproval = this.room.approvedHistory = this.room.rematch = null;
+    if (releaseSeats) this.room.roles = {};
+    this.refreshSessionRoles();
+  }
+
+  applyAgreedConfiguration() {
+    const proposal = this.room.proposal;
+    if (!proposal || !this.room.members[this.room.hostId]?.online) return false;
+    const voters = [...new Set(Object.values(this.room.roles))].filter(id => id !== this.room.hostId);
+    if (!voters.every(id => this.room.members[id]?.online && proposal.accepted.includes(id))) return false;
+    this.resetRound(proposal.snapshot, proposal.gameMode, proposal.timeControl);
+    this.room.summary = proposal.summary;
+    this.room.proposal = null;
+    return true;
+  }
+
+  async handleConfiguration(ws, payload) {
+    const a = safeAttachment(ws);
+    if (!a.joined || a.leaving) return;
+    try {
+      if (payload.type === 'proposeConfiguration') {
+        if (a.clientId !== this.room.hostId) throw new Error('Only the host can change the configuration.');
+        const mode = normalizeGameMode(payload.gameMode);
+        if (!SUPPORTED_GAME_MODES.has(mode)) throw new Error('Unsupported game mode.');
+        validateSnapshot(payload.snapshot, mode, { initial: true });
+        const config = timeControl(payload.timeControl);
+        this.room.proposal = { id: crypto.randomUUID(), gameMode: mode, snapshot: payload.snapshot, summary: sanitizeText(payload.summary, 220), timeControl: config, accepted: [], expiresAt: Date.now() + 60000 };
+      } else if (payload.type === 'cancelConfiguration') {
+        if (a.clientId !== this.room.hostId) throw new Error('Only the host can cancel the proposal.');
+        this.room.proposal = null;
+      } else {
+        if (!this.room.proposal || payload.proposalId !== this.room.proposal.id) throw new Error('The proposal has changed.');
+        if (!attachmentHasPlayableRole(a) || a.clientId === this.room.hostId) throw new Error('Only other players can respond.');
+        if (payload.accept === true) this.room.proposal.accepted = [...new Set([...this.room.proposal.accepted, a.clientId])];
+        else if (payload.accept === false) this.departMember(a.clientId);
+        else throw new Error('Choose accept or leave.');
+      }
+      this.applyAgreedConfiguration();
+      this.room.updatedAt = new Date(Date.now()).toISOString();
+      await this.saveRoom();
+      this.playerSockets().forEach(({ ws: target }) => this.sendState(target));
+      this.broadcastPresence();
+    } catch (error) { this.safeSend(ws, { type: 'error', error: error.message }); }
+  }
+
+  handleLobbySocket(request) {
+    const url = new URL(request.url);
+    const clientId = normalizeClientId(url.searchParams.get('clientId'));
+    if (!clientId) return jsonResponse({ error: 'Missing client id.' }, 400);
+    const [client, server] = Object.values(new WebSocketPair());
+    const attachment = { lobby: true, clientId, playerName: normalizePlayerName('', clientId), joined: false };
+    this.ctx.acceptWebSocket(server);
+    server.serializeAttachment(attachment);
+    this.sessions.set(server, attachment);
+    this.broadcastLobby();
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  lobbyPlayers() {
+    const players = new Map();
+    for (const a of this.sessions.values()) if (a.lobby) players.set(a.clientId, { clientId: a.clientId, playerName: a.playerName, roomCode: a.roomCode || '' });
+    return [...players.values()];
+  }
+
+  broadcastLobby() {
+    const players = this.lobbyPlayers();
+    for (const [ws, a] of this.sessions) if (a.lobby) this.safeSend(ws, { type: 'lobbyPresence', players });
+  }
+
+  handleLobbyPresence() { return jsonResponse({ players: this.lobbyPlayers() }); }
 }
 
 async function recordAnalyticsRequest(request, env) {
@@ -1435,7 +1685,7 @@ function analyticsReport(aggregates, days) {
     mergeAnalyticsMetricMaps(byCountry, entry.byCountry);
   });
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date(Date.now()).toISOString(),
     days,
     totals,
     daily: daily.map((entry) => ({
@@ -1530,8 +1780,13 @@ async function createRoom(request, env) {
   const gameMode = normalizeGameMode(body.gameMode);
   if (!SUPPORTED_GAME_MODES.has(gameMode)) return jsonResponse({ error: 'Unsupported game mode.' }, 400);
   validateSnapshot(body.snapshot, gameMode, { initial: true });
+  timeControl(body.timeControl);
+  const creationId = sanitizeText(body.creationId, 100);
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const roomCode = randomRoomCode();
+    // Stable allocation makes a lost POST response safe to retry, without a
+    // second non-transactional request registry in the room index.
+    const digest = creationId ? new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${body.clientId}:${creationId}:${attempt}`))) : null;
+    const roomCode = digest ? String(new DataView(digest.buffer).getUint32(0) % 1000000).padStart(6, '0') : randomRoomCode();
     const stub = env.GAME_ROOM.get(env.GAME_ROOM.idFromName(roomCode));
     const initRequest = new Request('https://room/init', {
       method: 'POST',
@@ -1565,7 +1820,7 @@ async function registerRoomInIndex(env, room) {
   const emptySince = normalizeOptionalTimestamp(room && room.emptySince);
   const entry = normalizeRoomIndexEntry({
     ...room,
-    verifiedAt: new Date().toISOString(),
+    verifiedAt: new Date(Date.now()).toISOString(),
     expiresAt: emptySince ? new Date(Date.parse(emptySince) + ROOM_EMPTY_TTL_MS).toISOString() : ''
   });
   if (!entry) return;
@@ -1854,6 +2109,17 @@ function normalizeClientIds(value) {
   return uniqueStrings(ids.map((item) => normalizeClientId(item)).filter(Boolean));
 }
 
+function configurationDetails(snapshot = {}) {
+  const preset = snapshot.preset || {};
+  return {
+    rows: preset.rows, cols: preset.cols,
+    boundary: preset.boundaryGlueMode, shape: preset.boundaryGlueShape,
+    pieRule: snapshot.pieRule, komi: snapshot.komi, fallDir: snapshot.fallDir,
+    jumpRule: snapshot.jumpRule, playerColors: snapshot.playerColors,
+    ballCount: Array.isArray(snapshot.balls) ? snapshot.balls.length : undefined
+  };
+}
+
 function publicRoundState(room) {
   updateRoomReadiness(room);
   const rematch = room.rematch && typeof room.rematch === 'object'
@@ -1863,6 +2129,15 @@ function publicRoundState(room) {
     }
     : null;
   return {
+    serverNow: Date.now(),
+    hostId: room.hostId || null,
+    hostName: room.playerNames?.[room.hostId] || '',
+    members: Object.entries(room.members || {}).sort((a, b) => a[1].order - b[1].order).map(([id, member]) => ({ clientId: id, playerName: room.playerNames?.[id] || '', online: !!member.online, roles: Object.keys(room.roles || {}).filter(role => room.roles[role] === id) })),
+    roundId: room.roundId || '',
+    timeControl: room.timeControl || { mode: 'unlimited' },
+    clock: room.clock || null,
+    outcome: room.outcome || null,
+    proposal: room.proposal ? { id: room.proposal.id, gameMode: room.proposal.gameMode, summary: room.proposal.summary, configuration: configurationDetails(room.proposal.snapshot), timeControl: room.proposal.timeControl, accepted: room.proposal.accepted, expiresAt: room.proposal.expiresAt } : null,
     roundState: room.roundState,
     readyToPlay: room.readyToPlay === true,
     readyClientIds: normalizeClientIds(room.readyClientIds),
@@ -1940,6 +2215,11 @@ function normalizeRoomIndexEntry(source) {
     roomCode,
     gameMode,
     summary: sanitizeText(source.summary, 220),
+    hostName: sanitizeText(source.hostName || source.playerNames?.[source.hostId], 32),
+    members: (Array.isArray(source.members) ? source.members : []).map(member => ({ playerName: sanitizeText(member.playerName, 32), online: !!member.online, roles: normalizeRoles(member.roles) })),
+    roundState: ['waiting', 'playing', 'finished', 'rematch-vote'].includes(source.roundState) ? source.roundState : 'waiting',
+    timeControl: source.timeControl || { mode: 'unlimited' },
+    unclaimedRoles: normalizeRoles(source.unclaimedRoles),
     updatedAt,
     verifiedAt: normalizeOptionalTimestamp(source.verifiedAt),
     expiresAt: normalizeOptionalTimestamp(source.expiresAt)
@@ -1961,6 +2241,11 @@ function publicRoomIndexEntry(entry) {
     roomCode: entry.roomCode,
     gameMode: entry.gameMode,
     summary: entry.summary || '',
+    hostName: entry.hostName,
+    members: entry.members,
+    roundState: entry.roundState,
+    timeControl: entry.timeControl,
+    unclaimedRoles: entry.unclaimedRoles,
     updatedAt: entry.updatedAt
   };
 }
@@ -1991,7 +2276,7 @@ function pruneRoomIndex(rooms) {
 function normalizeTimestamp(value) {
   const text = String(value || '').trim();
   const time = Date.parse(text);
-  return Number.isFinite(time) ? new Date(time).toISOString() : new Date().toISOString();
+  return Number.isFinite(time) ? new Date(time).toISOString() : new Date(Date.now()).toISOString();
 }
 
 function normalizeOptionalTimestamp(value) {

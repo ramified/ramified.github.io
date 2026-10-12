@@ -49,6 +49,7 @@
     let setupBusy = false;
     let setupRequest = 0;
     let preparationLayout = null;
+    let online = null;
     let previewFrame = null;
     let chessCategory = null;
     const chessBoards = new Map();
@@ -109,6 +110,7 @@
       byId('player-choose-level').hidden = activeSlot === null || state.mode !== 'sokoban' || state.online;
       byId('player-resume').disabled = activeSlot === null && !state.online;
       byId('player-new').disabled = !state.ready || restoring || setupBusy;
+      byId('player-online-open').disabled = !state.ready || restoring || setupBusy;
       const layout = state.browsing ? PREPARATION_LAYOUTS[state.mode] || null : null;
       if (preparationLayout !== layout) {
         preparationLayout = layout;
@@ -124,15 +126,18 @@
       byId('player-view-board').hidden = !!layout;
       byId('player-board-fields').inert = setupBusy || !state.ready;
       byId('player-edit-balls').hidden = !layout || state.mode !== 'billiards';
-      byId('player-more').disabled = setupBusy || !state.ready || state.setupError || !(state.mode === 'billiards' || layout?.fields.some((id) => !byId(id).hidden));
-      byId('player-begin').disabled = setupBusy || !state.ready || state.setupError || state.canStart === false;
+      byId('player-more').disabled = setupBusy || !state.ready || state.setupError || !(online?.flow() || state.mode === 'billiards' || layout?.fields.some((id) => !byId(id).hidden));
+      byId('player-begin').disabled = setupBusy || online?.busy() || !state.ready || state.setupError || state.canStart === false;
+      const beginKey = online?.flow() === 'change' ? 'lobby.propose' : online?.flow() ? 'lobby.create' : 'player.start';
+      byId('player-begin').dataset.i18n = beginKey;
+      byId('player-begin').textContent = tk(beginKey);
       byId('player-confirm-new').disabled = setupBusy || !state.ready || state.setupError || state.canStart === false;
       byId('player-board-previous').disabled = byId('player-board-next').disabled = setupBusy || !state.ready;
-      for (const button of byId('player-game-list').children) button.disabled = setupBusy || restoring || !state.canPrepare || state.online;
+      for (const button of byId('player-game-list').children) button.disabled = setupBusy || restoring || !state.canPrepare || state.online && !online?.flow();
       syncGameListPage(state);
       if (layout) {
-        byId('player-setup-players').hidden = !layout.colors;
-        byId('player-setup-options').hidden = !layout.main;
+        byId('player-setup-players').hidden = !layout.colors || !!online?.flow();
+        byId('player-setup-options').hidden = !layout.main || !!online?.flow() && state.mode === 'billiards';
         if (layout.colors) syncPlayerControllers(state);
         byId('player-board-name').textContent = engine.presets().find((preset) => preset.id === state.presetId)?.label || '';
         byId('player-board-preview').hidden = !state.ready || state.setupError;
@@ -339,6 +344,7 @@
     }
 
     function syncGameEntry(state) {
+      if (online?.flow()) { byId('player-continue').hidden = true; byId('player-games').classList.remove('has-saved-game'); return; }
       const saved = slots.slot(selectedSlot)?.game;
       const button = byId('player-continue');
       button.hidden = !saved;
@@ -427,7 +433,7 @@
         setup: PREPARATION_LAYOUTS[engine.state().mode]?.title || 'player.gameOptions', 'chess-category': 'games.chess', 'board-options': 'player.moreOptions', confirm: 'player.start',
         levels: 'player.chooseLevel',
         slots: 'player.chooseSave', 'slot-confirm': 'player.chooseSave',
-        display: 'setup.display', online: 'online.title'
+        display: 'setup.display', online: 'online.title', lobby: 'online.title', room: 'lobby.room'
       };
       byId('player-menu-title').dataset.i18n = titleKeys[next];
       byId('player-menu-title').textContent = window.SiteI18n.t(titleKeys[next]);
@@ -460,6 +466,8 @@
       } else showLevels('game-menu');
     });
     function goBack() {
+      if (online?.busy()) online.cancelRequest();
+      if (online?.back(page)) return;
       if (page === 'slot-confirm') { showSlots();
       } else if (page === 'slots') {
         ++setupRequest; restoring = false; setupBusy = false; selectedSlot = null;
@@ -474,14 +482,14 @@
       } else if (page === 'confirm' && pendingLevelId) {
         showLevels();
       } else if (page === 'setup') {
-        if (engine.state().mode === 'fide-chess' && !setupBusy) {
+        if (!online?.flow() && engine.state().mode === 'fide-chess' && !setupBusy) {
           chessBoards.set(chessCategory, engine.state().presetId);
           show('chess-category', 'games');
           return;
         }
         ++setupRequest;
         setupBusy = false;
-        engine.cancelSetup();
+        if (online?.flow()) engine.onlineCancelSetup(); else engine.cancelSetup();
         showGames();
       } else if (page === 'chess-category') {
         ++setupRequest;
@@ -506,10 +514,10 @@
     byId('player-settings').addEventListener('click', () => engine.settings());
     byId('player-game-settings').addEventListener('click', () => engine.settings());
     function showGames({ resetPage = false } = {}) {
-      if (selectedSlot === null) { showSlots(); return; }
+      if (selectedSlot === null && !online?.flow()) { showSlots(); return; }
       ++setupRequest;
       setupBusy = false; restoring = false;
-      engine.cancelSetup();
+      if (online?.flow()) engine.onlineCancelSetup(); else engine.cancelSetup();
       pendingLevelId = null;
       save();
       if (resetPage) gameListPage = 0;
@@ -548,11 +556,13 @@
       syncGameListPage();
     }
     function syncGameListPage(state = engine.state()) {
-      const buttons = Array.from(byId('player-game-list').children);
+      const all = Array.from(byId('player-game-list').children);
+      const buttons = all.filter(button => !online?.flow() || window.RamifiedOnlinePlayer.allowed.has(button.dataset.gameMode));
+      all.forEach(button => { button.hidden = true; });
       const lastPage = Math.max(0, Math.ceil(buttons.length / GAMES_PER_PAGE) - 1);
       gameListPage = Math.max(0, Math.min(gameListPage, lastPage));
       buttons.forEach((button, index) => { button.hidden = Math.floor(index / GAMES_PER_PAGE) !== gameListPage; });
-      const busy = setupBusy || restoring || !state.canPrepare || state.online;
+      const busy = setupBusy || restoring || !state.canPrepare || state.online && !online?.flow();
       byId('player-games-previous').disabled = busy || gameListPage === 0;
       byId('player-games-next').disabled = busy || gameListPage === lastPage;
     }
@@ -568,8 +578,9 @@
     byId('player-games-previous').addEventListener('click', () => changeGamesPage(-1));
     byId('player-games-next').addEventListener('click', () => changeGamesPage(1));
     async function chooseGame(mode, category = null) {
-      if (setupBusy || restoring || !engine.state().canPrepare || engine.state().online) return;
-      if (selectedSlot === null) { showSlots(); return; }
+      if (setupBusy || restoring || !engine.state().canPrepare || engine.state().online && !online?.flow()) return;
+      if (selectedSlot === null && !online?.flow()) { showSlots(); return; }
+      if (online?.flow() && mode === 'fide-chess') category = 'game';
       if (mode === 'sokoban') { showLevels('games'); return; }
       if (mode === 'fide-chess' && !category) {
         chessCategory = null;
@@ -583,7 +594,7 @@
       try {
         const resumeChess = mode === 'fide-chess' && engine.state().browsing && engine.state().mode === mode;
         chessCategory = category;
-        const loading = resumeChess
+        const loading = online?.flow() ? engine.onlinePrepare(mode) : resumeChess
           ? engine.selectPreset(chessBoards.get(category) || engine.defaultPreset(mode, category))
           : engine.beginSetup(mode, { category });
         show('setup', 'games');
@@ -647,6 +658,7 @@
     }
     function requestStart() {
       if (setupBusy || !engine.state().ready || engine.state().setupError) return;
+      if (online?.flow()) { online.submit(); return; }
       if (slots.slot(selectedSlot)?.game) show('confirm', 'setup');
       else startPreparedGame();
     }
@@ -663,6 +675,12 @@
     byId('player-cancel-new').addEventListener('click', () => pendingLevelId ? showLevels() : show('setup', 'games'));
     menu.querySelectorAll('[data-player-page]').forEach((button) => {
       button.addEventListener('click', () => {
+        if (button.dataset.playerPage === 'online') { online.open(); return; }
+        if (button.dataset.playerPage === 'setup' && engine.onlineInfo().joined) {
+          if (engine.onlineInfo().hostId === engine.onlineInfo().clientId) online.prepare(true);
+          else online.open();
+          return;
+        }
         if (button.dataset.playerPage === 'setup' && !engine.state().online) {
           selectedSlot = activeSlot;
           showGames({ resetPage: true });
@@ -721,6 +739,7 @@
       }
     }).observe(byId('fullscreen-settings-overlay'), { attributes: true, attributeFilter: ['hidden'] });
     window.addEventListener('pagehide', () => save());
+    online = window.RamifiedOnlinePlayer.create(engine, { show, setOpen, sync, save, message, page: () => page, games: () => showGames({ resetPage: true }) });
     engine.fit();
     show('home');
   });

@@ -709,6 +709,11 @@
   // A setup draft temporarily uses the renderer; the live game and history stay
   // in memory until a new game has actually started successfully.
   let playerSetupSession = null;
+  let playerOnlineSession = null;
+  let playerOnlinePreparing = false;
+  let playerOnlineLatest = null;
+  let playerOnlineSerial = 0;
+  let playerOnlineSnapshotSerial = 0;
   let playerDefaults = {};
   let playerSetupCommitting = false;
   let playerSetupError = false;
@@ -1884,10 +1889,11 @@ function handleOnlineRoleOptionsChange(event) {
 function onlineChineseCheckersCanClaimRoles(mode = null) {
   const targetMode = gameModeFromUrlParam(mode || (onlineState && onlineState.gameMode) || selectedGameMode());
   return !!(
-    targetMode === GAME_MODES.CHINESE_CHECKERS
+    ONLINE_SUPPORTED_GAME_MODES.has(targetMode)
     && onlineIsInRoom()
     && onlineSocketOpen()
-    && onlineState.readyToPlay === false
+    && !onlineState.proposal
+    && (onlineState.roundState === 'waiting' || !onlineStateHasPlayableRole())
     );
 }
 
@@ -1975,7 +1981,7 @@ function selectedOnlineRolesRequested() {
 }
 
 function onlinePendingRoleClaimsChanged() {
-  if (!onlineState || onlineState.gameMode !== GAME_MODES.CHINESE_CHECKERS) return false;
+  if (!onlineState) return false;
   const selected = selectedOnlineRolePreferences().filter((role) => role !== 'spectator').sort();
   const assigned = normalizeOnlineRoles(onlineState.roles).filter((role) => role !== 'spectator').sort();
   if (selected.length !== assigned.length) return true;
@@ -1984,7 +1990,7 @@ function onlinePendingRoleClaimsChanged() {
 
 function confirmOnlineChineseCheckersRolesFromUi() {
   if (!onlineChineseCheckersCanClaimRoles()) {
-    syncOnlineStatus('Colors can only be changed before Chinese Checkers begins.', 'error');
+    syncOnlineStatus(tk('lobby.claimUnavailable', 'Seats cannot be changed at this point.'), 'error');
     syncOnlineControls();
     return;
   }
@@ -2023,7 +2029,7 @@ function onlineChineseCheckersColorPlayableForLocal(color) {
 }
 
 function onlineIsInRoom() {
-  return !!(onlineState && onlineState.joined && onlineState.roomCode);
+  return !playerOnlinePreparing && !!(onlineState && onlineState.joined && onlineState.roomCode);
 }
 
 function onlineSocketOpen() {
@@ -2092,9 +2098,7 @@ function syncOnlineControls() {
       input.disabled = !visible || !configured || onlineRoleClaimedByOther(role) || (!!active && !canClaimRole);
     });
   }
-  const waitingChinese = onlineIsInRoom()
-  && onlineState.roundState === 'waiting'
-  && onlineState.gameMode === GAME_MODES.CHINESE_CHECKERS;
+  const waitingChinese = onlineChineseCheckersCanClaimRoles();
   if (refs.onlineConfirmRoles) {
     refs.onlineConfirmRoles.hidden = !waitingChinese;
     refs.onlineConfirmRoles.disabled = !waitingChinese || !onlineSocketOpen() || !onlinePendingRoleClaimsChanged();
@@ -2156,6 +2160,7 @@ function onlineWaitingPromptCopy(state = onlineState) {
 }
 
 function syncOnlineCanvasPrompt() {
+  if (playerShellEnabled && onlineIsInRoom()) { hideCanvasStartPrompt(); return; }
   if (!onlineIsInRoom() || !game || !onlineState) return;
   if (onlineState.roundState === 'waiting') {
     showCanvasStartPrompt({
@@ -2478,14 +2483,13 @@ function connectOnlineSocket(roomCode, requestedRoles = []) {
         type: 'hello',
         clientId: onlineState.clientId,
         playerName: currentOnlinePlayerName(),
-        role: rolesRequested[0] || 'auto',
-        rolesRequested
+        role: rolesRequested[0] || (requestedRoles.includes('spectator') ? 'spectator' : 'auto'),
+        rolesRequested: rolesRequested.length ? rolesRequested : requestedRoles.includes('spectator') ? ['spectator'] : []
       });
       syncOnlineStatus('Connected; waiting for room state...', 'idle');
       syncOnlineControls();
-      resolve();
     });
-    socket.addEventListener('message', (event) => handleOnlineSocketMessage(event));
+    socket.addEventListener('message', (event) => { if (onlineState.socket === socket) handleOnlineSocketMessage(event); });
     socket.addEventListener('error', () => {
       onlineState.connecting = false;
       rejectPendingOnlineJoin(socket, new Error('WebSocket error.'));
@@ -2493,6 +2497,7 @@ function connectOnlineSocket(roomCode, requestedRoles = []) {
       syncOnlineControls();
     });
     socket.addEventListener('close', (event) => {
+      if (onlineState.socket && onlineState.socket !== socket) return;
       const wasIntentional = !!(socket.__ramifiedIntentionalClose || (onlineState && onlineState.intentionalClose));
       if (onlineState && onlineState.socket === socket) onlineState.socket = null;
       if (!onlineState) return;
@@ -2626,11 +2631,16 @@ function closeOnlineSocket(options = {}) {
     onlineState.version = 0;
     onlineState.joined = false;
     onlineState.roomDisplaySettings = null;
+    onlineState.loadFailed = false;
   }
 }
 
 function leaveOnlineRoomFromUi() {
   if (!onlineState) return;
+  ++playerOnlineSerial;
+  cancelPlayerSetup();
+  playerOnlinePreparing = false;
+  playerOnlineLatest = null;
   if (onlineSocketOpen()) {
     onlineSendRaw({
       type: 'leave',
@@ -2640,10 +2650,16 @@ function leaveOnlineRoomFromUi() {
     });
   }
   closeOnlineSocket({ keepRoom: false, intentional: true });
+  if (playerOnlineSession) {
+    playerSetupSession = playerOnlineSession;
+    cancelPlayerSetup();
+    playerOnlineSession = null;
+  }
   syncOnlineRoleOptions(selectedGameMode());
   syncOnlineStatus(onlineState.baseUrl ? 'Ready to create or join an online room.' : 'Online Worker URL is not configured.', onlineState.baseUrl ? 'idle' : 'offline');
   syncOnlineControls();
   syncControls();
+  if (typeof document !== 'undefined') document.dispatchEvent(new CustomEvent('ramified-online-state', { detail: { type: 'departed' } }));
 }
 
 function scheduleOnlineReconnect() {
@@ -2670,6 +2686,9 @@ function handleOnlineSocketMessage(event) {
     return;
   }
   if (!message || typeof message !== 'object') return;
+  if (message.type === 'departed') { leaveOnlineRoomFromUi(); return; }
+  updateOnlineRoomMetaFromMessage(message);
+  if (typeof document !== 'undefined') queueMicrotask(() => document.dispatchEvent(new CustomEvent('ramified-online-state', { detail: message })));
   if (message.type === 'joined') {
     onlineState.roomCode = normalizeOnlineRoomCode(message.roomCode || onlineState.pendingRoomCode || onlineState.roomCode);
     onlineState.pendingRoomCode = '';
@@ -2786,19 +2805,34 @@ function handleOnlineSocketMessage(event) {
   }
 }
 
-function applyOnlineSnapshotMessage(message) {
+async function applyOnlineSnapshotMessage(message) {
   if (!message || !message.snapshot) return;
+  const importTicket = ++playerOnlineSnapshotSerial;
   updateOnlineRoomMetaFromMessage(message);
+  if (playerOnlinePreparing) { playerOnlineLatest = message; return; }
+  const serial = playerOnlineSerial;
+  const socket = onlineState?.socket;
+  try { await ensureModeDependencies(message.gameMode || message.snapshot.gameMode); }
+  catch (_) {
+    if (serial === playerOnlineSerial && socket === onlineState?.socket) {
+      onlineState.loadFailed = true;
+      document.dispatchEvent(new CustomEvent('ramified-online-state', { detail: { type: 'error' } }));
+    }
+    return;
+  }
+  if (serial !== playerOnlineSerial || socket !== onlineState?.socket || importTicket !== playerOnlineSnapshotSerial) return;
+  if (playerOnlinePreparing) { playerOnlineLatest = message; return; }
   const action = message.action && typeof message.action === 'object' && !Array.isArray(message.action)
   ? message.action
   : null;
   const originClientId = String(message.clientId || (action && action.clientId) || '');
   const localActionEcho = !!(originClientId && onlineState && originClientId === onlineState.clientId && action);
-  const remoteAction = !!(originClientId && onlineState && originClientId !== onlineState.clientId && action);
+  const remoteAction = !!(action && (originClientId !== onlineState.clientId || action.type === 'billiards-shot'));
   onlineState.version = normalizeOnlineVersion(message.version, onlineState.version);
   const messageMode = gameModeFromUrlParam(message.gameMode || message.snapshot.gameMode);
   if (messageMode) onlineState.gameMode = messageMode;
-  if (localActionEcho && String(action && action.type || '').toLowerCase() !== 'rematch-start') {
+  if (localActionEcho && !['rematch-start', 'billiards-shot'].includes(String(action?.type || '').toLowerCase())) {
+    if (currentAnimation && action.animationMs) currentAnimation.duration = action.animationMs;
     syncOnlineRoleOptions(onlineState.gameMode);
     syncOnlineStatus('Move accepted.', 'idle');
     syncOnlineControls();
@@ -2814,11 +2848,15 @@ function applyOnlineSnapshotMessage(message) {
     syncOnlineControls();
     return;
   }
-  if (remoteAction && tryApplyOnlineRemoteAction(action, message.snapshot, message)) return;
+  if (remoteAction && tryApplyOnlineRemoteAction(action, message.snapshot, message)) {
+    if (currentAnimation && action.animationMs) currentAnimation.duration = action.animationMs;
+    return;
+  }
   if (remoteAction) prepareOnlineHistoryForRemoteAction(action);
   onlineState.applyingRemoteState = true;
   try {
     const imported = gameStateFromDebugImportPayload(message.snapshot);
+    onlineState.loadFailed = false;
     onlineState.gameMode = gameModeFromUrlParam(message.gameMode || message.snapshot.gameMode) || gameModeValue(imported.state);
     if (!action) onlineState.roomDisplaySettings = onlineDisplaySettingsFromSnapshot(message.snapshot);
     applyImportedDebugState(imported, {
@@ -2832,17 +2870,25 @@ function applyOnlineSnapshotMessage(message) {
     if (onlineState.readyToPlay !== false) hideOnlineChineseCheckersStartPrompt();
     syncOnlineStatus('State synchronized.', 'idle');
   } catch (error) {
+    onlineState.loadFailed = true;
+    if (playerShellEnabled) document.dispatchEvent(new CustomEvent('ramified-online-state', { detail: { type: 'error' } }));
     syncOnlineStatus(error && error.message ? error.message : 'Could not apply online state.', 'error');
   } finally {
     onlineState.applyingRemoteState = false;
     syncOnlineControls();
     syncControls();
     syncOnlineCanvasPrompt();
+    if (playerShellEnabled) document.dispatchEvent(new CustomEvent('ramified-online-state', { detail: { type: 'stateApplied' } }));
   }
 }
 
 function updateOnlineRoomMetaFromMessage(message, options = {}) {
   if (!onlineState || !message || typeof message !== 'object') return;
+  if (message.gameMode) onlineState.gameMode = gameModeFromUrlParam(message.gameMode) || onlineState.gameMode;
+  for (const key of ['hostId', 'hostName', 'members', 'roundId', 'timeControl', 'clock', 'outcome', 'proposal', 'serverNow']) {
+    if (Object.prototype.hasOwnProperty.call(message, key)) onlineState[key] = message[key];
+  }
+  if (message.serverNow) onlineState.clockReceivedAt = Date.now();
   if (message.roles && typeof message.roles === 'object') {
     onlineState.roomRoles = { ...message.roles };
   }
@@ -3175,6 +3221,7 @@ function requestOnlineHistoryChange(kind) {
     rolesAssigned: onlineState.roles,
     kind: normalized,
     baseVersion: onlineState.version,
+    roundId: onlineState.roundId,
     summary: onlineGameSummary(game)
   });
   syncOnlineStatus(`Requested ${normalized}; waiting for opponent approval.`, 'idle');
@@ -3301,6 +3348,7 @@ function onlineSendLocalAction(action) {
   }
   onlineSendRaw({
     type: 'proposeMove',
+    roundId: onlineState.roundId,
     clientId: onlineState.clientId,
     role: onlineState.role,
     rolesAssigned: onlineState.roles,
@@ -3315,6 +3363,7 @@ function onlineSendLocalAction(action) {
 
 function onlineLocalPlayIssue(actionType = 'move') {
   if (!onlineState || !onlineIsInRoom()) return '';
+  if (onlineState.loadFailed) return tk('lobby.loadError', 'Could not load the lobby. Refresh to retry, or go back.');
   if (!onlineSocketOpen()) return 'online room is disconnected';
   if (!onlineStateSupported(game)) return 'this game is not supported online';
   if (!onlineStateHasPlayableRole()) return 'spectators cannot move';
@@ -3389,6 +3438,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     }
 
     function shouldApplyOnlineSnapshotDisplaySettings(message, action) {
+      if (playerShellEnabled) return false;
       if (action) return false;
       const reason = String(message && message.reason || '').trim().toLowerCase();
       return !reason || reason === 'join' || reason === 'resync';
@@ -7519,6 +7569,10 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
       strokePresetId: options.strokePresetId || billiardsStrokePresetId
     } : {};
     const source = game;
+    if (onlineIsInRoom() && !options.remote) {
+      return onlineSendRaw({ type: 'billiardsShot', baseVersion: onlineState.version, roundId: onlineState.roundId,
+        action: { type: 'billiards-shot', shooter, aim, power, contact, ...shotInput } });
+    }
     playSoundEffect('billiards-strike');
     const token = ++billiardsSimulationSerial;
     billiardsShotPending = { token, source };
@@ -33221,6 +33275,7 @@ function syncChineseCheckersPlayerOptions(modeChineseCheckers) {
       [LOCAL_AI_CONTROLLER, playerShellEnabled ? tk('player.aiChallenging', 'AI — Challenging') : tk('ai.localChallenging', 'Local AI — Challenging')],
       [HIDDEN_CONTROLLER, tk('ai.hidden', 'Not shown')]
       ].forEach(([value, text]) => {
+        if (playerOnlinePreparing && value === LOCAL_AI_CONTROLLER) return;
         const option = document.createElement('option');
         option.value = value;
         option.textContent = text;
@@ -33359,7 +33414,7 @@ function ensureChineseCheckersControllerPreset(preset, available = chineseChecke
   const preferred = playerDefaults['chinese-checkers']?.humanColor;
   const human = available.includes(preferred) ? preferred : available[0];
   available.forEach((color) => chineseCheckersControllers.set(color,
-    playerSetupSession && color !== human ? LOCAL_AI_CONTROLLER : HUMAN_CONTROLLER));
+    playerSetupSession && !playerOnlinePreparing && color !== human ? LOCAL_AI_CONTROLLER : HUMAN_CONTROLLER));
   chineseCheckersControllerPresetKey = key;
 }
 
@@ -34602,11 +34657,92 @@ function cancelPlayerSetup() {
 const api = {
   // Small adapter for the player shell; the archive keeps its original lifecycle.
   player: {
+    onlineInfo() {
+      if (!onlineState) return {};
+      const keys = ['baseUrl', 'clientId', 'playerName', 'roomCode', 'pendingRoomCode', 'joined', 'connecting', 'gameMode', 'roles', 'roomRoles', 'rolePlayers', 'roundState', 'readyClientIds', 'hostId', 'hostName', 'members', 'roundId', 'timeControl', 'clock', 'outcome', 'proposal', 'serverNow', 'clockReceivedAt', 'unclaimedRoles'];
+      return { ...Object.fromEntries(keys.map(key => [key, onlineState[key]])), version: onlineState.version, loadFailed: !!onlineState.loadFailed, roles: (onlineState.roles || []).filter(role => role !== 'spectator') };
+    },
+    onlineSend: onlineSendRaw,
+    onlineLeave: leaveOnlineRoomFromUi,
+    onlineRename(name) {
+      if (!onlineState) return;
+      onlineState.playerName = normalizeOnlinePlayerName(name) || onlineDefaultPlayerName(onlineState.clientId);
+      if (refs.onlinePlayerName) refs.onlinePlayerName.value = onlineState.playerName;
+      try { localStorage.setItem(ONLINE_PLAYER_NAME_KEY, onlineState.playerName); } catch (_) {}
+      if (onlineSocketOpen()) onlineSendRaw({ type: 'updateName', playerName: onlineState.playerName });
+    },
+    onlineEnter() {
+      if (playerOnlineSession) return true;
+      if (playerMoveIsPending()) return false;
+      cancelPlayerSetup();
+      playerOnlineSession = capturePlayerSetupSession();
+      return true;
+    },
+    async onlinePrepare(mode) {
+      if (!ONLINE_SUPPORTED_GAME_MODES.has(mode) || !api.player.onlineEnter()) return false;
+      api.player.onlineCancelSetup();
+      playerOnlinePreparing = true;
+      const loaded = await api.player.beginSetup(mode, { category: mode === 'fide-chess' ? 'game' : undefined });
+      if (!loaded) { playerOnlinePreparing = false; return false; }
+      syncRememberedAiControllersToHuman();
+      chineseCheckersControllers.forEach((_, color) => chineseCheckersControllers.set(color, HUMAN_CONTROLLER));
+      if (mode === 'billiards') {
+        refs.billiardsRules.value = 'competitive';
+        game.rules = 'competitive';
+      }
+      syncControls(); render();
+      return true;
+    },
+    onlineCancelSetup() {
+      cancelPlayerSetup();
+      playerOnlinePreparing = false;
+      if (playerOnlineLatest && onlineState?.joined) {
+        const message = { ...playerOnlineLatest, action: null, clientId: '' };
+        playerOnlineLatest = null;
+        applyOnlineSnapshotMessage(message);
+      }
+    },
+    onlinePreparedSnapshot() {
+      if (!playerOnlinePreparing || !playerSetupSession || selectionLoading || playerSetupError) throw new Error('No online preparation.');
+      const preview = game, previousUndo = undoStack, previousRedo = redoStack;
+      playerSetupCommitting = true;
+      try {
+        game = cloneGameState(preview);
+        syncRememberedAiControllersToHuman();
+        chineseCheckersControllers.forEach((_, color) => chineseCheckersControllers.set(color, HUMAN_CONTROLLER));
+        if (game.phase === 'setup') beginGameFromUi();
+        if (game.phase === 'setup') throw new Error('Invalid board.');
+        const snapshot = onlineSnapshotWithoutLocalDisplaySettings(debugExportPayload());
+        if (preview.preset.boundaryGlueMode) snapshot.preset.boundaryGlueMode = preview.preset.boundaryGlueMode;
+        if (preview.preset.boundaryGlueShape) snapshot.preset.boundaryGlueShape = preview.preset.boundaryGlueShape;
+        return snapshot;
+      } finally { game = preview; undoStack = previousUndo; redoStack = previousRedo; playerSetupCommitting = false; syncControls(); render(); }
+    },
+    async onlineJoin(code, { isCurrent = () => true } = {}) {
+      if (!api.player.onlineEnter()) throw new Error('Wait for the current move.');
+      const serial = ++playerOnlineSerial;
+      const response = await fetch(`${onlineState.baseUrl}/api/rooms/${encodeURIComponent(code)}`, { signal: AbortSignal.timeout(15000) });
+      if (!response.ok) throw new Error('Room unavailable.');
+      const meta = await response.json();
+      await ensureModeDependencies(meta.gameMode);
+      if (serial !== playerOnlineSerial || !isCurrent()) return false;
+      await connectOnlineSocket(code, ['spectator']);
+      return serial === playerOnlineSerial && isCurrent();
+    },
+    async onlineCreate(snapshot, config, creationId) {
+      const roles = onlineModeRoles(snapshot.gameMode);
+      const response = await fetch(`${onlineState.baseUrl}/api/rooms`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000),
+        body: JSON.stringify({ gameMode: snapshot.gameMode, snapshot, timeControl: config, creationId, clientId: onlineState.clientId, playerName: currentOnlinePlayerName(), role: (snapshot.playerColors || snapshot.chineseCheckersPlayers || roles)[0], summary: snapshot.preset.label || snapshot.preset.id })
+      });
+      if (!response.ok) throw new Error('Room creation failed.');
+      return response.json();
+    },
     state() {
       return {
         ready: presetCatalogReady && !selectionLoading && !!game,
         active: !!game && game.phase !== 'setup',
-        online: onlineIsInRoom(),
+        online: !!playerOnlineSession || onlineIsInRoom(),
         browsing: !!playerSetupSession,
         canPrepare: presetCatalogReady && !selectionLoading && !!game && !playerMoveIsPending(),
         canStart: presetCatalogReady && !selectionLoading && !!game && !playerSetupError && !refs.begin?.disabled,
@@ -34717,6 +34853,7 @@ const api = {
       return true;
     },
     snapshot() {
+      if (playerOnlineSession) return null;
       if (playerSetupSession) return playerSetupSession.snapshot;
       if (!game || game.phase === 'setup' || onlineIsInRoom() || selectionLoading
         || currentAnimation || billiardsShotPending || sokobanMoveSession
