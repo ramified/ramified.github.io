@@ -1,4 +1,4 @@
-// Save this file as ramified_minigame_presets/curling_on_cube.preset.js
+// Save this file as ramified_minigame_presets/sokoban/curling_on_cube.preset.js
 // Add this entry to ramified_minigame_presets/presets.js:
 // {
 //   "gameTypes": [
@@ -7,7 +7,7 @@
 //   "id": "curling-on-cube",
 //   "label": "curling on Cube",
 //   "key": "curling_on_cube",
-//   "file": "curling_on_cube.preset.js"
+//   "file": "sokoban/curling_on_cube.preset.js"
 // },
 // Store gameTypes in presets.js only; do not repeat them in this preset file.
 (function(root, factory) {

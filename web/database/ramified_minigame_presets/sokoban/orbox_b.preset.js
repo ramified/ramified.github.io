@@ -1,4 +1,4 @@
-// Save this file as ramified_minigame_presets/orbox_b.preset.js
+// Save this file as ramified_minigame_presets/sokoban/orbox_b.preset.js
 // Add this entry to ramified_minigame_presets/presets.js:
 // {
 //   "gameTypes": [
@@ -7,7 +7,7 @@
 //   "id": "orbox-b",
 //   "label": "Orbox B",
 //   "key": "orbox_b",
-//   "file": "orbox_b.preset.js"
+//   "file": "sokoban/orbox_b.preset.js"
 // },
 // Store gameTypes in presets.js only; do not repeat them in this preset file.
 (function(root, factory) {

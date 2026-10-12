@@ -3,7 +3,7 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = presets;
   if (root) root.RAMIFIED_MINIGAME_PRESETS = presets;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
-  const defaultForEntries = [
+  const featuredDefaultEntries = [
     ["hex", "classic-hex", "center"],
     ["gomoku", "wormhole", "vertex"],
     ["go", "gomoku-big-hole", "vertex"],
@@ -17,9 +17,23 @@
     ["lianliankan", "rubiks-cube-3x3x3", "center"]
   ];
   return {
-    gameOrder: defaultForEntries.map(([mode]) => mode),
-    defaultFor: Object.fromEntries(defaultForEntries.map(([mode, presetId]) => [mode, presetId])),
-    defaultDisplayFor: Object.fromEntries(defaultForEntries.map(([mode, _presetId, display]) => [mode, display])),
+    gameOrder: ['hex', 'gomoku', 'go', 'connect-four', '2048', 'reversi', 'chinese-checkers', 'sokoban', 'fide-chess', 'billiards', 'lianliankan'],
+    // Player defaults are independent from the topology-focused archive defaults.
+    playerDefaults: {
+      hex: { presetId: 'classic-hex', controls: { hexPieRule: false } },
+      gomoku: { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 15, boundaryGlueRows: 15, boundaryGlueCols: 15, gomokuBlackController: 'human', gomokuWhiteController: 'local-ai-challenging' } },
+      go: { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 19, boundaryGlueRows: 19, boundaryGlueCols: 19, goKomi: 6.5 } },
+      'connect-four': { presetId: 'connect-four-6x7', controls: { connectFourFall: 'S', connectFourRedController: 'human', connectFourYellowController: 'local-ai-challenging' } },
+      '2048': { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 4, boundaryGlueRows: 4, boundaryGlueCols: 4 } },
+      reversi: { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 8, boundaryGlueRows: 8, boundaryGlueCols: 8 } },
+      'chinese-checkers': { presetId: 'small-classic', humanColor: 'black', controls: { chineseCheckersJumpRule: 'unlimited' } },
+      'fide-chess': { presetId: 'fide-chess-8x8', categories: { game: 'fide-chess-8x8', 'kingless-puzzle': 'n-queens-puzzle' } },
+      billiards: { presetId: 'half-glued', controls: { billiardsRules: 'solo' } },
+      lianliankan: { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 6, boundaryGlueRows: 6, boundaryGlueCols: 6, lianliankanTileSet: 'chinese' } }
+    },
+    featuredDefaultFor: Object.fromEntries(featuredDefaultEntries.map(([mode, presetId]) => [mode, presetId])),
+    defaultFor: Object.fromEntries(featuredDefaultEntries.map(([mode, presetId]) => [mode, presetId])),
+    defaultDisplayFor: Object.fromEntries(featuredDefaultEntries.map(([mode, _presetId, display]) => [mode, display])),
     presets: [
     {
       "gameTypes": [
@@ -33,6 +47,7 @@
         "Billiard"
       ],
       "id": "boundary-glue-board",
+      "fideChessVariant": "game",
       "label": "boundary glue board",
       "key": "boundary_glue_board",
       "file": "boundary_glue_board.preset.js"
@@ -42,6 +57,7 @@
         "FIDE Chess"
       ],
       "id": "fide-chess-8x8",
+      "fideChessVariant": "game",
       "label": "FIDE chess 8x8",
       "key": "fide_chess_8x8",
       "file": "fide_chess_8x8.preset.js"
@@ -51,6 +67,7 @@
         "FIDE Chess"
         ],
       "id": "between-two-fires",
+      "fideChessVariant": "game",
       "label": "between two fires",
       "key": "between_two_fires",
       "wrappedView": { "x": "repeat", "y": "repeat" },
@@ -61,6 +78,7 @@
         "FIDE Chess"
       ],
       "id": "n-queens-puzzle",
+      "fideChessVariant": "kingless-puzzle",
       "label": "N queens puzzle",
       "key": "n_queens_puzzle",
       "file": "n_queens_puzzle.preset.js"
@@ -70,6 +88,7 @@
         "FIDE Chess"
       ],
       "id": "n-queens-torus-puzzle",
+      "fideChessVariant": "kingless-puzzle",
       "label": "N queens puzzle on torus",
       "key": "n_queens_torus_puzzle",
       "wrappedView": { "x": "repeat", "y": "repeat" },
@@ -484,7 +503,7 @@
       "id": "classic-fans",
       "label": "classic_fans",
       "key": "classic_fans",
-      "file": "classic_fans.preset.js"
+      "file": "sokoban/classic_fans.preset.js"
     },
     {
       "gameTypes": [
@@ -493,7 +512,7 @@
       "id": "pedestrian",
       "label": "Pedestrian",
       "key": "pedestrian",
-      "file": "pedestrian.preset.js"
+      "file": "sokoban/pedestrian.preset.js"
     },
     {
       "gameTypes": [
@@ -502,7 +521,7 @@
       "id": "classic-fans-glue",
       "label": "classic_fans_glue",
       "key": "classic_fans_glue",
-      "file": "classic_fans_glue.preset.js"
+      "file": "sokoban/classic_fans_glue.preset.js"
     },
     {
       "gameTypes": [
@@ -511,7 +530,7 @@
       "id": "ice-test",
       "label": "ice_test",
       "key": "ice_test",
-      "file": "ice_test.preset.js"
+      "file": "sokoban/ice_test.preset.js"
     },
     {
       "gameTypes": [
@@ -520,7 +539,7 @@
       "id": "curling-on-cube",
       "label": "curling on Cube",
       "key": "curling_on_cube",
-      "file": "curling_on_cube.preset.js"
+      "file": "sokoban/curling_on_cube.preset.js"
     },
     {
       "gameTypes": [
@@ -529,7 +548,7 @@
       "id": "easy-energy-bridge",
       "label": "easy energy bridge",
       "key": "easy_energy_bridge",
-      "file": "easy_energy_bridge.preset.js"
+      "file": "sokoban/easy_energy_bridge.preset.js"
     },
     {
       "gameTypes": [
@@ -538,7 +557,7 @@
       "id": "energy-test",
       "label": "energy_test",
       "key": "energy_test",
-      "file": "energy_test.preset.js"
+      "file": "sokoban/energy_test.preset.js"
     },
     {
       "gameTypes": [
@@ -547,7 +566,7 @@
       "id": "cross",
       "label": "cross",
       "key": "cross",
-      "file": "cross.preset.js"
+      "file": "sokoban/cross.preset.js"
     },
     {
       "gameTypes": [
@@ -556,34 +575,7 @@
       "id": "expand",
       "label": "expand",
       "key": "expand",
-      "file": "expand.preset.js"
-    },
-    {
-      "gameTypes": [
-        "Sokoban"
-        ],
-      "id": "expand2",
-      "label": "expand2",
-      "key": "expand2",
-      "file": "expand2.preset.js"
-    },
-    {
-      "gameTypes": [
-        "Sokoban"
-        ],
-      "id": "expand3",
-      "label": "expand3",
-      "key": "expand3",
-      "file": "expand3.preset.js"
-    },
-    {
-      "gameTypes": [
-        "Sokoban"
-        ],
-      "id": "bridges-blocking",
-      "label": "bridges_blocking",
-      "key": "bridges_blocking",
-      "file": "bridges_blocking.preset.js"
+      "file": "sokoban/expand.preset.js"
     },
     {
       "gameTypes": [
@@ -592,7 +584,7 @@
       "id": "orbox-b",
       "label": "Orbox B",
       "key": "orbox_b",
-      "file": "orbox_b.preset.js"
+      "file": "sokoban/orbox_b.preset.js"
     },
     {
       "gameTypes": [
@@ -601,7 +593,7 @@
       "id": "orbox-b-glued",
       "label": "Orbox B glued",
       "key": "orbox_b_glued",
-      "file": "orbox_b_glued.preset.js"
+      "file": "sokoban/orbox_b_glued.preset.js"
     },
     {
       "gameTypes": [
@@ -610,7 +602,7 @@
       "id": "loop",
       "label": "loop",
       "key": "loop",
-      "file": "loop.preset.js"
+      "file": "sokoban/loop.preset.js"
     },
     {
       "gameTypes": [
@@ -619,7 +611,7 @@
       "id": "curling",
       "label": "curling",
       "key": "curling",
-      "file": "curling.preset.js"
+      "file": "sokoban/curling.preset.js"
     },
     {
       "gameTypes": [
@@ -628,7 +620,7 @@
       "id": "remote-rotate",
       "label": "remote rotate",
       "key": "remote_rotate",
-      "file": "remote_rotate.preset.js"
+      "file": "sokoban/remote_rotate.preset.js"
     },
     {
       "gameTypes": [
@@ -637,7 +629,7 @@
       "id": "remote-control",
       "label": "remote control",
       "key": "remote_control",
-      "file": "remote_control.preset.js"
+      "file": "sokoban/remote_control.preset.js"
     },
     {
       "gameTypes": [
@@ -646,13 +638,41 @@
       "id": "islands",
       "label": "islands",
       "key": "islands",
-      "file": "islands.preset.js"
+      "file": "sokoban/islands.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "expand2",
+      "label": "expand2",
+      "key": "expand2",
+      "file": "sokoban/expand2.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "expand3",
+      "label": "expand3",
+      "key": "expand3",
+      "file": "sokoban/expand3.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "bridges-blocking",
+      "label": "bridges_blocking",
+      "key": "bridges_blocking",
+      "file": "sokoban/bridges_blocking.preset.js"
     },
     {
       "gameTypes": [
         "FIDE Chess"
         ],
       "id": "knights-on-rubik-s-cube",
+      "fideChessVariant": "kingless-puzzle",
       "label": "knights on Rubik's Cube",
       "key": "knights_on_rubik_s_cube",
       "file": "knights_on_rubik_s_cube.preset.js"
@@ -662,6 +682,7 @@
         "FIDE Chess"
         ],
       "id": "queens-on-double-cover",
+      "fideChessVariant": "kingless-puzzle",
       "label": "queens on double cover",
       "key": "queens_on_double_cover",
       "file": "queens_on_double_cover.preset.js"

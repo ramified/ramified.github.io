@@ -183,6 +183,15 @@ async function expandWorker(file, seen=new Set()){
   for(const m of matches){let inline='';for(const s of m[1].matchAll(/["']([^"']+)["']/g))inline+=await expandWorker(path.posix.join(path.posix.dirname(file),clean(s[1])),seen)+'\n';source=source.replace(m[0],inline);}
   return source;
 }
+async function presetFiles(directory){
+  const files=[];
+  for(const entry of await fs.readdir(path.join(sourceRoot,directory),{withFileTypes:true})){
+    const p=`${directory}/${entry.name}`;
+    if(entry.isDirectory())files.push(...await presetFiles(p));
+    else if(entry.name.endsWith('.preset.js'))files.push(p);
+  }
+  return files.sort();
+}
 async function build(){
   inputs.clear();outputs.clear();
   for(const file of ['js/math_workspace/build.mjs','js/math_workspace/editors/catalog.mjs','package.json','package-lock.json'])await read(file);
@@ -198,8 +207,8 @@ async function build(){
   for(const f of ['js/toric_cone_worker.js','js/background_homology_worker.js','js/mosaic_hyperbolic_metric_worker.js'])workers[f]=await expandWorker(f);
   virtual.set('workspace:workers',`export default ${JSON.stringify(workers)};`);
   let presetCode='export default {\n';
-  for(const directory of ['category_presets','ramified_minigame_presets'])for(const file of (await fs.readdir(path.join(sourceRoot,directory))).filter(f=>f.endsWith('.preset.js')).sort()){
-    const p=`${directory}/${file}`;presetCode+=`${JSON.stringify(p)}:(window)=>{const globalThis=window,self=window,module=undefined,require=undefined;${await read(p)}\n},\n`;
+  for(const directory of ['category_presets','ramified_minigame_presets'])for(const p of await presetFiles(directory)){
+    presetCode+=`${JSON.stringify(p)}:(window)=>{const globalThis=window,self=window,module=undefined,require=undefined;${await read(p)}\n},\n`;
   }
   virtual.set('workspace:presets',presetCode+'};');
   virtual.set('workspace:editors',editors.map((e,i)=>`import * as e${i} from 'editor:${e.id}';`).join('\n')+`\nexport default {${editors.map((e,i)=>`${JSON.stringify(e.id)}:e${i}`).join(',')}};`);
@@ -234,7 +243,7 @@ await build();
 if(process.argv.includes('--watch')){
   const stamp=async()=>{
     const files=await Promise.all([...inputs.keys()].map(async p=>`${p}:${(await fs.stat(path.join(root,p)).catch(()=>null))?.mtimeMs}`));
-    for(const directory of ['category_presets','ramified_minigame_presets'])files.push(`${directory}:${(await fs.readdir(path.join(sourceRoot,directory))).sort().join(',')}`);
+    for(const directory of ['category_presets','ramified_minigame_presets'])files.push(`${directory}:${(await presetFiles(directory)).join(',')}`);
     return files.join('|');
   };
   let last=await stamp(),building=false;

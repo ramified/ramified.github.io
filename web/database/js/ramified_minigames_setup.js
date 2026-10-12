@@ -709,8 +709,15 @@
   // A setup draft temporarily uses the renderer; the live game and history stay
   // in memory until a new game has actually started successfully.
   let playerSetupSession = null;
+  let playerOnlineSession = null;
+  let playerOnlinePreparing = false;
+  let playerOnlineLatest = null;
+  let playerOnlineSerial = 0;
+  let playerOnlineSnapshotSerial = 0;
+  let playerDefaults = {};
   let playerSetupCommitting = false;
   let playerSetupError = false;
+  let playerSokobanCompleted = new Set();
   let importedPreset = null;
   let hexCoverOffset = { x: HEX_COVER_OFFSET_DEFAULT, y: HEX_COVER_OFFSET_DEFAULT };
   let hexCoverOffsetPresetId = '';
@@ -1882,10 +1889,11 @@ function handleOnlineRoleOptionsChange(event) {
 function onlineChineseCheckersCanClaimRoles(mode = null) {
   const targetMode = gameModeFromUrlParam(mode || (onlineState && onlineState.gameMode) || selectedGameMode());
   return !!(
-    targetMode === GAME_MODES.CHINESE_CHECKERS
+    ONLINE_SUPPORTED_GAME_MODES.has(targetMode)
     && onlineIsInRoom()
     && onlineSocketOpen()
-    && onlineState.readyToPlay === false
+    && !onlineState.proposal
+    && (onlineState.roundState === 'waiting' || !onlineStateHasPlayableRole())
     );
 }
 
@@ -1973,7 +1981,7 @@ function selectedOnlineRolesRequested() {
 }
 
 function onlinePendingRoleClaimsChanged() {
-  if (!onlineState || onlineState.gameMode !== GAME_MODES.CHINESE_CHECKERS) return false;
+  if (!onlineState) return false;
   const selected = selectedOnlineRolePreferences().filter((role) => role !== 'spectator').sort();
   const assigned = normalizeOnlineRoles(onlineState.roles).filter((role) => role !== 'spectator').sort();
   if (selected.length !== assigned.length) return true;
@@ -1982,7 +1990,7 @@ function onlinePendingRoleClaimsChanged() {
 
 function confirmOnlineChineseCheckersRolesFromUi() {
   if (!onlineChineseCheckersCanClaimRoles()) {
-    syncOnlineStatus('Colors can only be changed before Chinese Checkers begins.', 'error');
+    syncOnlineStatus(tk('lobby.claimUnavailable', 'Seats cannot be changed at this point.'), 'error');
     syncOnlineControls();
     return;
   }
@@ -2021,7 +2029,7 @@ function onlineChineseCheckersColorPlayableForLocal(color) {
 }
 
 function onlineIsInRoom() {
-  return !!(onlineState && onlineState.joined && onlineState.roomCode);
+  return !playerOnlinePreparing && !!(onlineState && onlineState.joined && onlineState.roomCode);
 }
 
 function onlineSocketOpen() {
@@ -2090,9 +2098,7 @@ function syncOnlineControls() {
       input.disabled = !visible || !configured || onlineRoleClaimedByOther(role) || (!!active && !canClaimRole);
     });
   }
-  const waitingChinese = onlineIsInRoom()
-  && onlineState.roundState === 'waiting'
-  && onlineState.gameMode === GAME_MODES.CHINESE_CHECKERS;
+  const waitingChinese = onlineChineseCheckersCanClaimRoles();
   if (refs.onlineConfirmRoles) {
     refs.onlineConfirmRoles.hidden = !waitingChinese;
     refs.onlineConfirmRoles.disabled = !waitingChinese || !onlineSocketOpen() || !onlinePendingRoleClaimsChanged();
@@ -2154,6 +2160,7 @@ function onlineWaitingPromptCopy(state = onlineState) {
 }
 
 function syncOnlineCanvasPrompt() {
+  if (playerShellEnabled && onlineIsInRoom()) { hideCanvasStartPrompt(); return; }
   if (!onlineIsInRoom() || !game || !onlineState) return;
   if (onlineState.roundState === 'waiting') {
     showCanvasStartPrompt({
@@ -2476,14 +2483,13 @@ function connectOnlineSocket(roomCode, requestedRoles = []) {
         type: 'hello',
         clientId: onlineState.clientId,
         playerName: currentOnlinePlayerName(),
-        role: rolesRequested[0] || 'auto',
-        rolesRequested
+        role: rolesRequested[0] || (requestedRoles.includes('spectator') ? 'spectator' : 'auto'),
+        rolesRequested: rolesRequested.length ? rolesRequested : requestedRoles.includes('spectator') ? ['spectator'] : []
       });
       syncOnlineStatus('Connected; waiting for room state...', 'idle');
       syncOnlineControls();
-      resolve();
     });
-    socket.addEventListener('message', (event) => handleOnlineSocketMessage(event));
+    socket.addEventListener('message', (event) => { if (onlineState.socket === socket) handleOnlineSocketMessage(event); });
     socket.addEventListener('error', () => {
       onlineState.connecting = false;
       rejectPendingOnlineJoin(socket, new Error('WebSocket error.'));
@@ -2491,6 +2497,7 @@ function connectOnlineSocket(roomCode, requestedRoles = []) {
       syncOnlineControls();
     });
     socket.addEventListener('close', (event) => {
+      if (onlineState.socket && onlineState.socket !== socket) return;
       const wasIntentional = !!(socket.__ramifiedIntentionalClose || (onlineState && onlineState.intentionalClose));
       if (onlineState && onlineState.socket === socket) onlineState.socket = null;
       if (!onlineState) return;
@@ -2624,11 +2631,16 @@ function closeOnlineSocket(options = {}) {
     onlineState.version = 0;
     onlineState.joined = false;
     onlineState.roomDisplaySettings = null;
+    onlineState.loadFailed = false;
   }
 }
 
 function leaveOnlineRoomFromUi() {
   if (!onlineState) return;
+  ++playerOnlineSerial;
+  cancelPlayerSetup();
+  playerOnlinePreparing = false;
+  playerOnlineLatest = null;
   if (onlineSocketOpen()) {
     onlineSendRaw({
       type: 'leave',
@@ -2638,10 +2650,16 @@ function leaveOnlineRoomFromUi() {
     });
   }
   closeOnlineSocket({ keepRoom: false, intentional: true });
+  if (playerOnlineSession) {
+    playerSetupSession = playerOnlineSession;
+    cancelPlayerSetup();
+    playerOnlineSession = null;
+  }
   syncOnlineRoleOptions(selectedGameMode());
   syncOnlineStatus(onlineState.baseUrl ? 'Ready to create or join an online room.' : 'Online Worker URL is not configured.', onlineState.baseUrl ? 'idle' : 'offline');
   syncOnlineControls();
   syncControls();
+  if (typeof document !== 'undefined') document.dispatchEvent(new CustomEvent('ramified-online-state', { detail: { type: 'departed' } }));
 }
 
 function scheduleOnlineReconnect() {
@@ -2668,6 +2686,9 @@ function handleOnlineSocketMessage(event) {
     return;
   }
   if (!message || typeof message !== 'object') return;
+  if (message.type === 'departed') { leaveOnlineRoomFromUi(); return; }
+  updateOnlineRoomMetaFromMessage(message);
+  if (typeof document !== 'undefined') queueMicrotask(() => document.dispatchEvent(new CustomEvent('ramified-online-state', { detail: message })));
   if (message.type === 'joined') {
     onlineState.roomCode = normalizeOnlineRoomCode(message.roomCode || onlineState.pendingRoomCode || onlineState.roomCode);
     onlineState.pendingRoomCode = '';
@@ -2784,19 +2805,34 @@ function handleOnlineSocketMessage(event) {
   }
 }
 
-function applyOnlineSnapshotMessage(message) {
+async function applyOnlineSnapshotMessage(message) {
   if (!message || !message.snapshot) return;
+  const importTicket = ++playerOnlineSnapshotSerial;
   updateOnlineRoomMetaFromMessage(message);
+  if (playerOnlinePreparing) { playerOnlineLatest = message; return; }
+  const serial = playerOnlineSerial;
+  const socket = onlineState?.socket;
+  try { await ensureModeDependencies(message.gameMode || message.snapshot.gameMode); }
+  catch (_) {
+    if (serial === playerOnlineSerial && socket === onlineState?.socket) {
+      onlineState.loadFailed = true;
+      document.dispatchEvent(new CustomEvent('ramified-online-state', { detail: { type: 'error' } }));
+    }
+    return;
+  }
+  if (serial !== playerOnlineSerial || socket !== onlineState?.socket || importTicket !== playerOnlineSnapshotSerial) return;
+  if (playerOnlinePreparing) { playerOnlineLatest = message; return; }
   const action = message.action && typeof message.action === 'object' && !Array.isArray(message.action)
   ? message.action
   : null;
   const originClientId = String(message.clientId || (action && action.clientId) || '');
   const localActionEcho = !!(originClientId && onlineState && originClientId === onlineState.clientId && action);
-  const remoteAction = !!(originClientId && onlineState && originClientId !== onlineState.clientId && action);
+  const remoteAction = !!(action && (originClientId !== onlineState.clientId || action.type === 'billiards-shot'));
   onlineState.version = normalizeOnlineVersion(message.version, onlineState.version);
   const messageMode = gameModeFromUrlParam(message.gameMode || message.snapshot.gameMode);
   if (messageMode) onlineState.gameMode = messageMode;
-  if (localActionEcho && String(action && action.type || '').toLowerCase() !== 'rematch-start') {
+  if (localActionEcho && !['rematch-start', 'billiards-shot'].includes(String(action?.type || '').toLowerCase())) {
+    if (currentAnimation && action.animationMs) currentAnimation.duration = action.animationMs;
     syncOnlineRoleOptions(onlineState.gameMode);
     syncOnlineStatus('Move accepted.', 'idle');
     syncOnlineControls();
@@ -2812,11 +2848,15 @@ function applyOnlineSnapshotMessage(message) {
     syncOnlineControls();
     return;
   }
-  if (remoteAction && tryApplyOnlineRemoteAction(action, message.snapshot, message)) return;
+  if (remoteAction && tryApplyOnlineRemoteAction(action, message.snapshot, message)) {
+    if (currentAnimation && action.animationMs) currentAnimation.duration = action.animationMs;
+    return;
+  }
   if (remoteAction) prepareOnlineHistoryForRemoteAction(action);
   onlineState.applyingRemoteState = true;
   try {
     const imported = gameStateFromDebugImportPayload(message.snapshot);
+    onlineState.loadFailed = false;
     onlineState.gameMode = gameModeFromUrlParam(message.gameMode || message.snapshot.gameMode) || gameModeValue(imported.state);
     if (!action) onlineState.roomDisplaySettings = onlineDisplaySettingsFromSnapshot(message.snapshot);
     applyImportedDebugState(imported, {
@@ -2830,17 +2870,25 @@ function applyOnlineSnapshotMessage(message) {
     if (onlineState.readyToPlay !== false) hideOnlineChineseCheckersStartPrompt();
     syncOnlineStatus('State synchronized.', 'idle');
   } catch (error) {
+    onlineState.loadFailed = true;
+    if (playerShellEnabled) document.dispatchEvent(new CustomEvent('ramified-online-state', { detail: { type: 'error' } }));
     syncOnlineStatus(error && error.message ? error.message : 'Could not apply online state.', 'error');
   } finally {
     onlineState.applyingRemoteState = false;
     syncOnlineControls();
     syncControls();
     syncOnlineCanvasPrompt();
+    if (playerShellEnabled) document.dispatchEvent(new CustomEvent('ramified-online-state', { detail: { type: 'stateApplied' } }));
   }
 }
 
 function updateOnlineRoomMetaFromMessage(message, options = {}) {
   if (!onlineState || !message || typeof message !== 'object') return;
+  if (message.gameMode) onlineState.gameMode = gameModeFromUrlParam(message.gameMode) || onlineState.gameMode;
+  for (const key of ['hostId', 'hostName', 'members', 'roundId', 'timeControl', 'clock', 'outcome', 'proposal', 'serverNow']) {
+    if (Object.prototype.hasOwnProperty.call(message, key)) onlineState[key] = message[key];
+  }
+  if (message.serverNow) onlineState.clockReceivedAt = Date.now();
   if (message.roles && typeof message.roles === 'object') {
     onlineState.roomRoles = { ...message.roles };
   }
@@ -3173,6 +3221,7 @@ function requestOnlineHistoryChange(kind) {
     rolesAssigned: onlineState.roles,
     kind: normalized,
     baseVersion: onlineState.version,
+    roundId: onlineState.roundId,
     summary: onlineGameSummary(game)
   });
   syncOnlineStatus(`Requested ${normalized}; waiting for opponent approval.`, 'idle');
@@ -3299,6 +3348,7 @@ function onlineSendLocalAction(action) {
   }
   onlineSendRaw({
     type: 'proposeMove',
+    roundId: onlineState.roundId,
     clientId: onlineState.clientId,
     role: onlineState.role,
     rolesAssigned: onlineState.roles,
@@ -3313,6 +3363,7 @@ function onlineSendLocalAction(action) {
 
 function onlineLocalPlayIssue(actionType = 'move') {
   if (!onlineState || !onlineIsInRoom()) return '';
+  if (onlineState.loadFailed) return tk('lobby.loadError', 'Could not load the lobby. Refresh to retry, or go back.');
   if (!onlineSocketOpen()) return 'online room is disconnected';
   if (!onlineStateSupported(game)) return 'this game is not supported online';
   if (!onlineStateHasPlayableRole()) return 'spectators cannot move';
@@ -3387,6 +3438,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     }
 
     function shouldApplyOnlineSnapshotDisplaySettings(message, action) {
+      if (playerShellEnabled) return false;
       if (action) return false;
       const reason = String(message && message.reason || '').trim().toLowerCase();
       return !reason || reason === 'join' || reason === 'resync';
@@ -3803,6 +3855,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
         selectionLoading = false;
         if (typeof options.onReady === 'function') options.onReady();
         resetToPreview();
+        if (typeof options.afterReset === 'function') options.afterReset();
         if (options.focus && refs.canvas) refs.canvas.focus();
         return Promise.resolve(true);
       }
@@ -3816,6 +3869,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
         selectionLoading = false;
         if (typeof options.onReady === 'function') options.onReady();
         resetToPreview();
+        if (typeof options.afterReset === 'function') options.afterReset();
         if (options.focus && refs.canvas) refs.canvas.focus();
         return true;
       })
@@ -4048,6 +4102,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     if (!nextPresets.length) throw new Error('No ramified minigame presets were loaded.');
     PRESETS.splice(0, PRESETS.length, ...nextPresets);
     presetRegistry = nextRegistry;
+    playerDefaults = catalog.playerDefaults || {};
     presetDefaultByMode = resolvePresetDefaultMap(catalog.defaultFor, nextPresets);
     presetDefaultDisplayByMode = catalog.defaultDisplayFor;
     presetGameModeOrder = orderedCatalogGameModes(catalog.defaultFor, nextPresets, catalog.gameOrder);
@@ -4060,6 +4115,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
       id: entry.id,
       label: entry.label,
       ...(entry.labelZh ? { labelZh: entry.labelZh } : {}),
+      ...(entry.fideChessVariant ? { fideChessVariant: entry.fideChessVariant } : {}),
       gameTypes: entry.gameTypes.slice(),
       ...(entry.wrappedView ? { wrappedView: { ...entry.wrappedView } } : {}),
       ...(entry.wrappedCoverFit ? { wrappedCoverFit: entry.wrappedCoverFit } : {}),
@@ -4078,7 +4134,8 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
       if (!spec) return null;
       items.push({ entry, spec });
     }
-    return { items, defaultFor: catalog.defaultFor, defaultDisplayFor: catalog.defaultDisplayFor, gameOrder: catalog.gameOrder };
+    return { items, playerDefaults: catalog.playerDefaults,
+      defaultFor: catalog.defaultFor, defaultDisplayFor: catalog.defaultDisplayFor, gameOrder: catalog.gameOrder };
   }
 
   function loadBrowserPresetCatalogItems() {
@@ -4093,6 +4150,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     }
     return Promise.resolve({
       items: registry.map((entry) => ({ entry, spec: readPreloadedPresetSpec(entry) })),
+      playerDefaults: catalog.playerDefaults,
       defaultFor: catalog.defaultFor,
       defaultDisplayFor: catalog.defaultDisplayFor,
       gameOrder: catalog.gameOrder
@@ -4157,6 +4215,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     const folder = path.join(__dirname, '..', PRESET_FOLDER_URL);
     const catalog = normalizeMinigamePresetCatalog(require(path.join(folder, 'presets.js')));
     return {
+      playerDefaults: catalog.playerDefaults,
       defaultFor: catalog.defaultFor,
       defaultDisplayFor: catalog.defaultDisplayFor,
       gameOrder: catalog.gameOrder,
@@ -4171,6 +4230,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     if (Array.isArray(catalogInput)) return { items: catalogInput, defaultFor: {}, defaultDisplayFor: {}, gameOrder: [] };
     if (catalogInput && typeof catalogInput === 'object') {
       return {
+        playerDefaults: catalogInput.playerDefaults || {},
         items: Array.isArray(catalogInput.items) ? catalogInput.items : [],
         defaultFor: catalogInput.defaultFor && typeof catalogInput.defaultFor === 'object' ? catalogInput.defaultFor : {},
         defaultDisplayFor: normalizeDefaultDisplayMap(catalogInput.defaultDisplayFor),
@@ -4185,6 +4245,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     ? registry
     : { presets: registry };
     return {
+      playerDefaults: source.playerDefaults || {},
       entries: normalizeMinigamePresetRegistry(source.presets),
       defaultFor: normalizePresetDefaultMap(source.defaultFor),
       defaultDisplayFor: normalizeDefaultDisplayMap(source.defaultDisplayFor),
@@ -4232,6 +4293,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
         file,
         label,
         labelZh: sanitizeImportedText(entry.labelZh, ''),
+        fideChessVariant: normalizeFideChessVariant(entry.fideChessVariant),
         gameTypes: cleanPresetGameTypes(entry.gameTypes, entry.groups, entry.group),
         wrappedView: normalizeWrappedViewProfile(entry.wrappedView),
         wrappedCoverFit: entry.wrappedCoverFit === 'glued' ? 'glued' : '',
@@ -4660,9 +4722,15 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
       // The preview already owns a fully initialized runtime from the worker.
       // Reusing it avoids repeating the cellular-homology calculation here.
       game.phase = 'ready';
-    } else if (playerSetupSession && isGomokuGame(game)) {
-      // Start exactly the board being previewed, including a random gluing.
+    } else if (playerSetupSession && !isSokobanGame(game)) {
+      // Preserve the prepared topology and edited pieces; only perform start transitions.
+      if (is2048Game(game)) spawnNumbers(game, 2, Math.random, spawnInitialValue, []);
+      if (isFideChessGame(game)) {
+        game.fideChessVariant = inferFideChessVariantFromPieces(game.pieces, game.fideChessVariant);
+        if (isFideChessPuzzle(game)) prepareFideChessPuzzleState(game);
+      }
       game.phase = 'ready';
+      if (isFideChessPuzzle(game)) finalizeFideChessPuzzlePosition(game);
     } else {
       game = beginSelectedGame(selectedPreset(), selectedGameOptions({
         rng: Math.random,
@@ -4801,6 +4869,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     } else {
       game = beginSelectedGame(previous.preset || selectedPreset(), options);
     }
+    if (isSokobanGame(game) && previous.playerSokobanLevelId) game.playerSokobanLevelId = previous.playerSokobanLevelId;
     if (game.phase !== 'gameover') game.phase = 'ready';
     clearUndoHistory();
     clearDebugExport();
@@ -5598,10 +5667,10 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
         refs.billiardsRules.value = Billiards ? Billiards.normalizeRules(block && block.rules) : 'solo';
       }
       const savedSettings = playerSetupSession?.boardSettings.get(`${selectedGameMode()}:${refs.select.value}`);
-      if (savedSettings) savedSettings.forEach(({ node, value }) => { node.value = value; });
+      if (savedSettings) restorePlayerBoardControls(savedSettings);
       else syncBoardSizeInputForSelectedPreset();
       syncOnlineRoleOptions();
-    } });
+    }, afterReset() { restorePlayerBoardPreview(); } });
   }
 
   function syncBoardSizeInputForSelectedPreset() {
@@ -7500,6 +7569,10 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
       strokePresetId: options.strokePresetId || billiardsStrokePresetId
     } : {};
     const source = game;
+    if (onlineIsInRoom() && !options.remote) {
+      return onlineSendRaw({ type: 'billiardsShot', baseVersion: onlineState.version, roundId: onlineState.roundId,
+        action: { type: 'billiards-shot', shooter, aim, power, contact, ...shotInput } });
+    }
     playSoundEffect('billiards-strike');
     const token = ++billiardsSimulationSerial;
     billiardsShotPending = { token, source };
@@ -10361,6 +10434,10 @@ function handleCanvasStartBeginClick(event) {
   if (event && event.preventDefault) event.preventDefault();
   const action = canvasPromptAction || 'begin';
   hideCanvasStartPrompt();
+  if (action === 'sokoban-next' || action === 'sokoban-levels') {
+    document.dispatchEvent(new CustomEvent('ramified-player-sokoban-action', { detail: { action } }));
+    return;
+  }
   if (action === 'restart') {
     resetCurrentGameFromShortcut();
     return;
@@ -10383,6 +10460,10 @@ function handleCanvasStartBeginClick(event) {
 function handleCanvasStartCloseClick(event) {
   if (event && event.preventDefault) event.preventDefault();
   if (!game || onlineIsInRoom() || !['gameover', 'complete'].includes(game.phase)) return;
+  if (playerShellEnabled && game.playerSokobanLevelId) {
+    document.dispatchEvent(new CustomEvent('ramified-player-sokoban-action', { detail: { action: 'sokoban-levels' } }));
+    return;
+  }
   localResultPromptDismissed = true;
   hideCanvasStartPrompt();
   if (refs.canvas) refs.canvas.focus();
@@ -10442,16 +10523,18 @@ function showCanvasStartPrompt(options = {}) {
     return;
   }
   const copy = options.copy || canvasStartPromptCopy(game);
-  if (refs.canvasStartTitle) refs.canvasStartTitle.textContent = tr(copy.title);
-  if (refs.canvasStartContext) refs.canvasStartContext.textContent = tr(copy.context);
-  if (refs.canvasStartRules) refs.canvasStartRules.textContent = tr(copy.rules);
+  const promptText = value => copy.localized ? value : tr(value);
+  if (copy.localized) [refs.canvasStartTitle, refs.canvasStartBegin, refs.canvasStartClose].filter(Boolean).forEach(node => node.removeAttribute('data-i18n'));
+  if (refs.canvasStartTitle) refs.canvasStartTitle.textContent = promptText(copy.title);
+  if (refs.canvasStartContext) refs.canvasStartContext.textContent = promptText(copy.context);
+  if (refs.canvasStartRules) refs.canvasStartRules.textContent = promptText(copy.rules);
   if (refs.canvasStartBegin) {
-    refs.canvasStartBegin.textContent = tr(copy.action || 'begin the game');
+    refs.canvasStartBegin.textContent = promptText(copy.action || 'begin the game');
     refs.canvasStartBegin.disabled = false;
   }
   if (refs.canvasStartClose) {
     refs.canvasStartClose.hidden = !options.dismissible;
-    refs.canvasStartClose.textContent = tr(copy.closeAction || 'view completed board');
+    refs.canvasStartClose.textContent = promptText(copy.closeAction || 'view completed board');
   }
   canvasPromptAction = options.action || 'begin';
   refs.canvasStartOverlay.hidden = false;
@@ -10464,7 +10547,7 @@ function refreshCanvasPromptForLanguage() {
     syncOnlineCanvasPrompt();
     return;
   }
-  if (canvasPromptAction === 'restart') {
+  if (canvasPromptAction === 'restart' || canvasPromptAction.startsWith('sokoban-')) {
     showLocalReplayPrompt();
     return;
   }
@@ -10479,6 +10562,25 @@ function showLocalReplayPrompt() {
     || currentAnimation
     || localResultPromptDismissed
     ) return;
+    if (playerShellEnabled && isSokobanGame(game) && game.playerSokobanLevelId && !playerSetupSession && !playerMoveIsPending()) {
+      const levels = api.player.sokobanLevels();
+      const index = levels.findIndex(level => level.id === game.playerSokobanLevelId);
+      if (index >= 0) {
+        const hasNext = index + 1 < levels.length;
+        const allCompleted = levels.every(level => playerSokobanCompleted.has(level.id));
+        showCanvasStartPrompt({ force: true, action: hasNext ? 'sokoban-next' : 'sokoban-levels', dismissible: hasNext,
+          copy: {
+            localized: true,
+            title: allCompleted ? tk('player.allLevelsComplete', 'All levels complete') : tk('player.levelComplete', 'Level {{number}} complete', { number: index + 1 }),
+            context: tk('player.sokobanResult', '{{moves}} moves · {{pushes}} pushes', { moves: game.moves || 0, pushes: game.pushes || 0 }),
+            rules: '',
+            action: hasNext ? tk('player.nextLevel', 'Next level') : tk('player.chooseLevel', 'Choose a level'),
+            closeAction: tk('player.chooseLevel', 'Choose a level')
+          }
+        });
+        return;
+      }
+    }
     showCanvasStartPrompt({
       force: true,
       action: 'restart',
@@ -12185,7 +12287,7 @@ function restoreHistorySnapshot(snapshot, status, info) {
   if (isGoGame(game) && game.scoringReview) activateGoScoringReviewControls();
     // A finished Hex round opens a restart overlay.  Restoring a pre-win
     // snapshot must close that overlay before redrawing the active board.
-  if (isHexGame(game) && !['gameover', 'complete'].includes(game.phase)) hideCanvasStartPrompt();
+  if ((isHexGame(game) || isSokobanGame(game)) && !['gameover', 'complete'].includes(game.phase)) hideCanvasStartPrompt();
   syncStatus(status, info, phaseBadge(game.phase));
   showLocalReplayPrompt();
   render();
@@ -24393,8 +24495,8 @@ function initializeFideChessOpening(state) {
       syncControls();
       return;
     }
-    sokobanMoveSession = start.session;
-    const firstStep = nextSokobanSessionStep(game, sokobanMoveSession);
+    const moveSession = start.session;
+    const firstStep = nextSokobanSessionStep(game, moveSession);
     if (!firstStep.event) {
       playSoundEffect('sokoban-blocked');
       const message = firstStep.message || 'move rejected';
@@ -24407,6 +24509,8 @@ function initializeFideChessOpening(state) {
       return;
     }
     pushUndoSnapshot(`Sokoban move ${game.moves + 1}: ${dirLabel(dir, game.preset)}`);
+    // History must contain the idle state, not the movement session about to start.
+    sokobanMoveSession = moveSession;
     playSoundEffect(Number(firstStep.event.pushes) > 0 ? 'sokoban-push' : 'sokoban-step');
     clearNoMoveTrial();
     initializeSokobanMoveCounters(game, game);
@@ -30578,6 +30682,7 @@ function cloneGameState(source) {
   if (isSokobanGame(source)) {
     return {
       gameMode: GAME_MODES.SOKOBAN,
+      ...(source.playerSokobanLevelId ? { playerSokobanLevelId: source.playerSokobanLevelId } : {}),
       preset: source.preset,
       phase: source.phase,
       removed: new Set(source.removed),
@@ -31199,13 +31304,24 @@ function syncConnectFourFallOptions() {
   if (!presetCatalogReady || !PRESETS.length) return;
   const preset = game ? game.preset : selectedPreset();
   const lattice = latticeForPreset(preset);
+  const directions = {
+    right: ['games.right', tk('games.right', 'right')], down: ['games.down', tk('games.down', 'down')],
+    left: ['games.left', tk('games.left', 'left')], up: ['games.up', tk('games.up', 'up')],
+    east: ['games.east', tk('games.east', 'east')], west: ['games.west', tk('games.west', 'west')],
+    southeast: ['games.southeast', tk('games.southeast', 'southeast')], southwest: ['games.southwest', tk('games.southwest', 'southwest')],
+    northwest: ['games.northwest', tk('games.northwest', 'northwest')], northeast: ['games.northeast', tk('games.northeast', 'northeast')]
+  };
   const options = refs.connectFourFall.options ? Array.from(refs.connectFourFall.options) : [];
   options.forEach((option) => {
     const dir = dirFromName(option.value, preset);
     const valid = Number.isInteger(dir);
     option.hidden = !valid;
     option.disabled = !valid;
-    if (valid) option.textContent = lattice.dirLabels[dir] || lattice.dirNames[dir] || option.value;
+    if (valid) {
+      const [key, label] = directions[lattice.dirLabels[dir]];
+      option.setAttribute('data-i18n', key);
+      option.textContent = label;
+    }
   });
   if (!Number.isInteger(dirFromName(refs.connectFourFall.value, preset))) {
     refs.connectFourFall.value = lattice.dirNames[defaultConnectFourFallDir(preset)];
@@ -31537,7 +31653,7 @@ function normalizePresetPayload(payload, options = {}) {
   if (source.dynamicGomokuSize === true || payload.dynamicGomokuSize === true) normalized.dynamicGomokuSize = true;
   const dynamicLabel = firstPresentValue(source, ['dynamicGomokuLabelPrefix']) || firstPresentValue(payload, ['dynamicGomokuLabelPrefix']);
   if (dynamicLabel) normalized.dynamicGomokuLabelPrefix = sanitizeImportedText(dynamicLabel, '');
-  const fideVariant = normalizeFideChessVariant(firstPresentValue(source, ['fideChessVariant', 'chessVariant', 'variant']) || firstPresentValue(payload, ['fideChessVariant', 'chessVariant', 'variant']));
+  const fideVariant = normalizeFideChessVariant(firstPresentValue(source, ['fideChessVariant', 'chessVariant', 'variant']) || firstPresentValue(payload, ['fideChessVariant', 'chessVariant', 'variant']) || registryEntry.fideChessVariant);
   if (fideVariant) normalized.fideChessVariant = fideVariant;
   const fidePuzzle = normalizeFideChessPuzzleKind(firstPresentValue(source, ['fideChessPuzzle', 'chessPuzzle', 'puzzle']) || firstPresentValue(payload, ['fideChessPuzzle', 'chessPuzzle', 'puzzle']));
   if (fidePuzzle) normalized.fideChessPuzzle = fidePuzzle;
@@ -33126,6 +33242,7 @@ function syncChineseCheckersControls(modeChineseCheckers) {
 
 function syncChineseCheckersPlayerOptions(modeChineseCheckers) {
   if (!refs.chineseCheckersPlayerOptions) return;
+  const focusedColor = playerShellEnabled ? document.activeElement?.dataset?.color : null;
   refs.chineseCheckersPlayerOptions.textContent = '';
   if (!modeChineseCheckers || !presetCatalogReady || !PRESETS.length) return;
   const preset = game && isChineseCheckersGame(game) ? game.preset : selectedPreset();
@@ -33143,15 +33260,22 @@ function syncChineseCheckersPlayerOptions(modeChineseCheckers) {
     const label = document.createElement('label');
     label.className = 'local-ai-player-option';
     const colorName = chineseCheckersColorLabel(color);
+    if (playerShellEnabled) {
+      const stone = document.createElement('span');
+      stone.className = `player-stone player-stone-${color}`;
+      stone.setAttribute('aria-hidden', 'true');
+      label.appendChild(stone);
+    }
     label.appendChild(document.createTextNode(colorName));
     const select = document.createElement('select');
     select.dataset.color = color;
     select.setAttribute('aria-label', tk('ai.access.colorController', '{{side}} controller', { side: colorName }));
     [
       [HUMAN_CONTROLLER, tk('ai.human', 'Human')],
-      [LOCAL_AI_CONTROLLER, tk('ai.localChallenging', 'Local AI — Challenging')],
+      [LOCAL_AI_CONTROLLER, playerShellEnabled ? tk('player.aiChallenging', 'AI — Challenging') : tk('ai.localChallenging', 'Local AI — Challenging')],
       [HIDDEN_CONTROLLER, tk('ai.hidden', 'Not shown')]
       ].forEach(([value, text]) => {
+        if (playerOnlinePreparing && value === LOCAL_AI_CONTROLLER) return;
         const option = document.createElement('option');
         option.value = value;
         option.textContent = text;
@@ -33161,6 +33285,7 @@ function syncChineseCheckersPlayerOptions(modeChineseCheckers) {
       select.disabled = !setupEditable || onlineIsInRoom();
       label.appendChild(select);
       refs.chineseCheckersPlayerOptions.appendChild(label);
+      if (focusedColor === color) select.focus();
     });
 }
 
@@ -33286,7 +33411,10 @@ function ensureChineseCheckersControllerPreset(preset, available = chineseChecke
   const key = chineseCheckersPlayerSelectionKey(preset, available);
   if (chineseCheckersControllerPresetKey === key) return;
   chineseCheckersControllers.clear();
-  available.forEach((color) => chineseCheckersControllers.set(color, HUMAN_CONTROLLER));
+  const preferred = playerDefaults['chinese-checkers']?.humanColor;
+  const human = available.includes(preferred) ? preferred : available[0];
+  available.forEach((color) => chineseCheckersControllers.set(color,
+    playerSetupSession && !playerOnlinePreparing && color !== human ? LOCAL_AI_CONTROLLER : HUMAN_CONTROLLER));
   chineseCheckersControllerPresetKey = key;
 }
 
@@ -34365,7 +34493,7 @@ function playerMoveIsPending() {
 
 function playerBoardLabel(preset) {
   const label = preset.label || preset.id;
-  // Explicit keys for the boards exposed by the new Gomoku picker.
+  // Explicit keys for the boards exposed by the player preparation pages.
   switch (preset.id) {
     case 'boundary-glue-board': return tk('presets.boundary', label);
     case 'rubiks-cube-3x3x3': return tk('presets.rubiksCube', label);
@@ -34381,6 +34509,20 @@ function playerBoardLabel(preset) {
     case 'octahedron-with-square-holes': return tk('presets.octaHoles', label);
     case 'octahedron-with-square-glues': return tk('presets.octaGlues', label);
     case 'dodecahedron-with-pentagon-holes': return tk('presets.dodeca', label);
+    case 'connect-four-6x7': return tk('presets.connect67', label);
+    case 'connect-four-high-hit': return tk('presets.highHit', label);
+    case 'connect-four-high-hit-2': return tk('presets.highHit2', label);
+    case 'connect-four-all-horizontal': return tk('presets.horizontal', label);
+    case 'connect-four-top-fight': return tk('presets.topFight', label);
+    case 'connect-four-exchange': return tk('presets.exchange', label);
+    case 'connect-four-across': return tk('presets.across', label);
+    case 'connect-four-usual-strip': return tk('presets.usualStrip', label);
+    case 'connect-four-mobius-strip': return tk('presets.mobius', label);
+    case 'connect-four-hex-usual-strip': return tk('presets.hexStrip', label);
+    case 'falling-in-two-ways': return tk('presets.twoWays', label);
+    case 'connect-four-hex-bad-mobius-strip': return tk('presets.badMobius', label);
+    case 'connect-four-hex-good-mobius-strip': return tk('presets.goodMobius', label);
+    case 'r': return tk('presets.rBoard', label);
     default: {
       const chinese = typeof window !== 'undefined' && window.SiteI18n?.getLocale() === 'zh-CN';
       return tk('player.boardName', '{{name}}', { name: chinese && preset.labelZh ? preset.labelZh : label });
@@ -34388,9 +34530,61 @@ function playerBoardLabel(preset) {
   }
 }
 
+// Explicit allowlist: catalog defaults may configure preparation controls only.
+const PLAYER_BOARD_CONTROLS = ['gomokuSize', 'boundaryGlueMode', 'boundaryGlueShape', 'boundaryGlueRows', 'boundaryGlueCols', 'connectFourFall', 'hexPieRule', 'goKomi', 'chineseCheckersJumpRule', 'billiardsRules', 'billiardsPhysicsProfile', 'billiardsEquipment', 'billiardsTileLength', 'billiardsFriction', 'lianliankanTileSet', 'lianliankanTileLevel'];
+const PLAYER_DEFAULT_CONTROLS = [...PLAYER_BOARD_CONTROLS, 'gomokuBlackController', 'gomokuWhiteController', 'connectFourRedController', 'connectFourYellowController'];
+
+function applyPlayerDefaultControls(defaults) {
+  for (const [key, value] of Object.entries(defaults.controls || {})) {
+    if (!PLAYER_DEFAULT_CONTROLS.includes(key) || !refs[key]) continue;
+    if (typeof value === 'boolean') refs[key].checked = value;
+    else refs[key].value = String(value);
+  }
+  syncLianliankanTileLevelControl();
+}
+
+function rememberPlayerBoard() {
+  if (!playerSetupSession || playerSetupError || !game || game.preset.id !== refs.select.value) return;
+  playerSetupSession.boardSettings.set(`${selectedGameMode()}:${refs.select.value}`, {
+    game,
+    controls: PLAYER_BOARD_CONTROLS.map(key => refs[key]).filter(Boolean).map(node => ({ node, value: node.value, checked: node.checked })),
+    controllers: Array.from(chineseCheckersControllers),
+    players: chineseCheckersSelectedPlayers,
+    playersKey: chineseCheckersSelectedPlayersPresetKey,
+    controllerKey: chineseCheckersControllerPresetKey,
+    billiardsTileLength: billiardsTileEdgeLengthM
+  });
+}
+
+function restorePlayerBoardControls(saved) {
+  saved.controls.forEach(({ node, value, checked }) => {
+    node.value = value;
+    if (typeof checked === 'boolean') node.checked = checked;
+  });
+  chineseCheckersControllers.clear();
+  saved.controllers.forEach(([color, value]) => chineseCheckersControllers.set(color, value));
+  chineseCheckersSelectedPlayers = saved.players;
+  chineseCheckersSelectedPlayersPresetKey = saved.playersKey;
+  chineseCheckersControllerPresetKey = saved.controllerKey;
+  billiardsTileEdgeLengthM = saved.billiardsTileLength;
+}
+
+function restorePlayerBoardPreview() {
+  const saved = playerSetupSession?.boardSettings.get(`${selectedGameMode()}:${refs.select.value}`);
+  if (!saved) return;
+  cancelHexHomologyRequest();
+  game = saved.game;
+  restorePlayerBoardControls(saved);
+  render();
+  syncStatusForCurrentGame();
+  syncControls();
+  if (isHexGame(game) && game.hexTopologyState === 'pending') scheduleHexHomologyRequest(game);
+}
+
 function capturePlayerSetupSession() {
   return {
     game, undoStack, redoStack, importedPreset,
+    status: statusSnapshot(),
     boardSettings: new Map(),
     snapshot: api.player.snapshot(),
     controls: Array.from(new Set(Object.values(refs)))
@@ -34455,7 +34649,7 @@ function cancelPlayerSetup() {
   playerSetupSession = null;
   clearSetupAlert();
   render();
-  syncStatusForCurrentGame();
+  syncStatus(previous.status.status, previous.status.info, previous.status.badge);
   syncControls();
   if (isHexGame(game) && game.hexTopologyState === 'pending') scheduleHexHomologyRequest(game);
 }
@@ -34463,27 +34657,121 @@ function cancelPlayerSetup() {
 const api = {
   // Small adapter for the player shell; the archive keeps its original lifecycle.
   player: {
+    onlineInfo() {
+      if (!onlineState) return {};
+      const keys = ['baseUrl', 'clientId', 'playerName', 'roomCode', 'pendingRoomCode', 'joined', 'connecting', 'gameMode', 'roles', 'roomRoles', 'rolePlayers', 'roundState', 'readyClientIds', 'hostId', 'hostName', 'members', 'roundId', 'timeControl', 'clock', 'outcome', 'proposal', 'serverNow', 'clockReceivedAt', 'unclaimedRoles'];
+      return { ...Object.fromEntries(keys.map(key => [key, onlineState[key]])), version: onlineState.version, loadFailed: !!onlineState.loadFailed, roles: (onlineState.roles || []).filter(role => role !== 'spectator') };
+    },
+    onlineSend: onlineSendRaw,
+    onlineLeave: leaveOnlineRoomFromUi,
+    onlineRename(name) {
+      if (!onlineState) return;
+      onlineState.playerName = normalizeOnlinePlayerName(name) || onlineDefaultPlayerName(onlineState.clientId);
+      if (refs.onlinePlayerName) refs.onlinePlayerName.value = onlineState.playerName;
+      try { localStorage.setItem(ONLINE_PLAYER_NAME_KEY, onlineState.playerName); } catch (_) {}
+      if (onlineSocketOpen()) onlineSendRaw({ type: 'updateName', playerName: onlineState.playerName });
+    },
+    onlineEnter() {
+      if (playerOnlineSession) return true;
+      if (playerMoveIsPending()) return false;
+      cancelPlayerSetup();
+      playerOnlineSession = capturePlayerSetupSession();
+      return true;
+    },
+    async onlinePrepare(mode) {
+      if (!ONLINE_SUPPORTED_GAME_MODES.has(mode) || !api.player.onlineEnter()) return false;
+      api.player.onlineCancelSetup();
+      playerOnlinePreparing = true;
+      const loaded = await api.player.beginSetup(mode, { category: mode === 'fide-chess' ? 'game' : undefined });
+      if (!loaded) { playerOnlinePreparing = false; return false; }
+      syncRememberedAiControllersToHuman();
+      chineseCheckersControllers.forEach((_, color) => chineseCheckersControllers.set(color, HUMAN_CONTROLLER));
+      if (mode === 'billiards') {
+        refs.billiardsRules.value = 'competitive';
+        game.rules = 'competitive';
+      }
+      syncControls(); render();
+      return true;
+    },
+    onlineCancelSetup() {
+      cancelPlayerSetup();
+      playerOnlinePreparing = false;
+      if (playerOnlineLatest && onlineState?.joined) {
+        const message = { ...playerOnlineLatest, action: null, clientId: '' };
+        playerOnlineLatest = null;
+        applyOnlineSnapshotMessage(message);
+      }
+    },
+    onlinePreparedSnapshot() {
+      if (!playerOnlinePreparing || !playerSetupSession || selectionLoading || playerSetupError) throw new Error('No online preparation.');
+      const preview = game, previousUndo = undoStack, previousRedo = redoStack;
+      playerSetupCommitting = true;
+      try {
+        game = cloneGameState(preview);
+        syncRememberedAiControllersToHuman();
+        chineseCheckersControllers.forEach((_, color) => chineseCheckersControllers.set(color, HUMAN_CONTROLLER));
+        if (game.phase === 'setup') beginGameFromUi();
+        if (game.phase === 'setup') throw new Error('Invalid board.');
+        const snapshot = onlineSnapshotWithoutLocalDisplaySettings(debugExportPayload());
+        if (preview.preset.boundaryGlueMode) snapshot.preset.boundaryGlueMode = preview.preset.boundaryGlueMode;
+        if (preview.preset.boundaryGlueShape) snapshot.preset.boundaryGlueShape = preview.preset.boundaryGlueShape;
+        return snapshot;
+      } finally { game = preview; undoStack = previousUndo; redoStack = previousRedo; playerSetupCommitting = false; syncControls(); render(); }
+    },
+    async onlineJoin(code, { isCurrent = () => true } = {}) {
+      if (!api.player.onlineEnter()) throw new Error('Wait for the current move.');
+      const serial = ++playerOnlineSerial;
+      const response = await fetch(`${onlineState.baseUrl}/api/rooms/${encodeURIComponent(code)}`, { signal: AbortSignal.timeout(15000) });
+      if (!response.ok) throw new Error('Room unavailable.');
+      const meta = await response.json();
+      await ensureModeDependencies(meta.gameMode);
+      if (serial !== playerOnlineSerial || !isCurrent()) return false;
+      await connectOnlineSocket(code, ['spectator']);
+      return serial === playerOnlineSerial && isCurrent();
+    },
+    async onlineCreate(snapshot, config, creationId) {
+      const roles = onlineModeRoles(snapshot.gameMode);
+      const response = await fetch(`${onlineState.baseUrl}/api/rooms`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000),
+        body: JSON.stringify({ gameMode: snapshot.gameMode, snapshot, timeControl: config, creationId, clientId: onlineState.clientId, playerName: currentOnlinePlayerName(), role: (snapshot.playerColors || snapshot.chineseCheckersPlayers || roles)[0], summary: snapshot.preset.label || snapshot.preset.id })
+      });
+      if (!response.ok) throw new Error('Room creation failed.');
+      return response.json();
+    },
     state() {
       return {
         ready: presetCatalogReady && !selectionLoading && !!game,
         active: !!game && game.phase !== 'setup',
-        online: onlineIsInRoom(),
+        online: !!playerOnlineSession || onlineIsInRoom(),
         browsing: !!playerSetupSession,
         canPrepare: presetCatalogReady && !selectionLoading && !!game && !playerMoveIsPending(),
+        canStart: presetCatalogReady && !selectionLoading && !!game && !playerSetupError && !refs.begin?.disabled,
         setupError: playerSetupError,
+        sokobanLevelId: isSokobanGame(game) && !playerSetupSession ? game.playerSokobanLevelId || null : null,
+        solved: isSokobanGame(game) && game.phase === 'gameover' && game.winner === 'solved' && !playerSetupSession && !playerMoveIsPending(),
         mode: selectedGameMode(),
         presetId: refs.select && refs.select.value
       };
     },
     games() { return orderedCatalogGameModes().map((mode) => ({ mode, label: localizedGameName(mode) })); },
+    sokobanLevels() { return presetRegistry.filter(entry => entry.gameTypes.includes('Sokoban')).map(entry => ({ id: entry.id })); },
+    setSokobanProgress(completed) {
+      playerSokobanCompleted = new Set(completed);
+      if (canvasPromptAction.startsWith('sokoban-')) showLocalReplayPrompt();
+    },
     presets() {
       const presets = presetListForMode();
       if (importedPreset && presetMatchesGameMode(importedPreset)) presets.push(importedPreset);
-      return presets.map((preset) => ({ id: preset.id, label: playerBoardLabel(preset) }));
+      return presets.map((preset) => ({ id: preset.id, label: playerBoardLabel(preset), fideChessVariant: normalizeFideChessVariant(preset.fideChessVariant) || (isFideChessPuzzlePreset(preset) ? FIDE_CHESS_VARIANTS.KINGLESS_PUZZLE : FIDE_CHESS_VARIANTS.GAME) }));
     },
-    async beginSetup(mode) {
+    defaultPreset(mode, category) {
+      const defaults = playerDefaults[mode] || {};
+      return defaults.categories?.[category] || defaults.presetId || defaultPresetIdForMode(mode);
+    },
+    async beginSetup(mode, { category, presetId } = {}) {
       if (onlineIsInRoom() || !presetCatalogReady || selectionLoading || playerMoveIsPending()) return false;
       if (!orderedCatalogGameModes().includes(mode)) return false;
+      if (presetId && !presetListForMode(mode).some(preset => preset.id === presetId)) return false;
       cancelPlayerSetup();
       playerSetupSession = capturePlayerSetupSession();
       try {
@@ -34492,21 +34780,20 @@ const api = {
         syncBoardSizeInputForGameMode();
         applyDefaultPlacementDisplayForMode();
         applyDefaultPlacementPieceSizeForMode();
-        syncPresetSelectOptions(mode === GAME_MODES.GOMOKU ? BOUNDARY_GLUE_BOARD_PRESET_ID : defaultPresetIdForMode(mode));
-        if (mode === GAME_MODES.GOMOKU) {
-          refs.boundaryGlueMode.value = BOUNDARY_GLUE_MODES.OPEN;
-          refs.boundaryGlueShape.value = 'square';
-          refs.gomokuSize.value = '15';
-          refs.boundaryGlueRows.value = '15';
-          refs.boundaryGlueCols.value = '15';
-          refs.gomokuBlackController.value = HUMAN_CONTROLLER;
-          refs.gomokuWhiteController.value = LOCAL_AI_CONTROLLER;
-        }
+        const defaults = playerDefaults[mode] || {};
+        syncPresetSelectOptions(presetId || api.player.defaultPreset(mode, category));
+        chineseCheckersSelectedPlayers = null;
+        chineseCheckersSelectedPlayersPresetKey = '';
+        chineseCheckersControllerPresetKey = '';
+        applyPlayerDefaultControls(defaults);
         syncOnlineRoleOptions();
         if (refs.importGameMode) refs.importGameMode.value = mode;
         buildSoundEffectsDebugControls();
         const session = playerSetupSession;
-        const loaded = await loadSelectionAndReset();
+        const loaded = await loadSelectionAndReset({ onReady() {
+          syncBoardSizeInputForSelectedPreset();
+          applyPlayerDefaultControls(defaults);
+        } });
         if (playerSetupSession !== session) return false;
         if (!loaded) cancelPlayerSetup();
         return loaded;
@@ -34516,12 +34803,15 @@ const api = {
       }
     },
     cancelSetup: cancelPlayerSetup,
-    commitSetup() {
+    commitSetup({ sokobanLevelId } = {}) {
       if (!playerSetupSession || selectionLoading || playerSetupError || onlineIsInRoom()) return false;
       playerSetupCommitting = true;
       try {
         beginGameFromUi();
         if (!game || game.phase === 'setup') return false;
+        if (playerShellEnabled && isSokobanGame(game) && sokobanLevelId === game.preset.id && api.player.sokobanLevels().some(level => level.id === sokobanLevelId)) {
+          game.playerSokobanLevelId = sokobanLevelId;
+        }
         playerSetupSession = null;
         syncControls();
         return true;
@@ -34532,14 +34822,10 @@ const api = {
     },
     selectPreset(id) {
       if (!playerSetupSession || selectionLoading || !api.player.presets().some((preset) => preset.id === id)) return Promise.resolve(false);
-      // Keep each Gomoku board's choices for this preparation only. A failed load
-      // still has the previous board's controls, so it must not create an entry.
-      if (selectedGameMode() === GAME_MODES.GOMOKU && !playerSetupError) {
-        playerSetupSession.boardSettings.set(`${selectedGameMode()}:${refs.select.value}`,
-          [refs.gomokuSize, refs.boundaryGlueMode, refs.boundaryGlueShape, refs.boundaryGlueRows, refs.boundaryGlueCols]
-            .filter(Boolean).map((node) => ({ node, value: node.value })));
-      }
-      refs.select.value = id;
+      rememberPlayerBoard();
+      // Loaded metadata and restored saves can change the catalog's options.
+      // Refresh the original selector before assigning a player-list choice.
+      syncPresetSelectOptions(id);
       return handlePresetSelectChange();
     },
     paintPreview(canvas) {
@@ -34567,6 +34853,7 @@ const api = {
       return true;
     },
     snapshot() {
+      if (playerOnlineSession) return null;
       if (playerSetupSession) return playerSetupSession.snapshot;
       if (!game || game.phase === 'setup' || onlineIsInRoom() || selectionLoading
         || currentAnimation || billiardsShotPending || sokobanMoveSession
@@ -34574,16 +34861,26 @@ const api = {
       return {
         version: 1,
         payload: debugExportPayload(),
+        ...(game.playerSokobanLevelId ? { sokobanLevelId: game.playerSokobanLevelId } : {}),
         controllers: [refs.gomokuBlackController, refs.gomokuWhiteController, refs.connectFourRedController, refs.connectFourYellowController]
           .filter(Boolean).map((control) => [control.id, control.value]),
         checkersControllers: Array.from(chineseCheckersControllers),
         aiPauseReason: localAiPauseReason
       };
     },
-    async restore(saved) {
+    async restore(saved, { isCurrent = () => true } = {}) {
       if (!saved || saved.version !== 1 || !saved.payload || onlineIsInRoom()) throw new Error('Invalid player save');
+      for (const values of [saved.controllers, saved.checkersControllers]) {
+        if (values != null && (!Array.isArray(values) || !values.every(value => Array.isArray(value) && value.length === 2))) throw new Error('Invalid saved controllers');
+      }
       await ensureModeDependencies(saved.payload.gameMode);
+      if (!isCurrent()) return false;
       const imported = gameStateFromDebugImportPayload(saved.payload);
+      imported.settings = saved.payload.settings;
+      if (playerShellEnabled && isSokobanGame(imported.state) && api.player.sokobanLevels().some(level => level.id === saved.sokobanLevelId)) {
+        imported.state.playerSokobanLevelId = saved.sokobanLevelId;
+        imported.state.preset.id = saved.sokobanLevelId;
+      }
       applyImportedDebugState(imported, { recordHistory: false, focus: false });
       undoStack = [];
       redoStack = [];
@@ -34600,6 +34897,7 @@ const api = {
       syncControls();
       syncStatusForCurrentGame();
       render();
+      return true;
     }
   },
   DIRS,

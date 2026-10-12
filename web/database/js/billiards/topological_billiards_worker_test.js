@@ -197,7 +197,7 @@ function testSetupInteractionPreview() {
 }
 
 async function testOnlineRoundReadinessAndRematch(worker) {
-  const ctx = { storage: { async put() {} }, getWebSockets() { return []; } };
+  const ctx = { storage: { async put() {}, async setAlarm() {}, async deleteAlarm() {} }, getWebSockets() { return []; } };
   const room = new worker.GameRoom(ctx, {});
   const firstId = 'player-a-1234';
   const secondId = 'player-b-5678';
@@ -242,7 +242,7 @@ async function testOnlineRoundReadinessAndRematch(worker) {
 }
 
 async function testHexRoomPieSwap(worker) {
-  const ctx = { storage: { async put() {} }, getWebSockets() { return []; } };
+  const ctx = { storage: { async put() {}, async setAlarm() {}, async deleteAlarm() {} }, getWebSockets() { return []; } };
   const room = new worker.GameRoom(ctx, {});
   const redId = 'hex-red-1234';
   const blueId = 'hex-blue-5678';

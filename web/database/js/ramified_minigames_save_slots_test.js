@@ -1,0 +1,71 @@
+'use strict';
+const assert = require('assert');
+const slotsApi = require('./ramified_minigames_save_slots.js');
+const progress = require('./ramified_minigames_sokoban_progress.js');
+const ids = ['a', 'b', 'c', 'd', 'e', 'f'];
+const game = mode => ({ version: 1, payload: { gameMode: mode, phase: 'ready', round: 2 } });
+function memory(initial = {}) {
+  const data = new Map(Object.entries(initial));
+  return { data, getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
+}
+const storage = memory();
+let slots = slotsApi.create(ids, storage);
+assert.deepStrictEqual(slots.slots(), [null, null, null]);
+assert.strictEqual(storage.data.size, 0, 'browsing does not create a save');
+assert(slots.save(0, game('sokoban'), 'b'));
+assert.deepStrictEqual(slots.progress(0).completed, ['b']);
+assert.strictEqual(slots.progress(0).unlocked.length, 4);
+assert(slots.save(1, game('gomoku')));
+assert(slots.save(2, game('2048')));
+const otherSlots = slots.slots().slice(1);
+assert(slots.save(0, game('sokoban'), 'b'));
+assert.strictEqual(slots.progress(0).unlocked.length, 4);
+slots = slotsApi.create(ids, storage);
+assert.deepStrictEqual(slots.slots().slice(1), otherSlots);
+assert(slots.clear(0, true));
+assert.strictEqual(slots.slot(0).game, null);
+assert.deepStrictEqual(slots.progress(0), progress.normalize(ids, null));
+assert.deepStrictEqual(slots.slots().slice(1), otherSlots);
+assert(slots.clear(1));
+assert.strictEqual(slots.slot(1), null);
+assert.deepStrictEqual(slots.slot(2), otherSlots[1]);
+assert.strictEqual(slots.clear(3), false);
+
+const oldGame = JSON.stringify(game('gomoku'));
+const oldProgress = JSON.stringify(progress.complete(ids, null, 'a'));
+const legacy = memory({ [slotsApi.LEGACY_SAVE_KEY]: oldGame, [progress.SAVE_KEY]: oldProgress });
+slots = slotsApi.create(ids, legacy);
+assert.deepStrictEqual(slots.slot(0).game, game('gomoku'));
+assert.deepStrictEqual(slots.progress(0).completed, ['a']);
+assert.strictEqual(legacy.getItem(slotsApi.LEGACY_SAVE_KEY), oldGame);
+assert.strictEqual(legacy.getItem(progress.SAVE_KEY), oldProgress);
+assert(slots.clear(0));
+assert.strictEqual(slotsApi.create(ids, legacy).slot(0), null, 'deleted data is not resurrected from legacy backups');
+const onlyProgress = slotsApi.create(ids, memory({ [progress.SAVE_KEY]: oldProgress }));
+assert.strictEqual(onlyProgress.slot(0).game, null);
+assert.deepStrictEqual(onlyProgress.progress(0).completed, ['a']);
+
+let quota = true;
+const unreliable = memory({ [slotsApi.LEGACY_SAVE_KEY]: oldGame, [progress.SAVE_KEY]: oldProgress });
+const put = unreliable.setItem;
+unreliable.setItem = (key, value) => { if (quota) throw Error('quota'); put(key, value); };
+slots = slotsApi.create(ids, unreliable);
+assert.strictEqual(slots.error(), 'write');
+assert.deepStrictEqual(slots.slot(0).game, game('gomoku'));
+assert.strictEqual(slots.clear(0), false);
+assert.deepStrictEqual(slots.slot(0).game, game('gomoku'), 'failed deletion retains the original slot');
+assert.strictEqual(slots.save(1, game('go')), false);
+assert.deepStrictEqual(slots.slot(1).game, game('go'), 'failed autosave remains available in this tab');
+quota = false;
+assert(slots.save(1, game('go')));
+assert.strictEqual(slots.error(), '');
+assert.deepStrictEqual(slotsApi.create(ids, unreliable).slot(1).game, game('go'));
+for (const raw of ['broken', '{"version":9,"slots":[]}', '{"version":1,"slots":[null]}']) {
+  const corrupt = memory({ [slotsApi.SAVE_KEY]: raw, [slotsApi.LEGACY_SAVE_KEY]: oldGame });
+  slots = slotsApi.create(ids, corrupt);
+  assert.strictEqual(slots.error(), 'read');
+  assert.strictEqual(slots.save(0, game('hex')), false);
+  assert.strictEqual(slots.clear(0), false);
+  assert.strictEqual(corrupt.getItem(slotsApi.SAVE_KEY), raw, 'unreadable data is never overwritten');
+}
+console.log('ramified_minigames_save_slots_test: migration, isolated progress, reset/delete, write failures and backup protection passed');

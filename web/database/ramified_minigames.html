@@ -2054,7 +2054,7 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="css/ramified_minigames_player.css?v=20261007-4">
+  <link rel="stylesheet" href="css/ramified_minigames_player.css?v=20261012-1">
 </head>
 <body class="ramified-player player-menu-open">
 
@@ -2095,27 +2095,49 @@
           <p id="player-message" role="status" hidden></p>
           <section id="player-home" class="player-page">
             <button class="btn" id="player-new" type="button" data-i18n="player.start" disabled>Start game</button>
-            <button class="btn" id="player-continue" type="button" data-i18n="player.continue" disabled>Continue game</button>
+            <button class="btn" id="player-online-open" type="button" data-i18n="online.title">Online Play</button>
             <button class="btn" id="player-settings" type="button" data-i18n="fullscreen.settings">Settings</button>
           </section>
           <section id="player-game-menu" class="player-page" hidden>
             <button class="btn" id="player-resume" type="button" data-i18n="player.resume">Return to game</button>
+            <button class="btn" id="player-choose-level" type="button" data-i18n="player.chooseLevel" hidden>Choose a level</button>
             <button class="btn" data-player-page="setup" type="button" data-i18n="player.changeGame">Change game</button>
             <button class="btn" data-player-page="display" type="button" data-i18n="setup.display">Display</button>
             <button class="btn" data-player-page="online" type="button" data-i18n="online.title">Online Play</button>
-            <button class="btn" data-player-page="files" type="button" data-i18n="player.files">Import / export</button>
-            <button class="btn" data-player-page="stats" type="button" data-i18n="status.stats">Game Stats</button>
             <button class="btn" id="player-game-settings" type="button" data-i18n="fullscreen.settings">Settings</button>
             <button class="btn" id="player-home-button" type="button" data-i18n="player.home">Main menu</button>
           </section>
           <section id="player-games" class="player-page" hidden>
-            <button class="btn player-game-page-arrow" id="player-games-previous" type="button" aria-controls="player-game-list" data-i18n-aria-label="player.previousGamesPage" aria-label="Previous page of games">&#9664;</button>
-            <div id="player-game-list"></div>
-            <button class="btn player-game-page-arrow" id="player-games-next" type="button" aria-controls="player-game-list" data-i18n-aria-label="player.nextGamesPage" aria-label="Next page of games">&#9654;</button>
+            <button class="btn" id="player-continue" type="button" hidden disabled>
+              <span data-i18n="player.continueLast">Continue last game</span>
+              <span id="player-continue-game"></span>
+            </button>
+            <div id="player-game-browser">
+              <button class="btn player-game-page-arrow" id="player-games-previous" type="button" aria-controls="player-game-list" data-i18n-aria-label="player.previousGamesPage" aria-label="Previous page of games">&#9664;</button>
+              <div id="player-game-list"></div>
+              <button class="btn player-game-page-arrow" id="player-games-next" type="button" aria-controls="player-game-list" data-i18n-aria-label="player.nextGamesPage" aria-label="Next page of games">&#9654;</button>
+            </div>
+          </section>
+          <section id="player-levels" class="player-page" hidden>
+            <div id="player-level-list" role="group" data-i18n-aria-label="player.sokobanLevels" aria-label="Sokoban levels"></div>
+          </section>
+          <section id="player-slots" class="player-page" hidden>
+            <div id="player-slot-list" role="group" data-i18n-aria-label="player.chooseSave" aria-label="Choose a save"></div>
+          </section>
+          <section id="player-slot-confirm" class="player-page" hidden>
+            <p id="player-slot-warning"></p>
+            <div class="player-slot-confirm-actions">
+              <button class="btn" id="player-slot-confirm-action" type="button" data-i18n="player.slotDelete">Delete</button>
+              <button class="btn" id="player-slot-cancel" type="button" data-i18n="common.cancel">Cancel</button>
+            </div>
+          </section>
+          <section id="player-chess-category" class="player-page" hidden>
+            <button class="btn" type="button" data-chess-category="game" data-i18n="player.chessGame">Game</button>
+            <button class="btn" type="button" data-chess-category="kingless-puzzle" data-i18n="player.chessPuzzle">Puzzle</button>
           </section>
           <section id="player-setup" class="player-page" hidden>
-            <div id="player-gomoku-setup" hidden>
-              <div class="player-gomoku-main">
+            <div id="player-board-setup" hidden>
+              <div class="player-setup-main">
                 <div class="player-board-picker">
                   <div class="player-board-navigation">
                     <button class="btn" id="player-board-previous" type="button" data-i18n-aria-label="player.previousBoard" aria-label="Previous board">&#9664;</button>
@@ -2126,26 +2148,27 @@
                   </div>
                   <div id="player-board-name" aria-live="polite"></div>
                 </div>
-                <div id="player-gomoku-players">
-                  <div class="player-side" role="group" aria-labelledby="player-black-label">
+                <div id="player-setup-players">
+                  <div class="player-side" role="group" aria-labelledby="player-first-label">
                     <span class="player-stone player-stone-black" aria-hidden="true"></span>
-                    <span class="player-visually-hidden" id="player-black-label" data-i18n="status.black">Black</span>
+                    <span class="player-visually-hidden" id="player-first-label" data-i18n="status.black">Black</span>
                     <div class="player-controller-picker">
-                      <button class="btn" id="player-black-previous" type="button" data-i18n-aria-label="player.previousBlackController" aria-label="Previous black player type">&#9664;</button>
-                      <output id="player-black-controller" aria-live="polite" data-i18n="ai.human">Human</output>
-                      <button class="btn" id="player-black-next" type="button" data-i18n-aria-label="player.nextBlackController" aria-label="Next black player type">&#9654;</button>
+                      <button class="btn" id="player-first-previous" type="button" data-i18n-aria-label="player.previousBlackController" aria-label="Previous black player type">&#9664;</button>
+                      <output id="player-first-controller" aria-live="polite" data-i18n="ai.human">Human</output>
+                      <button class="btn" id="player-first-next" type="button" data-i18n-aria-label="player.nextBlackController" aria-label="Next black player type">&#9654;</button>
                     </div>
                   </div>
-                  <div class="player-side" role="group" aria-labelledby="player-white-label">
+                  <div class="player-side" role="group" aria-labelledby="player-second-label">
                     <span class="player-stone player-stone-white" aria-hidden="true"></span>
-                    <span class="player-visually-hidden" id="player-white-label" data-i18n="status.white">White</span>
+                    <span class="player-visually-hidden" id="player-second-label" data-i18n="status.white">White</span>
                     <div class="player-controller-picker">
-                      <button class="btn" id="player-white-previous" type="button" data-i18n-aria-label="player.previousWhiteController" aria-label="Previous white player type">&#9664;</button>
-                      <output id="player-white-controller" aria-live="polite" data-i18n="player.aiChallenging">AI — Challenging</output>
-                      <button class="btn" id="player-white-next" type="button" data-i18n-aria-label="player.nextWhiteController" aria-label="Next white player type">&#9654;</button>
+                      <button class="btn" id="player-second-previous" type="button" data-i18n-aria-label="player.previousWhiteController" aria-label="Previous white player type">&#9664;</button>
+                      <output id="player-second-controller" aria-live="polite" data-i18n="player.aiChallenging">AI — Challenging</output>
+                      <button class="btn" id="player-second-next" type="button" data-i18n-aria-label="player.nextWhiteController" aria-label="Next white player type">&#9654;</button>
                     </div>
                   </div>
                 </div>
+                <div id="player-setup-options" hidden></div>
               </div>
               <div class="player-setup-footer">
                 <button class="btn" id="player-more" type="button" data-i18n="player.more" aria-controls="player-board-options">More</button>
@@ -2156,17 +2179,65 @@
             <button class="btn" id="player-view-board" type="button" data-i18n="player.viewBoard">View board</button>
           </section>
           <section id="player-board-options" class="player-page" hidden>
-            <div id="player-gomoku-fields"></div>
+            <div id="player-board-fields"></div>
+            <div id="player-time-fields" hidden>
+              <label for="player-time-mode" data-i18n="lobby.timeControl">Time control</label>
+              <select id="player-time-mode">
+                <option value="unlimited" data-i18n="lobby.unlimited">Unlimited</option>
+                <option value="total" data-i18n="lobby.total">Total time per side</option>
+                <option value="move" data-i18n="lobby.move">Time per action</option>
+                <option value="byoyomi" data-i18n="lobby.byoyomi">Total time + 3 periods</option>
+              </select>
+              <label id="player-time-main-row"><span data-i18n="lobby.totalSeconds">Total time per side (seconds)</span><input id="player-time-main" type="number" min="1" max="86400" step="1" inputmode="numeric"></label>
+              <label id="player-time-action-row"><span id="player-time-action-label" data-i18n="lobby.actionSeconds">Time per action (seconds)</span><input id="player-time-action" type="number" min="1" max="86400" step="1" inputmode="numeric"></label>
+            </div>
+            <button class="btn" id="player-edit-balls" type="button" data-i18n="player.editBalls" hidden>Arrange balls</button>
           </section>
           <section id="player-confirm" class="player-page" hidden>
-            <p data-i18n="player.replace">Start a new game? The next game will replace the saved game.</p>
+            <p id="player-replace-text"></p>
             <button class="btn" id="player-confirm-new" type="button" data-i18n="player.start">Start game</button>
             <button class="btn" id="player-cancel-new" type="button" data-i18n="common.cancel">Cancel</button>
           </section>
           <section id="player-display" class="player-page" hidden></section>
           <section id="player-online" class="player-page" hidden></section>
-          <section id="player-files" class="player-page" hidden></section>
-          <section id="player-stats" class="player-page" hidden></section>
+          <section id="player-lobby" class="player-page" hidden>
+            <div class="player-online-heading">
+              <label for="player-lobby-name" data-i18n="lobby.name">Nickname</label>
+              <input id="player-lobby-name" type="text" maxlength="32" autocomplete="nickname">
+              <button class="btn" id="player-lobby-rename" type="button" data-i18n="lobby.rename">Set nickname</button>
+              <button class="btn" id="player-lobby-refresh" type="button" data-i18n="lobby.refresh">Refresh</button>
+              <button class="btn" id="player-lobby-create" type="button" data-i18n="lobby.create">Create room</button>
+            </div>
+            <div class="player-lobby-columns">
+              <div><h2 data-i18n="lobby.players">Online players</h2><ul id="player-lobby-players"></ul></div>
+              <div><h2 data-i18n="lobby.rooms">Rooms</h2><div id="player-lobby-rooms"></div></div>
+            </div>
+          </section>
+          <section id="player-room" class="player-page" hidden>
+            <div class="player-room-body">
+              <p id="player-room-summary"></p>
+              <p id="player-room-state" role="status"></p>
+              <p id="player-room-time"></p>
+              <ul id="player-room-members"></ul>
+              <fieldset id="player-room-seats"><legend data-i18n="lobby.seats">Choose a seat</legend><div id="player-room-seat-options"></div></fieldset>
+              <div class="player-room-actions">
+                <button class="btn" id="player-room-claim" type="button" data-i18n="lobby.claim">Confirm seats</button>
+                <button class="btn" id="player-room-ready" type="button" data-i18n="lobby.ready">Ready</button>
+                <button class="btn" id="player-room-watch" type="button" data-i18n="player.viewBoard">View board</button>
+                <button class="btn" id="player-room-retry" type="button" data-i18n="lobby.refresh" hidden>Refresh</button>
+                <button class="btn" id="player-room-change" type="button" data-i18n="lobby.change">Change game or board</button>
+              </div>
+              <div id="player-room-proposal" hidden>
+                <p id="player-room-proposal-text"></p>
+                <div class="player-room-actions">
+                  <button class="btn" id="player-proposal-accept" type="button" data-i18n="lobby.accept">Agree</button>
+                  <button class="btn" id="player-proposal-reject" type="button" data-i18n="lobby.reject">Disagree and leave</button>
+                  <button class="btn" id="player-proposal-cancel" type="button" data-i18n="common.cancel">Cancel</button>
+                </div>
+              </div>
+            </div>
+            <div class="player-room-footer"><button class="btn" id="player-room-leave" type="button" data-i18n="lobby.leave">Leave room</button></div>
+          </section>
         </div>
       </div>
       <details id="player-actions">
@@ -2174,6 +2245,7 @@
         <div id="player-action-controls"></div>
       </details>
       <canvas id="mosaic-canvas" tabindex="0" aria-label="Ramified minigame mosaic canvas"></canvas>
+      <output id="player-online-clock" hidden data-i18n-aria-label="lobby.clocks" aria-label="Game clocks"></output>
       <div class="fullscreen-lianliankan-actions" id="fullscreen-lianliankan-actions" data-i18n-aria-label="access.fullscreenGameTools" aria-label="Fullscreen game tools" hidden>
         <button class="fullscreen-lianliankan-button" id="fullscreen-lianliankan-hint" type="button" data-i18n-aria-label="common.showHint" aria-label="Show hint" data-i18n-title="common.hint" title="Hint">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -2286,8 +2358,6 @@
           <div class="fullscreen-settings-panel" id="fullscreen-settings-display" role="tabpanel" aria-labelledby="fullscreen-settings-display-tab">
             <div class="player-settings-extra" id="player-settings-extra">
               <div id="player-language"></div>
-              <p data-i18n="player.saveNote">Local games are saved in this browser. Undo history is not restored after reloading. Online rooms are not saved locally.</p>
-              <p><a href="ramified_minigames_archive.html" target="_blank" rel="noopener" data-i18n="player.archive">Archive / debug</a></p>
             </div>
             <div class="fullscreen-settings-options">
               <div class="fullscreen-setting-row" id="fullscreen-wrapped-view-row" hidden>
@@ -2681,16 +2751,16 @@
           <button class="btn go-score-action-button" id="go-confirm-score" type="button">confirm score</button>
         </div>
         <div class="mosaic-inline-row" id="connect-four-fall-row" data-mode-control="connect-four" hidden>
-          <span class="input-label">Fall</span>
-          <select id="connect-four-fall-dir" aria-label="Connect Four fall direction">
-            <option value="S" selected>down</option>
-            <option value="E">right</option>
-            <option value="W">left</option>
-            <option value="N">up</option>
-            <option value="SE">southeast</option>
-            <option value="SW">southwest</option>
-            <option value="NW">northwest</option>
-            <option value="NE">northeast</option>
+          <span class="input-label" data-i18n="setup.fall">Fall</span>
+          <select id="connect-four-fall-dir" data-i18n-aria-label="access.connectFall" aria-label="Connect Four fall direction">
+            <option value="S" selected data-i18n="games.down">down</option>
+            <option value="E" data-i18n="games.right">right</option>
+            <option value="W" data-i18n="games.left">left</option>
+            <option value="N" data-i18n="games.up">up</option>
+            <option value="SE" data-i18n="games.southeast">southeast</option>
+            <option value="SW" data-i18n="games.southwest">southwest</option>
+            <option value="NW" data-i18n="games.northwest">northwest</option>
+            <option value="NE" data-i18n="games.northeast">northeast</option>
           </select>
         </div>
         <div class="mosaic-inline-row" id="connect-four-align-row" data-mode-control="connect-four" hidden>
@@ -3168,22 +3238,24 @@
 <footer>
   Browser-side minigames on glued mosaic background spaces.
   <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
-  <span data-i18n="analytics.notice">Anonymous visit, country, and active playtime statistics are collected; no IP addresses, names, room codes, persistent visitor IDs, or game states are stored.</span>
 </footer>
 
-<script src="ramified_minigame_presets/presets.js?v=20260904-1"></script>
+<script src="ramified_minigame_presets/presets.js?v=20261008-3"></script>
 <script src="js/calculator_input_settings.js?v=20260903-1"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20261007-4"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20261012-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
 <script src="js/ramified_minigames_sfx.js?v=20260913-2"></script>
-<script src="js/ramified_minigames_setup.js?v=20261007-1"></script>
-<script src="js/ramified_minigames_player.js?v=20261007-4"></script>
+<script src="js/ramified_minigames_setup.js?v=20261012-1"></script>
+<script src="js/ramified_minigames_sokoban_progress.js?v=20261008-3"></script>
+<script src="js/ramified_minigames_save_slots.js?v=20261010-1"></script>
+<script src="js/ramified_minigames_online.js?v=20261012-1"></script>
+<script src="js/ramified_minigames_player.js?v=20261012-1"></script>
 <script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
 </body>

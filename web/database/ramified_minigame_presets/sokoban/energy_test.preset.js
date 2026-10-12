@@ -1,4 +1,4 @@
-// Save this file as ramified_minigame_presets/energy_test.preset.js
+// Save this file as ramified_minigame_presets/sokoban/energy_test.preset.js
 // Add this entry to ramified_minigame_presets/presets.js:
 // {
 //   "gameTypes": [
@@ -7,7 +7,7 @@
 //   "id": "energy-test",
 //   "label": "energy_test",
 //   "key": "energy_test",
-//   "file": "energy_test.preset.js"
+//   "file": "sokoban/energy_test.preset.js"
 // }
 // Store gameTypes in presets.js only; do not repeat them in this preset file.
 (function(root, factory) {

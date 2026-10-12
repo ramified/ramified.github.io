@@ -1,4 +1,4 @@
-// Save this file as ramified_minigame_presets/remote_rotate.preset.js
+// Save this file as ramified_minigame_presets/sokoban/remote_rotate.preset.js
 // Add this entry to ramified_minigame_presets/presets.js:
 // {
 //   "gameTypes": [
@@ -7,7 +7,7 @@
 //   "id": "remote-rotate",
 //   "label": "remote rotate",
 //   "key": "remote_rotate",
-//   "file": "remote_rotate.preset.js"
+//   "file": "sokoban/remote_rotate.preset.js"
 // },
 // Store gameTypes in presets.js only; do not repeat them in this preset file.
 (function(root, factory) {

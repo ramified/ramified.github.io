@@ -1,4 +1,4 @@
-// Save this file as ramified_minigame_presets/islands.preset.js
+// Save this file as ramified_minigame_presets/sokoban/islands.preset.js
 // Add this entry to ramified_minigame_presets/presets.js:
 // {
 //   "gameTypes": [
@@ -7,7 +7,7 @@
 //   "id": "islands",
 //   "label": "islands",
 //   "key": "islands",
-//   "file": "islands.preset.js"
+//   "file": "sokoban/islands.preset.js"
 // },
 // Store gameTypes in presets.js only; do not repeat them in this preset file.
 (function(root, factory) {
