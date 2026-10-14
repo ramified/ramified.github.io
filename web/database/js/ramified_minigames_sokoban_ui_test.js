@@ -87,7 +87,7 @@ async function run() {
     await click('#canvas-start-begin'); await ready();
     assert.strictEqual(await read('RamifiedMinigames.player.state().sokobanLevelId'),'classic-fans-glue','next is current + 1, not newly unlocked 4');
     await client.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
-    await openMenu(); await click('#player-choose-level');
+    await openMenu(); if (await read('document.querySelector("[data-game-mode=sokoban]").hidden')) await click('#player-games-next'); await click('[data-game-mode="sokoban"]');
     const saved = await saveContents();
     await click('#player-level-1'); await ready();
     assert.strictEqual(await read('document.querySelector("#player-confirm").hidden'),false);
@@ -113,10 +113,10 @@ async function run() {
     await key('r','KeyR',82); await key('r','KeyR',82); await ready();
     assert.strictEqual(await read('RamifiedMinigames.__test.getGame().moves'),0);
     assert.strictEqual(await read('RamifiedMinigames.player.state().sokobanLevelId'),'classic-fans');
-    await openMenu(); await click('#player-home-button'); await click('#player-new'); await click('#player-slot-1'); await chooseGame('[data-game-mode="gomoku"]'); await ready();
+    await click('#fullscreen-settings-open'); await click('#player-home-button'); await click('#player-new'); await click('#player-slot-1'); await chooseGame('[data-game-mode="gomoku"]'); await ready();
     await click('#player-begin'); await click('#player-confirm-new');
     assert.strictEqual((await progress()).unlocked.length,5,'another game preserves progress');
-    await openMenu(); await click('#player-home-button'); await click('#player-new'); await click('#player-slot-1'); await click('#player-games-next'); await chooseGame('[data-game-mode="sokoban"]');
+    await click('#fullscreen-settings-open'); await click('#player-home-button'); await click('#player-new'); await click('#player-slot-1'); await click('#player-games-next'); await chooseGame('[data-game-mode="sokoban"]');
     assert.strictEqual(await read('document.querySelectorAll("#player-level-list > button:not(:disabled)").length'),5);
     // Fail the first request for a not-yet-loaded level, then retry normally.
     await client.send('Network.enable'); await client.send('Network.setBlockedURLs',{urls:['*sokoban/ice_test.preset.js*']});
@@ -128,7 +128,7 @@ async function run() {
     await levelSelect(4);
     assert.strictEqual(await read('RamifiedMinigames.player.state().sokobanLevelId'),'ice-test');
     // Back must discard a pending selection even if its script arrives later.
-    await openMenu(); await click('#player-choose-level');
+    await openMenu(); if (await read('document.querySelector("[data-game-mode=sokoban]").hidden')) await click('#player-games-next'); await click('[data-game-mode="sokoban"]');
     let pausedRequest;
     const pauseListener = event => {const m=JSON.parse(String(event.data));if(m.method==='Fetch.requestPaused')pausedRequest=m.params.requestId;};
     client.socket.addEventListener('message',pauseListener);
@@ -138,7 +138,7 @@ async function run() {
     await client.send('Fetch.continueRequest',{requestId:pausedRequest});
     await client.send('Fetch.disable');client.socket.removeEventListener('message',pauseListener);
     await delay(150);await ready();
-    assert.strictEqual(await read('document.querySelector("#player-game-menu").hidden'),false,'late response does not reopen levels');
+    assert.strictEqual(await read('document.querySelector("#player-games").hidden'),false,'late response does not reopen levels');
     assert.strictEqual(await read('RamifiedMinigames.player.state().sokobanLevelId'),'ice-test');
     // Read every moved file through the browser loader, then restore the live game.
     const levelIds = await read('RamifiedMinigames.player.sokobanLevels().map(p=>p.id)');
@@ -146,11 +146,18 @@ async function run() {
       assert.strictEqual(await read(`RamifiedMinigames.player.beginSetup('sokoban',{presetId:${JSON.stringify(id)}})`),true,id+': browser asset');
       await read('RamifiedMinigames.player.cancelSetup()');
     }
-    await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/ramified_minigames_archive.html`});await ready();
+    await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/archive/ramified_minigames/index.html`});await ready();
     assert.strictEqual(await read("RamifiedMinigames.player.beginSetup('sokoban',{presetId:'pedestrian'})"),true);
     assert.strictEqual(await read('RamifiedMinigames.player.commitSetup()'),true);
     assert.strictEqual(await read('RamifiedMinigames.__test.getGame().preset.id'),'pedestrian');
     assert.strictEqual(await read('RamifiedMinigames.player.state().sokobanLevelId'),null,'archive remains outside campaign progress');
+    await read('RamifiedMinigames.player.settings()');
+    assert.deepStrictEqual(await read('[...document.querySelectorAll("[data-settings-panel]")].map(n=>n.dataset.settingsPanel)'), ['display', 'controls'], 'archive keeps its existing two categories');
+    await click('#fullscreen-settings-controls-tab');
+    assert.strictEqual(await read('document.querySelector("#fullscreen-settings-display").hidden && !document.querySelector("#fullscreen-settings-controls").hidden'), true);
+    await click('#fullscreen-settings-display-tab');
+    assert.strictEqual(await read('!document.querySelector("#fullscreen-settings-display").hidden && document.querySelector("#fullscreen-settings-controls").hidden'), true);
+    await click('#fullscreen-settings-close');
     assert.deepStrictEqual(errors,[]);
     console.log('ramified_minigames_sokoban_ui_test: bilingual grid, narrow/fullscreen, real level 1/2 wins, next, cancel, undo/redo, replay, R, refresh, other-game save, load retry/cancel, all assets and archive passed');
   } finally {

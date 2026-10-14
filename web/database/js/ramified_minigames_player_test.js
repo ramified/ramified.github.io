@@ -224,7 +224,7 @@ async function run() {
   assert.strictEqual(lazyEngine.__test.getGame().preset.id, 'connect-four-6x7');
   assert.strictEqual(lazyEngine.__test.getGame().fallDir, lazyEngine.DIRS.S);
   // The built-in catalog classifies every chess board without materializing it.
-  const catalog = require('../ramified_minigame_presets/presets.js');
+  const catalog = require('../presets/ramified_minigames/presets.js');
   assert.deepStrictEqual(catalog.featuredDefaultFor, catalog.defaultFor);
   for (const preset of catalog.presets.filter(p => p.gameTypes.includes('FIDE Chess'))) {
     assert.ok(['game', 'kingless-puzzle'].includes(preset.fideChessVariant), preset.id);

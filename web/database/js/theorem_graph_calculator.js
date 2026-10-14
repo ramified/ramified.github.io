@@ -1,9 +1,22 @@
 (() => {
   'use strict';
 
+  function listenInputDraft(control, handler, commitHandled = false) {
+    const settings = typeof window !== 'undefined' ? window.CalculatorInputSettings : null;
+    if (settings?.listenEditable) return settings.listenEditable(control, 'input', handler, { commitHandled });
+    return control.addEventListener('input', handler);
+  }
+
+  function syncTitleInput(value) {
+    if (!refs.graphTitle) return;
+    const settings = typeof window !== 'undefined' ? window.CalculatorInputSettings : null;
+    if (settings?.syncEditableValue) settings.syncEditableValue(refs.graphTitle, value);
+    else if (refs.graphTitle.value !== value) refs.graphTitle.value = value;
+  }
+
   const SCHEMA_VERSION = 11;
   const DEFAULT_GRAPH_TITLE = '';
-  const PRESET_FOLDER_URL = 'theorem_graph_presets/';
+  const PRESET_FOLDER_URL = 'presets/theorem_graph/';
   const DEFAULT_PRESET_KEY = 'maintenance_tracker';
   const DEFAULT_NEW_NODE_TYPE = 'misc';
   const DEFAULT_NODE_STROKE = '#7a6f65';
@@ -599,7 +612,7 @@
         selectTitleNodeFromTitleInput();
       });
       refs.graphTitle.addEventListener('click', selectTitleNodeFromTitleInput);
-      refs.graphTitle.addEventListener('input', () => {
+      listenInputDraft(refs.graphTitle, () => {
         if (!state.titleUndoCaptured) {
           pushUndoSnapshot('graph title edit');
           state.titleUndoCaptured = true;
@@ -610,7 +623,7 @@
         updateDocumentTitle();
         syncControls();
         if (state.titleEditorActive) syncEditor();
-      });
+      }, true);
       refs.graphTitle.addEventListener('blur', () => {
         state.graphTitle = cleanGraphTitle(refs.graphTitle.value);
         refs.graphTitle.value = state.graphTitle;
@@ -663,7 +676,7 @@
       refs.arrowColor
     ].forEach((control) => {
       if (!control) return;
-      control.addEventListener('input', autoApplyDetailUpdate);
+      listenInputDraft(control, autoApplyDetailUpdate, shouldAutoApplyOnChange(control));
       if (shouldAutoApplyOnChange(control)) {
         control.addEventListener('change', autoApplyDetailUpdate);
       }
@@ -1211,7 +1224,7 @@
     const graph = currentGraph();
     copySourceNodeToTitleNode(graph.titleNode, owner.node);
     graph.title = graph.titleNode.label;
-    if (refs.graphTitle && refs.graphTitle.value !== graph.title) refs.graphTitle.value = graph.title;
+    syncTitleInput(graph.title);
     return true;
   }
 
@@ -1221,7 +1234,7 @@
     const graph = currentGraph();
     copyTitleNodeToSourceNode(owner.node, graph.titleNode);
     graph.title = graph.titleNode.label;
-    if (refs.graphTitle && refs.graphTitle.value !== graph.title) refs.graphTitle.value = graph.title;
+    syncTitleInput(graph.title);
     return true;
   }
 
@@ -4514,7 +4527,7 @@
     textInput.value = label.text;
     textInput.dataset.arrowLabelRole = 'text';
     textInput.setAttribute('aria-label', 'Arrow label text');
-    textInput.addEventListener('input', (event) => {
+    listenInputDraft(textInput, (event) => {
       syncArrowLabelRowSummary(row);
       autoApplyDetailUpdate(event);
     });
@@ -4808,7 +4821,7 @@
     textarea.value = term.text;
     textarea.dataset.arrowTermRole = 'text';
     textarea.setAttribute('aria-label', `Arrow term ${term.label}`);
-    textarea.addEventListener('input', autoApplyDetailUpdate);
+    listenInputDraft(textarea, autoApplyDetailUpdate);
     textarea.addEventListener('input', () => autoResizeTextarea(textarea));
     textarea.addEventListener('focus', () => {
       state.activeLatexDetailField = arrowTermFieldKey(term.id);
@@ -5178,7 +5191,7 @@
     textarea.spellcheck = true;
     textarea.value = nodeTypeDetailValue(node, detail);
     textarea.dataset.nodeTypeDetailRole = 'text';
-    textarea.addEventListener('input', autoApplyDetailUpdate);
+    listenInputDraft(textarea, autoApplyDetailUpdate);
     textarea.addEventListener('focus', () => {
       state.activeLatexDetailField = nodeTypeDetailFieldKey(detail.id);
       syncLatexDetailFields();
@@ -5328,7 +5341,7 @@
     textarea.spellcheck = true;
     textarea.value = detail.text;
     textarea.dataset.detailRole = 'text';
-    textarea.addEventListener('input', autoApplyDetailUpdate);
+    listenInputDraft(textarea, autoApplyDetailUpdate);
     textarea.addEventListener('focus', () => {
       state.activeLatexDetailField = miscDetailFieldKey(detail.id);
       syncLatexDetailFields();
@@ -5938,7 +5951,7 @@
     node.details = nextDetails;
     if (isTitle) {
       graph.title = node.label;
-      if (refs.graphTitle && refs.graphTitle.value !== node.label) refs.graphTitle.value = node.label;
+      syncTitleInput(node.label);
       updateDocumentTitle();
     }
     node.color = normalizeColor(refs.nodeColor ? refs.nodeColor.value : node.color, (NODE_TYPES[type] || NODE_TYPES[DEFAULT_NEW_NODE_TYPE]).stroke);
@@ -7182,8 +7195,8 @@
     const key = presetKeyFromTitle(preset.title);
     const file = `${key}.preset.js`;
     return [
-      `// Save this file as theorem_graph_presets/${file}`,
-      '// Add this entry to theorem_graph_presets/presets.js:',
+      `// Save this file as presets/theorem_graph/${file}`,
+      '// Add this entry to presets/theorem_graph/presets.js:',
       `// { label: ${JSON.stringify(preset.title)}, key: ${JSON.stringify(key)}, file: ${JSON.stringify(file)} }`,
       'window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};',
       `window.THEOREM_GRAPH_PRESET_DATA.${key} = ${JSON.stringify(preset, null, 2)};`
@@ -8022,7 +8035,7 @@
     setExportMessage(
       registryPresets.length
         ? `Loaded ${registryPresets.length} preset${registryPresets.length === 1 ? '' : 's'} from presets.js.`
-        : 'No presets are registered in theorem_graph_presets/presets.js.',
+        : 'No presets are registered in presets/theorem_graph/presets.js.',
       !registryPresets.length
     );
     syncControls();
@@ -8357,7 +8370,7 @@
     if (refs.graphCountBadge) {
       refs.graphCountBadge.textContent = `${state.nodes.length} node${state.nodes.length === 1 ? '' : 's'}, ${state.arrows.length} arrow${state.arrows.length === 1 ? '' : 's'}`;
     }
-    if (refs.graphTitle && refs.graphTitle.value !== state.graphTitle) refs.graphTitle.value = state.graphTitle;
+    syncTitleInput(state.graphTitle);
     syncCanvasRatioLockControl();
     syncDebugControlValues();
     syncImportModeControls();

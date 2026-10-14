@@ -3,11 +3,11 @@ const fs = require('fs');
 const vm = require('vm');
 
 const game = require('./ramified_minigames_setup.js');
-const presetRegistrySource = require('../ramified_minigame_presets/presets.js');
+const presetRegistrySource = require('../presets/ramified_minigames/presets.js');
 const presetRegistry = presetRegistrySource.presets;
 const presetDefaultFor = presetRegistrySource.defaultFor;
 const presetDataByKey = Object.fromEntries(
-  presetRegistry.map((entry) => [entry.key, require(`../ramified_minigame_presets/${entry.file}`)])
+  presetRegistry.map((entry) => [entry.key, require(`../presets/ramified_minigames/${entry.file}`)])
 );
 
 function billiardsPaletteCanvas() {
@@ -3918,7 +3918,7 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('id="boundary-glue-rect-row"'));
   assert.ok(minigameHtml.includes('<option value="rp2">RP^2</option>'));
   assert.ok(minigameHtml.includes('<option value="random">random boundary glue</option>'));
-  assert.ok(minigameHtml.includes('<script src="ramified_minigame_presets/presets.js"></script>'));
+  assert.ok(minigameHtml.includes('<script src="presets/ramified_minigames/presets.js"></script>'));
   assert.ok(!minigameHtml.includes('<option value="twisted-torus">'));
   assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, '2048')));
   assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, 'Gomoku')));
@@ -3928,7 +3928,7 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, 'Chinese Checkers')));
   assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, 'Sokoban')));
   assert.ok(presetRegistry.every((preset) => Array.isArray(preset.gameTypes) && preset.gameTypes.length >= 1));
-  const presetDir = require('path').resolve(__dirname, '..', 'ramified_minigame_presets');
+  const presetDir = require('path').resolve(__dirname, '..', 'presets/ramified_minigames');
   const presetFilesWithGameTypes = fs.readdirSync(presetDir)
     .filter((file) => file.endsWith('.preset.js'))
     .filter((file) => fs.readFileSync(require('path').join(presetDir, file), 'utf8').includes('"gameTypes"'));
@@ -4039,7 +4039,7 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(mosaicHtml.includes('<select id="export-preset-group"'));
   assert.ok(mosaicHtml.includes('<option value="Connect Four">Connect Four</option>'));
   assert.ok(mosaicHtml.includes('id="export-test-link"'));
-  assert.ok(mosaicHtml.includes('<script src="ramified_minigame_presets/presets.js"></script>'));
+  assert.ok(mosaicHtml.includes('<script src="presets/ramified_minigames/presets.js"></script>'));
   assert.ok(mosaicHtml.includes('<option value="decoration">Add / remove decorations</option>'));
   assert.ok(mosaicHtml.includes('id="background-decoration-kind"'));
   assert.ok(mosaicHtml.includes('id="background-decoration-color"'));
@@ -4159,8 +4159,8 @@ function testPresetFromFullMosaicCalculatorExport() {
 
 function testPresetFromMosaicPresetJsWrapper() {
   const source = [
-    '// Save this file as ramified_minigame_presets/wrapped_export.preset.js',
-    '// Add this entry to ramified_minigame_presets/presets.js:',
+    '// Save this file as presets/ramified_minigames/wrapped_export.preset.js',
+    '// Add this entry to presets/ramified_minigames/presets.js:',
     '(function(root, factory) {',
     '  const preset = factory();',
     "  if (typeof module !== 'undefined' && module.exports) module.exports = preset;",

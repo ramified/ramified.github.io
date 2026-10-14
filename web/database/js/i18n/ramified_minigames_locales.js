@@ -2,6 +2,7 @@
   'use strict';
 
   const pairs = {
+    'setup.presetRegistryEmpty': ['No presets are registered in {{path}}.', '{{path}} 中未注册任何预设。'],
     'lobby.timeControl': ['Time control', '计时方式'],
     'lobby.unlimited': ['Unlimited', '不限时'],
     'lobby.total': ['Total time per side', '每方总时长'],
@@ -322,6 +323,11 @@
     'controls.settingsSections': ['Settings sections', '设置分区'],
     'controls.controlsTab': ['Controls & cards', '键位与卡片'],
     'controls.displayTab': ['Display & sound', '显示与声音'],
+    'settings.general': ['General', '常规'],
+    'settings.display': ['Display', '显示'],
+    'settings.sound': ['Sound', '声音'],
+    'settings.controls': ['Controls', '操作'],
+    'player.returnToPreparation': ['Back to preparation', '返回准备页'],
     'controls.ui.settings': ['Settings', '设置'],
     'controls.ui.openSettings': ['Open settings', '打开设置'],
     'controls.ui.close': ['Close', '关闭'],

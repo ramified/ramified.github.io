@@ -1,15 +1,28 @@
 (() => {
   'use strict';
 
+  function listenInputDraft(control, handler, commitHandled = false) {
+    const settings = typeof window !== 'undefined' ? window.CalculatorInputSettings : null;
+    if (settings?.listenEditable) return settings.listenEditable(control, 'input', handler, { commitHandled });
+    return control.addEventListener('input', handler);
+  }
+
+  function syncInputDraft(control, value) {
+    if (!control) return;
+    const settings = typeof window !== 'undefined' ? window.CalculatorInputSettings : null;
+    if (settings?.syncEditableValue) return settings.syncEditableValue(control, value);
+    control.value = String(value);
+  }
+
   let Billiards = typeof window !== 'undefined' && window.TopologicalBilliardsNative
   ? window.TopologicalBilliardsNative
   : (typeof require === 'function' ? require('./billiards/topological_billiards_native.js') : null);
   let Lianliankan = typeof window !== 'undefined' && window.Lianliankan
   ? window.Lianliankan
-  : (typeof require === 'function' ? require('../lianliankan/lianliankan_engine.js') : null);
+  : (typeof require === 'function' ? require('../archive/lianliankan/lianliankan_engine.js') : null);
   let LianliankanMosaicAdapter = typeof window !== 'undefined' && window.LianliankanMosaicAdapter
   ? window.LianliankanMosaicAdapter
-  : (typeof require === 'function' ? require('../lianliankan/mosaic_adapter.js') : null);
+  : (typeof require === 'function' ? require('../archive/lianliankan/mosaic_adapter.js') : null);
   let KoreanPronunciationAudio = typeof window !== 'undefined' && window.RamifiedKoreanPronunciationAudio
   ? window.RamifiedKoreanPronunciationAudio
   : (typeof require === 'function' ? require('./ramified_minigames_korean_audio.js') : null);
@@ -523,7 +536,7 @@
     return Array.from({ length: cols }, (_, index) => ({ row: 1, col: index + 1 }));
   }
 
-  const PRESET_FOLDER_URL = 'ramified_minigame_presets/';
+  const PRESET_FOLDER_URL = 'presets/ramified_minigames/';
   const PRESET_ASSET_VERSION = '20260904-1';
   const OPTIONAL_SCRIPT_GROUPS = Object.freeze({
     [GAME_MODES.HEX]: Object.freeze([
@@ -537,8 +550,8 @@
       'js/billiards/topological_billiards_native.js?v=20260909-3'
       ]),
     [GAME_MODES.LIANLIANKAN]: Object.freeze([
-      'lianliankan/lianliankan_engine.js?v=20260830-1',
-      'lianliankan/mosaic_adapter.js?v=20260826-2'
+      'archive/lianliankan/lianliankan_engine.js?v=20260830-1',
+      'archive/lianliankan/mosaic_adapter.js?v=20260826-2'
       ])
   });
   const PRESET_GROUP_ORDER = ['Hex', '2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Billiard', 'Tile Matching', 'Sokoban'];
@@ -1239,7 +1252,7 @@
               if (refs.lianliankanTileLevel) refs.lianliankanTileLevel.addEventListener('change', handleLianliankanTileSetChange);
               if (refs.fideChessPuzzleAttackBorders) refs.fideChessPuzzleAttackBorders.addEventListener('change', handleFideChessPuzzleAttackBordersChange);
               if (refs.gomokuSize) refs.gomokuSize.addEventListener('change', handleGomokuSizeChange);
-              if (refs.gomokuSize) refs.gomokuSize.addEventListener('input', handleGomokuSizeChange);
+              if (refs.gomokuSize) listenInputDraft(refs.gomokuSize, handleGomokuSizeChange, true);
               if (refs.hexPieRule) refs.hexPieRule.addEventListener('change', () => {
                 if (isHexGame(game) && game.phase === 'setup') game.pieRule = !!refs.hexPieRule.checked;
                 syncControls();
@@ -1251,10 +1264,10 @@
                 [refs.boundaryGlueRows, refs.boundaryGlueCols].forEach((input) => {
                   if (!input) return;
                   input.addEventListener('change', handleBoundaryGlueBoardChange);
-                  input.addEventListener('input', handleBoundaryGlueBoardChange);
+                  listenInputDraft(input, handleBoundaryGlueBoardChange, true);
                 });
                 if (refs.goKomi) refs.goKomi.addEventListener('change', handleGoKomiChange);
-                if (refs.goKomi) refs.goKomi.addEventListener('input', handleGoKomiChange);
+                if (refs.goKomi) listenInputDraft(refs.goKomi, handleGoKomiChange, true);
                 if (refs.goPass) refs.goPass.addEventListener('click', passGoFromUi);
                 if (refs.goScoreView) refs.goScoreView.addEventListener('change', handleGoScoreViewChange);
                 if (refs.goScoringMethod) refs.goScoringMethod.addEventListener('change', handleGoScoringMethodChange);
@@ -1305,9 +1318,9 @@
                 if (refs.onlineStartClaimedColors) refs.onlineStartClaimedColors.addEventListener('click', startOnlineChineseCheckersWithClaimedColorsFromUi);
                 if (refs.onlineLeaveRoom) refs.onlineLeaveRoom.addEventListener('click', leaveOnlineRoomFromUi);
                 if (refs.onlineRoleOptions) refs.onlineRoleOptions.addEventListener('change', handleOnlineRoleOptionsChange);
-                if (refs.onlineRoomCode) refs.onlineRoomCode.addEventListener('input', syncOnlineControls);
+                if (refs.onlineRoomCode) listenInputDraft(refs.onlineRoomCode, syncOnlineControls);
                 if (refs.onlineRoomSelect) refs.onlineRoomSelect.addEventListener('change', handleOnlineRoomSelectChange);
-                if (refs.onlinePlayerName) refs.onlinePlayerName.addEventListener('input', handleOnlinePlayerNameInput);
+                if (refs.onlinePlayerName) listenInputDraft(refs.onlinePlayerName, handleOnlinePlayerNameInput, true);
                 if (refs.onlinePlayerName) refs.onlinePlayerName.addEventListener('change', sendOnlinePlayerNameUpdate);
                 if (refs.onlineTurnFeedbackDuration) refs.onlineTurnFeedbackDuration.addEventListener('input', syncOnlineTurnFeedbackDurationOutput);
                 if (refs.onlineTurnFeedbackDuration) refs.onlineTurnFeedbackDuration.addEventListener('change', syncOnlineTurnFeedbackDurationOutput);
@@ -1350,7 +1363,7 @@
                   });
                   if (refs.fullscreenSettingsOpen) refs.fullscreenSettingsOpen.addEventListener('click', () => {
                     if (calculatorInputSession) calculatorInputSession.open(refs.fullscreenSettingsOpen);
-                    else openFullscreenSettings('display', refs.fullscreenSettingsOpen);
+                    else openFullscreenSettings(null, refs.fullscreenSettingsOpen);
                   });
                     if (refs.placementPreviewOpacity) refs.placementPreviewOpacity.addEventListener('input', () => {
                       syncPlacementPreviewOpacityOutput();
@@ -1371,6 +1384,17 @@
                       if (refs.fullscreenShowGameTools) refs.fullscreenShowGameTools.addEventListener('change', handleFullscreenGameToolsChange);
                       refs.fullscreenSettingsTabs.forEach((button) => {
                         button.addEventListener('click', () => setFullscreenSettingsPanel(button.dataset.settingsPanel));
+                        button.addEventListener('keydown', (event) => {
+                          const tabs = refs.fullscreenSettingsTabs;
+                          const index = tabs.indexOf(button);
+                          const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length
+                            : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length
+                            : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1;
+                          if (next < 0) return;
+                          event.preventDefault();
+                          setFullscreenSettingsPanel(tabs[next].dataset.settingsPanel);
+                          tabs[next].focus();
+                        });
                       });
                       if (refs.fullscreenUndo) refs.fullscreenUndo.addEventListener('click', undoFromFullscreenAction);
                       if (refs.fullscreenRedo) refs.fullscreenRedo.addEventListener('click', redoFromFullscreenAction);
@@ -4146,7 +4170,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     const catalog = normalizeMinigamePresetCatalog(root.RAMIFIED_MINIGAME_PRESETS);
     const registry = catalog.entries;
     if (!registry.length) {
-      return Promise.reject(new Error('No presets are registered in ramified_minigame_presets/presets.js.'));
+      return Promise.reject(new Error(tk('setup.presetRegistryEmpty', 'No presets are registered in {{path}}.', { path: `${PRESET_FOLDER_URL}presets.js` })));
     }
     return Promise.resolve({
       items: registry.map((entry) => ({ entry, spec: readPreloadedPresetSpec(entry) })),
@@ -5562,7 +5586,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
 
   function handleGomokuSizeChange() {
     const dimensions = selectedBoardDimensions();
-    if (refs.gomokuSize) refs.gomokuSize.value = String(dimensions.rows);
+    syncInputDraft(refs.gomokuSize, dimensions.rows);
     if (selectedPresetUsesDynamicBoardSize()) {
       resetToPreview();
     }
@@ -5615,7 +5639,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleGoKomiChange() {
-    if (refs.goKomi) refs.goKomi.value = formatKomi(selectedGoKomi());
+    syncInputDraft(refs.goKomi, formatKomi(selectedGoKomi()));
     if (isGoGame(game) && game.phase === 'setup') {
       game.komi = selectedGoKomi();
       syncStatusForCurrentGame();
@@ -5677,9 +5701,9 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     if (!refs.gomokuSize || !selectedPresetUsesDynamicBoardSize()) return;
     const preset = selectedPreset();
     const fallback = defaultBoardSizeForPreset(selectedGameMode(), preset);
-    refs.gomokuSize.value = String(fallback);
-    if (refs.boundaryGlueRows) refs.boundaryGlueRows.value = String(fallback);
-    if (refs.boundaryGlueCols) refs.boundaryGlueCols.value = String(fallback);
+    syncInputDraft(refs.gomokuSize, fallback);
+    syncInputDraft(refs.boundaryGlueRows, fallback);
+    syncInputDraft(refs.boundaryGlueCols, fallback);
   }
 
   function setImportToolsVisible(force) {
@@ -7006,7 +7030,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
         dialog: '#fullscreen-settings-dialog',
         trigger: '#fullscreen-settings-open',
         isOpen: () => fullscreenSettingsOpen,
-        open: (_panel, trigger) => openFullscreenSettings('display', trigger),
+        open: (_panel, trigger) => openFullscreenSettings(null, trigger),
         close: () => closeFullscreenSettings()
       }
     });
@@ -9919,17 +9943,19 @@ function handleFullscreenGameToolsChange() {
 }
 
 function setFullscreenSettingsPanel(panel) {
-  fullscreenSettingsPanel = panel === 'display' ? 'display' : 'controls';
+  const tabs = refs.fullscreenSettingsTabs;
+  const activeTab = tabs.find((button) => button.dataset.settingsPanel === panel) || tabs[0];
+  fullscreenSettingsPanel = activeTab?.dataset.settingsPanel || 'display';
   refs.fullscreenSettingsTabs.forEach((button) => {
     const selected = button.dataset.settingsPanel === fullscreenSettingsPanel;
     button.setAttribute('aria-selected', selected ? 'true' : 'false');
     button.tabIndex = selected ? 0 : -1;
+    const content = document.getElementById(button.getAttribute('aria-controls'));
+    if (content) content.hidden = !selected;
   });
-  if (refs.fullscreenSettingsControls) refs.fullscreenSettingsControls.hidden = fullscreenSettingsPanel !== 'controls';
-  if (refs.fullscreenSettingsDisplay) refs.fullscreenSettingsDisplay.hidden = fullscreenSettingsPanel !== 'display';
 }
 
-function openFullscreenSettings(panel = 'display', trigger = null) {
+function openFullscreenSettings(panel = null, trigger = null) {
   clearWrappedViewGestures();
   if (!refs.fullscreenSettingsOverlay) return;
   fullscreenSettingsReturnFocus = trigger || (typeof document !== 'undefined' ? document.activeElement : null);
@@ -9941,10 +9967,13 @@ function openFullscreenSettings(panel = 'display', trigger = null) {
   syncFullscreenSettingsUi();
   setFullscreenSettingsPanel(panel);
   if (calculatorInputSession) calculatorInputSession.refresh();
-  const tabForPanel = (name) => refs.fullscreenSettingsTabs.find((button) => button.dataset.settingsPanel === name);
-  const focusTarget = fullscreenSettingsPanel === 'controls'
-  ? (refs.fullscreenSettingsControls?.querySelector('.calculator-input-binding, .calculator-input-add') || tabForPanel('controls') || refs.fullscreenSettingsClose)
-  : (refs.fullscreenSoundEnabled || tabForPanel('display') || refs.fullscreenSettingsClose);
+  const tab = refs.fullscreenSettingsTabs.find((button) => button.dataset.settingsPanel === fullscreenSettingsPanel);
+  const content = tab && document.getElementById(tab.getAttribute('aria-controls'));
+  if (content) content.scrollTop = 0;
+  const focusTarget = playerShellEnabled ? tab || refs.fullscreenSettingsClose
+    : fullscreenSettingsPanel === 'controls'
+      ? (refs.fullscreenSettingsControls?.querySelector('.calculator-input-binding, .calculator-input-add') || tab || refs.fullscreenSettingsClose)
+      : (refs.fullscreenSoundEnabled || tab || refs.fullscreenSettingsClose);
   if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
 }
 
@@ -31272,21 +31301,21 @@ function syncBoundaryGlueBoardControls() {
     const value = shape === 'rectangle'
     ? normalizeBoundaryGlueBoardSize(refs.gomokuSize.value || defaults.rows, defaults.rows)
     : selectedBoardDimensions().rows;
-    refs.gomokuSize.value = String(value);
+    syncInputDraft(refs.gomokuSize, value);
   }
   if (refs.boundaryGlueRows) {
     refs.boundaryGlueRows.min = String(BOUNDARY_GLUE_MIN_BOARD_SIZE);
     refs.boundaryGlueRows.max = String(BOUNDARY_GLUE_MAX_BOARD_SIZE);
     refs.boundaryGlueRows.step = '1';
     refs.boundaryGlueRows.disabled = !active || shape !== 'rectangle';
-    refs.boundaryGlueRows.value = String(normalizeBoundaryGlueBoardSize(refs.boundaryGlueRows.value || defaults.rows, defaults.rows));
+    syncInputDraft(refs.boundaryGlueRows, normalizeBoundaryGlueBoardSize(refs.boundaryGlueRows.value || defaults.rows, defaults.rows));
   }
   if (refs.boundaryGlueCols) {
     refs.boundaryGlueCols.min = String(BOUNDARY_GLUE_MIN_BOARD_SIZE);
     refs.boundaryGlueCols.max = String(BOUNDARY_GLUE_MAX_BOARD_SIZE);
     refs.boundaryGlueCols.step = '1';
     refs.boundaryGlueCols.disabled = !active || shape !== 'rectangle';
-    refs.boundaryGlueCols.value = String(normalizeBoundaryGlueBoardSize(refs.boundaryGlueCols.value || defaults.cols, defaults.cols));
+    syncInputDraft(refs.boundaryGlueCols, normalizeBoundaryGlueBoardSize(refs.boundaryGlueCols.value || defaults.cols, defaults.cols));
   }
 }
 
@@ -31336,7 +31365,7 @@ function syncConnectFourFallInputFromGame() {
 
 function syncGoKomiInputFromGame() {
   if (!refs.goKomi || !isGoGame(game)) return;
-  refs.goKomi.value = formatKomi(game.komi);
+  syncInputDraft(refs.goKomi, formatKomi(game.komi));
 }
 
 function syncGoScoringMethodInputFromGame() {

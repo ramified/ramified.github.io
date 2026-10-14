@@ -94,21 +94,24 @@
       const node = byId(id);
       if (node) byId('player-action-controls').append(node);
     });
-    byId('player-toolbar').append(byId('fullscreen-action-shell'));
+    byId('player-toolbar').prepend(byId('fullscreen-action-shell'));
     byId('player-action-controls').append(byId('fullscreen-lianliankan-actions'));
     const language = document.querySelector('body > header .site-language-control');
     if (language) byId('player-language').append(language);
 
     function sync() {
       const state = engine.state();
+      byId('player-return-to-setup').hidden = !state.browsing || !menu.hidden;
       if (!restoring && activeSlot !== null && !state.online && state.solved && state.sokobanLevelId) save();
       syncLevels(state);
       if (page === 'slots') syncSlots(state);
       if (page === 'games') syncGameEntry(state);
       if (page === 'slot-confirm') syncSlotConfirmation();
       if (page === 'confirm') byId('player-replace-text').textContent = tk('player.replaceSlot', 'Start a new game in save {{number}}? This replaces its current game. Sokoban progress is kept.', { number: selectedSlot + 1 });
-      byId('player-choose-level').hidden = activeSlot === null || state.mode !== 'sokoban' || state.online;
-      byId('player-resume').disabled = activeSlot === null && !state.online;
+      const returnKey = online?.flow() ? 'player.chooseGame' : engine.onlineInfo().joined ? 'lobby.room'
+        : selectedSlot !== null || activeSlot !== null ? 'player.chooseGame' : 'player.chooseSave';
+      byId('player-menu-button').dataset.i18n = returnKey;
+      byId('player-menu-button').textContent = tk(returnKey);
       byId('player-new').disabled = !state.ready || restoring || setupBusy;
       byId('player-online-open').disabled = !state.ready || restoring || setupBusy;
       const layout = state.browsing ? PREPARATION_LAYOUTS[state.mode] || null : null;
@@ -187,7 +190,6 @@
       engine.cancelSetup();
       pendingLevelId = null;
       levelsParent = parent;
-      if (parent === 'game-menu') selectedSlot = activeSlot;
       save();
       show('levels', parent);
     }
@@ -420,6 +422,7 @@
       document.body.classList.toggle('player-menu-open', open);
       engine.setMenuOpen(open);
       syncModalInput();
+      byId('player-return-to-setup').hidden = open || !engine.state().browsing;
       if (!open) canvas.focus();
     }
 
@@ -427,13 +430,13 @@
       page = next;
       backPage = parent;
       pages.forEach((node) => { node.hidden = node.id !== `player-${next}`; });
-      byId('player-back').hidden = next === 'home' || next === 'game-menu';
+      byId('player-back').hidden = next === 'home';
       const titleKeys = {
-        home: 'meta.heading', 'game-menu': 'player.menu', games: 'player.chooseGame',
+        home: 'meta.heading', games: 'player.chooseGame',
         setup: PREPARATION_LAYOUTS[engine.state().mode]?.title || 'player.gameOptions', 'chess-category': 'games.chess', 'board-options': 'player.moreOptions', confirm: 'player.start',
         levels: 'player.chooseLevel',
         slots: 'player.chooseSave', 'slot-confirm': 'player.chooseSave',
-        display: 'setup.display', online: 'online.title', lobby: 'online.title', room: 'lobby.room'
+        online: 'online.title', lobby: 'online.title', room: 'lobby.room'
       };
       byId('player-menu-title').dataset.i18n = titleKeys[next];
       byId('player-menu-title').textContent = window.SiteI18n.t(titleKeys[next]);
@@ -451,19 +454,26 @@
     byId('player-menu-button').addEventListener('click', () => {
       engine.closeSettings();
       save();
-      show(engine.state().browsing ? 'setup' : activeSlot !== null || engine.state().online ? 'game-menu' : 'home');
+      if (online?.flow()) { online.cancelRequest(); showGames(); return; }
+      if (engine.onlineInfo().joined) { online.open(); return; }
+      if (menu.hidden || selectedSlot === null) selectedSlot = activeSlot;
+      showGames();
     });
-    byId('player-resume').addEventListener('click', () => setOpen(false));
-    byId('player-home-button').addEventListener('click', () => { save(); show('home'); });
-    byId('player-choose-level').addEventListener('click', () => showLevels('game-menu'));
+    byId('player-home-button').addEventListener('click', () => {
+      engine.closeSettings(); save(); ++setupRequest;
+      setupBusy = false; restoring = false;
+      if (engine.state().online) { online.home(); return; }
+      engine.cancelSetup(); show('home');
+    });
     document.addEventListener('ramified-player-sokoban-action', event => {
       const state = engine.state();
       if (state.online || !state.solved || !state.sokobanLevelId) return;
+      selectedSlot = activeSlot;
       const next = levelIds[levelIds.indexOf(state.sokobanLevelId) + 1];
       if (event.detail.action === 'sokoban-next' && next) {
-        levelsParent = 'game-menu';
+        levelsParent = 'games';
         chooseLevel(next, { next: true });
-      } else showLevels('game-menu');
+      } else showLevels('games');
     });
     function goBack() {
       if (online?.busy()) online.cancelRequest();
@@ -508,11 +518,11 @@
     });
     byId('player-view-board').addEventListener('click', () => setOpen(false));
     byId('player-edit-balls').addEventListener('click', () => setOpen(false));
+    byId('player-return-to-setup').addEventListener('click', () => show('setup', 'games', 'player-more'));
     for (const button of byId('player-chess-category').querySelectorAll('[data-chess-category]')) {
       button.addEventListener('click', () => chooseGame('fide-chess', button.dataset.chessCategory));
     }
     byId('player-settings').addEventListener('click', () => engine.settings());
-    byId('player-game-settings').addEventListener('click', () => engine.settings());
     function showGames({ resetPage = false } = {}) {
       if (selectedSlot === null && !online?.flow()) { showSlots(); return; }
       ++setupRequest;
@@ -673,22 +683,6 @@
     document.addEventListener('ramified-player-start-request', requestStart);
     byId('player-confirm-new').addEventListener('click', startPreparedGame);
     byId('player-cancel-new').addEventListener('click', () => pendingLevelId ? showLevels() : show('setup', 'games'));
-    menu.querySelectorAll('[data-player-page]').forEach((button) => {
-      button.addEventListener('click', () => {
-        if (button.dataset.playerPage === 'online') { online.open(); return; }
-        if (button.dataset.playerPage === 'setup' && engine.onlineInfo().joined) {
-          if (engine.onlineInfo().hostId === engine.onlineInfo().clientId) online.prepare(true);
-          else online.open();
-          return;
-        }
-        if (button.dataset.playerPage === 'setup' && !engine.state().online) {
-          selectedSlot = activeSlot;
-          showGames({ resetPage: true });
-          return;
-        }
-        show(button.dataset.playerPage, 'game-menu');
-      });
-    });
     byId('player-new').addEventListener('click', () => {
       if (engine.state().online) { setOpen(false); return; }
       showSlots();
@@ -701,8 +695,7 @@
       if (!menu.hidden) {
         if (event.key === 'Escape') {
           event.preventDefault();
-          if (page === 'game-menu') setOpen(false);
-          else if (page !== 'home') goBack();
+          if (page !== 'home') goBack();
         } else if (event.key === 'Tab') {
           const focusable = Array.from(menu.querySelectorAll('button, select, input, textarea, a[href], summary'))
             .filter((node) => !node.disabled && node.getClientRects().length);
@@ -727,14 +720,10 @@
     document.addEventListener('fullscreenchange', sync);
     new MutationObserver(() => {
       syncModalInput();
-      if (!byId('fullscreen-settings-overlay').hidden && !byId('fullscreen-settings-display').hidden) {
-        // The player page starts with language; the shared engine initially focuses sound.
-        byId('player-language').querySelector('select')?.focus({ preventScroll: true });
-        byId('fullscreen-settings-display').scrollTo(0, 0);
-      } else if (byId('fullscreen-settings-overlay').hidden
+      if (byId('fullscreen-settings-overlay').hidden
         && (document.activeElement === document.body || document.activeElement?.closest('#fullscreen-settings-overlay'))) {
         const target = menu.hidden ? 'fullscreen-settings-open'
-          : page === 'home' ? 'player-settings' : page === 'game-menu' ? 'player-game-settings' : 'player-back';
+          : page === 'home' ? 'player-settings' : 'player-back';
         byId(target).focus();
       }
     }).observe(byId('fullscreen-settings-overlay'), { attributes: true, attributeFilter: ['hidden'] });

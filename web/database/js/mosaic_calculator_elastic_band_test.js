@@ -1510,13 +1510,13 @@ assert.strictEqual(removedBlocked.point.tileIndex, 1);
 // certified cellular-to-quotient initialization. In particular, a1 ends at
 // a glued removed-region corner and a2 needs more than eight ordinary tile
 // chart transitions after its portal crossing.
-const genusFourEntry = require('../ramified_minigame_presets/presets.js').presets.find((entry) => (
+const genusFourEntry = require('../presets/ramified_minigames/presets.js').presets.find((entry) => (
   entry.id === 'gomoku-m4-15x15'
 ));
 const genusFourPayload = elastic.normalizeExportImportPayload(
   elastic.materializeMinigamePresetForMosaic(
     genusFourEntry,
-    require('../ramified_minigame_presets/gomoku_m4_15x15.preset.js'),
+    require('../presets/ramified_minigames/gomoku_m4_15x15.preset.js'),
     '2048'
   )
 );
@@ -1800,7 +1800,7 @@ const sourceText = fs.readFileSync(path.join(__dirname, 'mosaic_calculator.js'),
 const htmlText = fs.readFileSync(path.join(__dirname, '..', 'mosaic_calculator.html'), 'utf8');
 assert.strictEqual(htmlText.includes('id="homology-cord-contraction-strength"'), false);
 assert.ok(htmlText.includes('id="homology-cord-relax-speed" min="0.1" max="10" step="0.1" value="10"'));
-assert.ok(htmlText.includes('js/mosaic_calculator.js?v=hyperbolic-metric-1'));
+assert.match(htmlText, /src="js\/mosaic_calculator\.js\?v=[^"\s]+"/);
 assert.ok(htmlText.includes('id="homology-local-chart-card"'));
 assert.ok(htmlText.includes('id="homology-local-chart-radius-controls"'));
 assert.ok(htmlText.includes('id="homology-local-chart-wide"'));

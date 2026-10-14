@@ -3815,8 +3815,8 @@
       .split('\n')
       .map((line, index, lines) => `// ${line}${index === lines.length - 1 ? ',' : ''}`);
     return [
-      `// Save this file as ramified_minigame_presets/${registryEntry.file}`,
-      '// Add this entry to ramified_minigame_presets/presets.js:',
+      `// Save this file as presets/ramified_minigames/${registryEntry.file}`,
+      '// Add this entry to presets/ramified_minigames/presets.js:',
       ...registryHint,
       '// Store gameTypes in presets.js only; do not repeat them in this preset file.',
       '(function(root, factory) {',
@@ -3905,7 +3905,7 @@
     const root = typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null);
     let registry = root && root.RAMIFIED_MINIGAME_PRESETS;
     if (!registry && typeof require === 'function') {
-      try { registry = require('../ramified_minigame_presets/presets.js'); } catch (_) { registry = null; }
+      try { registry = require('../presets/ramified_minigames/presets.js'); } catch (_) { registry = null; }
     }
     const entries = Array.isArray(registry) ? registry : (registry && Array.isArray(registry.presets) ? registry.presets : []);
     return entries.map((entry) => {
@@ -3962,13 +3962,13 @@
     const loaded = root && root.RAMIFIED_MINIGAME_PRESET_DATA && root.RAMIFIED_MINIGAME_PRESET_DATA[entry.key];
     if (loaded) return Promise.resolve(JSON.parse(JSON.stringify(loaded)));
     if (typeof require === 'function') {
-      try { return Promise.resolve(JSON.parse(JSON.stringify(require(`../ramified_minigame_presets/${entry.file}`)))); } catch (_) {}
+      try { return Promise.resolve(JSON.parse(JSON.stringify(require(`../presets/ramified_minigames/${entry.file}`)))); } catch (_) {}
     }
     if (minigamePresetLoadCache.has(entry.key)) return minigamePresetLoadCache.get(entry.key);
     if (typeof document === 'undefined' || !document.createElement) return Promise.reject(new Error('Minigame preset loading is unavailable.'));
     const request = new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = `ramified_minigame_presets/${entry.file.split('/').map(encodeURIComponent).join('/')}?v=20260826-2`;
+      script.src = `presets/ramified_minigames/${entry.file.split('/').map(encodeURIComponent).join('/')}?v=20260826-2`;
       script.async = true;
       script.onload = () => {
         const data = root && root.RAMIFIED_MINIGAME_PRESET_DATA && root.RAMIFIED_MINIGAME_PRESET_DATA[entry.key];
@@ -30327,7 +30327,12 @@
   }
 
   function extractExportImportRegistryMetadata(text) {
-    const marker = 'Add this entry to ramified_minigame_presets/presets.js:';
+    const markers = [
+      'Add this entry to presets/ramified_minigames/presets.js:',
+      'Add this entry to ramified_minigame_presets/presets.js:'
+    ];
+    const marker = markers.find((candidate) => String(text || '').includes(candidate));
+    if (!marker) return null;
     const markerIndex = String(text || '').indexOf(marker);
     if (markerIndex < 0) return null;
     const commentText = String(text)
@@ -31717,7 +31722,7 @@
     }
     if (typeof require === 'function') {
       try {
-        const registry = require('../ramified_minigame_presets/presets.js');
+        const registry = require('../presets/ramified_minigames/presets.js');
         const entries = Array.isArray(registry) ? registry : (registry && Array.isArray(registry.presets) ? registry.presets : []);
         entries.forEach((entry) => {
           gameTypesFromPresetLike(entry).forEach((gameType) => groups.add(gameType));

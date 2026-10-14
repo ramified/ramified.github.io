@@ -3,7 +3,7 @@ const assert = require('assert');
 const vm = require('vm');
 const progressApi = require('./ramified_minigames_sokoban_progress.js');
 const { createHeadlessDomHarness } = require('./ramified_minigames_setup_test.js');
-const catalog = require('../ramified_minigame_presets/presets.js');
+const catalog = require('../presets/ramified_minigames/presets.js');
 const levels = catalog.presets.filter(p => p.gameTypes.includes('Sokoban'));
 const ids = levels.map(p => p.id);
 
@@ -11,7 +11,7 @@ async function run() {
   assert.deepStrictEqual(ids, ['classic-fans', 'pedestrian', 'classic-fans-glue', 'ice-test', 'curling-on-cube', 'easy-energy-bridge', 'energy-test', 'cross', 'expand', 'orbox-b', 'orbox-b-glued', 'loop', 'curling', 'remote-rotate', 'remote-control', 'islands', 'expand2', 'expand3', 'bridges-blocking']);
   for (const level of levels) {
     assert(level.file.startsWith('sokoban/'));
-    assert.strictEqual(require('../ramified_minigame_presets/' + level.file).id, level.id);
+    assert.strictEqual(require('../presets/ramified_minigames/' + level.file).id, level.id);
   }
   let stored;
   const storage = { getItem: () => stored, setItem: (_, value) => { stored = value; } };
@@ -79,14 +79,14 @@ async function run() {
 
   const mosaic = require('./mosaic_calculator.js').__test;
   for (const entry of levels) {
-    const data = require('../ramified_minigame_presets/' + entry.file);
+    const data = require('../presets/ramified_minigames/' + entry.file);
     const imported = mosaic.normalizeExportImportPayload(mosaic.materializeMinigamePresetForMosaic(entry, data));
     assert(imported.rows > 0 && imported.cols > 0, entry.id + ': calculator import');
   }
   mosaic.setTestBoard({ rows: 4, cols: 4 });
   mosaic.setTestExportControls({ type: 'minigame', format: 'dsl', label: 'New Sokoban Level', group: 'Sokoban' });
   let source = mosaic.buildExportText();
-  assert.match(source, /Save this file as ramified_minigame_presets\/sokoban\/new_sokoban_level\.preset\.js/);
+  assert.match(source, /Save this file as presets\/ramified_minigames\/sokoban\/new_sokoban_level\.preset\.js/);
   const scope = { module: { exports: {} }, globalThis: {} }; vm.runInNewContext(source, scope);
   const exported = scope.module.exports;
   assert.strictEqual(exported.id, 'new-sokoban-level');

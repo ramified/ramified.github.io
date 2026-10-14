@@ -528,7 +528,7 @@
       refs.finiteFieldPrime.addEventListener('paste', () => { state.finiteFieldPrimeTextEditing = true; });
       refs.finiteFieldPrime.addEventListener('change', () => {
         try {
-          setFiniteFieldPrime(currentFiniteFieldPrime());
+          setFiniteFieldPrime(refs.finiteFieldPrime.value || state.finiteFieldPrime);
         } catch (_) {}
         state.finiteFieldPrimeTextEditing = false;
         clearOperationResult();
@@ -622,7 +622,12 @@
   }
 
   function currentFiniteFieldPrime() {
-    return normalizePrime(refs.finiteFieldPrime ? refs.finiteFieldPrime.value : state.finiteFieldPrime);
+    const raw = refs.finiteFieldPrime ? refs.finiteFieldPrime.value : state.finiteFieldPrime;
+    const candidate = Number(raw);
+    if (String(raw).trim() === '' || (state.finiteFieldPrimeTextEditing && !isPrimeInt(candidate))) {
+      return state.finiteFieldPrime;
+    }
+    return normalizePrime(raw);
   }
 
   function currentFieldInfo() {
@@ -636,6 +641,11 @@
     return { kind: type };
   }
 
+  function fieldHasFocus(control) {
+    const root = control?.getRootNode?.() || control?.ownerDocument;
+    return root?.activeElement === control || (typeof document !== 'undefined' && document.activeElement === control);
+  }
+
   function updateFieldControls() {
     const finiteField = isFiniteFieldMode();
     const rationalFunction = currentDataType() === 'rational-function';
@@ -647,16 +657,16 @@
     if (refs.numberFieldSymbolLabel) refs.numberFieldSymbolLabel.hidden = !numberField;
     if (refs.numberFieldPolynomialLabel) refs.numberFieldPolynomialLabel.hidden = !numberField;
     if (refs.numberFieldSymbol) refs.numberFieldSymbol.hidden = !numberField;
-    if (refs.finiteFieldPrime && finiteField && !refs.finiteFieldPrime.value) {
+    if (refs.finiteFieldPrime && finiteField && !refs.finiteFieldPrime.value && !fieldHasFocus(refs.finiteFieldPrime)) {
       refs.finiteFieldPrime.value = String(state.finiteFieldPrime);
     }
-    if (refs.rationalFunctionVariable && rationalFunction && !refs.rationalFunctionVariable.value) {
+    if (refs.rationalFunctionVariable && rationalFunction && !refs.rationalFunctionVariable.value && !fieldHasFocus(refs.rationalFunctionVariable)) {
       refs.rationalFunctionVariable.value = state.rationalFunctionVariables.join(', ');
     }
-    if (refs.numberFieldGenerator && numberField && !refs.numberFieldGenerator.value) {
+    if (refs.numberFieldGenerator && numberField && !refs.numberFieldGenerator.value && !fieldHasFocus(refs.numberFieldGenerator)) {
       refs.numberFieldGenerator.value = state.numberFieldSymbol;
     }
-    if (refs.numberFieldPolynomial && numberField && !refs.numberFieldPolynomial.value) {
+    if (refs.numberFieldPolynomial && numberField && !refs.numberFieldPolynomial.value && !fieldHasFocus(refs.numberFieldPolynomial)) {
       refs.numberFieldPolynomial.value = state.numberFieldPolynomial;
     }
     renderFiniteFieldSymbol();

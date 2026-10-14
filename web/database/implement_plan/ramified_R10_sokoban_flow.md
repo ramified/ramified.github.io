@@ -9,7 +9,7 @@
 - 第一版选关使用数字，后续再考虑其他展示。
 - 最初可玩前 3 关，每成功一关增加解锁一关。
 - 通关后提示玩家进入下一关，替代“再来一局”作为主要操作。
-- 推箱子预设单独存放在 `ramified_minigame_presets/sokoban/`。
+- 推箱子预设单独存放在 `presets/ramified_minigames/sokoban/`。
 - **现有目录顺序就是正确关卡顺序，作为正式顺序保留，不是临时排序。**
 
 ## 2. 文件组织与关卡顺序
@@ -17,7 +17,7 @@
 已实施结构：
 
 ```text
-ramified_minigame_presets/
+presets/ramified_minigames/
   presets.js
   sokoban/
     classic_fans.preset.js
@@ -87,7 +87,7 @@ ramified_minigame_presets/
 
 ## 4. 目录迁移及维护入口
 
-- `ramified_minigame_presets/presets.js`：统一索引和唯一关卡顺序来源，19 个 `file` 改为子目录路径。
+- `presets/ramified_minigames/presets.js`：统一索引和唯一关卡顺序来源，19 个 `file` 改为子目录路径。
 - `js/ramified_minigames_sokoban_progress.js`：长期记录、去重、解锁与存储失败处理。
 - `js/ramified_minigames_player.js`：数字选关、加载／取消、新局确认及下一关路由。
 - `js/ramified_minigames_setup.js`：精确加载所选关卡、官方 ID 随游戏／存档保留、原通关提示适配。

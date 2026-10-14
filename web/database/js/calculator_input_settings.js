@@ -8,6 +8,148 @@
   const sessions = new Map();
   let listenersReady = false;
 
+  // The DOM holds the editing draft. Application handlers may publish a valid
+  // preview, but must not replace the user's text or caret during input.
+  const inputDrafts = new WeakMap();
+
+  function textControl(control) {
+    if (!control) return false;
+    const tag = String(control.tagName || '').toUpperCase();
+    return tag === 'TEXTAREA' || (tag === 'INPUT'
+      && ['text', 'number', 'search', 'url', 'email', 'tel', 'password'].includes(String(control.type || 'text').toLowerCase()));
+  }
+
+  function editableTextControl(control) {
+    return textControl(control) && !control.disabled && !control.readOnly;
+  }
+
+  function focusedControl(control) {
+    const root = control?.getRootNode?.() || control?.ownerDocument;
+    return root?.activeElement === control || control?.ownerDocument?.activeElement === control;
+  }
+
+  function usableNumberDraft(control) {
+    if (String(control.type).toLowerCase() !== 'number') return true;
+    return String(control.value).trim() !== '' && Number.isFinite(Number(control.value))
+      && (!control.validity || control.validity.valid);
+  }
+
+  function prepareDraftCommit(control, draft) {
+    if (control.type === 'number'
+      && (control.value === '' || control.validity?.badInput)
+      && draft.lastValidValue != null) control.value = draft.lastValidValue;
+    draft.committing = true;
+  }
+
+  function dispatchDraftEvent(control, type) {
+    const EventClass = control.ownerDocument?.defaultView?.Event
+      || (typeof Event !== 'undefined' ? Event : null);
+    if (EventClass && control.isConnected !== false) control.dispatchEvent(new EventClass(type, { bubbles: true }));
+  }
+
+  function draftForControl(control) {
+    if (inputDrafts.has(control)) return inputDrafts.get(control);
+    const draft = { dirty: false, composing: false, committing: false,
+      lastValidValue: usableNumberDraft(control) ? control.value : null,
+      publishedValue: null, inputHandlers: [], changeHandlers: [] };
+    inputDrafts.set(control, draft);
+    control.addEventListener('focus', () => {
+      if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+    });
+    control.addEventListener('compositionstart', () => { draft.composing = true; });
+    control.addEventListener('compositionend', () => {
+      draft.composing = false;
+      // Browsers differ in whether the final input precedes compositionend.
+      // Publish once if that final input was deferred during composition.
+      queueMicrotask(() => {
+        if (draft.dirty && draft.publishedValue !== control.value && !draft.composing) dispatchDraftEvent(control, 'input');
+      });
+    });
+    control.addEventListener('change', (event) => {
+      prepareDraftCommit(control, draft);
+      if (!draft.changeHandlers.length && !draft.externalCommit) {
+        for (const handler of draft.inputHandlers) handler.call(control, event);
+      }
+      queueMicrotask(() => {
+        draft.dirty = false;
+        draft.committing = false;
+        if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+      });
+    }, true);
+    control.addEventListener('blur', () => {
+      queueMicrotask(() => {
+        if (draft.dirty && !draft.committing && !draft.composing) dispatchDraftEvent(control, 'change');
+      });
+    });
+    return draft;
+  }
+
+  function restoreInputDraft(control, snapshot) {
+    let target = control;
+    if (control.isConnected === false && control.id) {
+      target = snapshot.root?.getElementById?.(control.id);
+      if (!target && snapshot.root?.querySelector && typeof CSS !== 'undefined') {
+        target = snapshot.root.querySelector(`#${CSS.escape(control.id)}`);
+      }
+    }
+    if (!target || target.isConnected === false || !editableTextControl(target)) return;
+    if (target.value !== snapshot.value) target.value = snapshot.value;
+    if (snapshot.focused && snapshot.root?.activeElement !== target
+      && (snapshot.root?.activeElement === control || !snapshot.root?.activeElement
+        || snapshot.root.activeElement === snapshot.root.body)) target.focus?.({ preventScroll: true });
+    if (snapshot.start != null && target.setSelectionRange) {
+      target.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+    }
+  }
+
+  function listenEditable(control, type, handler, options) {
+    if (!control?.addEventListener) return;
+    if (!['input', 'change'].includes(type)) {
+      control.addEventListener(type, handler, options);
+      return;
+    }
+    if (textControl(control)) {
+      const draft = draftForControl(control);
+      if (options?.commitHandled) draft.externalCommit = true;
+      const handlers = type === 'input' ? draft.inputHandlers : draft.changeHandlers;
+      if (!handlers.includes(handler)) handlers.push(handler);
+    }
+    control.addEventListener(type, function(event) {
+      const target = event.target || control;
+      if (!editableTextControl(target)) return handler.call(this, event);
+      const draft = draftForControl(target);
+      if (type !== 'input' || draft.committing) return handler.call(this, event);
+      draft.dirty = true;
+      if (event.isComposing || draft.composing || !usableNumberDraft(target)) return;
+      // A number input can expose "1" while visually holding "1.". Avoid a
+      // value write that would erase the decimal point before the next digit.
+      if (target.type === 'number' && /[.eE+-]$/.test(String(event.data || ''))) return;
+      const snapshot = { value: target.value, start: target.selectionStart,
+        end: target.selectionEnd, direction: target.selectionDirection,
+        root: target.getRootNode?.() || target.ownerDocument, focused: focusedControl(target) };
+      try {
+        return handler.call(this, event);
+      } finally {
+        if (usableNumberDraft(target)) draft.lastValidValue = target.value;
+        draft.publishedValue = draft.dirty ? snapshot.value : target.value;
+        if (draft.dirty) restoreInputDraft(target, snapshot);
+      }
+    }, options);
+  }
+
+  function syncEditableValue(control, value, { force = false } = {}) {
+    if (!control) return false;
+    const draft = inputDrafts.get(control);
+    if (!force && editableTextControl(control) && focusedControl(control)
+      && draft && !draft.committing && (draft.dirty || draft.composing)) return false;
+    if (control.value !== String(value)) control.value = String(value);
+    if (draft) {
+      if (force) draft.dirty = false;
+      if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+    }
+    return true;
+  }
+
   const DEFAULT_STRINGS = Object.freeze({
     settings: 'Settings',
     openSettings: 'Open settings',
@@ -824,6 +966,8 @@
     STORAGE_PREFIX,
     MAX_BINDINGS,
     register,
+    listenEditable,
+    syncEditableValue,
     getSession: (pageId) => sessions.get(String(pageId || '')) || null,
     setCardVisible(pageId, cardId, visible) {
       const session = sessions.get(String(pageId || ''));

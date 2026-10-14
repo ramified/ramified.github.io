@@ -122,7 +122,7 @@ module.exports = async function checkPreparationPages({ client, mouse, read, cli
       await mouse(client, 'mousePressed', point.x, point.y, 1); await mouse(client, 'mouseReleased', point.x, point.y, 0);
       const arranged = await read('JSON.stringify(RamifiedMinigames.__test.getGame().balls)');
       assert.notStrictEqual(arranged, beforeBalls, 'placing a numbered ball edits the original board');
-      await click('#fullscreen-settings-open'); await click('#player-menu-button');
+      await click('#player-return-to-setup');
       await click('#player-board-next'); await ready(); await click('#player-board-previous'); await ready();
       assert.strictEqual(await read('document.querySelector("#billiards-tile-length").value'), '0.2', 'physical board dimensions survive browsing');
       assert.strictEqual(await read('JSON.stringify(RamifiedMinigames.__test.getGame().balls)'), arranged, 'browsing retains the arrangement');
@@ -141,6 +141,20 @@ module.exports = async function checkPreparationPages({ client, mouse, read, cli
     await waitFor(() => read('!RamifiedMinigames.player.state().browsing && document.querySelector("#player-menu").hidden'), 10000, mode + ': actual start');
     assert.strictEqual(await read('JSON.stringify(RamifiedMinigames.__test.getGame().preset.gluedEdges)'), before);
     assert.strictEqual(await read('RamifiedMinigames.player.snapshot().payload.gameMode'), mode, mode + ': save');
+    // Display reuses game-specific rows: long selectors, checkbox groups and sliders must fit too.
+    for (const width of [1280, 320]) {
+      await resize(width);
+      await click('#fullscreen-settings-open'); await click('#fullscreen-settings-display-tab');
+      assert.strictEqual(await read(`(() => {const p=document.querySelector('#fullscreen-settings-display');return p.scrollWidth<=p.clientWidth+1;})()`), true, mode + ': display has no horizontal overflow');
+      const inputs = await read(`Array.from(document.querySelectorAll('#player-display input, #player-display select')).filter(n=>n.getClientRects().length).map(n=>n.id)`);
+      for (const id of inputs) {
+        assert.strictEqual(await read(`(() => {const n=document.getElementById(${JSON.stringify(id)});n.scrollIntoView({block:'nearest'});const r=n.getBoundingClientRect(),p=document.querySelector('#fullscreen-settings-display').getBoundingClientRect();return r.left>=p.left&&r.right<=p.right&&r.top>=p.top&&r.bottom<=p.bottom+1;})()`), true, mode + ': reachable display option ' + id);
+      }
+      await read('document.querySelector("#fullscreen-settings-display").scrollTop=0');
+      await shot(`display-${mode}-${width}`);
+      await click('#fullscreen-settings-close');
+    }
+    await resize(1280);
     if (mode === 'chinese-checkers') {
       await menuHome(); await click('#player-new'); await click('#player-slot-1'); await revealGame(mode); await chooseGame(`[data-game-mode="${mode}"]`); await ready();
       await read(`(() => { const n = document.querySelector('#chinese-checkers-player-options select[data-color="black"]'); n.value = 'local-ai-challenging'; n.dispatchEvent(new Event('change', { bubbles:true })); })()`);

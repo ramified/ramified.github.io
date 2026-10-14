@@ -2054,7 +2054,7 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="css/ramified_minigames_player.css?v=20261012-1">
+  <link rel="stylesheet" href="css/ramified_minigames_player.css?v=20261014-1">
 </head>
 <body class="ramified-player player-menu-open">
 
@@ -2085,6 +2085,7 @@
     </header>
     <div id="canvas-wrap">
       <div id="player-toolbar">
+        <button class="btn" id="player-return-to-setup" type="button" data-i18n="player.returnToPreparation" hidden>Back to preparation</button>
       </div>
       <div id="player-menu" role="dialog" aria-modal="true" aria-labelledby="player-menu-title">
         <div class="player-menu-sheet">
@@ -2097,15 +2098,6 @@
             <button class="btn" id="player-new" type="button" data-i18n="player.start" disabled>Start game</button>
             <button class="btn" id="player-online-open" type="button" data-i18n="online.title">Online Play</button>
             <button class="btn" id="player-settings" type="button" data-i18n="fullscreen.settings">Settings</button>
-          </section>
-          <section id="player-game-menu" class="player-page" hidden>
-            <button class="btn" id="player-resume" type="button" data-i18n="player.resume">Return to game</button>
-            <button class="btn" id="player-choose-level" type="button" data-i18n="player.chooseLevel" hidden>Choose a level</button>
-            <button class="btn" data-player-page="setup" type="button" data-i18n="player.changeGame">Change game</button>
-            <button class="btn" data-player-page="display" type="button" data-i18n="setup.display">Display</button>
-            <button class="btn" data-player-page="online" type="button" data-i18n="online.title">Online Play</button>
-            <button class="btn" id="player-game-settings" type="button" data-i18n="fullscreen.settings">Settings</button>
-            <button class="btn" id="player-home-button" type="button" data-i18n="player.home">Main menu</button>
           </section>
           <section id="player-games" class="player-page" hidden>
             <button class="btn" id="player-continue" type="button" hidden disabled>
@@ -2198,7 +2190,6 @@
             <button class="btn" id="player-confirm-new" type="button" data-i18n="player.start">Start game</button>
             <button class="btn" id="player-cancel-new" type="button" data-i18n="common.cancel">Cancel</button>
           </section>
-          <section id="player-display" class="player-page" hidden></section>
           <section id="player-online" class="player-page" hidden></section>
           <section id="player-lobby" class="player-page" hidden>
             <div class="player-online-heading">
@@ -2352,21 +2343,16 @@
             </button>
           </header>
           <nav class="fullscreen-settings-tabs" role="tablist" data-i18n-aria-label="controls.settingsSections" aria-label="Settings sections">
-            <button class="fullscreen-settings-tab" id="fullscreen-settings-display-tab" type="button" role="tab" aria-selected="true" aria-controls="fullscreen-settings-display" data-settings-panel="display" data-i18n="controls.displayTab">Display &amp; sound</button>
-            <button class="fullscreen-settings-tab" id="fullscreen-settings-controls-tab" type="button" role="tab" aria-selected="false" aria-controls="fullscreen-settings-controls" data-settings-panel="controls" data-i18n="player.controls">Controls</button>
+            <button class="fullscreen-settings-tab" id="fullscreen-settings-general-tab" type="button" role="tab" aria-selected="true" aria-controls="fullscreen-settings-general" data-settings-panel="general" data-i18n="settings.general">General</button>
+            <button class="fullscreen-settings-tab" id="fullscreen-settings-display-tab" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="fullscreen-settings-display" data-settings-panel="display" data-i18n="settings.display">Display</button>
+            <button class="fullscreen-settings-tab" id="fullscreen-settings-sound-tab" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="fullscreen-settings-sound" data-settings-panel="sound" data-i18n="settings.sound">Sound</button>
+            <button class="fullscreen-settings-tab" id="fullscreen-settings-controls-tab" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="fullscreen-settings-controls" data-settings-panel="controls" data-i18n="settings.controls">Controls</button>
           </nav>
-          <div class="fullscreen-settings-panel" id="fullscreen-settings-display" role="tabpanel" aria-labelledby="fullscreen-settings-display-tab">
+          <div class="fullscreen-settings-panel" id="fullscreen-settings-general" role="tabpanel" aria-labelledby="fullscreen-settings-general-tab">
             <div class="player-settings-extra" id="player-settings-extra">
               <div id="player-language"></div>
             </div>
             <div class="fullscreen-settings-options">
-              <div class="fullscreen-setting-row" id="fullscreen-wrapped-view-row" hidden>
-                <label for="fullscreen-wrapped-view-mode" data-i18n="fullscreen.wrappedView">Board view</label>
-                <select id="fullscreen-wrapped-view-mode" data-i18n-aria-label="access.boardView" aria-label="Board view (usual or wrapped)">
-                  <option value="usual" data-i18n="wrapped.usual">usual</option>
-                  <option value="wrapped" data-i18n="wrapped.wrapped">wrapped</option>
-                </select>
-              </div>
               <div class="fullscreen-setting-row" id="fullscreen-billiards-physics-row" hidden>
                 <label for="fullscreen-billiards-physics-profile" data-i18n="setup.billiardsPhysics">Physics</label>
                 <select id="fullscreen-billiards-physics-profile" data-i18n-aria-label="access.billiardsPhysicsProfile" aria-label="Billiards physics profile">
@@ -2389,19 +2375,16 @@
                   <output id="fullscreen-billiards-tile-length-value" for="fullscreen-billiards-tile-length">0.13 m</output>
                 </span>
               </div>
-              <label class="fullscreen-setting-row" for="fullscreen-sound-enabled">
-                <span data-i18n="fullscreen.soundEffects">Sound effects</span>
-                <span class="fullscreen-setting-switch">
-                  <input id="fullscreen-sound-enabled" type="checkbox">
-                  <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
-                </span>
-              </label>
-              <div class="fullscreen-setting-row">
-                <label for="fullscreen-sound-volume" data-i18n="fullscreen.volume">Volume</label>
-                <span class="fullscreen-volume-control">
-                  <input id="fullscreen-sound-volume" type="range" min="0" max="100" step="1" value="100" data-i18n-aria-label="access.soundVolume" aria-label="Sound volume" disabled>
-                  <output id="fullscreen-sound-volume-value" for="fullscreen-sound-volume">100%</output>
-                </span>
+            </div>
+          </div>
+          <div class="fullscreen-settings-panel" id="fullscreen-settings-display" role="tabpanel" aria-labelledby="fullscreen-settings-display-tab" hidden>
+            <div class="fullscreen-settings-options">
+              <div class="fullscreen-setting-row" id="fullscreen-wrapped-view-row" hidden>
+                <label for="fullscreen-wrapped-view-mode" data-i18n="fullscreen.wrappedView">Board view</label>
+                <select id="fullscreen-wrapped-view-mode" data-i18n-aria-label="access.boardView" aria-label="Board view (usual or wrapped)">
+                  <option value="usual" data-i18n="wrapped.usual">usual</option>
+                  <option value="wrapped" data-i18n="wrapped.wrapped">wrapped</option>
+                </select>
               </div>
               <label class="fullscreen-setting-row" for="fullscreen-show-action-row">
                 <span data-i18n="player.showSessionControls">Show session controls</span>
@@ -2418,8 +2401,8 @@
                 </span>
               </label>
             </div>
-            <footer class="fullscreen-settings-footer">
-              <button class="btn" id="player-menu-button" type="button" data-i18n="player.returnMenu">Return to menu</button>
+            <div id="player-display"></div>
+            <div class="player-settings-fullscreen">
               <button class="btn" id="player-fullscreen" type="button" data-i18n="common.fullscreen">fullscreen</button>
               <button class="btn fullscreen-settings-exit" id="fullscreen-settings-exit" type="button">
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -2430,9 +2413,31 @@
                 </svg>
                 <span data-i18n="fullscreen.exit">Exit fullscreen</span>
               </button>
-            </footer>
+            </div>
+          </div>
+          <div class="fullscreen-settings-panel" id="fullscreen-settings-sound" role="tabpanel" aria-labelledby="fullscreen-settings-sound-tab" hidden>
+            <div class="fullscreen-settings-options">
+              <label class="fullscreen-setting-row" for="fullscreen-sound-enabled">
+                <span data-i18n="fullscreen.soundEffects">Sound effects</span>
+                <span class="fullscreen-setting-switch">
+                  <input id="fullscreen-sound-enabled" type="checkbox">
+                  <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
+                </span>
+              </label>
+              <div class="fullscreen-setting-row">
+                <label for="fullscreen-sound-volume" data-i18n="fullscreen.volume">Volume</label>
+                <span class="fullscreen-volume-control">
+                  <input id="fullscreen-sound-volume" type="range" min="0" max="100" step="1" value="100" data-i18n-aria-label="access.soundVolume" aria-label="Sound volume" disabled>
+                  <output id="fullscreen-sound-volume-value" for="fullscreen-sound-volume">100%</output>
+                </span>
+              </div>
+            </div>
           </div>
           <div class="fullscreen-settings-panel fullscreen-settings-controls calculator-input-settings-content" id="fullscreen-settings-controls" role="tabpanel" aria-labelledby="fullscreen-settings-controls-tab" hidden></div>
+          <footer class="fullscreen-settings-footer">
+            <button class="btn" id="player-menu-button" type="button" data-i18n="player.chooseGame">Choose a game</button>
+            <button class="btn" id="player-home-button" type="button" data-i18n="player.home">Main menu</button>
+          </footer>
         </div>
       </div>
       <div class="canvas-start-overlay" id="canvas-start-overlay" role="region" aria-live="polite" aria-label="Canvas action prompt" hidden>
@@ -3240,22 +3245,22 @@
   <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
 </footer>
 
-<script src="ramified_minigame_presets/presets.js?v=20261008-3"></script>
-<script src="js/calculator_input_settings.js?v=20260903-1"></script>
+<script src="presets/ramified_minigames/presets.js?v=20261008-3"></script>
+<script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20261012-1"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20261014-2"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
 <script src="js/ramified_minigames_sfx.js?v=20260913-2"></script>
-<script src="js/ramified_minigames_setup.js?v=20261012-1"></script>
+<script src="js/ramified_minigames_setup.js?v=20261014-input-drafts-1"></script>
 <script src="js/ramified_minigames_sokoban_progress.js?v=20261008-3"></script>
 <script src="js/ramified_minigames_save_slots.js?v=20261010-1"></script>
-<script src="js/ramified_minigames_online.js?v=20261012-1"></script>
-<script src="js/ramified_minigames_player.js?v=20261012-1"></script>
+<script src="js/ramified_minigames_online.js?v=20261014-1"></script>
+<script src="js/ramified_minigames_player.js?v=20261014-1"></script>
 <script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
 </body>
