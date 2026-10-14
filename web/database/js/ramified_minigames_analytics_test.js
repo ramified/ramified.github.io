@@ -83,7 +83,7 @@ function testDisabledWithoutEndpointOrWithGpc() {
 }
 
 function testPageWiring() {
-  for (const page of ['ramified_minigames.html', 'ramified_minigames_archive.html']) {
+  for (const page of ['ramified_minigames.html', 'archive/ramified_minigames/index.html']) {
     const html = fs.readFileSync(require.resolve('../' + page), 'utf8');
     assert.strictEqual(html.includes('data-i18n="analytics.notice"'), page.includes('archive'), 'R11 removes the player notice while retaining archive content');
     assert.ok(html.includes('js/ramified_minigames_analytics.js?v='));

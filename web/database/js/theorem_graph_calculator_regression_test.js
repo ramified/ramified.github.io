@@ -820,8 +820,8 @@ function testImportParserAcceptsJsonAndExportedPresetText() {
   const api = loadCalculator();
   const json = '{"schemaVersion":10,"title":"JSON graph","nodes":[],"arrows":[]}';
   const preset = [
-    '// Save this file as theorem_graph_presets/round_trip.preset.js',
-    '// Add this entry to theorem_graph_presets/presets.js:',
+    '// Save this file as presets/theorem_graph/round_trip.preset.js',
+    '// Add this entry to presets/theorem_graph/presets.js:',
     'window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};',
     `window.THEOREM_GRAPH_PRESET_DATA.round_trip = ${json};`
   ].join('\n');
@@ -838,7 +838,7 @@ function testImportParserAcceptsJsonAndExportedPresetText() {
 function testImportParserRejectsMalformedPresetText() {
   const api = loadCalculator();
   const malformed = [
-    '// Save this file as theorem_graph_presets/broken.preset.js',
+    '// Save this file as presets/theorem_graph/broken.preset.js',
     'window.THEOREM_GRAPH_PRESET_DATA.broken = { title: "not JSON" };'
   ].join('\n');
 

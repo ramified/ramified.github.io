@@ -733,7 +733,7 @@ Implemented:
 
 - complete-enough import/export state for current generic objects;
 - `index.html` card titled `Higher-Dimensional Slice Calculator`;
-- GIF preview using `gif/higher_dimensional_slice_explorer_gif_1.gif`;
+- GIF preview using `assets/gif/higher_dimensional_slice_explorer_gif_1.gif`;
 - public page renamed to `higher_dimensional_slice_calculator.html`.
 
 Remaining deliverables:

@@ -301,7 +301,7 @@
 
 ### 维护默认配置
 
-- 修改 `ramified_minigame_presets/presets.js` 中的 `playerDefaults`。`presetId` 指定首次棋盘，`controls` 指定现有准备控件初值。例如围棋 `gomokuSize: 19` 使用共用尺寸控件，名称沿用旧引擎。
+- 修改 `presets/ramified_minigames/presets.js` 中的 `playerDefaults`。`presetId` 指定首次棋盘，`controls` 指定现有准备控件初值。例如围棋 `gomokuSize: 19` 使用共用尺寸控件，名称沿用旧引擎。
 - 跳棋 `humanColor` 指定优先人类阵营；棋盘没有该颜色时取现有顺序第一方，其余 AI。阵营与控制者修改仅保留在本次准备中。
 - 国际象棋 `categories` 保存对局／谜题各自的首次棋盘。目录条目 `fideChessVariant` 使用 `game`／`kingless-puzzle`；三个对局、四个谜题均有明确分类。
 - `featuredDefaultFor` 保存原拓扑特色默认棋盘，旧 `defaultFor` 使用同一映射。`gameOrder` 独立定义顺序，玩家默认配置不改变 archive 默认入口。

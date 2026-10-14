@@ -6,10 +6,10 @@
   : (typeof require === 'function' ? require('./billiards/topological_billiards_native.js') : null);
   let Lianliankan = typeof window !== 'undefined' && window.Lianliankan
   ? window.Lianliankan
-  : (typeof require === 'function' ? require('../lianliankan/lianliankan_engine.js') : null);
+  : (typeof require === 'function' ? require('../archive/lianliankan/lianliankan_engine.js') : null);
   let LianliankanMosaicAdapter = typeof window !== 'undefined' && window.LianliankanMosaicAdapter
   ? window.LianliankanMosaicAdapter
-  : (typeof require === 'function' ? require('../lianliankan/mosaic_adapter.js') : null);
+  : (typeof require === 'function' ? require('../archive/lianliankan/mosaic_adapter.js') : null);
   let KoreanPronunciationAudio = typeof window !== 'undefined' && window.RamifiedKoreanPronunciationAudio
   ? window.RamifiedKoreanPronunciationAudio
   : (typeof require === 'function' ? require('./ramified_minigames_korean_audio.js') : null);
@@ -523,7 +523,7 @@
     return Array.from({ length: cols }, (_, index) => ({ row: 1, col: index + 1 }));
   }
 
-  const PRESET_FOLDER_URL = 'ramified_minigame_presets/';
+  const PRESET_FOLDER_URL = 'presets/ramified_minigames/';
   const PRESET_ASSET_VERSION = '20260904-1';
   const OPTIONAL_SCRIPT_GROUPS = Object.freeze({
     [GAME_MODES.HEX]: Object.freeze([
@@ -537,8 +537,8 @@
       'js/billiards/topological_billiards_native.js?v=20260909-3'
       ]),
     [GAME_MODES.LIANLIANKAN]: Object.freeze([
-      'lianliankan/lianliankan_engine.js?v=20260830-1',
-      'lianliankan/mosaic_adapter.js?v=20260826-2'
+      'archive/lianliankan/lianliankan_engine.js?v=20260830-1',
+      'archive/lianliankan/mosaic_adapter.js?v=20260826-2'
       ])
   });
   const PRESET_GROUP_ORDER = ['Hex', '2048', 'Gomoku', 'Connect Four', 'Go', 'Reversi', 'Chinese Checkers', 'Billiard', 'Tile Matching', 'Sokoban'];
@@ -4157,7 +4157,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     const catalog = normalizeMinigamePresetCatalog(root.RAMIFIED_MINIGAME_PRESETS);
     const registry = catalog.entries;
     if (!registry.length) {
-      return Promise.reject(new Error('No presets are registered in ramified_minigame_presets/presets.js.'));
+      return Promise.reject(new Error(tk('setup.presetRegistryEmpty', 'No presets are registered in {{path}}.', { path: `${PRESET_FOLDER_URL}presets.js` })));
     }
     return Promise.resolve({
       items: registry.map((entry) => ({ entry, spec: readPreloadedPresetSpec(entry) })),

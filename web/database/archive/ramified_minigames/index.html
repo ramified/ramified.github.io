@@ -1,0 +1,3094 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <base href="../../">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="meta.title">Ramified Minigames</title>
+  <link rel="stylesheet" href="css/site.css?v=20260903-1">
+  <link rel="stylesheet" href="css/site_i18n.css">
+  <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
+<style>
+    .mosaic-layout {
+      max-width: 1220px;
+      grid-template-columns: minmax(0, 1fr) 340px;
+    }
+
+    #mosaic-canvas {
+      display: block;
+      width: 100%;
+      cursor: pointer;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #mosaic-canvas.wrapped-universal-cover {
+      cursor: grab;
+    }
+
+    #mosaic-canvas.wrapped-universal-cover.is-panning {
+      cursor: grabbing;
+    }
+
+    #canvas-wrap {
+      position: relative;
+    }
+
+    .billiards-spin-row {
+      display: grid;
+      grid-template-columns: 116px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+    }
+
+    .billiards-spin-row[hidden] {
+      display: none !important;
+    }
+
+    .lianliankan-ipa-audio-link {
+      align-self: center;
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.2;
+    }
+
+    .billiards-spin-control {
+      display: grid;
+      grid-template-columns: 104px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    #billiards-spin-pad,
+    #fullscreen-billiards-spin-pad {
+      display: block;
+      width: 104px !important;
+      height: 104px !important;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    #billiards-spin-label,
+    #fullscreen-billiards-spin-label {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .fullscreen-billiards-spin {
+      position: absolute;
+      z-index: 9;
+      right: 14px;
+      bottom: 14px;
+      display: none;
+      grid-template-columns: minmax(250px, 310px);
+      gap: 8px;
+      align-items: center;
+      padding: 8px;
+      border: 1px solid rgba(68, 55, 43, 0.3);
+      border-radius: 12px;
+      background: rgba(255, 253, 248, 0.9);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+      pointer-events: auto;
+      max-height: calc(100% - 28px);
+      overflow: auto;
+    }
+
+    body.canvas-fullscreen-active .fullscreen-billiards-spin:not([hidden]),
+    body.canvas-fit-viewport .fullscreen-billiards-spin:not([hidden]) {
+      display: grid;
+    }
+
+    .fullscreen-billiards-spin[hidden] {
+      display: none !important;
+    }
+
+    #fullscreen-billiards-spin-pad {
+      width: 84px !important;
+      height: 84px !important;
+    }
+
+    .billiards-tools-header,
+    .billiards-tools-contact,
+    .billiards-tools-line,
+    .billiards-tools-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .billiards-tools-header {
+      justify-content: space-between;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .billiards-tools-contact {
+      align-items: flex-start;
+    }
+
+    .billiards-tools-readout,
+    .billiards-telemetry-output {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.35;
+    }
+
+    .billiards-telemetry-output {
+      display: block;
+      white-space: pre-wrap;
+    }
+
+    .billiards-tools-line {
+      display: grid;
+      grid-template-columns: 74px minmax(0, 1fr) auto;
+      margin-top: 6px;
+      font-size: 0.72rem;
+    }
+
+    .billiards-tools-line input[type="range"],
+    .billiards-tools-line select {
+      min-width: 0;
+      width: 100%;
+    }
+
+    .billiards-tools-advanced,
+    .billiards-research-telemetry {
+      margin-top: 7px;
+      border-top: 1px dotted var(--border);
+      padding-top: 6px;
+    }
+
+    .billiards-tools-advanced summary,
+    .billiards-research-telemetry summary {
+      cursor: pointer;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+
+    .billiards-tools-actions {
+      justify-content: flex-end;
+      margin-top: 6px;
+    }
+
+    .billiards-profile-badge {
+      border: 1px solid rgba(31, 122, 140, 0.35);
+      border-radius: 999px;
+      padding: 2px 7px;
+      color: var(--accent2);
+      background: rgba(31, 122, 140, 0.08);
+    }
+
+    .billiards-advanced-row[hidden],
+    .billiards-research-row[hidden] {
+      display: none !important;
+    }
+
+    .billiards-debug-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      padding-top: 8px;
+      border-top: 1px dotted var(--border);
+    }
+
+    #billiards-power {
+      width: 100%;
+      height: 12px;
+      accent-color: var(--accent2);
+    }
+
+    .online-play-panel {
+      display: grid;
+      gap: 9px;
+    }
+
+    .online-status-line {
+      min-height: 1.5em;
+      padding: 6px 7px;
+      border: 1px solid rgba(31, 122, 140, 0.22);
+      border-radius: 5px;
+      background: rgba(31, 122, 140, 0.06);
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .online-status-line[data-state="connected"] {
+      border-color: rgba(47, 133, 90, 0.32);
+      background: rgba(47, 133, 90, 0.08);
+      color: #24543a;
+    }
+
+    .online-status-line[data-state="error"] {
+      border-color: rgba(178, 58, 72, 0.32);
+      background: rgba(178, 58, 72, 0.08);
+      color: #7d2830;
+    }
+
+    .online-room-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .online-room-fields {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .online-action-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+    }
+
+    .online-action-grid .btn {
+      min-width: 0;
+    }
+
+    .online-role-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      min-width: 0;
+    }
+
+    .online-role-options .opt-row {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .online-role-options .opt-row[data-claimed="other"] {
+      color: var(--muted);
+    }
+
+    .online-role-owner {
+      color: var(--muted);
+      font-size: 0.74rem;
+    }
+
+    body.canvas-fit-viewport {
+      overflow: hidden;
+    }
+
+    body.canvas-fit-viewport > header,
+    body.canvas-fit-viewport > footer {
+      display: none;
+    }
+
+    body.canvas-fit-viewport .mosaic-layout {
+      max-width: none;
+      height: 100vh;
+      margin: 0;
+      padding: 8px;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    body.canvas-fit-viewport .side {
+      min-height: 0;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    body.canvas-fit-viewport .canvas-panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    body.canvas-fit-viewport .canvas-panel {
+      height: 100%;
+    }
+
+    body.canvas-fit-viewport #canvas-wrap,
+    body.canvas-fullscreen-active #canvas-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    body.canvas-fit-viewport #canvas-wrap {
+      padding: 8px;
+    }
+
+    /* The class is synchronized from the standard OR prefixed Fullscreen API.
+       Mixing unsupported pseudo-classes in one selector list drops the whole
+       rule on prefix-only Safari (and the inverse on other browsers). */
+    body.canvas-fullscreen-active #canvas-wrap {
+      width: 100vw;
+      width: 100dvw;
+      height: 100vh;
+      height: 100dvh;
+      max-width: 100vw;
+      max-width: 100dvw;
+      max-height: 100vh;
+      max-height: 100dvh;
+      min-width: 0;
+      min-height: 0;
+      padding: 0;
+      background: #111111;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    body.canvas-fit-viewport #mosaic-canvas,
+    body.canvas-fullscreen-active #mosaic-canvas {
+      width: var(--canvas-display-width, 100%) !important;
+      height: var(--canvas-display-height, auto) !important;
+      max-width: 100%;
+      max-height: 100%;
+      flex: 0 0 auto;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    body.canvas-fullscreen-active #mosaic-canvas {
+      position: absolute;
+      left: var(--canvas-display-left, 0px);
+      top: var(--canvas-display-top, 0px);
+    }
+
+    @media (max-width: 980px), (max-height: 560px) {
+      body.canvas-fit-viewport .mosaic-layout {
+        grid-template-columns: 1fr;
+        gap: 0;
+      }
+
+      body.canvas-fit-viewport .side {
+        display: none;
+      }
+    }
+
+    .canvas-start-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      pointer-events: none;
+      box-sizing: border-box;
+    }
+
+    .canvas-start-overlay[hidden] {
+      display: none !important;
+    }
+
+    .canvas-start-sheet {
+      width: min(380px, 100%);
+      padding: 15px 16px 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: rgba(255, 253, 248, 0.96);
+      box-shadow: 0 12px 34px rgba(0, 0, 0, 0.16);
+      color: var(--text);
+      pointer-events: auto;
+      box-sizing: border-box;
+      animation: canvas-start-sheet-fade-in 300ms ease-out both;
+    }
+
+    @keyframes canvas-start-sheet-fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .canvas-start-sheet {
+        animation: none;
+      }
+    }
+
+    .canvas-start-title {
+      margin: 0;
+      font-family: 'EB Garamond', serif;
+      font-size: 1.08rem;
+      line-height: 1.2;
+      font-weight: 700;
+    }
+
+    .canvas-start-context,
+    .canvas-start-rules {
+      margin: 7px 0 0;
+      line-height: 1.35;
+    }
+
+    .canvas-start-context {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      overflow-wrap: anywhere;
+    }
+
+    .canvas-start-rules {
+      font-size: 0.92rem;
+    }
+
+    .canvas-start-actions {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .canvas-start-begin,
+    .canvas-start-close {
+      width: 100%;
+    }
+
+    .canvas-start-close {
+      background: transparent;
+      color: var(--muted);
+    }
+
+    .fullscreen-action-shell {
+      position: absolute;
+      z-index: 8;
+      top: var(--fullscreen-action-top, 10px);
+      left: var(--fullscreen-action-left, 10px);
+      display: none;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+    }
+
+    body.canvas-fullscreen-active .fullscreen-action-shell:not([hidden]) {
+      display: flex;
+    }
+
+    .fullscreen-action-shell[hidden] {
+      display: none !important;
+    }
+
+    .fullscreen-lianliankan-actions {
+      position: absolute;
+      z-index: 9;
+      top: 10px;
+      right: 10px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+    }
+
+    body.canvas-fullscreen-active .fullscreen-lianliankan-actions:not([hidden]) {
+      display: flex;
+    }
+
+    .fullscreen-lianliankan-actions[hidden] {
+      display: none !important;
+    }
+
+    .fullscreen-settings-button,
+    .fullscreen-action-button,
+    .fullscreen-lianliankan-button {
+      width: 42px;
+      height: 42px;
+      min-width: 42px;
+      padding: 0;
+      border: 1px solid rgba(26, 22, 18, 0.18);
+      border-radius: 5px;
+      background: rgba(255, 253, 248, 0.94);
+      color: var(--text);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      touch-action: manipulation;
+    }
+
+    .fullscreen-settings-button:hover,
+    .fullscreen-action-button:hover,
+    .fullscreen-lianliankan-button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .fullscreen-action-button:active,
+    .fullscreen-settings-button:active,
+    .fullscreen-lianliankan-button:active {
+      transform: scale(0.96);
+    }
+
+    .fullscreen-action-button:disabled,
+    .fullscreen-lianliankan-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.44;
+      transform: none;
+    }
+
+    .fullscreen-action-shell svg {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .fullscreen-lianliankan-actions svg {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .fullscreen-lianliankan-reset {
+      border-color: rgba(139, 58, 42, 0.36);
+      color: var(--accent2);
+    }
+
+    .fullscreen-action-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: calc(100vw - 70px);
+      box-sizing: border-box;
+      padding: 5px;
+      border: 1px solid rgba(26, 22, 18, 0.16);
+      border-radius: 7px;
+      background: rgba(255, 253, 248, 0.94);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      pointer-events: auto;
+    }
+
+    .fullscreen-action-bar[hidden],
+    .fullscreen-settings-overlay[hidden] {
+      display: none !important;
+    }
+
+    .fullscreen-action-shell[data-placement="left"],
+    .fullscreen-action-shell[data-placement="right"],
+    .fullscreen-action-shell[data-placement="left"] .fullscreen-action-bar,
+    .fullscreen-action-shell[data-placement="right"] .fullscreen-action-bar {
+      flex-direction: column;
+    }
+
+    .fullscreen-action-divider {
+      width: 1px;
+      align-self: stretch;
+      background: rgba(26, 22, 18, 0.18);
+      margin: 3px 2px;
+    }
+
+    .fullscreen-action-status {
+      min-width: 0;
+      max-width: min(190px, 45vw);
+      color: var(--accent2);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.2;
+      padding: 0 3px;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .fullscreen-action-status[hidden] {
+      display: none !important;
+    }
+
+    .fullscreen-action-shell[data-placement="left"] .fullscreen-action-divider,
+    .fullscreen-action-shell[data-placement="right"] .fullscreen-action-divider {
+      width: auto;
+      height: 1px;
+      align-self: stretch;
+      margin: 2px 3px;
+    }
+
+    .fullscreen-action-shell[data-placement="left"] .fullscreen-action-status,
+    .fullscreen-action-shell[data-placement="right"] .fullscreen-action-status {
+      max-width: 82px;
+      text-align: center;
+    }
+
+    .fullscreen-action-danger {
+      border-color: rgba(139, 58, 42, 0.36);
+      color: var(--accent2);
+    }
+
+    .fullscreen-action-danger.is-confirming {
+      border-color: var(--accent2);
+      background: color-mix(in srgb, var(--accent2) 14%, rgba(255, 253, 248, 0.94));
+      box-shadow: 0 0 0 2px rgba(139, 58, 42, 0.18), 0 8px 22px rgba(0, 0, 0, 0.16);
+    }
+
+    .fullscreen-action-danger:hover {
+      border-color: var(--accent2);
+      background: var(--accent2);
+      color: #fff;
+    }
+
+    body.canvas-fullscreen-active #canvas-wrap.fullscreen-action-gutter {
+      padding-top: var(--fullscreen-action-gutter-height, 0px);
+    }
+
+    #fullscreen-sizing-debug {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 2147483647;
+      max-width: 100%;
+      padding: 4px;
+      background: rgba(0, 0, 0, 0.82);
+      color: #fff;
+      font: 10px/1.25 monospace;
+      pointer-events: none;
+      white-space: pre-wrap;
+    }
+
+    .fullscreen-settings-overlay {
+      position: absolute;
+      z-index: 20;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      padding: 16px;
+      background: rgba(10, 10, 10, 0.68);
+      pointer-events: auto;
+    }
+
+    .fullscreen-settings-overlay:not([hidden]) {
+      display: flex;
+    }
+
+    .fullscreen-settings-dialog {
+      width: min(720px, 100%);
+      max-height: 100%;
+      overflow: auto;
+      box-sizing: border-box;
+      border: 1px solid rgba(26, 22, 18, 0.2);
+      border-radius: 7px;
+      background: rgba(255, 253, 248, 0.98);
+      color: var(--text);
+      box-shadow: 0 18px 52px rgba(0, 0, 0, 0.34);
+    }
+
+    .fullscreen-settings-header {
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 8px 6px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .fullscreen-settings-title {
+      margin: 0;
+      font-family: 'EB Garamond', serif;
+      font-size: 1.2rem;
+      line-height: 1.2;
+    }
+
+    .fullscreen-settings-close {
+      width: 40px;
+      height: 40px;
+      min-width: 40px;
+      padding: 0;
+      border: 1px solid transparent;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .fullscreen-settings-close:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .fullscreen-settings-close svg,
+    .fullscreen-settings-exit svg {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .fullscreen-settings-options {
+      display: grid;
+      padding: 4px 16px;
+    }
+
+    .fullscreen-settings-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 10px 16px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .fullscreen-settings-tab {
+      min-height: 40px;
+      padding: 8px 12px;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .fullscreen-settings-tab[aria-selected="true"] {
+      border-bottom-color: var(--accent);
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .fullscreen-settings-panel[hidden] {
+      display: none !important;
+    }
+
+    .fullscreen-settings-controls {
+      max-height: min(64vh, 620px);
+      overflow: auto;
+    }
+
+    body:not(.canvas-fullscreen-active) .fullscreen-settings-exit {
+      display: none;
+    }
+
+    .fullscreen-setting-row {
+      min-height: 58px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.94rem;
+    }
+
+    .fullscreen-setting-row:last-child {
+      border-bottom: none;
+    }
+
+    .fullscreen-setting-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex: 0 0 auto;
+    }
+
+    .fullscreen-setting-switch input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+    }
+
+    .fullscreen-setting-switch-track {
+      position: absolute;
+      inset: 0;
+      border: 1px solid rgba(26, 22, 18, 0.24);
+      border-radius: 12px;
+      background: #d6d2ca;
+      cursor: pointer;
+      transition: background 140ms ease, border-color 140ms ease;
+    }
+
+    .fullscreen-setting-switch-track::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+      transition: transform 140ms ease;
+    }
+
+    .fullscreen-setting-switch input:checked + .fullscreen-setting-switch-track {
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .fullscreen-setting-switch input:checked + .fullscreen-setting-switch-track::after {
+      transform: translateX(20px);
+    }
+
+    .fullscreen-setting-switch input:focus-visible + .fullscreen-setting-switch-track {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .fullscreen-volume-control {
+      width: min(190px, 48vw);
+      display: grid;
+      grid-template-columns: minmax(90px, 1fr) 4ch;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .fullscreen-volume-control input {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .fullscreen-volume-control input:disabled,
+    .fullscreen-volume-control input:disabled + output {
+      opacity: 0.46;
+    }
+
+    .fullscreen-volume-control output {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      text-align: right;
+    }
+
+    .fullscreen-settings-footer {
+      padding: 12px 16px 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .fullscreen-settings-exit {
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    @media (max-width: 520px), (max-height: 520px) {
+      .fullscreen-settings-overlay {
+        padding: 10px;
+      }
+
+      .fullscreen-lianliankan-actions {
+        top: auto;
+        bottom: 10px;
+        flex-direction: column;
+      }
+
+      .fullscreen-setting-row {
+        min-height: 54px;
+      }
+
+      .fullscreen-volume-control {
+        width: min(164px, 48vw);
+        grid-template-columns: minmax(72px, 1fr) 4ch;
+        gap: 8px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .fullscreen-setting-switch-track,
+      .fullscreen-setting-switch-track::after {
+        transition: none;
+      }
+    }
+
+    .mosaic-toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding-left: 12px;
+      border-left: 1px solid var(--border);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .mosaic-toolbar-group label,
+    .mosaic-toolbar-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .mosaic-toolbar-select {
+      min-width: 92px;
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.82rem;
+    }
+
+    .mosaic-toolbar-toggle {
+      padding-left: 12px;
+      border-left: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .mosaic-toolbar-toggle input {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .mosaic-underbar-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    #info-line {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 5px;
+      min-width: 0;
+      text-align: right;
+      flex-wrap: wrap;
+    }
+
+    .chinese-checkers-status-piece {
+      width: 0.9rem;
+      height: 0.9rem;
+      flex: 0 0 auto;
+      border: 1px solid currentColor;
+      border-radius: 50%;
+      box-sizing: border-box;
+      box-shadow: inset 0 1px 2px rgba(255,255,255,0.52), 0 1px 2px rgba(45,34,22,0.2);
+      color: transparent;
+      font-size: 0;
+      line-height: 0;
+      overflow: hidden;
+    }
+
+    .mosaic-status-good { color: var(--accent); }
+    .mosaic-status-bad { color: var(--accent2); }
+
+    .mosaic-number-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .mosaic-number-row label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .mosaic-number-row input[type=number],
+    .mosaic-editor-input {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+
+    .mosaic-editor-input {
+      margin-top: 4px;
+    }
+
+    .mosaic-import-input {
+      min-height: 78px;
+      line-height: 1.35;
+      resize: vertical;
+    }
+
+    .mosaic-import-button {
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .game-setup-alert {
+      margin-top: 7px;
+      color: #b42318;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .game-setup-alert[hidden] {
+      display: none !important;
+    }
+
+    .mosaic-import-presets {
+      margin-top: 4px;
+    }
+
+    .mosaic-import-preset-controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .mosaic-preset-field {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .mosaic-preset-field .input-label {
+      display: inline;
+      flex: 0 0 auto;
+      margin: 0;
+      text-transform: none;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .mosaic-preset-field .mosaic-editor-input {
+      margin-top: 0;
+    }
+
+    .mosaic-import-preset-controls[hidden] {
+      display: none !important;
+    }
+
+    .mosaic-knot-code {
+      min-height: 46px;
+      line-height: 1.35;
+      resize: vertical;
+    }
+
+    .mosaic-knot-links {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      align-items: flex-end;
+    }
+
+    .mosaic-opt-pair {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      column-gap: 12px;
+      align-items: center;
+    }
+
+    .mosaic-mode-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      gap: 10px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .mosaic-mode-row select {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .mosaic-mode-row select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .mosaic-wrap-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 0.86rem;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .mosaic-wrap-toggle input {
+      accent-color: var(--accent);
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+    }
+
+    .mosaic-view-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .mosaic-inline-row {
+      display: grid;
+      grid-template-columns: 116px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .mosaic-inline-row .input-label {
+      margin-bottom: 0 !important;
+      white-space: nowrap;
+    }
+
+    .glue-flap-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .glue-flap-controls .opt-row {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    .export-test-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.86rem;
+      white-space: nowrap;
+    }
+
+    .export-test-link:hover {
+      text-decoration: underline;
+    }
+
+    .display-style-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .display-style-controls select {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+
+    .display-style-controls .opt-row {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    .mosaic-debug-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+      margin-top: 18px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .mosaic-history-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .mosaic-debug-actions .btn,
+    .mosaic-history-actions .btn {
+      width: 100%;
+    }
+
+    #begin-game,
+    .mosaic-debug-actions .btn,
+    .mosaic-history-actions .btn {
+      min-height: 38px;
+    }
+
+    .mosaic-debug-step-row {
+      align-items: center;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(100px, max-content);
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .mosaic-debug-step-row .btn {
+      width: 100%;
+    }
+
+    .mosaic-debug-panel {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .mosaic-debug-panel[hidden] {
+      display: none !important;
+    }
+
+    .mosaic-debug-export,
+    .minigame-status-export {
+      min-height: 128px;
+      line-height: 1.35;
+      resize: vertical;
+    }
+
+    .hex-move-pad {
+      --hex-move-size: 46px;
+      --hex-move-gap: 6px;
+      --hex-row-offset: 26px;
+      --hex-pad-width: 150px;
+      display: grid;
+      grid-template-columns: repeat(3, var(--hex-move-size));
+      gap: var(--hex-move-gap);
+      width: var(--hex-pad-width);
+      max-width: 100%;
+    }
+
+    .hex-move-pad[hidden] {
+      display: none !important;
+    }
+
+    .hex-move-pad [data-move-dir="NW"] { grid-column: 1; grid-row: 1; }
+    .hex-move-pad [data-move-dir="NE"] { grid-column: 2; grid-row: 1; }
+    .hex-move-pad [data-move-dir="W"] { grid-column: 1; grid-row: 2; }
+    .hex-move-pad [data-move-dir="E"] { grid-column: 3; grid-row: 2; }
+    .hex-move-pad [data-move-dir="SW"] { grid-column: 1; grid-row: 3; }
+    .hex-move-pad [data-move-dir="SE"] { grid-column: 2; grid-row: 3; }
+
+    .hex-move-pad [data-move-dir="NW"],
+    .hex-move-pad [data-move-dir="NE"],
+    .hex-move-pad [data-move-dir="SW"],
+    .hex-move-pad [data-move-dir="SE"] {
+      left: var(--hex-row-offset);
+      position: relative;
+    }
+
+    .btn.debug-active {
+      border-color: var(--accent2);
+      background: var(--accent2);
+    }
+
+    .btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+      transform: none;
+    }
+
+    .input-mode-panel[hidden],
+    .mosaic-debug-step-row[hidden],
+    .mosaic-inline-row[hidden],
+    .mosaic-view-row[hidden] {
+      display: none !important;
+    }
+
+    .mosaic-view-row select {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .mosaic-view-row select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .mosaic-inline-row select,
+    .mosaic-inline-row input[type=number] {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .mosaic-inline-row select:focus,
+    .mosaic-inline-row input[type=number]:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .boundary-chain-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .boundary-chain-length {
+      width: 64px;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+
+    .boundary-chain-length:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .background-preset-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .background-preset-controls .btn {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+      white-space: nowrap;
+    }
+
+    .stat-action-value {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .stat-compute-btn {
+      padding: 2px 7px;
+      font-size: 0.72rem;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .billiard-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .billiard-controls .btn {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    .background-slider-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .background-slider-controls input[type=range] {
+      flex: 1 1 auto;
+      min-width: 64px;
+      accent-color: var(--accent);
+    }
+
+    .background-slider-controls output {
+      min-width: 34px;
+      text-align: right;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+    }
+
+    .chinese-checkers-player-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 12px;
+      min-width: 0;
+    }
+
+    .chinese-checkers-player-options .opt-row {
+      padding: 2px 0;
+      min-width: 170px;
+    }
+
+    .local-ai-player-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      min-width: 0;
+    }
+
+    .local-ai-player-option {
+      display: grid;
+      grid-template-columns: auto minmax(112px, 1fr);
+      gap: 6px;
+      align-items: center;
+      min-width: 170px;
+    }
+
+    .go-score-action-button,
+    .chinese-checkers-action-button {
+      width: 100%;
+    }
+
+    .go-score-compare {
+      display: block;
+      min-width: 0;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .mosaic-color-row {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .mosaic-color-input {
+      width: 42px;
+      height: 28px;
+      padding: 2px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      cursor: pointer;
+    }
+
+    .mosaic-color-input[disabled] {
+      opacity: 0.58;
+      cursor: not-allowed;
+    }
+
+    .mosaic-color-swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .mosaic-color-swatch {
+      width: 22px;
+      height: 22px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--swatch-color);
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .mosaic-color-swatch:hover,
+    .mosaic-color-swatch:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .mosaic-boundary-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 8px;
+    }
+
+    .mosaic-boundary-chip {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--boundary-color);
+    }
+
+    .slice-info-row {
+      display: grid;
+      grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
+      align-items: start;
+      column-gap: 10px;
+      font-size: 0.82rem;
+      line-height: 1.6;
+    }
+
+    .slice-info-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      min-width: 80px;
+    }
+
+    .slice-info-value {
+      font-family: 'EB Garamond', serif;
+      font-size: 0.88rem;
+      min-width: 0;
+    }
+
+    .slice-invariant-head {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .slice-invariant-toggle {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1;
+      padding: 1px 3px;
+    }
+
+    .slice-invariant-toggle:hover {
+      color: var(--accent);
+    }
+
+    #dual-graph-invariant-panel {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    #dual-graph-invariant-panel[hidden] {
+      display: none;
+    }
+
+    .slice-invariant-list {
+      display: grid;
+      grid-template-columns: minmax(58px, max-content) minmax(0, 1fr);
+      column-gap: 10px;
+      row-gap: 2px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.45;
+      margin: 0;
+    }
+
+    .dual-graph-control-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+      gap: 8px 12px;
+      margin-top: 8px;
+    }
+
+    .dual-graph-control-row .opt-row {
+      margin: 0;
+    }
+
+    #dual-graph-layout-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    #dual-graph-layout-controls[hidden] {
+      display: none !important;
+    }
+
+    .dual-graph-layout-picker {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .dual-graph-layout-picker select {
+      min-width: 128px;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .dual-graph-layout-picker select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .dual-graph-layout-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      overflow-wrap: anywhere;
+    }
+
+    .slice-mode-row {
+      display: inline-flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .slice-mode-btn {
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--muted);
+      padding: 2px 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      cursor: pointer;
+    }
+
+    .slice-mode-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(61,107,79,0.08);
+    }
+
+    .dual-graph-view-inputs {
+      display: none;
+    }
+
+    .dual-graph-degeneration-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .dual-graph-degeneration-options-row,
+    .dual-graph-degeneration-emphasis-row {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .dual-graph-degeneration-options-row {
+      grid-template-columns: minmax(0, 1fr) max-content;
+    }
+
+    .dual-graph-degeneration-option-toggle,
+    .dual-graph-degeneration-emphasis-toggle {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .dual-graph-degeneration-select-field,
+    .dual-graph-degeneration-style-field {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .dual-graph-degeneration-options-row .input-label,
+    .dual-graph-degeneration-emphasis-row .input-label {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .dual-graph-degeneration-options-row select,
+    .dual-graph-degeneration-emphasis-row select {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .dual-graph-degeneration-options-row select:focus,
+    .dual-graph-degeneration-emphasis-row select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .dual-graph-degeneration-scroll {
+      max-height: 420px;
+      overflow-y: auto;
+      padding-right: 3px;
+    }
+
+    .dual-graph-degeneration-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .dual-graph-degeneration-tile {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fffdf8;
+      padding: 5px;
+      cursor: pointer;
+    }
+
+    .dual-graph-degeneration-tile:hover,
+    .dual-graph-degeneration-tile:focus-visible {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(61,107,79,0.12);
+      outline: none;
+    }
+
+    .dual-graph-degeneration-tile canvas {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      display: block;
+      background: #fffdf8;
+    }
+
+    .dual-graph-degeneration-caption {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.64rem;
+      color: var(--muted);
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    #dual-graph-degenerations-card.wide {
+      margin-top: 16px;
+    }
+
+    #dual-graph-degenerations-card.wide .dual-graph-degeneration-grid {
+      grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    }
+
+    #dual-graph-degenerations-card.wide .dual-graph-degeneration-scroll {
+      max-height: min(70vh, 720px);
+    }
+
+    .dual-graph-degeneration-wide-toggle {
+      display: none;
+    }
+
+    @media (min-width: 960px) {
+      .dual-graph-degeneration-wide-toggle {
+        display: inline-flex;
+      }
+    }
+
+    .wander-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .wander-actions .btn {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    .wander-status {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .wander-canvas-wrap {
+      margin-top: 8px;
+    }
+
+    #wander-canvas {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fffdf8;
+      cursor: pointer;
+      touch-action: none;
+      display: block;
+      max-height: none !important;
+    }
+
+    #wander-card.wide {
+      margin-top: 16px;
+    }
+
+    .wander-open-row[hidden],
+    #wander-side-host[hidden],
+    #wander-wide-host[hidden] {
+      display: none !important;
+    }
+
+    .mosaic-decoration-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .mosaic-decoration-actions .btn {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    .mosaic-decoration-actions .opt-row {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .algebraic-energy-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+
+    .algebraic-energy-row .opt-row {
+      margin: 0;
+    }
+
+    .slice-invariant-list dt {
+      color: var(--muted);
+    }
+
+    .slice-invariant-list dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .rs-node-radius-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
+      gap: 6px 8px;
+      margin-top: 8px;
+    }
+
+    .rs-node-radius-control {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) 32px;
+      align-items: center;
+      column-gap: 5px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--muted);
+    }
+
+    .rs-node-radius-control input {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .rs-node-radius-control output {
+      text-align: right;
+      color: var(--text);
+    }
+
+    .rs-node-auto {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      align-self: center;
+    }
+
+    .tile-palette-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(46px, 1fr));
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .tile-swatch {
+      height: 46px;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fffdf8;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      padding: 3px;
+      transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+    }
+
+    .tile-swatch:hover,
+    .tile-swatch.active {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
+    .tile-swatch.dragging {
+      opacity: 0.42;
+      box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
+    .tile-swatch:active {
+      cursor: grabbing;
+      transform: scale(0.98);
+    }
+
+    .tile-swatch canvas {
+      width: 100% !important;
+      height: 100% !important;
+      background: transparent;
+      cursor: inherit;
+    }
+
+    .billiards-ball-palette-row {
+      align-items: start;
+    }
+
+    .billiards-ball-palette {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 0;
+    }
+
+    .billiards-ball-palette .tile-swatch {
+      width: 100%;
+      height: auto;
+      aspect-ratio: 1;
+      cursor: pointer;
+      background: #f5f2e9;
+    }
+
+    .billiards-ball-palette .tile-swatch:disabled {
+      cursor: not-allowed;
+      opacity: 0.3;
+      border-color: var(--border);
+      box-shadow: none;
+      transform: none;
+    }
+
+    .tile-drag-ghost {
+      position: fixed;
+      width: 58px;
+      height: 58px;
+      border: 1px solid var(--accent);
+      border-radius: 3px;
+      background: #fffdf8;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+      opacity: 0.86;
+      padding: 4px;
+      pointer-events: none;
+      z-index: 9999;
+      box-sizing: border-box;
+      transform: translate(-50%, -50%);
+    }
+
+    .tile-drag-ghost canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    .mosaic-underbar-clear {
+      padding: 4px 12px;
+      font-size: 0.72rem;
+    }
+
+    body.tile-dragging * {
+      cursor: grabbing !important;
+    }
+
+    @media (max-width: 980px) {
+      .mosaic-layout { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 520px) {
+      .mosaic-number-row,
+      .mosaic-mode-row,
+      .mosaic-view-row,
+      .mosaic-inline-row {
+        grid-template-columns: 1fr;
+      }
+
+      .billiards-spin-row {
+        grid-template-columns: 1fr;
+      }
+
+      .mosaic-toolbar-group,
+      .mosaic-toolbar-toggle {
+        padding-left: 0;
+        border-left: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1 data-i18n="meta.heading">Ramified Minigames</h1>
+  <span><a href="index.html" data-i18n="common.toolkit">Pure Math Toolkit</a> &middot; <a href="mosaic_calculator.html" data-i18n="common.mosaicCalculator">Mosaic Calculator</a> &middot; <span data-i18n="common.tagline">glued-boundary game prototypes</span></span>
+  <label class="site-language-control">
+    <span data-i18n="common.language">Language</span>
+    <select data-language-switch data-i18n-aria-label="common.language" aria-label="Language">
+      <option value="en">English</option>
+      <option value="zh-CN">简体中文</option>
+    </select>
+  </label>
+</header>
+
+<main class="layout mosaic-layout">
+  <section class="canvas-panel" aria-label="Ramified minigame canvas panel">
+    <header class="panel-title">
+      <span class="panel-title-text" data-i18n="setup.canvas">Mosaic Canvas</span>
+      <div class="canvas-toolbar" aria-label="Ramified minigame status">
+        <span class="shape-indicator" title="Prototype status"><span id="status-badge" class="mosaic-chip calculator-badge">setup</span></span>
+        <span class="canvas-view-row" id="canvas-view-row" aria-label="Canvas view">
+          <button class="canvas-view-btn active" type="button" data-canvas-display-mode="normal" aria-pressed="true">normal</button>
+          <button class="canvas-view-btn" type="button" data-canvas-display-mode="fit-viewport" aria-pressed="false">fit viewport</button>
+          <button class="canvas-view-btn" type="button" data-canvas-display-mode="fullscreen" aria-pressed="false">fullscreen</button>
+        </span>
+      </div>
+    </header>
+    <div id="canvas-wrap">
+      <canvas id="mosaic-canvas" tabindex="0" aria-label="Ramified minigame mosaic canvas"></canvas>
+      <div class="fullscreen-lianliankan-actions" id="fullscreen-lianliankan-actions" data-i18n-aria-label="access.fullscreenGameTools" aria-label="Fullscreen game tools" hidden>
+        <button class="fullscreen-lianliankan-button" id="fullscreen-lianliankan-hint" type="button" data-i18n-aria-label="common.showHint" aria-label="Show hint" data-i18n-title="common.hint" title="Hint">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M9 18h6"></path>
+            <path d="M10 22h4"></path>
+            <path d="M8.3 14.5A7 7 0 1 1 15.7 14.5c-.9.7-1.4 1.5-1.5 2.5h-4.4c-.1-1-.6-1.8-1.5-2.5z"></path>
+          </svg>
+        </button>
+        <button class="fullscreen-lianliankan-button fullscreen-lianliankan-reset" id="fullscreen-lianliankan-reset" type="button" data-i18n-aria-label="common.refreshRemainingTiles" aria-label="Refresh remaining tiles" data-i18n-title="common.refreshRemainingTiles" title="Refresh remaining tiles">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M3 12a9 9 0 1 0 3-6.7"></path>
+            <path d="M3 4v6h6"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="fullscreen-billiards-spin" id="fullscreen-billiards-spin" data-i18n-aria-label="access.billiardsCueContact" aria-label="Cue ball contact point" hidden>
+        <div class="billiards-tools-header">
+          <span data-i18n="billiards.tools.title">Billiards tools</span>
+          <span class="billiards-profile-badge" id="fullscreen-billiards-profile-badge">classic</span>
+        </div>
+        <div class="billiards-tools-contact">
+          <canvas id="fullscreen-billiards-spin-pad" width="84" height="84" tabindex="0" data-i18n-aria-label="access.billiardsCueContact" aria-label="Cue ball contact point"></canvas>
+          <div>
+            <output id="fullscreen-billiards-spin-label" data-i18n="setup.billiardsCenter">center</output>
+            <div class="billiards-tools-readout" id="fullscreen-billiards-contact-readout">x 0.00 · y 0.00</div>
+            <button class="btn" id="fullscreen-billiards-center-contact" type="button" data-i18n="billiards.tools.center">center</button>
+          </div>
+        </div>
+        <div class="billiards-tools-line">
+          <label for="fullscreen-billiards-cue-speed" data-i18n="billiards.tools.cueSpeed">Cue speed</label>
+          <input id="fullscreen-billiards-cue-speed" type="range" min="0.1" max="7.5" step="0.1" value="3" data-i18n-aria-label="access.billiardsCueSpeed" aria-label="Cue speed">
+          <output id="fullscreen-billiards-cue-speed-value">3.0 m/s</output>
+        </div>
+        <label class="billiards-tools-line" for="fullscreen-billiards-speed-lock">
+          <span data-i18n="billiards.tools.exactSpeed">Exact speed</span>
+          <span><input id="fullscreen-billiards-speed-lock" type="checkbox"> <span data-i18n="billiards.tools.lock">lock</span></span>
+          <span></span>
+        </label>
+        <div class="billiards-tools-line billiards-advanced-row" id="fullscreen-billiards-elevation-row">
+          <label for="fullscreen-billiards-elevation" data-i18n="billiards.tools.elevation">Elevation</label>
+          <input id="fullscreen-billiards-elevation" type="range" min="0" max="75" step="1" value="0" data-i18n-aria-label="access.billiardsElevation" aria-label="Cue elevation">
+          <output id="fullscreen-billiards-elevation-value">0°</output>
+        </div>
+        <details class="billiards-tools-advanced">
+          <summary data-i18n="billiards.tools.advanced">Advanced</summary>
+          <div class="billiards-tools-line"><label for="fullscreen-billiards-stroke-preset" data-i18n="billiards.tools.stroke">Stroke</label><select id="fullscreen-billiards-stroke-preset" data-i18n-aria-label="access.billiardsStroke" aria-label="Stroke preset"></select><span></span></div>
+          <div class="billiards-tools-line"><label for="fullscreen-billiards-cue-profile" data-i18n="billiards.tools.cue">Cue</label><select id="fullscreen-billiards-cue-profile" data-i18n-aria-label="access.billiardsCueProfile" aria-label="Cue profile"></select><span></span></div>
+          <div class="billiards-tools-line"><label for="fullscreen-billiards-tip-profile" data-i18n="billiards.tools.tip">Tip</label><select id="fullscreen-billiards-tip-profile" data-i18n-aria-label="access.billiardsTipProfile" aria-label="Cue tip profile"></select><span></span></div>
+          <div class="billiards-tools-line"><label for="fullscreen-billiards-assistance" data-i18n="setup.assistance">Assistance</label><select id="fullscreen-billiards-assistance" data-i18n-aria-label="access.billiardsAssistance" aria-label="Billiards aim assistance"><option value="beginner" data-i18n="setup.billiardsBeginner">beginner</option><option value="normal" data-i18n="setup.billiardsNormal">normal</option><option value="expert" data-i18n="setup.billiardsExpert">expert</option></select><span></span></div>
+        </details>
+        <details class="billiards-research-telemetry" id="fullscreen-billiards-research-telemetry" hidden>
+          <summary data-i18n="billiards.tools.telemetry">Research telemetry</summary>
+          <output class="billiards-telemetry-output" id="fullscreen-billiards-telemetry-output">idle</output>
+          <div class="billiards-tools-actions"><button class="btn" id="fullscreen-billiards-cancel" type="button" data-i18n="common.cancel" disabled>cancel</button></div>
+        </details>
+      </div>
+      <div class="fullscreen-action-shell" id="fullscreen-action-shell" data-placement="top" data-i18n-aria-label="access.fullscreenControls" aria-label="Fullscreen action controls" hidden>
+        <button class="fullscreen-settings-button" id="fullscreen-settings-open" type="button" data-i18n-aria-label="access.openFullscreenSettings" aria-label="Open fullscreen settings" aria-haspopup="dialog" aria-controls="fullscreen-settings-overlay" aria-expanded="false" data-i18n-title="fullscreen.settings" title="Settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7A2 2 0 1 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1z"></path>
+          </svg>
+        </button>
+        <div class="fullscreen-action-bar" id="fullscreen-action-bar" role="toolbar" data-i18n-aria-label="access.fullscreenBar" aria-label="Fullscreen action bar">
+          <button class="fullscreen-action-button" id="fullscreen-undo-step" type="button" data-i18n-aria-label="access.undoMove" aria-label="Undo move" data-i18n-title="common.undo" title="Undo" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M3 7v6h6"></path>
+              <path d="M21 17a9 9 0 0 0-15-6.7L3 13"></path>
+            </svg>
+          </button>
+          <button class="fullscreen-action-button" id="fullscreen-redo-step" type="button" data-i18n-aria-label="access.redoMove" aria-label="Redo move" data-i18n-title="common.redo" title="Redo" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M21 7v6h-6"></path>
+              <path d="M3 17a9 9 0 0 1 15-6.7l3 2.7"></path>
+            </svg>
+          </button>
+          <button class="fullscreen-action-button" id="fullscreen-exit" type="button" data-i18n-aria-label="access.exitFullscreen" aria-label="Exit fullscreen" data-i18n-title="fullscreen.exit" title="Exit fullscreen">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M9 3v6H3"></path>
+              <path d="M15 3v6h6"></path>
+              <path d="M9 21v-6H3"></path>
+              <path d="M15 21v-6h6"></path>
+            </svg>
+          </button>
+          <span class="fullscreen-action-divider" aria-hidden="true"></span>
+          <span class="fullscreen-action-status" id="fullscreen-action-status" role="status" aria-live="polite" hidden></span>
+          <button class="fullscreen-action-button fullscreen-action-danger" id="fullscreen-restart" type="button" data-i18n-aria-label="access.restartGame" aria-label="Restart game" data-i18n-title="fullscreen.restart" title="Restart">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M3 12a9 9 0 1 0 3-6.7"></path>
+              <path d="M3 4v6h6"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="fullscreen-settings-overlay" id="fullscreen-settings-overlay" hidden>
+        <div class="fullscreen-settings-dialog" id="fullscreen-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="fullscreen-settings-title">
+          <header class="fullscreen-settings-header">
+            <h2 class="fullscreen-settings-title" id="fullscreen-settings-title" data-i18n="fullscreen.settings">Settings</h2>
+            <button class="fullscreen-settings-close" id="fullscreen-settings-close" type="button" data-i18n-aria-label="access.closeFullscreenSettings" aria-label="Close fullscreen settings" data-i18n-title="common.close" title="Close">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M18 6 6 18"></path>
+                <path d="m6 6 12 12"></path>
+              </svg>
+            </button>
+          </header>
+          <nav class="fullscreen-settings-tabs" role="tablist" data-i18n-aria-label="controls.settingsSections" aria-label="Settings sections">
+            <button class="fullscreen-settings-tab" id="fullscreen-settings-display-tab" type="button" role="tab" aria-selected="true" aria-controls="fullscreen-settings-display" data-settings-panel="display" data-i18n="controls.displayTab">Display &amp; sound</button>
+            <button class="fullscreen-settings-tab" id="fullscreen-settings-controls-tab" type="button" role="tab" aria-selected="false" aria-controls="fullscreen-settings-controls" data-settings-panel="controls" data-i18n="controls.controlsTab">Controls &amp; cards</button>
+          </nav>
+          <div class="fullscreen-settings-panel" id="fullscreen-settings-display" role="tabpanel" aria-labelledby="fullscreen-settings-display-tab">
+            <div class="fullscreen-settings-options">
+              <div class="fullscreen-setting-row" id="fullscreen-wrapped-view-row" hidden>
+                <label for="fullscreen-wrapped-view-mode" data-i18n="fullscreen.wrappedView">Board view</label>
+                <select id="fullscreen-wrapped-view-mode" data-i18n-aria-label="access.boardView" aria-label="Board view (usual or wrapped)">
+                  <option value="usual" data-i18n="wrapped.usual">usual</option>
+                  <option value="wrapped" data-i18n="wrapped.wrapped">wrapped</option>
+                </select>
+              </div>
+              <div class="fullscreen-setting-row" id="fullscreen-billiards-physics-row" hidden>
+                <label for="fullscreen-billiards-physics-profile" data-i18n="setup.billiardsPhysics">Physics</label>
+                <select id="fullscreen-billiards-physics-profile" data-i18n-aria-label="access.billiardsPhysicsProfile" aria-label="Billiards physics profile">
+                  <option value="legacy" selected data-i18n="setup.billiardsPhysicsClassic">classic (faster)</option>
+                  <option value="realistic" data-i18n="setup.billiardsPhysicsRealistic">realistic (higher CPU)</option>
+                  <option value="research" data-i18n="setup.billiardsPhysicsResearch">research (reference)</option>
+                </select>
+              </div>
+              <div class="fullscreen-setting-row" id="fullscreen-billiards-equipment-row" hidden>
+                <label for="fullscreen-billiards-equipment" data-i18n="billiards.tools.equipment">Equipment</label>
+                <select id="fullscreen-billiards-equipment" data-i18n-aria-label="access.billiardsEquipment" aria-label="Billiards equipment profile">
+                  <option value="pool-9ft" selected data-i18n="billiards.equipment.pool9">9-foot pool</option>
+                  <option value="chinese-8ball" data-i18n="billiards.equipment.chinese8">Chinese 8-ball</option>
+                </select>
+              </div>
+              <div class="fullscreen-setting-row" id="fullscreen-billiards-tile-length-row" hidden>
+                <label for="fullscreen-billiards-tile-length" data-i18n="billiards.tools.tileEdgeLength">Tile edge length</label>
+                <span class="background-slider-controls">
+                  <input id="fullscreen-billiards-tile-length" type="range" min="0.07" max="0.5" step="0.01" value="0.13" data-i18n-aria-label="access.billiardsTileEdgeLength" aria-label="Physical length of each billiards tile edge">
+                  <output id="fullscreen-billiards-tile-length-value" for="fullscreen-billiards-tile-length">0.13 m</output>
+                </span>
+              </div>
+              <label class="fullscreen-setting-row" for="fullscreen-sound-enabled">
+                <span data-i18n="fullscreen.soundEffects">Sound effects</span>
+                <span class="fullscreen-setting-switch">
+                  <input id="fullscreen-sound-enabled" type="checkbox">
+                  <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
+                </span>
+              </label>
+              <div class="fullscreen-setting-row">
+                <label for="fullscreen-sound-volume" data-i18n="fullscreen.volume">Volume</label>
+                <span class="fullscreen-volume-control">
+                  <input id="fullscreen-sound-volume" type="range" min="0" max="100" step="1" value="100" data-i18n-aria-label="access.soundVolume" aria-label="Sound volume" disabled>
+                  <output id="fullscreen-sound-volume-value" for="fullscreen-sound-volume">100%</output>
+                </span>
+              </div>
+              <label class="fullscreen-setting-row" for="fullscreen-show-action-row">
+                <span data-i18n="fullscreen.showActionRow">Show action row</span>
+                <span class="fullscreen-setting-switch">
+                  <input id="fullscreen-show-action-row" type="checkbox" checked>
+                  <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
+                </span>
+              </label>
+              <label class="fullscreen-setting-row" for="fullscreen-show-game-tools">
+                <span data-i18n="fullscreen.showGameTools">Show game tools</span>
+                <span class="fullscreen-setting-switch">
+                  <input id="fullscreen-show-game-tools" type="checkbox" checked>
+                  <span class="fullscreen-setting-switch-track" aria-hidden="true"></span>
+                </span>
+              </label>
+            </div>
+            <footer class="fullscreen-settings-footer">
+              <button class="btn fullscreen-settings-exit" id="fullscreen-settings-exit" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M9 3v6H3"></path>
+                  <path d="M15 3v6h6"></path>
+                  <path d="M9 21v-6H3"></path>
+                  <path d="M15 21v-6h6"></path>
+                </svg>
+                <span data-i18n="fullscreen.exit">Exit fullscreen</span>
+              </button>
+            </footer>
+          </div>
+          <div class="fullscreen-settings-panel fullscreen-settings-controls calculator-input-settings-content" id="fullscreen-settings-controls" role="tabpanel" aria-labelledby="fullscreen-settings-controls-tab" hidden></div>
+        </div>
+      </div>
+      <div class="canvas-start-overlay" id="canvas-start-overlay" role="region" aria-live="polite" aria-label="Canvas action prompt" hidden>
+        <div class="canvas-start-sheet">
+          <p class="canvas-start-title" id="canvas-start-title" data-i18n="setup.ready">Ready to begin?</p>
+          <p class="canvas-start-context" id="canvas-start-context"></p>
+          <p class="canvas-start-rules" id="canvas-start-rules"></p>
+          <div class="canvas-start-actions">
+            <button class="btn canvas-start-begin" id="canvas-start-begin" type="button" data-i18n="setup.begin">begin the game</button>
+            <button class="btn canvas-start-close" id="canvas-start-close" type="button" data-i18n="setup.viewBoard" hidden>view completed board</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mosaic-underbar calculator-underbar">
+      <span class="mosaic-underbar-left">
+        <span id="status-line">choose a preset</span>
+      </span>
+      <span id="info-line">game not started</span>
+    </div>
+  </section>
+
+  <aside class="side" aria-label="Ramified minigame setup">
+    <section class="card">
+      <div class="card-head"><span class="card-head-label" data-i18n="setup.gameSetup">Game Setup</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="mosaic-inline-row">
+          <span class="input-label">Game</span>
+          <select id="game-mode-select" aria-label="Game">
+            <option value="hex">Hex (Nash)</option>
+            <option value="gomoku">Gomoku</option>
+            <option value="go">Go</option>
+            <option value="connect-four">Connect Four</option>
+            <option value="2048" selected>2048</option>
+            <option value="reversi">Reversi</option>
+            <option value="chinese-checkers">Chinese Checkers</option>
+            <option value="sokoban">Sokoban</option>
+            <option value="fide-chess">FIDE Chess</option>
+            <option value="billiards" data-i18n="games.billiards">Billiard</option>
+            <option value="__random-game-setup">Random setup</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="surface-preset-row">
+          <span class="input-label">Preset</span>
+          <select id="surface-preset-select" aria-label="Surface preset">
+            <option value="">Loading presets...</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="boundary-glue-mode-row" hidden>
+          <span class="input-label">Boundary</span>
+          <select id="boundary-glue-mode" aria-label="Boundary glue mode">
+            <option value="torus" selected>torus</option>
+            <option value="klein-bottle">Klein bottle</option>
+            <option value="rp2">RP^2</option>
+            <option value="open">open/classic</option>
+            <option value="random">random boundary glue</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="boundary-glue-wrapped-view-row" hidden>
+          <span class="input-label" data-i18n="setup.boardView">Board view</span>
+          <select id="boundary-glue-wrapped-view-mode" data-i18n-aria-label="access.boardView" aria-label="Board view (usual or wrapped)">
+            <option value="usual" data-i18n="wrapped.usual">usual</option>
+            <option value="wrapped" data-i18n="wrapped.wrapped">wrapped</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="boundary-glue-shape-row" hidden>
+          <span class="input-label">Shape</span>
+          <select id="boundary-glue-shape" aria-label="Boundary board shape">
+            <option value="square" selected>square</option>
+            <option value="rectangle">rectangle</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="gomoku-display-row">
+          <span class="input-label" data-i18n="setup.tileStyle">Tile style</span>
+          <span class="display-style-controls">
+            <select id="gomoku-display-style" data-i18n-aria-label="access.tileStyle" aria-label="Tile style">
+              <option value="vertex" selected>gridded board</option>
+              <option value="polished-vertex">polished gridded board</option>
+              <option value="center">tile board</option>
+              <option value="chessboard">classical board</option>
+              <option value="billiards-table" data-i18n="games.billiardsTable">billiards table</option>
+            </select>
+            <label class="opt-row"><input type="checkbox" id="show-board-coordinates" data-i18n-aria-label="access.coordinates" aria-label="Show board coordinates"> <span data-i18n="setup.coordinates">coordinates</span></label>
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="glue-flaps-row" hidden>
+          <span class="input-label" data-i18n="setup.gluedBoundary">Glued boundary</span>
+          <span class="glue-flap-controls">
+            <label class="opt-row"><input type="checkbox" id="show-glue-flaps" data-i18n-aria-label="access.glueFlaps" aria-label="Show glue flaps"> <span data-i18n="setup.glueFlaps">Glue flaps</span></label>
+            <label class="opt-row"><input type="checkbox" id="glue-flap-target-on-hover" checked data-i18n-aria-label="access.glueFlapTargetOnHover" aria-label="Show glue target only on hover"> <span data-i18n="setup.glueFlapTargetOnHover">On hover</span></label>
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="lianliankan-tile-set-row" data-mode-control="lianliankan" hidden>
+          <span class="input-label" data-i18n="setup.tileFamily">Characters</span>
+          <select id="lianliankan-tile-set" data-i18n-aria-label="access.tileFamily" aria-label="Tile Matching character family">
+            <option value="chinese" selected data-i18n="setup.chineseCharacters">Chinese characters</option>
+            <option value="japanese" data-i18n="setup.japaneseCharacters">Japanese characters</option>
+            <option value="korean" data-i18n="setup.koreanCharacters">Korean characters</option>
+            <option value="ipa" data-i18n="setup.ipaCharacters">IPA symbols</option>
+            <option value="young-3x3" data-i18n="setup.youngDiagrams3x3">Young diagrams (3×3)</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="lianliankan-tile-level-row" data-mode-control="lianliankan" hidden>
+          <span class="input-label" data-i18n="setup.level">Level</span>
+          <select id="lianliankan-tile-level" data-i18n-aria-label="access.tileLevel" aria-label="Tile Matching character level">
+            <option value="japanese" data-tile-family="japanese" data-i18n="setup.japaneseHiragana">Japanese Hiragana</option>
+            <option value="japanese-katakana" data-tile-family="japanese" data-i18n="setup.japaneseKatakana">Japanese Katakana</option>
+            <option value="japanese-mixed" data-tile-family="japanese" data-i18n="setup.japaneseMixedKana">Japanese mixed Kana</option>
+            <option value="korean-jamo-consonants" data-tile-family="korean" data-i18n="setup.koreanJamoConsonants">Korean jamo: basic consonants</option>
+            <option value="korean-jamo-vowels" data-tile-family="korean" data-i18n="setup.koreanJamoVowels">Korean jamo: basic vowels</option>
+            <option value="korean-jamo-basic" data-tile-family="korean" data-i18n="setup.koreanJamoBasic">Korean jamo: basic combined</option>
+            <option value="korean-jamo-modern" data-tile-family="korean" data-i18n="setup.koreanJamoModern">Korean jamo: modern extensions</option>
+            <option value="korean-jamo-combined" data-tile-family="korean" data-i18n="setup.koreanJamoCombined">Korean jamo: final exam</option>
+            <option value="korean-spelling-a" data-tile-family="korean" data-i18n="setup.koreanSpellingA">Korean spelling 1: ㅏ syllables</option>
+            <option value="korean-spelling-vowels" data-tile-family="korean" data-i18n="setup.koreanSpellingVowels">Korean spelling 2: vowel sounds</option>
+            <option value="korean-spelling-cv" data-tile-family="korean" data-i18n="setup.koreanSpellingCv">Korean spelling 3: basic CV</option>
+            <option value="korean-spelling-cvc" data-tile-family="korean" data-i18n="setup.koreanSpellingCvc">Korean spelling 4: basic CVC</option>
+            <option value="ipa-vowels" data-tile-family="ipa" data-i18n="setup.ipaVowels">IPA vowels</option>
+            <option value="ipa-pulmonic-consonants" data-tile-family="ipa" data-i18n="setup.ipaPulmonicConsonants">IPA pulmonic consonants</option>
+            <option value="ipa-non-pulmonic-consonants" data-tile-family="ipa" data-i18n="setup.ipaNonPulmonicConsonants">IPA non-pulmonic consonants</option>
+            <option value="ipa-other-symbols" data-tile-family="ipa" data-i18n="setup.ipaOtherSymbols">IPA other symbols</option>
+            <option value="ipa-affricates" data-tile-family="ipa" data-i18n="setup.ipaAffricates">IPA affricates</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="lianliankan-ipa-audio-note" data-mode-control="lianliankan" hidden>
+          <span class="input-label" data-i18n="setup.ipaAudio">IPA audio</span>
+          <a class="lianliankan-ipa-audio-link" href="https://www.ipachart.com/" target="_blank" rel="noopener" data-i18n="setup.ipaAudioSource" data-i18n-title="setup.ipaAudioAttribution" title="Audio from IPA Chart; see its clip licences and attribution.">IPA Chart audio</a>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-rules-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.rules">Rules</span>
+          <select id="billiards-rules" data-i18n-aria-label="access.billiardsRules" aria-label="Billiards rules">
+            <option value="solo" selected data-i18n="setup.billiardsSolo">solo</option>
+            <option value="competitive" data-i18n="setup.billiardsCompetitive">two-player</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-physics-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.billiardsPhysics">Physics</span>
+          <select id="billiards-physics-profile" data-i18n-aria-label="access.billiardsPhysicsProfile" aria-label="Billiards physics profile">
+            <option value="legacy" selected data-i18n="setup.billiardsPhysicsClassic">classic (faster)</option>
+            <option value="realistic" data-i18n="setup.billiardsPhysicsRealistic">realistic (higher CPU)</option>
+            <option value="research" data-i18n="setup.billiardsPhysicsResearch">research (reference)</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-equipment-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.equipment">Equipment</span>
+          <select id="billiards-equipment" data-i18n-aria-label="access.billiardsEquipment" aria-label="Billiards equipment profile">
+            <option value="pool-9ft" selected data-i18n="billiards.equipment.pool9">9-foot pool</option>
+            <option value="chinese-8ball" data-i18n="billiards.equipment.chinese8">Chinese 8-ball</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-tile-length-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.tileEdgeLength">Tile edge length</span>
+          <span class="background-slider-controls">
+            <input id="billiards-tile-length" type="range" min="0.07" max="0.5" step="0.01" value="0.13" data-i18n-aria-label="access.billiardsTileEdgeLength" aria-label="Physical length of each billiards tile edge">
+            <output id="billiards-tile-length-value" for="billiards-tile-length">0.13 m</output>
+          </span>
+        </div>
+        <div class="mosaic-inline-row billiards-ball-palette-row" id="billiards-ball-palette-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.billiardsBalls">Balls</span>
+          <div class="tile-palette-grid billiards-ball-palette" id="billiards-ball-palette" role="toolbar" data-i18n-aria-label="access.billiardsBallPalette" aria-label="Billiards ball palette"></div>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-assistance-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.assistance">Assistance</span>
+          <select id="billiards-assistance" data-i18n-aria-label="access.billiardsAssistance" aria-label="Billiards aim assistance">
+            <option value="beginner" selected data-i18n="setup.billiardsBeginner">beginner</option>
+            <option value="normal" data-i18n="setup.billiardsNormal">normal</option>
+            <option value="expert" data-i18n="setup.billiardsExpert">expert</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-friction-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.friction">Friction</span>
+          <span class="background-slider-controls">
+            <input type="range" id="billiards-friction" min="50" max="250" step="25" value="100" data-i18n-aria-label="access.billiardsFriction" aria-label="Billiards table friction">
+            <output id="billiards-friction-value">100%</output>
+          </span>
+        </div>
+        <div class="billiards-spin-row" id="billiards-spin-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.cueContact">Cue contact</span>
+          <span class="billiards-spin-control">
+            <canvas id="billiards-spin-pad" width="104" height="104" tabindex="0" data-i18n-aria-label="access.billiardsCueContact" aria-label="Cue ball contact point"></canvas>
+            <output id="billiards-spin-label" data-i18n="setup.billiardsCenter">center</output>
+            <output class="billiards-tools-readout" id="billiards-contact-readout">x 0.00 · y 0.00</output>
+            <button class="btn" id="billiards-center-contact" type="button" data-i18n="billiards.tools.center">center</button>
+          </span>
+        </div>
+        <div class="mosaic-inline-row billiards-advanced-row" id="billiards-cue-speed-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.cueSpeed">Cue speed</span>
+          <span class="background-slider-controls">
+            <input id="billiards-cue-speed" type="range" min="0.1" max="7.5" step="0.1" value="3" data-i18n-aria-label="access.billiardsCueSpeed" aria-label="Cue speed">
+            <output id="billiards-cue-speed-value">3.0 m/s</output>
+            <label class="opt-row"><input id="billiards-speed-lock" type="checkbox"> <span data-i18n="billiards.tools.lock">lock</span></label>
+          </span>
+        </div>
+        <div class="mosaic-inline-row billiards-advanced-row" id="billiards-elevation-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.elevation">Elevation</span>
+          <span class="background-slider-controls">
+            <input id="billiards-elevation" type="range" min="0" max="75" step="1" value="0" data-i18n-aria-label="access.billiardsElevation" aria-label="Cue elevation">
+            <output id="billiards-elevation-value">0°</output>
+          </span>
+        </div>
+        <div class="mosaic-inline-row billiards-advanced-row" id="billiards-stroke-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.stroke">Stroke</span>
+          <select id="billiards-stroke-preset" data-i18n-aria-label="access.billiardsStroke" aria-label="Stroke preset"></select>
+        </div>
+        <div class="mosaic-inline-row billiards-advanced-row" id="billiards-cue-profile-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.cue">Cue</span>
+          <select id="billiards-cue-profile" data-i18n-aria-label="access.billiardsCueProfile" aria-label="Cue profile"></select>
+        </div>
+        <div class="mosaic-inline-row billiards-advanced-row" id="billiards-tip-profile-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.tip">Tip</span>
+          <select id="billiards-tip-profile" data-i18n-aria-label="access.billiardsTipProfile" aria-label="Cue tip profile"></select>
+        </div>
+        <div class="mosaic-inline-row billiards-research-row" id="billiards-telemetry-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="billiards.tools.telemetry">Research telemetry</span>
+          <span><output class="billiards-telemetry-output" id="billiards-telemetry-output">idle</output> <button class="btn" id="billiards-cancel" type="button" data-i18n="common.cancel" disabled>cancel</button></span>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-power-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.power">Power</span>
+          <meter id="billiards-power" min="0" max="100" value="0">0%</meter>
+        </div>
+        <div class="mosaic-inline-row" id="billiards-debug-row" data-mode-control="billiards" hidden>
+          <span class="input-label" data-i18n="setup.view">View</span>
+          <span class="billiards-debug-options">
+            <label class="opt-row"><input type="checkbox" id="billiards-debug"> <span data-i18n="setup.billiardsAtlas">atlas</span></label>
+            <label class="opt-row"><input type="checkbox" id="billiards-debug-texture"> <span data-i18n="setup.billiardsOrientation">orientation</span></label>
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="move-number-label-row" hidden>
+          <span class="input-label">Labels</span>
+          <label class="opt-row"><input type="checkbox" id="move-number-labels"> move numbers</label>
+        </div>
+        <div class="mosaic-inline-row" id="placement-hint-highlight-row" hidden>
+          <span class="input-label" data-i18n="setup.hintHighlight">Hint highlight</span>
+          <select id="placement-hint-highlight" data-i18n-aria-label="access.placementHintHighlight" aria-label="Directional hint highlight">
+            <option value="single" selected data-i18n="setup.hintHighlightSingle">one direction</option>
+            <option value="opposites" data-i18n="setup.hintHighlightOpposites">direction and opposite</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="placement-hint-colors-row" hidden>
+          <span class="input-label" data-i18n="setup.hintLineColors">Hint colors</span>
+          <select id="placement-hint-colors" data-i18n-aria-label="access.placementHintColors" aria-label="Directional hint line colors">
+            <option value="uniform" data-i18n="setup.hintLineColorsUniform">one color</option>
+            <option id="placement-hint-colors-axis" value="axis" selected></option>
+            <option id="placement-hint-colors-direction" value="direction"></option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="placement-piece-size-row" hidden>
+          <span class="input-label">Piece</span>
+          <span class="background-slider-controls">
+            <input type="range" id="placement-piece-size" min="24" max="100" step="1" value="43" aria-label="Placement piece radius">
+            <output id="placement-piece-size-value">43%</output>
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="fide-chess-piece-display-row" data-mode-control="fide-chess" hidden>
+          <span class="input-label">Pieces</span>
+          <select id="fide-chess-piece-display" aria-label="Chess piece display">
+            <option value="minigame" selected>minigame symbols</option>
+            <option value="mosaic">mosaic calculator</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="fide-chess-puzzle-threat-row" data-mode-control="fide-chess" hidden>
+          <span class="input-label">Threats</span>
+          <label class="opt-row"><input type="checkbox" id="fide-chess-puzzle-attack-borders" checked> attacked background</label>
+        </div>
+        <div class="mosaic-inline-row" id="gomoku-size-row" data-mode-control="gomoku" hidden>
+          <span class="input-label">Board n</span>
+          <input id="gomoku-board-size" type="number" min="2" max="25" step="1" value="15" aria-label="Square board size">
+        </div>
+        <div class="mosaic-inline-row" id="gomoku-controllers-row" data-mode-control="gomoku" hidden>
+          <span class="input-label" data-i18n="ai.players">Players</span>
+          <span class="local-ai-player-options">
+            <label class="local-ai-player-option"><span data-i18n="status.black">Black</span><select id="gomoku-black-controller" data-i18n-aria-label="ai.access.blackController" aria-label="Black controller"><option value="human" data-i18n="ai.human">Human</option><option value="local-ai-challenging" data-i18n="ai.localChallenging">Local AI — Challenging</option><option value="local-ai-aggressive" data-i18n="ai.localAggressive">Local AI — Aggressive</option></select></label>
+            <label class="local-ai-player-option"><span data-i18n="status.white">White</span><select id="gomoku-white-controller" data-i18n-aria-label="ai.access.whiteController" aria-label="White controller"><option value="human" data-i18n="ai.human">Human</option><option value="local-ai-challenging" data-i18n="ai.localChallenging">Local AI — Challenging</option><option value="local-ai-aggressive" data-i18n="ai.localAggressive">Local AI — Aggressive</option></select></label>
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="boundary-glue-rect-row" hidden>
+          <span class="input-label">Rows / cols</span>
+          <span class="background-slider-controls">
+            <input id="boundary-glue-rows" type="number" min="2" max="25" step="1" value="3" aria-label="Boundary board rows">
+            <input id="boundary-glue-cols" type="number" min="2" max="25" step="1" value="5" aria-label="Boundary board columns">
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="go-komi-row" data-mode-control="go" hidden>
+          <span class="input-label">Komi</span>
+          <input id="go-komi" type="number" min="-99" max="99" step="0.5" value="6.5" aria-label="Go white komi">
+        </div>
+        <div class="mosaic-inline-row" id="go-action-row" data-mode-control="go" hidden>
+          <span class="input-label">Action</span>
+          <button class="btn" id="go-pass" type="button">pass</button>
+        </div>
+        <div class="mosaic-inline-row" id="go-score-view-row" data-mode-control="go" hidden>
+          <span class="input-label">Score</span>
+          <label class="opt-row"><input type="checkbox" id="go-score-view"> score view</label>
+        </div>
+        <div class="mosaic-inline-row" id="go-scoring-method-row" data-mode-control="go" hidden>
+          <span class="input-label">Method</span>
+          <select id="go-scoring-method" aria-label="Go scoring method">
+            <option value="influence" selected>influence field</option>
+            <option value="nearest">nearest stone</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="go-mark-dead-row" data-mode-control="go" hidden>
+          <span class="input-label">Dead</span>
+          <label class="opt-row"><input type="checkbox" id="go-mark-dead"> mark groups</label>
+        </div>
+        <div class="mosaic-inline-row" id="go-edit-territory-row" data-mode-control="go" hidden>
+          <span class="input-label">Edit</span>
+          <label class="opt-row"><input type="checkbox" id="go-edit-territory"> edit territory</label>
+        </div>
+        <div class="mosaic-inline-row" id="go-score-compare-row" data-mode-control="go" hidden>
+          <span class="input-label">Compare</span>
+          <span class="go-score-compare" id="go-score-compare">score view off</span>
+        </div>
+        <div class="mosaic-inline-row" id="go-confirm-score-row" data-mode-control="go" hidden>
+          <span class="input-label">Finish</span>
+          <button class="btn go-score-action-button" id="go-confirm-score" type="button">confirm score</button>
+        </div>
+        <div class="mosaic-inline-row" id="connect-four-fall-row" data-mode-control="connect-four" hidden>
+          <span class="input-label">Fall</span>
+          <select id="connect-four-fall-dir" aria-label="Connect Four fall direction">
+            <option value="S" selected>down</option>
+            <option value="E">right</option>
+            <option value="W">left</option>
+            <option value="N">up</option>
+            <option value="SE">southeast</option>
+            <option value="SW">southwest</option>
+            <option value="NW">northwest</option>
+            <option value="NE">northeast</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="connect-four-align-row" data-mode-control="connect-four" hidden>
+          <span class="input-label">Board</span>
+          <label class="opt-row"><input type="checkbox" id="connect-four-align-fall" checked> fall down</label>
+        </div>
+        <div class="mosaic-inline-row" id="connect-four-controllers-row" data-mode-control="connect-four" hidden>
+          <span class="input-label" data-i18n="ai.players">Players</span>
+          <span class="local-ai-player-options">
+            <label class="local-ai-player-option"><span data-i18n="status.red">Red</span><select id="connect-four-red-controller" data-i18n-aria-label="ai.access.redController" aria-label="Red controller"><option value="human" data-i18n="ai.human">Human</option><option value="local-ai-challenging" data-i18n="ai.localChallenging">Local AI — Challenging</option></select></label>
+            <label class="local-ai-player-option"><span data-i18n="status.yellow">Yellow</span><select id="connect-four-yellow-controller" data-i18n-aria-label="ai.access.yellowController" aria-label="Yellow controller"><option value="human" data-i18n="ai.human">Human</option><option value="local-ai-challenging" data-i18n="ai.localChallenging">Local AI — Challenging</option></select></label>
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="chinese-checkers-move-time-row" data-mode-control="chinese-checkers" hidden>
+          <span class="input-label">Move time</span>
+          <span class="background-slider-controls">
+            <input type="range" id="chinese-checkers-move-time" min="40" max="160" step="20" value="100" aria-label="Chinese Checkers move time per edge">
+            <output id="chinese-checkers-move-time-value">100 ms/edge</output>
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="chinese-checkers-jump-pause-row" data-mode-control="chinese-checkers" hidden>
+          <span class="input-label">Jump pause</span>
+          <span class="background-slider-controls">
+            <input type="range" id="chinese-checkers-jump-pause" min="0" max="240" step="40" value="120" aria-label="Chinese Checkers pause at multi-jump landings">
+            <output id="chinese-checkers-jump-pause-value">120 ms</output>
+          </span>
+        </div>
+        <div class="mosaic-inline-row"
+        id="hex-pie-rule-row"
+        data-mode-control="hex"
+        hidden>
+
+        <span class="input-label"
+        data-i18n="setup.rules">Rules</span>
+
+        <label class="opt-row">
+          <input type="checkbox" id="hex-pie-rule">
+          <span data-i18n="setup.hexStandardPieRule">standard pie rule</span>
+        </label>
+      </div>
+      <div class="mosaic-inline-row"
+      id="hex-pie-swap-row"
+      data-mode-control="hex"
+      hidden>
+
+      <span class="input-label"
+      data-i18n="setup.hexPieRule">Pie rule</span>
+
+      <button class="btn"
+      id="hex-pie-swap"
+      type="button"
+      data-i18n="setup.hexSwapColors">swap colors</button>
+    </div>
+        <div class="mosaic-inline-row" id="chinese-checkers-jump-rule-row" data-mode-control="chinese-checkers" hidden>
+          <span class="input-label" data-i18n="setup.checkersJumpRule">Jump rule</span>
+          <select id="chinese-checkers-jump-rule" data-i18n-aria-label="access.checkersJumpRule" aria-label="Chinese Checkers jump rule">
+            <option value="unlimited" selected data-i18n="setup.checkersJumpUnlimited">unlimited mirror jump</option>
+            <option value="adjacent" data-i18n="setup.checkersJumpAdjacent">adjacent jump only</option>
+            <option value="adjacent-or-two" data-i18n="setup.checkersJumpAdjacentOrTwo">adjacent or distance-two jump</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="chinese-checkers-hints-row" data-mode-control="chinese-checkers" hidden>
+          <span class="input-label">Hints</span>
+          <label class="opt-row"><input type="checkbox" id="chinese-checkers-full-hints"> full-chain hints</label>
+        </div>
+        <div class="mosaic-inline-row" id="chinese-checkers-players-row" data-mode-control="chinese-checkers" hidden>
+          <span class="input-label" data-i18n="ai.players">Players</span>
+          <span class="chinese-checkers-player-options" id="chinese-checkers-player-options" data-i18n-aria-label="ai.access.checkersControllers" aria-label="Chinese Checkers controllers"></span>
+        </div>
+        <div class="mosaic-inline-row" id="chinese-checkers-end-jump-row" data-mode-control="chinese-checkers" hidden>
+          <span class="input-label">Jump</span>
+          <button class="btn chinese-checkers-action-button" id="chinese-checkers-end-jump" type="button">end jump</button>
+        </div>
+        <div class="mosaic-inline-row" id="local-ai-pause-row" hidden>
+          <span class="input-label" data-i18n="ai.local">Local AI</span>
+          <button class="btn" id="local-ai-pause" type="button" data-i18n="ai.pause">Pause AI</button>
+        </div>
+        <div class="mosaic-inline-row" id="box-ui-row" data-mode-control="2048">
+          <span class="input-label" data-i18n="setup.boxUi">Box UI</span>
+          <select id="number-box-style" data-i18n-aria-label="access.numberBoxStyle" aria-label="Number box style">
+            <option value="paper" selected>paper square</option>
+            <option value="ink">ink outline</option>
+            <option value="color">value color</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="box-orientation-row" data-mode-control="2048">
+          <label class="opt-row"><input type="checkbox" id="keep-numbers-upright" data-i18n-aria-label="access.keepNumbersUpright" aria-label="Keep numbers upright"> <span data-i18n="setup.keepNumbersUpright">Keep numbers upright</span></label>
+        </div>
+        <div class="mosaic-inline-row" id="new-boxes-row" data-mode-control="2048">
+          <span class="input-label">New boxes</span>
+          <label class="opt-row"><input type="checkbox" id="highlight-new-boxes" checked> highlight</label>
+        </div>
+        <div class="mosaic-inline-row" id="speed-row" data-mode-control="directional">
+          <span class="input-label">Speed</span>
+          <span class="background-slider-controls">
+            <input type="range" id="animation-speed" min="40" max="400" step="20" value="80">
+            <output id="animation-speed-value">80 ms</output>
+          </span>
+        </div>
+        <button class="btn mosaic-import-button" id="begin-game" type="button">begin the game</button>
+        <div class="game-setup-alert" id="game-setup-alert" role="status" aria-live="polite" hidden></div>
+        <div class="mosaic-debug-actions">
+          <button class="btn" id="debug-toggle" type="button" aria-pressed="false">debug</button>
+        </div>
+        <div class="mosaic-history-actions" aria-label="Move history">
+          <button class="btn" id="undo-step" type="button" disabled>undo</button>
+          <button class="btn" id="redo-step" type="button" disabled>redo</button>
+        </div>
+        <div class="mosaic-debug-panel" id="debug-tools" hidden>
+          <section class="mosaic-debug-step-row" id="sound-effects-debug" aria-label="Sound effect variants" data-i18n-aria-label="access.soundVariants">
+            <span class="input-label" data-i18n="debug.soundVariants">Sound effect variants</span>
+            <div id="sound-effects-debug-list"></div>
+          </section>
+          <section class="mosaic-debug-step-row" id="sound-audition-debug" aria-label="Seeded retro sound audition" data-i18n-aria-label="access.soundAudition">
+            <span class="input-label" data-i18n="debug.soundAudition">Seeded retro sound audition</span>
+            <div class="mosaic-inline-row">
+              <label class="input-label" for="sound-audition-category" data-i18n="sfx.audition.category">Collection</label>
+              <select class="mosaic-editor-input calculator-control" id="sound-audition-category" data-i18n-aria-label="access.soundAuditionCategory" aria-label="Sound collection">
+                <option value="marble" data-i18n="sfx.audition.marble">Marble hops</option>
+                <option value="stone" data-i18n="sfx.audition.stone">Stone skips</option>
+                <option value="billiards" data-i18n="sfx.audition.billiards">Billiards contacts</option>
+                <option value="win" data-i18n="sfx.audition.win">Wins</option>
+              </select>
+              <select class="mosaic-editor-input calculator-control" id="sound-audition-seed" data-i18n-aria-label="access.soundAuditionSeed" aria-label="Sound seed"></select>
+              <button class="btn" id="sound-audition-generate" type="button" data-i18n="sfx.audition.generate">Generate 24</button>
+            </div>
+            <div class="mosaic-inline-row">
+              <label class="input-label" for="sound-audition-custom-seed" data-i18n="sfx.audition.customSeed">Numeric seed</label>
+              <input class="mosaic-editor-input calculator-control" id="sound-audition-custom-seed" type="text" inputmode="numeric" maxlength="12" autocomplete="off" data-i18n-aria-label="access.soundAuditionCustomSeed" aria-label="Custom numeric sound seed">
+              <button class="btn" id="sound-audition-use-seed" type="button" data-i18n="sfx.audition.useSeed">Use seed</button>
+            </div>
+            <div class="mosaic-inline-row">
+              <label class="input-label" for="sound-audition-event" data-i18n="sfx.audition.applyTo">Apply to event</label>
+              <select class="mosaic-editor-input calculator-control" id="sound-audition-event" data-i18n-aria-label="access.soundAuditionEvent" aria-label="Sound event"></select>
+              <button class="btn" id="sound-audition-preview" type="button" data-i18n="sfx.preview">Preview</button>
+              <button class="btn" id="sound-audition-save" type="button" data-i18n="sfx.audition.save">Save for event</button>
+            </div>
+          </section>
+          <div class="mosaic-debug-step-row" id="translation-check-row">
+            <label class="opt-row"><input type="checkbox" id="check-translation" data-i18n-aria-label="access.checkTranslation" aria-label="Check Chinese translations"> <span data-i18n="debug.checkTranslation">check translation</span></label>
+          </div>
+          <div class="mosaic-debug-step-row" id="connect-four-hole-edit-row" data-mode-control="connect-four" hidden>
+            <label class="opt-row"><input type="checkbox" id="connect-four-hole-edit"> add/remove holes</label>
+          </div>
+          <div class="mosaic-debug-step-row" id="step-mode-row" data-mode-control="directional">
+            <label class="opt-row"><input type="checkbox" id="step-mode"> step-by-step</label>
+            <button class="btn" id="next-step" type="button" disabled>next step</button>
+          </div>
+          <div class="mosaic-debug-step-row" id="gomoku-five-path-count-row" data-mode-control="gomoku" hidden>
+            <label class="opt-row"><input type="checkbox" id="gomoku-five-path-counts" data-i18n-aria-label="ai.access.showFivePathCounts" aria-label="Show Gomoku five-path counts"> <span data-i18n="ai.showFivePathCounts">show five-path counts</span></label>
+          </div>
+          <div class="mosaic-inline-row" id="gomoku-ai-think-time-row" data-mode-control="gomoku" hidden>
+            <span class="input-label" data-i18n="ai.challengingThinkTime">Challenging AI think time</span>
+            <span class="background-slider-controls">
+              <input type="range" id="gomoku-ai-think-time" min="100" max="3000" step="100" value="1000" data-i18n-aria-label="ai.access.challengingThinkTime" aria-label="Gomoku Challenging AI think time">
+              <output id="gomoku-ai-think-time-value">1000 ms</output>
+            </span>
+          </div>
+          <div class="mosaic-debug-step-row" id="gomoku-safe-pruning-row" data-mode-control="gomoku" hidden>
+            <label class="opt-row"><input type="checkbox" id="gomoku-safe-pruning" data-i18n-aria-label="ai.access.safePruning" aria-label="Use Gomoku pruning safety fallback"> <span data-i18n="ai.safePruning">pruning safety fallback</span></label>
+          </div>
+          <div class="mosaic-inline-row" id="hex-neighbor-delay-row" data-mode-control="hex" hidden>
+            <span class="input-label" data-i18n="setup.hexNeighborDelay">Neighbor delay</span>
+            <span class="background-slider-controls">
+              <input type="range" id="hex-neighbor-delay" min="0.1" max="0.8" step="0.1" value="0.4" data-i18n-aria-label="access.hexNeighborDelay" aria-label="Hex neighbor hint delay">
+              <output id="hex-neighbor-delay-value">0.4 s</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="hex-neighbor-size-row" data-mode-control="hex" hidden>
+            <span class="input-label" data-i18n="setup.hexNeighborSize">Neighbor size</span>
+            <span class="background-slider-controls">
+              <input type="range" id="hex-neighbor-size" min="50" max="100" step="1" value="75" data-i18n-aria-label="access.hexNeighborSize" aria-label="Hex neighbor marker size">
+              <output id="hex-neighbor-size-value">75%</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="hex-neighbor-stroke-row" data-mode-control="hex" hidden>
+            <span class="input-label" data-i18n="setup.hexNeighborStroke">Neighbor stroke</span>
+            <span class="background-slider-controls">
+              <input type="range" id="hex-neighbor-stroke" min="1" max="5" step="0.5" value="3" data-i18n-aria-label="access.hexNeighborStroke" aria-label="Hex neighbor marker stroke width">
+              <output id="hex-neighbor-stroke-value">3 px</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="hex-cover-offset-row" hidden>
+            <span class="input-label" data-i18n="debug.hexCoverOffset">Hex cover offset</span>
+            <span class="background-slider-controls">
+              <span data-i18n="debug.offsetX">X</span>
+              <input type="range" id="hex-cover-offset-x" min="-2" max="2" step="0.05" value="0" data-i18n-aria-label="access.hexCoverOffsetX" aria-label="Hex cover horizontal offset">
+              <output id="hex-cover-offset-x-value" data-i18n-aria-label="access.hexCoverOffsetXValue" aria-label="Hex cover horizontal offset value">0.00 r</output>
+            </span>
+            <span class="background-slider-controls">
+              <span data-i18n="debug.offsetY">Y</span>
+              <input type="range" id="hex-cover-offset-y" min="-2" max="2" step="0.05" value="0" data-i18n-aria-label="access.hexCoverOffsetY" aria-label="Hex cover vertical offset">
+              <output id="hex-cover-offset-y-value" data-i18n-aria-label="access.hexCoverOffsetYValue" aria-label="Hex cover vertical offset value">0.00 r</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="placement-preview-opacity-row" hidden>
+            <span class="input-label" data-i18n="setup.previewOpacity">Preview opacity</span>
+            <span class="background-slider-controls">
+              <input type="range" id="placement-preview-opacity" min="10" max="90" step="5" value="50" data-i18n-aria-label="access.previewOpacity" aria-label="Placement preview opacity">
+              <output id="placement-preview-opacity-value">50%</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="debug-tile-row" data-mode-control="2048">
+            <span class="input-label">Tile value</span>
+            <select class="mosaic-editor-input calculator-control" id="debug-tile-value" aria-label="Debug tile value">
+              <option value="">empty</option>
+              <option value="2">2</option>
+              <option value="4">4</option>
+              <option value="8">8</option>
+              <option value="16">16</option>
+              <option value="32">32</option>
+              <option value="64">64</option>
+              <option value="128">128</option>
+              <option value="256">256</option>
+              <option value="512">512</option>
+              <option value="1024">1024</option>
+              <option value="2048">2048</option>
+              <option value="4096">4096</option>
+              <option value="8192">8192</option>
+              <option value="16384">16384</option>
+              <option value="32768">32768</option>
+              <option value="65536">65536</option>
+              <option value="131072">131072</option>
+              <option value="262144">262144</option>
+              <option value="524288">524288</option>
+              <option value="1048576">1048576</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row" id="debug-bomb-row" data-mode-control="2048">
+            <span class="input-label">Tile tool</span>
+            <select class="mosaic-editor-input calculator-control" id="debug-bomb-tool" aria-label="Debug tile tool">
+              <option value="number" selected>number / empty</option>
+              <option value="blue">place blue bomb</option>
+              <option value="red">place red bomb</option>
+              <option value="clear">clear bomb</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row" id="bomb-art-row" data-mode-control="2048">
+            <span class="input-label">Bomb art</span>
+            <select class="mosaic-editor-input calculator-control" id="bomb-art-style" aria-label="Bomb art style">
+              <option value="png-1" selected>PNG skull</option>
+              <option value="png-2">PNG stripe</option>
+              <option value="png-3">PNG vortex</option>
+              <option value="canvas-1">canvas spark</option>
+            </select>
+          </div>
+          <div class="mosaic-debug-step-row" id="sokoban-object-size-row" data-mode-control="sokoban" hidden>
+            <span class="input-label">Object size</span>
+            <span class="background-slider-controls">
+              <input type="range" id="sokoban-object-size" min="54" max="96" step="2" value="70" aria-label="Sokoban object size">
+              <output id="sokoban-object-size-value">70%</output>
+            </span>
+          </div>
+          <div class="mosaic-debug-step-row" id="sokoban-glow-inner-row" data-mode-control="sokoban" hidden>
+            <span class="input-label">Inner glow</span>
+            <span class="background-slider-controls">
+              <input type="range" id="sokoban-glow-inner" min="0" max="100" step="5" value="55" aria-label="Energy Bridge inner glow">
+              <output id="sokoban-glow-inner-value">55%</output>
+            </span>
+          </div>
+          <div class="mosaic-debug-step-row" id="sokoban-glow-outer-row" data-mode-control="sokoban" hidden>
+            <span class="input-label">Outer glow</span>
+            <span class="background-slider-controls">
+              <input type="range" id="sokoban-glow-outer" min="0" max="100" step="5" value="82" aria-label="Energy Bridge outer glow">
+              <output id="sokoban-glow-outer-value">82%</output>
+            </span>
+          </div>
+          <div class="mosaic-debug-step-row" id="sokoban-glow-blur-row" data-mode-control="sokoban" hidden>
+            <span class="input-label">Glow blur</span>
+            <span class="background-slider-controls">
+              <input type="range" id="sokoban-glow-blur" min="0" max="100" step="5" value="38" aria-label="Energy Bridge glow blur">
+              <output id="sokoban-glow-blur-value">38%</output>
+            </span>
+          </div>
+          <div class="mosaic-debug-step-row" id="sokoban-beam-width-row" data-mode-control="sokoban" hidden>
+            <span class="input-label">Beam width</span>
+            <span class="background-slider-controls">
+              <input type="range" id="sokoban-beam-width" min="20" max="110" step="5" value="70" aria-label="Energy beam width">
+              <output id="sokoban-beam-width-value">70%</output>
+            </span>
+          </div>
+          <div class="mosaic-debug-step-row" id="sokoban-beam-opacity-row" data-mode-control="sokoban" hidden>
+            <span class="input-label">Beam opacity</span>
+            <span class="background-slider-controls">
+              <input type="range" id="sokoban-beam-opacity" min="5" max="80" step="5" value="34" aria-label="Energy beam opacity">
+              <output id="sokoban-beam-opacity-value">34%</output>
+            </span>
+          </div>
+        </div>
+        <div class="mosaic-inline-row" id="move-row" data-mode-control="2048">
+          <span class="input-label">Move</span>
+          <table data-move-lattice="square" aria-label="Square directional controls">
+            <tbody>
+              <tr>
+                <td></td>
+                <td><button class="btn" type="button" data-move-dir="N" aria-label="Move up" title="Move up (ArrowUp/W)">&uarr;</button></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td><button class="btn" type="button" data-move-dir="W" aria-label="Move left" title="Move left (ArrowLeft/A)">&larr;</button></td>
+                <td></td>
+                <td><button class="btn" type="button" data-move-dir="E" aria-label="Move right" title="Move right (ArrowRight/D)">&rarr;</button></td>
+              </tr>
+              <tr>
+                <td></td>
+                <td><button class="btn" type="button" data-move-dir="S" aria-label="Move down" title="Move down (ArrowDown/S)">&darr;</button></td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="hex-move-pad" data-move-lattice="hexagonal" hidden aria-label="Hexagonal directional controls">
+            <button class="btn" type="button" data-move-dir="NW" aria-label="Move northwest" title="Move northwest (ArrowUp+ArrowLeft)">&#x2196;</button>
+            <button class="btn" type="button" data-move-dir="NE" aria-label="Move northeast" title="Move northeast (ArrowUp+ArrowRight)">&#x2197;</button>
+            <button class="btn" type="button" data-move-dir="W" aria-label="Move west" title="Move west (ArrowLeft)">&#x2190;</button>
+            <button class="btn" type="button" data-move-dir="E" aria-label="Move east" title="Move east (ArrowRight)">&#x2192;</button>
+            <button class="btn" type="button" data-move-dir="SW" aria-label="Move southwest" title="Move southwest (ArrowDown+ArrowLeft)">&#x2199;</button>
+            <button class="btn" type="button" data-move-dir="SE" aria-label="Move southeast" title="Move southeast (ArrowDown+ArrowRight)">&#x2198;</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="display-card">
+      <div class="card-head"><span class="card-head-label" data-i18n="setup.display">Display</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body" id="display-card-body"></div>
+    </section>
+
+    <section class="card" id="online-play-card">
+      <div class="card-head"><span class="card-head-label" data-i18n="online.title">Online Play</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body online-play-panel">
+        <div class="mosaic-inline-row">
+          <span class="input-label">Room</span>
+          <span class="online-room-fields">
+            <input class="mosaic-editor-input calculator-control online-room-code" id="online-room-code" type="text" maxlength="8" autocomplete="off" spellcheck="false" placeholder="room code" aria-label="Online room code">
+            <select class="mosaic-editor-input calculator-control" id="online-room-select" aria-label="Available online rooms" hidden></select>
+          </span>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Name</span>
+          <input class="mosaic-editor-input calculator-control" id="online-player-name" type="text" maxlength="32" autocomplete="off" spellcheck="false" placeholder="player name" aria-label="Online player name">
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Side</span>
+          <span class="online-role-options" id="online-role-options" aria-label="Online player side"></span>
+        </div>
+        <div class="online-action-grid">
+          <button class="btn" id="online-create-room" type="button">create room</button>
+          <button class="btn" id="online-search-room" type="button">search room</button>
+        </div>
+        <div class="online-action-grid">
+          <button class="btn" id="online-join-room" type="button">join room</button>
+          <button class="btn" id="online-leave-room" type="button" disabled>leave room</button>
+        </div>
+        <button class="btn" id="online-confirm-roles" type="button" hidden>confirm colors</button>
+        <button class="btn" id="online-ready" type="button" data-i18n="online.prepared" hidden>I'm prepared</button>
+        <div class="mosaic-inline-row" id="online-chinese-start-row" hidden>
+          <label class="opt-row"><input type="checkbox" id="online-keep-unclaimed-colors"> keep unclaimed colors</label>
+          <button class="btn" id="online-start-claimed-colors" type="button">begin claimed colors</button>
+        </div>
+        <div class="online-status-line" id="online-status" data-state="offline" role="status" aria-live="polite">Online Worker URL is not configured.</div>
+      </div>
+    </section>
+
+    <section class="card" id="ramified-import-export-card">
+      <div class="card-head"><span class="card-head-label" data-i18n="io.title">Import / Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="import-export-panel" id="ramified-import-export-panel">
+          <div class="import-export-tabs" role="tablist" aria-label="Import and export" data-i18n-aria-label="access.ioTabs">
+            <button class="import-export-tab" id="import-export-tab-export" type="button" role="tab" aria-selected="true" aria-controls="import-export-panel-export" data-import-export-tab="export" data-i18n="io.tabExport">Export</button>
+            <button class="import-export-tab" id="import-export-tab-import" type="button" role="tab" aria-selected="false" aria-controls="import-preset-tools" tabindex="-1" data-import-export-tab="import" data-i18n="io.tabImport">Import</button>
+          </div>
+
+          <div class="import-export-tabpanel" id="import-export-panel-export" role="tabpanel" aria-labelledby="import-export-tab-export" data-import-export-panel="export">
+            <div class="mosaic-inline-row">
+              <span class="input-label" data-i18n="io.exportContent">Export content</span>
+              <span class="import-export-field-control">
+                <select id="export-state-kind" data-export-kind data-export-content data-i18n-aria-label="access.exportContent" aria-label="Export content">
+                  <option value="background" data-i18n="io.backgroundPreset">Background preset</option>
+                  <option value="status" selected data-i18n="io.fullStatus">Full current status</option>
+                  <option value="record" data-i18n="io.gameRecord">Game record</option>
+                </select>
+                <span class="import-export-field-value" data-export-content-value aria-live="polite" hidden></span>
+              </span>
+            </div>
+            <div class="mosaic-inline-row" id="export-background-format-row" data-export-format-row>
+              <span class="input-label" data-i18n="io.format">Format</span>
+              <span class="import-export-field-control">
+                <select id="export-background-format" data-export-format data-i18n-aria-label="access.exportFormat" aria-label="Export format">
+                  <option value="dsl" selected data-i18n="io.dsl">DSL-style</option>
+                  <option value="verbose" data-i18n="io.verboseJson">Verbose JSON</option>
+                </select>
+                <span class="import-export-field-value" data-export-format-value aria-live="polite" hidden></span>
+              </span>
+            </div>
+            <textarea class="mosaic-editor-input calculator-control minigame-status-export" id="debug-export-output" data-export-output spellcheck="false" autocomplete="off" data-i18n-aria-label="access.exportOutput" aria-label="Current game status or preset export" readonly></textarea>
+            <div class="mosaic-inline-row" id="edit-mosaic-link-row">
+              <span class="input-label" data-i18n="common.edit">edit</span>
+              <a class="export-test-link" id="edit-mosaic-link" href="mosaic_calculator.html" target="_blank" rel="noopener" data-i18n="io.editInMosaicCalculator">edit in Mosaic calculator</a>
+            </div>
+            <div class="import-export-actions">
+              <button class="btn" id="export-state" type="button" data-export-action="refresh" data-i18n="common.refresh">refresh</button>
+              <button class="btn" id="copy-state" type="button" data-export-action="copy" data-i18n="common.copy" disabled>copy</button>
+              <button class="btn" id="download-state" type="button" data-export-action="download" data-i18n="common.download" disabled>download</button>
+            </div>
+          </div>
+
+          <div class="import-export-tabpanel" id="import-preset-tools" role="tabpanel" aria-labelledby="import-export-tab-import" data-import-export-panel="import" hidden>
+            <label class="opt-row"><input type="checkbox" id="import-keep-game-mode" checked> <span data-i18n="io.keepMode">keep current game type</span></label>
+            <div class="mosaic-inline-row">
+              <span class="input-label" data-i18n="io.importContent">Import content</span>
+              <span class="import-export-field-value" data-import-content-value aria-live="polite"></span>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label" data-i18n="io.format">Format</span>
+              <span class="import-export-field-value" data-import-format-value aria-live="polite"></span>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label" data-i18n="io.importGame">Import game</span>
+              <select id="import-game-mode" data-i18n-aria-label="access.importGame" aria-label="Import game">
+                <option value="gomoku" data-i18n="games.gomoku">Gomoku</option>
+                <option value="go" data-i18n="games.go">Go</option>
+                <option value="connect-four" data-i18n="games.connectFour">Connect Four</option>
+                <option value="2048" selected>2048</option>
+                <option value="reversi" data-i18n="games.reversi">Reversi</option>
+                <option value="chinese-checkers" data-i18n="games.checkers">Chinese Checkers</option>
+                <option value="sokoban" data-i18n="games.sokoban">Sokoban</option>
+                <option value="fide-chess" data-i18n="games.chess">FIDE Chess</option>
+                <option value="billiards" data-i18n="games.billiards">Billiard</option>
+              </select>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label" data-i18n="io.source">Source</span>
+              <select id="import-preset-source" data-import-source data-i18n-aria-label="access.presetSource" aria-label="Preset import source">
+                <option value="catalog" selected data-i18n="io.catalogPreset">Catalog preset</option>
+                <option value="paste" data-i18n="io.pasteJson">Paste JSON</option>
+                <option value="file" data-i18n="io.localFile">Local file</option>
+              </select>
+            </div>
+            <div class="mosaic-inline-row" id="import-preset-catalog-row" data-import-source-panel="catalog">
+              <span class="input-label" data-i18n="io.catalog">Catalog</span>
+              <select id="import-preset-catalog" data-import-catalog data-i18n-aria-label="access.importCatalog" aria-label="Import catalog preset"></select>
+            </div>
+            <div class="import-export-file-row" data-import-source-panel="file" hidden>
+              <label class="import-export-file-picker">
+                <span data-i18n="io.chooseFile">Choose JSON file</span>
+                <input id="import-state-file" data-import-file type="file" accept="application/json,.json" data-i18n-aria-label="access.importFile" aria-label="Choose a JSON file to import">
+              </label>
+              <span class="import-export-filename" id="import-state-filename" data-import-filename aria-live="polite"></span>
+            </div>
+            <textarea class="mosaic-editor-input calculator-control mosaic-import-input" id="import-preset-input" data-import-input spellcheck="false" autocomplete="off" data-i18n-placeholder="io.pastePlaceholder" placeholder="Paste preset, status, or game-record JSON" data-i18n-aria-label="access.importPayload" aria-label="Imported preset or status" hidden></textarea>
+            <div class="import-export-actions import-export-import-actions">
+              <button class="btn" id="clear-import-preset" type="button" data-import-action="clear" data-i18n="common.clear" hidden>clear</button>
+              <button class="btn" id="apply-import-preset" type="button" data-import-action="apply" data-i18n="common.import">import</button>
+            </div>
+          </div>
+
+          <p class="import-export-status" id="import-export-status" role="status" aria-live="polite" data-import-export-status data-i18n-ignore></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><span class="card-head-label" data-i18n="status.stats">Game Stats</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="stat-row"><span class="stat-label" id="score-label">Score</span><span class="stat-value" id="score-value">0</span></div>
+        <div class="stat-row"><span class="stat-label" id="highest-tile-label">Highest tile</span><span class="stat-value" id="highest-tile-value">0</span></div>
+        <div class="stat-row"><span class="stat-label" id="existing-tile-label">Existing tiles</span><span class="stat-value" id="existing-tile-value">0</span></div>
+        <div class="stat-row"><span class="stat-label" id="removed-tile-label">Blocked tiles</span><span class="stat-value" id="removed-tile-value">0</span></div>
+        <div class="stat-row"><span class="stat-label" id="round-label">Round</span><span class="stat-value" id="round-value">0</span></div>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  Browser-side minigames on glued mosaic background spaces.
+  <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
+  <span data-i18n="analytics.notice">Anonymous visit, country, and active playtime statistics are collected; no IP addresses, names, room codes, persistent visitor IDs, or game states are stored.</span>
+</footer>
+
+<script src="presets/ramified_minigames/presets.js?v=20261008-3"></script>
+<script src="js/calculator_cards.js?v=20260903-1"></script>
+<script src="js/calculator_input_settings.js?v=20260903-1"></script>
+<script src="js/site_i18n.js?v=20260826-1"></script>
+<script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20261014-2"></script>
+<script src="js/import_export_panel.js?v=20260821-7"></script>
+<script>
+  window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
+</script>
+<script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
+<script src="js/ramified_minigames_sfx.js?v=20260913-2"></script>
+<script src="js/ramified_minigames_setup.js?v=20261014-3"></script>
+<script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
+<script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
+</body>
+</html>

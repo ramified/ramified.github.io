@@ -9,7 +9,7 @@ const html = fs.readFileSync(path.join(root, 'math_workspace.html'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'css', 'math_workspace.css'), 'utf8');
 const historicalSheafSource = fs.readFileSync(path.join(__dirname, 'sheaf_complex_calculator.js'), 'utf8');
 const nativeBundle = fs.readFileSync(path.join(__dirname, 'math_workspace_native_editors_v8.js'));
-const nativeBuilder = fs.readFileSync(path.join(root, 'math_workspace_version1', 'js', 'math_workspace', 'build.mjs'), 'utf8');
+const nativeBuilder = fs.readFileSync(path.join(root, 'archive/math_workspace_version1', 'js', 'math_workspace', 'build.mjs'), 'utf8');
 const calculatorPages = [
   'young_diagrams.html',
   'double_young_diagram.html',
@@ -583,7 +583,7 @@ assert(nativeBundle.includes(Buffer.from(':host{display:block;min-width:0;height
 assert(nativeBundle.includes(Buffer.from('[id$="-wide-host"]:not(:has(.card)){display:none!important}')), 'empty wide-card hosts must not reserve native canvas space');
 assert(nativeBundle.includes(Buffer.from('.workspace-editor-layout .workspace-view-card{min-width:0;width:100%;height:100%')), 'nested calculator canvas panels must fill their allocated workspace height');
 assert(/math_workspace_native_editors_v8\.js\?v=[a-f0-9]{16}/.test(html), 'native editor cache query must be derived from the reproducible bundle hash');
-assert(html.includes('css/math_workspace.css?v=20260926-2'), 'workspace stylesheet changes need a cache-query bump');
+assert(html.includes('css/math_workspace.css?v=20260926-3'), 'workspace stylesheet changes need a cache-query bump');
 assert(html.includes('js/math_workspace.js?v=20260926-5'), 'workspace controller changes need a cache-query bump');
 assert(html.includes('js/calculator_cards.js?v=20260903-1'), 'workspace-owned Assets cards must reuse the shared calculator card chrome');
 assert(nativeBuilder.includes('math_workspace_native_editors_v8.js') && nativeBuilder.includes('Stale live native editor bundle'), 'the source builder must publish and verify the live runtime');

@@ -146,7 +146,7 @@ async function run() {
       assert.strictEqual(await read(`RamifiedMinigames.player.beginSetup('sokoban',{presetId:${JSON.stringify(id)}})`),true,id+': browser asset');
       await read('RamifiedMinigames.player.cancelSetup()');
     }
-    await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/ramified_minigames_archive.html`});await ready();
+    await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/archive/ramified_minigames/index.html`});await ready();
     assert.strictEqual(await read("RamifiedMinigames.player.beginSetup('sokoban',{presetId:'pedestrian'})"),true);
     assert.strictEqual(await read('RamifiedMinigames.player.commitSetup()'),true);
     assert.strictEqual(await read('RamifiedMinigames.__test.getGame().preset.id'),'pedestrian');

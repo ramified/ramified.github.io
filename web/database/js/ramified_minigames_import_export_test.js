@@ -39,8 +39,8 @@ assert.ok(html.includes('id="hex-neighbor-stroke" min="1" max="5" step="0.5" val
   'js/billiards/topological_billiards_physics.js',
   'js/billiards/topological_billiards_renderer.js',
   'js/billiards/topological_billiards_native.js',
-  'lianliankan/lianliankan_engine.js',
-  'lianliankan/mosaic_adapter.js'
+  'archive/lianliankan/lianliankan_engine.js',
+  'archive/lianliankan/mosaic_adapter.js'
 ].forEach((asset) => assert.ok(
   !html.includes(`<script src="${asset}`),
   `${asset} must be loaded only when its game is selected`
@@ -65,8 +65,8 @@ assert.deepStrictEqual(minigames.__test.optionalScriptGroups.billiards.map((url)
 ]);
 assert.ok(minigames.__test.optionalScriptGroups.billiards.some((url) => url.includes('topological_billiards_native.js?v=20260909-3')));
 assert.deepStrictEqual(minigames.__test.optionalScriptGroups.lianliankan.map((url) => url.split('?')[0]), [
-  'lianliankan/lianliankan_engine.js',
-  'lianliankan/mosaic_adapter.js'
+  'archive/lianliankan/lianliankan_engine.js',
+  'archive/lianliankan/mosaic_adapter.js'
 ]);
 const previousImage = global.Image;
 const requestedBombImages = [];

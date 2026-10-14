@@ -2,6 +2,7 @@
   'use strict';
 
   const pairs = {
+    'setup.presetRegistryEmpty': ['No presets are registered in {{path}}.', '{{path}} 中未注册任何预设。'],
     'lobby.timeControl': ['Time control', '计时方式'],
     'lobby.unlimited': ['Unlimited', '不限时'],
     'lobby.total': ['Total time per side', '每方总时长'],

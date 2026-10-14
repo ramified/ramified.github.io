@@ -138,8 +138,8 @@ function testMinigameFormats() {
   });
   const source = mosaic.buildExportText();
   assert.match(source, /RAMIFIED_MINIGAME_PRESET_DATA/);
-  assert.match(source, /Save this file as ramified_minigame_presets\/connect_four_export\.preset\.js/);
-  assert.match(source, /Add this entry to ramified_minigame_presets\/presets\.js:/);
+  assert.match(source, /Save this file as presets\/ramified_minigames\/connect_four_export\.preset\.js/);
+  assert.match(source, /Add this entry to presets\/ramified_minigames\/presets\.js:/);
   assert.match(source, /\/\/\s+"gameTypes": \[/);
   assert.match(source, /\/\/\s+"file": "connect_four_export\.preset\.js"/);
   assert.match(source, /\/\/ \},/);
@@ -1061,7 +1061,7 @@ function testSokobanDecorationDrawingMatchesMinigame() {
 
 function testRemovedBoundaryPresetIdsAreNotAdvertised() {
   const mosaicSource = fs.readFileSync(require.resolve('./mosaic_calculator.js'), 'utf8');
-  const registrySource = fs.readFileSync(require.resolve('../ramified_minigame_presets/presets.js'), 'utf8');
+  const registrySource = fs.readFileSync(require.resolve('../presets/ramified_minigames/presets.js'), 'utf8');
   const backgroundPresetSource = mosaicSource.slice(
     mosaicSource.indexOf('const BACKGROUND_SPACE_PRESETS'),
     mosaicSource.indexOf('const SOKOBAN_ENERGY_GLOW_DEFAULT')
@@ -1118,23 +1118,23 @@ function testStagedImportCatalogAndParameterizedLevels() {
   assert.ok(queens && queens.gameTypes.includes('FIDE Chess'));
   const boundaryPayload = mosaic.materializeMinigamePresetForMosaic(
     boundary,
-    require('../ramified_minigame_presets/boundary_glue_board.preset.js')
+    require('../presets/ramified_minigames/boundary_glue_board.preset.js')
   );
   assert.strictEqual(boundaryPayload.rows, 4);
   assert.strictEqual(boundaryPayload.cols, 4);
   assert.strictEqual(boundaryPayload.gluedEdges.length, 8);
   const queensPayload = mosaic.materializeMinigamePresetForMosaic(
     queens,
-    require('../ramified_minigame_presets/n_queens_puzzle.preset.js')
+    require('../presets/ramified_minigames/n_queens_puzzle.preset.js')
   );
   assert.strictEqual(queensPayload.rows, queensPayload.cols);
   assert.strictEqual(queensPayload.pieces.length, queensPayload.rows);
 }
 
 function testEveryMinigameCatalogLevelMaterializesForImport() {
-  const registry = require('../ramified_minigame_presets/presets.js').presets;
+  const registry = require('../presets/ramified_minigames/presets.js').presets;
   registry.forEach((entry) => {
-    const source = require(`../ramified_minigame_presets/${entry.file}`);
+    const source = require(`../presets/ramified_minigames/${entry.file}`);
     const payload = mosaic.normalizeExportImportPayload(
       mosaic.materializeMinigamePresetForMosaic(entry, source)
     );
@@ -1150,7 +1150,7 @@ function testEveryMinigameCatalogLevelMaterializesForImport() {
   const rubiks = registry.find((entry) => entry.id === 'rubiks-cube-2x2x2');
   const rubiksPayload = mosaic.materializeMinigamePresetForMosaic(
     rubiks,
-    require('../ramified_minigame_presets/rubiks_cube_2x2x2.preset.js')
+    require('../presets/ramified_minigames/rubiks_cube_2x2x2.preset.js')
   );
   assert.strictEqual(rubiksPayload.rows, 6);
   assert.strictEqual(rubiksPayload.cols, 8);
@@ -1159,9 +1159,9 @@ function testEveryMinigameCatalogLevelMaterializesForImport() {
 }
 
 function testMinigameImportsClearOtherGameDecorations() {
-  const registry = require('../ramified_minigame_presets/presets.js').presets;
+  const registry = require('../presets/ramified_minigames/presets.js').presets;
   const ramifiedCover = registry.find((entry) => entry.id === 'ramified-cover');
-  const coverSource = require('../ramified_minigame_presets/ramified_cover.preset.js');
+  const coverSource = require('../presets/ramified_minigames/ramified_cover.preset.js');
   const matching = mosaic.materializeMinigamePresetForMosaic(ramifiedCover, coverSource, 'Tile Matching');
   assert.ok(matching.lianliankan.initiallyEmpty.length > 0, 'the selected game keeps its preset decorations');
   assert.deepStrictEqual(matching.inputHoles, []);
@@ -1176,7 +1176,7 @@ function testMinigameImportsClearOtherGameDecorations() {
   const usualStrip = registry.find((entry) => entry.id === 'usual-strip');
   const billiards = mosaic.materializeMinigamePresetForMosaic(
     usualStrip,
-    require('../ramified_minigame_presets/usual_strip.preset.js'),
+    require('../presets/ramified_minigames/usual_strip.preset.js'),
     'Billiard'
   );
   assert.ok(billiards.billiards.balls.length > 0, 'the selected Billiards decorations are retained');

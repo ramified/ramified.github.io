@@ -3,7 +3,7 @@
 
   const SCHEMA_VERSION = 11;
   const DEFAULT_GRAPH_TITLE = '';
-  const PRESET_FOLDER_URL = 'theorem_graph_presets/';
+  const PRESET_FOLDER_URL = 'presets/theorem_graph/';
   const DEFAULT_PRESET_KEY = 'maintenance_tracker';
   const DEFAULT_NEW_NODE_TYPE = 'misc';
   const DEFAULT_NODE_STROKE = '#7a6f65';
@@ -7182,8 +7182,8 @@
     const key = presetKeyFromTitle(preset.title);
     const file = `${key}.preset.js`;
     return [
-      `// Save this file as theorem_graph_presets/${file}`,
-      '// Add this entry to theorem_graph_presets/presets.js:',
+      `// Save this file as presets/theorem_graph/${file}`,
+      '// Add this entry to presets/theorem_graph/presets.js:',
       `// { label: ${JSON.stringify(preset.title)}, key: ${JSON.stringify(key)}, file: ${JSON.stringify(file)} }`,
       'window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};',
       `window.THEOREM_GRAPH_PRESET_DATA.${key} = ${JSON.stringify(preset, null, 2)};`
@@ -8022,7 +8022,7 @@
     setExportMessage(
       registryPresets.length
         ? `Loaded ${registryPresets.length} preset${registryPresets.length === 1 ? '' : 's'} from presets.js.`
-        : 'No presets are registered in theorem_graph_presets/presets.js.',
+        : 'No presets are registered in presets/theorem_graph/presets.js.',
       !registryPresets.length
     );
     syncControls();
