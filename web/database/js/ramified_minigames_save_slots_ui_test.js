@@ -41,7 +41,7 @@ async function run() {
     // Export metadata includes translated status text; compare the actual game/progress instead.
     const stored = () => read(`(() => {const s=JSON.parse(localStorage.getItem(RamifiedSaveSlots.SAVE_KEY)); for(const slot of s?.slots||[])if(slot?.game){delete slot.game.payload.exportedAt;delete slot.game.payload.status;}return s;})()`);
     const reload = async () => { await client.send('Page.reload'); await ready(); };
-    const home = async () => { await click('#fullscreen-settings-open'); await click('#player-menu-button'); await click('#player-home-button'); };
+    const home = async () => { await click('#fullscreen-settings-open'); await click('#player-home-button'); };
     const selectGame = async mode => {
       if (await read(`document.querySelector('[data-game-mode="${mode}"]').hidden`)) await click('#player-games-next');
       await click(`[data-game-mode="${mode}"]`);
@@ -200,7 +200,6 @@ async function run() {
     for(const dir of 'EWSSNWWENN') await move(dir);
     const beforeNext=await stored();
     await click('#fullscreen-settings-open'); await click('#player-menu-button');
-    await click('#player-game-menu [data-player-page="setup"]');
     assert.strictEqual(await visible('player-games'),true,'Change game skips selecting the active slot again');
     await click('#player-back'); await click('#player-slot-2'); await selectGame('gomoku'); await ready();
     await click('#player-back'); await click('#player-back'); await click('#player-slot-1');

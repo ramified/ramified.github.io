@@ -125,7 +125,7 @@
     function retryLobby() { clearTimeout(reconnectTimer); if (!stopped) reconnectTimer = setTimeout(connectLobby, 3000); }
     function open() {
       ++serial; ui.save();
-      if (engine.onlineInfo().joined) { renderRoom(true); ui.show('room', 'game-menu'); return; }
+      if (engine.onlineInfo().joined) { renderRoom(true); ui.show('room', 'home'); return; }
       ui.show('lobby', 'home');
       el('player-lobby-name').value = engine.onlineInfo().playerName || '';
       renderPlayers(); connectLobby(); refresh();
@@ -165,7 +165,7 @@
         creationFingerprint = fingerprint;
         if (flow === 'change') {
           if (!engine.onlineSend({ type: 'proposeConfiguration', gameMode: snapshot.gameMode, snapshot, timeControl: config, summary: snapshot.preset.label || snapshot.preset.id })) throw new Error('send');
-          engine.onlineCancelSetup(); setFlow(''); ui.show('room', 'game-menu');
+          engine.onlineCancelSetup(); setFlow(''); ui.show('room', 'home');
         } else {
           const room = await engine.onlineCreate(snapshot, config, creationId);
           if (ticket !== serial) return;
@@ -254,17 +254,17 @@
     el('player-proposal-cancel').addEventListener('click', () => engine.onlineSend({ type: 'cancelConfiguration' }));
     document.addEventListener('ramified-online-state', event => {
       const info = engine.onlineInfo(); presence(); renderRoom(); clockText(); ui.sync();
-      if (event.detail.type === 'departed' && ['room', 'game-menu'].includes(ui.page())) { ui.show('lobby', 'home'); refresh(); }
+      if (event.detail.type === 'departed' && ['room', 'home'].includes(ui.page())) { ui.show('lobby', 'home'); refresh(); }
       if (event.detail.type === 'error') {
-        if (info.loadFailed && !flow) ui.show('room', 'game-menu');
+        if (info.loadFailed && !flow) ui.show('room', 'home');
         ui.message(tk('lobby.operationError', 'The room could not accept this action. Check the current room state and retry.'));
       }
       const round = `${info.roundId}:${info.roundState}`;
       if (previousRound !== round && info.joined && !flow) {
         if (info.roundState === 'playing' && ui.page() === 'room' && !info.proposal) ui.setOpen(false);
-        if (info.roundState === 'finished' || info.roundState === 'waiting') ui.show('room', 'game-menu');
+        if (info.roundState === 'finished' || info.roundState === 'waiting') ui.show('room', 'home');
       }
-      if (info.proposal && !flow && info.roles?.length && info.hostId !== info.clientId && !info.proposal.accepted.includes(info.clientId)) ui.show('room', 'game-menu');
+      if (info.proposal && !flow && info.roles?.length && info.hostId !== info.clientId && !info.proposal.accepted.includes(info.clientId)) ui.show('room', 'home');
       previousRound = round;
     });
     document.addEventListener('site-language-change', () => { modeFields(); renderPlayers(); renderRooms(); renderRoom(true); clockText(); });
@@ -275,6 +275,11 @@
     // Start presence for the entire game collection, including the main menu.
     setTimeout(connectLobby, 0); modeFields();
     return { open, prepare, back, submit, flow: () => flow, busy: () => requestBusy, renderRoom,
+      home() {
+        ++serial; requestBusy = false; engine.onlineCancelSetup();
+        if (!engine.onlineInfo().joined) engine.onlineLeave();
+        setFlow(''); ui.show('home');
+      },
       cancelRequest() { ++serial; requestBusy = false; ui.sync(); } };
   } };
 })();

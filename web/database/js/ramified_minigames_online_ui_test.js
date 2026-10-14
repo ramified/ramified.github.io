@@ -29,7 +29,7 @@ async function run() {
     await a.until(`!document.querySelector('#player-begin').disabled`); await a.click('#player-begin'); await a.click('#mosaic-canvas');
     await a.until(`RamifiedMinigames.__test.getGame().round===1`, 'local move before online');
     const localBefore = await a.read(`JSON.stringify(RamifiedMinigames.__test.getGame().stones)`);
-    await a.read(`document.querySelector('#player-menu-button').click()`); await a.click('#player-home-button');
+    await a.click('#fullscreen-settings-open'); await a.click('#player-home-button');
     await a.click('#player-online-open'); await b.click('#player-online-open');
     await a.until(`document.querySelectorAll('#player-lobby-players li').length===2`, 'all browser identities in lobby');
     for (const width of [390, 320]) {
@@ -68,7 +68,7 @@ async function run() {
     assert.equal(await a.read(`RamifiedMinigames.player.snapshot()`), null, 'network state never autosaves');
     // Open room through the existing in-game menu; host draft does not stop clocks.
     await a.read(`document.querySelector('#player-menu-button').click()`);
-    await a.click('[data-player-page="online"]'); await a.click('#player-room-change');
+    await a.click('#player-room-change');
     await a.click('[data-game-mode="connect-four"]'); await a.until(`!document.querySelector('#player-begin').disabled`);
     const remaining = (await b.info()).clock.seats.black.main;
     await delay(200); await a.click('#player-begin');
@@ -89,11 +89,10 @@ async function run() {
       await a.read(`SiteI18n.setLocale('en')`);
     }
     await a.client.send('Emulation.clearDeviceMetricsOverride');
-    await a.read(`document.querySelector('#player-menu-button').click()`);
-    await a.click('#player-game-settings'); await a.click('#player-fullscreen');
+    await a.click('#player-room-watch'); await a.click('#fullscreen-settings-open'); await a.click('#fullscreen-settings-display-tab'); await a.click('#player-fullscreen');
     await a.until(`!!document.fullscreenElement`, 'real fullscreen');
     await a.client.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
-    await a.read(`document.querySelector('#player-menu-button').click()`); await a.click('[data-player-page="online"]');
+    await a.click('#fullscreen-settings-open'); await a.click('#player-menu-button');
     assert.equal(await a.read(`(() => { const p=document.querySelector('.player-room-body').getBoundingClientRect(), f=document.querySelector('#player-room').getBoundingClientRect();return Math.abs((p.left+p.right-f.left-f.right)/2)<2; })()`), true, 'fullscreen room content is centered');
     const screenshot = path.join(os.tmpdir(), 'ramified-r19-room-fullscreen.png');
     fs.writeFileSync(screenshot, Buffer.from((await a.client.send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
@@ -123,8 +122,8 @@ async function run() {
         await a.until(`RamifiedMinigames.player.onlineInfo().roundState==='playing'`);
         await a.read(`RamifiedMinigames.player.onlineSend({type:'billiardsShot',baseVersion:RamifiedMinigames.player.onlineInfo().version || 0,action:{aim:{x:1,y:0},power:.15,contact:{x:0,y:0}}})`);
         await waitFor(() => bridge.objects.get(roomInfo.roomCode).room.snapshot.shots === 1, 20000, 'server billiards simulation');
-        await a.read(`document.querySelector('#player-menu-button').click()`); await a.click('[data-player-page="online"]');
-        await b.read(`document.querySelector('#player-menu-button').click()`); await b.click('[data-player-page="online"]'); await b.click('#player-room-leave');
+        await a.click('#fullscreen-settings-open'); await a.click('#player-menu-button');
+        await b.read(`document.querySelector('#player-menu-button').click()`); await b.click('#player-room-leave');
       }
       await a.click('#player-room-leave');
       console.log('Online initialization verified: ' + mode);

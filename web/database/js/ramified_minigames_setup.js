@@ -1350,7 +1350,7 @@
                   });
                   if (refs.fullscreenSettingsOpen) refs.fullscreenSettingsOpen.addEventListener('click', () => {
                     if (calculatorInputSession) calculatorInputSession.open(refs.fullscreenSettingsOpen);
-                    else openFullscreenSettings('display', refs.fullscreenSettingsOpen);
+                    else openFullscreenSettings(null, refs.fullscreenSettingsOpen);
                   });
                     if (refs.placementPreviewOpacity) refs.placementPreviewOpacity.addEventListener('input', () => {
                       syncPlacementPreviewOpacityOutput();
@@ -1371,6 +1371,17 @@
                       if (refs.fullscreenShowGameTools) refs.fullscreenShowGameTools.addEventListener('change', handleFullscreenGameToolsChange);
                       refs.fullscreenSettingsTabs.forEach((button) => {
                         button.addEventListener('click', () => setFullscreenSettingsPanel(button.dataset.settingsPanel));
+                        button.addEventListener('keydown', (event) => {
+                          const tabs = refs.fullscreenSettingsTabs;
+                          const index = tabs.indexOf(button);
+                          const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length
+                            : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length
+                            : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1;
+                          if (next < 0) return;
+                          event.preventDefault();
+                          setFullscreenSettingsPanel(tabs[next].dataset.settingsPanel);
+                          tabs[next].focus();
+                        });
                       });
                       if (refs.fullscreenUndo) refs.fullscreenUndo.addEventListener('click', undoFromFullscreenAction);
                       if (refs.fullscreenRedo) refs.fullscreenRedo.addEventListener('click', redoFromFullscreenAction);
@@ -7006,7 +7017,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
         dialog: '#fullscreen-settings-dialog',
         trigger: '#fullscreen-settings-open',
         isOpen: () => fullscreenSettingsOpen,
-        open: (_panel, trigger) => openFullscreenSettings('display', trigger),
+        open: (_panel, trigger) => openFullscreenSettings(null, trigger),
         close: () => closeFullscreenSettings()
       }
     });
@@ -9919,17 +9930,19 @@ function handleFullscreenGameToolsChange() {
 }
 
 function setFullscreenSettingsPanel(panel) {
-  fullscreenSettingsPanel = panel === 'display' ? 'display' : 'controls';
+  const tabs = refs.fullscreenSettingsTabs;
+  const activeTab = tabs.find((button) => button.dataset.settingsPanel === panel) || tabs[0];
+  fullscreenSettingsPanel = activeTab?.dataset.settingsPanel || 'display';
   refs.fullscreenSettingsTabs.forEach((button) => {
     const selected = button.dataset.settingsPanel === fullscreenSettingsPanel;
     button.setAttribute('aria-selected', selected ? 'true' : 'false');
     button.tabIndex = selected ? 0 : -1;
+    const content = document.getElementById(button.getAttribute('aria-controls'));
+    if (content) content.hidden = !selected;
   });
-  if (refs.fullscreenSettingsControls) refs.fullscreenSettingsControls.hidden = fullscreenSettingsPanel !== 'controls';
-  if (refs.fullscreenSettingsDisplay) refs.fullscreenSettingsDisplay.hidden = fullscreenSettingsPanel !== 'display';
 }
 
-function openFullscreenSettings(panel = 'display', trigger = null) {
+function openFullscreenSettings(panel = null, trigger = null) {
   clearWrappedViewGestures();
   if (!refs.fullscreenSettingsOverlay) return;
   fullscreenSettingsReturnFocus = trigger || (typeof document !== 'undefined' ? document.activeElement : null);
@@ -9941,10 +9954,13 @@ function openFullscreenSettings(panel = 'display', trigger = null) {
   syncFullscreenSettingsUi();
   setFullscreenSettingsPanel(panel);
   if (calculatorInputSession) calculatorInputSession.refresh();
-  const tabForPanel = (name) => refs.fullscreenSettingsTabs.find((button) => button.dataset.settingsPanel === name);
-  const focusTarget = fullscreenSettingsPanel === 'controls'
-  ? (refs.fullscreenSettingsControls?.querySelector('.calculator-input-binding, .calculator-input-add') || tabForPanel('controls') || refs.fullscreenSettingsClose)
-  : (refs.fullscreenSoundEnabled || tabForPanel('display') || refs.fullscreenSettingsClose);
+  const tab = refs.fullscreenSettingsTabs.find((button) => button.dataset.settingsPanel === fullscreenSettingsPanel);
+  const content = tab && document.getElementById(tab.getAttribute('aria-controls'));
+  if (content) content.scrollTop = 0;
+  const focusTarget = playerShellEnabled ? tab || refs.fullscreenSettingsClose
+    : fullscreenSettingsPanel === 'controls'
+      ? (refs.fullscreenSettingsControls?.querySelector('.calculator-input-binding, .calculator-input-add') || tab || refs.fullscreenSettingsClose)
+      : (refs.fullscreenSoundEnabled || tab || refs.fullscreenSettingsClose);
   if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
 }
 

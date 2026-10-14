@@ -63,7 +63,7 @@ async function run() {
       return Object.fromEntries(ids.map(id => { const r = document.getElementById(id).getBoundingClientRect(); return [id, { x:r.x, y:r.y, right:r.right, bottom:r.bottom, width:r.width, height:r.height }]; }));
     })()`);
     const menuHome = async () => {
-      await click('#fullscreen-settings-open'); await click('#player-menu-button'); await click('#player-home-button');
+      await click('#fullscreen-settings-open'); await click('#player-home-button');
     };
     const visibleGames = () => read(`[...document.querySelectorAll('#player-game-list > button:not([hidden])')].map(button => button.dataset.gameMode)`);
     const revealGame = async mode => {
@@ -86,8 +86,19 @@ async function run() {
       assert.deepStrictEqual(layout, { count, columns: 3, rows: 2, contained: true, labelsFit: true, noScroll: true, arrows: [true, true] });
     };
     await resize(1280);
-    await ready();
+    try { await ready(); }
+    catch (error) {
+      console.error(await read('({state:window.RamifiedMinigames?.player.state(),message:document.querySelector("#player-message")?.textContent})'), errors);
+      throw error;
+    }
     assert.strictEqual(await read('document.querySelector("#player-continue").disabled'), true);
+    await click('#player-settings');
+    assert.strictEqual(await read('document.querySelector("#player-menu-button").dataset.i18n'), 'player.chooseSave', 'settings cannot skip save selection on first entry');
+    await click('#fullscreen-settings-close');
+    assert.strictEqual(await read('document.querySelector("#player-home").hidden'), false, 'close returns to the original main menu');
+    await click('#player-settings'); await click('#player-menu-button');
+    assert.strictEqual(await read('document.querySelector("#player-slots").hidden'), false);
+    await click('#player-back');
     await click('#player-new'); await click('#player-slot-1');
     await waitFor(() => read(`(() => {
       const images = [...document.querySelectorAll('#player-game-list img')];
@@ -253,7 +264,7 @@ async function run() {
     assert.strictEqual(await read('document.querySelector("#player-second-controller").textContent'), 'AI — Challenging');
     assert.strictEqual(await read('document.querySelector("#player-first-next").getAttribute("aria-label")'), 'Next red player type');
     assert.strictEqual(await read('document.querySelector("#connect-four-fall-row").parentElement.id'), 'player-board-fields');
-    assert.strictEqual(await read('document.querySelector("#connect-four-align-row").closest(".player-page").id'), 'player-display', 'original display control remains accessible');
+    assert.strictEqual(await read('document.querySelector("#connect-four-align-row").closest(".fullscreen-settings-panel").id'), 'fullscreen-settings-display', 'original display control remains accessible');
     const connectLayout = await dimensions();
     for (const id of ['player-board-preview', 'player-setup-players', 'player-more', 'player-begin']) {
       assert.deepStrictEqual(connectLayout[id], layout[id], `${id}: same geometry as Gomoku`);
@@ -325,7 +336,7 @@ async function run() {
     assert.strictEqual(await read('document.querySelector("#connect-four-yellow-controller").value'), 'local-ai-challenging');
     assert.strictEqual(await read('RamifiedMinigames.__test.getGame().round'), 2);
 
-    await menuHome(); await click('#player-settings'); await click('#player-fullscreen');
+    await menuHome(); await click('#player-settings'); await click('#fullscreen-settings-display-tab'); await click('#player-fullscreen');
     await waitFor(() => read('!!document.fullscreenElement'), 5000, 'fullscreen');
     await click('#player-new'); await click('#player-slot-1'); await checkGamePage(6); await shot('games-fullscreen');
     await click('#player-games-next'); await checkGamePage(5); await click('#player-games-previous');
@@ -350,26 +361,55 @@ async function run() {
       await read(`SiteI18n.setLocale('${locale}')`);
       for (const [width, fullscreen] of [[1280, false], [390, false], [320, false], [1920, true]]) {
         await resize(width);
-        await click('#fullscreen-settings-open'); await click('#player-menu-button');
+        await click('#fullscreen-settings-open');
         if (fullscreen) {
-          await click('#player-game-settings'); await click('#player-fullscreen');
-          await waitFor(() => read('!!document.fullscreenElement'), 5000, 'menu fullscreen');
+          await click('#fullscreen-settings-display-tab'); await click('#player-fullscreen');
+          await waitFor(() => read('!!document.fullscreenElement'), 5000, 'settings fullscreen');
+          await click('#fullscreen-settings-open');
         }
-        assert.deepStrictEqual(await read(`[...document.querySelectorAll('#player-game-menu > button:not([hidden])')].map(n=>n.dataset.i18n)`),
-          ['player.resume', 'player.chooseLevel', 'player.changeGame', 'setup.display', 'online.title', 'fullscreen.settings', 'player.home']);
-        assert.strictEqual(await read(`!document.querySelector('#player-menu [data-player-page="files"], #player-menu [data-player-page="stats"], #player-files, #player-stats')`), true);
-        assert.strictEqual(await read(`[...document.querySelectorAll('.side button, .side input, .side select')].every(n=>!n.getClientRects().length)`), true, 'remaining debug controls are outside the player flow');
-        assert.strictEqual(await read(`(() => {const p=document.querySelector('#player-game-menu'),r=p.getBoundingClientRect();return p.scrollWidth<=p.clientWidth&&[...p.querySelectorAll('button:not([hidden])')].every(n=>{const b=n.getBoundingClientRect();return Math.abs(b.x+b.width/2-(r.x+p.clientWidth/2))<1;});})()`), true, 'menu stays centered without horizontal overflow');
-        await read('document.querySelector("#player-home-button").focus()'); await key('Tab', 'Tab', 9);
-        assert.strictEqual(await read('document.activeElement.id'), 'player-resume', 'removed pages leave no stale keyboard stop');
-        await shot(`menu-r11-${width}-${locale}`);
-        await click('#player-game-settings');
-        assert.strictEqual(await read(`(() => {const p=document.querySelector('#fullscreen-settings-display'),n=document.querySelector('#player-language select'),r=n.getBoundingClientRect(),b=p.getBoundingClientRect();return p.scrollTop===0&&document.activeElement===n&&r.y>=b.y&&r.bottom<=b.bottom;})()`), true, 'settings opens at language without clipping the first control');
+        assert.strictEqual(await read('!document.querySelector("#player-game-menu, #player-resume, [data-player-page=display]")'), true, 'no intermediate Menu or separate Display page');
+        assert.strictEqual(await read('document.querySelector("#player-display").closest(".fullscreen-settings-panel").id'), 'fullscreen-settings-display');
+        assert.strictEqual(await read('document.querySelector("#player-menu-button").dataset.i18n'), 'player.chooseGame');
+        assert.strictEqual(await read('document.activeElement.id'), 'fullscreen-settings-general-tab', 'settings opens at category navigation');
         assert.strictEqual(await read(`!document.querySelector('#fullscreen-settings-overlay [data-i18n="player.saveNote"], #fullscreen-settings-overlay [data-i18n="player.archive"], #fullscreen-settings-overlay [data-i18n="analytics.notice"]')`), true);
         assert.strictEqual(await read(`!!window.RamifiedMinigamesAnalytics && !!document.querySelector('script[src*="ramified_minigames_analytics.js"]')`), true, 'analytics still loads');
-        await shot(`settings-r11-${width}-${locale}`);
-        await click('#fullscreen-settings-controls-tab'); await shot(`controls-r11-${width}-${locale}`);
-        await key('Escape', 'Escape', 27); await click('#player-resume');
+        const footer = await read('document.querySelector(".fullscreen-settings-footer").getBoundingClientRect().y');
+        await key('ArrowRight', 'ArrowRight', 39);
+        assert.strictEqual(await read('document.activeElement.id'), 'fullscreen-settings-display-tab');
+        await key('End', 'End', 35);
+        assert.strictEqual(await read('document.activeElement.id'), 'fullscreen-settings-controls-tab');
+        await key('Home', 'Home', 36);
+        for (const category of ['general', 'display', 'sound', 'controls']) {
+          await click(`#fullscreen-settings-${category}-tab`);
+          const layout = await read(`(() => {
+            const p=document.querySelector('#fullscreen-settings-${category}'), d=document.querySelector('#fullscreen-settings-dialog');
+            const b=p.getBoundingClientRect(), f=document.querySelector('.fullscreen-settings-footer').getBoundingClientRect(), r=d.getBoundingClientRect();
+            return {visible:[...document.querySelectorAll('.fullscreen-settings-panel')].filter(n=>!n.hidden).map(n=>n.id),
+              overflow:p.scrollWidth>p.clientWidth+1, height:b.height, footer:f.y, contained:f.bottom<=r.bottom+1,
+              centered:Math.abs((f.left+f.right-r.left-r.right)/2)<2};
+          })()`);
+          assert.deepStrictEqual(layout.visible, [`fullscreen-settings-${category}`]);
+          assert.strictEqual(layout.overflow, false, `${category} fits at ${width}`);
+          assert(layout.height > 35, 'scrollable category has usable height');
+          assert.strictEqual(layout.footer, footer, 'navigation does not shift between categories');
+          assert(layout.contained && layout.centered, 'navigation stays inside the frame and centered');
+          if (category === 'general') {
+            assert.strictEqual(await read(`(() => {const p=document.querySelector('#fullscreen-settings-general').getBoundingClientRect(),r=document.querySelector('#player-language select').getBoundingClientRect();return r.y>=p.y&&r.bottom<=p.bottom;})()`), true, 'first option is visible when settings opens');
+          }
+          if (category === 'sound' && width === 1280 && locale === 'en') {
+            const before = await read('RamifiedMinigames.__test.getFullscreenPreferences()');
+            await click('label[for="fullscreen-sound-enabled"]');
+            assert.strictEqual(await read('RamifiedMinigames.__test.getFullscreenPreferences().soundEnabled'), !before.soundEnabled, 'sound toggle still uses original listener');
+            assert.strictEqual(await read('document.querySelector("#fullscreen-sound-volume").disabled'), before.soundEnabled);
+            await click('label[for="fullscreen-sound-enabled"]');
+          }
+          await shot(`${category}-r18-${width}-${locale}`);
+        }
+        await key('Escape', 'Escape', 27);
+        assert.strictEqual(await read('document.querySelector("#player-menu").hidden'), true, 'Esc closes settings directly to the board');
+        await click('#fullscreen-settings-open'); await click('#player-menu-button');
+        assert.strictEqual(await read('document.querySelector("#player-games").hidden'), false, 'settings returns directly to Choose a game');
+        await click('#player-continue');
         if (fullscreen) await read('document.exitFullscreen()');
       }
     }
