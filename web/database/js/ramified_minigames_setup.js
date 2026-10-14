@@ -1,6 +1,19 @@
 (() => {
   'use strict';
 
+  function listenInputDraft(control, handler, commitHandled = false) {
+    const settings = typeof window !== 'undefined' ? window.CalculatorInputSettings : null;
+    if (settings?.listenEditable) return settings.listenEditable(control, 'input', handler, { commitHandled });
+    return control.addEventListener('input', handler);
+  }
+
+  function syncInputDraft(control, value) {
+    if (!control) return;
+    const settings = typeof window !== 'undefined' ? window.CalculatorInputSettings : null;
+    if (settings?.syncEditableValue) return settings.syncEditableValue(control, value);
+    control.value = String(value);
+  }
+
   let Billiards = typeof window !== 'undefined' && window.TopologicalBilliardsNative
   ? window.TopologicalBilliardsNative
   : (typeof require === 'function' ? require('./billiards/topological_billiards_native.js') : null);
@@ -1239,7 +1252,7 @@
               if (refs.lianliankanTileLevel) refs.lianliankanTileLevel.addEventListener('change', handleLianliankanTileSetChange);
               if (refs.fideChessPuzzleAttackBorders) refs.fideChessPuzzleAttackBorders.addEventListener('change', handleFideChessPuzzleAttackBordersChange);
               if (refs.gomokuSize) refs.gomokuSize.addEventListener('change', handleGomokuSizeChange);
-              if (refs.gomokuSize) refs.gomokuSize.addEventListener('input', handleGomokuSizeChange);
+              if (refs.gomokuSize) listenInputDraft(refs.gomokuSize, handleGomokuSizeChange, true);
               if (refs.hexPieRule) refs.hexPieRule.addEventListener('change', () => {
                 if (isHexGame(game) && game.phase === 'setup') game.pieRule = !!refs.hexPieRule.checked;
                 syncControls();
@@ -1251,10 +1264,10 @@
                 [refs.boundaryGlueRows, refs.boundaryGlueCols].forEach((input) => {
                   if (!input) return;
                   input.addEventListener('change', handleBoundaryGlueBoardChange);
-                  input.addEventListener('input', handleBoundaryGlueBoardChange);
+                  listenInputDraft(input, handleBoundaryGlueBoardChange, true);
                 });
                 if (refs.goKomi) refs.goKomi.addEventListener('change', handleGoKomiChange);
-                if (refs.goKomi) refs.goKomi.addEventListener('input', handleGoKomiChange);
+                if (refs.goKomi) listenInputDraft(refs.goKomi, handleGoKomiChange, true);
                 if (refs.goPass) refs.goPass.addEventListener('click', passGoFromUi);
                 if (refs.goScoreView) refs.goScoreView.addEventListener('change', handleGoScoreViewChange);
                 if (refs.goScoringMethod) refs.goScoringMethod.addEventListener('change', handleGoScoringMethodChange);
@@ -1305,9 +1318,9 @@
                 if (refs.onlineStartClaimedColors) refs.onlineStartClaimedColors.addEventListener('click', startOnlineChineseCheckersWithClaimedColorsFromUi);
                 if (refs.onlineLeaveRoom) refs.onlineLeaveRoom.addEventListener('click', leaveOnlineRoomFromUi);
                 if (refs.onlineRoleOptions) refs.onlineRoleOptions.addEventListener('change', handleOnlineRoleOptionsChange);
-                if (refs.onlineRoomCode) refs.onlineRoomCode.addEventListener('input', syncOnlineControls);
+                if (refs.onlineRoomCode) listenInputDraft(refs.onlineRoomCode, syncOnlineControls);
                 if (refs.onlineRoomSelect) refs.onlineRoomSelect.addEventListener('change', handleOnlineRoomSelectChange);
-                if (refs.onlinePlayerName) refs.onlinePlayerName.addEventListener('input', handleOnlinePlayerNameInput);
+                if (refs.onlinePlayerName) listenInputDraft(refs.onlinePlayerName, handleOnlinePlayerNameInput, true);
                 if (refs.onlinePlayerName) refs.onlinePlayerName.addEventListener('change', sendOnlinePlayerNameUpdate);
                 if (refs.onlineTurnFeedbackDuration) refs.onlineTurnFeedbackDuration.addEventListener('input', syncOnlineTurnFeedbackDurationOutput);
                 if (refs.onlineTurnFeedbackDuration) refs.onlineTurnFeedbackDuration.addEventListener('change', syncOnlineTurnFeedbackDurationOutput);
@@ -5573,7 +5586,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
 
   function handleGomokuSizeChange() {
     const dimensions = selectedBoardDimensions();
-    if (refs.gomokuSize) refs.gomokuSize.value = String(dimensions.rows);
+    syncInputDraft(refs.gomokuSize, dimensions.rows);
     if (selectedPresetUsesDynamicBoardSize()) {
       resetToPreview();
     }
@@ -5626,7 +5639,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleGoKomiChange() {
-    if (refs.goKomi) refs.goKomi.value = formatKomi(selectedGoKomi());
+    syncInputDraft(refs.goKomi, formatKomi(selectedGoKomi()));
     if (isGoGame(game) && game.phase === 'setup') {
       game.komi = selectedGoKomi();
       syncStatusForCurrentGame();
@@ -5688,9 +5701,9 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     if (!refs.gomokuSize || !selectedPresetUsesDynamicBoardSize()) return;
     const preset = selectedPreset();
     const fallback = defaultBoardSizeForPreset(selectedGameMode(), preset);
-    refs.gomokuSize.value = String(fallback);
-    if (refs.boundaryGlueRows) refs.boundaryGlueRows.value = String(fallback);
-    if (refs.boundaryGlueCols) refs.boundaryGlueCols.value = String(fallback);
+    syncInputDraft(refs.gomokuSize, fallback);
+    syncInputDraft(refs.boundaryGlueRows, fallback);
+    syncInputDraft(refs.boundaryGlueCols, fallback);
   }
 
   function setImportToolsVisible(force) {
@@ -31288,21 +31301,21 @@ function syncBoundaryGlueBoardControls() {
     const value = shape === 'rectangle'
     ? normalizeBoundaryGlueBoardSize(refs.gomokuSize.value || defaults.rows, defaults.rows)
     : selectedBoardDimensions().rows;
-    refs.gomokuSize.value = String(value);
+    syncInputDraft(refs.gomokuSize, value);
   }
   if (refs.boundaryGlueRows) {
     refs.boundaryGlueRows.min = String(BOUNDARY_GLUE_MIN_BOARD_SIZE);
     refs.boundaryGlueRows.max = String(BOUNDARY_GLUE_MAX_BOARD_SIZE);
     refs.boundaryGlueRows.step = '1';
     refs.boundaryGlueRows.disabled = !active || shape !== 'rectangle';
-    refs.boundaryGlueRows.value = String(normalizeBoundaryGlueBoardSize(refs.boundaryGlueRows.value || defaults.rows, defaults.rows));
+    syncInputDraft(refs.boundaryGlueRows, normalizeBoundaryGlueBoardSize(refs.boundaryGlueRows.value || defaults.rows, defaults.rows));
   }
   if (refs.boundaryGlueCols) {
     refs.boundaryGlueCols.min = String(BOUNDARY_GLUE_MIN_BOARD_SIZE);
     refs.boundaryGlueCols.max = String(BOUNDARY_GLUE_MAX_BOARD_SIZE);
     refs.boundaryGlueCols.step = '1';
     refs.boundaryGlueCols.disabled = !active || shape !== 'rectangle';
-    refs.boundaryGlueCols.value = String(normalizeBoundaryGlueBoardSize(refs.boundaryGlueCols.value || defaults.cols, defaults.cols));
+    syncInputDraft(refs.boundaryGlueCols, normalizeBoundaryGlueBoardSize(refs.boundaryGlueCols.value || defaults.cols, defaults.cols));
   }
 }
 
@@ -31352,7 +31365,7 @@ function syncConnectFourFallInputFromGame() {
 
 function syncGoKomiInputFromGame() {
   if (!refs.goKomi || !isGoGame(game)) return;
-  refs.goKomi.value = formatKomi(game.komi);
+  syncInputDraft(refs.goKomi, formatKomi(game.komi));
 }
 
 function syncGoScoringMethodInputFromGame() {

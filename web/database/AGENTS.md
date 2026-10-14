@@ -12,3 +12,15 @@ When changing `ramified_minigames.html`, `js/ramified_minigames_setup.js`, the m
 8. When `js/i18n/ramified_minigames_locales.js` changes, bump its cache query in `ramified_minigames.html`.
 
 Do not turn an ordinary feature request into a full legacy translation audit unless the user asks for one. Convert newly added and directly modified user-visible strings.
+
+# Editable input requirements
+
+When changing a calculator's editable text or number controls:
+
+1. Read `implement_plan/input_editing_principles.md` first.
+2. Keep the user's raw draft separate from normalized model values. Empty numbers, signs, decimal points, exponent prefixes, trailing spaces, and IME composition are legitimate editing states.
+3. Use `CalculatorInputSettings.listenEditable()` for new or directly modified live textbox handlers, or preserve the same draft/selection/composition contract explicitly. Existing plain change/blur handlers can remain commit handlers; mark `commitHandled: true` when appropriate.
+4. Use `CalculatorInputSettings.syncEditableValue()` for render or asynchronous updates to a draft-aware field. Never normalize or replace a focused field merely to make an intermediate draft valid. Do not rebuild the focused control on each keystroke.
+5. Normalize at a commit boundary. A valid preview may update while typing; an incomplete or invalid number must not replace the last valid model value.
+6. Run `node js/calculator_input_drafts_test.js`, `node js/calculator_input_drafts_ui_test.js`, and relevant calculator tests. The UI test uses an isolated browser and real keystrokes; setting `.value` once is not sufficient to test sequential editing.
+7. Rebuild and check the live workspace bundle when shared input behavior or a bundled calculator changes, and bump affected page script cache queries.

@@ -1,6 +1,17 @@
 (() => {
   "use strict";
 
+  function listenInputDraft(control, handler, commitHandled = false) {
+    const settings = typeof window !== "undefined" ? window.CalculatorInputSettings : null;
+    if (settings?.listenEditable) return settings.listenEditable(control, "input", handler, { commitHandled });
+    return control.addEventListener("input", handler);
+  }
+
+  function syncInputDraft(control, value) {
+    if (window.CalculatorInputSettings?.syncEditableValue) return window.CalculatorInputSettings.syncEditableValue(control, value);
+    control.value = String(value);
+  }
+
   const $ = (id) => document.getElementById(id);
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
   const finiteNumber = (value, fallback = 0) => {
@@ -7600,7 +7611,7 @@
   function changeAmbientDimension(rawValue) {
     const next = clamp(Math.round(finiteNumber(rawValue, state.ambientDim)), 2, 8);
     if (next === state.ambientDim) {
-      $("ambient-dimension").value = String(next);
+      syncInputDraft($("ambient-dimension"), next);
       return;
     }
     if (next < state.ambientDim) {
@@ -7645,7 +7656,7 @@
     clearWeylInteraction();
     state.activeToricFace = null;
     invalidateToricAnalysis();
-    $("ambient-dimension").value = String(next);
+    syncInputDraft($("ambient-dimension"), next);
     rebuildDynamicControls();
     refreshTypeLabels();
     syncObjectPanel();
@@ -8605,12 +8616,12 @@
     const update = (raw) => {
       target[key] = finiteNumber(raw, target[key]);
       slider.value = String(target[key]);
-      number.value = String(target[key]);
+      syncInputDraft(number, target[key]);
       if (callback) callback();
       renderAll();
     };
     slider.addEventListener("input", () => update(slider.value));
-    number.addEventListener("input", () => update(number.value));
+    listenInputDraft(number, () => update(number.value));
   }
 
   function bindCardCollapse() {
@@ -9144,7 +9155,7 @@
       });
     });
 
-    $("ambient-dimension").addEventListener("input", () => changeAmbientDimension($("ambient-dimension").value));
+    listenInputDraft($("ambient-dimension"), () => changeAmbientDimension($("ambient-dimension").value), true);
     $("ambient-dimension").addEventListener("change", () => changeAmbientDimension($("ambient-dimension").value));
 
     $("slide-input-mode-controls").addEventListener("click", (event) => {
@@ -9437,15 +9448,15 @@
     state.activeDirection = normalizeDirection(state.activeDirection);
     clampMotionState();
     refreshLinkedObjects();
-    $("ambient-dimension").value = String(state.ambientDim);
+    syncInputDraft($("ambient-dimension"), state.ambientDim);
     $("screen-zoom").value = String(state.viewport.zoom);
     $("label-size-slider").value = String(state.viewport.labelSize);
     $("label-size-value").textContent = `${fmt(state.viewport.labelSize, 2)}rem`;
     $("camera-distance").value = String(state.viewport.cameraDistance);
     $("box-radius-slider").value = String(state.viewport.boxRadius);
-    $("box-radius-number").value = String(state.viewport.boxRadius);
+    syncInputDraft($("box-radius-number"), state.viewport.boxRadius);
     $("tolerance-slider").value = String(state.viewport.tolerance);
-    $("tolerance-number").value = String(state.viewport.tolerance);
+    syncInputDraft($("tolerance-number"), state.viewport.tolerance);
     $("show-axes").checked = state.viewport.showAxes;
     $("show-grid").checked = state.viewport.showGrid;
     $("show-labels").checked = state.viewport.showLabels;

@@ -708,12 +708,19 @@ function syncGridSizeInputs() {
   const colsInput = document.getElementById('grid-cols');
   const rowsInput = document.getElementById('grid-rows');
   if (isGeneralizedCanvasActive()) {
-    if (colsInput) colsInput.value = generalizedSideCols();
-    if (rowsInput) rowsInput.value = generalizedBoardRows();
+    syncGridSizeDraft(colsInput, generalizedSideCols());
+    syncGridSizeDraft(rowsInput, generalizedBoardRows());
     return;
   }
-  if (colsInput) colsInput.value = gridCols;
-  if (rowsInput) rowsInput.value = gridRows;
+  syncGridSizeDraft(colsInput, gridCols);
+  syncGridSizeDraft(rowsInput, gridRows);
+}
+
+function syncGridSizeDraft(control, value) {
+  if (!control) return;
+  if (window.CalculatorInputSettings?.syncEditableValue) {
+    window.CalculatorInputSettings.syncEditableValue(control, value);
+  } else control.value = String(value);
 }
 
 function resetCalculatedOutputsForEmptyDiagram() {
@@ -761,6 +768,9 @@ function handleLayoutBreakpointChange() {
 function initGridSizeControls() {
   const colsInput = document.getElementById('grid-cols');
   const rowsInput = document.getElementById('grid-rows');
+  [colsInput, rowsInput].filter(Boolean).forEach((control) => {
+    window.CalculatorInputSettings?.listenEditable(control, 'input', () => {}, { commitHandled: true });
+  });
   if (colsInput) {
     colsInput.min = 1;
     colsInput.max = MAX_GRID_COLS;

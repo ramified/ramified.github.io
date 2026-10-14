@@ -16300,6 +16300,136 @@
       const GLOBAL_PROFILE = "__global__";
       const sessions = /* @__PURE__ */ new Map();
       let listenersReady = false;
+      const inputDrafts = /* @__PURE__ */ new WeakMap();
+      function textControl(control) {
+        if (!control) return false;
+        const tag = String(control.tagName || "").toUpperCase();
+        return tag === "TEXTAREA" || tag === "INPUT" && ["text", "number", "search", "url", "email", "tel", "password"].includes(String(control.type || "text").toLowerCase());
+      }
+      function editableTextControl(control) {
+        return textControl(control) && !control.disabled && !control.readOnly;
+      }
+      function focusedControl(control) {
+        const root = control?.getRootNode?.() || control?.ownerDocument;
+        return root?.activeElement === control || control?.ownerDocument?.activeElement === control;
+      }
+      function usableNumberDraft(control) {
+        if (String(control.type).toLowerCase() !== "number") return true;
+        return String(control.value).trim() !== "" && Number.isFinite(Number(control.value)) && (!control.validity || control.validity.valid);
+      }
+      function prepareDraftCommit(control, draft) {
+        if (control.type === "number" && (control.value === "" || control.validity?.badInput) && draft.lastValidValue != null) control.value = draft.lastValidValue;
+        draft.committing = true;
+      }
+      function dispatchDraftEvent(control, type) {
+        const EventClass = control.ownerDocument?.defaultView?.Event || (typeof Event !== "undefined" ? Event : null);
+        if (EventClass && control.isConnected !== false) control.dispatchEvent(new EventClass(type, { bubbles: true }));
+      }
+      function draftForControl(control) {
+        if (inputDrafts.has(control)) return inputDrafts.get(control);
+        const draft = {
+          dirty: false,
+          composing: false,
+          committing: false,
+          lastValidValue: usableNumberDraft(control) ? control.value : null,
+          publishedValue: null,
+          inputHandlers: [],
+          changeHandlers: []
+        };
+        inputDrafts.set(control, draft);
+        control.addEventListener("focus", () => {
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        });
+        control.addEventListener("compositionstart", () => {
+          draft.composing = true;
+        });
+        control.addEventListener("compositionend", () => {
+          draft.composing = false;
+          queueMicrotask(() => {
+            if (draft.dirty && draft.publishedValue !== control.value && !draft.composing) dispatchDraftEvent(control, "input");
+          });
+        });
+        control.addEventListener("change", (event) => {
+          prepareDraftCommit(control, draft);
+          if (!draft.changeHandlers.length && !draft.externalCommit) {
+            for (const handler of draft.inputHandlers) handler.call(control, event);
+          }
+          queueMicrotask(() => {
+            draft.dirty = false;
+            draft.committing = false;
+            if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+          });
+        }, true);
+        control.addEventListener("blur", () => {
+          queueMicrotask(() => {
+            if (draft.dirty && !draft.committing && !draft.composing) dispatchDraftEvent(control, "change");
+          });
+        });
+        return draft;
+      }
+      function restoreInputDraft(control, snapshot) {
+        let target = control;
+        if (control.isConnected === false && control.id) {
+          target = snapshot.root?.getElementById?.(control.id);
+          if (!target && snapshot.root?.querySelector && typeof CSS !== "undefined") {
+            target = snapshot.root.querySelector(`#${CSS.escape(control.id)}`);
+          }
+        }
+        if (!target || target.isConnected === false || !editableTextControl(target)) return;
+        if (target.value !== snapshot.value) target.value = snapshot.value;
+        if (snapshot.focused && snapshot.root?.activeElement !== target && (snapshot.root?.activeElement === control || !snapshot.root?.activeElement || snapshot.root.activeElement === snapshot.root.body)) target.focus?.({ preventScroll: true });
+        if (snapshot.start != null && target.setSelectionRange) {
+          target.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+        }
+      }
+      function listenEditable(control, type, handler, options2) {
+        if (!control?.addEventListener) return;
+        if (!["input", "change"].includes(type)) {
+          control.addEventListener(type, handler, options2);
+          return;
+        }
+        if (textControl(control)) {
+          const draft = draftForControl(control);
+          if (options2?.commitHandled) draft.externalCommit = true;
+          const handlers = type === "input" ? draft.inputHandlers : draft.changeHandlers;
+          if (!handlers.includes(handler)) handlers.push(handler);
+        }
+        control.addEventListener(type, function(event) {
+          const target = event.target || control;
+          if (!editableTextControl(target)) return handler.call(this, event);
+          const draft = draftForControl(target);
+          if (type !== "input" || draft.committing) return handler.call(this, event);
+          draft.dirty = true;
+          if (event.isComposing || draft.composing || !usableNumberDraft(target)) return;
+          if (target.type === "number" && /[.eE+-]$/.test(String(event.data || ""))) return;
+          const snapshot = {
+            value: target.value,
+            start: target.selectionStart,
+            end: target.selectionEnd,
+            direction: target.selectionDirection,
+            root: target.getRootNode?.() || target.ownerDocument,
+            focused: focusedControl(target)
+          };
+          try {
+            return handler.call(this, event);
+          } finally {
+            if (usableNumberDraft(target)) draft.lastValidValue = target.value;
+            draft.publishedValue = draft.dirty ? snapshot.value : target.value;
+            if (draft.dirty) restoreInputDraft(target, snapshot);
+          }
+        }, options2);
+      }
+      function syncEditableValue(control, value, { force = false } = {}) {
+        if (!control) return false;
+        const draft = inputDrafts.get(control);
+        if (!force && editableTextControl(control) && focusedControl(control) && draft && !draft.committing && (draft.dirty || draft.composing)) return false;
+        if (control.value !== String(value)) control.value = String(value);
+        if (draft) {
+          if (force) draft.dirty = false;
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        }
+        return true;
+      }
       const DEFAULT_STRINGS = Object.freeze({
         settings: "Settings",
         openSettings: "Open settings",
@@ -17071,6 +17201,8 @@
         STORAGE_PREFIX,
         MAX_BINDINGS,
         register,
+        listenEditable,
+        syncEditableValue,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
         setCardVisible(pageId, cardId, visible) {
           const session = sessions.get(String(pageId || ""));
@@ -18484,6 +18616,15 @@
     })();
     (() => {
       "use strict";
+      function listenInputDraft(control, handler, commitHandled = false) {
+        const settings = typeof window !== "undefined" ? window.CalculatorInputSettings : null;
+        if (settings?.listenEditable) return settings.listenEditable(control, "input", handler, { commitHandled });
+        return control.addEventListener("input", handler);
+      }
+      function syncInputDraft(control, value) {
+        if (window.CalculatorInputSettings?.syncEditableValue) return window.CalculatorInputSettings.syncEditableValue(control, value);
+        control.value = String(value);
+      }
       const $ = (id) => document2.getElementById(id);
       const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
       const finiteNumber = (value, fallback = 0) => {
@@ -25464,7 +25605,7 @@
       function changeAmbientDimension(rawValue) {
         const next = clamp(Math.round(finiteNumber(rawValue, state.ambientDim)), 2, 8);
         if (next === state.ambientDim) {
-          $("ambient-dimension").value = String(next);
+          syncInputDraft($("ambient-dimension"), next);
           return;
         }
         if (next < state.ambientDim) {
@@ -25507,7 +25648,7 @@
         clearWeylInteraction();
         state.activeToricFace = null;
         invalidateToricAnalysis();
-        $("ambient-dimension").value = String(next);
+        syncInputDraft($("ambient-dimension"), next);
         rebuildDynamicControls();
         refreshTypeLabels();
         syncObjectPanel();
@@ -26397,12 +26538,12 @@
         const update = (raw) => {
           target[key] = finiteNumber(raw, target[key]);
           slider.value = String(target[key]);
-          number.value = String(target[key]);
+          syncInputDraft(number, target[key]);
           if (callback) callback();
           renderAll();
         };
         slider.addEventListener("input", () => update(slider.value));
-        number.addEventListener("input", () => update(number.value));
+        listenInputDraft(number, () => update(number.value));
       }
       function bindCardCollapse() {
         if (window.CalculatorCards) window.CalculatorCards.init({ side: "#cards" });
@@ -26890,7 +27031,7 @@
             renderAll();
           });
         });
-        $("ambient-dimension").addEventListener("input", () => changeAmbientDimension($("ambient-dimension").value));
+        listenInputDraft($("ambient-dimension"), () => changeAmbientDimension($("ambient-dimension").value), true);
         $("ambient-dimension").addEventListener("change", () => changeAmbientDimension($("ambient-dimension").value));
         $("slide-input-mode-controls").addEventListener("click", (event) => {
           const button = event.target.closest("[data-slide-input-mode]");
@@ -27160,15 +27301,15 @@
         state.activeDirection = normalizeDirection(state.activeDirection);
         clampMotionState();
         refreshLinkedObjects();
-        $("ambient-dimension").value = String(state.ambientDim);
+        syncInputDraft($("ambient-dimension"), state.ambientDim);
         $("screen-zoom").value = String(state.viewport.zoom);
         $("label-size-slider").value = String(state.viewport.labelSize);
         $("label-size-value").textContent = `${fmt(state.viewport.labelSize, 2)}rem`;
         $("camera-distance").value = String(state.viewport.cameraDistance);
         $("box-radius-slider").value = String(state.viewport.boxRadius);
-        $("box-radius-number").value = String(state.viewport.boxRadius);
+        syncInputDraft($("box-radius-number"), state.viewport.boxRadius);
         $("tolerance-slider").value = String(state.viewport.tolerance);
-        $("tolerance-number").value = String(state.viewport.tolerance);
+        syncInputDraft($("tolerance-number"), state.viewport.tolerance);
         $("show-axes").checked = state.viewport.showAxes;
         $("show-grid").checked = state.viewport.showGrid;
         $("show-labels").checked = state.viewport.showLabels;
@@ -37028,6 +37169,136 @@ ${body}`;
       const GLOBAL_PROFILE = "__global__";
       const sessions = /* @__PURE__ */ new Map();
       let listenersReady = false;
+      const inputDrafts = /* @__PURE__ */ new WeakMap();
+      function textControl(control) {
+        if (!control) return false;
+        const tag = String(control.tagName || "").toUpperCase();
+        return tag === "TEXTAREA" || tag === "INPUT" && ["text", "number", "search", "url", "email", "tel", "password"].includes(String(control.type || "text").toLowerCase());
+      }
+      function editableTextControl(control) {
+        return textControl(control) && !control.disabled && !control.readOnly;
+      }
+      function focusedControl(control) {
+        const root = control?.getRootNode?.() || control?.ownerDocument;
+        return root?.activeElement === control || control?.ownerDocument?.activeElement === control;
+      }
+      function usableNumberDraft(control) {
+        if (String(control.type).toLowerCase() !== "number") return true;
+        return String(control.value).trim() !== "" && Number.isFinite(Number(control.value)) && (!control.validity || control.validity.valid);
+      }
+      function prepareDraftCommit(control, draft) {
+        if (control.type === "number" && (control.value === "" || control.validity?.badInput) && draft.lastValidValue != null) control.value = draft.lastValidValue;
+        draft.committing = true;
+      }
+      function dispatchDraftEvent(control, type) {
+        const EventClass = control.ownerDocument?.defaultView?.Event || (typeof Event !== "undefined" ? Event : null);
+        if (EventClass && control.isConnected !== false) control.dispatchEvent(new EventClass(type, { bubbles: true }));
+      }
+      function draftForControl(control) {
+        if (inputDrafts.has(control)) return inputDrafts.get(control);
+        const draft = {
+          dirty: false,
+          composing: false,
+          committing: false,
+          lastValidValue: usableNumberDraft(control) ? control.value : null,
+          publishedValue: null,
+          inputHandlers: [],
+          changeHandlers: []
+        };
+        inputDrafts.set(control, draft);
+        control.addEventListener("focus", () => {
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        });
+        control.addEventListener("compositionstart", () => {
+          draft.composing = true;
+        });
+        control.addEventListener("compositionend", () => {
+          draft.composing = false;
+          queueMicrotask(() => {
+            if (draft.dirty && draft.publishedValue !== control.value && !draft.composing) dispatchDraftEvent(control, "input");
+          });
+        });
+        control.addEventListener("change", (event) => {
+          prepareDraftCommit(control, draft);
+          if (!draft.changeHandlers.length && !draft.externalCommit) {
+            for (const handler of draft.inputHandlers) handler.call(control, event);
+          }
+          queueMicrotask(() => {
+            draft.dirty = false;
+            draft.committing = false;
+            if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+          });
+        }, true);
+        control.addEventListener("blur", () => {
+          queueMicrotask(() => {
+            if (draft.dirty && !draft.committing && !draft.composing) dispatchDraftEvent(control, "change");
+          });
+        });
+        return draft;
+      }
+      function restoreInputDraft(control, snapshot) {
+        let target = control;
+        if (control.isConnected === false && control.id) {
+          target = snapshot.root?.getElementById?.(control.id);
+          if (!target && snapshot.root?.querySelector && typeof CSS !== "undefined") {
+            target = snapshot.root.querySelector(`#${CSS.escape(control.id)}`);
+          }
+        }
+        if (!target || target.isConnected === false || !editableTextControl(target)) return;
+        if (target.value !== snapshot.value) target.value = snapshot.value;
+        if (snapshot.focused && snapshot.root?.activeElement !== target && (snapshot.root?.activeElement === control || !snapshot.root?.activeElement || snapshot.root.activeElement === snapshot.root.body)) target.focus?.({ preventScroll: true });
+        if (snapshot.start != null && target.setSelectionRange) {
+          target.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+        }
+      }
+      function listenEditable(control, type, handler, options2) {
+        if (!control?.addEventListener) return;
+        if (!["input", "change"].includes(type)) {
+          control.addEventListener(type, handler, options2);
+          return;
+        }
+        if (textControl(control)) {
+          const draft = draftForControl(control);
+          if (options2?.commitHandled) draft.externalCommit = true;
+          const handlers = type === "input" ? draft.inputHandlers : draft.changeHandlers;
+          if (!handlers.includes(handler)) handlers.push(handler);
+        }
+        control.addEventListener(type, function(event) {
+          const target = event.target || control;
+          if (!editableTextControl(target)) return handler.call(this, event);
+          const draft = draftForControl(target);
+          if (type !== "input" || draft.committing) return handler.call(this, event);
+          draft.dirty = true;
+          if (event.isComposing || draft.composing || !usableNumberDraft(target)) return;
+          if (target.type === "number" && /[.eE+-]$/.test(String(event.data || ""))) return;
+          const snapshot = {
+            value: target.value,
+            start: target.selectionStart,
+            end: target.selectionEnd,
+            direction: target.selectionDirection,
+            root: target.getRootNode?.() || target.ownerDocument,
+            focused: focusedControl(target)
+          };
+          try {
+            return handler.call(this, event);
+          } finally {
+            if (usableNumberDraft(target)) draft.lastValidValue = target.value;
+            draft.publishedValue = draft.dirty ? snapshot.value : target.value;
+            if (draft.dirty) restoreInputDraft(target, snapshot);
+          }
+        }, options2);
+      }
+      function syncEditableValue(control, value, { force = false } = {}) {
+        if (!control) return false;
+        const draft = inputDrafts.get(control);
+        if (!force && editableTextControl(control) && focusedControl(control) && draft && !draft.committing && (draft.dirty || draft.composing)) return false;
+        if (control.value !== String(value)) control.value = String(value);
+        if (draft) {
+          if (force) draft.dirty = false;
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        }
+        return true;
+      }
       const DEFAULT_STRINGS = Object.freeze({
         settings: "Settings",
         openSettings: "Open settings",
@@ -37799,6 +38070,8 @@ ${body}`;
         STORAGE_PREFIX,
         MAX_BINDINGS,
         register,
+        listenEditable,
+        syncEditableValue,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
         setCardVisible(pageId, cardId, visible) {
           const session = sessions.get(String(pageId || ""));
@@ -38445,12 +38718,18 @@ ${body}`;
       const colsInput = document2.getElementById("grid-cols");
       const rowsInput = document2.getElementById("grid-rows");
       if (isGeneralizedCanvasActive()) {
-        if (colsInput) colsInput.value = generalizedSideCols();
-        if (rowsInput) rowsInput.value = generalizedBoardRows();
+        syncGridSizeDraft(colsInput, generalizedSideCols());
+        syncGridSizeDraft(rowsInput, generalizedBoardRows());
         return;
       }
-      if (colsInput) colsInput.value = gridCols;
-      if (rowsInput) rowsInput.value = gridRows;
+      syncGridSizeDraft(colsInput, gridCols);
+      syncGridSizeDraft(rowsInput, gridRows);
+    }
+    function syncGridSizeDraft(control, value) {
+      if (!control) return;
+      if (window.CalculatorInputSettings?.syncEditableValue) {
+        window.CalculatorInputSettings.syncEditableValue(control, value);
+      } else control.value = String(value);
     }
     function resetCalculatedOutputsForEmptyDiagram() {
       document2.getElementById("shape-badge").textContent = "( )";
@@ -38489,6 +38768,10 @@ ${body}`;
     function initGridSizeControls() {
       const colsInput = document2.getElementById("grid-cols");
       const rowsInput = document2.getElementById("grid-rows");
+      [colsInput, rowsInput].filter(Boolean).forEach((control) => {
+        window.CalculatorInputSettings?.listenEditable(control, "input", () => {
+        }, { commitHandled: true });
+      });
       if (colsInput) {
         colsInput.min = 1;
         colsInput.max = MAX_GRID_COLS;
@@ -46074,7 +46357,7 @@ ${body}`;
       if (document2.readyState === "loading") document2.addEventListener("DOMContentLoaded", start, { once: true });
       else window.setTimeout(start, 0);
     })();
-    __editor.registerHandlers({ bigMul, bigDiv, bigFrom, bigStr, factorial, defaultGridSize, makeEmptyBlocks, resetBlocks, isGeneralizedCanvasActive, isGeneralizedRows, signedRowsLabel, clampGeneralizedRowCount, generalizedBoardRows, defaultGeneralizedSideCols, generalizedSideCols, inferGeneralizedSideCols, clampGeneralizedRowValue, normalizeGeneralizedRows, generalizedActiveRows, generalizedShiftAmount, isNonIncreasingNonnegativeRows, isOrdinaryYoungDiagramRows, generalizedPaperRowsAreNonIncreasing, generalizedBoundaryEditAvailable, syncGeneralizedCanvasInputs, commitGeneralizedCanvasRows, setGeneralizedCanvasRows, resizeGeneralizedCanvasFromControls, clearGeneralizedCanvasRows, updateGeneralizedCanvasControls, setGeneralizedCanvasMode, enterYoungBoundaryEditIfPossible, setGeneralizedCanvasRowValue, handleGeneralizedBoundaryClick, paperCellValueFromCol, paperRowContainsCell, paperValueExcludingCell, nextPaperRowValueFromClick, handleGeneralizedShiftedRowClick, handleGeneralizedCanvasClick, resetExportToDefaultCitation, measuredCanvasWrapInnerWidth, resize, scheduleCanvasResizePasses, hookLen, computeHooks, rowLengths, colLengths, hslHook, drawGeneralizedCanvas, redraw, cardForElement, isCardExpandedById, updateShapeBadge, refreshStats, refreshCardCalculation, refreshOpenCalculations, cardByContainedId, setCardStaleById, diagramChanged, clampInt, syncGridSizeInputs, resetCalculatedOutputsForEmptyDiagram, setGridSize, applyGridSizeFromInputs, handleLayoutBreakpointChange, initGridSizeControls, updateYoungUrlState, applyYoungUrlState, calc, clearAll, parseIntegerList, drawPartitionRows, setPartition, rowsFromDynkinLabels, setDynkinLabels, clearAllSilent, conjugate, complement, exportLaTeX, exportSVG, copyShape, showErr, clearErr, bumpBranchingLRSearch, lrCoeff, partitionsEvenParts, conjugatePart, trimPart, partitionsOfSize, miniDiagram, miniDiagramPlain, miniDiagramDecomp, escapeHtml, partitionSize, partitionCount, partitionLabel, symfunPartKey, partitionsOfSizeLimited, bigCombSmall, capacityGroups, groupAllocationProfiles, sortedPositiveState, rowTransitionStates, powerRowTransitionStates, kostkaNumber, countRowTransitionCoefficient, coefficientForBasis, expansionForBasis, symRatGcd, symRat, symRatIsZero, symRatIsOneAbs, symRatAdd, symRatSub, symRatMul, symRatDiv, symRatNeg, symRatAbs, symRatFromInteger, symfunDefinition, symfunSymbolHTML, symmetricBasisSymbol, formatSymRatCoefficient, formatBasisLinearCombination, generatorSymbolHTML, generatorMonomialHTML, normalizedGeneratorPart, generatorPartFromKey, addGeneratorPolynomialTerm, multiplyGeneratorPolynomials, schurGeneratorPolynomial, expandSchurLinearTermsToGeneratorPolynomial, formatBasisPolynomialCombination, basisLinearCombinationToMonomialVector, convertBasisLinearCombination, convertInfiniteBasisExpansions, symfunTitle, defaultSymfunVariableCount, syncSymfunVariableControl, handleSymfunVariableInput, toggleSymfunInfinite, initSymfunVariableControls, selectedSymfunInfiniteBasis, selectedSymfunOmegaSource, setSymfunOmegaSource, symfunOmegaSourceSelectHTML, symfunOmegaLabelHTML, selectedSymfunInfiniteMode, conversionBasisForInfiniteMode, omegaSignForPowerSum, omegaPowerSumTerms, omegaTermsInBasis, omegaFinitePolynomial, readSymfunVariableCount, zeroExponentVector, polyKey, exponentsFromKey, onePolynomial, addPolynomialTerm, addScaledPolynomial, multiplyPolynomials, multiplyPolynomialList, pSeedPolynomial, eSeedPolynomial, hSeedPolynomial, mPolynomial, schurPolynomial, finiteSymfunPolynomial, compareExponentKeys, formatVariableMonomial, formatFinitePolynomial, formatFiniteRationalPolynomial, renderFiniteSymmetricFunctionChart, renderSymmetricFunctionChart, symfunSymbolText, partitionLabelText, formatSymRatText, formatBasisLinearCombinationText, generatorMonomialText, formatBasisPolynomialCombinationText, formatVariableMonomialText, formatFinitePolynomialText, formatFiniteRationalPolynomialText, symmetricFunctionExportText, cardFromActionEvent, revealExportCard, exportSymmetricFunctions, branchingRuleLabel, branchingLRSearchLimitMessage, ensureBeforeElement, branchingCandidatePairEstimate, renderBranchingPreview, rejectBranching, markBranchingStale, computeBranching, exportBranching, branchingRuleDef, syncBranchingControls, onBranchingRuleChange, setBranchingViewMode, trimTrailingZerosVector, currentBranchingCanvasRows, normalizeOrdinaryBranchingPartition, rationalGLFromSignedRows, signedRowsFromRationalGL, signedRowsFromRationalGLWithRank, rationalGLSize, rationalGLLength, tryFiniteGLRowsFromRational, rationalGLFromFiniteRows, finiteGLSourceRankForBranching, branchingGLSourceLabel, parseBranchingRowsInput, readBranchingRanks, readBranchingInputs, branchingInputBoxSize, createBranchingContext, createBranchingOrdinaryModificationStats, createBranchingGLModificationStats, bumpBranchingCandidate, partKey, lrCached, branchingLRCoeff, partitionsCached, evenBranchingParts, tensorProductExpansion, factorKey, cloneFactor, makeFactor, addBranchingEntry, addSingleBranchingEntry, addProductBranchingEntry, restrictionSideTerms, computeGLToOrdinaryBranching, computeOrdinaryToGLBranching, finiteComposedIntermediateRanks, applyComposedIntermediateFiniteOperations, computeGLOrdinaryGLBranching, computeOrdinaryDirectSumBranching, computeOrdinaryDiagonalBranching, glDiagonalBridgeTerms, computeGLDiagonalBranching, computeGLDirectSumBranching, finiteGLPolynomialPartFromRows, finiteGLRowsFromPolynomialPart, computeFiniteGLDiagonalBranching, computeFiniteGLDirectSumBranching, finiteGLTargetRank, finiteGLPolyKey, finiteGLPolyOne, finiteGLPolyAddScaled, finiteGLPolyMul, finiteGLCompleteSymmetricPoly, finiteGLUniversalCharacterPoly, compareFiniteGLExponentKeys, finiteGLStraightenFactor, applyFiniteGLTargetModification, medianDeterminantShiftForStableRows, orthogonalDeterminantAssociatePart, applyOrthogonalDeterminantTwistMap, firstColumnHookBorderStripRemoval, orthogonalColumnSum, isFiniteOrthogonalPartition, isFiniteSymplecticPartition, finiteSymplecticModification, finiteOrthogonalModificationRaw, finiteOrthogonalModification, finiteOrdinaryModification, finiteOrdinaryTargetRank, finiteOrdinaryStageRuleForBranching, finiteOrdinaryStageStableLimit, pruneZeroBranchingMap, applyFiniteOrdinaryTargetModification, validateFiniteOrdinarySourcePart, validateFiniteOrdinarySources, finiteReducedSourceBoxSize, prepareFiniteRankBranchingReduction, applyPostBranchingFiniteOperations, branchingFactorRows, compareBranchingFactor, branchingEntriesFromMap, branchingStableRangeWarning, branchingFiniteModificationNote, branchingFactorLabel, branchingGLFactorRank, branchingFactorDisplayRows, branchingFactorDisplayLabel, branchingSourceSummaryForRule, branchingSourceSummary, branchingEntryLabel, branchingEntryDisplayLabel, branchingFactorDiagramHTML, renderBranchingResult, computeBranchingMap, bgcd, bf, bfint, cartanMatrix, makeBn, makeCn, makeDn, positiveRoots, positiveCoroots, weylDimGeneral, toDynkinLabels, orthogonalCoordsToDynkinLabels, glCoordsToDynkinLabels, conformalCoordsToDynkinLabels, currentLieWeightRows, sameIntVector, vectorText, coefficientTermHTML, matrixWeightExpressionHTML, setLieWeightLabelHints, glDominantRows, compareVectorsDesc, uniquePermutations, glOrbitRows, signedValueMultisetsForOrbit, signedPermutationOrbitRows, vectorAdd, vectorSub, rhoRowsForType, dotActionRowsOrbit, dotActionDominantRows, semisimpleRowsFromDynkinForCoordinateMode, glCoordinateCount, conformalCoordinateCount, signedPermutationDominantRows, conformalDominantRows, lieUsesGlRows, lieUsesConformalRows, currentConformalLabelText, currentGlLabelText, lieWeightData, dominantRowsAreOrdinaryYoung, dominantRowsToPartition, setDominantRepresentativePreview, clearDominantRepresentativePreview, showDominantRepresentativeOnCanvas, rankOf, weylOrbitDynkin, dotActionOrbitDynkin, positiveCorootPairings, dotActionDominantDynkin, dotActionOrbitSize, bwbResultFromDynkin, factorialBI, powBI, cartanEdgeWeight, dynkinComponents, componentAdjacency, isPathAdjacency, doubleEdgeTouchesPathEnd, armLengthsFromBranch, irreducibleWeylOrderFromCartan, weylGroupOrderFromCartan, weylOrbitSizeFast, updateOrbitViewButtons, setOrbitViewMode, lieUsesDotAction, onLieDotActionChange, markBorelWeilBottStale, bwbDimensionLatex, bwbZeroAllLatex, typesetLieBwbMath, updateLieGlToggleVisibility, onTypeChange, onAlgebraChange, currentTypeStr, orbitListLimitText, renderOrbitTableOrMessage, toggleOrbitTable, exportOrbit, computeWeyl, orbitTableHeaderLabels, orbitDynkinLabelForRows, orbitRowsForEntry, buildOrbitTable, orbitVectorLabel, bwbConventionWarning, buildBwbCurrentResult, renderBorelWeilBottResult, computeBorelWeilBott, exportBorelWeilBott, generalizedOrbitDiagramSVG, buildOrbitDiagramList, cloneMatrix, invertMatrix, transposeMatrix, matVec, symmetrizerFromCartan, fundamentalWeightGram, dotDyn, normDyn, rootDynkinFromSimple, innerWeightRoot, addScaled, cleanIntArray, isDominantDyn, dominantRepresentativeDyn, dynkinToRows, typeDisplayHTML, vectorKey, simpleRootCoordinatesForDiff, isReachableFromHighest, buildWeightDecompContext, enumerateDominantWeightCandidates, weightMultiplicityFreudenthal, renderWeightSpaceDecomposition, computeWeightSpaceDecomposition, exportWeightSpaceDecomposition, isOpenChartLimitCard, latestOpenChartCardExcluding, cardPinningEnabled, isCardPinnedForOpenLimit, syncCardPinAvailability, initCardPinBreakpoint, setCardAriaExpanded, collapseCard, toggleCardPinned, stopCardPinEvent, initCardChrome, enforceOpenChartCardLimit, openCard, toggleCard, initCustomTooltips, parseYoungDiagramImportText, validateYoungDiagramImport, initYoungDiagramPage });
+    __editor.registerHandlers({ bigMul, bigDiv, bigFrom, bigStr, factorial, defaultGridSize, makeEmptyBlocks, resetBlocks, isGeneralizedCanvasActive, isGeneralizedRows, signedRowsLabel, clampGeneralizedRowCount, generalizedBoardRows, defaultGeneralizedSideCols, generalizedSideCols, inferGeneralizedSideCols, clampGeneralizedRowValue, normalizeGeneralizedRows, generalizedActiveRows, generalizedShiftAmount, isNonIncreasingNonnegativeRows, isOrdinaryYoungDiagramRows, generalizedPaperRowsAreNonIncreasing, generalizedBoundaryEditAvailable, syncGeneralizedCanvasInputs, commitGeneralizedCanvasRows, setGeneralizedCanvasRows, resizeGeneralizedCanvasFromControls, clearGeneralizedCanvasRows, updateGeneralizedCanvasControls, setGeneralizedCanvasMode, enterYoungBoundaryEditIfPossible, setGeneralizedCanvasRowValue, handleGeneralizedBoundaryClick, paperCellValueFromCol, paperRowContainsCell, paperValueExcludingCell, nextPaperRowValueFromClick, handleGeneralizedShiftedRowClick, handleGeneralizedCanvasClick, resetExportToDefaultCitation, measuredCanvasWrapInnerWidth, resize, scheduleCanvasResizePasses, hookLen, computeHooks, rowLengths, colLengths, hslHook, drawGeneralizedCanvas, redraw, cardForElement, isCardExpandedById, updateShapeBadge, refreshStats, refreshCardCalculation, refreshOpenCalculations, cardByContainedId, setCardStaleById, diagramChanged, clampInt, syncGridSizeInputs, syncGridSizeDraft, resetCalculatedOutputsForEmptyDiagram, setGridSize, applyGridSizeFromInputs, handleLayoutBreakpointChange, initGridSizeControls, updateYoungUrlState, applyYoungUrlState, calc, clearAll, parseIntegerList, drawPartitionRows, setPartition, rowsFromDynkinLabels, setDynkinLabels, clearAllSilent, conjugate, complement, exportLaTeX, exportSVG, copyShape, showErr, clearErr, bumpBranchingLRSearch, lrCoeff, partitionsEvenParts, conjugatePart, trimPart, partitionsOfSize, miniDiagram, miniDiagramPlain, miniDiagramDecomp, escapeHtml, partitionSize, partitionCount, partitionLabel, symfunPartKey, partitionsOfSizeLimited, bigCombSmall, capacityGroups, groupAllocationProfiles, sortedPositiveState, rowTransitionStates, powerRowTransitionStates, kostkaNumber, countRowTransitionCoefficient, coefficientForBasis, expansionForBasis, symRatGcd, symRat, symRatIsZero, symRatIsOneAbs, symRatAdd, symRatSub, symRatMul, symRatDiv, symRatNeg, symRatAbs, symRatFromInteger, symfunDefinition, symfunSymbolHTML, symmetricBasisSymbol, formatSymRatCoefficient, formatBasisLinearCombination, generatorSymbolHTML, generatorMonomialHTML, normalizedGeneratorPart, generatorPartFromKey, addGeneratorPolynomialTerm, multiplyGeneratorPolynomials, schurGeneratorPolynomial, expandSchurLinearTermsToGeneratorPolynomial, formatBasisPolynomialCombination, basisLinearCombinationToMonomialVector, convertBasisLinearCombination, convertInfiniteBasisExpansions, symfunTitle, defaultSymfunVariableCount, syncSymfunVariableControl, handleSymfunVariableInput, toggleSymfunInfinite, initSymfunVariableControls, selectedSymfunInfiniteBasis, selectedSymfunOmegaSource, setSymfunOmegaSource, symfunOmegaSourceSelectHTML, symfunOmegaLabelHTML, selectedSymfunInfiniteMode, conversionBasisForInfiniteMode, omegaSignForPowerSum, omegaPowerSumTerms, omegaTermsInBasis, omegaFinitePolynomial, readSymfunVariableCount, zeroExponentVector, polyKey, exponentsFromKey, onePolynomial, addPolynomialTerm, addScaledPolynomial, multiplyPolynomials, multiplyPolynomialList, pSeedPolynomial, eSeedPolynomial, hSeedPolynomial, mPolynomial, schurPolynomial, finiteSymfunPolynomial, compareExponentKeys, formatVariableMonomial, formatFinitePolynomial, formatFiniteRationalPolynomial, renderFiniteSymmetricFunctionChart, renderSymmetricFunctionChart, symfunSymbolText, partitionLabelText, formatSymRatText, formatBasisLinearCombinationText, generatorMonomialText, formatBasisPolynomialCombinationText, formatVariableMonomialText, formatFinitePolynomialText, formatFiniteRationalPolynomialText, symmetricFunctionExportText, cardFromActionEvent, revealExportCard, exportSymmetricFunctions, branchingRuleLabel, branchingLRSearchLimitMessage, ensureBeforeElement, branchingCandidatePairEstimate, renderBranchingPreview, rejectBranching, markBranchingStale, computeBranching, exportBranching, branchingRuleDef, syncBranchingControls, onBranchingRuleChange, setBranchingViewMode, trimTrailingZerosVector, currentBranchingCanvasRows, normalizeOrdinaryBranchingPartition, rationalGLFromSignedRows, signedRowsFromRationalGL, signedRowsFromRationalGLWithRank, rationalGLSize, rationalGLLength, tryFiniteGLRowsFromRational, rationalGLFromFiniteRows, finiteGLSourceRankForBranching, branchingGLSourceLabel, parseBranchingRowsInput, readBranchingRanks, readBranchingInputs, branchingInputBoxSize, createBranchingContext, createBranchingOrdinaryModificationStats, createBranchingGLModificationStats, bumpBranchingCandidate, partKey, lrCached, branchingLRCoeff, partitionsCached, evenBranchingParts, tensorProductExpansion, factorKey, cloneFactor, makeFactor, addBranchingEntry, addSingleBranchingEntry, addProductBranchingEntry, restrictionSideTerms, computeGLToOrdinaryBranching, computeOrdinaryToGLBranching, finiteComposedIntermediateRanks, applyComposedIntermediateFiniteOperations, computeGLOrdinaryGLBranching, computeOrdinaryDirectSumBranching, computeOrdinaryDiagonalBranching, glDiagonalBridgeTerms, computeGLDiagonalBranching, computeGLDirectSumBranching, finiteGLPolynomialPartFromRows, finiteGLRowsFromPolynomialPart, computeFiniteGLDiagonalBranching, computeFiniteGLDirectSumBranching, finiteGLTargetRank, finiteGLPolyKey, finiteGLPolyOne, finiteGLPolyAddScaled, finiteGLPolyMul, finiteGLCompleteSymmetricPoly, finiteGLUniversalCharacterPoly, compareFiniteGLExponentKeys, finiteGLStraightenFactor, applyFiniteGLTargetModification, medianDeterminantShiftForStableRows, orthogonalDeterminantAssociatePart, applyOrthogonalDeterminantTwistMap, firstColumnHookBorderStripRemoval, orthogonalColumnSum, isFiniteOrthogonalPartition, isFiniteSymplecticPartition, finiteSymplecticModification, finiteOrthogonalModificationRaw, finiteOrthogonalModification, finiteOrdinaryModification, finiteOrdinaryTargetRank, finiteOrdinaryStageRuleForBranching, finiteOrdinaryStageStableLimit, pruneZeroBranchingMap, applyFiniteOrdinaryTargetModification, validateFiniteOrdinarySourcePart, validateFiniteOrdinarySources, finiteReducedSourceBoxSize, prepareFiniteRankBranchingReduction, applyPostBranchingFiniteOperations, branchingFactorRows, compareBranchingFactor, branchingEntriesFromMap, branchingStableRangeWarning, branchingFiniteModificationNote, branchingFactorLabel, branchingGLFactorRank, branchingFactorDisplayRows, branchingFactorDisplayLabel, branchingSourceSummaryForRule, branchingSourceSummary, branchingEntryLabel, branchingEntryDisplayLabel, branchingFactorDiagramHTML, renderBranchingResult, computeBranchingMap, bgcd, bf, bfint, cartanMatrix, makeBn, makeCn, makeDn, positiveRoots, positiveCoroots, weylDimGeneral, toDynkinLabels, orthogonalCoordsToDynkinLabels, glCoordsToDynkinLabels, conformalCoordsToDynkinLabels, currentLieWeightRows, sameIntVector, vectorText, coefficientTermHTML, matrixWeightExpressionHTML, setLieWeightLabelHints, glDominantRows, compareVectorsDesc, uniquePermutations, glOrbitRows, signedValueMultisetsForOrbit, signedPermutationOrbitRows, vectorAdd, vectorSub, rhoRowsForType, dotActionRowsOrbit, dotActionDominantRows, semisimpleRowsFromDynkinForCoordinateMode, glCoordinateCount, conformalCoordinateCount, signedPermutationDominantRows, conformalDominantRows, lieUsesGlRows, lieUsesConformalRows, currentConformalLabelText, currentGlLabelText, lieWeightData, dominantRowsAreOrdinaryYoung, dominantRowsToPartition, setDominantRepresentativePreview, clearDominantRepresentativePreview, showDominantRepresentativeOnCanvas, rankOf, weylOrbitDynkin, dotActionOrbitDynkin, positiveCorootPairings, dotActionDominantDynkin, dotActionOrbitSize, bwbResultFromDynkin, factorialBI, powBI, cartanEdgeWeight, dynkinComponents, componentAdjacency, isPathAdjacency, doubleEdgeTouchesPathEnd, armLengthsFromBranch, irreducibleWeylOrderFromCartan, weylGroupOrderFromCartan, weylOrbitSizeFast, updateOrbitViewButtons, setOrbitViewMode, lieUsesDotAction, onLieDotActionChange, markBorelWeilBottStale, bwbDimensionLatex, bwbZeroAllLatex, typesetLieBwbMath, updateLieGlToggleVisibility, onTypeChange, onAlgebraChange, currentTypeStr, orbitListLimitText, renderOrbitTableOrMessage, toggleOrbitTable, exportOrbit, computeWeyl, orbitTableHeaderLabels, orbitDynkinLabelForRows, orbitRowsForEntry, buildOrbitTable, orbitVectorLabel, bwbConventionWarning, buildBwbCurrentResult, renderBorelWeilBottResult, computeBorelWeilBott, exportBorelWeilBott, generalizedOrbitDiagramSVG, buildOrbitDiagramList, cloneMatrix, invertMatrix, transposeMatrix, matVec, symmetrizerFromCartan, fundamentalWeightGram, dotDyn, normDyn, rootDynkinFromSimple, innerWeightRoot, addScaled, cleanIntArray, isDominantDyn, dominantRepresentativeDyn, dynkinToRows, typeDisplayHTML, vectorKey, simpleRootCoordinatesForDiff, isReachableFromHighest, buildWeightDecompContext, enumerateDominantWeightCandidates, weightMultiplicityFreudenthal, renderWeightSpaceDecomposition, computeWeightSpaceDecomposition, exportWeightSpaceDecomposition, isOpenChartLimitCard, latestOpenChartCardExcluding, cardPinningEnabled, isCardPinnedForOpenLimit, syncCardPinAvailability, initCardPinBreakpoint, setCardAriaExpanded, collapseCard, toggleCardPinned, stopCardPinEvent, initCardChrome, enforceOpenChartCardLimit, openCard, toggleCard, initCustomTooltips, parseYoungDiagramImportText, validateYoungDiagramImport, initYoungDiagramPage });
     return __editor.start();
   }
 
@@ -49170,6 +49453,136 @@ ${body}`;
       const GLOBAL_PROFILE = "__global__";
       const sessions = /* @__PURE__ */ new Map();
       let listenersReady = false;
+      const inputDrafts = /* @__PURE__ */ new WeakMap();
+      function textControl(control) {
+        if (!control) return false;
+        const tag = String(control.tagName || "").toUpperCase();
+        return tag === "TEXTAREA" || tag === "INPUT" && ["text", "number", "search", "url", "email", "tel", "password"].includes(String(control.type || "text").toLowerCase());
+      }
+      function editableTextControl(control) {
+        return textControl(control) && !control.disabled && !control.readOnly;
+      }
+      function focusedControl(control) {
+        const root = control?.getRootNode?.() || control?.ownerDocument;
+        return root?.activeElement === control || control?.ownerDocument?.activeElement === control;
+      }
+      function usableNumberDraft(control) {
+        if (String(control.type).toLowerCase() !== "number") return true;
+        return String(control.value).trim() !== "" && Number.isFinite(Number(control.value)) && (!control.validity || control.validity.valid);
+      }
+      function prepareDraftCommit(control, draft) {
+        if (control.type === "number" && (control.value === "" || control.validity?.badInput) && draft.lastValidValue != null) control.value = draft.lastValidValue;
+        draft.committing = true;
+      }
+      function dispatchDraftEvent(control, type) {
+        const EventClass = control.ownerDocument?.defaultView?.Event || (typeof Event !== "undefined" ? Event : null);
+        if (EventClass && control.isConnected !== false) control.dispatchEvent(new EventClass(type, { bubbles: true }));
+      }
+      function draftForControl(control) {
+        if (inputDrafts.has(control)) return inputDrafts.get(control);
+        const draft = {
+          dirty: false,
+          composing: false,
+          committing: false,
+          lastValidValue: usableNumberDraft(control) ? control.value : null,
+          publishedValue: null,
+          inputHandlers: [],
+          changeHandlers: []
+        };
+        inputDrafts.set(control, draft);
+        control.addEventListener("focus", () => {
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        });
+        control.addEventListener("compositionstart", () => {
+          draft.composing = true;
+        });
+        control.addEventListener("compositionend", () => {
+          draft.composing = false;
+          queueMicrotask(() => {
+            if (draft.dirty && draft.publishedValue !== control.value && !draft.composing) dispatchDraftEvent(control, "input");
+          });
+        });
+        control.addEventListener("change", (event) => {
+          prepareDraftCommit(control, draft);
+          if (!draft.changeHandlers.length && !draft.externalCommit) {
+            for (const handler of draft.inputHandlers) handler.call(control, event);
+          }
+          queueMicrotask(() => {
+            draft.dirty = false;
+            draft.committing = false;
+            if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+          });
+        }, true);
+        control.addEventListener("blur", () => {
+          queueMicrotask(() => {
+            if (draft.dirty && !draft.committing && !draft.composing) dispatchDraftEvent(control, "change");
+          });
+        });
+        return draft;
+      }
+      function restoreInputDraft(control, snapshot) {
+        let target = control;
+        if (control.isConnected === false && control.id) {
+          target = snapshot.root?.getElementById?.(control.id);
+          if (!target && snapshot.root?.querySelector && typeof CSS !== "undefined") {
+            target = snapshot.root.querySelector(`#${CSS.escape(control.id)}`);
+          }
+        }
+        if (!target || target.isConnected === false || !editableTextControl(target)) return;
+        if (target.value !== snapshot.value) target.value = snapshot.value;
+        if (snapshot.focused && snapshot.root?.activeElement !== target && (snapshot.root?.activeElement === control || !snapshot.root?.activeElement || snapshot.root.activeElement === snapshot.root.body)) target.focus?.({ preventScroll: true });
+        if (snapshot.start != null && target.setSelectionRange) {
+          target.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+        }
+      }
+      function listenEditable(control, type, handler, options2) {
+        if (!control?.addEventListener) return;
+        if (!["input", "change"].includes(type)) {
+          control.addEventListener(type, handler, options2);
+          return;
+        }
+        if (textControl(control)) {
+          const draft = draftForControl(control);
+          if (options2?.commitHandled) draft.externalCommit = true;
+          const handlers = type === "input" ? draft.inputHandlers : draft.changeHandlers;
+          if (!handlers.includes(handler)) handlers.push(handler);
+        }
+        control.addEventListener(type, function(event) {
+          const target = event.target || control;
+          if (!editableTextControl(target)) return handler.call(this, event);
+          const draft = draftForControl(target);
+          if (type !== "input" || draft.committing) return handler.call(this, event);
+          draft.dirty = true;
+          if (event.isComposing || draft.composing || !usableNumberDraft(target)) return;
+          if (target.type === "number" && /[.eE+-]$/.test(String(event.data || ""))) return;
+          const snapshot = {
+            value: target.value,
+            start: target.selectionStart,
+            end: target.selectionEnd,
+            direction: target.selectionDirection,
+            root: target.getRootNode?.() || target.ownerDocument,
+            focused: focusedControl(target)
+          };
+          try {
+            return handler.call(this, event);
+          } finally {
+            if (usableNumberDraft(target)) draft.lastValidValue = target.value;
+            draft.publishedValue = draft.dirty ? snapshot.value : target.value;
+            if (draft.dirty) restoreInputDraft(target, snapshot);
+          }
+        }, options2);
+      }
+      function syncEditableValue(control, value, { force = false } = {}) {
+        if (!control) return false;
+        const draft = inputDrafts.get(control);
+        if (!force && editableTextControl(control) && focusedControl(control) && draft && !draft.committing && (draft.dirty || draft.composing)) return false;
+        if (control.value !== String(value)) control.value = String(value);
+        if (draft) {
+          if (force) draft.dirty = false;
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        }
+        return true;
+      }
       const DEFAULT_STRINGS = Object.freeze({
         settings: "Settings",
         openSettings: "Open settings",
@@ -49941,6 +50354,8 @@ ${body}`;
         STORAGE_PREFIX,
         MAX_BINDINGS,
         register,
+        listenEditable,
+        syncEditableValue,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
         setCardVisible(pageId, cardId, visible) {
           const session = sessions.get(String(pageId || ""));
@@ -61603,6 +62018,136 @@ ${body}`;
       const GLOBAL_PROFILE = "__global__";
       const sessions = /* @__PURE__ */ new Map();
       let listenersReady = false;
+      const inputDrafts = /* @__PURE__ */ new WeakMap();
+      function textControl(control) {
+        if (!control) return false;
+        const tag = String(control.tagName || "").toUpperCase();
+        return tag === "TEXTAREA" || tag === "INPUT" && ["text", "number", "search", "url", "email", "tel", "password"].includes(String(control.type || "text").toLowerCase());
+      }
+      function editableTextControl(control) {
+        return textControl(control) && !control.disabled && !control.readOnly;
+      }
+      function focusedControl(control) {
+        const root = control?.getRootNode?.() || control?.ownerDocument;
+        return root?.activeElement === control || control?.ownerDocument?.activeElement === control;
+      }
+      function usableNumberDraft(control) {
+        if (String(control.type).toLowerCase() !== "number") return true;
+        return String(control.value).trim() !== "" && Number.isFinite(Number(control.value)) && (!control.validity || control.validity.valid);
+      }
+      function prepareDraftCommit(control, draft) {
+        if (control.type === "number" && (control.value === "" || control.validity?.badInput) && draft.lastValidValue != null) control.value = draft.lastValidValue;
+        draft.committing = true;
+      }
+      function dispatchDraftEvent(control, type) {
+        const EventClass = control.ownerDocument?.defaultView?.Event || (typeof Event !== "undefined" ? Event : null);
+        if (EventClass && control.isConnected !== false) control.dispatchEvent(new EventClass(type, { bubbles: true }));
+      }
+      function draftForControl(control) {
+        if (inputDrafts.has(control)) return inputDrafts.get(control);
+        const draft = {
+          dirty: false,
+          composing: false,
+          committing: false,
+          lastValidValue: usableNumberDraft(control) ? control.value : null,
+          publishedValue: null,
+          inputHandlers: [],
+          changeHandlers: []
+        };
+        inputDrafts.set(control, draft);
+        control.addEventListener("focus", () => {
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        });
+        control.addEventListener("compositionstart", () => {
+          draft.composing = true;
+        });
+        control.addEventListener("compositionend", () => {
+          draft.composing = false;
+          queueMicrotask(() => {
+            if (draft.dirty && draft.publishedValue !== control.value && !draft.composing) dispatchDraftEvent(control, "input");
+          });
+        });
+        control.addEventListener("change", (event) => {
+          prepareDraftCommit(control, draft);
+          if (!draft.changeHandlers.length && !draft.externalCommit) {
+            for (const handler of draft.inputHandlers) handler.call(control, event);
+          }
+          queueMicrotask(() => {
+            draft.dirty = false;
+            draft.committing = false;
+            if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+          });
+        }, true);
+        control.addEventListener("blur", () => {
+          queueMicrotask(() => {
+            if (draft.dirty && !draft.committing && !draft.composing) dispatchDraftEvent(control, "change");
+          });
+        });
+        return draft;
+      }
+      function restoreInputDraft(control, snapshot) {
+        let target = control;
+        if (control.isConnected === false && control.id) {
+          target = snapshot.root?.getElementById?.(control.id);
+          if (!target && snapshot.root?.querySelector && typeof CSS !== "undefined") {
+            target = snapshot.root.querySelector(`#${CSS.escape(control.id)}`);
+          }
+        }
+        if (!target || target.isConnected === false || !editableTextControl(target)) return;
+        if (target.value !== snapshot.value) target.value = snapshot.value;
+        if (snapshot.focused && snapshot.root?.activeElement !== target && (snapshot.root?.activeElement === control || !snapshot.root?.activeElement || snapshot.root.activeElement === snapshot.root.body)) target.focus?.({ preventScroll: true });
+        if (snapshot.start != null && target.setSelectionRange) {
+          target.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+        }
+      }
+      function listenEditable(control, type, handler, options2) {
+        if (!control?.addEventListener) return;
+        if (!["input", "change"].includes(type)) {
+          control.addEventListener(type, handler, options2);
+          return;
+        }
+        if (textControl(control)) {
+          const draft = draftForControl(control);
+          if (options2?.commitHandled) draft.externalCommit = true;
+          const handlers = type === "input" ? draft.inputHandlers : draft.changeHandlers;
+          if (!handlers.includes(handler)) handlers.push(handler);
+        }
+        control.addEventListener(type, function(event) {
+          const target = event.target || control;
+          if (!editableTextControl(target)) return handler.call(this, event);
+          const draft = draftForControl(target);
+          if (type !== "input" || draft.committing) return handler.call(this, event);
+          draft.dirty = true;
+          if (event.isComposing || draft.composing || !usableNumberDraft(target)) return;
+          if (target.type === "number" && /[.eE+-]$/.test(String(event.data || ""))) return;
+          const snapshot = {
+            value: target.value,
+            start: target.selectionStart,
+            end: target.selectionEnd,
+            direction: target.selectionDirection,
+            root: target.getRootNode?.() || target.ownerDocument,
+            focused: focusedControl(target)
+          };
+          try {
+            return handler.call(this, event);
+          } finally {
+            if (usableNumberDraft(target)) draft.lastValidValue = target.value;
+            draft.publishedValue = draft.dirty ? snapshot.value : target.value;
+            if (draft.dirty) restoreInputDraft(target, snapshot);
+          }
+        }, options2);
+      }
+      function syncEditableValue(control, value, { force = false } = {}) {
+        if (!control) return false;
+        const draft = inputDrafts.get(control);
+        if (!force && editableTextControl(control) && focusedControl(control) && draft && !draft.committing && (draft.dirty || draft.composing)) return false;
+        if (control.value !== String(value)) control.value = String(value);
+        if (draft) {
+          if (force) draft.dirty = false;
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        }
+        return true;
+      }
       const DEFAULT_STRINGS = Object.freeze({
         settings: "Settings",
         openSettings: "Open settings",
@@ -62374,6 +62919,8 @@ ${body}`;
         STORAGE_PREFIX,
         MAX_BINDINGS,
         register,
+        listenEditable,
+        syncEditableValue,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
         setCardVisible(pageId, cardId, visible) {
           const session = sessions.get(String(pageId || ""));
@@ -69770,6 +70317,136 @@ ${body}`;
       const GLOBAL_PROFILE = "__global__";
       const sessions = /* @__PURE__ */ new Map();
       let listenersReady = false;
+      const inputDrafts = /* @__PURE__ */ new WeakMap();
+      function textControl(control) {
+        if (!control) return false;
+        const tag = String(control.tagName || "").toUpperCase();
+        return tag === "TEXTAREA" || tag === "INPUT" && ["text", "number", "search", "url", "email", "tel", "password"].includes(String(control.type || "text").toLowerCase());
+      }
+      function editableTextControl(control) {
+        return textControl(control) && !control.disabled && !control.readOnly;
+      }
+      function focusedControl(control) {
+        const root = control?.getRootNode?.() || control?.ownerDocument;
+        return root?.activeElement === control || control?.ownerDocument?.activeElement === control;
+      }
+      function usableNumberDraft(control) {
+        if (String(control.type).toLowerCase() !== "number") return true;
+        return String(control.value).trim() !== "" && Number.isFinite(Number(control.value)) && (!control.validity || control.validity.valid);
+      }
+      function prepareDraftCommit(control, draft) {
+        if (control.type === "number" && (control.value === "" || control.validity?.badInput) && draft.lastValidValue != null) control.value = draft.lastValidValue;
+        draft.committing = true;
+      }
+      function dispatchDraftEvent(control, type) {
+        const EventClass = control.ownerDocument?.defaultView?.Event || (typeof Event !== "undefined" ? Event : null);
+        if (EventClass && control.isConnected !== false) control.dispatchEvent(new EventClass(type, { bubbles: true }));
+      }
+      function draftForControl(control) {
+        if (inputDrafts.has(control)) return inputDrafts.get(control);
+        const draft = {
+          dirty: false,
+          composing: false,
+          committing: false,
+          lastValidValue: usableNumberDraft(control) ? control.value : null,
+          publishedValue: null,
+          inputHandlers: [],
+          changeHandlers: []
+        };
+        inputDrafts.set(control, draft);
+        control.addEventListener("focus", () => {
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        });
+        control.addEventListener("compositionstart", () => {
+          draft.composing = true;
+        });
+        control.addEventListener("compositionend", () => {
+          draft.composing = false;
+          queueMicrotask(() => {
+            if (draft.dirty && draft.publishedValue !== control.value && !draft.composing) dispatchDraftEvent(control, "input");
+          });
+        });
+        control.addEventListener("change", (event) => {
+          prepareDraftCommit(control, draft);
+          if (!draft.changeHandlers.length && !draft.externalCommit) {
+            for (const handler of draft.inputHandlers) handler.call(control, event);
+          }
+          queueMicrotask(() => {
+            draft.dirty = false;
+            draft.committing = false;
+            if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+          });
+        }, true);
+        control.addEventListener("blur", () => {
+          queueMicrotask(() => {
+            if (draft.dirty && !draft.committing && !draft.composing) dispatchDraftEvent(control, "change");
+          });
+        });
+        return draft;
+      }
+      function restoreInputDraft(control, snapshot) {
+        let target = control;
+        if (control.isConnected === false && control.id) {
+          target = snapshot.root?.getElementById?.(control.id);
+          if (!target && snapshot.root?.querySelector && typeof CSS !== "undefined") {
+            target = snapshot.root.querySelector(`#${CSS.escape(control.id)}`);
+          }
+        }
+        if (!target || target.isConnected === false || !editableTextControl(target)) return;
+        if (target.value !== snapshot.value) target.value = snapshot.value;
+        if (snapshot.focused && snapshot.root?.activeElement !== target && (snapshot.root?.activeElement === control || !snapshot.root?.activeElement || snapshot.root.activeElement === snapshot.root.body)) target.focus?.({ preventScroll: true });
+        if (snapshot.start != null && target.setSelectionRange) {
+          target.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+        }
+      }
+      function listenEditable(control, type, handler, options2) {
+        if (!control?.addEventListener) return;
+        if (!["input", "change"].includes(type)) {
+          control.addEventListener(type, handler, options2);
+          return;
+        }
+        if (textControl(control)) {
+          const draft = draftForControl(control);
+          if (options2?.commitHandled) draft.externalCommit = true;
+          const handlers = type === "input" ? draft.inputHandlers : draft.changeHandlers;
+          if (!handlers.includes(handler)) handlers.push(handler);
+        }
+        control.addEventListener(type, function(event) {
+          const target = event.target || control;
+          if (!editableTextControl(target)) return handler.call(this, event);
+          const draft = draftForControl(target);
+          if (type !== "input" || draft.committing) return handler.call(this, event);
+          draft.dirty = true;
+          if (event.isComposing || draft.composing || !usableNumberDraft(target)) return;
+          if (target.type === "number" && /[.eE+-]$/.test(String(event.data || ""))) return;
+          const snapshot = {
+            value: target.value,
+            start: target.selectionStart,
+            end: target.selectionEnd,
+            direction: target.selectionDirection,
+            root: target.getRootNode?.() || target.ownerDocument,
+            focused: focusedControl(target)
+          };
+          try {
+            return handler.call(this, event);
+          } finally {
+            if (usableNumberDraft(target)) draft.lastValidValue = target.value;
+            draft.publishedValue = draft.dirty ? snapshot.value : target.value;
+            if (draft.dirty) restoreInputDraft(target, snapshot);
+          }
+        }, options2);
+      }
+      function syncEditableValue(control, value, { force = false } = {}) {
+        if (!control) return false;
+        const draft = inputDrafts.get(control);
+        if (!force && editableTextControl(control) && focusedControl(control) && draft && !draft.committing && (draft.dirty || draft.composing)) return false;
+        if (control.value !== String(value)) control.value = String(value);
+        if (draft) {
+          if (force) draft.dirty = false;
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        }
+        return true;
+      }
       const DEFAULT_STRINGS = Object.freeze({
         settings: "Settings",
         openSettings: "Open settings",
@@ -70541,6 +71218,8 @@ ${body}`;
         STORAGE_PREFIX,
         MAX_BINDINGS,
         register,
+        listenEditable,
+        syncEditableValue,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
         setCardVisible(pageId, cardId, visible) {
           const session = sessions.get(String(pageId || ""));
@@ -82377,6 +83056,136 @@ ${rows.join("\\\\\n")}
       const GLOBAL_PROFILE = "__global__";
       const sessions = /* @__PURE__ */ new Map();
       let listenersReady = false;
+      const inputDrafts = /* @__PURE__ */ new WeakMap();
+      function textControl(control) {
+        if (!control) return false;
+        const tag = String(control.tagName || "").toUpperCase();
+        return tag === "TEXTAREA" || tag === "INPUT" && ["text", "number", "search", "url", "email", "tel", "password"].includes(String(control.type || "text").toLowerCase());
+      }
+      function editableTextControl(control) {
+        return textControl(control) && !control.disabled && !control.readOnly;
+      }
+      function focusedControl(control) {
+        const root = control?.getRootNode?.() || control?.ownerDocument;
+        return root?.activeElement === control || control?.ownerDocument?.activeElement === control;
+      }
+      function usableNumberDraft(control) {
+        if (String(control.type).toLowerCase() !== "number") return true;
+        return String(control.value).trim() !== "" && Number.isFinite(Number(control.value)) && (!control.validity || control.validity.valid);
+      }
+      function prepareDraftCommit(control, draft) {
+        if (control.type === "number" && (control.value === "" || control.validity?.badInput) && draft.lastValidValue != null) control.value = draft.lastValidValue;
+        draft.committing = true;
+      }
+      function dispatchDraftEvent(control, type) {
+        const EventClass = control.ownerDocument?.defaultView?.Event || (typeof Event !== "undefined" ? Event : null);
+        if (EventClass && control.isConnected !== false) control.dispatchEvent(new EventClass(type, { bubbles: true }));
+      }
+      function draftForControl(control) {
+        if (inputDrafts.has(control)) return inputDrafts.get(control);
+        const draft = {
+          dirty: false,
+          composing: false,
+          committing: false,
+          lastValidValue: usableNumberDraft(control) ? control.value : null,
+          publishedValue: null,
+          inputHandlers: [],
+          changeHandlers: []
+        };
+        inputDrafts.set(control, draft);
+        control.addEventListener("focus", () => {
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        });
+        control.addEventListener("compositionstart", () => {
+          draft.composing = true;
+        });
+        control.addEventListener("compositionend", () => {
+          draft.composing = false;
+          queueMicrotask(() => {
+            if (draft.dirty && draft.publishedValue !== control.value && !draft.composing) dispatchDraftEvent(control, "input");
+          });
+        });
+        control.addEventListener("change", (event) => {
+          prepareDraftCommit(control, draft);
+          if (!draft.changeHandlers.length && !draft.externalCommit) {
+            for (const handler of draft.inputHandlers) handler.call(control, event);
+          }
+          queueMicrotask(() => {
+            draft.dirty = false;
+            draft.committing = false;
+            if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+          });
+        }, true);
+        control.addEventListener("blur", () => {
+          queueMicrotask(() => {
+            if (draft.dirty && !draft.committing && !draft.composing) dispatchDraftEvent(control, "change");
+          });
+        });
+        return draft;
+      }
+      function restoreInputDraft(control, snapshot) {
+        let target = control;
+        if (control.isConnected === false && control.id) {
+          target = snapshot.root?.getElementById?.(control.id);
+          if (!target && snapshot.root?.querySelector && typeof CSS !== "undefined") {
+            target = snapshot.root.querySelector(`#${CSS.escape(control.id)}`);
+          }
+        }
+        if (!target || target.isConnected === false || !editableTextControl(target)) return;
+        if (target.value !== snapshot.value) target.value = snapshot.value;
+        if (snapshot.focused && snapshot.root?.activeElement !== target && (snapshot.root?.activeElement === control || !snapshot.root?.activeElement || snapshot.root.activeElement === snapshot.root.body)) target.focus?.({ preventScroll: true });
+        if (snapshot.start != null && target.setSelectionRange) {
+          target.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+        }
+      }
+      function listenEditable(control, type, handler, options2) {
+        if (!control?.addEventListener) return;
+        if (!["input", "change"].includes(type)) {
+          control.addEventListener(type, handler, options2);
+          return;
+        }
+        if (textControl(control)) {
+          const draft = draftForControl(control);
+          if (options2?.commitHandled) draft.externalCommit = true;
+          const handlers = type === "input" ? draft.inputHandlers : draft.changeHandlers;
+          if (!handlers.includes(handler)) handlers.push(handler);
+        }
+        control.addEventListener(type, function(event) {
+          const target = event.target || control;
+          if (!editableTextControl(target)) return handler.call(this, event);
+          const draft = draftForControl(target);
+          if (type !== "input" || draft.committing) return handler.call(this, event);
+          draft.dirty = true;
+          if (event.isComposing || draft.composing || !usableNumberDraft(target)) return;
+          if (target.type === "number" && /[.eE+-]$/.test(String(event.data || ""))) return;
+          const snapshot = {
+            value: target.value,
+            start: target.selectionStart,
+            end: target.selectionEnd,
+            direction: target.selectionDirection,
+            root: target.getRootNode?.() || target.ownerDocument,
+            focused: focusedControl(target)
+          };
+          try {
+            return handler.call(this, event);
+          } finally {
+            if (usableNumberDraft(target)) draft.lastValidValue = target.value;
+            draft.publishedValue = draft.dirty ? snapshot.value : target.value;
+            if (draft.dirty) restoreInputDraft(target, snapshot);
+          }
+        }, options2);
+      }
+      function syncEditableValue(control, value, { force = false } = {}) {
+        if (!control) return false;
+        const draft = inputDrafts.get(control);
+        if (!force && editableTextControl(control) && focusedControl(control) && draft && !draft.committing && (draft.dirty || draft.composing)) return false;
+        if (control.value !== String(value)) control.value = String(value);
+        if (draft) {
+          if (force) draft.dirty = false;
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        }
+        return true;
+      }
       const DEFAULT_STRINGS = Object.freeze({
         settings: "Settings",
         openSettings: "Open settings",
@@ -83148,6 +83957,8 @@ ${rows.join("\\\\\n")}
         STORAGE_PREFIX,
         MAX_BINDINGS,
         register,
+        listenEditable,
+        syncEditableValue,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
         setCardVisible(pageId, cardId, visible) {
           const session = sessions.get(String(pageId || ""));
@@ -83867,7 +84678,7 @@ ${rows.join("\\\\\n")}
           });
           refs.finiteFieldPrime.addEventListener("change", () => {
             try {
-              setFiniteFieldPrime(currentFiniteFieldPrime());
+              setFiniteFieldPrime(refs.finiteFieldPrime.value || state.finiteFieldPrime);
             } catch (_) {
             }
             state.finiteFieldPrimeTextEditing = false;
@@ -83959,7 +84770,12 @@ ${rows.join("\\\\\n")}
         return currentDataType() === "finite-field";
       }
       function currentFiniteFieldPrime() {
-        return normalizePrime(refs.finiteFieldPrime ? refs.finiteFieldPrime.value : state.finiteFieldPrime);
+        const raw = refs.finiteFieldPrime ? refs.finiteFieldPrime.value : state.finiteFieldPrime;
+        const candidate = Number(raw);
+        if (String(raw).trim() === "" || state.finiteFieldPrimeTextEditing && !isPrimeInt(candidate)) {
+          return state.finiteFieldPrime;
+        }
+        return normalizePrime(raw);
       }
       function currentFieldInfo() {
         const type = currentDataType();
@@ -83970,6 +84786,10 @@ ${rows.join("\\\\\n")}
         }
         if (type === "number-field") return currentNumberFieldInfo();
         return { kind: type };
+      }
+      function fieldHasFocus(control) {
+        const root = control?.getRootNode?.() || control?.ownerDocument;
+        return root?.activeElement === control || typeof document2 !== "undefined" && document2.activeElement === control;
       }
       function updateFieldControls() {
         const finiteField = isFiniteFieldMode();
@@ -83982,16 +84802,16 @@ ${rows.join("\\\\\n")}
         if (refs.numberFieldSymbolLabel) refs.numberFieldSymbolLabel.hidden = !numberField;
         if (refs.numberFieldPolynomialLabel) refs.numberFieldPolynomialLabel.hidden = !numberField;
         if (refs.numberFieldSymbol) refs.numberFieldSymbol.hidden = !numberField;
-        if (refs.finiteFieldPrime && finiteField && !refs.finiteFieldPrime.value) {
+        if (refs.finiteFieldPrime && finiteField && !refs.finiteFieldPrime.value && !fieldHasFocus(refs.finiteFieldPrime)) {
           refs.finiteFieldPrime.value = String(state.finiteFieldPrime);
         }
-        if (refs.rationalFunctionVariable && rationalFunction && !refs.rationalFunctionVariable.value) {
+        if (refs.rationalFunctionVariable && rationalFunction && !refs.rationalFunctionVariable.value && !fieldHasFocus(refs.rationalFunctionVariable)) {
           refs.rationalFunctionVariable.value = state.rationalFunctionVariables.join(", ");
         }
-        if (refs.numberFieldGenerator && numberField && !refs.numberFieldGenerator.value) {
+        if (refs.numberFieldGenerator && numberField && !refs.numberFieldGenerator.value && !fieldHasFocus(refs.numberFieldGenerator)) {
           refs.numberFieldGenerator.value = state.numberFieldSymbol;
         }
-        if (refs.numberFieldPolynomial && numberField && !refs.numberFieldPolynomial.value) {
+        if (refs.numberFieldPolynomial && numberField && !refs.numberFieldPolynomial.value && !fieldHasFocus(refs.numberFieldPolynomial)) {
           refs.numberFieldPolynomial.value = state.numberFieldPolynomial;
         }
         renderFiniteFieldSymbol();
@@ -97121,6 +97941,136 @@ ${rows}
       const GLOBAL_PROFILE = "__global__";
       const sessions = /* @__PURE__ */ new Map();
       let listenersReady = false;
+      const inputDrafts = /* @__PURE__ */ new WeakMap();
+      function textControl(control) {
+        if (!control) return false;
+        const tag = String(control.tagName || "").toUpperCase();
+        return tag === "TEXTAREA" || tag === "INPUT" && ["text", "number", "search", "url", "email", "tel", "password"].includes(String(control.type || "text").toLowerCase());
+      }
+      function editableTextControl(control) {
+        return textControl(control) && !control.disabled && !control.readOnly;
+      }
+      function focusedControl(control) {
+        const root = control?.getRootNode?.() || control?.ownerDocument;
+        return root?.activeElement === control || control?.ownerDocument?.activeElement === control;
+      }
+      function usableNumberDraft(control) {
+        if (String(control.type).toLowerCase() !== "number") return true;
+        return String(control.value).trim() !== "" && Number.isFinite(Number(control.value)) && (!control.validity || control.validity.valid);
+      }
+      function prepareDraftCommit(control, draft) {
+        if (control.type === "number" && (control.value === "" || control.validity?.badInput) && draft.lastValidValue != null) control.value = draft.lastValidValue;
+        draft.committing = true;
+      }
+      function dispatchDraftEvent(control, type) {
+        const EventClass = control.ownerDocument?.defaultView?.Event || (typeof Event !== "undefined" ? Event : null);
+        if (EventClass && control.isConnected !== false) control.dispatchEvent(new EventClass(type, { bubbles: true }));
+      }
+      function draftForControl(control) {
+        if (inputDrafts.has(control)) return inputDrafts.get(control);
+        const draft = {
+          dirty: false,
+          composing: false,
+          committing: false,
+          lastValidValue: usableNumberDraft(control) ? control.value : null,
+          publishedValue: null,
+          inputHandlers: [],
+          changeHandlers: []
+        };
+        inputDrafts.set(control, draft);
+        control.addEventListener("focus", () => {
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        });
+        control.addEventListener("compositionstart", () => {
+          draft.composing = true;
+        });
+        control.addEventListener("compositionend", () => {
+          draft.composing = false;
+          queueMicrotask(() => {
+            if (draft.dirty && draft.publishedValue !== control.value && !draft.composing) dispatchDraftEvent(control, "input");
+          });
+        });
+        control.addEventListener("change", (event) => {
+          prepareDraftCommit(control, draft);
+          if (!draft.changeHandlers.length && !draft.externalCommit) {
+            for (const handler of draft.inputHandlers) handler.call(control, event);
+          }
+          queueMicrotask(() => {
+            draft.dirty = false;
+            draft.committing = false;
+            if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+          });
+        }, true);
+        control.addEventListener("blur", () => {
+          queueMicrotask(() => {
+            if (draft.dirty && !draft.committing && !draft.composing) dispatchDraftEvent(control, "change");
+          });
+        });
+        return draft;
+      }
+      function restoreInputDraft(control, snapshot) {
+        let target = control;
+        if (control.isConnected === false && control.id) {
+          target = snapshot.root?.getElementById?.(control.id);
+          if (!target && snapshot.root?.querySelector && typeof CSS !== "undefined") {
+            target = snapshot.root.querySelector(`#${CSS.escape(control.id)}`);
+          }
+        }
+        if (!target || target.isConnected === false || !editableTextControl(target)) return;
+        if (target.value !== snapshot.value) target.value = snapshot.value;
+        if (snapshot.focused && snapshot.root?.activeElement !== target && (snapshot.root?.activeElement === control || !snapshot.root?.activeElement || snapshot.root.activeElement === snapshot.root.body)) target.focus?.({ preventScroll: true });
+        if (snapshot.start != null && target.setSelectionRange) {
+          target.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+        }
+      }
+      function listenEditable(control, type, handler, options2) {
+        if (!control?.addEventListener) return;
+        if (!["input", "change"].includes(type)) {
+          control.addEventListener(type, handler, options2);
+          return;
+        }
+        if (textControl(control)) {
+          const draft = draftForControl(control);
+          if (options2?.commitHandled) draft.externalCommit = true;
+          const handlers = type === "input" ? draft.inputHandlers : draft.changeHandlers;
+          if (!handlers.includes(handler)) handlers.push(handler);
+        }
+        control.addEventListener(type, function(event) {
+          const target = event.target || control;
+          if (!editableTextControl(target)) return handler.call(this, event);
+          const draft = draftForControl(target);
+          if (type !== "input" || draft.committing) return handler.call(this, event);
+          draft.dirty = true;
+          if (event.isComposing || draft.composing || !usableNumberDraft(target)) return;
+          if (target.type === "number" && /[.eE+-]$/.test(String(event.data || ""))) return;
+          const snapshot = {
+            value: target.value,
+            start: target.selectionStart,
+            end: target.selectionEnd,
+            direction: target.selectionDirection,
+            root: target.getRootNode?.() || target.ownerDocument,
+            focused: focusedControl(target)
+          };
+          try {
+            return handler.call(this, event);
+          } finally {
+            if (usableNumberDraft(target)) draft.lastValidValue = target.value;
+            draft.publishedValue = draft.dirty ? snapshot.value : target.value;
+            if (draft.dirty) restoreInputDraft(target, snapshot);
+          }
+        }, options2);
+      }
+      function syncEditableValue(control, value, { force = false } = {}) {
+        if (!control) return false;
+        const draft = inputDrafts.get(control);
+        if (!force && editableTextControl(control) && focusedControl(control) && draft && !draft.committing && (draft.dirty || draft.composing)) return false;
+        if (control.value !== String(value)) control.value = String(value);
+        if (draft) {
+          if (force) draft.dirty = false;
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        }
+        return true;
+      }
       const DEFAULT_STRINGS = Object.freeze({
         settings: "Settings",
         openSettings: "Open settings",
@@ -97892,6 +98842,8 @@ ${rows}
         STORAGE_PREFIX,
         MAX_BINDINGS,
         register,
+        listenEditable,
+        syncEditableValue,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
         setCardVisible(pageId, cardId, visible) {
           const session = sessions.get(String(pageId || ""));
@@ -145768,6 +146720,136 @@ ${arrows.join("\n")}` : "";
       const GLOBAL_PROFILE = "__global__";
       const sessions = /* @__PURE__ */ new Map();
       let listenersReady = false;
+      const inputDrafts = /* @__PURE__ */ new WeakMap();
+      function textControl(control) {
+        if (!control) return false;
+        const tag = String(control.tagName || "").toUpperCase();
+        return tag === "TEXTAREA" || tag === "INPUT" && ["text", "number", "search", "url", "email", "tel", "password"].includes(String(control.type || "text").toLowerCase());
+      }
+      function editableTextControl(control) {
+        return textControl(control) && !control.disabled && !control.readOnly;
+      }
+      function focusedControl(control) {
+        const root = control?.getRootNode?.() || control?.ownerDocument;
+        return root?.activeElement === control || control?.ownerDocument?.activeElement === control;
+      }
+      function usableNumberDraft(control) {
+        if (String(control.type).toLowerCase() !== "number") return true;
+        return String(control.value).trim() !== "" && Number.isFinite(Number(control.value)) && (!control.validity || control.validity.valid);
+      }
+      function prepareDraftCommit(control, draft) {
+        if (control.type === "number" && (control.value === "" || control.validity?.badInput) && draft.lastValidValue != null) control.value = draft.lastValidValue;
+        draft.committing = true;
+      }
+      function dispatchDraftEvent(control, type) {
+        const EventClass = control.ownerDocument?.defaultView?.Event || (typeof Event !== "undefined" ? Event : null);
+        if (EventClass && control.isConnected !== false) control.dispatchEvent(new EventClass(type, { bubbles: true }));
+      }
+      function draftForControl(control) {
+        if (inputDrafts.has(control)) return inputDrafts.get(control);
+        const draft = {
+          dirty: false,
+          composing: false,
+          committing: false,
+          lastValidValue: usableNumberDraft(control) ? control.value : null,
+          publishedValue: null,
+          inputHandlers: [],
+          changeHandlers: []
+        };
+        inputDrafts.set(control, draft);
+        control.addEventListener("focus", () => {
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        });
+        control.addEventListener("compositionstart", () => {
+          draft.composing = true;
+        });
+        control.addEventListener("compositionend", () => {
+          draft.composing = false;
+          queueMicrotask(() => {
+            if (draft.dirty && draft.publishedValue !== control.value && !draft.composing) dispatchDraftEvent(control, "input");
+          });
+        });
+        control.addEventListener("change", (event) => {
+          prepareDraftCommit(control, draft);
+          if (!draft.changeHandlers.length && !draft.externalCommit) {
+            for (const handler of draft.inputHandlers) handler.call(control, event);
+          }
+          queueMicrotask(() => {
+            draft.dirty = false;
+            draft.committing = false;
+            if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+          });
+        }, true);
+        control.addEventListener("blur", () => {
+          queueMicrotask(() => {
+            if (draft.dirty && !draft.committing && !draft.composing) dispatchDraftEvent(control, "change");
+          });
+        });
+        return draft;
+      }
+      function restoreInputDraft(control, snapshot) {
+        let target = control;
+        if (control.isConnected === false && control.id) {
+          target = snapshot.root?.getElementById?.(control.id);
+          if (!target && snapshot.root?.querySelector && typeof CSS !== "undefined") {
+            target = snapshot.root.querySelector(`#${CSS.escape(control.id)}`);
+          }
+        }
+        if (!target || target.isConnected === false || !editableTextControl(target)) return;
+        if (target.value !== snapshot.value) target.value = snapshot.value;
+        if (snapshot.focused && snapshot.root?.activeElement !== target && (snapshot.root?.activeElement === control || !snapshot.root?.activeElement || snapshot.root.activeElement === snapshot.root.body)) target.focus?.({ preventScroll: true });
+        if (snapshot.start != null && target.setSelectionRange) {
+          target.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+        }
+      }
+      function listenEditable(control, type, handler, options2) {
+        if (!control?.addEventListener) return;
+        if (!["input", "change"].includes(type)) {
+          control.addEventListener(type, handler, options2);
+          return;
+        }
+        if (textControl(control)) {
+          const draft = draftForControl(control);
+          if (options2?.commitHandled) draft.externalCommit = true;
+          const handlers = type === "input" ? draft.inputHandlers : draft.changeHandlers;
+          if (!handlers.includes(handler)) handlers.push(handler);
+        }
+        control.addEventListener(type, function(event) {
+          const target = event.target || control;
+          if (!editableTextControl(target)) return handler.call(this, event);
+          const draft = draftForControl(target);
+          if (type !== "input" || draft.committing) return handler.call(this, event);
+          draft.dirty = true;
+          if (event.isComposing || draft.composing || !usableNumberDraft(target)) return;
+          if (target.type === "number" && /[.eE+-]$/.test(String(event.data || ""))) return;
+          const snapshot = {
+            value: target.value,
+            start: target.selectionStart,
+            end: target.selectionEnd,
+            direction: target.selectionDirection,
+            root: target.getRootNode?.() || target.ownerDocument,
+            focused: focusedControl(target)
+          };
+          try {
+            return handler.call(this, event);
+          } finally {
+            if (usableNumberDraft(target)) draft.lastValidValue = target.value;
+            draft.publishedValue = draft.dirty ? snapshot.value : target.value;
+            if (draft.dirty) restoreInputDraft(target, snapshot);
+          }
+        }, options2);
+      }
+      function syncEditableValue(control, value, { force = false } = {}) {
+        if (!control) return false;
+        const draft = inputDrafts.get(control);
+        if (!force && editableTextControl(control) && focusedControl(control) && draft && !draft.committing && (draft.dirty || draft.composing)) return false;
+        if (control.value !== String(value)) control.value = String(value);
+        if (draft) {
+          if (force) draft.dirty = false;
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        }
+        return true;
+      }
       const DEFAULT_STRINGS = Object.freeze({
         settings: "Settings",
         openSettings: "Open settings",
@@ -146539,6 +147621,8 @@ ${arrows.join("\n")}` : "";
         STORAGE_PREFIX,
         MAX_BINDINGS,
         register,
+        listenEditable,
+        syncEditableValue,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
         setCardVisible(pageId, cardId, visible) {
           const session = sessions.get(String(pageId || ""));
@@ -198007,6 +199091,136 @@ ${arrows.join("\n")}` : "";
       const GLOBAL_PROFILE = "__global__";
       const sessions = /* @__PURE__ */ new Map();
       let listenersReady = false;
+      const inputDrafts = /* @__PURE__ */ new WeakMap();
+      function textControl(control) {
+        if (!control) return false;
+        const tag = String(control.tagName || "").toUpperCase();
+        return tag === "TEXTAREA" || tag === "INPUT" && ["text", "number", "search", "url", "email", "tel", "password"].includes(String(control.type || "text").toLowerCase());
+      }
+      function editableTextControl(control) {
+        return textControl(control) && !control.disabled && !control.readOnly;
+      }
+      function focusedControl(control) {
+        const root = control?.getRootNode?.() || control?.ownerDocument;
+        return root?.activeElement === control || control?.ownerDocument?.activeElement === control;
+      }
+      function usableNumberDraft(control) {
+        if (String(control.type).toLowerCase() !== "number") return true;
+        return String(control.value).trim() !== "" && Number.isFinite(Number(control.value)) && (!control.validity || control.validity.valid);
+      }
+      function prepareDraftCommit(control, draft) {
+        if (control.type === "number" && (control.value === "" || control.validity?.badInput) && draft.lastValidValue != null) control.value = draft.lastValidValue;
+        draft.committing = true;
+      }
+      function dispatchDraftEvent(control, type) {
+        const EventClass = control.ownerDocument?.defaultView?.Event || (typeof Event !== "undefined" ? Event : null);
+        if (EventClass && control.isConnected !== false) control.dispatchEvent(new EventClass(type, { bubbles: true }));
+      }
+      function draftForControl(control) {
+        if (inputDrafts.has(control)) return inputDrafts.get(control);
+        const draft = {
+          dirty: false,
+          composing: false,
+          committing: false,
+          lastValidValue: usableNumberDraft(control) ? control.value : null,
+          publishedValue: null,
+          inputHandlers: [],
+          changeHandlers: []
+        };
+        inputDrafts.set(control, draft);
+        control.addEventListener("focus", () => {
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        });
+        control.addEventListener("compositionstart", () => {
+          draft.composing = true;
+        });
+        control.addEventListener("compositionend", () => {
+          draft.composing = false;
+          queueMicrotask(() => {
+            if (draft.dirty && draft.publishedValue !== control.value && !draft.composing) dispatchDraftEvent(control, "input");
+          });
+        });
+        control.addEventListener("change", (event) => {
+          prepareDraftCommit(control, draft);
+          if (!draft.changeHandlers.length && !draft.externalCommit) {
+            for (const handler of draft.inputHandlers) handler.call(control, event);
+          }
+          queueMicrotask(() => {
+            draft.dirty = false;
+            draft.committing = false;
+            if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+          });
+        }, true);
+        control.addEventListener("blur", () => {
+          queueMicrotask(() => {
+            if (draft.dirty && !draft.committing && !draft.composing) dispatchDraftEvent(control, "change");
+          });
+        });
+        return draft;
+      }
+      function restoreInputDraft(control, snapshot) {
+        let target = control;
+        if (control.isConnected === false && control.id) {
+          target = snapshot.root?.getElementById?.(control.id);
+          if (!target && snapshot.root?.querySelector && typeof CSS !== "undefined") {
+            target = snapshot.root.querySelector(`#${CSS.escape(control.id)}`);
+          }
+        }
+        if (!target || target.isConnected === false || !editableTextControl(target)) return;
+        if (target.value !== snapshot.value) target.value = snapshot.value;
+        if (snapshot.focused && snapshot.root?.activeElement !== target && (snapshot.root?.activeElement === control || !snapshot.root?.activeElement || snapshot.root.activeElement === snapshot.root.body)) target.focus?.({ preventScroll: true });
+        if (snapshot.start != null && target.setSelectionRange) {
+          target.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+        }
+      }
+      function listenEditable(control, type, handler, options2) {
+        if (!control?.addEventListener) return;
+        if (!["input", "change"].includes(type)) {
+          control.addEventListener(type, handler, options2);
+          return;
+        }
+        if (textControl(control)) {
+          const draft = draftForControl(control);
+          if (options2?.commitHandled) draft.externalCommit = true;
+          const handlers = type === "input" ? draft.inputHandlers : draft.changeHandlers;
+          if (!handlers.includes(handler)) handlers.push(handler);
+        }
+        control.addEventListener(type, function(event) {
+          const target = event.target || control;
+          if (!editableTextControl(target)) return handler.call(this, event);
+          const draft = draftForControl(target);
+          if (type !== "input" || draft.committing) return handler.call(this, event);
+          draft.dirty = true;
+          if (event.isComposing || draft.composing || !usableNumberDraft(target)) return;
+          if (target.type === "number" && /[.eE+-]$/.test(String(event.data || ""))) return;
+          const snapshot = {
+            value: target.value,
+            start: target.selectionStart,
+            end: target.selectionEnd,
+            direction: target.selectionDirection,
+            root: target.getRootNode?.() || target.ownerDocument,
+            focused: focusedControl(target)
+          };
+          try {
+            return handler.call(this, event);
+          } finally {
+            if (usableNumberDraft(target)) draft.lastValidValue = target.value;
+            draft.publishedValue = draft.dirty ? snapshot.value : target.value;
+            if (draft.dirty) restoreInputDraft(target, snapshot);
+          }
+        }, options2);
+      }
+      function syncEditableValue(control, value, { force = false } = {}) {
+        if (!control) return false;
+        const draft = inputDrafts.get(control);
+        if (!force && editableTextControl(control) && focusedControl(control) && draft && !draft.committing && (draft.dirty || draft.composing)) return false;
+        if (control.value !== String(value)) control.value = String(value);
+        if (draft) {
+          if (force) draft.dirty = false;
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        }
+        return true;
+      }
       const DEFAULT_STRINGS = Object.freeze({
         settings: "Settings",
         openSettings: "Open settings",
@@ -198778,6 +199992,8 @@ ${arrows.join("\n")}` : "";
         STORAGE_PREFIX,
         MAX_BINDINGS,
         register,
+        listenEditable,
+        syncEditableValue,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
         setCardVisible(pageId, cardId, visible) {
           const session = sessions.get(String(pageId || ""));
@@ -243028,6 +244244,136 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
       const GLOBAL_PROFILE = "__global__";
       const sessions = /* @__PURE__ */ new Map();
       let listenersReady = false;
+      const inputDrafts = /* @__PURE__ */ new WeakMap();
+      function textControl(control) {
+        if (!control) return false;
+        const tag = String(control.tagName || "").toUpperCase();
+        return tag === "TEXTAREA" || tag === "INPUT" && ["text", "number", "search", "url", "email", "tel", "password"].includes(String(control.type || "text").toLowerCase());
+      }
+      function editableTextControl(control) {
+        return textControl(control) && !control.disabled && !control.readOnly;
+      }
+      function focusedControl(control) {
+        const root = control?.getRootNode?.() || control?.ownerDocument;
+        return root?.activeElement === control || control?.ownerDocument?.activeElement === control;
+      }
+      function usableNumberDraft(control) {
+        if (String(control.type).toLowerCase() !== "number") return true;
+        return String(control.value).trim() !== "" && Number.isFinite(Number(control.value)) && (!control.validity || control.validity.valid);
+      }
+      function prepareDraftCommit(control, draft) {
+        if (control.type === "number" && (control.value === "" || control.validity?.badInput) && draft.lastValidValue != null) control.value = draft.lastValidValue;
+        draft.committing = true;
+      }
+      function dispatchDraftEvent(control, type) {
+        const EventClass = control.ownerDocument?.defaultView?.Event || (typeof Event !== "undefined" ? Event : null);
+        if (EventClass && control.isConnected !== false) control.dispatchEvent(new EventClass(type, { bubbles: true }));
+      }
+      function draftForControl(control) {
+        if (inputDrafts.has(control)) return inputDrafts.get(control);
+        const draft = {
+          dirty: false,
+          composing: false,
+          committing: false,
+          lastValidValue: usableNumberDraft(control) ? control.value : null,
+          publishedValue: null,
+          inputHandlers: [],
+          changeHandlers: []
+        };
+        inputDrafts.set(control, draft);
+        control.addEventListener("focus", () => {
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        });
+        control.addEventListener("compositionstart", () => {
+          draft.composing = true;
+        });
+        control.addEventListener("compositionend", () => {
+          draft.composing = false;
+          queueMicrotask(() => {
+            if (draft.dirty && draft.publishedValue !== control.value && !draft.composing) dispatchDraftEvent(control, "input");
+          });
+        });
+        control.addEventListener("change", (event) => {
+          prepareDraftCommit(control, draft);
+          if (!draft.changeHandlers.length && !draft.externalCommit) {
+            for (const handler of draft.inputHandlers) handler.call(control, event);
+          }
+          queueMicrotask(() => {
+            draft.dirty = false;
+            draft.committing = false;
+            if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+          });
+        }, true);
+        control.addEventListener("blur", () => {
+          queueMicrotask(() => {
+            if (draft.dirty && !draft.committing && !draft.composing) dispatchDraftEvent(control, "change");
+          });
+        });
+        return draft;
+      }
+      function restoreInputDraft(control, snapshot) {
+        let target = control;
+        if (control.isConnected === false && control.id) {
+          target = snapshot.root?.getElementById?.(control.id);
+          if (!target && snapshot.root?.querySelector && typeof CSS !== "undefined") {
+            target = snapshot.root.querySelector(`#${CSS.escape(control.id)}`);
+          }
+        }
+        if (!target || target.isConnected === false || !editableTextControl(target)) return;
+        if (target.value !== snapshot.value) target.value = snapshot.value;
+        if (snapshot.focused && snapshot.root?.activeElement !== target && (snapshot.root?.activeElement === control || !snapshot.root?.activeElement || snapshot.root.activeElement === snapshot.root.body)) target.focus?.({ preventScroll: true });
+        if (snapshot.start != null && target.setSelectionRange) {
+          target.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+        }
+      }
+      function listenEditable(control, type, handler, options2) {
+        if (!control?.addEventListener) return;
+        if (!["input", "change"].includes(type)) {
+          control.addEventListener(type, handler, options2);
+          return;
+        }
+        if (textControl(control)) {
+          const draft = draftForControl(control);
+          if (options2?.commitHandled) draft.externalCommit = true;
+          const handlers = type === "input" ? draft.inputHandlers : draft.changeHandlers;
+          if (!handlers.includes(handler)) handlers.push(handler);
+        }
+        control.addEventListener(type, function(event) {
+          const target = event.target || control;
+          if (!editableTextControl(target)) return handler.call(this, event);
+          const draft = draftForControl(target);
+          if (type !== "input" || draft.committing) return handler.call(this, event);
+          draft.dirty = true;
+          if (event.isComposing || draft.composing || !usableNumberDraft(target)) return;
+          if (target.type === "number" && /[.eE+-]$/.test(String(event.data || ""))) return;
+          const snapshot = {
+            value: target.value,
+            start: target.selectionStart,
+            end: target.selectionEnd,
+            direction: target.selectionDirection,
+            root: target.getRootNode?.() || target.ownerDocument,
+            focused: focusedControl(target)
+          };
+          try {
+            return handler.call(this, event);
+          } finally {
+            if (usableNumberDraft(target)) draft.lastValidValue = target.value;
+            draft.publishedValue = draft.dirty ? snapshot.value : target.value;
+            if (draft.dirty) restoreInputDraft(target, snapshot);
+          }
+        }, options2);
+      }
+      function syncEditableValue(control, value, { force = false } = {}) {
+        if (!control) return false;
+        const draft = inputDrafts.get(control);
+        if (!force && editableTextControl(control) && focusedControl(control) && draft && !draft.committing && (draft.dirty || draft.composing)) return false;
+        if (control.value !== String(value)) control.value = String(value);
+        if (draft) {
+          if (force) draft.dirty = false;
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        }
+        return true;
+      }
       const DEFAULT_STRINGS = Object.freeze({
         settings: "Settings",
         openSettings: "Open settings",
@@ -243799,6 +245145,8 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         STORAGE_PREFIX,
         MAX_BINDINGS,
         register,
+        listenEditable,
+        syncEditableValue,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
         setCardVisible(pageId, cardId, visible) {
           const session = sessions.get(String(pageId || ""));
@@ -249871,6 +251219,136 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
       const GLOBAL_PROFILE = "__global__";
       const sessions = /* @__PURE__ */ new Map();
       let listenersReady = false;
+      const inputDrafts = /* @__PURE__ */ new WeakMap();
+      function textControl(control) {
+        if (!control) return false;
+        const tag = String(control.tagName || "").toUpperCase();
+        return tag === "TEXTAREA" || tag === "INPUT" && ["text", "number", "search", "url", "email", "tel", "password"].includes(String(control.type || "text").toLowerCase());
+      }
+      function editableTextControl(control) {
+        return textControl(control) && !control.disabled && !control.readOnly;
+      }
+      function focusedControl(control) {
+        const root = control?.getRootNode?.() || control?.ownerDocument;
+        return root?.activeElement === control || control?.ownerDocument?.activeElement === control;
+      }
+      function usableNumberDraft(control) {
+        if (String(control.type).toLowerCase() !== "number") return true;
+        return String(control.value).trim() !== "" && Number.isFinite(Number(control.value)) && (!control.validity || control.validity.valid);
+      }
+      function prepareDraftCommit(control, draft) {
+        if (control.type === "number" && (control.value === "" || control.validity?.badInput) && draft.lastValidValue != null) control.value = draft.lastValidValue;
+        draft.committing = true;
+      }
+      function dispatchDraftEvent(control, type) {
+        const EventClass = control.ownerDocument?.defaultView?.Event || (typeof Event !== "undefined" ? Event : null);
+        if (EventClass && control.isConnected !== false) control.dispatchEvent(new EventClass(type, { bubbles: true }));
+      }
+      function draftForControl(control) {
+        if (inputDrafts.has(control)) return inputDrafts.get(control);
+        const draft = {
+          dirty: false,
+          composing: false,
+          committing: false,
+          lastValidValue: usableNumberDraft(control) ? control.value : null,
+          publishedValue: null,
+          inputHandlers: [],
+          changeHandlers: []
+        };
+        inputDrafts.set(control, draft);
+        control.addEventListener("focus", () => {
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        });
+        control.addEventListener("compositionstart", () => {
+          draft.composing = true;
+        });
+        control.addEventListener("compositionend", () => {
+          draft.composing = false;
+          queueMicrotask(() => {
+            if (draft.dirty && draft.publishedValue !== control.value && !draft.composing) dispatchDraftEvent(control, "input");
+          });
+        });
+        control.addEventListener("change", (event) => {
+          prepareDraftCommit(control, draft);
+          if (!draft.changeHandlers.length && !draft.externalCommit) {
+            for (const handler of draft.inputHandlers) handler.call(control, event);
+          }
+          queueMicrotask(() => {
+            draft.dirty = false;
+            draft.committing = false;
+            if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+          });
+        }, true);
+        control.addEventListener("blur", () => {
+          queueMicrotask(() => {
+            if (draft.dirty && !draft.committing && !draft.composing) dispatchDraftEvent(control, "change");
+          });
+        });
+        return draft;
+      }
+      function restoreInputDraft(control, snapshot) {
+        let target = control;
+        if (control.isConnected === false && control.id) {
+          target = snapshot.root?.getElementById?.(control.id);
+          if (!target && snapshot.root?.querySelector && typeof CSS !== "undefined") {
+            target = snapshot.root.querySelector(`#${CSS.escape(control.id)}`);
+          }
+        }
+        if (!target || target.isConnected === false || !editableTextControl(target)) return;
+        if (target.value !== snapshot.value) target.value = snapshot.value;
+        if (snapshot.focused && snapshot.root?.activeElement !== target && (snapshot.root?.activeElement === control || !snapshot.root?.activeElement || snapshot.root.activeElement === snapshot.root.body)) target.focus?.({ preventScroll: true });
+        if (snapshot.start != null && target.setSelectionRange) {
+          target.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+        }
+      }
+      function listenEditable(control, type, handler, options2) {
+        if (!control?.addEventListener) return;
+        if (!["input", "change"].includes(type)) {
+          control.addEventListener(type, handler, options2);
+          return;
+        }
+        if (textControl(control)) {
+          const draft = draftForControl(control);
+          if (options2?.commitHandled) draft.externalCommit = true;
+          const handlers = type === "input" ? draft.inputHandlers : draft.changeHandlers;
+          if (!handlers.includes(handler)) handlers.push(handler);
+        }
+        control.addEventListener(type, function(event) {
+          const target = event.target || control;
+          if (!editableTextControl(target)) return handler.call(this, event);
+          const draft = draftForControl(target);
+          if (type !== "input" || draft.committing) return handler.call(this, event);
+          draft.dirty = true;
+          if (event.isComposing || draft.composing || !usableNumberDraft(target)) return;
+          if (target.type === "number" && /[.eE+-]$/.test(String(event.data || ""))) return;
+          const snapshot = {
+            value: target.value,
+            start: target.selectionStart,
+            end: target.selectionEnd,
+            direction: target.selectionDirection,
+            root: target.getRootNode?.() || target.ownerDocument,
+            focused: focusedControl(target)
+          };
+          try {
+            return handler.call(this, event);
+          } finally {
+            if (usableNumberDraft(target)) draft.lastValidValue = target.value;
+            draft.publishedValue = draft.dirty ? snapshot.value : target.value;
+            if (draft.dirty) restoreInputDraft(target, snapshot);
+          }
+        }, options2);
+      }
+      function syncEditableValue(control, value, { force = false } = {}) {
+        if (!control) return false;
+        const draft = inputDrafts.get(control);
+        if (!force && editableTextControl(control) && focusedControl(control) && draft && !draft.committing && (draft.dirty || draft.composing)) return false;
+        if (control.value !== String(value)) control.value = String(value);
+        if (draft) {
+          if (force) draft.dirty = false;
+          if (usableNumberDraft(control)) draft.lastValidValue = control.value;
+        }
+        return true;
+      }
       const DEFAULT_STRINGS = Object.freeze({
         settings: "Settings",
         openSettings: "Open settings",
@@ -250642,6 +252120,8 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         STORAGE_PREFIX,
         MAX_BINDINGS,
         register,
+        listenEditable,
+        syncEditableValue,
         getSession: (pageId) => sessions.get(String(pageId || "")) || null,
         setCardVisible(pageId, cardId, visible) {
           const session = sessions.get(String(pageId || ""));
