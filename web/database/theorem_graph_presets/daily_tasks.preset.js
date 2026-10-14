@@ -47,7 +47,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
       "x": 209.9,
-      "y": 182.3
+      "y": 182.9
     },
     {
       "id": "n53",
@@ -75,7 +75,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
                 "id": "web-lists",
                 "label": "web lists",
                 "type": "checkbox",
-                "text": "- [x] https://www.math.uni-hamburg.de/\n- [x] https://www.kus.uni-hamburg.de/en.html\n- [x] https://www.rrz.uni-hamburg.de/\n- [?] https://wcms-fakmin.rrz.uni-hamburg.de/fakmin/NPS/\n- [x] https://docata.min.uni-hamburg.de/home\n- [x] https://start.voip-centrex.dfn.de/main/telephone"
+                "text": "- [x] https://www.math.uni-hamburg.de/\n- [x] https://www.kus.uni-hamburg.de/en.html\n- [x] https://www.rrz.uni-hamburg.de/\n- [?] https://wcms-fakmin.rrz.uni-hamburg.de/fakmin/NPS/\n- [x] https://docata.min.uni-hamburg.de/home\n- [x] https://start.voip-centrex.dfn.de/main/telephone\nhttps://www.stine.uni-hamburg.de/scripts/mgrqispi.dll?APPNAME=CampusNet&PRGNAME=ACTION&ARGUMENTS=-A~ZMatPAj9PuenVJkDKvG3tZSGr01wGgfd7kef0QO0XHPVDsVHcZzSRlJZAwDZfD6mEJaBXNd5yCD0uMtblo44tgSvMO5rMx7pxZUtaxnpFx7yflsujEHMl-zM17IP0QS5LbyOdvIYwF5OzNwY0Re9cPdSrNIZ8tQvFeF8kEqnFuJCXJDUg7rZ7SSAtYLYJu~UoktxbKySvy3IAQ_"
               }
             ],
             "setting": "",
@@ -85,8 +85,8 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "citationKeys": [],
             "color": "#7a6f65",
             "fillColor": "#f7f5f1",
-            "x": 237.4,
-            "y": 101.1
+            "x": 232.9,
+            "y": 99.9
           },
           {
             "id": "n8",
@@ -97,7 +97,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
                 "id": "tools",
                 "label": "tools",
                 "type": "checkbox",
-                "text": "- [x] chatgpt and codex\n- [x] snipaste\n- [x] everything\n- [x] 小狼毫\n- [?] bandzip\n- [ ] github"
+                "text": "- [x] chatgpt and codex\n- [x] snipaste\n- [x] everything\n- [x] 小狼毫\n- [?] bandzip\n- [x] github"
               }
             ],
             "setting": "",
@@ -107,8 +107,8 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "citationKeys": [],
             "color": "#7a6f65",
             "fillColor": "#f7f5f1",
-            "x": 505.1,
-            "y": 162.1
+            "x": 498.4,
+            "y": 160.2
           },
           {
             "id": "n9",
@@ -129,8 +129,8 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "citationKeys": [],
             "color": "#2f5f9f",
             "fillColor": "#eef4fb",
-            "x": 331.8,
-            "y": 231.4
+            "x": 327.4,
+            "y": 228.7
           },
           {
             "id": "n10",
@@ -157,8 +157,30 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
             "citationKeys": [],
             "color": "#7a6f65",
             "fillColor": "#f7f5f1",
-            "x": 465.4,
-            "y": 84
+            "x": 459.2,
+            "y": 83
+          },
+          {
+            "id": "n11",
+            "type": "misc",
+            "label": "partial",
+            "details": [
+              {
+                "id": "tasks",
+                "label": "tasks",
+                "type": "checkbox",
+                "text": "save the scanned documents"
+              }
+            ],
+            "setting": "",
+            "condition": "",
+            "result": "",
+            "proofSketch": "",
+            "citationKeys": [],
+            "color": "#7a6f65",
+            "fillColor": "#f7f5f1",
+            "x": 312.6,
+            "y": 156.1
           }
         ],
         "arrows": [],
@@ -166,7 +188,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
           "selectedId": "",
           "layoutAvoidOverlap": true,
           "layoutRunning": false,
-          "canvasHeight": 337,
+          "canvasHeight": 333,
           "canvasRatioLocked": true,
           "canvasAspectRatio": 2.2315
         }
@@ -181,7 +203,7 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
           "id": "check",
           "label": "check",
           "type": "checkbox",
-          "text": "\\cite{link1} 48:33"
+          "text": "\\cite{link1} 48:33\nhttps://www.bilibili.com/video/BV1ktpu6sE5o/"
         }
       ],
       "setting": "",
@@ -207,19 +229,19 @@ window.THEOREM_GRAPH_PRESET_DATA.daily_tasks = {
     "canvasAspectRatio": 2.5067,
     "relativeNodePositions": {
       "n50": {
-        "x": 0.2687,
+        "x": 0.2723,
         "y": 0.3697
       },
       "n51": {
-        "x": 0.2787,
-        "y": 0.6075
+        "x": 0.2825,
+        "y": 0.6097
       },
       "n53": {
-        "x": 0.5056,
+        "x": 0.5124,
         "y": 0.3207
       },
       "n54": {
-        "x": 0.5436,
+        "x": 0.5509,
         "y": 0.6428
       }
     },

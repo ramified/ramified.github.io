@@ -3,7 +3,7 @@
 // { label: "Half-Spin Symmetry for Conormal Cycles", key: "half_spin_symmetry_for_conormal_cycles", file: "half_spin_symmetry_for_conormal_cycles.preset.js" }
 window.THEOREM_GRAPH_PRESET_DATA = window.THEOREM_GRAPH_PRESET_DATA || {};
 window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
-  "schemaVersion": 9,
+  "schemaVersion": 11,
   "title": "Half-Spin Symmetry for Conormal Cycles",
   "titleNode": {
     "id": "__title__",
@@ -74,8 +74,8 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       ],
       "color": "#46786e",
       "fillColor": "#eef7f4",
-      "x": 151,
-      "y": 133.1,
+      "x": 127.6,
+      "y": 79.1,
       "childGraph": {
         "title": "Schoen surface",
         "nodes": [
@@ -151,7 +151,7 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 377.1,
+      "x": 377.6,
       "y": 56.9,
       "childGraph": {
         "title": "$W(D_4)$-monodromy",
@@ -178,8 +178,8 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 219.2,
-      "y": 214.3
+      "x": 351.2,
+      "y": 144.8
     },
     {
       "id": "lem_nonzero_middle",
@@ -192,7 +192,7 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 565.7,
+      "x": 566.4,
       "y": 223.3
     },
     {
@@ -206,8 +206,30 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "citationKeys": [],
       "color": "#7a6f65",
       "fillColor": "#f7f5f1",
-      "x": 585.5,
+      "x": 586.3,
       "y": 77
+    },
+    {
+      "id": "n1",
+      "type": "misc",
+      "label": "curiosity",
+      "details": [
+        {
+          "id": "questions",
+          "label": "questions",
+          "type": "checkbox",
+          "text": "How is the deformation looks like when the seed is different?\nWhy does the deformation preserve the degree 3 automorphism?"
+        }
+      ],
+      "setting": "",
+      "condition": "",
+      "result": "",
+      "proofSketch": "",
+      "citationKeys": [],
+      "color": "#7a6f65",
+      "fillColor": "#f7f5f1",
+      "x": 124.4,
+      "y": 197.3
     }
   ],
   "arrows": [
@@ -215,6 +237,8 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "id": "arr_family_to_monodromy",
       "sourceId": "lem_schoen_family",
       "targetId": "lem_wd4_monodromy",
+      "labels": [],
+      "terms": [],
       "label": "",
       "remark": "",
       "body": "solid",
@@ -232,6 +256,8 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "id": "arr_family_to_specialization",
       "sourceId": "lem_schoen_family",
       "targetId": "lem_normalized_middle",
+      "labels": [],
+      "terms": [],
       "label": "",
       "remark": "",
       "body": "solid",
@@ -249,6 +275,8 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "id": "arr_specialization_to_nonzero",
       "sourceId": "lem_normalized_middle",
       "targetId": "lem_nonzero_middle",
+      "labels": [],
+      "terms": [],
       "label": "",
       "remark": "",
       "body": "solid",
@@ -266,6 +294,8 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "id": "arr_nonzero_to_counterexample",
       "sourceId": "lem_nonzero_middle",
       "targetId": "thm_counterexample",
+      "labels": [],
+      "terms": [],
       "label": "",
       "remark": "",
       "body": "solid",
@@ -283,6 +313,8 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "id": "a1",
       "sourceId": "lem_wd4_monodromy",
       "targetId": "thm_counterexample",
+      "labels": [],
+      "terms": [],
       "label": "",
       "remark": "",
       "body": "solid",
@@ -291,7 +323,7 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "level": 1,
       "endpointScale": 1,
       "curve": 0,
-      "labelOffset": 15,
+      "labelOffset": 0,
       "labelPosition": 0.5,
       "labelAlign": "left",
       "color": "#5f574e"
@@ -305,7 +337,7 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
     },
     "nodeSerial": 6,
     "arrowSerial": 9,
-    "selectedId": "lem_schoen_family",
+    "selectedId": "n1",
     "layoutAvoidOverlap": true,
     "layoutRunning": false,
     "canvasHeight": 316,
@@ -313,16 +345,16 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
     "canvasAspectRatio": 2.3829,
     "relativeNodePositions": {
       "lem_schoen_family": {
-        "x": 0.2008,
-        "y": 0.4213
+        "x": 0.1694,
+        "y": 0.2504
       },
       "lem_wd4_monodromy": {
         "x": 0.5015,
         "y": 0.18
       },
       "lem_normalized_middle": {
-        "x": 0.2915,
-        "y": 0.6783
+        "x": 0.4665,
+        "y": 0.4582
       },
       "lem_nonzero_middle": {
         "x": 0.7522,
@@ -331,6 +363,10 @@ window.THEOREM_GRAPH_PRESET_DATA.half_spin_symmetry_for_conormal_cycles = {
       "thm_counterexample": {
         "x": 0.7786,
         "y": 0.2438
+      },
+      "n1": {
+        "x": 0.1652,
+        "y": 0.6245
       }
     },
     "selectedReferenceKeys": []
