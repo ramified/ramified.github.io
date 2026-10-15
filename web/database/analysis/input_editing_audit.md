@@ -1,4 +1,4 @@
-# Input editing audit — 2026-10-14
+# Input editing audit — verified 2026-10-15
 
 ## Findings and repairs
 
@@ -31,6 +31,7 @@ The persistent real-keyboard regression separately checks:
 - minigames board `6 → empty → 7` and prefix `1 → 15`;
 - negative decimal Go komi;
 - hidden finite-field prime editing during refresh and explicit next-prime stepping;
+
 - numeric editing inside the rebuilt native workspace's shadow DOM.
 
 The unit test checks empty numeric drafts, delayed model writes, text spaces, selection, commit fallback, composition, explicit reset, and duplicate commit prevention. These tests are a repeatable gate for future changes; the audit is not a claim that every possible dynamic mathematical state has been enumerated.
@@ -46,4 +47,18 @@ node js/ramified_minigames_i18n_test.js
 node js/build_math_workspace_native_editors.mjs --check
 ```
 
-Additional relevant calculator, minigame, and workspace checks accompany the changes. Previously reported broad-suite failures in Hex hover timing, the mosaic billiards editor, and Lianliankan catalog expectations are separate from this input repair.
+## Verification results
+
+Final verification on 2026-10-15 passed:
+
+- Draft unit tests, including initially disabled controls, commit fallback, IME, and explicit resets.
+- Real-keyboard browser regression: English and Simplified Chinese titles, caret insertion, numeric editing, delayed rendering, minigames board sizes/komi, matrix prime editing/stepping, and native workspace shadow-DOM editing. The latest run probed 44 editable fields across 14 interfaces; the count depends on the visible controls in the current page state.
+- Shared input settings and 13-page settings coverage checks.
+- Theorem graph regression, matrix calculator, and slicing toric checks.
+- Minigames i18n (536 referenced keys and 1,070 catalog entries), import/export, player unit, and player browser checks. The player browser check includes bilingual UI, keyboard interactions, preparation, save/cancel, and Sokoban.
+- Workspace asset checks, rebuild from current sources, and subsequent builder `--check`. Historical native bundle snapshots remain unchanged.
+- Repository-root `git diff --check`.
+
+The resource-path check still fails at `archive/only_knot/mosaic_calculator.html`, which links to a missing `young_diagrams.html` relative to that frozen directory. That independently added archive was not changed by this input repair.
+
+Previously reported broad-suite failures in Hex hover timing, the mosaic billiards editor, and Lianliankan catalog expectations are separate from this input repair and were not rerun in the final input verification. The builder also reports existing duplicate object keys in the Double Young and mosaic exports; compilation and reproducibility checks pass.

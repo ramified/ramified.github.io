@@ -34313,6 +34313,10 @@ ${body}`;
         if (catalogSource) clear.hidden = true;
         importActions.append(clear, apply);
         importPanel.appendChild(importActions);
+        if (config.id === "theorem-graph") {
+          const account = legacyHost.querySelector("#personal-account");
+          if (account) importPanel.appendChild(account);
+        }
         const status = element("p", "import-export-status");
         status.setAttribute("role", "status");
         status.setAttribute("aria-live", "polite");
@@ -46173,6 +46177,10 @@ ${body}`;
         if (catalogSource) clear.hidden = true;
         importActions.append(clear, apply);
         importPanel.appendChild(importActions);
+        if (config.id === "theorem-graph") {
+          const account = legacyHost.querySelector("#personal-account");
+          if (account) importPanel.appendChild(account);
+        }
         const status = element("p", "import-export-status");
         status.setAttribute("role", "status");
         status.setAttribute("aria-live", "polite");
@@ -58848,6 +58856,10 @@ ${body}`;
         if (catalogSource) clear.hidden = true;
         importActions.append(clear, apply);
         importPanel.appendChild(importActions);
+        if (config.id === "theorem-graph") {
+          const account = legacyHost.querySelector("#personal-account");
+          if (account) importPanel.appendChild(account);
+        }
         const status = element("p", "import-export-status");
         status.setAttribute("role", "status");
         status.setAttribute("aria-live", "polite");
@@ -66644,6 +66656,10 @@ ${body}`;
         if (catalogSource) clear.hidden = true;
         importActions.append(clear, apply);
         importPanel.appendChild(importActions);
+        if (config.id === "theorem-graph") {
+          const account = legacyHost.querySelector("#personal-account");
+          if (account) importPanel.appendChild(account);
+        }
         const status = element("p", "import-export-status");
         status.setAttribute("role", "status");
         status.setAttribute("aria-live", "polite");
@@ -80144,6 +80160,10 @@ ${rows.join("\\\\\n")}
         if (catalogSource) clear.hidden = true;
         importActions.append(clear, apply);
         importPanel.appendChild(importActions);
+        if (config.id === "theorem-graph") {
+          const account = legacyHost.querySelector("#personal-account");
+          if (account) importPanel.appendChild(account);
+        }
         const status = element("p", "import-export-status");
         status.setAttribute("role", "status");
         status.setAttribute("aria-live", "polite");
@@ -91781,6 +91801,10 @@ ${rows}
         if (catalogSource) clear.hidden = true;
         importActions.append(clear, apply);
         importPanel.appendChild(importActions);
+        if (config.id === "theorem-graph") {
+          const account = legacyHost.querySelector("#personal-account");
+          if (account) importPanel.appendChild(account);
+        }
         const status = element("p", "import-export-status");
         status.setAttribute("role", "status");
         status.setAttribute("aria-live", "polite");
@@ -140001,6 +140025,10 @@ ${arrows.join("\n")}` : "";
         if (catalogSource) clear.hidden = true;
         importActions.append(clear, apply);
         importPanel.appendChild(importActions);
+        if (config.id === "theorem-graph") {
+          const account = legacyHost.querySelector("#personal-account");
+          if (account) importPanel.appendChild(account);
+        }
         const status = element("p", "import-export-status");
         status.setAttribute("role", "status");
         status.setAttribute("aria-live", "polite");
@@ -192272,6 +192300,10 @@ ${arrows.join("\n")}` : "";
         if (catalogSource) clear.hidden = true;
         importActions.append(clear, apply);
         importPanel.appendChild(importActions);
+        if (config.id === "theorem-graph") {
+          const account = legacyHost.querySelector("#personal-account");
+          if (account) importPanel.appendChild(account);
+        }
         const status = element("p", "import-export-status");
         status.setAttribute("role", "status");
         status.setAttribute("aria-live", "polite");
@@ -240854,6 +240886,10 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         if (catalogSource) clear.hidden = true;
         importActions.append(clear, apply);
         importPanel.appendChild(importActions);
+        if (config.id === "theorem-graph") {
+          const account = legacyHost.querySelector("#personal-account");
+          if (account) importPanel.appendChild(account);
+        }
         const status = element("p", "import-export-status");
         status.setAttribute("role", "status");
         status.setAttribute("aria-live", "polite");
@@ -248226,6 +248262,10 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         if (catalogSource) clear.hidden = true;
         importActions.append(clear, apply);
         importPanel.appendChild(importActions);
+        if (config.id === "theorem-graph") {
+          const account = legacyHost.querySelector("#personal-account");
+          if (account) importPanel.appendChild(account);
+        }
         const status = element("p", "import-export-status");
         status.setAttribute("role", "status");
         status.setAttribute("aria-live", "polite");
@@ -256877,6 +256917,10 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         if (catalogSource) clear.hidden = true;
         importActions.append(clear, apply);
         importPanel.appendChild(importActions);
+        if (config.id === "theorem-graph") {
+          const account = legacyHost.querySelector("#personal-account");
+          if (account) importPanel.appendChild(account);
+        }
         const status = element("p", "import-export-status");
         status.setAttribute("role", "status");
         status.setAttribute("aria-live", "polite");
