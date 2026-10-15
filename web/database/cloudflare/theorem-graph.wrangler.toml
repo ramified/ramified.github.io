@@ -18,4 +18,4 @@ ADMIN_USERNAME = "ramified"
 binding = "DB"
 database_name = "theorem-graph-personal"
 # Replace with the ID returned by `wrangler d1 create theorem-graph-personal`.
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "047c7f39-840f-429e-809c-b1bfaf5a5be2"
