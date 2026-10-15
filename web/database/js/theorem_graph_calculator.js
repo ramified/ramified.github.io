@@ -296,6 +296,7 @@
   };
 
   const refs = {};
+  let personalStorage = null;
 
   defineActiveGraphAccessors();
   installImportExportPageAdapter();
@@ -345,7 +346,7 @@
     applyImportData(data, 'JSON text', currentImportScope());
   }
 
-  function init() {
+  async function init() {
     cacheRefs();
     populateArrowPartPickers();
     populateColorPalettes();
@@ -353,8 +354,17 @@
     syncCanvasRatioLockControl();
     resizeCanvas();
     loadPresetRegistry();
-    loadDefaultPreset();
+    await loadDefaultPreset();
     setupCalculatorInputSettings();
+    if (window.TheoremGraphPersonal) {
+      personalStorage = window.TheoremGraphPersonal.mount({
+        capture: capturePersonalGraph,
+        restore: restorePersonalGraph,
+        signature: graphContentSignature,
+        busy: () => !!(state.drag || state.canvasResize),
+        context: () => JSON.stringify([state.activePath, state.selectedNodeId, state.selectedArrowId, state.editingReferenceKey])
+      });
+    }
 
     if (window.ResizeObserver && refs.canvas) {
       const observer = new ResizeObserver(() => {
@@ -1932,6 +1942,7 @@
   }
 
   function pushUndoSnapshot(label = 'change') {
+    if (personalStorage && /import|clear graph/.test(label)) personalStorage.checkpoint();
     const snapshot = makeUndoSnapshot(label);
     if (!snapshot) return false;
     const previous = state.undoStack[state.undoStack.length - 1];
@@ -7149,6 +7160,41 @@
 
   function markExportDirty() {
     state.exportDirty = true;
+    if (personalStorage) personalStorage.changed();
+  }
+
+  function capturePersonalGraph() {
+    return {
+      formatVersion: 1,
+      graph: buildExport('whole'),
+      editor: {
+        activePath: [...state.activePath], selectedNodeId: state.selectedNodeId,
+        selectedArrowId: state.selectedArrowId, titleEditorActive: state.titleEditorActive,
+        editingReferenceKey: state.editingReferenceKey,
+        detailEditBaseline: clonePlainObject(state.detailEditBaseline)
+      }
+    };
+  }
+
+  function restorePersonalGraph(payload) {
+    if (!payload || payload.formatVersion !== 1 || !payload.graph) throw new Error('Unsupported personal graph.');
+    applyImportData(payload.graph, 'personal graph', 'whole', { recordUndo: false });
+    const editor = payload.editor || {};
+    state.activePath = Array.isArray(editor.activePath) ? editor.activePath : [];
+    currentGraph();
+    state.selectedNodeId = cleanId(editor.selectedNodeId);
+    state.selectedArrowId = cleanId(editor.selectedArrowId);
+    state.titleEditorActive = editor.titleEditorActive === true;
+    state.undoStack = [];
+    applyActiveGraphCanvasView();
+    renderAll();
+    resetDetailEditBaseline();
+    if (window.CalculatorInputSettings?.syncEditableValue) {
+      window.CalculatorInputSettings.syncEditableValue(refs.graphTitle, state.graphTitle, { force: true });
+    } else if (refs.graphTitle) refs.graphTitle.value = state.graphTitle;
+    if (editor.detailEditBaseline) state.detailEditBaseline = clonePlainObject(editor.detailEditBaseline);
+    if (editor.editingReferenceKey) openReferenceEdit(editor.editingReferenceKey);
+    markCurrentExportClean();
   }
 
   function ensureExportFresh() {
@@ -7184,6 +7230,13 @@
   }
 
   function handleBeforeUnload(event) {
+    if (personalStorage) {
+      personalStorage.flushLocal();
+      if (!personalStorage.hasUnstoredChanges()) return undefined;
+      event.preventDefault();
+      event.returnValue = '';
+      return '';
+    }
     if (!hasUnsavedCorrections()) return undefined;
     event.preventDefault();
     event.returnValue = '';

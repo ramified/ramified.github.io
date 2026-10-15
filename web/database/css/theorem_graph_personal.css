@@ -1,0 +1,18 @@
+.theorem-personal { min-width: 0; }
+.theorem-personal p { margin: 8px 0; font-size: .86rem; line-height: 1.5; }
+.theorem-personal-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.theorem-personal select { min-width: 0; flex: 1 1 180px; max-width: 100%; }
+.theorem-personal[hidden], .theorem-personal [hidden], .theorem-personal-account [hidden] { display: none !important; }
+.theorem-personal-account { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+.theorem-personal-link { border: 0; padding: 0; background: none; color: var(--muted); font: inherit; font-size: .75rem; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.theorem-personal-link:hover, .theorem-personal-link:focus-visible { color: var(--accent); }
+#personal-login { margin-top: 10px; }
+#personal-login input { display: block; width: 100%; min-width: 0; }
+.theorem-personal .btn { white-space: normal; }
+.theorem-personal-history { padding-left: 0; list-style: none; }
+.theorem-personal-status { color: #466449; }
+.theorem-personal-status[data-warning="true"] { color: #99512b; }
+.theorem-personal-conflict { padding: 10px; border: 1px solid #ba7942; border-radius: 8px; background: #fff4e5; }
+.theorem-personal-history { max-height: 260px; overflow: auto; }
+.theorem-personal-history li { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin: 8px 0; }
+.theorem-personal-preview { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: .8rem/1.5 monospace; }

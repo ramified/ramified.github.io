@@ -6,6 +6,7 @@
   <title>Maintenance Tracker</title>
   <link rel="stylesheet" href="css/site.css?v=20260903-1">
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
+  <link rel="stylesheet" href="css/theorem_graph_personal.css?v=20261014-2">
   <style>
     .theorem-layout {
       max-width: 1260px;
@@ -1387,11 +1388,45 @@
 
     <div class="theorem-underbar">
       <span id="theorem-status">ready</span>
-      <span id="theorem-summary">explicit export/import only</span>
+      <span id="theorem-summary">nodes, arrows, and references</span>
     </div>
   </section>
 
   <aside class="side" id="cards">
+    <section class="card collapsed theorem-personal" id="theorem-personal" aria-labelledby="personal-heading" hidden>
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label" id="personal-heading">My graphs</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <p id="personal-current">Loading local drafts…</p>
+        <p class="theorem-personal-status" id="personal-status" role="status" aria-live="polite">Opening storage…</p>
+        <div class="theorem-personal-row">
+          <label for="personal-select">Saved graphs</label>
+          <select id="personal-select" class="theorem-select" aria-label="Saved personal graphs"></select>
+          <button id="personal-open" class="btn" type="button" disabled>Open</button>
+          <button id="personal-refresh" class="btn btn-ghost" type="button">Refresh list</button>
+        </div>
+        <div class="theorem-personal-row">
+          <button id="personal-copy" class="btn" type="button">Save as new graph</button>
+          <button id="personal-sync" class="btn btn-ghost" type="button" disabled>Sync now</button>
+          <button id="personal-revert" class="btn btn-ghost" type="button" disabled>Restore opening version</button>
+          <button id="personal-history" class="btn btn-ghost" type="button">History</button>
+          <button id="personal-download" class="btn btn-ghost" type="button">Download JSON</button>
+          <button id="personal-logout" class="btn btn-ghost" type="button" hidden>Sign out</button>
+        </div>
+        <div class="theorem-personal-conflict" id="personal-conflict" hidden>
+          <p>This graph changed elsewhere. Use “Save as new graph” to keep editing a separate copy, or open the cloud version. Your local changes will be kept as a recovered copy.</p>
+          <button id="personal-cloud-version" class="btn" type="button">Open cloud version and keep local copy</button>
+        </div>
+        <div id="personal-history-panel" hidden>
+          <p>Checkpoints are kept before restores and at intervals while editing. The latest 50 checkpoints are retained in each storage location.</p>
+          <p id="personal-history-empty"></p>
+          <ul id="personal-history-list" class="theorem-personal-history"></ul>
+          <div id="personal-history-preview" hidden>
+            <pre id="personal-preview-text" class="theorem-personal-preview"></pre>
+            <button id="personal-restore-history" class="btn" type="button">Restore this version</button>
+          </div>
+        </div>
+      </div>
+    </section>
     <section class="card" id="node-card">
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Node / Arrow</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
@@ -1797,6 +1832,22 @@
           </label>
         </div>
         <div class="hint" id="export-message">Import / export includes nodes, arrows, references, and positions. JSON import also accepts Tao paper-diagram JSON.</div>
+        <div class="theorem-personal-account" id="personal-account">
+          <button id="personal-sign-in" class="theorem-personal-link" type="button" aria-expanded="false" aria-controls="personal-login">Sign in to My graphs</button>
+          <a id="personal-cloud-link" class="theorem-personal-link" hidden>Sign in to My graphs</a>
+          <button id="personal-show-graphs" class="theorem-personal-link" type="button" hidden>Open My graphs</button>
+          <form id="personal-login" hidden>
+            <label class="input-label" for="personal-username">Username</label>
+            <input id="personal-username" name="username" class="theorem-input" type="text" value="ramified" autocomplete="username" required maxlength="80">
+            <label class="input-label" for="personal-password">Password</label>
+            <input id="personal-password" name="password" class="theorem-input" type="password" autocomplete="current-password" required maxlength="1024" aria-describedby="personal-login-status">
+            <div class="theorem-personal-row">
+              <button id="personal-login-submit" class="btn" type="submit">Sign in</button>
+              <button id="personal-login-cancel" class="btn btn-ghost" type="button">Cancel</button>
+            </div>
+          </form>
+          <p id="personal-login-status" class="hint" role="status" aria-live="polite" hidden></p>
+        </div>
       </div>
     </section>
   </aside>
@@ -1829,8 +1880,11 @@
 <script id="theorem-preset-registry" src="presets/theorem_graph/presets.js"></script>
 <script src="js/calculator_cards.js?v=20260903-1"></script>
 <script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
-<script src="js/theorem_graph_calculator.js?v=20261014-input-drafts-1"></script>
+<script src="js/theorem_graph_cloud_config.js?v=20261014-1"></script>
+<script src="js/theorem_graph_storage.js?v=20261014-1"></script>
+<script src="js/theorem_graph_personal.js?v=20261014-2"></script>
+<script src="js/theorem_graph_calculator.js?v=20261014-personal-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
-<script src="js/import_export_page_adapters.js?v=20260825-3"></script>
+<script src="js/import_export_page_adapters.js?v=20261014-personal-1"></script>
 </body>
 </html>

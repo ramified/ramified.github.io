@@ -557,6 +557,13 @@
     importActions.append(clear, apply);
     importPanel.appendChild(importActions);
 
+    // Keep theorem account controls in the visible Import tab when upgrading
+    // the legacy markup. Moving the existing node preserves its form handlers.
+    if (config.id === 'theorem-graph') {
+      const account = legacyHost.querySelector('#personal-account');
+      if (account) importPanel.appendChild(account);
+    }
+
     const status = element('p', 'import-export-status');
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
