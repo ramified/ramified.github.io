@@ -11,7 +11,9 @@ const password = 'runtime-test-only-password-12345';
 const options = {
   cf: false,
   workers: [{
-    name: 'theorem-personal-test', modules: true, scriptPath: path.join(here, 'theorem-graph.worker.mjs'),
+    name: 'theorem-personal-test', modulesRoot: here,
+    modules: ['theorem-graph.worker.mjs', 'theorem-graph-common.mjs', 'theorem-graph-api.mjs']
+      .map(file => ({ type: 'ESModule', path: path.join(here, file) })),
     compatibilityDate: '2026-10-14', d1Databases: ['DB'],
     bindings: { ADMIN_USERNAME: 'ramified', ADMIN_PASSWORD_HASH: await passwordHash(password), LOCAL_HTTP: 'true' }
   }]
@@ -38,12 +40,24 @@ try {
   const save = { baseRevision: 0, writeId: crypto.randomUUID(), sessionId: crypto.randomUUID(),
     payload: { formatVersion: 1, graph: { schemaVersion: 11, title: 'Workerd smoke test', nodes: [], arrows: [] } } };
   assert.equal((await request('/documents/runtime-graph', 'PUT', save)).status, 200);
+  assert.equal((await db.prepare('SELECT username FROM graph_owners WHERE document_id=?').bind('runtime-graph').first()).username, 'ramified');
   const changed = { ...save, baseRevision: 1, writeId: crypto.randomUUID(), checkpoint: true,
     payload: { ...save.payload, graph: { ...save.payload.graph, title: 'Changed' } } };
   assert.equal((await request('/documents/runtime-graph', 'PUT', changed)).status, 200);
   assert.equal((await (await request('/documents/runtime-graph/history/1')).json()).payload.graph.title, 'Workerd smoke test');
   assert.equal((await request('/documents/runtime-graph', 'PUT', { ...changed, writeId: crypto.randomUUID() })).status, 409);
+  const shareResponse = await request('/documents/runtime-graph/shares', 'POST', { canEdit: true, canSave: true });
+  assert.equal(shareResponse.status, 200);
+  const share = await shareResponse.json();
+  const shared = await mf.dispatchFetch(origin + '/api/theorem/shared', {
+    method: 'PUT', headers: { Origin: origin, 'X-Theorem-Request': '1', 'Content-Type': 'application/json', 'X-Theorem-Share': share.token },
+    body: JSON.stringify({ ...changed, baseRevision: 2, writeId: crypto.randomUUID(), payload: { ...save.payload, graph: { ...save.payload.graph, title: 'Shared change' } } })
+  });
+  assert.equal(shared.status, 200, await shared.text());
+  assert.equal((await (await request('/documents/runtime-graph')).json()).title, 'Shared change');
+  assert.equal((await request('/documents/runtime-graph/shares/' + share.id, 'DELETE')).status, 200);
+  assert.equal((await mf.dispatchFetch(origin + '/api/theorem/shared', { headers: { 'X-Theorem-Share': share.token } })).status, 404);
   assert.equal((await request('/logout', 'POST', {})).status, 200);
   assert.equal((await request('/documents')).status, 401);
-  console.log('PASS actual workerd/D1: password verification, cookies, writes, trigger checkpoints, conflict rejection, logout');
+  console.log('PASS actual workerd/D1: modules, password verification, cookies, ownership, writes, trigger checkpoints, conflict rejection, shared saves, revocation, logout');
 } finally { await mf.dispose(); }

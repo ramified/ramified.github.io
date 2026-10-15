@@ -175,7 +175,7 @@
     }
     function changed() {
       if (!ready || restoring) return;
-      if (shared) { if (shared.canEdit) { sharedDirty = true; stashShared(); renderShared(); } return; }
+      if (shared) { if (shared.canEdit) { shared.message = ''; sharedDirty = true; stashShared(); renderShared(); } return; }
       pendingLocal = true;
       status('Saving on this device…');
       clearTimeout(localTimer);
@@ -450,7 +450,7 @@
           }
         } catch { /* The remote graph remains available. */ }
       } else if (discard) { try { sessionStorage.removeItem(sharedKey()); } catch {} }
-      restore(payload); adapter.setReadOnly?.(!shared.canEdit); render();
+      adapter.setReadOnly?.(!shared.canEdit); restore(payload); render();
     }
     function leaveShared() {
       if (!shared) return;

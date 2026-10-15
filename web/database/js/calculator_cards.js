@@ -563,9 +563,9 @@ try {
       if (card.parentElement !== wideHost) wideHost.appendChild(card);
     } else if (meta.sideHost) {
       if (card.parentElement !== meta.sideHost) meta.sideHost.appendChild(card);
-    } else if (meta.anchor?.parentElement && card.parentElement !== meta.anchor.parentElement) {
-      meta.anchor.insertAdjacentElement('afterend', card);
     } else if (meta.anchor?.parentNode) {
+      // The automatic anchor is a Comment, so use the Node API for both
+      // automatic anchors and explicitly configured element anchors.
       meta.anchor.parentNode.insertBefore(card, meta.anchor.nextSibling);
     }
     card.classList.toggle('wide', useWide);

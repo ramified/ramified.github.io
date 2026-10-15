@@ -6,6 +6,7 @@ class MemoryStore {
   constructor() { this.records = new Map(); }
   async read(id) { return this.records.has(id) ? clone(this.records.get(id)) : null; }
   async list() { return [...this.records.values()].map(clone); }
+  async remove(id) { this.records.delete(id); }
   async put(record, expected) {
     if ((this.records.get(record.id)?.localVersion || 0) !== expected) throw Object.assign(new Error('Local conflict'), { status: 409 });
     const result = { ...clone(record), localVersion: expected + 1 };
@@ -17,7 +18,14 @@ class Remote {
   async request(route, method = 'GET', body) {
     const id = route.split('/')[2];
     const existing = this.records.get(id);
-    if (method === 'GET') return clone(existing);
+    if (method === 'GET') {
+      if (!existing) throw Object.assign(new Error('Graph not found'), { status: 404 });
+      return clone(existing);
+    }
+    if (method === 'DELETE') {
+      if (existing?.revision !== body.baseRevision) throw Object.assign(new Error('Cloud conflict'), { status: 409 });
+      this.records.delete(id); return { ok: true };
+    }
     this.calls.push(clone(body));
     if (this.hold) await this.hold();
     if (existing?.writeId === body.writeId) return { revision: existing.revision };
@@ -84,5 +92,36 @@ async function run() {
   await reloaded.openCloud(id);
   assert.deepEqual(reloaded.current.payload, pendingBefore, 'opening cloud never silently replaces unsent local edits');
   console.log('PASS theorem storage: offline/reload, uncertain-response retry, edits during sync, cloud/local conflicts, recovery copies, restore history');
+
+  const management = new Library({ store: new MemoryStore(), api: new Remote() });
+  management.online = true;
+  const original = payload('Before rename');
+  original.graph.titleNode = { label: 'Before rename' };
+  original.drafts = [{ selector: '#graph-title', value: 'Old raw title ' }, { selector: '#node-label', value: 'Node draft ' }];
+  await management.create(original); await management.sync();
+  const firstId = management.current.id;
+  await management.create(payload('Keep this open')); await management.sync();
+  const currentId = management.current.id;
+  await management.rename(firstId, '  Renamed graph  '); await management.sync();
+  assert.equal(management.current.id, currentId, 'renaming another row keeps the editor on its current graph');
+  const renamed = await management.store.read(firstId);
+  assert.equal(renamed.payload.graph.title, 'Renamed graph');
+  assert.equal(renamed.payload.graph.titleNode.label, 'Renamed graph');
+  assert.deepEqual(renamed.payload.drafts, [{ selector: '#node-label', value: 'Node draft ' }]);
+  assert(renamed.history.some(entry => entry.payload.graph.title === 'Before rename'));
+  assert.equal(management.api.records.get(firstId).title, 'Renamed graph');
+  management.api.records.get(firstId).revision++;
+  await assert.rejects(management.remove(firstId), /changed on another device/);
+  assert(await management.store.read(firstId), 'a rejected delete retains the local graph');
+  await management.openCloud(firstId);
+  management.online = false;
+  await assert.rejects(management.remove(firstId), /Connect before deleting/);
+  management.online = true;
+  await management.remove(firstId);
+  assert.equal(management.current, null);
+  assert.equal(await management.store.read(firstId), null);
+  assert(!management.api.records.has(firstId));
+  assert(await management.store.read(currentId), 'deleting one graph preserves the other rows');
+  console.log('PASS theorem storage: rename checkpoints and drafts, non-active rows, stale/offline delete rejection, local/cloud removal');
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

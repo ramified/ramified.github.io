@@ -188,7 +188,7 @@ async function routes(request, env, ctx) {
       AND NOT EXISTS (SELECT 1 FROM graph_deletions WHERE document_id=?)
       ON CONFLICT(id) DO NOTHING RETURNING revision,updated_at AS updatedAt`)
       .bind(id, validatePayload(data.payload), JSON.stringify(data.payload), now, now, data.sessionId, data.writeId, adminName(env), user.username, id),
-    env.DB.prepare(`INSERT INTO graph_owners SELECT id,? FROM documents WHERE id=? AND write_id=? AND session_id=?
+    env.DB.prepare(`INSERT INTO graph_owners SELECT id,? FROM documents WHERE changes()=1 AND id=? AND write_id=? AND session_id=?
       ON CONFLICT(document_id) DO NOTHING`).bind(user.username, id, data.writeId, data.sessionId)
   ]);
   if (!result[0].results[0]) throw fault(409, 'The graph already exists or the library has reached its limit.');
