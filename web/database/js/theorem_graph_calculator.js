@@ -297,6 +297,7 @@
 
   const refs = {};
   let personalStorage = null;
+  let personalReadOnly = false;
 
   defineActiveGraphAccessors();
   installImportExportPageAdapter();
@@ -361,6 +362,7 @@
         capture: capturePersonalGraph,
         restore: restorePersonalGraph,
         signature: graphContentSignature,
+        setReadOnly: setPersonalReadOnly,
         busy: () => !!(state.drag || state.canvasResize),
         context: () => JSON.stringify([state.activePath, state.selectedNodeId, state.selectedArrowId, state.editingReferenceKey])
       });
@@ -2024,6 +2026,7 @@
   }
 
   function performUndo(options = {}) {
+    if (personalReadOnly) return false;
     const snapshot = state.undoStack.pop();
     if (!snapshot) {
       if (options.render !== false) setStatus('Nothing to undo.');
@@ -2061,10 +2064,12 @@
       description,
       defaultBindings: [],
       enabled: () => {
+        if (personalReadOnly) return false;
         const button = document.getElementById(id);
         return !!(button && !button.disabled && !button.hidden && !button.closest('[hidden]'));
       },
       trigger: () => {
+        if (personalReadOnly) return false;
         const button = document.getElementById(id);
         if (!button || button.disabled || button.hidden || button.closest('[hidden]')) return false;
         button.click();
@@ -2077,14 +2082,14 @@
         {
           id: 'undo', group: 'Graph', label: 'Undo graph change',
           description: 'Restores the previous graph state.', defaultBindings: ['Mod+z'],
-          enabled: () => state.undoStack.length > 0,
+          enabled: () => !personalReadOnly && state.undoStack.length > 0,
           trigger: () => performUndo()
         },
         {
           id: 'primary', group: 'Current task', label: 'Add / update current item',
           description: 'Runs the primary action in the focused or most recently used panel.',
           defaultBindings: ['Mod+Enter'], allowInEditable: true,
-          trigger: () => sessionRef.current?.triggerPrimary('[data-shortcut-primary]') || false
+          trigger: () => !personalReadOnly && (sessionRef.current?.triggerPrimary('[data-shortcut-primary]') || false)
         },
         buttonAction('delete-selected', 'Graph', 'Delete selection', 'Deletes the selected node or arrow.'),
         buttonAction('toggle-layout', 'Layout', 'Run / stop layout', 'Uses the current automatic-layout control.'),
@@ -3004,6 +3009,11 @@
   function handleCanvasPointerDown(event) {
     const point = eventPoint(event);
     const node = hitNode(point);
+    if (personalReadOnly) {
+      if (node) selectNode(node.id);
+      else { const arrow = hitArrow(point); if (arrow) selectArrow(arrow.id); else clearSelection(); }
+      renderAll(); return;
+    }
     if (state.connectMode) {
       handleConnectClick(node);
       return;
@@ -3049,6 +3059,7 @@
     event.preventDefault();
     const node = findNode(target.dataset.nodeId);
     if (!node) return;
+    if (personalReadOnly) { selectNode(node.id); renderAll(); return; }
     if (state.connectMode) {
       handleConnectClick(node);
       return;
@@ -3071,6 +3082,7 @@
     const label = arrowLabelById(arrow, target.dataset.arrowLabelId);
     if (!arrow || !label) return;
     selectArrow(arrow.id, label.id);
+    if (personalReadOnly) { renderAll(); return; }
     state.drag = {
       kind: 'arrow-label',
       arrowId: arrow.id,
@@ -3466,6 +3478,7 @@
   }
 
   function handleCanvasDoubleClick(event) {
+    if (personalReadOnly) return;
     if (state.connectMode) return;
     const point = eventPoint(event);
     const type = refs.newNodeType ? refs.newNodeType.value : DEFAULT_NEW_NODE_TYPE;
@@ -3759,6 +3772,7 @@
   }
 
   function openChildGraph(node) {
+    if (personalReadOnly && !node?.childGraph) return;
     if (!node || isTitleNode(node)) return;
     if (state.selectedNodeId === node.id && refs.nodeEditor && !refs.nodeEditor.hidden) {
       applyNodeDetailFromControls(node);
@@ -7175,6 +7189,27 @@
       }
     };
   }
+
+  function setPersonalReadOnly(value) {
+    personalReadOnly = !!value;
+    if (personalReadOnly) { state.connectMode = false; state.drag = null; stopLayout(); }
+    refs.graphTitle.readOnly = personalReadOnly;
+    ['node-card', 'graph-card', 'debug-card', 'reference-card'].forEach(id => {
+      const body = document.querySelector(`#${id} .card-body`);
+      if (body) body.inert = personalReadOnly;
+    });
+    document.querySelectorAll('#theorem-graph-import-panel > :not(#personal-account)').forEach(node => { node.inert = personalReadOnly; });
+    refs.clearGraph.inert = personalReadOnly;
+    refs.canvasResizeHandle.inert = personalReadOnly;
+  }
+
+  // Embedded task checkboxes are rebuilt with the node layer. Guard their native
+  // events without disabling graph selection, links, or nested-graph navigation.
+  ['click', 'beforeinput', 'change'].forEach(type => document.addEventListener(type, event => {
+    if (personalReadOnly && event.target.closest?.('.theorem-stage input, .theorem-stage button, .theorem-stage textarea')) {
+      event.preventDefault(); event.stopImmediatePropagation();
+    }
+  }, true));
 
   function restorePersonalGraph(payload) {
     if (!payload || payload.formatVersion !== 1 || !payload.graph) throw new Error('Unsupported personal graph.');

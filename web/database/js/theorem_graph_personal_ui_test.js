@@ -49,7 +49,7 @@ async function run() {
     await clear('graph-title'); await type('personal ');
     await delay(700);
     assert.equal(await value('graph-title'), 'personal ', 'local autosave preserves trailing spaces');
-    assert(await read(`(async()=> (await new TheoremGraphStorage.IndexedStore().list()).some(row=>row.history.some(entry=>entry.payload.graph.title==='Maintenance Tracker')))()`), 'first edit retains the original opening version');
+    assert(await read(`(async()=> (await new TheoremGraphStorage.IndexedStore('theorem-graphs-v2:'+window.THEOREM_GRAPH_API_BASE+':guest').list()).some(row=>row.history.some(entry=>entry.payload.graph.title==='Maintenance Tracker')))()`), 'first edit retains the original opening version');
     await client.send('Page.reload'); await delay(100); await ready();
     assert.equal(await value('graph-title'), 'personal ', 'raw draft survives reload');
     assert.equal(await read('document.activeElement.id'), 'graph-title', 'editing focus is restored');
@@ -132,7 +132,7 @@ async function run() {
     assert.equal(await value('graph-title'), 'local conflict');
     await read(`document.getElementById('personal-cloud-version').click()`);
     await waitFor(() => read(`document.getElementById('graph-title').value === 'remote device'`), 10000, 'open remote graph');
-    const recovered = await read(`(async()=> (await new TheoremGraphStorage.IndexedStore().list()).some(row=>row.recovered && row.payload.graph.title==='local conflict'))()`);
+    const recovered = await read(`(async()=> (await new TheoremGraphStorage.IndexedStore('theorem-graphs-v2:'+window.THEOREM_GRAPH_API_BASE+':ramified').list()).some(row=>row.recovered && row.payload.graph.title==='local conflict'))()`);
     assert(recovered, 'conflict resolution preserves the displaced local graph');
 
     await clear('graph-title'); await type('before restore'); await delay(700);
@@ -166,7 +166,7 @@ async function run() {
     await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
     await synced();
     assert(await read(`!document.getElementById('theorem-personal').hidden`), 'the password form supports Enter to sign in');
-    db.sqlite.prepare('UPDATE sessions SET expires_at=0').run();
+    db.sqlite.prepare('UPDATE graph_sessions SET expires_at=0').run();
     await read(`document.getElementById('personal-refresh').click()`);
     await waitFor(() => read(`document.getElementById('theorem-personal').hidden`), 10000, 'an expired session hides the personal card');
     assert.deepEqual(errors, []);

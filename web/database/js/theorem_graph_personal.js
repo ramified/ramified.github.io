@@ -11,23 +11,21 @@
     if (!panel) return null;
     const base = window.THEOREM_GRAPH_API_BASE;
     const api = base ? new CloudAPI(base) : null;
-    const library = new Library({ store: new IndexedStore(), api, onChange: render });
+    const storeName = username => `theorem-graphs-v2:${base || 'local'}:${username || 'guest'}`;
+    let library = new Library({ store: new IndexedStore(storeName()), api, onChange: render });
+    let user = null, entries = [], renameId = null, shareId = null, resetUser = null;
+    let shared = null, sharedDirty = false, sharedPending = null, sharedSaving = false;
+    const defaultPayload = clone(adapter.capture());
     let ready = false, restoring = false, pendingLocal = false, localError = '', cloudError = '';
     let localTimer, syncTimer, maxTimer, retryTimer, lastKey = '', cloudList = [], actionBusy = false;
     let edited = new Map(), preview = null, localFlight = null, initialPayload = null;
     let loginExpanded = false, loginMessage = '', signedIn = false;
-    let personalUrl = '';
-    try {
-      const url = new URL(window.THEOREM_GRAPH_PERSONAL_URL);
-      if (url.protocol === 'https:') personalUrl = url.href;
-    } catch { /* The public page can be used before cloud deployment is configured. */ }
-    if (personalUrl) $('personal-cloud-link').href = personalUrl;
-    const activeKey = 'theorem-personal-active-v1';
+    let activeKey = storeName() + ':active';
     function activeId() { try { return localStorage.getItem(activeKey); } catch { return null; } }
-    function remember() { try { if (library.current) localStorage.setItem(activeKey, library.current.id); } catch { /* IndexedDB still owns the draft. */ } }
+    function remember() { try { if (library.current) localStorage.setItem(activeKey, library.current.id); else localStorage.removeItem(activeKey); } catch { /* IndexedDB still owns the draft. */ } }
     function eligible(node) {
       return node && node.matches?.('input, textarea, select') && !node.readOnly && node.type !== 'password'
-        && !node.closest('#theorem-personal, #export-card') && !!node.closest('main');
+        && !node.closest('#theorem-personal, #export-card, #personal-shared-banner') && !!node.closest('main');
     }
     function selector(node) {
       const parts = [];
@@ -97,7 +95,7 @@
       if (scroll) panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
     function renderAccount() {
-      const nextSignedIn = !!api && library.online;
+      const nextSignedIn = !!user;
       panel.hidden = !nextSignedIn;
       if (signedIn !== nextSignedIn) {
         signedIn = nextSignedIn;
@@ -111,9 +109,9 @@
           loginMessage = cloudError;
         }
       }
-      $('personal-sign-in').hidden = signedIn || (!api && !!personalUrl);
+      $('personal-sign-in').hidden = signedIn;
       $('personal-sign-in').setAttribute('aria-expanded', String(loginExpanded));
-      $('personal-cloud-link').hidden = !!api || !personalUrl;
+      $('personal-cloud-link').hidden = true;
       $('personal-show-graphs').hidden = !signedIn;
       $('personal-login').hidden = !api || signedIn || !loginExpanded;
       $('personal-login-submit').disabled = actionBusy;
@@ -121,10 +119,14 @@
       $('personal-login-status').hidden = signedIn || !loginMessage;
       text('personal-login-status', loginMessage);
       $('personal-logout').hidden = !signedIn;
+      $('personal-users').hidden = !user?.admin;
+      text('personal-account-name', user ? `Signed in as ${user.username}` : '');
     }
     function render() {
       if (!panel) return;
       renderAccount();
+      renderRows();
+      renderShared();
       const current = library.current;
       if (current) {
         const select = $('personal-select');
@@ -133,11 +135,13 @@
         option.textContent = `${current.title}${current.recovered ? ' (recovered copy)' : ''} · ${library.online && !library.dirty() ? 'cloud' : 'this device'}`;
         $('personal-open').disabled = false;
       }
-      text('personal-current', current ? `Current: ${current.title}${current.recovered ? ' (recovered copy)' : ''}` : 'Current graph will be saved on this device when edited.');
+      text('personal-current', shared ? `Viewing shared graph: ${shared.title}` : current ? `Current: ${current.title}${current.recovered ? ' (recovered copy)' : ''}` : 'Current graph will be saved on this device when edited.');
       $('personal-conflict').hidden = !current?.conflict;
       $('personal-cloud-version').disabled = !library.online;
-      $('personal-sync').disabled = !api || !library.online || !!library.syncing;
-      $('personal-revert').disabled = !current || actionBusy;
+      $('personal-sync').disabled = !!shared || !api || !library.online || !!library.syncing;
+      $('personal-revert').disabled = !!shared || !current || actionBusy;
+      $('personal-history').disabled = !!shared || !current;
+      $('personal-copy').disabled = !!shared;
       if (localError) status(`Local save failed: ${localError}. Download a backup before closing.`, true);
       else if (pendingLocal) status('Saving on this device…');
       else if (current?.conflict) status('Another device has a newer version. Your changes are saved on this device.', true);
@@ -156,8 +160,9 @@
     async function persistLocal() {
       if (!ready || restoring) return;
       clearTimeout(localTimer);
+      if (shared) { stashShared(); return; }
       const key = contentKey();
-      if (key === lastKey && !localError) { pendingLocal = false; return; }
+      if (key === lastKey && !localError) { pendingLocal = false; render(); return; }
       const payload = capture();
       pendingLocal = true;
       try {
@@ -170,6 +175,7 @@
     }
     function changed() {
       if (!ready || restoring) return;
+      if (shared) { if (shared.canEdit) { sharedDirty = true; stashShared(); renderShared(); } return; }
       pendingLocal = true;
       status('Saving on this device…');
       clearTimeout(localTimer);
@@ -190,6 +196,7 @@
         cloudError = error.status === 401 ? 'Session expired; sign in again.' : error.message || 'Cloud sync failed; retrying when connected.';
         clearTimeout(retryTimer);
         if (library.online) retryTimer = setTimeout(sync, 30000);
+        if (error.status === 401) await signOutLocally();
       }
       render();
     }
@@ -199,15 +206,17 @@
       if (library.online) cloudList = (await api.request('/documents')).documents;
       const merged = new Map(cloudList.map(item => [item.id, { ...item, cloud: true }]));
       for (const item of local) merged.set(item.id, { ...item, cloud: merged.has(item.id) });
+      entries = [...merged.values()].sort((a, b) => b.updatedAt - a.updatedAt);
       const select = $('personal-select'); const selected = select.value || library.current?.id;
       select.replaceChildren();
-      for (const item of [...merged.values()].sort((a, b) => b.updatedAt - a.updatedAt)) {
+      for (const item of entries) {
         const option = document.createElement('option'); option.value = item.id;
         option.textContent = `${item.title}${item.recovered ? ' (recovered copy)' : ''} · ${item.cloud && !item.dirty ? 'cloud' : 'this device'}`;
         select.append(option);
       }
       if (merged.has(selected)) select.value = selected;
       $('personal-open').disabled = !merged.size;
+      renderRows();
     }
     async function action(task) {
       if (actionBusy) return;
@@ -215,11 +224,273 @@
       try { await flushLocal(); if (localError) throw new Error(localError); await task(); }
       catch (error) {
         cloudError = error.message;
-        if (error.status === 401) library.online = false;
+        if (error.status === 401 && user) await signOutLocally();
         if (loginExpanded && !library.online) loginMessage = error.message;
       }
       finally { actionBusy = false; render(); }
     }
+    async function switchAccount(session) {
+      await flushLocal(); await library.queue;
+      const guest = !user && !shared && library.current ? capture() : null;
+      user = { username: session.username, admin: !!session.admin };
+      library = new Library({ store: new IndexedStore(storeName(user.username)), api, onChange: render });
+      library.online = true; cloudList = []; entries = [];
+      activeKey = storeName(user.username) + ':active';
+      // Import the old single-user cache only into its administrator's library.
+      // No guest or newly created account can see these legacy private drafts.
+      if (user.admin) {
+        for (const record of await new IndexedStore().list()) {
+          if (!await library.store.read(record.id)) await library.store.put(record, 0);
+        }
+      }
+      const id = activeId();
+      const local = id && await library.store.read(id);
+      if (local) {
+        const payload = await library.openLocal(id);
+        if (!shared) restore(payload);
+      } else if (guest && !(await library.store.summaries()).length) {
+        await library.create(guest);
+        if (!shared) restore(guest);
+      } else if (!shared) restore(defaultPayload);
+      initialPayload = clone(defaultPayload); pendingLocal = false; localError = ''; preview = null;
+      if (!shared) lastKey = contentKey();
+      $('personal-history-panel').hidden = true;
+      $('personal-rename').hidden = true; $('personal-share-panel').hidden = true;
+      render();
+    }
+    async function signOutLocally() {
+      await library.queue;
+      library.online = false; api?.setToken(''); user = null;
+      library = new Library({ store: new IndexedStore(storeName()), api, onChange: render });
+      activeKey = storeName() + ':active'; cloudList = []; entries = []; preview = null;
+      initialPayload = clone(defaultPayload); pendingLocal = false; localError = '';
+      if (!shared) restore(defaultPayload);
+      $('personal-user-password').value = ''; $('personal-user-list').replaceChildren();
+      $('personal-users').open = false; $('personal-share-result').hidden = true;
+      $('personal-share-url').value = ''; $('personal-rename').hidden = true;
+      await list(); render();
+    }
+    function button(label, handler) {
+      const node = document.createElement('button'); node.type = 'button'; node.className = 'btn btn-ghost';
+      node.textContent = label; node.addEventListener('click', handler); return node;
+    }
+    function renderRows() {
+      const target = $('personal-graph-list');
+      const values = new Map(entries.map(item => [item.id, item]));
+      if (library.current) values.set(library.current.id, { ...library.current, dirty: library.dirty(), cloud: !!library.current.cloudRevision });
+      const rows = new Map([...target.children].map(row => [row.dataset.id, row]));
+      for (const item of [...values.values()].sort((a, b) => b.updatedAt - a.updatedAt)) {
+        let row = rows.get(item.id);
+        if (!row) {
+          row = document.createElement('div'); row.className = 'theorem-personal-item'; row.dataset.id = item.id;
+          const name = button('', () => action(() => openGraph(item.id)));
+          name.className = 'theorem-personal-item-name';
+          const date = document.createElement('time'); date.className = 'theorem-personal-item-date';
+          const actions = document.createElement('div'); actions.className = 'theorem-personal-item-actions';
+          actions.append(button('Rename', () => {
+            renameId = item.id; $('personal-rename').hidden = false;
+            const title = library.current?.id === item.id ? library.current.title : entries.find(entry => entry.id === item.id)?.title || item.title;
+            $('personal-rename-title').value = title; $('personal-rename-title').focus(); $('personal-rename-title').select();
+          }), button('Share', () => action(() => openSharing(item.id))), button('Delete', () => action(async () => {
+            if (!confirm('Delete this graph and its history? Its share links will stop working.')) return;
+            await library.remove(item.id);
+            if (!library.current && !shared) { restore(defaultPayload); initialPayload = clone(defaultPayload); }
+            if (shareId === item.id) $('personal-share-panel').hidden = true;
+            if (renameId === item.id) $('personal-rename').hidden = true;
+            await list();
+          })));
+          row.append(name, date, actions); target.append(row);
+        }
+        const current = !shared && library.current?.id === item.id;
+        row.classList.toggle('is-current', current);
+        if (current) row.setAttribute('aria-current', 'true'); else row.removeAttribute('aria-current');
+        const label = `${item.title}${item.recovered ? ' (recovered copy)' : ''}${current ? ' · Editing' : ''}`;
+        if (row.firstChild.textContent !== label) row.firstChild.textContent = label;
+        row.children[1].dateTime = new Date(item.updatedAt).toISOString();
+        row.children[1].textContent = time(item.updatedAt);
+        row.children[1].title = item.dirty ? 'Changes saved on this device' : item.cloud ? 'Saved to cloud' : 'Saved on this device';
+        row.querySelectorAll('button').forEach(node => { node.disabled = actionBusy; });
+        rows.delete(item.id);
+      }
+      rows.forEach(row => row.remove());
+      $('personal-list-empty').hidden = values.size > 0;
+    }
+    async function openGraph(id) {
+      leaveShared();
+      const cloud = library.online && cloudList.some(item => item.id === id);
+      restore(await (cloud ? library.openCloud(id, flushLocal) : library.openLocal(id)));
+      $('personal-select').value = id; $('personal-history-panel').hidden = true;
+      $('personal-rename').hidden = true; $('personal-share-panel').hidden = true;
+    }
+    $('personal-rename').addEventListener('submit', event => {
+      event.preventDefault(); action(async () => {
+        const payload = await library.rename(renameId, $('personal-rename-title').value);
+        if (!shared && library.current?.id === renameId) restore(payload);
+        $('personal-rename').hidden = true; await sync(); await list();
+      });
+    });
+    $('personal-rename-cancel').addEventListener('click', () => { $('personal-rename').hidden = true; });
+    async function openSharing(id) {
+      if (!library.online) throw new Error('Sign in and connect before sharing a graph.');
+      await sync();
+      const local = await library.store.read(id);
+      if (local && library.dirty(local)) throw new Error('Sync this graph and resolve any conflict before sharing.');
+      const graph = await api.request(`/documents/${id}`);
+      shareId = id; $('personal-share-panel').hidden = false;
+      $('personal-share-result').hidden = true; $('personal-share-url').value = '';
+      $('personal-share-edit').checked = false; $('personal-share-save').checked = false; $('personal-share-save').disabled = true;
+      text('personal-share-title', `Share: ${graph.title}`); await listShares();
+    }
+    async function listShares() {
+      const result = await api.request(`/documents/${shareId}/shares`);
+      const target = $('personal-share-list'); target.replaceChildren();
+      for (const entry of result.shares) {
+        const row = document.createElement('li'), label = document.createElement('span');
+        label.textContent = `${time(entry.createdAt)} · ${entry.canSave ? 'Edit and save' : entry.canEdit ? 'Temporary edits' : 'Read only'}`;
+        row.append(label, button('Revoke', () => action(async () => {
+          await api.request(`/documents/${shareId}/shares/${entry.id}`, 'DELETE');
+          if ($('personal-share-result').dataset.id === entry.id) { $('personal-share-result').hidden = true; $('personal-share-url').value = ''; }
+          await listShares();
+        }))); target.append(row);
+      }
+    }
+    $('personal-share-edit').addEventListener('change', () => {
+      $('personal-share-save').disabled = !$('personal-share-edit').checked;
+      if (!$('personal-share-edit').checked) $('personal-share-save').checked = false;
+    });
+    $('personal-share-form').addEventListener('submit', event => {
+      event.preventDefault(); action(async () => {
+        const link = await api.request(`/documents/${shareId}/shares`, 'POST', {
+          canEdit: $('personal-share-edit').checked, canSave: $('personal-share-save').checked
+        });
+        const url = new URL(location.href); url.hash = 'share=' + link.token;
+        $('personal-share-url').value = url.href; $('personal-share-result').hidden = false;
+        text('personal-share-copy', 'Copy link');
+        $('personal-share-result').dataset.id = link.id;
+        await listShares();
+      });
+    });
+    $('personal-share-copy').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText($('personal-share-url').value); text('personal-share-copy', 'Copied'); }
+      catch { $('personal-share-url').focus(); $('personal-share-url').select(); }
+    });
+    $('personal-share-close').addEventListener('click', () => { $('personal-share-panel').hidden = true; });
+    async function listUsers() {
+      if (!user?.admin) return;
+      const target = $('personal-user-list'); target.replaceChildren();
+      for (const entry of (await api.request('/users')).users) {
+        const row = document.createElement('li'), name = document.createElement('span');
+        name.textContent = entry.username + (entry.disabled ? ' · disabled' : '');
+        row.append(name, button('Reset password', () => {
+          resetUser = entry.username; $('personal-user-name').value = entry.username; $('personal-user-name').readOnly = true;
+          $('personal-user-password').value = ''; $('personal-user-password').focus();
+          text('personal-user-submit', 'Reset password'); $('personal-user-cancel').hidden = false;
+        }), button(entry.disabled ? 'Enable' : 'Disable', () => action(async () => {
+          await api.request(`/users/${entry.username}`, 'PUT', { disabled: !entry.disabled }); await listUsers();
+        }))); target.append(row);
+      }
+    }
+    function resetUserForm() {
+      resetUser = null; $('personal-user-form').reset(); $('personal-user-name').readOnly = false;
+      text('personal-user-submit', 'Create account'); $('personal-user-cancel').hidden = true;
+    }
+    $('personal-users').addEventListener('toggle', () => { if ($('personal-users').open) action(listUsers); });
+    $('personal-user-cancel').addEventListener('click', resetUserForm);
+    $('personal-user-form').addEventListener('submit', event => {
+      event.preventDefault(); action(async () => {
+        const name = resetUser || $('personal-user-name').value;
+        try {
+          await api.request(resetUser ? `/users/${name}` : '/users', resetUser ? 'PUT' : 'POST', {
+            username: name, password: $('personal-user-password').value
+          });
+          text('personal-user-status', resetUser ? `Password reset for ${name}.` : `Account ${name} created.`);
+          resetUserForm(); await listUsers();
+        } finally { $('personal-user-password').value = ''; }
+      });
+    });
+    const shareHeaders = () => ({ 'X-Theorem-Share': shared.token });
+    const sharedKey = () => `theorem-shared-draft:${base}:${shared.token}`;
+    function stashShared() {
+      if (!shared?.canEdit || restoring) return;
+      try {
+        sessionStorage.setItem(sharedKey(), JSON.stringify({ payload: capture(), revision: shared.revision, dirty: sharedDirty, pending: sharedPending }));
+        pendingLocal = false;
+      } catch { pendingLocal = sharedDirty; }
+    }
+    function renderShared() {
+      $('personal-shared-banner').hidden = !shared;
+      $('personal-shared-save').hidden = !shared?.canSave;
+      $('personal-shared-save').disabled = sharedSaving || !sharedDirty;
+      if (!shared) return;
+      const access = shared.canSave ? 'Edits can be saved to the original graph.' : shared.canEdit ? 'Temporary edits only; saving to the original is disabled.' : 'Read-only shared graph.';
+      text('personal-shared-status', shared.message || (sharedSaving ? 'Saving to the original graph…' : `${access}${sharedDirty ? ' Unsaved shared changes.' : ''}`));
+    }
+    async function openShared(token, discard = false) {
+      if (!api || !/^[\w-]{43}$/.test(token)) throw new Error('Invalid share link.');
+      await flushLocal();
+      let remote;
+      try { remote = await api.request('/shared', 'GET', undefined, { 'X-Theorem-Share': token }); }
+      catch (error) {
+        if (shared?.token === token) {
+          shared.message = error.message;
+          if ([403, 404].includes(error.status)) { shared.canEdit = false; shared.canSave = false; adapter.setReadOnly?.(true); }
+          renderShared();
+        }
+        throw error;
+      }
+      shared = { ...remote, token }; sharedDirty = false; sharedPending = null;
+      let payload = remote.payload;
+      if (!discard && remote.canEdit) {
+        try {
+          const cached = JSON.parse(sessionStorage.getItem(sharedKey()));
+          if (cached?.dirty && cached.payload) {
+            payload = cached.payload; sharedDirty = true; sharedPending = cached.pending;
+            shared.revision = cached.revision;
+            if (cached.revision !== remote.revision) shared.message = 'A newer version exists. Your shared draft is kept; download it before reloading.';
+          }
+        } catch { /* The remote graph remains available. */ }
+      } else if (discard) { try { sessionStorage.removeItem(sharedKey()); } catch {} }
+      restore(payload); adapter.setReadOnly?.(!shared.canEdit); render();
+    }
+    function leaveShared() {
+      if (!shared) return;
+      stashShared(); shared = null; sharedDirty = false; sharedPending = null; pendingLocal = false;
+      adapter.setReadOnly?.(false);
+      const url = new URL(location.href); url.hash = ''; history.replaceState(null, '', url);
+      restore(library.current?.payload || defaultPayload); render();
+    }
+    $('personal-shared-leave').addEventListener('click', leaveShared);
+    $('personal-shared-reload').addEventListener('click', () => action(async () => {
+      if (sharedDirty && !confirm('Discard your temporary shared edits and load the latest original graph?')) return;
+      await openShared(shared.token, true);
+    }));
+    $('personal-shared-save').addEventListener('click', async () => {
+      if (!shared?.canSave || sharedSaving || !sharedDirty) return;
+      sharedSaving = true; shared.message = ''; renderShared();
+      try {
+        const token = shared.token;
+        const snapshot = { formatVersion: 1, graph: capture().graph, editor: {}, drafts: [] };
+        if (!sharedPending) sharedPending = { payload: snapshot, baseRevision: shared.revision,
+          writeId: crypto.randomUUID(), sessionId: library.sessionId, checkpoint: false };
+        stashShared();
+        const sent = sharedPending;
+        const acknowledgement = await api.request('/shared', 'PUT', sent, shareHeaders());
+        if (shared?.token !== token) return;
+        shared.revision = acknowledgement.revision; sharedPending = null;
+        sharedDirty = JSON.stringify(capture().graph) !== JSON.stringify(sent.payload.graph);
+        shared.message = sharedDirty ? 'Saved. Newer local edits are still waiting to be saved.' : 'Saved to the original graph.';
+        stashShared();
+      } catch (error) {
+        if (shared) {
+          shared.message = error.status === 409 ? 'The original changed. Your edits are kept; download a copy before reloading.' : error.message;
+          if ([403, 404].includes(error.status)) { shared.canSave = false; shared.canEdit = false; adapter.setReadOnly?.(true); }
+        }
+      } finally { sharedSaving = false; renderShared(); }
+    });
+    window.addEventListener('hashchange', () => {
+      const token = new URLSearchParams(location.hash.slice(1)).get('share');
+      if (token) action(() => openShared(token)); else leaveShared();
+    });
     async function showHistory() {
       const current = library.current;
       if (!current) return;
@@ -271,8 +542,8 @@
         renderAccount();
         const password = $('personal-password').value;
         try {
-          await api.request('/login', 'POST', { username: $('personal-username').value, password });
-          library.online = true; cloudError = '';
+          const session = await api.request('/login', 'POST', { username: $('personal-username').value, password });
+          await switchAccount(session); cloudError = '';
           await loadAccount();
         } catch (error) {
           loginMessage = error.message || 'Unable to sign in. Please try again.';
@@ -283,13 +554,14 @@
     $('personal-logout').addEventListener('click', () => action(async () => {
       await sync();
       await api.request('/logout', 'POST', {});
-      library.online = false; cloudList = []; cloudError = ''; await list();
+      cloudError = ''; await signOutLocally();
     }));
     $('personal-sync').addEventListener('click', () => action(async () => { await sync(); await list(); }));
     $('personal-refresh').addEventListener('click', () => action(list));
     $('personal-open').addEventListener('click', () => action(async () => {
       const id = $('personal-select').value;
       if (!id) return;
+      leaveShared();
       const cloud = library.online && cloudList.some(item => item.id === id);
       restore(await (cloud ? library.openCloud(id, flushLocal) : library.openLocal(id)));
       $('personal-history-panel').hidden = true;
@@ -333,15 +605,23 @@
     // A short periodic local checkpoint also captures continuous layout movement.
     setInterval(() => { if (ready && !restoring && !adapter.busy() && contentKey() !== lastKey) flushLocal(); }, 1500);
     async function connect() {
-      try { await api.request('/session'); library.online = true; cloudError = ''; await loadAccount(); }
-      catch (error) { library.online = false; if (error.status !== 401) cloudError = 'Cloud unavailable; local drafts remain available.'; }
+      if (!api.token) return;
+      try {
+        const session = await api.request('/session');
+        if (user?.username !== session.username) await switchAccount(session);
+        library.online = true; cloudError = ''; await loadAccount();
+      } catch (error) {
+        library.online = false;
+        if (error.status === 401) await signOutLocally();
+        else cloudError = 'Cloud unavailable; local drafts remain available.';
+      }
       await list(); render();
     }
     async function loadAccount() {
       await sync(); await list();
       const current = library.current;
-      if (current?.cloudRevision && !library.dirty(current)) restore(await library.openCloud(current.id, flushLocal));
-      else if (!current && cloudList.length) restore(await library.openCloud(cloudList[0].id, flushLocal));
+      if (!shared && current?.cloudRevision && !library.dirty(current)) restore(await library.openCloud(current.id, flushLocal));
+      else if (!shared && !current && cloudList.length) restore(await library.openCloud(cloudList[0].id, flushLocal));
     }
     async function start() {
       try {
@@ -350,7 +630,21 @@
         else { lastKey = contentKey(); initialPayload = capture(); }
         ready = true;
         await list();
+        if (api?.token && api.identity?.username) {
+          await switchAccount(api.identity);
+          library.online = false;
+        }
         if (api) await connect();
+        const token = new URLSearchParams(location.hash.slice(1)).get('share');
+        if (token) {
+          try { await openShared(token); }
+          catch (error) {
+            $('personal-shared-banner').hidden = false;
+            text('personal-shared-status', error.message);
+            shared = { token, title: 'Unavailable shared graph', canEdit: false, canSave: false, message: error.message };
+            adapter.setReadOnly?.(true);
+          }
+        }
       } catch (error) { localError = error.message; ready = true; }
       render(); panel.dataset.ready = 'true';
     }
@@ -358,11 +652,11 @@
     return {
       changed, flushLocal,
       checkpoint() {
-        if (!ready || restoring) return;
+        if (!ready || restoring || shared) return;
         const payload = capture();
         library.save(payload, true).catch(error => { localError = error.message; render(); });
       },
-      hasUnstoredChanges: () => !!localError || pendingLocal || (ready && contentKey() !== lastKey)
+      hasUnstoredChanges: () => shared ? pendingLocal : !!localError || pendingLocal || (ready && contentKey() !== lastKey)
     };
   } };
 })();

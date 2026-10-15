@@ -73,22 +73,57 @@
         transaction.onerror = () => { error ||= transaction.error; };
       });
     }
+    async remove(id) {
+      const db = await this.open();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['graphs', 'catalog'], 'readwrite');
+        transaction.objectStore('graphs').delete(id); transaction.objectStore('catalog').delete(id);
+        transaction.oncomplete = resolve;
+        transaction.onabort = () => reject(transaction.error || new Error('Could not remove the local graph.'));
+      });
+    }
   }
 
   class CloudAPI {
-    constructor(base, fetcher = (...args) => fetch(...args)) { this.base = base.replace(/\/$/, ''); this.fetcher = fetcher; }
-    async request(path, method = 'GET', body) {
+    constructor(base, fetcher = (...args) => fetch(...args)) {
+      this.base = base.replace(/\/$/, ''); this.fetcher = fetcher; this.token = '';
+      this.tokenKey = 'theorem-session-v2:' + this.base;
+      this.identity = null;
+      try {
+        this.token = sessionStorage.getItem(this.tokenKey) || '';
+        if (this.token) this.identity = JSON.parse(sessionStorage.getItem(this.tokenKey + ':identity'));
+      } catch { /* Memory-only login still works. */ }
+    }
+    setToken(token) {
+      this.token = token || '';
+      if (!this.token) this.identity = null;
+      try {
+        if (this.token) sessionStorage.setItem(this.tokenKey, this.token);
+        else { sessionStorage.removeItem(this.tokenKey); sessionStorage.removeItem(this.tokenKey + ':identity'); }
+      } catch { /* Memory-only session. */ }
+    }
+    async request(path, method = 'GET', body, extraHeaders = {}) {
       const abort = new AbortController();
       const timer = setTimeout(() => abort.abort(), 15000);
       try {
         const response = await this.fetcher(`${this.base}${path}`, {
-          method, credentials: 'same-origin', cache: 'no-store', signal: abort.signal,
-          headers: { 'Content-Type': 'application/json', 'X-Theorem-Request': '1' },
+          method, credentials: 'omit', cache: 'no-store', signal: abort.signal,
+          headers: { 'Content-Type': 'application/json', 'X-Theorem-Request': '1',
+            ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}), ...extraHeaders },
           ...(body === undefined ? {} : { body: JSON.stringify(body) })
         });
         if (!(response.headers.get('content-type') || '').includes('application/json')) throw new Error('Cloud storage did not return a valid response.');
         const data = await response.json();
-        if (!response.ok) throw Object.assign(new Error(data.error || 'Cloud request failed.'), { status: response.status });
+        if (!response.ok) {
+          if (response.status === 401 && path !== '/login') this.setToken('');
+          throw Object.assign(new Error(data.error || 'Cloud request failed.'), { status: response.status });
+        }
+        if (path === '/login') this.setToken(data.token);
+        if (path === '/login' || path === '/session') {
+          this.identity = { username: data.username, admin: !!data.admin };
+          try { sessionStorage.setItem(this.tokenKey + ':identity', JSON.stringify(this.identity)); } catch {}
+        }
+        if (path === '/logout') this.setToken('');
         return data;
       } finally { clearTimeout(timer); }
     }
@@ -202,6 +237,45 @@
         return clone(remote.payload);
       });
     }
+    async rename(id, name) {
+      const normalized = String(name).trim();
+      if (!normalized || normalized.length > 120) throw new Error('Use a graph name between 1 and 120 characters.');
+      // Cache remote-only rows without changing the graph open in the editor.
+      if (!await this.store.read(id)) {
+        const remote = await this.api.request(`/documents/${encodeURIComponent(id)}`);
+        await this.store.put({ ...this.make(remote.payload), id, title: remote.title, payload: remote.payload,
+          cloudRevision: remote.revision, updatedAt: remote.updatedAt, syncedPayload: signature(remote.payload) }, 0);
+      }
+      return this.serial(async () => {
+        const record = await this.store.read(id);
+        if (record.conflict) throw new Error('Resolve this graph’s conflict before renaming it.');
+        this.checkpoint(record, 'Before rename');
+        record.payload.graph.title = normalized;
+        if (record.payload.graph.titleNode) record.payload.graph.titleNode.label = normalized;
+        record.payload.drafts = (record.payload.drafts || []).filter(draft => draft.selector !== '#graph-title');
+        if (record.payload.editor) record.payload.editor.detailEditBaseline = null;
+        record.title = normalized; record.updatedAt = this.now(); record.forceCheckpoint = true;
+        await this.write(record); this.emit(); return clone(record.payload);
+      });
+    }
+    async remove(id) {
+      if (this.syncing) await this.syncing;
+      return this.serial(async () => {
+        const record = await this.store.read(id);
+        if (this.online) {
+          let remote;
+          try { remote = await this.api.request(`/documents/${encodeURIComponent(id)}`); }
+          catch (error) { if (error.status !== 404) throw error; }
+          if (remote) {
+            if (record?.cloudRevision && record.cloudRevision !== remote.revision) throw new Error('This graph changed on another device. Refresh it before deleting.');
+            await this.api.request(`/documents/${encodeURIComponent(id)}`, 'DELETE', { baseRevision: remote.revision });
+          }
+        } else if (record?.cloudRevision) throw new Error('Connect before deleting a cloud graph.');
+        await this.store.remove(id);
+        if (this.current?.id === id) { this.current = null; this.opening = null; }
+        this.emit();
+      });
+    }
     async sync() {
       if (!this.online || !this.api) return;
       if (this.syncing) return this.syncing;
@@ -238,7 +312,7 @@
               this.emit();
             });
           } catch (error) {
-            if (error.status === 409) {
+            if (error.status === 409 || error.status === 410) {
               await this.serial(async () => {
                 const latest = await this.store.read(record.id);
                 if (latest) await this.write({ ...latest, conflict: true });

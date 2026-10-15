@@ -42,3 +42,37 @@ CREATE TABLE IF NOT EXISTS login_limits (
   hits INTEGER NOT NULL,
   expires_at INTEGER NOT NULL
 );
+
+-- Additive, repeatable upgrade from the single-user editor. Existing documents
+-- without an ownership row belong to ADMIN_USERNAME; their contents stay intact.
+CREATE TABLE IF NOT EXISTS graph_owners (
+  document_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+  username TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS graph_owners_user ON graph_owners(username);
+CREATE TABLE IF NOT EXISTS graph_users (
+  username TEXT PRIMARY KEY,
+  password_hash TEXT NOT NULL,
+  disabled INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS graph_sessions (
+  token_hash TEXT PRIMARY KEY,
+  username TEXT NOT NULL,
+  password_tag TEXT NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS graph_shares (
+  id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  can_edit INTEGER NOT NULL DEFAULT 0,
+  can_save INTEGER NOT NULL DEFAULT 0 CHECK (can_save = 0 OR can_edit = 1),
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS graph_shares_document ON graph_shares(document_id);
+-- Tombstones prevent stale offline tabs from silently recreating deleted graphs.
+CREATE TABLE IF NOT EXISTS graph_deletions (
+  document_id TEXT PRIMARY KEY,
+  deleted_at INTEGER NOT NULL
+);

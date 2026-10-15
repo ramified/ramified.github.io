@@ -1,3 +1,3 @@
-// Set this to the deployed personal editor URL after deploying the Worker.
-// This is a public address, never a password or API token.
-window.THEOREM_GRAPH_PERSONAL_URL = '';
+// Public API address only. Credentials are entered in the editor, never here.
+// The Worker-hosted build supplies its own same-origin API before this script.
+window.THEOREM_GRAPH_API_BASE ||= 'https://theorem-graph-personal.ramified.workers.dev/api/theorem';

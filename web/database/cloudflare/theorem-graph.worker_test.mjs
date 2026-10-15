@@ -27,7 +27,7 @@ try {
   cookie = login.headers.get('set-cookie').split(';')[0];
   assert.match(login.headers.get('set-cookie'), /HttpOnly; SameSite=Strict; Secure/);
   assert.match(cookie, /^__Host-theorem_session=/);
-  assert(!db.sqlite.prepare('SELECT token_hash FROM sessions').get().token_hash.includes(cookie.split('=')[1]));
+  assert(!db.sqlite.prepare('SELECT token_hash FROM graph_sessions').get().token_hash.includes(cookie.split('=')[1]));
   assert.equal((await request('/session')).body.username, 'ramified');
   assert.equal((await request('/session', 'GET', undefined, { headers: { Cookie: cookie + 'forged' } })).status, 401);
   assert.equal((await request('/documents/document-one', 'PUT', save('CSRF', 0), { headers: { 'X-Theorem-Request': '' } })).status, 403);
@@ -63,7 +63,7 @@ try {
   assert.equal((await request('/documents/document-two', 'PUT', { ...save('Bad', 0), payload: { graph: {} } })).status, 400);
   assert.equal((await request('/documents/document-two', 'PUT', save('x'.repeat(1024 * 1024), 0))).status, 413);
   assert.equal((await request('/documents/document-two', 'PUT', save('Future schema', 0, { payload: { ...payload('x'), graph: { ...payload('x').graph, schemaVersion: 999 } } }))).status, 400);
-  assert.equal((await request('/documents/document-one', 'DELETE')).status, 405);
+  assert.equal((await request('/documents/document-one', 'DELETE', { baseRevision: 0 })).status, 409, 'stale deletes must not remove a graph');
 
   assert.equal((await request('/session', 'GET', undefined, { env: { ...env, ADMIN_PASSWORD_HASH: await passwordHash('changed-test-password-12345') } })).status, 401, 'password rotation revokes old sessions');
   assert.equal((await request('/logout', 'POST', {})).status, 200);
