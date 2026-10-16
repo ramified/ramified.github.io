@@ -6,7 +6,7 @@
 <title>Mathematical Workspace</title>
 <link rel="stylesheet" href="css/site.css?v=20260903-1">
 <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
-<link rel="stylesheet" href="css/math_workspace.css?v=20260926-3">
+<link rel="stylesheet" href="css/math_workspace.css?v=20261016-objects-1">
 </head>
 <body>
 <header>
@@ -17,14 +17,14 @@
 <main class="math-workspace-layout">
   <section class="canvas-panel workspace-view-card" aria-label="Workspace view">
     <header class="panel-title workspace-panel-title">
-      <span class="panel-title-text">View · <span id="workspace-canvas-name">Choose a calculator</span></span>
+      <span class="panel-title-text">Main · <span id="workspace-canvas-name">Choose a panel</span></span>
       <div class="workspace-canvas-controls">
-        <label class="sr-only" for="workspace-open-canvas">Open canvas</label>
-        <select id="workspace-open-canvas" class="workspace-canvas-picker workspace-control calculator-control" aria-label="Open canvas"></select>
+        <label class="sr-only" for="workspace-open-canvas">Open panel in main area</label>
+        <select id="workspace-open-canvas" class="workspace-canvas-picker workspace-control calculator-control" aria-label="Open panel in main area"></select>
         <button id="workspace-split-view" class="btn btn-ghost" type="button" aria-pressed="false" disabled>split view</button>
       </div>
     </header>
-    <div id="workspace-canvas-tabs" class="workspace-canvas-tabs" role="tablist" aria-label="Opened canvases"></div>
+    <div id="workspace-canvas-tabs" class="workspace-canvas-tabs" role="tablist" aria-label="Opened panels"></div>
     <div id="workspace-canvas-panes" class="workspace-canvas-panes" data-split="false">
       <section id="workspace-canvas-pane-primary" class="workspace-canvas-pane" data-pane="primary" tabindex="0" aria-label="Primary canvas pane">
         <div class="workspace-canvas-pane-slot"></div>
@@ -37,10 +37,10 @@
     <div id="workspace-canvas-parking" hidden aria-hidden="true"></div>
   </section>
 
-  <aside class="workspace-inspector" aria-label="Workspace inspector">
+  <aside class="workspace-inspector" aria-label="Side panels">
     <div class="workspace-inspector-head">
-      <h2>Inspector</h2>
-      <button id="workspace-add-card" class="btn btn-ghost workspace-add-card" type="button" aria-haspopup="dialog" aria-expanded="false">Add card</button>
+      <h2>Panels</h2>
+      <button id="workspace-add-card" class="btn btn-ghost workspace-add-card" type="button" aria-haspopup="dialog" aria-expanded="false">Add panel</button>
     </div>
     <div id="workspace-cards" class="workspace-cards">
     <section id="workspace-io-card" class="card workspace-io-card">
@@ -85,8 +85,8 @@
   </aside>
 </main>
 
-<div id="workspace-card-picker" class="workspace-card-picker" role="dialog" aria-label="Add Inspector cards" hidden>
-  <label for="workspace-card-source">Cards from</label>
+<div id="workspace-card-picker" class="workspace-card-picker" role="dialog" aria-label="Add panels" hidden>
+  <label for="workspace-card-source">Panels from</label>
   <select id="workspace-card-source" class="workspace-control calculator-control"></select>
   <div id="workspace-card-options" class="workspace-card-options"></div>
 </div>
@@ -112,7 +112,9 @@
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js?v=20260903-1"></script>
-<script src="js/math_workspace_native_editors_v8.js?v=14944abb92268906"></script>
-  <script src="js/math_workspace.js?v=20260926-5"></script>
+<script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
+<script src="js/math_workspace_objects.js?v=20261016-objects-1"></script>
+<script src="js/math_workspace_native_editors_v8.js?v=23cf1fae24e7850f"></script>
+<script src="js/math_workspace.js?v=20261016-objects-1"></script>
 </body>
 </html>

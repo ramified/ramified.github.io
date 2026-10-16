@@ -7,6 +7,7 @@ import * as acorn from 'acorn';
 import * as walk from 'acorn-walk';
 import {parse,serialize} from 'parse5';
 import {editors} from './editors/catalog.mjs';
+import {singleObjectPanel, doubleObjectPanel} from './editors/object_panels.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 // The archived workspace owns its builder/runtime, while calculator source
 // pages remain at the live repository root.  This keeps the generated bundle
@@ -124,6 +125,8 @@ function instrument(source,file,primary){
     const outer=ast.body.find(n=>n.type==='ExpressionStatement'&&n.expression.type==='CallExpression'&&['ArrowFunctionExpression','FunctionExpression'].includes(n.expression.callee.type));
     if(outer&&ast.body.length<5){body=outer.expression.callee.body.body;end=outer.expression.callee.body.end-1;}
     const bound=new Set(names(body)), classNames=body.filter(n=>n.type==='ClassDeclaration').map(n=>n.id.name);
+    if(file==='js/young_diagrams.js') patches.push({start:end,end,text:singleObjectPanel});
+    if(file==='js/double_young_diagram.js') patches.push({start:end,end,text:doubleObjectPanel});
     const candidates=['state','S'];const state=candidates.find(n=>bound.has(n));
     const redraw=(file.includes('matrix_calculator')?['renderMatrixGrid','refreshAll']:file.includes('sheaf_')?['recompute']:file.includes('double_young')?['resizeCanvases']:file.includes('mosaic_')?['resizeCanvas','updateReport']:['renderAll','render','redraw']).filter(n=>bound.has(n));
     const mutable=body.filter(n=>n.type==='VariableDeclaration'&&n.kind!=='const').flatMap(n=>n.declarations.filter(d=>d.id.type==='Identifier').map(d=>d.id.name)).filter(n=>!/(timer|queued|timestamp|pointer|canvasmetrics|last.*time|pag[eE]Initialized|Ready|suppress)/i.test(n));
@@ -156,7 +159,7 @@ async function compileEditor(e){
   for(const n of all){if(n.tagName==='style')css+=serialize(n)+'\n';if(n.tagName==='link'&&attr(n,'rel')==='stylesheet'&&!/^https?:/.test(attr(n,'href')))css+=await read(clean(attr(n,'href')))+'\n';}
   // Shadow DOM preserves original selectors and IDs without leaking their styles
   // or colliding with another editor. Root/body rules target its native wrapper.
-  css=css.replace(/:root\b/g,':host').replace(/(^|[\s,>+~])html(?=[\s.#:{,>+~])/g,'$1.editor-document').replace(/(^|[\s,>+~])body(?=[\s.#:{,>+~])/g,'$1.editor-body');
+  css=css.replace(/\r\n?/g,'\n').replace(/[ \t]+$/gm,'').replace(/:root\b/g,':host').replace(/(^|[\s,>+~])html(?=[\s.#:{,>+~])/g,'$1.editor-document').replace(/(^|[\s,>+~])body(?=[\s.#:{,>+~])/g,'$1.editor-body');
   let scripts='';
   for(const n of all.filter(n=>n.tagName==='script')){
     const src=attr(n,'src'); if(src&&/^https?:/.test(src))continue;

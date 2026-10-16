@@ -2,8 +2,6 @@
   'use strict';
 
   const calculators = [
-    ['young', 'Young diagrams', 'young'],
-    ['double-young', 'Double Young diagrams', 'double-young'],
     ['slicing', 'Higher-dimensional slicing', 'slice'],
     ['dynkin', 'Dynkin diagrams', 'dynkin'],
     ['strands', 'Strands', 'strand'],
@@ -17,10 +15,11 @@
   const byId = new Map([...calculators, assetsDefinition].map((item) => [item.id, item]));
   const canvases = new Map(), sessions = new Map(), liveCards = new Map();
   const paneCanvases = { primary: '', secondary: '' };
+  let objectWorkspace = null;
   let activeCanvasId = '', focusedPane = 'primary', splitView = false, inspectorSourceId = '', cardPickerSourceId = '';
   const DEFAULT_CANVAS_HEIGHT = 680, MIN_CANVAS_HEIGHT = 420, MAX_CANVAS_HEIGHT = 1600;
   const ASSET_LAYOUTS = ['icons', 'list', 'details', 'tiles', 'content'];
-  const ASSET_KINDS = ['variety', 'sheaf', 'map'];
+  const ASSET_KINDS = ['variety', 'sheaf', 'map', 'young', 'lie'];
   const INPUT_AUTOSAVE_DEBOUNCE_MS = 450, INPUT_AUTOSAVE_MAX_WAIT_MS = 1500;
   const assetState = {
     ready: true, editorCard: null, editorRecord: null, editorMode: 'create', activeInputInstanceKey: null, view: null,
@@ -38,7 +37,7 @@
   const assetRef = (asset) => ({ kind: asset.kind, id: asset.id });
 
   const ASSET_CARD_REGISTRY = Object.freeze({
-    input: Object.freeze({ cardType: 'input', label: 'Input', nativeCardKey: null, supportedKinds: Object.freeze(['variety', 'sheaf', 'map']) }),
+    input: Object.freeze({ cardType: 'input', label: 'Input', nativeCardKey: null, supportedKinds: Object.freeze(['variety', 'sheaf', 'map', 'young', 'lie']) }),
     hodge: Object.freeze({ cardType: 'hodge', label: 'Hodge Numbers', nativeCardKey: 'hodge-card', supportedKinds: Object.freeze(['variety']) }),
     betti: Object.freeze({ cardType: 'betti', label: 'Betti Table', nativeCardKey: 'betti-card', supportedKinds: Object.freeze(['variety']) }),
     homology: Object.freeze({ cardType: 'homology', label: 'Homology Classes', nativeCardKey: 'homology-card', supportedKinds: Object.freeze(['variety', 'sheaf', 'map']) }),
@@ -253,6 +252,7 @@
   }
 
   function openCanvas(id) {
+    if (id.startsWith('object:')) { objectWorkspace?.open(id.slice(7), '', 'main'); return; }
     const definition = byId.get(id);
     if (!definition) return;
     if (!canvases.has(id)) {
@@ -313,6 +313,7 @@
       $('#workspace-canvas-parking').appendChild(canvas.node); canvas.node.hidden = true;
     }
     canvases.delete(id);
+    if (canvas.kind === 'object-panel') objectWorkspace?.closed(id);
     const ids = openedCanvasIds();
     ['primary', 'secondary'].forEach((name) => {
       if (paneCanvases[name] === id) paneCanvases[name] = ids.find((candidate) => candidate !== paneCanvases[otherPane(name)]) || '';
@@ -370,9 +371,11 @@
     $('#workspace-canvas-name').textContent = activeCanvasId ? byId.get(activeCanvasId).label : 'Choose a view';
     const split = $('#workspace-split-view'); split.disabled = canvases.size < 2; split.textContent = splitView ? 'single view' : 'split view'; split.setAttribute('aria-pressed', String(splitView));
     renderCanvasTabs(); renderInspector(); updateCanvasHeightLayout();
+    objectWorkspace?.resize();
   }
 
   function availableCardsFor(sourceId) {
+    if (sourceId === 'objects') return objectWorkspace?.listCards() || [];
     if (sourceId === 'assets') {
       ensureAssetsEditor(false);
       return [
@@ -393,6 +396,7 @@
   }
 
   function applyCardVisibility(sourceId, key, visible) {
+    if (sourceId === 'objects') { objectWorkspace?.setVisible(key, visible); return; }
     if (sourceId === 'assets') {
       if (key === 'input' && !visible) flushAssetInputInstance(activeAssetInputInstance());
       const slot = workspaceOwnedCardSlot(key);
@@ -420,14 +424,15 @@
     if (!source || !options) return;
     const preferred = cardPickerSourceId || inspectorSourceId || activeCanvasId || 'assets';
     cardPickerSourceId = preferred;
-    source.replaceChildren(new Option('Assets', 'assets'), ...calculators.map((calculator) => new Option(calculator.label, calculator.id)));
+    source.replaceChildren(new Option('Mathematical objects', 'objects'), new Option('Assets', 'assets'), ...calculators.map((calculator) => new Option(calculator.label, calculator.id)));
     source.value = preferred;
     const cards = availableCardsFor(preferred), session = sessions.get(preferred); options.replaceChildren();
     const appendCard = (card) => {
       const row = Object.assign(document.createElement('label'), { className: 'workspace-check workspace-card-option' });
       const available = card.available !== false;
-      const onScreen = preferred === 'assets' || !session?.inspectorHost?.hidden;
+      const onScreen = preferred === 'assets' || preferred === 'objects' || !session?.inspectorHost?.hidden;
       const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: onScreen && available && !!card.visible, disabled: !available });
+      check.dataset.cardKey = card.key;
       check.addEventListener('change', () => setCardVisibility(preferred, card.key, check.checked));
       row.append(check, document.createTextNode(available ? card.label : `${card.label} — ${card.unavailableReason || 'unavailable for the current selection'}`)); options.appendChild(row);
     };
@@ -452,7 +457,7 @@
   }
 
   function openCardPicker() {
-    cardPickerSourceId = inspectorSourceId || activeCanvasId || 'assets'; renderCardPicker();
+    cardPickerSourceId = 'objects'; renderCardPicker();
     const picker = $('#workspace-card-picker'), button = $('#workspace-add-card'), rect = button.getBoundingClientRect();
     picker.hidden = false; picker.style.left = `${Math.max(8, Math.min(rect.right - 310, window.innerWidth - 318))}px`; picker.style.top = `${Math.min(rect.bottom + 7, window.innerHeight - 120)}px`;
     button.setAttribute('aria-expanded', 'true'); $('#workspace-card-source').focus();
@@ -529,17 +534,18 @@
     card.querySelector('.card-head')?.setAttribute('aria-expanded', String(!slot.collapsed));
     card.querySelector('.card-pin-btn')?.setAttribute('aria-pressed', String(!!slot.pinned));
   }
-  function installWorkspaceOwnedCardChrome(card, key) {
+  function installWorkspaceOwnedCardChrome(card, key, options = {}) {
     if (!card || card.dataset.workspaceOwnedChrome) return;
     card.dataset.workspaceOwnedChrome = key;
     const head = card.querySelector('.card-head'); if (!head) return;
     if (!head.querySelector('.drag-handle')) head.insertBefore(Object.assign(document.createElement('span'), { className: 'drag-handle', textContent: '⋮⋮' }), head.firstChild).setAttribute('aria-hidden', 'true');
     const tools = Object.assign(document.createElement('span'), { className: 'workspace-card-tools' });
     const hide = () => {
+      if (options.hide) { options.hide(); return; }
       const slot = workspaceOwnedCardSlot(key); if (!slot) return;
       slot.visible = false; assetState.cards[key] = false; renderInspector(); renderCardPicker(); refreshWorkspaceOwnedCardChrome();
     };
-    [['move-up', 'Move up', '↑', () => moveWorkspaceOwnedCard(card, -1)], ['move-down', 'Move down', '↓', () => moveWorkspaceOwnedCard(card, 1)], ['hide', 'Hide card', '×', hide]].forEach(([actionKey, label, glyph, action]) => {
+    [...(options.actions || []), ['move-up', 'Move up', '↑', () => moveWorkspaceOwnedCard(card, -1)], ['move-down', 'Move down', '↓', () => moveWorkspaceOwnedCard(card, 1)], ['hide', 'Hide card', '×', hide]].forEach(([actionKey, label, glyph, action]) => {
       const button = Object.assign(document.createElement('button'), { type: 'button', className: 'workspace-card-tool', textContent: glyph, title: label });
       button.dataset.workspaceCardAction = actionKey;
       button.setAttribute('aria-label', label);
@@ -639,7 +645,7 @@
     card.className = 'card workspace-live-card workspace-assets-input-card workspace-assets-inspector-card'; card.dataset.workspaceCard = identity; card.dataset.workspaceLabel = 'Assets · Input'; card.hidden = !visible;
     card.innerHTML = `<div class="card-head" role="button" tabindex="0" aria-expanded="true"><span class="drag-handle" aria-hidden="true">⋮⋮</span><span class="card-head-label">Assets · Input</span><span class="workspace-autosave-status" data-assets-autosave-status>Saved</span><em class="toggle-icon">▾</em></div>
       <form class="card-body workspace-card-form" data-assets-editor novalidate>
-        <div class="workspace-form-grid"><label class="workspace-field workspace-field-inline"><span class="input-label">Mode</span><select class="workspace-control" data-assets-mode><option value="create">Create</option><option value="modify">Modify</option></select></label><label class="workspace-field workspace-field-inline"><span class="input-label">Object</span><select class="workspace-control" data-assets-kind><option value="variety">Variety</option><option value="sheaf">Sheaf</option><option value="map">Map</option></select></label></div>
+        <div class="workspace-form-grid"><label class="workspace-field workspace-field-inline"><span class="input-label">Mode</span><select class="workspace-control" data-assets-mode><option value="create">Create</option><option value="modify">Modify</option></select></label><label class="workspace-field workspace-field-inline"><span class="input-label">Object</span><select class="workspace-control" data-assets-kind><option value="variety">Variety</option><option value="sheaf">Sheaf</option><option value="map">Map</option><option value="young">Young diagram</option><option value="lie">Lie type</option></select></label></div>
         <label class="workspace-field workspace-field-inline"><span class="input-label">Name</span><input class="workspace-control workspace-code-control" data-assets-name type="text" value="X" maxlength="80" spellcheck="false"></label>
         <label class="workspace-field workspace-field-inline"><span class="input-label">Type</span><select class="workspace-control" data-assets-subtype></select></label>
         <div class="workspace-form-fields" data-assets-fields></div>
@@ -683,6 +689,8 @@
   }
 
   const ASSET_SUBTYPES = {
+    young: [['partition', 'Young diagram'], ['generalized', 'Generalized Young diagram']],
+    lie: [['simple', 'Lie type']],
     variety: [['abstract', 'Abstract variety'], ['curve', 'Curve'], ['symmetric-product-curve', 'Symmetric product of a curve'], ['abelian', 'Abelian variety'], ['ppav-moduli', 'Moduli of ppav'], ['point', 'Point'], ['projective', 'Projective space'], ['grassmannian', 'Grassmannian'], ['complete-intersection', 'Complete intersection'], ['product', 'Product of varieties']],
     sheaf: [['abstract', 'Abstract sheaf'], ['locally-free', 'Locally free sheaf'], ['structure', 'Structure sheaf'], ['tangent', 'Tangent sheaf'], ['cotangent', 'Cotangent sheaf'], ['canonical', 'Canonical sheaf'], ['twist', 'Twist'], ['divisor-line', 'Divisor line bundle'], ['universal-bundle', 'Universal bundle'], ['direct-sum', 'Direct sum'], ['self-direct-sum', 'Self direct sum'], ['self-tensor-product', 'Self tensor product'], ['dual', 'Dual sheaf'], ['internal-hom', 'Internal Hom'], ['ideal-sheaf', 'Ideal sheaf'], ['normal-bundle', 'Normal bundle'], ['conormal-bundle', 'Conormal bundle'], ['relative-tangent', 'Relative tangent'], ['relative-cotangent', 'Relative cotangent'], ['tensor', 'Tensor product'], ['schur', 'Schur functor'], ['map-operation', 'Pullback / pushforward']],
     map: [['ordinary', 'Map of varieties'], ['sheaf', 'Map of sheaves'], ['abel-jacobi', 'Abel–Jacobi map'], ['composition', 'Composition of maps']]
@@ -716,7 +724,7 @@
     });
     return { sourceRef: sourceRef ? { kind: sourceRef.kind, id: sourceRef.id } : null, revision, changes, reason };
   }
-  const localAssetSnapshot = () => ({ revision: assetState.snapshot.revision, assets: assetState.snapshot.assets.map((asset) => ({ ...asset, dependencies: (asset.dependencies || []).map((ref) => ({ ...ref })), data: { ...(asset.data || {}) }, properties: cloneAssetProperties(asset.properties) })), capabilities: { variety: true, sheaf: assetState.snapshot.assets.some((asset) => asset.kind === 'variety'), map: assetState.snapshot.assets.some((asset) => asset.kind === 'variety') } });
+  const localAssetSnapshot = () => ({ revision: assetState.snapshot.revision, assets: assetState.snapshot.assets.map((asset) => ({ ...asset, dependencies: (asset.dependencies || []).map((ref) => ({ ...ref })), data: cloneAssetProperties(asset.data), properties: cloneAssetProperties(asset.properties) })), capabilities: { variety: true, young: true, lie: true, sheaf: assetState.snapshot.assets.some((asset) => asset.kind === 'variety'), map: assetState.snapshot.assets.some((asset) => asset.kind === 'variety') } });
   const assetMathSignature = (asset) => JSON.stringify({ kind: asset?.kind, type: asset?.type, data: asset?.data || {}, dependencies: asset?.dependencies || [] });
   function invalidateDerivedAssetProperties(record, next) {
     if (!record || assetMathSignature(record) === assetMathSignature(next)) return cloneAssetProperties(record?.properties);
@@ -766,6 +774,7 @@
     return nonnegativeInt(asset?.data?.dimension, 0);
   }
   function normalizedAssetData(kind, type, source = {}) {
+    if (kind === 'young' || kind === 'lie') return window.MathWorkspaceObjects.normalize(kind, type, source);
     const data = { ...source };
     if (kind === 'variety') {
       if (type === 'point') data.dimension = '0';
@@ -786,6 +795,7 @@
   const ASSET_DRAG_TYPE = 'application/x-math-workspace-asset';
   const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   function referenceFieldSpecs(kind, type) {
+    if (kind === 'young' || kind === 'lie') return [];
     if (kind === 'variety') return type === 'product' ? [{ field: 'first', label: 'First factor', expectedKind: 'variety' }, { field: 'second', label: 'Second factor', expectedKind: 'variety' }] : [];
     if (kind === 'sheaf') {
       const specs = isDirectSheafType(type) ? [{ field: 'base', label: 'Base variety', expectedKind: 'variety' }] : [];
@@ -856,7 +866,7 @@
     const mode = options.mode || assetState.editorMode;
     if (mode === 'create') {
       const kind = options.createKind || 'variety';
-      const label = kind === 'sheaf' ? 'Sheaf' : kind === 'map' ? 'Map' : 'Variety';
+      const label = kind === 'young' ? 'Young diagram' : kind === 'lie' ? 'Lie type' : kind === 'sheaf' ? 'Sheaf' : kind === 'map' ? 'Map' : 'Variety';
       return { rendered: `New ${label} · Input`, plain: `New ${label} · Input`, instanceKey: '' };
     }
     return { rendered: 'Assets · Input', plain: 'Assets · Input', instanceKey: '' };
@@ -888,7 +898,7 @@
     form.querySelector('[data-assets-mode]').value = assetState.editorMode;
     form.querySelector('[data-assets-kind]').value = kind; form.querySelector('[data-assets-kind]').disabled = !!record;
     updateAssetsInputCardTitle(instance, kind);
-    form.querySelector('[data-assets-name]').value = instance ? draft.name : (kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
+    form.querySelector('[data-assets-name]').value = instance ? draft.name : (kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
     const subtypeSelect = form.querySelector('[data-assets-subtype]'); subtypeSelect.replaceChildren(...ASSET_SUBTYPES[kind].map(([value, label]) => new Option(label, value))); subtypeSelect.value = subtype;
     form.querySelector('[data-assets-save]').textContent = record ? 'save now' : 'add'; form.querySelector('[data-assets-delete]').hidden = !record;
     renderAssetsEditorFields();
@@ -903,9 +913,14 @@
     closeReferencePicker();
     const kind = form.querySelector('[data-assets-kind]').value, type = form.querySelector('[data-assets-subtype]').value;
     const instance = activeAssetInputInstance(), record = instance ? assetByKey(assetKey(instance.targetRef)) : null;
-    const currentKey = record ? assetKey(record) : '', rawData = { ...(instance?.draft?.data || {}) }, data = { ...normalizedAssetData(kind, type, rawData), ...rawData }, fields = form.querySelector('[data-assets-fields]'); let html = '';
+    const currentKey = record ? assetKey(record) : '', rawData = { ...(instance?.draft?.data || {}) }, data = ['young', 'lie'].includes(kind) ? rawData : { ...normalizedAssetData(kind, type, rawData), ...rawData }, fields = form.querySelector('[data-assets-fields]'); let html = '';
     const context = { kind, type, currentKey, data };
-    if (kind === 'variety') {
+    if (kind === 'young') {
+      html += fieldHtml('Rows', 'partition', data.partition ?? (data.rows || []).join(', '));
+    } else if (kind === 'lie') {
+      html += `<label class="workspace-field workspace-field-inline"><span class="input-label">Lie type</span><select class="workspace-control" data-assets-field="family">${['A','B','C','D','E6','E7','E8','F4','G2'].map(family => `<option value="${family}"${family === (data.family || 'A') ? ' selected' : ''}>${family}</option>`).join('')}</select></label>`;
+      html += fieldHtml('Rank', 'rank', data.rank ?? 3, 'number');
+    } else if (kind === 'variety') {
       const derivedDimension = ['curve', 'symmetric-product-curve', 'ppav-moduli', 'grassmannian', 'complete-intersection', 'product'].includes(type);
       html += fieldHtml('Dimension', 'dimension', data.dimension ?? 3, 'number', { readOnly: type === 'point' || derivedDimension });
       if (['curve', 'symmetric-product-curve', 'ppav-moduli'].includes(type)) html += fieldHtml('Genus', 'genus', data.genus ?? 2, 'number');
@@ -1236,6 +1251,8 @@
     control.addEventListener('drop', (event) => { const { spec, key, result } = dragResult(event); if (!result.allowed) { markReferenceDrop(control, 'invalid'); return; } event.preventDefault(); markReferenceDrop(control, ''); chooseAssetReference(control, spec, key); });
   }
   function assetDefinitionFor(kind, type, data) {
+    if (kind === 'young') return `${type === 'generalized' ? 'Generalized rows' : 'Partition'} (${data.partition || '∅'})`;
+    if (kind === 'lie') return ['A','B','C','D'].includes(data.family) ? `${data.family}${data.rank}` : data.family;
     if (kind === 'variety') {
       if (type === 'projective') return `Projective space of dimension ${data.dimension || 0}`;
       if (type === 'grassmannian') return `Gr(${data.r || '?'}, ${data.n || '?'})`;
@@ -1586,6 +1603,7 @@
     reprojectActiveAssetPropertySlots(localAssetSnapshot(), { onlyStale: !!options.affectedAssetKeys?.size });
     syncAssetProjectionSessions();
     renderAssets(); renderInspector();
+    objectWorkspace?.refresh(localAssetSnapshot());
   }
 
   function assetDependencyClosure(keys) {
@@ -1684,7 +1702,7 @@
     return entries;
   }
 
-  const assetIcon = (kind) => kind === 'variety' ? '𝕍' : kind === 'sheaf' ? '𝒽' : '→';
+  const assetIcon = (kind) => kind === 'young' ? '▦' : kind === 'lie' ? '𝔤' : kind === 'variety' ? '𝕍' : kind === 'sheaf' ? '𝒽' : '→';
   const formatAssetTime = (value) => value ? new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—';
   function createAssetItem(asset) {
     const key = assetKey(asset), meta = assetState.metadata.get(key) || {}, item = document.createElement('div');
@@ -1789,6 +1807,7 @@
   async function openSelectedAsset() {
     const selected = selectedAssetRecords();
     if (selected.length !== 1) return;
+    if (['young', 'lie'].includes(selected[0].kind)) { objectWorkspace?.open(`${selected[0].kind}-input`, assetKey(selected[0]), 'main'); return; }
     revealAssetsEditor();
     try {
       await assetRequest('select-for-modify', { ref: assetRef(selected[0]) });
@@ -1809,28 +1828,34 @@
     const target = assetByKey(assetKey(contextTargetRef));
     if (!target) return [menuButton('Choose one object', () => {}, { disabled: true })];
     const capturedRef = cloneAssetRef(contextTargetRef);
+    if (target.kind === 'young' || target.kind === 'lie') {
+      const capturedKey = assetKey(target);
+      const items = [menuButton('Input', () => { closeAssetsContextMenu(); objectWorkspace?.open(`${target.kind}-input`, capturedKey, 'side'); })];
+      if (target.kind === 'young') window.MathWorkspaceObjects.definitions.filter(definition => !definition.input).forEach(definition => items.push(menuButton(definition.label, () => { closeAssetsContextMenu(); objectWorkspace?.open(definition.id, capturedKey, 'side'); })));
+      return items;
+    }
     return NATIVE_ASSET_CARD_TYPES
       .filter((cardType) => cardSupportsAsset(cardType, target.kind))
       .map((cardType) => menuButton(ASSET_CARD_REGISTRY[cardType].label, () => openAssetProperty(cardType, capturedRef)));
   }
 
   function uniqueDefaultAssetName(kind) {
-    const base = kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f';
+    const base = kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f';
     const numbered = (number) => kind === 'sheaf' ? `\\mathcal{E}_{${number}}` : `${base}_{${number}}`;
     let name = base, number = 2;
     const isTaken = (candidate) => assetState.snapshot.assets.some((asset) => canonicalAssetName(asset.name) === canonicalAssetName(candidate));
     while (isTaken(name)) name = numbered(number++);
     return name;
   }
-  function createDefaultAsset(kind) {
-    const type = kind === 'map' ? 'ordinary' : 'abstract';
+  function createDefaultAsset(kind, options = {}) {
+    const type = kind === 'young' ? 'partition' : kind === 'lie' ? 'simple' : kind === 'map' ? 'ordinary' : 'abstract';
     const firstVariety = assetState.snapshot.assets.find((asset) => asset.kind === 'variety');
-    const data = kind === 'variety'
+    const data = kind === 'young' ? { rows: [], partition: '' } : kind === 'lie' ? { family: 'A', rank: 3 } : kind === 'variety'
       ? { dimension: '3' }
       : kind === 'sheaf'
         ? { base: firstVariety ? assetKey(firstVariety) : '', rank: '1' }
         : { domain: firstVariety ? assetKey(firstVariety) : '', codomain: firstVariety ? assetKey(firstVariety) : '' };
-    const prefix = kind === 'variety' ? 'X' : kind === 'sheaf' ? 'E' : 'M';
+    const prefix = kind === 'young' ? 'Y' : kind === 'lie' ? 'L' : kind === 'variety' ? 'X' : kind === 'sheaf' ? 'E' : 'M';
     const record = { id: `${prefix}${++assetState.nextObjectId}`, kind, name: uniqueDefaultAssetName(kind), type, data };
     record.plainName = plainAssetName(record.name);
     record.typeLabel = ASSET_SUBTYPES[kind].find(([value]) => value === type)?.[1] || kind;
@@ -1842,11 +1867,14 @@
     assetState.snapshot.capabilities = localAssetSnapshot().capabilities;
     assetState.selected = new Set([assetKey(record)]);
     assetState.anchor = assetKey(record);
-    bindAssetInputInstance(assetRef(record), { flush: false, render: false });
+    if (options.bindInput !== false) bindAssetInputInstance(assetRef(record), { flush: false, render: false });
     rebaseCleanAssetInputInstances(assetState.snapshot.revision);
     return record;
   }
   async function createAsset(kind) {
+    if (kind === 'young' || kind === 'lie') {
+      closeAssetsContextMenu(); const record = createObjectAsset(kind); objectWorkspace?.open(`${kind}-input`, assetKey(record), 'side'); return;
+    }
     closeAssetsContextMenu(); revealAssetsEditor();
     try {
       flushAssetInputInstance(activeAssetInputInstance());
@@ -1856,6 +1884,72 @@
       editorForm()?.querySelector('[data-assets-name]')?.focus();
       status(`Created ${record.plainName || record.name}. Edit it in the Input card.`, 'success');
     } catch (error) { status(error.message, 'error'); }
+  }
+  function updateObjectAsset(ref, patch = {}) {
+    const record = assetByKey(assetKey(ref));
+    if (!record) throw new Error('The referenced asset no longer exists.');
+    const name = String(patch.name ?? record.name).trim(), type = patch.type || record.type;
+    if (!name || !balancedLatex(name)) throw new Error('Enter a complete asset name.');
+    if (assetState.snapshot.assets.some(asset => asset.id !== record.id && canonicalAssetName(asset.name) === canonicalAssetName(name))) throw new Error('Another asset already has that name.');
+    const data = normalizedAssetData(record.kind, type, patch.data || record.data);
+    validateAssetData(record.kind, type, data, assetKey(record));
+    const next = { ...record, name, type, data, dependencies: assetDependencies(record.kind, type, data) };
+    if (inputSemanticValue(next) === inputSemanticValue(record)) return record;
+    Object.assign(record, next, {
+      plainName: plainAssetName(name), typeLabel: ASSET_SUBTYPES[record.kind].find(entry => entry[0] === type)?.[1] || type,
+      definition: assetDefinitionFor(record.kind, type, data), properties: invalidateDerivedAssetProperties(record, next)
+    });
+    record.fingerprint = JSON.stringify({ name, type, data, dependencies: record.dependencies });
+    assetState.snapshot.revision += 1;
+    const input = assetInputInstanceForRef(ref);
+    if (input && !input.dirty) input.draft = inputDraftFromRecord(record);
+    applyAssetSnapshot(localAssetSnapshot(), ref, { affectedAssetKeys: new Set([assetKey(ref)]) });
+    return assetByKey(assetKey(ref));
+  }
+  function createObjectAsset(kind, options = {}) {
+    if (!ASSET_KINDS.includes(kind)) throw new Error('Unknown mathematical object type.');
+    const record = createDefaultAsset(kind, { bindInput: false });
+    if (Object.keys(options).length) updateObjectAsset(assetRef(record), options);
+    else applyAssetSnapshot(localAssetSnapshot(), assetRef(record), { affectedAssetKeys: new Set([assetKey(record)]) });
+    return assetByKey(assetKey(record));
+  }
+  function initialiseObjectPanels() {
+    if (!window.MathWorkspaceObjects) return;
+    objectWorkspace = window.MathWorkspaceObjects.mount({
+      snapshot: localAssetSnapshot, create: createObjectAsset, update: updateObjectAsset, status, closePicker: closeCardPicker,
+      installChrome: panel => {
+        installWorkspaceOwnedCardChrome(panel.node, panel.id, {
+          hide: () => objectWorkspace.move(panel, 'hidden'),
+          actions: [['move-area', 'Move to main area', '↗', () => objectWorkspace.move(panel, panel.location === 'main' ? 'side' : 'main')]]
+        });
+        panel.moveButton = panel.head.querySelector('[data-workspace-card-action="move-area"]');
+        panel.moveButton.textContent = panel.location === 'main' ? '↙' : '↗';
+        panel.moveButton.title = panel.location === 'main' ? 'Move to side panels' : 'Move to main area';
+        panel.moveButton.setAttribute('aria-label', panel.moveButton.title);
+        const sync = card => { if (card.dataset.objectPanel) objectWorkspace.syncPresentation(card.dataset.objectPanel); };
+        window.CalculatorCards?.init?.({ root: panel.node.parentElement, side: [], enforceInitial: false, onOpen: sync, onCollapse: sync });
+        const state = workspaceOwnedCardActionState(panel.node);
+        panel.head.querySelector('[data-workspace-card-action="move-up"]').disabled = !state.canMoveUp;
+        panel.head.querySelector('[data-workspace-card-action="move-down"]').disabled = !state.canMoveDown;
+        refreshWorkspaceOwnedCardChrome();
+      },
+      side: $('#workspace-cards'), parking: $('#workspace-canvas-parking'), split: () => splitView,
+      edit: ref => {
+        if (['young', 'lie'].includes(ref.kind)) objectWorkspace.open(`${ref.kind}-input`, assetKey(ref), 'side');
+        else { revealAssetsEditor(); bindAssetInputInstance(ref); }
+      },
+      placeMain: panel => {
+        const definition = { id: panel.id, label: panel.title.textContent, kind: 'object-panel' };
+        byId.set(panel.id, definition);
+        canvases.set(panel.id, { kind: 'object-panel', definition, node: panel.node, editor: { setCanvasActive: active => { panel.node.hidden = !active; } } });
+        selectCanvasTab(panel.id);
+      },
+      removeMain: closeCanvas,
+      title: (id, label) => { const definition = byId.get(id); if (definition && definition.label !== label) { definition.label = label; renderCanvasTabs(); if (activeCanvasId === id) $('#workspace-canvas-name').textContent = label; } },
+      focusPane: name => { if (name === 'primary' || name === 'secondary') focusedPane = name; },
+      pickerChanged: () => { if (!$('#workspace-card-picker').hidden) renderCardPicker(); }
+    });
+    window.MathWorkspaceObjectPanels = objectWorkspace;
   }
   function beginAssetRename() {
     const selected = selectedAssetRecords();
@@ -1992,7 +2086,7 @@
       const viewItems = ASSET_LAYOUTS.map((layout) => menuButton(layout[0].toUpperCase() + layout.slice(1), () => { assetState.layout = layout; renderAssets(); }, { checked: assetState.layout === layout }));
       const sortItems = [['creation', 'Creation order'], ['name', 'Name'], ['type', 'Object type'], ['modified', 'Date modified']].map(([value, label]) => menuButton(label, () => { assetState.sort = value; renderAssets(); }, { checked: assetState.sort === value }));
       sortItems.push(Object.assign(document.createElement('div'), { className: 'workspace-assets-menu-separator' }), menuButton('Ascending', () => { assetState.direction = 'asc'; renderAssets(); }, { checked: assetState.direction === 'asc', disabled: assetState.sort === 'creation' }), menuButton('Descending', () => { assetState.direction = 'desc'; renderAssets(); }, { checked: assetState.direction === 'desc', disabled: assetState.sort === 'creation' }));
-      const newItems = ASSET_KINDS.map((assetKind) => menuButton(assetKind[0].toUpperCase() + assetKind.slice(1), () => createAsset(assetKind), { disabled: assetState.snapshot.capabilities?.[assetKind] === false }));
+      const newItems = ASSET_KINDS.map((assetKind) => menuButton(assetKind === 'young' ? 'Young diagram' : assetKind === 'lie' ? 'Lie type' : assetKind[0].toUpperCase() + assetKind.slice(1), () => createAsset(assetKind), { disabled: assetState.snapshot.capabilities?.[assetKind] === false }));
       menu.append(menuCascade('View', viewItems), menuCascade('Sort by', sortItems), menuCascade('New', newItems));
     }
     menu.hidden = false; menu.classList.toggle('workspace-assets-menu-left', x > window.innerWidth - 460); menu.style.left = '0px'; menu.style.top = '0px';
@@ -2041,8 +2135,11 @@
   }
 
   function initialise() {
+    initialiseObjectPanels();
     const picker = $('#workspace-open-canvas'); picker.appendChild(new Option('Open view…', '', true, true));
     const views = document.createElement('optgroup'); views.label = 'Workspace views'; views.appendChild(new Option('Assets', 'assets')); picker.appendChild(views);
+    const objectGroup = document.createElement('optgroup'); objectGroup.label = 'Mathematical panels';
+    window.MathWorkspaceObjects?.definitions.forEach(definition => objectGroup.appendChild(new Option(definition.label, `object:${definition.id}`))); picker.appendChild(objectGroup);
     const calculatorGroup = document.createElement('optgroup'); calculatorGroup.label = 'Calculator views';
     calculators.forEach((calculator) => calculatorGroup.appendChild(new Option(calculator.label, calculator.id))); picker.appendChild(calculatorGroup);
     picker.addEventListener('change', () => { if (picker.value) openCanvas(picker.value); picker.value = ''; }); $('#workspace-split-view').addEventListener('click', () => setSplitView(!splitView));
@@ -2067,5 +2164,6 @@
   }
 
   window.MathWorkspaceAssetsTest = { assetKey, layouts: ASSET_LAYOUTS.slice(), selectAssetKey, orderedAssets, state: assetState, assetRequest, renderAssetsEditor, canonicalAssetName, normalizedAssetData, validateAssetData, referenceFieldSpecs, referenceEligibility, referenceWouldCreateCycle, referenceDragKey, isDirectSheafType, inferredSheafBase, assetMathSignature, invalidateDerivedAssetProperties, createAssetPropertyCommand, commitAssetPropertyCommand, captureAndCommitAssetPropertyCommand, captureSheafComplexLayout, cardSupportsAsset, assetCardInstanceKey, ASSET_CARD_REGISTRY, NATIVE_ASSET_CARD_TYPES, assetsCardState, assetsUtilitySlots, assetInputCardTitleState, createAssetsCardCoordinator, planAssetPropertySlotBinding, bindAssetPropertySlot, handleAssetPropertySessionChange, createAssetInputInstance, bindAssetInputInstance, activeAssetInputInstance, assetInputInstanceForRef, validateAssetInputDraft, createAssetInputCommitCommand, commitAssetInputCommand, updateAssetInputDraft, scheduleAssetInputAutosave, flushAssetInputInstance, cancelAssetInputAutosave, queueAssetInputAutosave, drainAssetInputQueue, removeAssetInputInstances, acceptAssetInputAsyncResult, markAffectedAssetPropertyInstances, reprojectActiveAssetPropertySlots, INPUT_AUTOSAVE_DEBOUNCE_MS, INPUT_AUTOSAVE_MAX_WAIT_MS, DEFAULT_CANVAS_HEIGHT, MIN_CANVAS_HEIGHT, MAX_CANVAS_HEIGHT, canvasHeightFor, sessions };
+  Object.assign(window.MathWorkspaceAssetsTest, { createObjectAsset, updateObjectAsset, localAssetSnapshot, applyAssetSnapshot, openCanvas, closeCanvas, setSplitView, selectCanvasTab });
   document.addEventListener('DOMContentLoaded', initialise);
 }());
