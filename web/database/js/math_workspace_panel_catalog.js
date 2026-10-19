@@ -18,7 +18,7 @@
     'slicing-scene': { nodes: { id: 'nodes', label: 'Objects to project or slice', kinds: ['frame','polytope','sphere','point','vector','roots','lattice','voronoi','formula','tropical','weyl','cone','fan','matrix','variety'], subtypes: { variety: ['toric'] }, excludeInput: 'frame', min: 1 } },
     'branching': { defaultRule: 'diag-gl' }
   };
-  function create({ assets = {}, definitions = [], nativePanels = {} } = {}) {
+  function create({ assets = {}, definitions = [], nativePanels = {}, resolveRefs = (id, refs) => refs } = {}) {
     const assetTypes = Object.entries(assets).map(([kind, subtypes]) => ({ kind, subtypes: subtypes.map(([type,label]) => ({ type,label })) }));
     const panels = definitions.map(definition => ({
       id: definition.id, label: definition.label, route: 'objects',
@@ -42,6 +42,7 @@
       const selected = [...new Set(selectedKeys)].map(key => allAssets.find(asset => keyOf(asset) === key)).filter(Boolean), result = [];
       const get = key => allAssets.find(asset => keyOf(asset) === key);
       const emit = (panel, refs, extra = {}) => {
+        refs = resolveRefs(panel.id, refs, allAssets);
         const missing = panel.inputs.filter(input => !input.optional && !refs[input.id]).map(input => input.label);
         if (panel.nodes && !(refs[panel.nodes.id] || []).length) missing.push(panel.nodes.label);
         result.push({ id: panel.id, label: panel.label, route: panel.route, cardType: panel.cardType, role: panel.role, refs, rule: panel.defaultRule, missing, ready: !missing.length, key: bindingKey(panel.id,refs), ...extra });

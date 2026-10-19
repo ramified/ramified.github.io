@@ -11,6 +11,7 @@ import {singleObjectPanel, doubleObjectPanel} from './editors/object_panels.mjs'
 import {matrixObjectPanel, categoryObjectPanel} from './editors/linear_category_panels.mjs';
 import {dynkinObjectPanel, strandObjectPanel} from './editors/root_system_panels.mjs';
 import {slicingObjectPanel} from './editors/slicing_panels.mjs';
+import {viewportPanels} from './editors/viewport_panels.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 // The archived workspace owns its builder/runtime, while calculator source
 // pages remain at the live repository root.  This keeps the generated bundle
@@ -128,6 +129,7 @@ function instrument(source,file,primary){
     const outer=ast.body.find(n=>n.type==='ExpressionStatement'&&n.expression.type==='CallExpression'&&['ArrowFunctionExpression','FunctionExpression'].includes(n.expression.callee.type));
     if(outer&&ast.body.length<5){body=outer.expression.callee.body.body;end=outer.expression.callee.body.end-1;}
     const bound=new Set(names(body)), classNames=body.filter(n=>n.type==='ClassDeclaration').map(n=>n.id.name);
+    if(viewportPanels[file]) patches.push({start:end,end,text:viewportPanels[file]});
     if(file==='js/young_diagrams.js') patches.push({start:end,end,text:singleObjectPanel});
     if(file==='js/double_young_diagram.js') patches.push({start:end,end,text:doubleObjectPanel});
     if(file==='js/matrix_calculator.js') patches.push({start:end,end,text:matrixObjectPanel});

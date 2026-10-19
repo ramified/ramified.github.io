@@ -301,7 +301,7 @@
       const matrix=get(key); if(!matrix || matrix.kind!=='matrix' || matrix.data.field || matrix.data.construction) return;
       const data=normalize('field','field',matrix.data);
       const existing=snapshot.assets.find(a=>a.kind==='field'&&JSON.stringify(a.data)===JSON.stringify(data));
-      const parent=existing||api.create('field',{data});
+      const parent=existing||api.ensureDefault('field',{data});
       api.update(refOf(matrix),{data:{...matrix.data,field:keyOf(parent)}});
     }
     function editMatrixAsset(asset) {
@@ -401,6 +401,7 @@
       }
       const compact = panel.location !== 'main' || api.split() || panel.node.getBoundingClientRect().width < 600;
       panel.node.dataset.density = compact ? 'compact' : 'large';
+      for(const renderer of [...panel.renderers.values(),panel.propertyRenderer].filter(Boolean)) renderer.editor.setViewportDensity?.(panel.node.dataset.density);
       const visible = !panel.closed && !panel.collapsed && !panel.node.hidden && !panel.inputIssues?.length && (!panel.definition.input || !!get(panel.assetKey));
       if (panel.definition.input && panel.definition.engine) {
         if (visible && get(panel.assetKey) && !panel.activeRenderer) {
@@ -748,7 +749,7 @@
       try {
           panel.selectors.forEach(({ row, select, spec, definition, read }) => {
           const source=definition.geometryView&&get(panel.computation.refs.asset);
-          updateSelector(select, spec, definition.geometryView&&spec.id==='frame'?{...definition,frameDimension:source?.data.ambientDimension??Number(source?.data.dimension)}:definition, read());
+          updateSelector(select, spec, definition.geometryView&&spec.id==='frame'?{...definition,frameDimension:source?.data.ambientDimension??Number(source&&slicing.materialize(source,snapshot.assets).data.dimension)}:definition, read());
           row.hidden = definition.id === 'branching' && spec.id === 'mu' && !panel.computation.rule.startsWith('diag-')
             || !!definition.input && spec.id==='asset' && !!get(panel.assetKey)
             || (definition.assetView||definition.objectView||definition.id==='matrix-view') && spec.id!=='frame' && !!get(read())
@@ -837,9 +838,25 @@
     }
     function open(type, assetKey = '', location = 'side', options = {}) {
       const definition = byType.get(type); if (!definition) throw new Error('Unknown mathematical panel.');
-      if(type==='matrix-input')ensureMatrixField(assetKey);
+      if(type==='matrix-input' && !options.id)ensureMatrixField(assetKey);
       const hiddenInput = !options.id && definition.input && assetKey && [...panels.values()].find(panel => panel.closed && panel.definition === definition && panel.assetKey === assetKey);
       if (hiddenInput) { move(hiddenInput, location); if (!options.keepPickerOpen) api.closePicker(); return hiddenInput; }
+      let refs = JSON.parse(JSON.stringify(options.refs || {}));
+      if (!definition.input) {
+        const firstSlot = definition.slots?.find(spec => compatible(get(assetKey), spec, definition));
+        if (firstSlot) refs[firstSlot.id] = assetKey;
+        else if (!definition.slicing && definition.fromKinds?.includes(get(assetKey)?.kind)) refs.lie = get(assetKey).data.lie;
+        if (definition.scene && !refs.nodes) refs.nodes = assetKey ? [assetKey] : snapshot.assets.filter(asset => ['category', 'functor'].includes(asset.kind) && !asset.isDefault).map(keyOf);
+        if (definition.slicingScene && !refs.nodes) refs.nodes = get(assetKey) && get(assetKey).kind !== 'frame' ? [assetKey] : [];
+        if (definition.geometryView && get(refs.asset)?.kind === 'frame') refs.frame = refs.asset;
+        // Restored panels retain exactly their saved references, including blanks.
+        if (!options.id) {
+          const revision = snapshot.revision;
+          refs = root.MathWorkspaceDefaults.panelRefs(definition, refs, snapshot.assets, api.ensureDefault);
+          if (api.snapshot().revision !== revision) api.publishDefaults();
+          snapshot = api.snapshot();
+        }
+      }
       const id = options.id || `object-panel-${nextId + 1}`;
       nextId = Math.max(nextId, Number(id.match(/\d+$/)[0]));
       const node = element('section', 'card workspace-object-panel workspace-assets-inspector-card'), head = element('div', 'card-head'), title = element('span', 'card-head-label', definition.label);
@@ -856,18 +873,12 @@
         panel.controls.append(...primary,...dependencies,...rows.filter(row=>!primary.includes(row)&&!dependencies.includes(row)));
         if(panel.derivedLabel)panel.derivedLabel.hidden=true;
       } else {
-        const computation = { id: options.computationId || `computation-${nextId}`, type, refs: JSON.parse(JSON.stringify(options.refs || {})), options: {}, result: null, status: 'missing', signature: '' };
-        const firstSlot = definition.slots?.find(spec => compatible(get(assetKey),spec,definition));
-        if (firstSlot) computation.refs[firstSlot.id] = assetKey;
-        else if (!definition.slicing && definition.fromKinds?.includes(get(assetKey)?.kind)) computation.refs.lie = get(assetKey).data.lie;
+        const computation = { id: options.computationId || `computation-${nextId}`, type, refs, options: {}, result: null, status: 'missing', signature: '' };
         if (definition.display) {
           const select = element('select', 'workspace-control'); select.setAttribute('aria-label', 'Target view'); panel.viewSelect = select;
           select.addEventListener('change', () => { computation.refs.view = select.value; refreshPanel(panel); });
           panel.references.append(field('View', select));
         }
-        if (definition.scene && !computation.refs.nodes) computation.refs.nodes = assetKey ? [assetKey] : snapshot.assets.filter(asset => ['category', 'functor'].includes(asset.kind)).map(keyOf);
-        if (definition.slicingScene && !computation.refs.nodes) computation.refs.nodes = get(assetKey) && get(assetKey).kind !== 'frame' ? [assetKey] : [];
-        if(definition.geometryView&&get(computation.refs.asset)?.kind==='frame')computation.refs.frame=computation.refs.asset;
         computations.set(computation.id, computation); panel.computation = computation;
         if (type === 'branching') {
           computation.rule = options.rule || 'diag-gl';
@@ -911,7 +922,7 @@
     function capturePanels() {
       return [...panels.values()].map(panel => ({
         id: panel.id, type: panel.definition.id, assetKey: panel.assetKey, location: panel.location, lastLocation: panel.lastLocation,
-        canvasHeight:panel.canvasHeight,
+        canvasHeight:panel.canvasHeight, canvasHeightMode:panel.canvasHeightMode,
         presentation: { collapsed: panel.node.classList.contains('collapsed'), pinned: panel.node.classList.contains('is-pinned'), displayMode: panel.node.dataset.cardWideState || 'normal' },
         computation: panel.computation ? { id: panel.computation.id, refs: panel.computation.refs, rule: panel.computation.rule, options: panel.computation.options, status: panel.computation.status } : null,
         drafts:[...panel.controls.querySelectorAll('input:not([type="checkbox"]),textarea')].map((control,index)=>({index,value:control.value})),
@@ -941,7 +952,7 @@
       panels.forEach(refreshPanel);
       for (const item of saved) {
         const panel = panels.get(item.id); panel.lastLocation = item.lastLocation;
-        panel.canvasHeight=item.canvasHeight;
+        panel.canvasHeight=item.canvasHeight; panel.canvasHeightMode=item.canvasHeightMode==='manual'?'manual':'auto';
         for (const savedRenderer of item.renderers) {
           let renderer = savedRenderer.role === 'property' ? panel.propertyRenderer : panel.renderers.get(savedRenderer.role);
           if (!renderer && panel.definition.input && panel.definition.engine && savedRenderer.role === 'input') { renderer = createNative(panel, panel.definition.engine, 'input'); panel.renderers.set('input', renderer); panel.activeRenderer = renderer; projectInput(panel); }

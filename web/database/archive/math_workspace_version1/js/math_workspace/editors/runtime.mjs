@@ -76,6 +76,28 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
   const disposal=[],readyListeners=[],loadListeners=[],listeners=[],rafs=new Map(),timers=new Set(),intervals=new Set(),workerSet=new Set(),eventBindingTokens=new WeakMap(),eventChangeDetails=new WeakMap();let sequence=0;
   const error=e=>{onError(e instanceof Error?e:new Error(String(e)));};
   const changed=(emittedBindingToken=bindingToken,detail={})=>{if(!saving&&!disposed)onChange({bindingToken:emittedBindingToken,...(!detail?.interaction&&forcedInteraction?{interaction:forcedInteraction}:{}),...(detail||{})});};
+  // Viewport changes are presentation updates, never Asset edits. Observe the
+  // actual drawing area (including toolbar wrapping), not the browser width.
+  let viewportArea=host,viewportFrame=null,viewportSignature='',viewportForced=false;
+  function getViewport(){
+    const rect=viewportArea.getBoundingClientRect(),css=realWindow.getComputedStyle(viewportArea);
+    return {width:Math.max(0,rect.width-parseFloat(css.paddingLeft||0)-parseFloat(css.paddingRight||0)),height:Math.max(0,rect.height-parseFloat(css.paddingTop||0)-parseFloat(css.paddingBottom||0)),compact:host.dataset.density==='compact',dpr:realWindow.devicePixelRatio||1};
+  }
+  function resizeViewport(force=false){
+    viewportForced ||= force;
+    if(disposed||viewportFrame!==null)return;
+    viewportFrame=realWindow.requestAnimationFrame(()=>{
+      viewportFrame=null;if(disposed||!canvasActive||!ready)return;
+      const size=getViewport();if(size.width<1||size.height<1)return;
+      const signature=[Math.round(size.width*10),Math.round(size.height*10),size.compact,size.dpr].join(':');
+      if(!viewportForced&&signature===viewportSignature)return;
+      viewportSignature=signature;viewportForced=false;
+      const previous=saving;saving=true;
+      try{if(assetAdapter?.viewport)assetAdapter.viewport(size);else {bridge?.resize?.();for(const l of listeners.filter(l=>l.target===realWindow&&l.type==='resize'))l.callback(new Event('resize'));}}catch(e){error(e);}finally{saving=previous;}
+    });
+  }
+  const viewportObserver=new realWindow.ResizeObserver(()=>resizeViewport());viewportObserver.observe(host);
+  disposal.push(()=>{viewportObserver.disconnect();if(viewportFrame!==null)realWindow.cancelAnimationFrame(viewportFrame);});
   const markInteraction=interaction=>{const generation=++forcedInteractionGeneration;forcedInteraction=String(interaction||'');realWindow.queueMicrotask(()=>{if(generation===forcedInteractionGeneration)forcedInteraction='';});};
   const local={};
   const workspaceSettings=realWindow.MathWorkspaceSettings;
@@ -170,7 +192,7 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
   function uiSnapshot(){return {controls:findAll('input[id],select[id],textarea[id]').filter(n=>n.type!=='file').map(n=>({id:n.id,value:n.value,checked:n.checked})),cards:findAll('.card').map((n,i)=>({i,key:n.dataset.workspaceCardId,collapsed:n.classList.contains('collapsed'),hidden:n.hidden,userHidden:n.classList.contains('calculator-card-user-hidden'),pinned:n.classList.contains('is-pinned'),wide:n.dataset.cardWideState})),dock:dock?.capture(),scrollTop:host.scrollTop};}
   function restoreUi(ui){if(!ui)return;for(const c of ui.controls||[]){const n=findOne(`#${CSS.escape(c.id)}`);if(n&&n.type!=='file'){n.value=c.value;if(c.checked!==undefined)n.checked=c.checked;}}for(const c of ui.cards||[]){const list=findAll('.card'),n=c.key?list.find(n=>n.dataset.workspaceCardId===c.key):list[c.i];if(n){n.classList.toggle('collapsed',c.collapsed);n.hidden=!!c.hidden;n.classList.toggle('calculator-card-user-hidden',!!c.userHidden);n.classList.toggle('is-pinned',!!c.pinned);n.querySelector('.card-head')?.setAttribute('aria-expanded',String(!c.collapsed));if(c.wide&&win.CalculatorCards)win.CalculatorCards.setWide(n,c.wide==='wide');}}dock?.restore(ui.dock);host.scrollTop=ui.scrollTop||0;}
   function capture(){return {version:1,model:bridge?encodeState(bridge.capture()):stateBinding?encodeState(stateBinding.get(),stateBinding.classes):null,ui:uiSnapshot(),storage:Object.fromEntries(localStorageMap)};}
-  function restore(s){if(!s)return;saving=true;try{if(s.storage){localStorageMap.clear();for(const [key,value] of Object.entries(s.storage))localStorageMap.set(key,String(value));}restoreUi(s.ui);if(s.model){if(bridge)bridge.restore(decodeState(s.model));else if(stateBinding)stateBinding.restore(decodeState(s.model,stateBinding.classes));}restoreUi(s.ui);}finally{saving=false;}}
+  function restore(s){if(!s)return;saving=true;try{if(s.storage){localStorageMap.clear();for(const [key,value] of Object.entries(s.storage))localStorageMap.set(key,String(value));}restoreUi(s.ui);if(s.model){if(bridge)bridge.restore(decodeState(s.model));else if(stateBinding)stateBinding.restore(decodeState(s.model,stateBinding.classes));}restoreUi(s.ui);}finally{saving=false;resizeViewport(true);}}
   // Inspector controls such as continuous frame motion also use animation frames.
   // Suspend their work only when both native surfaces are inactive.
   function syncActivity(){
@@ -205,12 +227,15 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
     (modifying?modify:content).filter(Boolean).forEach(node=>area.append(node));
     for(const child of [...target.children])child.hidden=true;
     if(bar.childNodes.length)shell.append(bar);shell.append(area);target.append(shell);
-    const css=realDocument.createElement('style');css.textContent='.editor-body>[hidden],.workspace-native-surface [hidden]{display:none!important}.workspace-native-surface{height:100%;min-height:0;display:flex;flex-direction:column;min-width:0}.workspace-native-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:7px 12px;padding:6px 0;border:0;flex:0 0 auto}.workspace-native-toolbar>*,.workspace-native-toolbar .canvas-toolbar{max-width:100%;flex-wrap:wrap}.workspace-native-content{flex:1;min-height:0;min-width:0;overflow:auto}.workspace-native-content>div:has(>canvas){height:100%;min-height:180px}.workspace-native-surface[data-surface-role="modify"]{height:auto}.workspace-native-surface[data-surface-role="modify"] .workspace-native-content{overflow:visible}.workspace-native-toolbar .card-body{padding:0;border:0}.calculator-input-settings-trigger{display:none!important}';
+    const css=realDocument.createElement('style');css.textContent='.editor-body>[hidden],.workspace-native-surface [hidden]{display:none!important}.workspace-native-surface{height:100%;min-height:0;display:flex;flex-direction:column;min-width:0}.workspace-native-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:7px 12px;padding:6px 0;border:0;flex:0 0 auto}.workspace-native-toolbar>*,.workspace-native-toolbar .canvas-toolbar{max-width:100%;flex-wrap:wrap}.workspace-native-content{flex:1;min-height:0;min-width:0;overflow:auto}.workspace-native-content>div:has(>canvas){height:100%!important;min-height:0!important;min-width:0;box-sizing:border-box}.workspace-native-surface[data-surface-role="view"] .workspace-native-content{overflow:hidden}:host([data-density="compact"]) .workspace-native-toolbar{gap:4px 8px;padding:3px 0;font-size:.72rem}:host([data-density="compact"]) .canvas-toolbar{gap:4px!important;padding:2px!important}.workspace-native-surface[data-surface-role="modify"]{height:auto}.workspace-native-surface[data-surface-role="modify"] .workspace-native-content{overflow:visible}.workspace-native-toolbar .card-body{padding:0;border:0}.calculator-input-settings-trigger{display:none!important}';
     (modifying&&inspectorHead?inspectorHead:head).append(css);
+    if(!modifying){viewportArea=area;viewportObserver.observe(area);resizeViewport(true);}
     return {shell,toolbar:bar,content:area};
   }
   const api={host,inspectorHost,shadow,inspectorShadow,environment,applyState,linkGlobals:v=>{link=v;},registerHandlers:v=>{handlers=v;},registerState:v=>{stateBinding=v;},setBridge:v=>{bridge=v;},setAssetAdapter:v=>{assetAdapter={...(assetAdapter||{}),...(v||{})};},markInteraction,notifyChange:detail=>changed(bindingToken,detail),applyAssets:(snapshot,activeRef,properties,binding)=>assetAdapter?.apply?.(snapshot,activeRef,properties,binding)??false,focusAssetCard:key=>assetAdapter?.reveal?.(key)??false,captureAssetProperties:()=>assetAdapter?.capture?.()??null,captureAssetLayout:()=>assetAdapter?.layout?.()??[],captureSceneGeometry:()=>assetAdapter?.scene?.()??null,captureCanvasAppearance:()=>assetAdapter?.appearance?.()??null,setCanvasAppearanceTarget:(ref,context)=>assetAdapter?.appearanceTarget?.(ref,context)??false,assetPositionFromClient:(x,y)=>assetAdapter?.scenePoint?.(x,y)??null,collectAssets:()=>assetAdapter?.collect?.()??null,restoreAssetPayloads:snapshot=>assetAdapter?.restore?.(snapshot)??false,positionAsset:(ref,point)=>assetAdapter?.position?.(ref,point)??false,
-    mountObjectSurfaces,
+    mountObjectSurfaces,getViewport,resizeViewport,
+    setViewportElement(node){if(!node)return;viewportArea=node;viewportObserver.observe(node);resizeViewport(true);},
+    setViewportDensity(value){if(host.dataset.density!==value){host.dataset.density=value;resizeViewport(true);}},
     openInputSettings(){const session=[...settingsSessions][0];if(!session)return false;const css=realDocument.createElement('style');css.textContent='.editor-body>*:not(.calculator-input-settings-overlay){display:none!important}.editor-body,.editor-document{height:auto!important;overflow:visible!important}.calculator-input-settings-overlay{position:static!important;display:block!important;padding:0!important;background:none!important}.calculator-input-settings-dialog{width:100%!important;max-height:none!important;box-shadow:none!important;border:0!important}.calculator-input-settings-header{display:none!important}';head.append(css);api.setCanvasActive(true);session.open();return true;},
     capture,restore,
     configureObjectPanel:config=>assetAdapter?.panel?.({...config,surfaceRole:config.mode,mode:config.mode==='modify'?'input':config.mode})??false,readObjectResult:()=>assetAdapter?.result?.()??null,objectIO:(action,value)=>assetAdapter?.io?.(action,value),
@@ -220,7 +245,7 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
     setCardVisible:(key,visible)=>dock?.setVisible?.(key,visible)||false,prioritizeCard:key=>dock?.prioritizeCard?.(key)||false,focusCard:key=>dock?.focusCard?.(key)||false,refreshCardDock:()=>dock?.update?.(),
     getCardPresentation:key=>dock?.getPresentation?.(key)||null,setCardPresentation:(key,value)=>dock?.setPresentation?.(key,value)||false,
     setCardLabel(key,text,ariaLabel){const node=dock?.labelNode?.(key);if(!node)return false;mathApi?.typesetClear?.([node]);dock.setLabel?.(key,text,ariaLabel);const typeset=mathApi?.typesetPromise?.([node]);typeset?.catch(error);return true;},
-    setCanvasActive(value){if(disposed)return;canvasActive=!!value;host.hidden=!canvasActive;syncSurfacePlacement();syncActivity();if(canvasActive){dock?.update();bridge?.resize?.();for(const l of listeners.filter(l=>l.target===realWindow&&l.type==='resize'))l.callback(new Event('resize'));}},
+    setCanvasActive(value){if(disposed)return;const activated=!canvasActive&&!!value;canvasActive=!!value;host.hidden=!canvasActive;syncSurfacePlacement();syncActivity();if(canvasActive){dock?.update();resizeViewport(activated);}},
     setInspectorActive(value){if(disposed)return;inspectorActive=!!value;if(inspectorHost)inspectorHost.hidden=!inspectorActive;syncSurfacePlacement();syncActivity();if(inspectorActive)dock?.update();},
     activate(){api.setCanvasActive(true);},deactivate(){api.setCanvasActive(false);},
     dispose(){if(disposed)return;for(const key of detachedCards.keys())returnCardSurface(key);api.setCanvasActive(false);api.setInspectorActive(false);disposed=true;mathApi?.typesetClear();for(const l of listeners)l.target.removeEventListener(l.type,l.callback,l.opts);timers.forEach(realWindow.clearTimeout);intervals.forEach(realWindow.clearInterval);workerSet.forEach(w=>w.terminate());disposal.forEach(f=>f());host.remove();inspectorHost?.remove();},

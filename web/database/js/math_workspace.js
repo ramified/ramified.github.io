@@ -20,8 +20,8 @@
   const INPUT_AUTOSAVE_DEBOUNCE_MS = 450, INPUT_AUTOSAVE_MAX_WAIT_MS = 1500;
   const assetState = {
     ready: true, editorCard: null, editorRecord: null, editorMode: 'create', activeInputInstanceKey: null, view: null,
-    snapshot: { revision: 0, assets: [], capabilities: { variety: true, sheaf: false, map: false } },
-    layout: 'icons', sort: 'creation', direction: 'asc', selected: new Set(), anchor: '', metadata: new Map(),
+    snapshot: { revision: 0, assets: [], capabilities: { variety: true, sheaf: true, map: true } },
+    layout: 'icons', sort: 'creation', direction: 'asc', showDefaults: false, selected: new Set(), anchor: '', metadata: new Map(),
     creationCounter: 0, nextObjectId: 0, renameKey: '', marquee: null, canvasHeight: DEFAULT_CANVAS_HEIGHT,
     cards: { input: true, importExport: true },
     // Deprecated CARD-003 compatibility observations only.  New Property Card
@@ -168,15 +168,18 @@
     if (id === 'assets') return clampCanvasHeight(assetState.canvasHeight);
     return clampCanvasHeight((sessions.get(id)||objectWorkspace?.panels.get(id)||dockedPanels.get(id))?.canvasHeight);
   }
+  function canvasHeightModeFor(id) { return (id==='assets'?assetState:(sessions.get(id)||objectWorkspace?.panels.get(id)||dockedPanels.get(id)))?.canvasHeightMode; }
   function visibleCanvasIds() {
     return (splitView ? [paneCanvases.primary, paneCanvases.secondary] : [paneCanvases.primary]).filter(Boolean);
   }
   function updateCanvasHeightLayout() {
     const view = document.querySelector('.workspace-view-card'), panes = $('#workspace-canvas-panes'), resizer = $('#workspace-canvas-resizer');
     if (!view || !panes || !resizer) return;
-    const ids = visibleCanvasIds(), outerHeight = ids.length ? Math.max(...ids.map(canvasHeightFor)) : DEFAULT_CANVAS_HEIGHT;
+    const ids = visibleCanvasIds(), preferred = ids.length ? Math.max(...ids.map(canvasHeightFor)) : DEFAULT_CANVAS_HEIGHT;
+    const available = Math.max(240, window.innerHeight - (view.getBoundingClientRect().top + window.scrollY) - 16);
+    const outerHeight = ids.some(id=>canvasHeightModeFor(id)==='manual') ? preferred : Math.min(preferred, available);
     view.style.setProperty('--workspace-view-height', `${outerHeight}px`);
-    const focusedHeight = splitView?outerHeight:activeCanvasId ? canvasHeightFor(activeCanvasId) : DEFAULT_CANVAS_HEIGHT;
+    const focusedHeight = outerHeight;
     resizer.setAttribute('aria-label',splitView?'Resize both canvas panes':'Resize canvas');
     resizer.setAttribute('aria-valuenow', String(focusedHeight));
     resizer.setAttribute('aria-disabled', String(!activeCanvasId));
@@ -185,25 +188,25 @@
       const chromeHeight = Math.max(0, view.getBoundingClientRect().height - panes.getBoundingClientRect().height);
       ids.forEach((id) => {
         const node = canvases.get(id)?.node;
-        if (node) node.style.setProperty('--workspace-session-pane-height', `${Math.max(0, canvasHeightFor(id) - chromeHeight)}px`);
+        if (node) node.style.setProperty('--workspace-session-pane-height', `${Math.max(0, outerHeight - chromeHeight)}px`);
       });
     };
     if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(applyPaneHeights); else setTimeout(applyPaneHeights, 0);
   }
   function setCanvasHeight(id, height) {
     const next = clampCanvasHeight(height);
-    if (id === 'assets') assetState.canvasHeight = next;
+    if (id === 'assets') { assetState.canvasHeight = next; assetState.canvasHeightMode = 'manual'; }
     else {
       const session = sessions.get(id)||objectWorkspace?.panels.get(id)||dockedPanels.get(id);
       if (!session) return;
-      session.canvasHeight = next;
+      session.canvasHeight = next; session.canvasHeightMode = 'manual';
     }
     updateCanvasHeightLayout();
   }
   function resizeVisibleCanvases(height){
     for(const id of splitView?visibleCanvasIds():[activeCanvasId])if(id)setCanvasHeight(id,height);
   }
-  function visibleCanvasHeight(){return splitView?Math.max(...visibleCanvasIds().map(canvasHeightFor)):canvasHeightFor(activeCanvasId);}
+  function visibleCanvasHeight(){return document.querySelector('.workspace-view-card')?.getBoundingClientRect().height || canvasHeightFor(activeCanvasId);}
   function beginCanvasResize(event) {
     if (!activeCanvasId || event.button !== 0) return;
     event.preventDefault();
@@ -839,7 +842,7 @@
     view.innerHTML = `<span class="workspace-assets-count" data-assets-count aria-live="polite"></span>
       <div class="workspace-assets-content" data-assets-content role="listbox" aria-label="Mathematical assets" aria-multiselectable="true"></div>`;
     const content = view.querySelector('[data-assets-content]');
-    content.addEventListener('contextmenu', handleAssetsContextMenu); content.addEventListener('pointerdown', beginAssetMarquee);
+    view.addEventListener('contextmenu', handleAssetsContextMenu); content.addEventListener('pointerdown', beginAssetMarquee);
     view.addEventListener('keydown', handleAssetKeydown);
     assetState.view = view;
     renderAssets();
@@ -938,7 +941,7 @@
     });
     return { sourceRef: sourceRef ? { kind: sourceRef.kind, id: sourceRef.id } : null, revision, changes, reason };
   }
-  const localAssetSnapshot = () => ({ revision: assetState.snapshot.revision, assets: assetState.snapshot.assets.map((asset) => ({ ...asset, dependencies: (asset.dependencies || []).map((ref) => ({ ...ref })), data: cloneAssetProperties(asset.data), properties: cloneAssetProperties(asset.properties) })), capabilities: { variety: true, young: true, lie: true, sheaf: assetState.snapshot.assets.some((asset) => asset.kind === 'variety'), map: assetState.snapshot.assets.some((asset) => asset.kind === 'variety') } });
+  const localAssetSnapshot = () => ({ revision: assetState.snapshot.revision, assets: assetState.snapshot.assets.map((asset) => ({ ...asset, dependencies: (asset.dependencies || []).map((ref) => ({ ...ref })), data: cloneAssetProperties(asset.data), properties: cloneAssetProperties(asset.properties) })), capabilities: { variety: true, young: true, lie: true, sheaf: true, map: true } });
   const assetMathSignature = (asset) => JSON.stringify({ kind: asset?.kind, type: asset?.type, data: asset?.data || {}, dependencies: asset?.dependencies || [] });
   function invalidateDerivedAssetProperties(record, next) {
     if (!record || assetMathSignature(record) === assetMathSignature(next)) return cloneAssetProperties(record?.properties);
@@ -1934,7 +1937,7 @@
   }
 
   function orderedAssets() {
-    const entries = assetState.snapshot.assets.slice(), direction = assetState.direction === 'desc' ? -1 : 1;
+    const entries = assetState.snapshot.assets.filter(asset => assetState.showDefaults || !asset.isDefault), direction = assetState.direction === 'desc' ? -1 : 1;
     const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
     entries.sort((left, right) => {
       const lm = assetState.metadata.get(assetKey(left)) || {}, rm = assetState.metadata.get(assetKey(right)) || {};
@@ -1953,12 +1956,13 @@
   function createAssetItem(asset) {
     const key = assetKey(asset), meta = assetState.metadata.get(key) || {}, item = document.createElement('div');
     item.className = `workspace-asset-item workspace-asset-${asset.kind}`; item.dataset.assetKey = key; item.dataset.assetKind = asset.kind; item.dataset.assetId = asset.id;
+    if (asset.isDefault) item.dataset.defaultAsset = 'true';
     item.draggable = true;
     item.setAttribute('role', assetState.layout === 'details' ? 'row' : 'option'); item.setAttribute('aria-selected', String(assetState.selected.has(key)));
-    item.setAttribute('aria-label', `${asset.plainName || asset.name}, ${asset.typeLabel}`); item.tabIndex = assetState.selected.has(key) ? 0 : -1;
+    item.setAttribute('aria-label', `${asset.plainName || asset.name}, ${asset.typeLabel}${asset.isDefault ? ', Default asset' : ''}`); item.tabIndex = assetState.selected.has(key) ? 0 : -1;
     const icon = Object.assign(document.createElement('span'), { className: 'workspace-asset-icon', textContent: assetIcon(asset.kind) }); icon.setAttribute('aria-hidden', 'true');
     const name = Object.assign(document.createElement('span'), { className: 'workspace-asset-name', title: asset.name, textContent: `\\(${asset.name}\\)` });
-    const type = Object.assign(document.createElement('span'), { className: 'workspace-asset-type', textContent: asset.typeLabel });
+    const type = Object.assign(document.createElement('span'), { className: 'workspace-asset-type', textContent: asset.typeLabel + (asset.isDefault ? ' · Default' : '') });
     const definition = Object.assign(document.createElement('span'), { className: 'workspace-asset-definition', textContent: asset.definition || asset.typeLabel });
     const modified = Object.assign(document.createElement('time'), { className: 'workspace-asset-modified', textContent: formatAssetTime(meta.modifiedAt) });
     if (assetState.renameKey === key) {
@@ -1982,7 +1986,8 @@
     renderCardPicker();
     if (!assetState.view) return;
     const content = assetState.view.querySelector('[data-assets-content]'), entries = orderedAssets();
-    assetState.view.querySelector('[data-assets-count]').textContent = `${entries.length} object${entries.length === 1 ? '' : 's'}${assetState.selected.size ? ` · ${assetState.selected.size} selected` : ''}`;
+    const hiddenDefaults = assetState.showDefaults ? 0 : assetState.snapshot.assets.filter(asset => asset.isDefault).length;
+    assetState.view.querySelector('[data-assets-count]').textContent = `${entries.length} object${entries.length === 1 ? '' : 's'}${hiddenDefaults ? ` · ${hiddenDefaults} default${hiddenDefaults === 1 ? '' : 's'} hidden` : ''}${assetState.selected.size ? ` · ${assetState.selected.size} selected` : ''}`;
     content.dataset.layout = assetState.layout; content.dataset.assetsEmpty = !assetState.ready ? 'loading' : !entries.length ? 'empty' : 'false'; content.replaceChildren();
     if (!assetState.ready) { content.appendChild(Object.assign(document.createElement('p'), { className: 'workspace-assets-empty', textContent: 'Loading Assets…' })); return; }
     if (!entries.length) {
@@ -2015,7 +2020,8 @@
     renderCardPicker();
     if (!assetState.view) return;
     const entries = orderedAssets();
-    assetState.view.querySelector('[data-assets-count]').textContent = `${entries.length} object${entries.length === 1 ? '' : 's'}${assetState.selected.size ? ` · ${assetState.selected.size} selected` : ''}`;
+    const hiddenDefaults = assetState.showDefaults ? 0 : assetState.snapshot.assets.filter(asset => asset.isDefault).length;
+    assetState.view.querySelector('[data-assets-count]').textContent = `${entries.length} object${entries.length === 1 ? '' : 's'}${hiddenDefaults ? ` · ${hiddenDefaults} default${hiddenDefaults === 1 ? '' : 's'} hidden` : ''}${assetState.selected.size ? ` · ${assetState.selected.size} selected` : ''}`;
     assetState.view.querySelectorAll('[data-asset-key]').forEach((item) => {
       const selected = assetState.selected.has(item.dataset.assetKey);
       item.setAttribute('aria-selected', String(selected));
@@ -2093,24 +2099,25 @@
     return items;
   }
 
+  const reservedAssetNames = new Set();
   function uniqueDefaultAssetName(kind) {
     const base = ({field:'K',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'sigma',fan:'Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
     const numbered = (number) => kind === 'sheaf' ? `\\mathcal{E}_{${number}}` : `${base}_{${number}}`;
     let name = base, number = 2;
-    const isTaken = (candidate) => assetState.snapshot.assets.some((asset) => canonicalAssetName(asset.name) === canonicalAssetName(candidate));
+    const isTaken = (candidate) => reservedAssetNames.has(canonicalAssetName(candidate)) || assetState.snapshot.assets.some((asset) => canonicalAssetName(asset.name) === canonicalAssetName(candidate));
     while (isTaken(name)) name = numbered(number++);
     return name;
   }
   function createDefaultAsset(kind, options = {}) {
-    const type = ASSET_SUBTYPES[kind][0][0];
+    const type = options.type || ASSET_SUBTYPES[kind][0][0];
+    if (!ASSET_SUBTYPES[kind].some(([value]) => value === type)) throw new Error('Unsupported object subtype.');
     const firstVariety = assetState.snapshot.assets.find((asset) => asset.kind === 'variety');
-    const data = OBJECT_INPUT_KINDS.includes(kind) ? window.MathWorkspaceObjects.normalize(kind, type) : kind === 'variety'
-      ? { dimension: '3' }
-      : kind === 'sheaf'
-        ? { base: firstVariety ? assetKey(firstVariety) : '', rank: '1' }
-        : { domain: firstVariety ? assetKey(firstVariety) : '', codomain: firstVariety ? assetKey(firstVariety) : '' };
+    const source = options.data || (firstVariety && kind === 'sheaf' && isDirectSheafType(type) ? { base: assetKey(firstVariety) } : firstVariety && kind === 'map' && type === 'ordinary' ? { domain: assetKey(firstVariety), codomain: assetKey(firstVariety) } : {});
+    const supplied = options.defaults === false ? source : window.MathWorkspaceDefaults.assetData(kind, type, source, ensureDefaultDependency);
+    const data = normalizedAssetData(kind, type, supplied);
+    if (options.defaults !== false) validateAssetData(kind, type, data, '');
     const prefix = { dynkin: 'D', strands: 'W', matrix: 'A', category: 'C', functor: 'F', young: 'Y', lie: 'L', variety: 'X', sheaf: 'E', map: 'M' }[kind] || kind.charAt(0).toUpperCase();
-    const record = { id: `${prefix}${++assetState.nextObjectId}`, kind, name: uniqueDefaultAssetName(kind), type, data };
+    const record = { id: `${prefix}${++assetState.nextObjectId}`, kind, name: options.name || uniqueDefaultAssetName(kind), type, data, ...(options.isDefault ? { isDefault: true } : {}) };
     record.plainName = plainAssetName(record.name);
     record.typeLabel = ASSET_SUBTYPES[kind].find(([value]) => value === type)?.[1] || kind;
     record.dependencies = assetDependencies(kind, type, data);
@@ -2119,11 +2126,20 @@
     assetState.snapshot.assets.push(record);
     assetState.snapshot.revision += 1;
     assetState.snapshot.capabilities = localAssetSnapshot().capabilities;
-    assetState.selected = new Set([assetKey(record)]);
-    assetState.anchor = assetKey(record);
+    if (options.select !== false) {
+      assetState.selected = new Set([assetKey(record)]);
+      assetState.anchor = assetKey(record);
+    }
     if (options.bindInput !== false) bindAssetInputInstance(assetRef(record), { flush: false, render: false });
     rebaseCleanAssetInputInstances(assetState.snapshot.revision);
     return record;
+  }
+  function ensureDefaultDependency(kind, options = {}) {
+    const type = options.type || ASSET_SUBTYPES[kind][0][0];
+    const source = window.MathWorkspaceDefaults.assetData(kind, type, options.data || {}, ensureDefaultDependency);
+    const data = normalizedAssetData(kind, type, source);
+    const existing = assetState.snapshot.assets.find(asset => asset.kind === kind && asset.type === type && JSON.stringify(normalizedAssetData(kind, type, asset.data)) === JSON.stringify(data));
+    return existing || createDefaultAsset(kind, { type, data, defaults: false, isDefault: true, select: false, bindInput: false });
   }
   async function createAsset(kind) {
     if (OBJECT_INPUT_KINDS.includes(kind)) {
@@ -2132,8 +2148,8 @@
     closeAssetsContextMenu(); revealAssetsEditor();
     try {
       flushAssetInputInstance(activeAssetInputInstance());
-      const record = createDefaultAsset(kind);
-      applyAssetSnapshot(localAssetSnapshot(), assetRef(record), { affectedAssetKeys: new Set([assetKey(record)]) });
+      const record = createObjectAsset(kind);
+      bindAssetInputInstance(assetRef(record), { flush: false, render: false });
       renderAssetsEditor();
       editorForm()?.querySelector('[data-assets-name]')?.focus();
       status(`Created ${record.plainName || record.name}. Edit it in the Input card.`, 'success');
@@ -2162,11 +2178,17 @@
   }
   function createObjectAsset(kind, options = {}) {
     if (!ASSET_KINDS.includes(kind)) throw new Error('Unknown mathematical object type.');
-    if (options.data) { const type = options.type || ASSET_SUBTYPES[kind][0][0]; validateAssetData(kind, type, normalizedAssetData(kind, type, options.data), ''); }
-    if (options.name && (!balancedLatex(options.name) || !String(options.name).trim() || assetState.snapshot.assets.some(asset => canonicalAssetName(asset.name) === canonicalAssetName(options.name)))) throw new Error('Choose a complete, unique asset name.');
-    const record = createDefaultAsset(kind, { bindInput: false });
-    if (Object.keys(options).length) updateObjectAsset(assetRef(record), options);
-    else applyAssetSnapshot(localAssetSnapshot(), assetRef(record), { affectedAssetKeys: new Set([assetKey(record)]) });
+    if (Object.hasOwn(options, 'name')) {
+      options = { ...options, name: String(options.name ?? '').trim() };
+      if (!options.name || !balancedLatex(options.name) || assetState.snapshot.assets.some(asset => canonicalAssetName(asset.name) === canonicalAssetName(options.name))) throw new Error('Choose a complete, unique asset name.');
+    }
+    const previous = { snapshot: { ...assetState.snapshot, assets: assetState.snapshot.assets.slice() }, nextObjectId: assetState.nextObjectId, selected: assetState.selected, anchor: assetState.anchor };
+    let record;
+    if (options.name) reservedAssetNames.add(canonicalAssetName(options.name));
+    try { record = createDefaultAsset(kind, { ...options, bindInput: false }); }
+    catch (error) { Object.assign(assetState, previous); rebaseCleanAssetInputInstances(assetState.snapshot.revision); throw error; }
+    finally { if (options.name) reservedAssetNames.delete(canonicalAssetName(options.name)); }
+    applyAssetSnapshot(localAssetSnapshot(), assetRef(record), { affectedAssetKeys: new Set([assetKey(record)]) });
     return assetByKey(assetKey(record));
   }
   function importCategoryGraph(value) {
@@ -2174,7 +2196,7 @@
     for (const item of [...graph.categories, ...graph.functors]) if (!item.name.trim() || !balancedLatex(item.name)) throw new Error('The preset contains an incomplete object name.');
     // Validate the whole graph before allocating any Asset IDs or changing the store.
     const add = (kind, item, data) => {
-      const record = createDefaultAsset(kind, { bindInput: false });
+      const record = createDefaultAsset(kind, { bindInput: false, defaults: false });
       let name = item.name.trim(), serial = 2;
       while (assetState.snapshot.assets.some(asset => asset !== record && canonicalAssetName(asset.name) === canonicalAssetName(name))) name = item.name.trim() + '_{' + serial++ + '}';
       Object.assign(record, { name, plainName: plainAssetName(name), data, dependencies: assetDependencies(kind, kind, data), definition: assetDefinitionFor(kind, kind, data) });
@@ -2240,7 +2262,7 @@
   function initialiseObjectPanels() {
     if (!window.MathWorkspaceObjects) return;
     objectWorkspace = window.MathWorkspaceObjects.mount({
-      snapshot: localAssetSnapshot, create: createObjectAsset, update: updateObjectAsset, importCategoryGraph, importRootObject, importSlicing, captureWorkspace, restoreWorkspace, importAsset: (ref, value) => {
+      snapshot: localAssetSnapshot, create: createObjectAsset, update: updateObjectAsset, ensureDefault: ensureDefaultDependency, publishDefaults: () => applyAssetSnapshot(localAssetSnapshot()), importCategoryGraph, importRootObject, importSlicing, captureWorkspace, restoreWorkspace, importAsset: (ref, value) => {
         if (!ASSET_SUBTYPES[ref.kind]?.some(([type]) => type === value.type)) throw new Error('Unsupported object subtype.');
         return updateObjectAsset(ref, { type: value.type, data: value.data });
       }, status, closePicker: closeCardPicker, ioChanged: updateImportExport,
@@ -2416,7 +2438,15 @@
       const sortItems = [['creation', 'Creation order'], ['name', 'Name'], ['type', 'Object type'], ['modified', 'Date modified']].map(([value, label]) => menuButton(label, () => { assetState.sort = value; renderAssets(); }, { checked: assetState.sort === value }));
       sortItems.push(Object.assign(document.createElement('div'), { className: 'workspace-assets-menu-separator' }), menuButton('Ascending', () => { assetState.direction = 'asc'; renderAssets(); }, { checked: assetState.direction === 'asc', disabled: assetState.sort === 'creation' }), menuButton('Descending', () => { assetState.direction = 'desc'; renderAssets(); }, { checked: assetState.direction === 'desc', disabled: assetState.sort === 'creation' }));
       const newItems = ASSET_KINDS.map((assetKind) => menuButton(assetKind === 'young' ? 'Young diagram' : assetKind === 'lie' ? 'Lie type' : assetKind[0].toUpperCase() + assetKind.slice(1), () => createAsset(assetKind), { disabled: assetState.snapshot.capabilities?.[assetKind] === false }));
-      menu.append(menuCascade('View', viewItems), menuCascade('Sort by', sortItems), menuCascade('New', newItems));
+      const defaults = menuButton('Show default assets', () => {
+        assetState.showDefaults = !assetState.showDefaults;
+        const visible = new Set(orderedAssets().map(assetKey));
+        assetState.selected = new Set([...assetState.selected].filter(key => visible.has(key)));
+        if (!visible.has(assetState.anchor)) assetState.anchor = '';
+        renderAssets();
+      }, { checked: assetState.showDefaults });
+      defaults.setAttribute('role', 'menuitemcheckbox'); defaults.setAttribute('aria-checked', String(assetState.showDefaults));
+      menu.append(menuCascade('View', viewItems), menuCascade('Sort by', sortItems), menuCascade('New', newItems), defaults);
     }
     menu.hidden = false; menu.classList.toggle('workspace-assets-menu-left', x > window.innerWidth - 460); menu.style.left = '0px'; menu.style.top = '0px';
     const rect = menu.getBoundingClientRect(); menu.style.left = `${Math.max(6, Math.min(x, window.innerWidth - rect.width - 6))}px`; menu.style.top = `${Math.max(6, Math.min(y, window.innerHeight - rect.height - 6))}px`;
@@ -2467,15 +2497,15 @@
     return window.MathWorkspaceIO.clone({
       schema: window.MathWorkspaceIO.schema, version: 1, assets: localAssetSnapshot().assets,
       panels: objectWorkspace.capturePanels(),
-      calculators: [...sessions.entries()].map(([id, session]) => ({ id, canvasHeight: session.canvasHeight, snapshot: session.editor.capture(),
+      calculators: [...sessions.entries()].map(([id, session]) => ({ id, canvasHeight: session.canvasHeight, canvasHeightMode: session.canvasHeightMode, snapshot: session.editor.capture(),
         assetProjection: session.assetProjection ? { keys: [...session.assetProjection.keys], layout: [...session.assetProjection.layout], activeRef: session.assetProjection.activeRef } : null })),
       assetCards: { slots, instances, activeInputInstanceKey: assetState.activeInputInstanceKey, editorMode: assetState.editorMode,
         importExport: { visible: importExportSlot.visible, collapsed: importExportSlot.collapsed, pinned: importExportSlot.pinned, displayMode: importExportSlot.displayMode } },
       workspace: { tabs: openedCanvasIds(), panes: { ...paneCanvases }, split: splitView, focusedPane, inspectorSourceId,
-        dockedPanels:[...dockedPanels.values()].map(({id,source,key,sessionId,location,canvasHeight})=>({id,source,key,sessionId,location,canvasHeight})),
+        dockedPanels:[...dockedPanels.values()].map(({id,source,key,sessionId,location,canvasHeight,canvasHeightMode})=>({id,source,key,sessionId,location,canvasHeight,canvasHeightMode})),
         inspectorOrder: [...$('#workspace-cards').children].map(inspectorNodeKey),
         settings: window.MathWorkspaceSettings?.capture(),
-        assets: { layout: assetState.layout, sort: assetState.sort, direction: assetState.direction, selected: [...assetState.selected], anchor: assetState.anchor, canvasHeight: assetState.canvasHeight, metadata: [...assetState.metadata] } }
+        assets: { layout: assetState.layout, sort: assetState.sort, direction: assetState.direction, showDefaults: assetState.showDefaults, selected: [...assetState.selected], anchor: assetState.anchor, canvasHeight: assetState.canvasHeight, canvasHeightMode: assetState.canvasHeightMode, metadata: [...assetState.metadata] } }
     });
   }
   function prepareWorkspace(text) {
@@ -2529,9 +2559,10 @@
     assetState.nextObjectId = Math.max(0, ...assets.map(a => Number(a.id.match(/\d+$/)?.[0]) || 0));
     const settings = saved.workspace.assets;
     assetState.layout = ASSET_LAYOUTS.includes(settings.layout) ? settings.layout : 'icons';
+    assetState.showDefaults = settings.showDefaults === true;
     assetState.sort = ['creation','name','type','modified'].includes(settings.sort) ? settings.sort : 'creation'; assetState.direction = settings.direction === 'desc' ? 'desc' : 'asc';
-    assetState.selected = new Set((settings.selected || []).filter(key => assetByKey(key))); assetState.anchor = settings.anchor || ''; assetState.renameKey = '';
-    assetState.canvasHeight = clampCanvasHeight(settings.canvasHeight); assetState.metadata = new Map(settings.metadata || []); assetState.creationCounter = Math.max(0,...[...assetState.metadata.values()].map(m => Number(m.order) || 0));
+    assetState.selected = new Set((settings.selected || []).filter(key => assetByKey(key) && (assetState.showDefaults || !assetByKey(key).isDefault))); assetState.anchor = assetState.selected.has(settings.anchor) ? settings.anchor : ''; assetState.renameKey = '';
+    assetState.canvasHeight = clampCanvasHeight(settings.canvasHeight); assetState.canvasHeightMode = settings.canvasHeightMode==='manual'?'manual':'auto'; assetState.metadata = new Map(settings.metadata || []); assetState.creationCounter = Math.max(0,...[...assetState.metadata.values()].map(m => Number(m.order) || 0));
     for (const item of saved.assetCards.instances) {
       const instance = item.cardType === 'input' ? createAssetInputInstance(item.targetRef) : createAssetCardInstance(item.targetRef,item.cardType);
       instance.localUiState = io.clone(item.localUiState);
@@ -2551,7 +2582,7 @@
     assetState.activeInputInstanceKey = saved.assetCards.activeInputInstanceKey; assetState.editorMode = saved.assetCards.editorMode;
     Object.assign(importExportSlot,saved.assetCards.importExport); applyWorkspaceOwnedSlotPresentation($('#workspace-io-card'),'importExport');
     for (const item of saved.calculators) {
-      const session = ensureCalculatorSession(byId.get(item.id)); session.canvasHeight = clampCanvasHeight(item.canvasHeight); session.applyingAssets = true;
+      const session = ensureCalculatorSession(byId.get(item.id)); session.canvasHeight = clampCanvasHeight(item.canvasHeight); session.canvasHeightMode = item.canvasHeightMode==='manual'?'manual':'auto'; session.applyingAssets = true;
       try { session.editor.restore(item.snapshot); } finally { session.applyingAssets = false; }
       if (session.assetProjection && item.assetProjection) { session.assetProjection = {keys:new Set(item.assetProjection.keys),layout:new Map(item.assetProjection.layout),activeRef:item.assetProjection.activeRef}; projectAssetsToSheafComplex(session); }
     }
@@ -2620,7 +2651,15 @@
   }
 
   function initialise() {
-    panelCatalog = window.MathWorkspacePanelCatalog.create({assets:ASSET_SUBTYPES,definitions:window.MathWorkspaceObjects.definitions,nativePanels:ASSET_CARD_REGISTRY});
+    panelCatalog = window.MathWorkspacePanelCatalog.create({assets:ASSET_SUBTYPES,definitions:window.MathWorkspaceObjects.definitions,nativePanels:ASSET_CARD_REGISTRY,
+      resolveRefs: (id, refs, assets) => {
+        const definition = window.MathWorkspaceObjects.definitions.find(item => item.id === id);
+        return definition ? window.MathWorkspaceDefaults.panelRefs(definition, refs, assets, (kind, options = {}) => {
+          const type = options.type || ASSET_SUBTYPES[kind][0][0], data = normalizedAssetData(kind, type, options.data || {});
+          return assets.find(asset => asset.kind === kind && asset.type === type && JSON.stringify(normalizedAssetData(kind, type, asset.data)) === JSON.stringify(data));
+        }) : refs;
+      }
+    });
     window.MathWorkspacePanelRegistry = panelCatalog;
     initialiseObjectPanels();
     initialiseImportExport();
@@ -2635,7 +2674,7 @@
     $('#workspace-canvas-resizer').addEventListener('pointerdown', beginCanvasResize);
     $('#workspace-canvas-resizer').addEventListener('keydown', handleCanvasResizeKeydown);
     document.addEventListener('pointerdown', (event) => { if (!$('#workspace-assets-context-menu').hidden && !$('#workspace-assets-context-menu').contains(event.target)) closeAssetsContextMenu(); const picker = assetState.referencePicker; if (picker && !picker.node.contains(event.target) && !picker.control.contains(event.target)) closeReferencePicker(); }, true);
-    window.addEventListener('blur', () => { closeAssetsContextMenu(); closeReferencePicker(); }); window.addEventListener('resize', () => { closeAssetsContextMenu(); closeCardPicker(); closeReferencePicker(); });
+    window.addEventListener('blur', () => { closeAssetsContextMenu(); closeReferencePicker(); }); window.addEventListener('resize', () => { updateCanvasHeightLayout(); closeAssetsContextMenu(); closeCardPicker(); closeReferencePicker(); });
     document.querySelectorAll('[data-workspace-io-tab]').forEach((tab) => tab.addEventListener('click', () => { const name = tab.dataset.workspaceIoTab; document.querySelectorAll('[data-workspace-io-tab]').forEach((item) => item.setAttribute('aria-selected', String(item === tab))); $('#workspace-io-export-panel').hidden = name !== 'export'; $('#workspace-io-import-panel').hidden = name !== 'import'; }));
     openCanvas('assets');
   }

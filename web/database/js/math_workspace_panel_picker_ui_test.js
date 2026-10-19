@@ -96,10 +96,10 @@ async function run() {
     assert.equal(await read(()=>[...panels.panels.values()].find(p=>p.definition.id==='slicing-display').computation.refs.view),await read(()=>scene.id));
     await read(()=>{select(d);option('dynkin-cartan').click();});
     assert.equal(await read(()=>[...panels.panels.values()].find(p=>p.definition.id==='dynkin-cartan').computation.refs.lie),await read(()=>key(g)));
-    await read(()=>{panels.open('strands-input',key(w),'side',{keepPickerOpen:true});select(w);});
+    await read(()=>{panels.open('strands-input',key(w),'side',{keepPickerOpen:true});panels.open('strands-view',key(w),'side',{keepPickerOpen:true});select(w);});
     assert.equal(await read(()=>!!option('strands-display')),true);
     await read(()=>option('strands-display').click());
-    assert.equal(await read(()=>[...panels.panels.values()].find(p=>p.definition.id==='strands-display').computation.refs.view),await read(()=>[...panels.panels.values()].find(p=>p.definition.id==='strands-input').id));
+    assert.equal(await read(()=>[...panels.panels.values()].find(p=>p.definition.id==='strands-display').computation.refs.view),await read(()=>[...panels.panels.values()].find(p=>p.definition.id==='strands-view').id));
     await read(()=>{document.querySelector('#workspace-add-card').click();scene.head.querySelector('[data-workspace-card-action="move-area"]').click();});
     assert.equal(await read(()=>scene.location),'main','properties can still be moved into the main area explicitly');
     assert.deepEqual(errors,[]);

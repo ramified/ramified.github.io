@@ -72,6 +72,9 @@ function __objectConfigureSpecific(config) {
       syncGridSizeInputs(); resize();
     };
     if(config.mode==='view') {
+      gridCols=5; gridRows=5; gridSizeWasCustomized=true; resetBlocks(); syncGridSizeInputs();
+      // Breakpoints change density, not the user's grid or mathematical data.
+      handleLayoutBreakpointChange=()=>resize();
       const toolbar=document.querySelector('.canvas-toolbar');
       const options=['showhooks','shadehooks','showcoords'].map(id=>document.getElementById(id)?.closest('label')).filter(Boolean);
       __editor.mountObjectSurfaces({content:[document.getElementById('canvas-wrap')],toolbar:[toolbar,...options]});
@@ -90,7 +93,13 @@ function __objectProject(objects, binding) {
   const asset = objects.lambda, rows = asset?.data?.rows || [], current = __objectRows();
   if (JSON.stringify(current.rows) !== JSON.stringify(rows) || (asset && current.type !== asset.type)) {
     gridRows = Math.max(gridRows, rows.length, 1); gridCols = Math.max(gridCols, ...rows.map(Math.abs), 1);
-    if (asset?.type === 'generalized') { setGeneralizedCanvasRows(rows); generalizedCanvasActiveRows = rows.length; }
+    if (asset?.type === 'generalized') {
+      const cols=isGeneralizedCanvasActive()?generalizedSideCols():gridCols, count=isGeneralizedCanvasActive()?generalizedBoardRows():gridRows;
+      setGeneralizedCanvasRows(rows);
+      generalizedCanvasSideCols=Math.max(cols, ...rows.map(Math.abs), 1);
+      generalizedCanvasRows=normalizeGeneralizedRows(rows,Math.max(count,rows.length));
+      generalizedCanvasActiveRows = rows.length;
+    }
     else drawPartitionRows(rows);
     syncGridSizeInputs(); resize();
     __objectSync('partition-input', rows.join(', '));

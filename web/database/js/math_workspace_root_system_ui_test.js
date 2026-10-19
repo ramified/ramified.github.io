@@ -118,7 +118,7 @@ async function run() {
     assert.equal(await read(() => reopened.id), await read(() => si.id));
     assert.equal(await read(() => sv.propertyRenderer.editor.objectIO('view').direction), 'left-right');
     await read(() => {
-      const empty = api.createObjectAsset('strands'); window.emptyPanel = panels.open('strands-input','strands:' + empty.id,'main');
+      const empty = api.createObjectAsset('strands', { data: { lie: '' } }); window.emptyPanel = panels.open('strands-input','strands:' + empty.id,'main');
       window.largeDynkin = panels.open('dynkin-input','dynkin:' + d.id,'main');
     });
     assert.equal(await read(() => !!emptyPanel.activeRenderer), false, 'an unbound Input must not display a fabricated default object');

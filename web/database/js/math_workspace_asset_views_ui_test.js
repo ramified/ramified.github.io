@@ -53,7 +53,8 @@ async function run(){
   assert.equal(await read(()=>getComputedStyle(strandModify.activeRenderer.host).display),'none','Strands Modify contains the generator input, not its display');
   assert(await read(()=>strandView.propertyRenderer.editor.shadow.querySelector('.workspace-native-toolbar #strand-direction')));
   await read(()=>{window.frame=api.createObjectAsset('frame',{data:{ambientDimension:3}});window.point=api.createObjectAsset('point',{data:{ambientDimension:3,position:[1,2,3]}});window.geometry=panels.open('geometry-view',key(point),'main');});
-  assert.equal(await read(()=>geometry.computation.status),'missing','no frame is silently created or selected');
+  assert.equal(await read(()=>geometry.computation.status),'current','geometry opens with a compatible default frame');
+  assert.equal(await read(()=>geometry.computation.refs.frame),await read(()=>key(frame)),'an existing standard frame is reused');
   await read(()=>{geometry.computation.refs.frame=key(frame);panels.refresh();});
   assert.equal(await read(()=>geometry.computation.status),'current');
   assert(await read(()=>geometry.propertyRenderer.editor.shadow.querySelector('.workspace-native-toolbar #screen-zoom')));
@@ -83,7 +84,7 @@ async function run(){
   assert.equal(await read(()=>panels.panels.get(panels.panels.get(oldDisplayId).computation.refs.view).definition.id),'strands-view','legacy settings bind to a display instead of Modify');
   assert(await read(()=>[...MathWorkspaceSettings.sessions.values()].filter(record=>record.session.pageId==='young-diagram').every(record=>record.session.data.profiles.default?.['clear-diagram']?.includes('q'))),'workspace backup restores shared settings for new instances');
   assert.deepEqual(errors,[]);
-  console.log('math_workspace_asset_views_ui_test: global Settings, native displays, compact Modify, toolbars and explicit frames passed');
+  console.log('math_workspace_asset_views_ui_test: global Settings, native displays, compact Modify, toolbars and default frames passed');
  }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}
 }
 run().catch(error=>{console.error(error.stack||error);process.exitCode=1;});
