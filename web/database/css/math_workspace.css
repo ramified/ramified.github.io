@@ -52,10 +52,11 @@
 .workspace-object-native { display: block; height: 500px; min-width: 0; width: 100%; }
 .workspace-object-panel[data-density='compact'] .workspace-object-native { height: 300px; }
 .workspace-object-native-inspector { min-width: 0; }
+.workspace-object-panel[data-panel-type='matrix-input'] .workspace-object-native { height: 420px; }
+.workspace-object-panel[data-panel-type='category-diagram'] .workspace-object-native { min-height: 300px; }
+.workspace-form-fields.workspace-object-scene-choices { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.workspace-object-scene-choices .workspace-card-option { width: auto; padding: 4px 0; }
 .workspace-object-panel .workspace-status:empty { display: none; }
-.workspace-object-io { border-top: 1px solid var(--border); padding-top: 8px; }
-.workspace-object-io summary { color: var(--muted); cursor: pointer; font-size: .8rem; }
-.workspace-object-io textarea { margin: 8px 0; resize: vertical; }
 .workspace-inspector-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .workspace-inspector-head h2 { font-size: 0.82rem; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; font-weight: 500; }
 .workspace-cards { display: grid; gap: 16px; }
@@ -68,6 +69,13 @@
 .workspace-card-option { min-width: 0; padding: 8px 2px; font-size: .82rem; }
 .workspace-card-option:has(input:disabled) { color: var(--muted); }
 .workspace-card-option input { width: auto !important; }
+.workspace-card-context { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.5; overflow-wrap: anywhere; }
+.workspace-card-picker > .workspace-card-context { max-height: 5em; overflow: auto; }
+.workspace-card-options-heading { padding: 10px 2px 4px; color: var(--muted); font: .65rem 'JetBrains Mono', monospace; letter-spacing: .04em; text-transform: uppercase; }
+.workspace-card-option > span { min-width: 0; }
+.workspace-card-option small { display: block; margin-top: 3px; color: var(--muted); font-size: .7rem; line-height: 1.4; overflow-wrap: anywhere; }
+.workspace-existing-panels { margin: 6px 0; border-top: 1px solid var(--border); }
+.workspace-existing-panels > summary { cursor: pointer; padding: 10px 2px 4px; font-size: .78rem; color: var(--muted); }
 .workspace-card-options-unavailable { margin-top: 4px; padding: 9px 2px 4px; border-top: 1px solid var(--border); color: var(--muted); font: .65rem 'JetBrains Mono', monospace; letter-spacing: .05em; text-transform: uppercase; }
 .workspace-card-options-legacy { margin-top: 4px; padding: 9px 2px 4px; border-top: 1px solid var(--border); color: var(--accent2); font: .65rem 'JetBrains Mono', monospace; letter-spacing: .05em; text-transform: uppercase; }
 .workspace-native-calculator[data-asset-drop='valid'] { outline: 2px solid var(--accent); outline-offset: -2px; }

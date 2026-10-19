@@ -606,8 +606,6 @@ async function main() {
 
       utilityCard.querySelector('[data-workspace-card-action="hide"]').click();
       document.querySelector('#workspace-add-card').click();
-      document.querySelector('#workspace-card-source').value = 'assets';
-      document.querySelector('#workspace-card-source').dispatchEvent(new Event('change', { bubbles: true }));
       const utilityOption = [...document.querySelectorAll('.workspace-card-option')].find((row) => row.textContent.includes('Import / Export'));
       const utilityHidden = { slotVisible: api.assetsUtilitySlots.get('importExport').visible, checked: utilityOption.querySelector('input').checked };
       utilityOption.querySelector('input').click();

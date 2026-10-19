@@ -1,25 +1,22 @@
 (function () {
   'use strict';
+  const slicing = window.MathWorkspaceSlicing;
 
   const calculators = [
-    ['slicing', 'Higher-dimensional slicing', 'slice'],
-    ['dynkin', 'Dynkin diagrams', 'dynkin'],
-    ['strands', 'Strands', 'strand'],
-    ['matrices', 'Matrices', 'matrix'],
     ['sheaf-complexes', 'Sheaf complexes', 'complex'],
     ['mosaic', 'Mosaic', 'mosaic'],
-    ['categories', 'Categories', 'category'],
     ['places', 'Place ramification', 'ramification']
   ].map(([id, label, nativeId]) => ({ id, label, nativeId, kind: 'calculator' }));
   const assetsDefinition = { id: 'assets', label: 'Assets', kind: 'assets' };
   const byId = new Map([...calculators, assetsDefinition].map((item) => [item.id, item]));
   const canvases = new Map(), sessions = new Map(), liveCards = new Map();
   const paneCanvases = { primary: '', secondary: '' };
-  let objectWorkspace = null;
-  let activeCanvasId = '', focusedPane = 'primary', splitView = false, inspectorSourceId = '', cardPickerSourceId = '';
+  let objectWorkspace = null, panelCatalog = null, renderingCardPicker = false, panelManagerOpen = false;
+  let activeCanvasId = '', focusedPane = 'primary', splitView = false, inspectorSourceId = '';
   const DEFAULT_CANVAS_HEIGHT = 680, MIN_CANVAS_HEIGHT = 420, MAX_CANVAS_HEIGHT = 1600;
   const ASSET_LAYOUTS = ['icons', 'list', 'details', 'tiles', 'content'];
-  const ASSET_KINDS = ['variety', 'sheaf', 'map', 'young', 'lie'];
+  const OBJECT_INPUT_KINDS = ['young', 'lie', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...(slicing?.kinds || [])];
+  const ASSET_KINDS = ['variety', 'sheaf', 'map', ...OBJECT_INPUT_KINDS];
   const INPUT_AUTOSAVE_DEBOUNCE_MS = 450, INPUT_AUTOSAVE_MAX_WAIT_MS = 1500;
   const assetState = {
     ready: true, editorCard: null, editorRecord: null, editorMode: 'create', activeInputInstanceKey: null, view: null,
@@ -370,7 +367,7 @@
     });
     $('#workspace-canvas-name').textContent = activeCanvasId ? byId.get(activeCanvasId).label : 'Choose a view';
     const split = $('#workspace-split-view'); split.disabled = canvases.size < 2; split.textContent = splitView ? 'single view' : 'split view'; split.setAttribute('aria-pressed', String(splitView));
-    renderCanvasTabs(); renderInspector(); updateCanvasHeightLayout();
+    renderCanvasTabs(); renderInspector(); renderCardPicker(); updateCanvasHeightLayout();
     objectWorkspace?.resize();
   }
 
@@ -420,35 +417,63 @@
   }
 
   function renderCardPicker() {
-    const source = $('#workspace-card-source'), options = $('#workspace-card-options');
-    if (!source || !options) return;
-    const preferred = cardPickerSourceId || inspectorSourceId || activeCanvasId || 'assets';
-    cardPickerSourceId = preferred;
-    source.replaceChildren(new Option('Mathematical objects', 'objects'), new Option('Assets', 'assets'), ...calculators.map((calculator) => new Option(calculator.label, calculator.id)));
-    source.value = preferred;
-    const cards = availableCardsFor(preferred), session = sessions.get(preferred); options.replaceChildren();
-    const appendCard = (card) => {
-      const row = Object.assign(document.createElement('label'), { className: 'workspace-check workspace-card-option' });
-      const available = card.available !== false;
-      const onScreen = preferred === 'assets' || preferred === 'objects' || !session?.inspectorHost?.hidden;
-      const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: onScreen && available && !!card.visible, disabled: !available });
-      check.dataset.cardKey = card.key;
-      check.addEventListener('change', () => setCardVisibility(preferred, card.key, check.checked));
-      row.append(check, document.createTextNode(available ? card.label : `${card.label} — ${card.unavailableReason || 'unavailable for the current selection'}`)); options.appendChild(row);
-    };
-    const legacy = preferred === 'sheaf-complexes' ? new Set(['input-card', 'homology-card']) : new Set();
-    cards.filter((card) => card.available !== false && !legacy.has(card.key)).forEach(appendCard);
-    const legacyCards = cards.filter((card) => card.available !== false && legacy.has(card.key));
-    if (legacyCards.length) {
-      options.appendChild(Object.assign(document.createElement('div'), { className: 'workspace-card-options-legacy', textContent: 'Will be removed next version' }));
-      legacyCards.forEach(appendCard);
-    }
-    const unavailable = cards.filter((card) => card.available === false);
-    if (unavailable.length) {
-      options.appendChild(Object.assign(document.createElement('div'), { className: 'workspace-card-options-unavailable', textContent: 'Unavailable for current selection' }));
-      unavailable.forEach(appendCard);
-    }
-    if (preferred === 'assets') renderInspector();
+    const options = $('#workspace-card-options');
+    if (!options || !panelCatalog || $('#workspace-card-picker').hidden || renderingCardPicker) return;
+    renderingCardPicker = true;
+    try {
+      const focusedOption = options.contains(document.activeElement) ? document.activeElement.dataset.optionIdentity : '';
+      const selected = [...assetState.selected].map(key => assetByKey(key)).filter(Boolean);
+      const name = key => assetByKey(key)?.plainName || assetByKey(key)?.name || 'Missing asset';
+      const bindings = refs => [...new Set(Object.entries(refs || {}).filter(([role]) => role !== 'view').flatMap(([,value]) => Array.isArray(value) ? value : [value]).filter(Boolean))];
+      const allPanels = [...(objectWorkspace?.panels.values() || [])];
+      const panelLabel = panel => panel.definition.label + (bindings(panel.computation?.refs).length ? ' · ' + bindings(panel.computation.refs).map(name).join(', ') : '');
+      const views = allPanels.map((panel,index) => ({ id: panel.id, type: panel.definition.id, closed: panel.closed, active: panel.id === activeCanvasId, assetKeys: panel.assetKey ? [panel.assetKey] : bindings(panel.computation?.refs), label: (panel.assetKey ? name(panel.assetKey) : panelLabel(panel)) + ' · View ' + (index+1) }));
+      const suggestions = panelCatalog.suggest(selected.map(assetKey),assetState.snapshot.assets,views), represented = new Set();
+      $('#workspace-card-context').textContent = selected.length ? 'Selected: ' + selected.map(asset => asset.plainName || asset.name).join(', ') : 'Select one or more assets to see matching panels.';
+      options.replaceChildren();
+      const heading = (label,parent=options) => parent.appendChild(Object.assign(document.createElement('div'),{className:'workspace-card-options-heading',textContent:label}));
+      const append = (parent,{key,identity=key,type,label,detail,checked,action}) => {
+        const row = Object.assign(document.createElement('label'),{className:'workspace-check workspace-card-option'}), check = Object.assign(document.createElement('input'),{type:'checkbox',checked:!!checked});
+        check.dataset.cardKey=key;check.dataset.optionIdentity=identity;if(type)check.dataset.panelType=type;
+        const text=document.createElement('span');text.append(document.createTextNode(label));if(detail)text.append(Object.assign(document.createElement('small'),{textContent:detail}));
+        check.addEventListener('change',()=>{try{action(check.checked);}catch(error){status(error.message,'error');}renderInspector();renderCardPicker();});
+        row.append(check,text);parent.append(row);
+      };
+      const appendSuggestion = suggestion => {
+        const panel = suggestion.route==='objects' ? allPanels.filter(panel=>panel.computation && panelCatalog.bindingKey(panel.definition.id,panel.computation.refs,panel.computation.rule)===suggestion.key).sort((a,b)=>Number(a.closed)-Number(b.closed))[0] : null;
+        const slot = suggestion.route==='assets' ? assetsCardState.slots.get(suggestion.cardType) : null;
+        const target = suggestion.refs.asset, instanceKey = target && assetCardInstanceKey(assetRefFromKey(target),suggestion.cardType);
+        const isBound = !!slot && !!instanceKey && slot.activeInstanceKey===instanceKey;
+        if(panel)represented.add(panel.id);if(isBound)represented.add(suggestion.id);
+        const context = suggestion.viewLabel || bindings(suggestion.refs).map(name).join(', ');
+        append(options,{key:panel?.id || 'suggest:'+suggestion.key,identity:suggestion.key,type:suggestion.id,label:suggestion.label,detail:[context,suggestion.missing.length?'Needs: '+suggestion.missing.join(', '):''].filter(Boolean).join(' · '),checked:panel ? !panel.closed : isBound&&slot.visible,action:visible=>{
+          if(suggestion.route==='objects') {
+            if(panel)objectWorkspace.setVisible(panel.id,visible);
+            else if(visible)objectWorkspace.open(suggestion.id,'','side',{keepPickerOpen:true,refs:suggestion.refs,rule:suggestion.rule});
+          } else if(visible)bindAssetPropertySlot(suggestion.cardType,assetRefFromKey(target),{selectTarget:false});
+          else if(isBound)slot.visible=false;
+        }});
+      };
+      for(const [label,items] of [['For selected assets',suggestions.filter(s=>s.ready&&s.role!=='view')],['More inputs needed',suggestions.filter(s=>!s.ready)],['View settings',suggestions.filter(s=>s.role==='view')]]) {
+        if(items.length){heading(label);items.forEach(appendSuggestion);}
+      }
+      if(selected.length&&!suggestions.length)options.appendChild(Object.assign(document.createElement('p'),{className:'workspace-card-context',textContent:'No additional panels for this selection.'}));
+      const existing=allPanels.filter(panel=>!panel.definition.input&&!represented.has(panel.id));
+      const nativeExisting=NATIVE_ASSET_CARD_TYPES.filter(type=>assetsCardState.slots.get(type)?.activeInstanceKey&&!represented.has('asset:'+type));
+      if(existing.length||nativeExisting.length) {
+        const details=document.createElement('details');details.className='workspace-existing-panels';details.open=panelManagerOpen;
+        details.appendChild(Object.assign(document.createElement('summary'),{textContent:'Existing panels ('+(existing.length+nativeExisting.length)+')'}));
+        details.addEventListener('toggle',()=>{if(details.isConnected)panelManagerOpen=details.open;});options.append(details);
+        existing.forEach(panel=>append(details,{key:panel.id,type:panel.definition.id,label:panelLabel(panel),checked:!panel.closed,action:visible=>objectWorkspace.setVisible(panel.id,visible)}));
+        nativeExisting.forEach(type=>{const slot=assetsCardState.slots.get(type),instance=assetsCardState.instances.get(slot.activeInstanceKey);append(details,{key:'asset:'+type,label:ASSET_CARD_REGISTRY[type].label,detail:instance?name(assetKey(instance.targetRef)):'',checked:slot.visible,action:visible=>{slot.visible=visible;}});});
+      }
+      if(sessions.has(activeCanvasId)&&byId.get(activeCanvasId)?.kind==='calculator') {
+        const sourceId=activeCanvasId,cards=availableCardsFor(sourceId).filter(card=>card.available!==false&&!['input-card','homology-card'].includes(card.key));
+        if(cards.length){heading('Current view · '+byId.get(sourceId).label);cards.forEach(card=>append(options,{key:card.key,label:card.label,checked:!!card.visible&&!sessions.get(sourceId).inspectorHost.hidden,action:visible=>applyCardVisibility(sourceId,card.key,visible)}));}
+      }
+      heading('Workspace');append(options,{key:'importExport',label:'Import / Export',checked:workspaceOwnedCardSlot('importExport').visible,action:visible=>applyCardVisibility('assets','importExport',visible)});
+      if(focusedOption)[...options.querySelectorAll('input')].find(input=>input.dataset.optionIdentity===focusedOption)?.focus({preventScroll:true});
+    } finally { renderingCardPicker=false; }
   }
 
   function closeCardPicker() {
@@ -457,10 +482,9 @@
   }
 
   function openCardPicker() {
-    cardPickerSourceId = 'objects'; renderCardPicker();
     const picker = $('#workspace-card-picker'), button = $('#workspace-add-card'), rect = button.getBoundingClientRect();
-    picker.hidden = false; picker.style.left = `${Math.max(8, Math.min(rect.right - 310, window.innerWidth - 318))}px`; picker.style.top = `${Math.min(rect.bottom + 7, window.innerHeight - 120)}px`;
-    button.setAttribute('aria-expanded', 'true'); $('#workspace-card-source').focus();
+    picker.hidden = false; renderCardPicker();picker.style.left = `${Math.max(8, Math.min(rect.right - 310, window.innerWidth - 318))}px`; picker.style.top = `${Math.min(rect.bottom + 7, window.innerHeight - 120)}px`;
+    button.setAttribute('aria-expanded', 'true'); $('#workspace-card-options input')?.focus();
   }
 
   function workspaceOwnedAssetCards() {
@@ -541,7 +565,7 @@
     if (!head.querySelector('.drag-handle')) head.insertBefore(Object.assign(document.createElement('span'), { className: 'drag-handle', textContent: '⋮⋮' }), head.firstChild).setAttribute('aria-hidden', 'true');
     const tools = Object.assign(document.createElement('span'), { className: 'workspace-card-tools' });
     const hide = () => {
-      if (options.hide) { options.hide(); return; }
+      if (options.hide) { options.hide(); refreshWorkspaceOwnedCardChrome(); renderCardPicker(); return; }
       const slot = workspaceOwnedCardSlot(key); if (!slot) return;
       slot.visible = false; assetState.cards[key] = false; renderInspector(); renderCardPicker(); refreshWorkspaceOwnedCardChrome();
     };
@@ -567,16 +591,19 @@
     const container = $('#workspace-cards');
     if (!container || container.dataset.workspaceOwnedDragReady) return;
     container.dataset.workspaceOwnedDragReady = 'true';
-    container.addEventListener('pointerdown', (event) => {
+    document.querySelector('.math-workspace-layout').addEventListener('pointerdown', (event) => {
       const path = event.composedPath?.() || [event.target];
       const handle = path.find((node) => node?.classList?.contains('drag-handle'));
-      const card = path.find((node) => node?.parentElement === container && (node.classList?.contains('workspace-assets-inspector-card') || node.dataset?.assetCardSlot));
-      if (!handle || !card || card.parentElement !== container || event.button !== 0) return;
-      const drag = { card, startY: event.clientY, active: false };
+      const objectNode = path.find(node => node?.dataset?.objectPanel);
+      const panel = objectWorkspace?.panels.get(objectNode?.dataset.objectPanel);
+      const card = objectNode || path.find((node) => node?.parentElement === container && (node.classList?.contains('workspace-assets-inspector-card') || node.dataset?.assetCardSlot));
+      if (!handle || !card || (!panel && card.parentElement !== container) || event.button !== 0) return;
+      const drag = { card, startX: event.clientX, startY: event.clientY, active: false };
       const move = (moveEvent) => {
-        if (!drag.active && Math.abs(moveEvent.clientY - drag.startY) < 4) return;
+        if (!drag.active && Math.hypot(moveEvent.clientX - drag.startX, moveEvent.clientY - drag.startY) < 4) return;
         drag.active = true;
         card.classList.add('workspace-card-dragging');
+        if (card.parentElement !== container || (panel && document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest('[data-pane]'))) return;
         const siblings = workspaceOwnedAssetCards().filter((item) => item !== card);
         const before = siblings.find((item) => {
           const rect = item.getBoundingClientRect();
@@ -584,13 +611,19 @@
         });
         if (before) container.insertBefore(card, before); else container.appendChild(card);
       };
-      const finish = () => {
+      const finish = (finishEvent) => {
         document.removeEventListener('pointermove', move);
         document.removeEventListener('pointerup', finish);
         document.removeEventListener('pointercancel', finish);
         if (drag.active) {
           card.classList.remove('workspace-card-dragging');
           card.dataset.workspaceCardDragSuppressed = 'true';
+          if (panel && finishEvent.type === 'pointerup') {
+            const target = document.elementFromPoint(finishEvent.clientX, finishEvent.clientY), pane = target?.closest('[data-pane]');
+            if (pane && (panel.location !== 'main' || card.closest('[data-pane]') !== pane)) {
+              focusedPane = pane.dataset.pane; objectWorkspace.move(panel, 'main');
+            } else if (!pane && target?.closest('#workspace-cards') && panel.location !== 'side') objectWorkspace.move(panel, 'side');
+          }
           syncWorkspaceOwnedCardOrder();
           refreshWorkspaceOwnedCardChrome();
           setTimeout(() => delete card.dataset.workspaceCardDragSuppressed, 0);
@@ -689,13 +722,19 @@
   }
 
   const ASSET_SUBTYPES = {
+    ...(slicing?.subtypes || {}),
+    dynkin: [['dynkin', 'Dynkin diagram']],
+    strands: [['strands', 'Strands']],
+    matrix: [['matrix', 'Matrix']],
+    category: [['category', 'Category']],
+    functor: [['functor', 'Functor']],
     young: [['partition', 'Young diagram'], ['generalized', 'Generalized Young diagram']],
     lie: [['simple', 'Lie type']],
-    variety: [['abstract', 'Abstract variety'], ['curve', 'Curve'], ['symmetric-product-curve', 'Symmetric product of a curve'], ['abelian', 'Abelian variety'], ['ppav-moduli', 'Moduli of ppav'], ['point', 'Point'], ['projective', 'Projective space'], ['grassmannian', 'Grassmannian'], ['complete-intersection', 'Complete intersection'], ['product', 'Product of varieties']],
+    variety: [['abstract', 'Abstract variety'], ['curve', 'Curve'], ['symmetric-product-curve', 'Symmetric product of a curve'], ['abelian', 'Abelian variety'], ['ppav-moduli', 'Moduli of ppav'], ['point', 'Point'], ['projective', 'Projective space'], ['grassmannian', 'Grassmannian'], ['complete-intersection', 'Complete intersection'], ['product', 'Product of varieties'], ['toric', 'Toric variety']],
     sheaf: [['abstract', 'Abstract sheaf'], ['locally-free', 'Locally free sheaf'], ['structure', 'Structure sheaf'], ['tangent', 'Tangent sheaf'], ['cotangent', 'Cotangent sheaf'], ['canonical', 'Canonical sheaf'], ['twist', 'Twist'], ['divisor-line', 'Divisor line bundle'], ['universal-bundle', 'Universal bundle'], ['direct-sum', 'Direct sum'], ['self-direct-sum', 'Self direct sum'], ['self-tensor-product', 'Self tensor product'], ['dual', 'Dual sheaf'], ['internal-hom', 'Internal Hom'], ['ideal-sheaf', 'Ideal sheaf'], ['normal-bundle', 'Normal bundle'], ['conormal-bundle', 'Conormal bundle'], ['relative-tangent', 'Relative tangent'], ['relative-cotangent', 'Relative cotangent'], ['tensor', 'Tensor product'], ['schur', 'Schur functor'], ['map-operation', 'Pullback / pushforward']],
     map: [['ordinary', 'Map of varieties'], ['sheaf', 'Map of sheaves'], ['abel-jacobi', 'Abel–Jacobi map'], ['composition', 'Composition of maps']]
   };
-  const plainAssetName = (value) => String(value || '').replace(/\\(?:mathcal|mathbf|mathrm|operatorname)\s*\{([^}]*)\}/g, '$1').replace(/[{}$\\]/g, '').replace(/[_^]/g, ' ').replace(/\s+/g, ' ').trim();
+  const plainAssetName = (value) => String(value || '').replace(/\\(?:mathcal|mathfrak|mathbf|mathrm|operatorname)\s*\{([^}]*)\}/g, '$1').replace(/[{}$\\]/g, '').replace(/[_^]/g, ' ').replace(/\s+/g, ' ').trim();
   const canonicalAssetName = (value) => plainAssetName(value).toLocaleLowerCase().replace(/\s+/g, '');
   const cloneAssetProperties = (properties) => properties ? JSON.parse(JSON.stringify(properties)) : {};
   const cloneAssetPropertyValue = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -771,10 +810,12 @@
     return String(value ?? '').split(/[,\s]+/).filter(Boolean).map((entry) => positiveInt(entry, 0)).filter(Boolean);
   }
   function varietyDimension(asset) {
+    if(asset?.type==='toric') { const source=assetByKey(asset.data.fan||asset.data.cone);if(source)return source.data.ambientDimension; }
     return nonnegativeInt(asset?.data?.dimension, 0);
   }
   function normalizedAssetData(kind, type, source = {}) {
-    if (kind === 'young' || kind === 'lie') return window.MathWorkspaceObjects.normalize(kind, type, source);
+    if (kind === 'variety' && type === 'toric') return slicing.normalize(kind,type,source);
+    if (OBJECT_INPUT_KINDS.includes(kind)) return window.MathWorkspaceObjects.normalize(kind, type, source);
     const data = { ...source };
     if (kind === 'variety') {
       if (type === 'point') data.dimension = '0';
@@ -795,7 +836,10 @@
   const ASSET_DRAG_TYPE = 'application/x-math-workspace-asset';
   const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   function referenceFieldSpecs(kind, type) {
-    if (kind === 'young' || kind === 'lie') return [];
+    if (kind === 'variety' && type === 'toric') return [{field:'fan',label:'Fan',expectedKind:'fan'},{field:'cone',label:'Affine cone',expectedKind:'cone'}];
+    if (['dynkin','strands'].includes(kind)) return [{ field: 'lie', label: 'Lie type', expectedKind: 'lie' }];
+    if (kind === 'functor') return ['domain', 'codomain'].map(field => ({ field, label: field === 'domain' ? 'Domain' : 'Codomain', expectedKind: 'category' }));
+    if (OBJECT_INPUT_KINDS.includes(kind)) return [];
     if (kind === 'variety') return type === 'product' ? [{ field: 'first', label: 'First factor', expectedKind: 'variety' }, { field: 'second', label: 'Second factor', expectedKind: 'variety' }] : [];
     if (kind === 'sheaf') {
       const specs = isDirectSheafType(type) ? [{ field: 'base', label: 'Base variety', expectedKind: 'variety' }] : [];
@@ -808,6 +852,7 @@
     return [{ field: 'domain', label: type === 'composition' ? 'First map' : 'Domain', expectedKind }, { field: 'codomain', label: type === 'composition' ? 'Second map' : 'Codomain', expectedKind }];
   }
   function referenceKeys(kind, type, data) {
+    if (slicing?.isAsset({kind,type}) || kind === 'matrix' && data.construction) return slicing.refKeys({kind,type,data});
     return [...new Set(referenceFieldSpecs(kind, type).map((spec) => data[spec.field]).filter(Boolean))];
   }
   function referenceWouldCreateCycle(currentKey, candidateKey, kind, type, data) {
@@ -961,6 +1006,25 @@
     return data;
   }
   function validateAssetData(kind, type, data, currentKey) {
+    if (slicing?.isAsset({kind,type}) || kind === 'matrix' && data.construction) {
+      const candidate={kind,type,data,...assetRefFromKey(currentKey||kind+':draft')};
+      for(const spec of slicing.references(candidate)) for(const key of (spec.many?slicing.readRef(data,spec.field)||[]:[slicing.readRef(data,spec.field)])) {
+        if (!key) continue;
+        if (!assetByKey(key,spec.kind) && !slicing.refKeys(assetByKey(currentKey)||{kind,type,data:{}}).includes(key)) throw new Error('Choose an existing '+spec.label+' asset.');
+      }
+      const graph=slicing.closure([assetKey(candidate)],[...assetState.snapshot.assets.filter(a=>assetKey(a)!==currentKey),candidate]);
+      if(graph.missing.some(text=>text.startsWith('Cyclic'))) throw new Error('Asset references cannot form a cycle.');
+      if (['formula','tropical'].includes(kind) && data.ambientDimension <= 8) slicing.math('validate',{asset:candidate,assets:assetState.snapshot.assets});
+      return;
+    }
+    if (['dynkin','strands'].includes(kind)) {
+      if (data.lie && !assetByKey(data.lie, 'lie') && assetByKey(currentKey)?.data.lie !== data.lie) throw new Error('Choose an existing Lie type asset.');
+      return;
+    }
+    if (kind === 'functor') {
+      for (const field of ['domain', 'codomain']) if (data[field] && !assetByKey(data[field], 'category')) throw new Error('Functor endpoints must reference Category assets.');
+      return;
+    }
     const context = { kind, type, data, currentKey };
     referenceFieldSpecs(kind, type).forEach((spec) => {
       const result = referenceEligibility(spec, data[spec.field], context);
@@ -1251,6 +1315,12 @@
     control.addEventListener('drop', (event) => { const { spec, key, result } = dragResult(event); if (!result.allowed) { markReferenceDrop(control, 'invalid'); return; } event.preventDefault(); markReferenceDrop(control, ''); chooseAssetReference(control, spec, key); });
   }
   function assetDefinitionFor(kind, type, data) {
+    if (slicing?.isAsset({kind,type})) return kind === 'frame' ? 'Point and full basis in R^'+data.ambientDimension : kind === 'variety' ? 'Toric variety · '+(data.fan?'fan':'affine cone') : (slicing.labels[kind]||kind)+' in R^'+data.ambientDimension;
+    if (kind === 'dynkin') return (data.lie || 'Choose Lie type') + ' · vertices ' + data.vertices.join(', ') + (data.quiver ? ' · quiver' : '');
+    if (kind === 'strands') return (data.lie || 'Choose Lie type') + ' · ' + data.generators.length + ' generators';
+    if (kind === 'matrix') return data.construction ? data.construction.basis+' · '+(data.construction.lie||'Choose Lie type') : data.rows + ' × ' + data.cols + ' · ' + data.dataType;
+    if (kind === 'category') return data.opposite ? 'Opposite category' : 'Category · objects ' + data.objectSymbol;
+    if (kind === 'functor') return data.variance + ': ' + (data.domain || '?') + ' → ' + (data.codomain || '?');
     if (kind === 'young') return `${type === 'generalized' ? 'Generalized rows' : 'Partition'} (${data.partition || '∅'})`;
     if (kind === 'lie') return ['A','B','C','D'].includes(data.family) ? `${data.family}${data.rank}` : data.family;
     if (kind === 'variety') {
@@ -1702,7 +1772,7 @@
     return entries;
   }
 
-  const assetIcon = (kind) => kind === 'young' ? '▦' : kind === 'lie' ? '𝔤' : kind === 'variety' ? '𝕍' : kind === 'sheaf' ? '𝒽' : '→';
+  const assetIcon = (kind) => ({ young: '▦', lie: '𝔤', dynkin: '●—●', strands: '⋈', matrix: '▦', category: '𝒞', functor: '⇒', variety: '𝕍', sheaf: '𝒽', map: '→' }[kind] || '◇');
   const formatAssetTime = (value) => value ? new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—';
   function createAssetItem(asset) {
     const key = assetKey(asset), meta = assetState.metadata.get(key) || {}, item = document.createElement('div');
@@ -1733,13 +1803,14 @@
   }
 
   function renderAssets() {
+    renderCardPicker();
     if (!assetState.view) return;
     const content = assetState.view.querySelector('[data-assets-content]'), entries = orderedAssets();
     assetState.view.querySelector('[data-assets-count]').textContent = `${entries.length} object${entries.length === 1 ? '' : 's'}${assetState.selected.size ? ` · ${assetState.selected.size} selected` : ''}`;
     content.dataset.layout = assetState.layout; content.dataset.assetsEmpty = !assetState.ready ? 'loading' : !entries.length ? 'empty' : 'false'; content.replaceChildren();
     if (!assetState.ready) { content.appendChild(Object.assign(document.createElement('p'), { className: 'workspace-assets-empty', textContent: 'Loading Assets…' })); return; }
     if (!entries.length) {
-      const empty = Object.assign(document.createElement('div'), { className: 'workspace-assets-empty' }); empty.innerHTML = '<strong>This Assets view is empty.</strong><span>Right-click here to create a variety.</span>'; content.appendChild(empty); return;
+      const empty = Object.assign(document.createElement('div'), { className: 'workspace-assets-empty' }); empty.innerHTML = '<strong>This Assets view is empty.</strong><span>Right-click here to create a mathematical object.</span>'; content.appendChild(empty); return;
     }
     if (assetState.layout === 'details') {
       const header = Object.assign(document.createElement('div'), { className: 'workspace-assets-details-header' }); header.setAttribute('role', 'row');
@@ -1765,6 +1836,7 @@
   }
 
   function syncAssetSelectionDom() {
+    renderCardPicker();
     if (!assetState.view) return;
     const entries = orderedAssets();
     assetState.view.querySelector('[data-assets-count]').textContent = `${entries.length} object${entries.length === 1 ? '' : 's'}${assetState.selected.size ? ` · ${assetState.selected.size} selected` : ''}`;
@@ -1807,7 +1879,7 @@
   async function openSelectedAsset() {
     const selected = selectedAssetRecords();
     if (selected.length !== 1) return;
-    if (['young', 'lie'].includes(selected[0].kind)) { objectWorkspace?.open(`${selected[0].kind}-input`, assetKey(selected[0]), 'main'); return; }
+    if (OBJECT_INPUT_KINDS.includes(selected[0].kind) || slicing?.isAsset(selected[0])) { objectWorkspace?.open(slicing.inputType(selected[0]), assetKey(selected[0]), 'main'); return; }
     revealAssetsEditor();
     try {
       await assetRequest('select-for-modify', { ref: assetRef(selected[0]) });
@@ -1828,19 +1900,18 @@
     const target = assetByKey(assetKey(contextTargetRef));
     if (!target) return [menuButton('Choose one object', () => {}, { disabled: true })];
     const capturedRef = cloneAssetRef(contextTargetRef);
-    if (target.kind === 'young' || target.kind === 'lie') {
-      const capturedKey = assetKey(target);
-      const items = [menuButton('Input', () => { closeAssetsContextMenu(); objectWorkspace?.open(`${target.kind}-input`, capturedKey, 'side'); })];
-      if (target.kind === 'young') window.MathWorkspaceObjects.definitions.filter(definition => !definition.input).forEach(definition => items.push(menuButton(definition.label, () => { closeAssetsContextMenu(); objectWorkspace?.open(definition.id, capturedKey, 'side'); })));
-      return items;
-    }
-    return NATIVE_ASSET_CARD_TYPES
-      .filter((cardType) => cardSupportsAsset(cardType, target.kind))
-      .map((cardType) => menuButton(ASSET_CARD_REGISTRY[cardType].label, () => openAssetProperty(cardType, capturedRef)));
+    const capturedKey = assetKey(target);
+    const items = OBJECT_INPUT_KINDS.includes(target.kind) || slicing?.isAsset(target) ? [menuButton('Input', () => { closeAssetsContextMenu(); objectWorkspace?.open(slicing.inputType(target), capturedKey, 'side'); })] : [];
+    for(const suggestion of panelCatalog?.suggest([capturedKey],assetState.snapshot.assets) || []) items.push(menuButton(suggestion.label,()=>{
+      closeAssetsContextMenu();
+      if(suggestion.route==='assets')openAssetProperty(suggestion.cardType,capturedRef);
+      else objectWorkspace?.open(suggestion.id,'','side',{refs:suggestion.refs,rule:suggestion.rule});
+    }));
+    return items;
   }
 
   function uniqueDefaultAssetName(kind) {
-    const base = kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f';
+    const base = ({frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'sigma',fan:'Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
     const numbered = (number) => kind === 'sheaf' ? `\\mathcal{E}_{${number}}` : `${base}_{${number}}`;
     let name = base, number = 2;
     const isTaken = (candidate) => assetState.snapshot.assets.some((asset) => canonicalAssetName(asset.name) === canonicalAssetName(candidate));
@@ -1848,14 +1919,14 @@
     return name;
   }
   function createDefaultAsset(kind, options = {}) {
-    const type = kind === 'young' ? 'partition' : kind === 'lie' ? 'simple' : kind === 'map' ? 'ordinary' : 'abstract';
+    const type = ASSET_SUBTYPES[kind][0][0];
     const firstVariety = assetState.snapshot.assets.find((asset) => asset.kind === 'variety');
-    const data = kind === 'young' ? { rows: [], partition: '' } : kind === 'lie' ? { family: 'A', rank: 3 } : kind === 'variety'
+    const data = OBJECT_INPUT_KINDS.includes(kind) ? window.MathWorkspaceObjects.normalize(kind, type) : kind === 'variety'
       ? { dimension: '3' }
       : kind === 'sheaf'
         ? { base: firstVariety ? assetKey(firstVariety) : '', rank: '1' }
         : { domain: firstVariety ? assetKey(firstVariety) : '', codomain: firstVariety ? assetKey(firstVariety) : '' };
-    const prefix = kind === 'young' ? 'Y' : kind === 'lie' ? 'L' : kind === 'variety' ? 'X' : kind === 'sheaf' ? 'E' : 'M';
+    const prefix = { dynkin: 'D', strands: 'W', matrix: 'A', category: 'C', functor: 'F', young: 'Y', lie: 'L', variety: 'X', sheaf: 'E', map: 'M' }[kind] || kind.charAt(0).toUpperCase();
     const record = { id: `${prefix}${++assetState.nextObjectId}`, kind, name: uniqueDefaultAssetName(kind), type, data };
     record.plainName = plainAssetName(record.name);
     record.typeLabel = ASSET_SUBTYPES[kind].find(([value]) => value === type)?.[1] || kind;
@@ -1872,7 +1943,7 @@
     return record;
   }
   async function createAsset(kind) {
-    if (kind === 'young' || kind === 'lie') {
+    if (OBJECT_INPUT_KINDS.includes(kind)) {
       closeAssetsContextMenu(); const record = createObjectAsset(kind); objectWorkspace?.open(`${kind}-input`, assetKey(record), 'side'); return;
     }
     closeAssetsContextMenu(); revealAssetsEditor();
@@ -1908,15 +1979,85 @@
   }
   function createObjectAsset(kind, options = {}) {
     if (!ASSET_KINDS.includes(kind)) throw new Error('Unknown mathematical object type.');
+    if (options.data) { const type = options.type || ASSET_SUBTYPES[kind][0][0]; validateAssetData(kind, type, normalizedAssetData(kind, type, options.data), ''); }
+    if (options.name && (!balancedLatex(options.name) || !String(options.name).trim() || assetState.snapshot.assets.some(asset => canonicalAssetName(asset.name) === canonicalAssetName(options.name)))) throw new Error('Choose a complete, unique asset name.');
     const record = createDefaultAsset(kind, { bindInput: false });
     if (Object.keys(options).length) updateObjectAsset(assetRef(record), options);
     else applyAssetSnapshot(localAssetSnapshot(), assetRef(record), { affectedAssetKeys: new Set([assetKey(record)]) });
     return assetByKey(assetKey(record));
   }
+  function importCategoryGraph(value) {
+    const graph = window.MathWorkspaceObjects.prepareCategoryGraph(value), ids = new Map(), created = [], layout = [];
+    for (const item of [...graph.categories, ...graph.functors]) if (!item.name.trim() || !balancedLatex(item.name)) throw new Error('The preset contains an incomplete object name.');
+    // Validate the whole graph before allocating any Asset IDs or changing the store.
+    const add = (kind, item, data) => {
+      const record = createDefaultAsset(kind, { bindInput: false });
+      let name = item.name.trim(), serial = 2;
+      while (assetState.snapshot.assets.some(asset => asset !== record && canonicalAssetName(asset.name) === canonicalAssetName(name))) name = item.name.trim() + '_{' + serial++ + '}';
+      Object.assign(record, { name, plainName: plainAssetName(name), data, dependencies: assetDependencies(kind, kind, data), definition: assetDefinitionFor(kind, kind, data) });
+      record.fingerprint = JSON.stringify({ name, type: kind, data, dependencies: record.dependencies }); created.push(assetKey(record)); return record;
+    };
+    for (const item of graph.categories) {
+      const record = add('category', item, item.data); ids.set(item.sourceId, assetKey(record));
+      if (Number.isFinite(item.point.x) && Number.isFinite(item.point.y)) layout.push({ id: assetKey(record), x: Math.max(.06, Math.min(.94, item.point.x)), y: Math.max(.06, Math.min(.94, item.point.y)) });
+    }
+    for (const item of graph.functors) add('functor', item, { ...item.data, domain: ids.get(item.data.domain), codomain: ids.get(item.data.codomain) });
+    applyAssetSnapshot(localAssetSnapshot(), null, { affectedAssetKeys: new Set(created) });
+    const panel = objectWorkspace.open('category-diagram', '', 'main'); panel.computation.refs.nodes = created; objectWorkspace.refresh();
+    panel.propertyRenderer?.editor.objectIO('layout', layout);
+    return created;
+  }
+  function importRootObject(ref, value) {
+    const asset = assetByKey(assetKey(ref));
+    if (!asset || !['dynkin','strands'].includes(asset.kind)) throw new Error('Choose a Dynkin or Strands destination.');
+    const model = window.MathWorkspaceObjects, prepared = model.prepareRootImport(asset.kind, value);
+    let parent = assetByKey(prepared.data.lie, 'lie');
+    if (prepared.lie) {
+      if (!parent || JSON.stringify(parent.data) !== JSON.stringify(prepared.lie)) parent = assetState.snapshot.assets.find(item => item.kind === 'lie' && JSON.stringify(item.data) === JSON.stringify(prepared.lie));
+    }
+    const issues = model.rootObjectIssues({ kind: asset.kind, data: prepared.data }, prepared.lie ? { kind: 'lie', data: prepared.lie } : parent);
+    if (issues.length) throw new Error(issues.join(' '));
+    // The full payload is validated before creating any dependency. Never edit a shared Lie asset on import.
+    if (!parent) parent = createObjectAsset('lie', { data: prepared.lie });
+    return updateObjectAsset(ref, { data: { ...prepared.data, lie: assetKey(parent) } });
+  }
+  function importSlicing(value, ref) {
+    const graph=slicing.prepareImport(value,window.MathWorkspaceObjects.normalize),destination=ref&&assetByKey(assetKey(ref));
+    const primary=graph.records.find(a=>assetKey(a)===graph.primary);
+    if(ref&&(!destination||graph.legacy||destination.kind!==primary?.kind)) throw new Error('Choose an asset of the same kind, or import a whole slicing experiment.');
+    let nextId=assetState.nextObjectId;
+    const remap=new Map(graph.records.map(a=>[assetKey(a),a===primary&&destination?assetKey(destination):a.kind+':S'+(++nextId)]));
+    const usedNames=new Set(assetState.snapshot.assets.map(a=>canonicalAssetName(a.name)));
+    const staged=graph.records.map(a=>{
+      const key=remap.get(assetKey(a)),data=slicing.clone(a.data);
+      for(const spec of slicing.references(a)) {
+        const parts=spec.field.split('.'),field=parts.pop(),parent=parts.reduce((d,k)=>d[k],data),value=parent[field];
+        parent[field]=spec.many?(value||[]).map(k=>remap.get(k)||k):(remap.get(value)||value||'');
+      }
+      let name=a===primary&&destination?destination.name:a.name.trim(),serial=2;
+      if(!name||!balancedLatex(name)) throw new Error('Every imported asset needs a complete name.');
+      if(!(a===primary&&destination)) { while(usedNames.has(canonicalAssetName(name)))name=a.name.trim()+'_{'+serial+++'}';usedNames.add(canonicalAssetName(name)); }
+      const type=a.type,kind=a.kind,id=key.slice(key.indexOf(':')+1),normalized=normalizedAssetData(kind,type,data),dependencies=assetDependencies(kind,type,normalized);
+      return {kind,id,type,name,plainName:plainAssetName(name),data:normalized,dependencies,typeLabel:ASSET_SUBTYPES[kind]?.find(entry=>entry[0]===type)?.[1]||type,definition:assetDefinitionFor(kind,type,normalized),fingerprint:JSON.stringify({name,type,data:normalized,dependencies})};
+    });
+    const all=[...assetState.snapshot.assets.filter(a=>!destination||assetKey(a)!==assetKey(destination)),...staged];
+    for(const a of staged) {
+      const errors=slicing.issues(a,all,false); if(errors.length) throw new Error(errors.join(' '));
+      if(['formula','tropical'].includes(a.kind)) slicing.math('validate',{asset:a,assets:all});
+    }
+    // Publish only after the complete graph, references and formulas have passed validation.
+    assetState.nextObjectId=nextId;assetState.snapshot.assets=all;assetState.snapshot.revision+=1;
+    const created=staged.map(assetKey);applyAssetSnapshot(localAssetSnapshot(),ref||null,{affectedAssetKeys:new Set(created)});
+    if(graph.legacy) {
+      const panel=objectWorkspace.open('slicing-scene','','main');panel.computation.refs={frame:remap.get(graph.frame),nodes:graph.nodes.map(k=>remap.get(k))};objectWorkspace.refresh();
+      panel.propertyRenderer?.editor.objectIO('view',{viewport:graph.viewport,layers:graph.layers.map(([key,layer])=>[remap.get(key),layer])});
+    }
+    return destination?assetByKey(assetKey(destination)):created;
+  }
   function initialiseObjectPanels() {
     if (!window.MathWorkspaceObjects) return;
     objectWorkspace = window.MathWorkspaceObjects.mount({
-      snapshot: localAssetSnapshot, create: createObjectAsset, update: updateObjectAsset, status, closePicker: closeCardPicker,
+      snapshot: localAssetSnapshot, create: createObjectAsset, update: updateObjectAsset, importCategoryGraph, importRootObject, importSlicing, status, closePicker: closeCardPicker, ioChanged: updateImportExport,
       installChrome: panel => {
         installWorkspaceOwnedCardChrome(panel.node, panel.id, {
           hide: () => objectWorkspace.move(panel, 'hidden'),
@@ -1935,7 +2076,7 @@
       },
       side: $('#workspace-cards'), parking: $('#workspace-canvas-parking'), split: () => splitView,
       edit: ref => {
-        if (['young', 'lie'].includes(ref.kind)) objectWorkspace.open(`${ref.kind}-input`, assetKey(ref), 'side');
+        if (OBJECT_INPUT_KINDS.includes(ref.kind) || slicing?.isAsset(assetByKey(assetKey(ref)))) objectWorkspace.open(slicing.inputType(assetByKey(assetKey(ref))), assetKey(ref), 'side');
         else { revealAssetsEditor(); bindAssetInputInstance(ref); }
       },
       placeMain: panel => {
@@ -2021,6 +2162,7 @@
     assetState.selected = next;
     assetState.view.querySelectorAll('[data-asset-key]').forEach((item) => item.setAttribute('aria-selected', String(next.has(item.dataset.assetKey))));
     assetState.view.querySelector('[data-assets-count]').textContent = `${assetState.snapshot.assets.length} objects${next.size ? ` · ${next.size} selected` : ''}`;
+    renderCardPicker();
   }
 
   function handleAssetsContextMenu(event) {
@@ -2126,34 +2268,54 @@
     if (Array.from(select.options).some((item) => item.value === previous)) select.value = previous; select.disabled = entries.length === 0;
   }
   function updateImportExport() {
-    const assetsTarget = inspectorSourceId === 'assets' || activeCanvasId === 'assets';
-    const definition = byId.get(assetsTarget ? 'assets' : activeCanvasId); $('#workspace-io-target').textContent = definition ? definition.label : 'No main view selected';
-    chooseOptions($('#workspace-io-exporter'), [], assetsTarget ? 'Unavailable for Assets' : 'Use the calculator’s native card');
-    chooseOptions($('#workspace-io-format'), [], 'Default format'); $('#workspace-io-format-row').hidden = true;
-    chooseOptions($('#workspace-io-importer'), [], assetsTarget ? 'Unavailable for Assets' : 'Use the calculator’s native card');
-    $('#workspace-io-output').value = '';
+    const entries = objectWorkspace?.ioEntries() || [], exporter = $('#workspace-io-exporter'), importer = $('#workspace-io-importer');
+    chooseOptions(exporter, entries.filter(entry => !entry.importOnly), 'Choose an asset or property…');
+    const formats = exporter.value ? objectWorkspace.exportFormats(exporter.value) : [];
+    chooseOptions($('#workspace-io-format'), formats, 'Default format'); $('#workspace-io-format-row').hidden = formats.length < 2;
+    chooseOptions(importer, entries.filter(entry => entry.canImport), 'Choose the destination asset…');
+    try { $('#workspace-io-output').value = exporter.value ? objectWorkspace.exportText(exporter.value, $('#workspace-io-format').value || 'json') : ''; }
+    catch (error) { $('#workspace-io-output').value = error.message; }
+    ['export', 'copy', 'download'].forEach(action => { $('#workspace-io-' + action).disabled = !exporter.value; });
+    $('#workspace-io-input').disabled = !importer.value;
+    $('#workspace-io-import').disabled = !importer.value;
+  }
+  function initialiseImportExport() {
+    const run = action => async () => { try { await action(); } catch (error) { status(error.message, 'error'); } };
+    const currentExport = () => objectWorkspace.exportText($('#workspace-io-exporter').value, $('#workspace-io-format').value || 'json');
+    $('#workspace-io-format').addEventListener('change', updateImportExport);
+    $('#workspace-io-exporter').addEventListener('change', updateImportExport);
+    $('#workspace-io-importer').addEventListener('change', updateImportExport);
+    $('#workspace-io-export').addEventListener('click', run(() => { $('#workspace-io-output').value = currentExport(); }));
+    $('#workspace-io-copy').addEventListener('click', run(async () => {
+      const text = currentExport(); await navigator.clipboard.writeText(text);
+      $('#workspace-io-output').value = text; status('Copied export data.', 'success');
+    }));
+    $('#workspace-io-download').addEventListener('click', run(() => {
+      const entry = objectWorkspace.ioEntries().find(entry => entry.id === $('#workspace-io-exporter').value), text = currentExport();
+      const format = $('#workspace-io-format').value || 'json', extension = format === 'json' || format === 'preset' ? 'json' : format === 'latex' ? 'tex' : 'txt';
+      const url = URL.createObjectURL(new Blob([text], { type: extension === 'json' ? 'application/json' : 'text/plain' })), link = document.createElement('a');
+      link.href = url; link.download = entry.filename.replace(/\.json$/, '.' + extension); link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }));
+    $('#workspace-io-import').addEventListener('click', run(() => {
+      const key = $('#workspace-io-importer').value;
+      objectWorkspace.importText(key, $('#workspace-io-input').value);
+      const entry = objectWorkspace.ioEntries().find(entry => entry.id === key);
+      status('Imported into ' + entry.label + '.', 'success');
+    }));
   }
 
   function initialise() {
+    panelCatalog = window.MathWorkspacePanelCatalog.create({assets:ASSET_SUBTYPES,definitions:window.MathWorkspaceObjects.definitions,nativePanels:ASSET_CARD_REGISTRY});
+    window.MathWorkspacePanelRegistry = panelCatalog;
     initialiseObjectPanels();
+    initialiseImportExport();
     const picker = $('#workspace-open-canvas'); picker.appendChild(new Option('Open view…', '', true, true));
     const views = document.createElement('optgroup'); views.label = 'Workspace views'; views.appendChild(new Option('Assets', 'assets')); picker.appendChild(views);
-    const objectGroup = document.createElement('optgroup'); objectGroup.label = 'Mathematical panels';
-    window.MathWorkspaceObjects?.definitions.forEach(definition => objectGroup.appendChild(new Option(definition.label, `object:${definition.id}`))); picker.appendChild(objectGroup);
     const calculatorGroup = document.createElement('optgroup'); calculatorGroup.label = 'Calculator views';
     calculators.forEach((calculator) => calculatorGroup.appendChild(new Option(calculator.label, calculator.id))); picker.appendChild(calculatorGroup);
     picker.addEventListener('change', () => { if (picker.value) openCanvas(picker.value); picker.value = ''; }); $('#workspace-split-view').addEventListener('click', () => setSplitView(!splitView));
     $('#workspace-io-card').classList.add('workspace-assets-inspector-card'); installWorkspaceOwnedCardChrome($('#workspace-io-card'), 'importExport'); enableWorkspaceOwnedCardDragging();
     $('#workspace-add-card').addEventListener('click', () => $('#workspace-card-picker').hidden ? openCardPicker() : closeCardPicker());
-    const changeCardPickerSource = (event) => {
-      const selectedSource = event.currentTarget.value;
-      cardPickerSourceId = selectedSource;
-      renderCardPicker();
-      $('#workspace-card-picker').hidden = false;
-      $('#workspace-add-card').setAttribute('aria-expanded', 'true');
-    };
-    $('#workspace-card-source').addEventListener('input', changeCardPickerSource);
-    $('#workspace-card-source').addEventListener('change', changeCardPickerSource);
     document.querySelectorAll('[data-pane]').forEach((pane) => pane.addEventListener('pointerdown', () => focusCanvasPane(pane.dataset.pane)));
     $('#workspace-canvas-resizer').addEventListener('pointerdown', beginCanvasResize);
     $('#workspace-canvas-resizer').addEventListener('keydown', handleCanvasResizeKeydown);

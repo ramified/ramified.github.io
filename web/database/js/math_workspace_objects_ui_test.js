@@ -30,7 +30,7 @@ async function run() {
       const x = api.createObjectAsset('variety', { name: 'X', type: 'grassmannian', data: { r: 2, n: 4 } });
       window.testAssets = { a: a.id, b: b.id, g: g.id, x: x.id };
       document.querySelector('#workspace-add-card').click();
-      document.querySelector('#workspace-card-options input[data-card-key="new:young-input"]').click();
+      MathWorkspaceObjectPanels.open('young-input', '', 'side', { keepPickerOpen: true });
       window.testInput = [...window.MathWorkspaceObjectPanels.panels.values()].at(-1);
       const select = testInput.node.querySelector('[data-object-reference="asset"]');
       select.value = 'young:' + testAssets.a; select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -38,7 +38,7 @@ async function run() {
     await waitFor(() => read(() => testInput.activeRenderer?.role === 'compact'));
     assert.equal(await read(() => document.querySelector('#workspace-card-picker').hidden), false, 'checkbox selection keeps the picker open');
     assert.equal(await read(() => document.querySelector('#workspace-card-options button')), null);
-    assert.equal(await read(() => document.querySelector('#workspace-card-options input[data-card-key="' + testInput.id + '"]').checked), true);
+    assert.equal(await read(() => document.querySelector('#workspace-card-options input[data-card-key="' + testInput.id + '"]')), null, 'Inputs stay out of Add panel');
     await read(() => {
       document.querySelector('#workspace-add-card').click();
       testInput.head.click();
@@ -53,8 +53,8 @@ async function run() {
       testInput.head.querySelector('[data-workspace-card-action="hide"]').click();
       document.querySelector('#workspace-add-card').click();
     });
-    assert.equal(await read(() => document.querySelector('#workspace-card-options input[data-card-key="' + testInput.id + '"]').checked), false);
-    await read(() => document.querySelector('#workspace-card-options input[data-card-key="' + testInput.id + '"]').click());
+    assert.equal(await read(() => document.querySelector('#workspace-card-options input[data-card-key="' + testInput.id + '"]')), null);
+    await read(() => MathWorkspaceObjectPanels.setVisible(testInput.id, true));
     assert.equal(await read(() => MathWorkspaceObjectPanels.panels.size), 1, 'showing a hidden panel restores the same instance');
     assert.equal(await read(() => testInput.node.classList.contains('is-pinned')), true);
     await read(() => {
@@ -75,6 +75,29 @@ async function run() {
       await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode, ...options });
     };
     const type = async text => { for (const char of text) await client.send('Input.insertText', { text: char }); };
+    assert.equal(await read(() => testInput.node.querySelector('.workspace-object-io')), null);
+    await read(() => {
+      const importer = document.querySelector('#workspace-io-importer'), exporter = document.querySelector('#workspace-io-exporter');
+      importer.value = exporter.value = 'young:' + testAssets.b;
+      importer.dispatchEvent(new Event('change', { bubbles: true }));
+      document.querySelector('[data-workspace-io-tab="import"]').click();
+      document.querySelector('#workspace-io-input').focus();
+    });
+    await type('3, ');
+    assert.equal(await read(() => document.querySelector('#workspace-io-input').value), '3, ');
+    await read(() => document.querySelector('#workspace-io-import').click());
+    assert.deepEqual(await read(() => MathWorkspaceAssetsTest.state.snapshot.assets.find(a => a.id === testAssets.b).data.rows), [1], 'an incomplete import must not alter its destination');
+    await read(() => document.querySelector('#workspace-io-input').focus()); await type('2');
+    await read(() => document.querySelector('#workspace-io-import').click());
+    assert.deepEqual(await read(() => MathWorkspaceAssetsTest.state.snapshot.assets.find(a => a.id === testAssets.b).data.rows), [3, 2]);
+    assert.deepEqual(await read(() => testInput.activeRenderer.editor.collectAssets().rows), [2, 1], 'import targets its selected asset, not the open Input panel');
+    assert.deepEqual(await read(() => JSON.parse(document.querySelector('#workspace-io-output').value).data.rows), [3, 2]);
+    await read(() => {
+      document.querySelector('#workspace-io-input').value = '1'; document.querySelector('#workspace-io-import').click();
+      document.querySelector('[data-workspace-io-tab="export"]').click();
+      scrollTo(0, 0);
+    });
+    console.log('PASS dedicated Import / Export card, explicit targets and atomic draft validation');
     await read(() => testInput.rows.focus()); await key('a', 'KeyA', { modifiers: 2 }); await key('Backspace', 'Backspace');
     assert.equal(await read(() => testInput.rows.value), '');
     await type('4, ');
@@ -99,6 +122,7 @@ async function run() {
     console.log('PASS sequential drafts, invalid prefixes, caret, trailing space, IME');
 
     await read(() => testInput.moveButton.click()); await delay(200);
+    assert.equal(await read(() => document.querySelector('#workspace-io-exporter').value), 'young:' + await read(() => testAssets.b));
     assert.equal(await read(() => testInput.activeRenderer.role), 'large');
     assert.deepEqual(await read(() => testInput.activeRenderer.editor.collectAssets().rows), [4, 3, 1]);
     fs.writeFileSync(path.join(os.tmpdir(), 'math-workspace-object-large.png'), Buffer.from((await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })).data, 'base64'));
@@ -127,11 +151,16 @@ async function run() {
     await waitFor(() => read(previous => JSON.stringify(testInput.activeRenderer.editor.collectAssets().rows) !== previous, before));
     assert.deepEqual(await read(() => secondInput.activeRenderer.editor.collectAssets().rows), await read(() => testInput.activeRenderer.editor.collectAssets().rows));
     console.log('PASS actual canvas pointer editing publishes to the shared asset');
-    await read(() => {
-      MathWorkspaceAssetsTest.setSplitView(true);
-      const transfer = new DataTransfer(); transfer.setData('application/x-math-workspace-panel', testInput.id);
-      document.querySelector('#workspace-canvas-pane-secondary').dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: transfer }));
+    await read(() => { MathWorkspaceAssetsTest.setSplitView(true); scrollTo(0, 0); });
+    const dragPoints = await read(() => {
+      const grip = testInput.head.querySelector('.drag-handle').getBoundingClientRect();
+      const pane = document.querySelector('#workspace-canvas-pane-secondary').getBoundingClientRect();
+      return { x: grip.left + grip.width / 2, y: grip.top + grip.height / 2, toX: pane.left + pane.width / 2, toY: pane.top + 80 };
     });
+    await mouse(client, 'mouseMoved', dragPoints.x, dragPoints.y, 0);
+    await mouse(client, 'mousePressed', dragPoints.x, dragPoints.y, 1);
+    await mouse(client, 'mouseMoved', dragPoints.toX, dragPoints.toY, 1);
+    await mouse(client, 'mouseReleased', dragPoints.toX, dragPoints.toY, 0);
     await delay(100);
     assert.deepEqual(await read(() => [secondInput, testInput].map(panel => [panel.node.closest('[data-pane]').dataset.pane, panel.activeRenderer.role])), [['primary','compact'],['secondary','compact']]);
     fs.writeFileSync(path.join(os.tmpdir(), 'math-workspace-object-split.png'), Buffer.from((await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })).data, 'base64'));
@@ -171,10 +200,11 @@ async function run() {
     assert.equal(await read(() => lrPanel.propertyRenderer.editor.shadow.getElementById('lie-rank').value), '4');
     assert.equal(await read(() => statsPanel.propertyRenderer.editor.inspectorShadow.getElementById('out-size').textContent.trim()), '1');
     await read(() => {
-      const io = lrPanel.node.querySelector('.workspace-object-io');
-      [...io.querySelectorAll('button')].find(button => button.textContent === 'export').click();
+      const exporter = document.querySelector('#workspace-io-exporter');
+      exporter.value = 'property:' + lrPanel.computation.id; exporter.dispatchEvent(new Event('change', { bubbles: true }));
+      document.querySelector('#workspace-io-export').click();
     });
-    assert.equal(await read(() => JSON.parse(lrPanel.node.querySelector('.workspace-object-io textarea').value).result), null, 'stale results are never exported as current');
+    assert.equal(await read(() => JSON.parse(document.querySelector('#workspace-io-output').value).result), null, 'stale results are never exported as current');
     console.log('PASS dual inputs, native LR result, independent statistics and shared Lie invalidation');
 
     await choose('lrPanel', 'mu', 'young', 'a');

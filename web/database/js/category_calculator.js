@@ -199,7 +199,7 @@
       refs.categoryOpposite
     ].forEach((control) => {
       if (!control) return;
-      control.addEventListener('input', handleCategoryDraftChange);
+      window.CalculatorInputSettings.listenEditable(control, 'input', handleCategoryDraftChange, { commitHandled: true });
       control.addEventListener('change', handleCategoryDraftChange);
     });
     if (refs.categoryObjectSymbol) {
@@ -243,7 +243,7 @@
       refs.functorLabel,
       refs.functorVariance
     ].forEach((control) => {
-      control.addEventListener('input', handleFunctorDraftChange);
+      window.CalculatorInputSettings.listenEditable(control, 'input', handleFunctorDraftChange, { commitHandled: true });
       control.addEventListener('change', handleFunctorDraftChange);
     });
 

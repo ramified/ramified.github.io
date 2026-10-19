@@ -6,7 +6,7 @@
 <title>Mathematical Workspace</title>
 <link rel="stylesheet" href="css/site.css?v=20260903-1">
 <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
-<link rel="stylesheet" href="css/math_workspace.css?v=20261016-objects-1">
+<link rel="stylesheet" href="css/math_workspace.css?v=20261018-context-panels-1">
 </head>
 <body>
 <header>
@@ -50,7 +50,7 @@
         <em class="toggle-icon">▾</em>
       </div>
       <div class="card-body">
-        <span id="workspace-io-target" class="workspace-io-target">No main canvas selected</span>
+        <span id="workspace-io-target" class="workspace-io-target">Choose an asset or property below. Import updates the selected asset.</span>
         <div class="import-export-panel">
           <div class="import-export-tabs" role="tablist" aria-label="Import and export">
             <button class="import-export-tab" type="button" role="tab" aria-selected="true" data-workspace-io-tab="export">Export</button>
@@ -86,8 +86,7 @@
 </main>
 
 <div id="workspace-card-picker" class="workspace-card-picker" role="dialog" aria-label="Add panels" hidden>
-  <label for="workspace-card-source">Panels from</label>
-  <select id="workspace-card-source" class="workspace-control calculator-control"></select>
+  <p id="workspace-card-context" class="workspace-card-context" aria-live="polite"></p>
   <div id="workspace-card-options" class="workspace-card-options"></div>
 </div>
 
@@ -113,8 +112,10 @@
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js?v=20260903-1"></script>
 <script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
-<script src="js/math_workspace_objects.js?v=20261016-objects-1"></script>
-<script src="js/math_workspace_native_editors_v8.js?v=23cf1fae24e7850f"></script>
-<script src="js/math_workspace.js?v=20261016-objects-1"></script>
+<script src="js/math_workspace_slicing.js?v=20261018-slicing-assets-1"></script>
+<script src="js/math_workspace_objects.js?v=20261018-context-panels-1"></script>
+<script src="js/math_workspace_panel_catalog.js?v=20261018-context-panels-1"></script>
+<script src="js/math_workspace_native_editors_v8.js?v=67fe62549210afdb"></script>
+<script src="js/math_workspace.js?v=20261018-context-panels-1"></script>
 </body>
 </html>

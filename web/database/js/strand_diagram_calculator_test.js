@@ -297,7 +297,7 @@ function testVersionFourCurrentCalculationExport() {
 }
 
 function testHtmlIntegration() {
-  const html = fs.readFileSync(path.join(__dirname, '..', 'strand_diagram_calculator.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'strand_diagram_calculator.html'), 'utf8').replace(/\r\n/g, '\n');
   const source = fs.readFileSync(path.join(__dirname, 'strand_diagram_calculator.js'), 'utf8');
   assert.ok(html.includes('id="strand-calculation-card"'));
   assert.ok(html.includes('id="strand-calculation-task"'));

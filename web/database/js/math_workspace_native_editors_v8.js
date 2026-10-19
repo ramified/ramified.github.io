@@ -12615,7 +12615,7 @@
       if (key === "head") return head;
       if (key === "documentElement") return docRoot;
       if (key === "readyState") return ready ? "complete" : "loading";
-      if (key === "activeElement") return shadow.activeElement;
+      if (key === "activeElement") return shadow.activeElement || inspectorShadow?.activeElement;
       if (key === "contains") return (node) => roots().some((root) => root.contains(node));
       if (key === "defaultView") return environment.window;
       if (key === "getElementsByClassName") return (...args) => roots().flatMap((root) => [...root.getElementsByClassName(...args)]);
@@ -12827,6 +12827,7 @@
       positionAsset: (ref2, point) => assetAdapter?.position?.(ref2, point) ?? false,
       configureObjectPanel: (config) => assetAdapter?.panel?.(config) ?? false,
       readObjectResult: () => assetAdapter?.result?.() ?? null,
+      objectIO: (action, value) => assetAdapter?.io?.(action, value),
       setBindingToken: (value) => {
         bindingToken = value ?? null;
       },
@@ -32898,6 +32899,474 @@ ${body}`;
         mathTypesetDirty = __editor.applyState(mathTypesetDirty, value.mathTypesetDirty);
         renderAll();
       }, classes: { FormulaExpressionParser, NumericFormulaExpressionParser } });
+      let __panelConfig = {}, __panelCard = null;
+      const __key = (ref2) => ref2 ? ref2.kind + ":" + ref2.id : "";
+      const __sync = (control, value) => window.CalculatorInputSettings.syncEditableValue(control, String(value ?? ""));
+      function __showCard(card) {
+        __panelCard = card;
+        card.classList.add("workspace-object-content");
+        card.classList.remove("collapsed");
+        __editor.setCardVisible(card.dataset.workspaceCardId, true);
+      }
+      function __panelStyle(text = "") {
+        const style = document2.createElement("style");
+        style.textContent = ".workspace-object-content>.card-head{display:none!important}.workspace-object-content{border:0!important;margin:0!important;max-height:none!important}.workspace-object-content>.card-body{padding:4px!important;max-height:none!important}.workspace-card-inspector{display:block!important}.workspace-object-content [data-import-export-trigger]{display:none!important}" + text;
+        document2.head.append(style);
+        __editor.inspectorShadow?.append(style.cloneNode(true));
+      }
+      const __captureControls = () => __panelCard ? [...__panelCard.querySelectorAll("input[id],select[id],textarea[id]")].filter((n) => !n.readOnly && n.type !== "hidden").map((n) => ({ id: n.id, value: n.value, checked: n.type === "checkbox" ? n.checked : void 0 })) : [];
+      const __sliceModel = () => window.MathWorkspaceSlicing;
+      const __copySlice = (value) => JSON.parse(JSON.stringify(value));
+      let __sliceSnapshot = { assets: [] }, __sliceRef = null, __sliceBinding = {}, __sliceFrame = null, __sliceTarget = null;
+      let __sliceApplying = false, __sliceRendering = false, __sliceNotifyQueued = false;
+      const __sliceLayers = /* @__PURE__ */ new Map(), __sliceInputModes = /* @__PURE__ */ new Map();
+      let __sliceSourceSignature = "", __sliceFrameSignature = "", __sliceRawFrame = null;
+      const __originalSliceRender = renderAll, __originalReadouts = updateReadouts, __originalDirectFrame = applyDirectFrameRows, __originalSliceDraw = draw;
+      const __originalSourceLabel = sourceLabel;
+      sourceLabel = function(object) {
+        return objectTypeKey(object) === "workspace-frame" ? "frame" : __originalSourceLabel(object);
+      };
+      function __sliceFrameData() {
+        return { ambientDimension: state.ambientDim, position: state.p.slice(), basis: frameRows(state.frame).map((row) => row.slice()) };
+      }
+      function __withOrthonormalFrame(action) {
+        const raw = state.frame, candidate = orthonormalizeFrameColumns(raw, state.ambientDim);
+        if (!candidate.ok) throw new Error(candidate.error);
+        __sliceRawFrame = raw;
+        state.frame = candidate.frame;
+        try {
+          return action();
+        } finally {
+          state.frame = raw;
+          __sliceRawFrame = null;
+        }
+      }
+      draw = function() {
+        return __panelConfig.mode && __panelConfig.mode !== "kernel" ? __withOrthonormalFrame(() => __originalSliceDraw()) : __originalSliceDraw();
+      };
+      const __originalDynkinPicker = buildDynkinReferencePicker, __originalSliceParams = rebuildObjectParams;
+      buildDynkinReferencePicker = function(...args) {
+        if (!__panelConfig.mode) return __originalDynkinPicker(...args);
+      };
+      rebuildObjectParams = function() {
+        if (__panelConfig.operation !== "slicing-display") return __originalSliceParams();
+        const host2 = $("object-params"), object = activeObject();
+        host2.replaceChildren();
+        if (!object) return;
+        const control = (label, key, options2) => {
+          const row = document2.createElement("label");
+          row.className = "slice-control-line";
+          row.append(document2.createTextNode(label + " "));
+          const input = document2.createElement(options2 ? "select" : "input");
+          input.setAttribute("aria-label", label);
+          if (options2) {
+            for (const value of options2) {
+              const option = document2.createElement("option");
+              option.value = value;
+              option.textContent = value;
+              input.append(option);
+            }
+            input.value = object.data[key];
+          } else {
+            input.type = "checkbox";
+            input.checked = object.data[key] !== false;
+          }
+          input.addEventListener("change", () => {
+            object.data[key] = options2 ? input.value : input.checked;
+            renderAll();
+          });
+          row.append(input);
+          host2.append(row);
+        };
+        const type = objectTypeKey(object);
+        if (type === "lattice") {
+          control("Lattice points", "showLatticePoints");
+          buildLatticeBoundControls(host2, object);
+        }
+        if (type === "tropical-polynomial") {
+          control("Tropical districts", "showDistricts");
+          control("District label density", "tropicalDistrictLabelDensity", ["all", "active"]);
+        }
+        if (type === "weyl-chambers") {
+          control("Weyl chambers", "showChambers");
+          control("Weyl labels", "weylLabelMode", ["permutation", "word", "length", "kl", "kl-v1"]);
+          control("Weyl label density", "weylLabelDensity", ["all", "active"]);
+        }
+      };
+      updateReadouts = function() {
+        if (!__sliceRawFrame) return __originalReadouts();
+        const computational = state.frame;
+        state.frame = __sliceRawFrame;
+        try {
+          __originalReadouts();
+        } finally {
+          state.frame = computational;
+        }
+      };
+      applyDirectFrameRows = function(rows, nextP, message) {
+        if (!__panelConfig.mode) return __originalDirectFrame(rows, nextP, message);
+        const data2 = __sliceModel().normalize("frame", "frame", { ambientDimension: state.ambientDim, position: nextP || state.p, basis: rows });
+        state.p = data2.position;
+        state.frame = columnsFromRows(data2.basis);
+        state.lastWarning = message;
+        syncDirectInputFields({ force: true });
+        renderAll();
+      };
+      function __sliceNative(asset, all) {
+        const model = __sliceModel(), key = __key(asset), d = model.materialize(asset, all).data, n = d.ambientDimension ?? d.rows ?? state.ambientDim;
+        const get = (key2) => all.find((a) => __key(a) === key2);
+        let data2;
+        if (asset.kind === "frame") {
+          data2 = { objectType: "workspace-frame", kind: "geometry", ambientDimension: n, points: [], edges: [], rays: d.basis[0].map((_, i) => ({ origin: d.position.slice(), direction: d.basis.map((row) => row[i]), length: Math.hypot(...d.basis.map((row) => row[i])), label: "v_" + (i + 1) })) };
+        } else if (asset.kind === "variety" && asset.type === "toric") {
+          const parent = get(d.fan || d.cone);
+          if (!parent) throw new Error("Choose the toric construction source.");
+          data2 = __copySlice(__sliceNative(parent, all).data);
+          if (parent.kind === "cone") {
+            data2 = { ...makeToricFanData(n), constructionMode: "cone-list", coneSourceIds: [__key(parent)], cones: [{ id: __key(parent), label: parent.name, sourceId: __key(parent), generators: __copySlice(parent.data.generators) }] };
+          }
+        } else if (asset.kind === "matrix") {
+          const value = model.materialize(asset, all);
+          data2 = makeMatrixData(n);
+          data2.matrixRows = model.rows(value.data.entries, n, "Matrix");
+        } else if (asset.kind === "lie") data2 = makeDynkinTypeData(d.rank, d.family.charAt(0));
+        else {
+          const type2 = asset.kind === "polytope" ? asset.type : model.nativeTypes[asset.kind];
+          if (!type2) return null;
+          data2 = makeObjectData(type2, n, { family: d.family });
+          Object.assign(data2, __copySlice(d), { objectType: type2 });
+          if (asset.kind === "formula") Object.assign(data2, compileFormulaRelation(d.formula, n));
+          if (asset.kind === "tropical") Object.assign(data2, compileTropicalPolynomial(d.tropicalInput, d.tropicalConvention, n));
+          if (d.lie) {
+            const lie = get(d.lie);
+            if (!lie) throw new Error("Missing Lie type.");
+            Object.assign(data2, { dynkinSourceId: d.lie, dynkinType: lie.data.family.charAt(0), dynkinRank: lie.data.rank });
+          }
+          if (asset.kind === "lattice") {
+            if (d.basisMode === "matrix-object") data2.matrixSourceId = d.matrix;
+            if (d.basisMode === "dynkin") data2.basisRows = latticeBasisRowsFromDynkin(data2, n);
+            if (d.basisMode === "lmfdb-field" && d.lmfdbField) data2.basisRows = lmfdbBasisRowsFromField(d.lmfdbField, d.embeddingCoordinateMode, n);
+          }
+          if (asset.kind === "voronoi") {
+            data2.latticeSourceId = d.lattice;
+            data2.latticePoint = get(d.point).data.position.slice();
+          }
+          if (asset.kind === "fan") {
+            data2.coneSourceIds = d.cones || [];
+            data2.characterLatticeSourceId = d.characterLattice;
+            data2.cones = d.constructionMode === "preset" ? toricFanPresetCones(d.preset, n).map((c) => cloneToricFanCone(c, n)) : (d.cones || []).map((key2) => {
+              const cone = get(key2);
+              if (!cone) throw new Error("Missing cone.");
+              return { id: key2, label: cone.name, sourceId: key2, generators: __copySlice(cone.data.generators) };
+            });
+          }
+        }
+        const type = data2.objectType, defaults = OBJECT_TYPES.find((t) => t.key === type) || OBJECT_TYPES[3];
+        const layer = __sliceLayers.get(key) || {};
+        Object.assign(data2, __sliceInputModes.get(key) || {});
+        if (layer.data) Object.assign(data2, layer.data);
+        return { id: key, name: asset.name, kind: data2.kind || "geometry", data: { ...data2, name: asset.name }, visibleProjection: layer.visibleProjection ?? !isProjectionlessSourceType(type), visibleSlice: layer.visibleSlice ?? supportsExact2DSliceType(type), labels: !!layer.labels, style: { color: defaults.color, opacity: 0.85, pointSize: defaults.pointSize, lineWidth: defaults.lineWidth, ...layer.style } };
+      }
+      function __rememberSliceViews() {
+        for (const object of state.objects) {
+          const data2 = {};
+          for (const key of ["showDistricts", "tropicalDistrictLabelDensity", "tropicalNotationMode", "showChambers", "weylLabelMode", "weylElementDisplayMode", "weylLabelDensity", "showLatticePoints", "latticeBoundShape", "latticeBoundRadius"]) if (Object.hasOwn(object.data, key)) data2[key] = object.data[key];
+          const previous = __sliceLayers.get(object.id) || {};
+          __sliceLayers.set(object.id, { ...previous, style: { ...object.style }, labels: object.labels, data: data2, ...!object.__dependency ? { visibleProjection: object.visibleProjection, visibleSlice: object.visibleSlice } : {} });
+          const modes = {};
+          for (const key of ["positionInputMode", "vectorInputMode", "centerInputMode", "basisInputMode", "formulaInputMode", "generatorInputMode", "generatorImportOrientation"]) if (Object.hasOwn(object.data, key)) modes[key] = object.data[key];
+          __sliceInputModes.set(object.id, modes);
+        }
+      }
+      function __collectSlice() {
+        if (__sliceFrame && (__sliceTarget?.kind === "frame" || __panelConfig.operation === "slicing-scene")) return { kind: "frame", assetKey: __key(__sliceFrame), type: "frame", data: __sliceFrameData() };
+        if (!__sliceTarget || !__sliceModel().isAsset(__sliceTarget) || __sliceTarget.kind === "variety") return null;
+        const object = state.objects.find((o) => o.id === __key(__sliceTarget));
+        if (!object) return null;
+        const d = { ...object.data };
+        if (d.dynkinSourceId) d.lie = d.dynkinSourceId;
+        if (__sliceTarget.kind === "lattice") d.matrix = d.matrixSourceId;
+        if (__sliceTarget.kind === "voronoi") {
+          d.lattice = d.latticeSourceId;
+          d.point = __sliceTarget.data.point;
+        }
+        if (__sliceTarget.kind === "fan") {
+          d.cones = d.coneSourceIds;
+          d.characterLattice = d.characterLatticeSourceId;
+        }
+        return { type: __sliceTarget.type, data: __sliceModel().normalize(__sliceTarget.kind, __sliceTarget.type, d) };
+      }
+      function __sliceNotify() {
+        if (__sliceApplying || !__panelConfig.mode || __panelConfig.mode === "kernel" || __panelConfig.mode === "io" || __sliceNotifyQueued) return;
+        __sliceNotifyQueued = true;
+        queueMicrotask(() => {
+          __sliceNotifyQueued = false;
+          if (!__sliceApplying) __editor.notifyChange({ interaction: "object-preview" });
+        });
+      }
+      function __slicePinTabs() {
+        const op = __panelConfig.operation;
+        if (op === "cone-input") setToricTab("build");
+        else if (op === "cone-faces") setToricTab("faces");
+        else if (op === "cone-variety") setToricTab("variety");
+        if (op === "fan-input") setToricFanTab("build");
+        else if (op === "fan-orbits") setToricFanTab("fan");
+        else if (op === "fan-divisors") setToricFanTab("divisors");
+        if (__panelCard) __panelCard.hidden = false;
+      }
+      renderAll = function() {
+        if (!__panelConfig.mode || __panelConfig.mode === "kernel") return __originalSliceRender();
+        if (__sliceRendering) return;
+        __sliceRendering = true;
+        try {
+          __originalSliceRender();
+          __slicePinTabs();
+          if (__panelConfig.operation === "lattice-character") __renderBoundCharacter();
+        } finally {
+          __sliceRendering = false;
+        }
+        __sliceNotify();
+      };
+      function __renderBoundCharacter() {
+        const refs = __sliceBinding.references || {}, get = (k) => __sliceSnapshot.assets.find((a) => __key(a) === k), point = get(refs.point), lattice = state.objects.find((o) => o.id === refs.lattice);
+        if (!point || !lattice) return;
+        const ambient = point.data.position;
+        try {
+          const coeffs = multiplyMatrixVector(inverseMatrix(lattice.data.basisRows, "Lattice basis"), ambient);
+          if (coeffs.some((x) => Math.abs(x - Math.round(x)) > 1e-7)) {
+            $("slice-weight-info-out").textContent = "The selected point is not an integral point of this lattice.";
+            return;
+          }
+          const candidate = { objectId: lattice.id, objectName: lattice.name, label: point.name, ambient, latticePoint: true, latticeCoefficients: coeffs.map(Math.round) };
+          if (!refs.variety && lattice.data.basisMode !== "dynkin") {
+            $("slice-weight-info-out").textContent = "Lattice coordinates: (" + candidate.latticeCoefficients.join(", ") + "). Choose a toric variety to compute its character and principal divisor.";
+            return;
+          }
+          renderWeightInfoCard(candidate);
+        } catch (error) {
+          $("slice-weight-info-out").textContent = error.message;
+        }
+      }
+      const __originalCharacterFan = toricCharacterFanForCandidate;
+      toricCharacterFanForCandidate = function(candidate) {
+        if (__panelConfig.operation !== "lattice-character") return __originalCharacterFan(candidate);
+        const refs = __sliceBinding.references || {}, object = state.objects.find((o) => o.id === refs.variety);
+        if (!object || !candidate?.latticeCoefficients) return null;
+        const coordinates = candidate.latticeCoefficients;
+        if (object.data.characterLatticeSourceId && object.data.characterLatticeSourceId !== refs.lattice) return { object, coordinates, error: "This variety uses a different character lattice. Choose the referenced lattice." };
+        return { object, coordinates, analysis: toricFanAnalysis(object) };
+      };
+      const __originalSliceObjectSelect = syncObjectSelect;
+      syncObjectSelect = function() {
+        __originalSliceObjectSelect();
+        if (__panelConfig.operation !== "slicing-display") return;
+        const select = $("object-select");
+        for (const option of [...select.options]) if (state.objects.find((o) => o.id === option.value)?.__dependency) option.remove();
+        if (![...select.options].some((o) => o.value === state.activeObjectId)) {
+          state.activeObjectId = select.options[0]?.value || null;
+          select.value = state.activeObjectId || "";
+        }
+      };
+      function __sliceApply(snapshot, ref2, binding = {}) {
+        const model = __sliceModel(), all = snapshot.assets || [], refs = binding.references || {};
+        const target = all.find((a) => __key(a) === __key(ref2));
+        const frame = target?.kind === "frame" ? target : all.find((a) => __key(a) === refs.frame && a.kind === "frame");
+        const primary = target || all.find((a) => __key(a) === (refs.cone || refs.fan || refs.variety || refs.lattice));
+        const primaryData = primary ? model.materialize(primary, all).data : null;
+        const n = frame?.data.ambientDimension ?? primaryData?.ambientDimension ?? primaryData?.rows ?? (Number(primaryData?.dimension) || 4);
+        if (n < 2 || n > 8) throw new Error("The slicing renderer supports dimensions 2\u20138.");
+        const changedDimension = state.ambientDim !== n;
+        let current2;
+        try {
+          current2 = __collectSlice();
+        } catch (_) {
+        }
+        const sameTarget = __key(target) === __key(__sliceTarget);
+        const incoming = target ? JSON.stringify(target.data) : "";
+        const unchangedTarget = sameTarget && incoming === JSON.stringify(current2?.data);
+        const sourceSignature = JSON.stringify([refs, all.map((a) => [__key(a), a.name, a.type, a.data])]);
+        __rememberSliceViews();
+        __sliceSnapshot = snapshot;
+        __sliceRef = ref2;
+        __sliceBinding = binding;
+        __sliceTarget = target || null;
+        __sliceFrame = frame || null;
+        __sliceApplying = true;
+        try {
+          state.ambientDim = n;
+          state.sliceDim = 2;
+          if (frame) {
+            state.p = frame.data.position.slice();
+            state.frame = columnsFromRows(frame.data.basis);
+          } else {
+            state.p = Array(n).fill(0);
+            state.frame = identityFrame(n);
+          }
+          if (changedDimension) {
+            state.activeDirection = defaultDirection(n);
+            state.rotationPair = defaultRotationPair(n);
+            rebuildDynamicControls();
+          }
+          if (sourceSignature !== __sliceSourceSignature) {
+            const selected = new Set(refs.nodes || (primary ? [__key(primary)] : []));
+            if (__panelConfig.operation === "lattice-character" && refs.variety) selected.add(refs.variety);
+            const old = new Map(state.objects.map((o) => [o.id, o]));
+            state.objects = all.filter((a) => {
+              if (!(model.isAsset(a) || ["matrix", "lie"].includes(a.kind))) return false;
+              try {
+                const d = model.materialize(a, all).data;
+                return (d.ambientDimension ?? d.rows ?? d.rank ?? Number(d.dimension)) === n;
+              } catch (_) {
+                return false;
+              }
+            }).flatMap((a) => {
+              if (model.inputIssues(a, all).length) return [];
+              let object;
+              if (unchangedTarget && !["frame", "voronoi"].includes(a.kind) && __key(a) === __key(target) && old.has(__key(a))) object = old.get(__key(a));
+              else object = __sliceNative(a, all);
+              if (!object) return [];
+              object.__dependency = !selected.has(object.id);
+              if (object.__dependency) {
+                object.visibleProjection = false;
+                object.visibleSlice = false;
+              }
+              return [object];
+            });
+            __sliceSourceSignature = sourceSignature;
+          }
+          const nativeTarget = primary && state.objects.find((o) => o.id === __key(primary));
+          if (nativeTarget) state.activeObjectId = nativeTarget.id;
+          else if (!state.objects.some((o) => o.id === state.activeObjectId)) state.activeObjectId = state.objects[0]?.id || null;
+          if (refs.nodes && !refs.nodes.includes(state.activeObjectId)) state.activeObjectId = refs.nodes.find((key) => state.objects.some((o) => o.id === key)) || null;
+          state.sourceMode = "modify";
+          if (!unchangedTarget && nativeTarget && target?.kind !== "frame") syncObjectPanel();
+          if (__panelConfig.operation === "slicing-display") {
+            syncObjectSelect();
+            syncObjectPanel();
+          }
+          if (frame && JSON.stringify(frame.data) !== __sliceFrameSignature) {
+            syncDirectInputFields();
+            __sliceFrameSignature = JSON.stringify(frame.data);
+          }
+          if (!sameTarget) {
+            clearVectorTargetSession();
+            clearWeylInteraction();
+            state.selectedVertex = null;
+            state.activeToricFace = null;
+          }
+          renderAll();
+          return true;
+        } finally {
+          __sliceApplying = false;
+        }
+      }
+      function __sliceResult() {
+        const refs = __sliceBinding.references || {}, op = __panelConfig.operation;
+        const result = { hasResult: true, text: __panelCard?.querySelector(".card-body")?.innerText || "", frame: __sliceFrame ? __sliceFrameData() : null };
+        if (op === "slicing-scene") __withOrthonormalFrame(() => {
+          result.sliceBasis = frameRows(state.frame.slice(0, 2));
+          result.coordinates = "orthonormal slice coordinates";
+          result.objects = state.objects.filter((o) => (refs.nodes || []).includes(o.id)).map((o) => ({ asset: o.id, slice: o.visibleSlice ? exactSliceData(o) : null }));
+        });
+        if (["cone-faces", "cone-variety", "fan-orbits", "fan-divisors"].includes(op)) {
+          const o = activeObject();
+          if (o) {
+            const a = objectTypeKey(o) === "toric-fan" ? toricFanAnalysis(o) : toricConeAnalysis(o);
+            result.hasResult = a?.status !== "pending";
+            result.analysis = __copySlice(a);
+          }
+        }
+        if (op === "lattice-character") result.point = refs.point;
+        return result;
+      }
+      function __sliceView(value) {
+        if (value) {
+          __sliceApplying = true;
+          try {
+            if (__panelConfig.operation === "slicing-display" || __panelConfig.operation === "slicing-debug") {
+              __sliceApply(value.context, value.ref, value.binding);
+              __sliceApplying = true;
+            }
+            Object.assign(state.viewport, value.viewport || {});
+            for (const [key, layer] of value.layers || []) {
+              __sliceLayers.set(key, __copySlice(layer));
+              const o = state.objects.find((o2) => o2.id === key);
+              if (!o) continue;
+              Object.assign(o, { style: { ...o.style, ...layer.style }, labels: !!layer.labels });
+              if (!o.__dependency) Object.assign(o, { visibleProjection: !!layer.visibleProjection, visibleSlice: !!layer.visibleSlice });
+              Object.assign(o.data, layer.data || {});
+            }
+            renderAll();
+          } finally {
+            __sliceApplying = false;
+          }
+        }
+        __rememberSliceViews();
+        return { viewport: { ...state.viewport }, layers: [...__sliceLayers.entries()], context: __sliceSnapshot, ref: __sliceRef, binding: __sliceBinding };
+      }
+      __editor.setAssetAdapter({
+        panel(config) {
+          __panelConfig = config;
+          state.autoSchmidt = false;
+          __panelStyle("[data-import-export-trigger]{display:none!important}#toric-cone-tabs,#toric-fan-tabs{display:none!important}.workspace-object-content .slice-row:has(#source-mode-controls),.workspace-object-content .slice-row:has(#source-add-object),.workspace-object-content .slice-row:has(#object-name),.workspace-object-content .slice-row:has(#object-select){display:none!important}");
+          $("ambient-dimension").disabled = true;
+          let card;
+          if (config.mode === "input") {
+            if (config.assetKind === "frame") card = $("slide-input-mode-controls").closest(".card");
+            else if (config.assetKind === "cone") card = $("slice-toric-cone-card");
+            else if (config.assetKind === "fan") card = $("slice-toric-fan-card");
+            else if (config.assetKind !== "variety") card = $("object-params").closest(".card");
+            __panelStyle(".workspace-object-content .slice-row:has(#object-color),.workspace-object-content .slice-row:has(#object-visible-projection){display:none!important}");
+            __panelStyle('[aria-label="Lattice basis mode"],.slice-control-line:has([aria-label="Matrix object basis source"]),.slice-control-line:has([aria-label="Voronoi lattice source"]),#toric-fan-source-mode,#toric-fan-cone-list-panel,.slice-row:has(#toric-fan-character-lattice){display:none!important}#object-params .slice-inline-check,[aria-label="Weyl label mode"],[aria-label="Weyl label density"],[aria-label="Tropical district label density"],.slice-row:has([aria-label="Lattice point bound shape"]){display:none!important}');
+          } else if (config.mode === "property") {
+            card = $(config.marker)?.closest(".card");
+            if (config.operation === "slicing-display") {
+              const source = $("object-params").closest(".card");
+              __showCard(source);
+              const style = document2.createElement("style");
+              style.textContent = ".workspace-object-content .slice-row:has(#object-select){display:flex!important}#object-delete,#object-export{display:none!important}";
+              __editor.inspectorShadow.append(style);
+            }
+          }
+          if (card) __showCard(card);
+          if (config.assetKind === "frame" || config.mode === "scene" || config.operation === "frame-details") {
+            const note = document2.createElement("p");
+            note.className = "workspace-frame-note";
+            note.textContent = "Frame: point p and all ordered basis vectors. The slice is p + span(v1, v2); drawing uses an orthonormal basis of that plane.";
+            (__panelCard?.querySelector(".card-body") || __editor.shadow.querySelector(".slice-layout") || __editor.host).append(note);
+          }
+          return true;
+        },
+        apply: (snapshot, ref2, properties, binding) => __sliceApply(snapshot, ref2, binding),
+        collect: __collectSlice,
+        capture: () => ({ viewport: { ...state.viewport }, layers: [...__sliceLayers.entries()] }),
+        result: __sliceResult,
+        io(action, value) {
+          if (action === "view") return __sliceView(value);
+          if (action === "geometry") return { p: state.p.slice(), frame: frameRows(state.frame), picks: state.pickCandidates.map((c) => ({ objectId: c.objectId, ambient: c.ambient, label: c.label })) };
+          if (action === "lie-matrix") {
+            const previous = state.ambientDim;
+            state.ambientDim = value.lie.rank;
+            try {
+              return dynkinMatrixRows(value.lie.family.charAt(0), value.basis, value.lie.rank);
+            } finally {
+              state.ambientDim = previous;
+            }
+          }
+          if (action === "validate") {
+            const { asset } = value, n = asset.data.ambientDimension;
+            if (asset.kind === "formula") return compileFormulaRelation(asset.data.formula, n);
+            if (asset.kind === "tropical") return compileTropicalPolynomial(asset.data.tropicalInput, asset.data.tropicalConvention, n);
+            return true;
+          }
+          if (action === "export") {
+            const a = __sliceTarget;
+            if (a?.kind === "frame") return value === "latex" ? "p=" + vectorToTex(state.p) + "\nB=" + matrixToTex(frameRows(state.frame)) : JSON.stringify(__sliceFrameData(), null, 2);
+            return __panelConfig.mode === "property" ? __sliceResult().text : JSON.stringify(a?.data || __sliceResult(), null, 2);
+          }
+          if (action === "result") return __sliceResult();
+        }
+      });
     })();
     (() => {
       "use strict";
@@ -65259,6 +65728,127 @@ ${body}`;
         __editor.applyState(state, value.state);
         render();
       }, classes: {} });
+      let __panelConfig = {}, __panelCard = null;
+      const __key = (ref2) => ref2 ? ref2.kind + ":" + ref2.id : "";
+      const __sync = (control, value) => window.CalculatorInputSettings.syncEditableValue(control, String(value ?? ""));
+      function __showCard(card) {
+        __panelCard = card;
+        card.classList.add("workspace-object-content");
+        card.classList.remove("collapsed");
+        __editor.setCardVisible(card.dataset.workspaceCardId, true);
+      }
+      function __panelStyle(text = "") {
+        const style = document2.createElement("style");
+        style.textContent = ".workspace-object-content>.card-head{display:none!important}.workspace-object-content{border:0!important;margin:0!important;max-height:none!important}.workspace-object-content>.card-body{padding:4px!important;max-height:none!important}.workspace-card-inspector{display:block!important}.workspace-object-content [data-import-export-trigger]{display:none!important}" + text;
+        document2.head.append(style);
+        __editor.inspectorShadow?.append(style.cloneNode(true));
+      }
+      const __captureControls = () => __panelCard ? [...__panelCard.querySelectorAll("input[id],select[id],textarea[id]")].filter((n) => !n.readOnly && n.type !== "hidden").map((n) => ({ id: n.id, value: n.value, checked: n.type === "checkbox" ? n.checked : void 0 })) : [];
+      function __textResult(format) {
+        const body = __panelCard?.querySelector(".card-body");
+        if (format === "latex" && body) {
+          const items = window.MathJax?.startup?.document?.getMathItemsWithin?.(body) || [];
+          if (items.length) return items.map((item) => (item.display ? "\\[" : "\\(") + item.math + (item.display ? "\\]" : "\\)")).join("\n");
+        }
+        return body?.innerText || body?.textContent || "";
+      }
+      let __dynkinAsset = null, __hasQuiver = false, __vertexFocus = null;
+      const __oldSyncQuiver = syncQuiverControls, __oldSelectVertex = selectDynkinVertex;
+      const __oldToggleEdge = toggleQuiverEdge, __oldCanUseAR = canUseStartingFunctionAR;
+      syncQuiverControls = function() {
+        __oldSyncQuiver();
+        if (!__panelConfig.mode) return;
+        const control = $("dynkin-quiver-mode");
+        control.disabled = !__hasQuiver;
+        control.closest("label").title = __hasQuiver ? "Show stored quiver arrows; click an edge to reverse it" : "Add optional quiver directions in the Input first";
+      };
+      canUseStartingFunctionAR = function(available) {
+        return __oldCanUseAR(available) && (!__panelConfig.mode || __hasQuiver);
+      };
+      const __oldSetAR = setStartingFunctionARMode;
+      setStartingFunctionARMode = function(enabled) {
+        if (!__panelConfig.mode) return __oldSetAR(enabled);
+        state.startingFunctionARMode = !!enabled && __hasQuiver && supportsQuiverOrientation(state.type);
+        state.quiverMode = __hasQuiver;
+        renderStartingFunction();
+        queueMathTypeset();
+      };
+      selectDynkinVertex = function(index) {
+        if (__panelConfig.mode !== "property") return __oldSelectVertex(index);
+        if (!selectedIndices().includes(index)) return;
+        state.selected = index;
+        renderVertexData();
+        renderStartingFunction();
+        queueMathTypeset();
+        if (__vertexFocus) __vertexFocus.value = String(index);
+      };
+      toggleQuiverEdge = function(i, j) {
+        if (__panelConfig.mode === "input" && __hasQuiver) return __oldToggleEdge(i, j);
+      };
+      function __dynkinFocusControl() {
+        if (!["dynkin-vertex", "dynkin-starting"].includes(__panelConfig.operation)) return;
+        if (!__vertexFocus) {
+          const label = document2.createElement("label");
+          label.className = "dynkin-check-label";
+          label.textContent = "Vertex ";
+          __vertexFocus = document2.createElement("select");
+          __vertexFocus.setAttribute("aria-label", "Property vertex");
+          __vertexFocus.addEventListener("change", () => selectDynkinVertex(Number(__vertexFocus.value)));
+          label.append(__vertexFocus);
+          __panelCard.querySelector(".card-body").prepend(label);
+        }
+        __vertexFocus.replaceChildren(...selectedIndices().map((index) => new Option(String(index + 1), String(index))));
+        __vertexFocus.value = String(state.selected);
+      }
+      __editor.setAssetAdapter({
+        panel(config) {
+          __panelConfig = config;
+          __panelStyle('#dynkin-type,label[for="dynkin-type"],#dynkin-rank-wrap,#dynkin-starting-wide{display:none!important}.canvas-toolbar{flex-wrap:wrap!important}');
+          $("dynkin-type").disabled = true;
+          $("dynkin-rank").disabled = true;
+          $("dynkin-starting-card").removeAttribute("data-card-wide");
+          $("dynkin-starting-ar-mode").closest("label").title = "Show the AR quiver from the asset\u2019s stored directions";
+          if (config.mode === "property") __showCard($(config.marker).closest(".card"));
+          return true;
+        },
+        apply(snapshot, ref2, properties, binding) {
+          const asset = snapshot.assets.find((item) => item.kind === "dynkin" && (__key(item) === __key(ref2) || __key(item) === __key(binding?.refs?.dynkin)));
+          const parent = snapshot.assets.find((item) => item.kind === "lie");
+          if (!parent) return false;
+          const model = window.MathWorkspaceObjects, issues = [...model.lieEngineIssues(parent.data, "dynkin"), ...asset ? model.rootObjectIssues(asset, parent) : []];
+          if (issues.length) throw new Error(issues.join(" "));
+          const wasQuiver = __hasQuiver;
+          __dynkinAsset = asset ? JSON.parse(JSON.stringify(asset)) : null;
+          __hasQuiver = asset?.data.quiver != null;
+          state.type = parent.data.family;
+          state.rank = parent.data.rank;
+          const indices = asset ? asset.data.vertices.map((v) => v - 1) : [0];
+          state.selectedSet = indices;
+          if (!indices.includes(state.selected)) state.selected = indices[0];
+          state.multiSelect = indices.length > 1 || __panelConfig.mode === "input" && state.multiSelect;
+          if (__panelConfig.mode === "property") state.multiSelect = true;
+          if (__hasQuiver) state.quiverOrientations[quiverLayoutKey(state.type, state.rank)] = { ...asset.data.quiver };
+          state.quiverMode = __hasQuiver && (__panelConfig.mode === "property" || !wasQuiver || state.quiverMode);
+          if (!__hasQuiver) state.startingFunctionARMode = false;
+          render();
+          __dynkinFocusControl();
+          return true;
+        },
+        collect() {
+          if (!__dynkinAsset) return null;
+          return { type: "dynkin", data: { lie: __dynkinAsset.data.lie, vertices: selectedIndices().map((i) => i + 1), quiver: __hasQuiver ? { ...state.quiverOrientations[quiverLayoutKey(state.type, state.rank)] } : null } };
+        },
+        capture: () => ({ vertex: state.selected + 1, arMode: state.startingFunctionARMode, transpose: state.startingFunctionTransposed }),
+        result: () => ({ text: __textResult("plain"), hasResult: true, vertex: state.selected + 1, vertices: selectedIndices().map((i) => i + 1), cartan: state.cartan.map((row) => row.slice()) }),
+        io(action, format) {
+          if (action === "geometry") return { vertices: state.hitboxes, edges: state.edgeHitboxes };
+          if (action === "export") {
+            if (__panelConfig.mode === "property") return __textResult(format);
+            if (format === "latex") return "\\[" + typeLatex() + "\\qquad " + matrixLatex(state.cartan) + "\\qquad I=\\{" + selectedIndices().map((i) => i + 1).join(",") + "\\}\\]";
+            return typeLabel() + "; vertices: " + selectedIndices().map((i) => i + 1).join(", ") + (__hasQuiver ? "; quiver: " + JSON.stringify(__dynkinAsset.data.quiver) : "");
+          }
+        }
+      });
     })();
     (() => {
       "use strict";
@@ -78761,6 +79351,98 @@ ${rows.join("\\\\\n")}
         __editor.applyState(state, value.state);
         renderAll();
       }, classes: {} });
+      let __panelConfig = {}, __panelCard = null;
+      const __key = (ref2) => ref2 ? ref2.kind + ":" + ref2.id : "";
+      const __sync = (control, value) => window.CalculatorInputSettings.syncEditableValue(control, String(value ?? ""));
+      function __showCard(card) {
+        __panelCard = card;
+        card.classList.add("workspace-object-content");
+        card.classList.remove("collapsed");
+        __editor.setCardVisible(card.dataset.workspaceCardId, true);
+      }
+      function __panelStyle(text = "") {
+        const style = document2.createElement("style");
+        style.textContent = ".workspace-object-content>.card-head{display:none!important}.workspace-object-content{border:0!important;margin:0!important;max-height:none!important}.workspace-object-content>.card-body{padding:4px!important;max-height:none!important}.workspace-card-inspector{display:block!important}.workspace-object-content [data-import-export-trigger]{display:none!important}" + text;
+        document2.head.append(style);
+        __editor.inspectorShadow?.append(style.cloneNode(true));
+      }
+      const __captureControls = () => __panelCard ? [...__panelCard.querySelectorAll("input[id],select[id],textarea[id]")].filter((n) => !n.readOnly && n.type !== "hidden").map((n) => ({ id: n.id, value: n.value, checked: n.type === "checkbox" ? n.checked : void 0 })) : [];
+      function __textResult(format) {
+        const body = __panelCard?.querySelector(".card-body");
+        if (format === "latex" && body) {
+          const items = window.MathJax?.startup?.document?.getMathItemsWithin?.(body) || [];
+          if (items.length) return items.map((item) => (item.display ? "\\[" : "\\(") + item.math + (item.display ? "\\]" : "\\)")).join("\n");
+        }
+        return body?.innerText || body?.textContent || "";
+      }
+      let __strandAsset = null, __strandSignature = "";
+      const __viewKeys = ["direction", "strandDisplayStyle", "generatorSpacing", "generatorGapEnabled", "strandSizeMode", "fixedGeneratorSize"];
+      function __strandView(value) {
+        if (value) {
+          for (const key of __viewKeys) if (Object.hasOwn(value, key)) state[key] = value[key];
+          renderAll({ preserveMessage: true });
+        }
+        return Object.fromEntries(__viewKeys.map((key) => [key, state[key]]));
+      }
+      __editor.setAssetAdapter({
+        panel(config) {
+          __panelConfig = config;
+          __panelStyle('label[for="strand-group-type"],label[for="strand-count"],#strand-calculation-task-row,#strand-calculation-wide{display:none!important}.strand-input-chart{overflow:auto;max-height:400px}.strand-field-row{flex-wrap:wrap}');
+          refs.groupType.disabled = true;
+          refs.count.disabled = true;
+          document2.getElementById("strand-calculation-card").removeAttribute("data-card-wide");
+          if (config.mode === "input") __showCard(refs.inputChart.closest(".card"));
+          if (config.mode === "property") {
+            __showCard(document2.getElementById(config.marker).closest(".card"));
+            setCalculationTask(config.operation === "strands-relations" ? "relations" : config.operation === "strands-basis" ? "basis" : "strand");
+            __panelCard.addEventListener("click", (event) => {
+              if (event.target.closest("#strand-calculate")) queueMicrotask(() => __editor.notifyChange({ interaction: "object-compute" }));
+            });
+          }
+          return true;
+        },
+        apply(snapshot, ref2, properties, binding) {
+          const asset = snapshot.assets.find((item) => item.kind === "strands" && (__key(item) === __key(ref2) || __key(item) === __key(binding?.refs?.strands)));
+          const parent = snapshot.assets.find((item) => item.kind === "lie");
+          if (!parent && __panelConfig.operation !== "strands-relations") return false;
+          if (parent) {
+            const model = window.MathWorkspaceObjects, issues = [...model.lieEngineIssues(parent.data, "strand"), ...asset ? model.rootObjectIssues(asset, parent) : []];
+            if (issues.length) throw new Error(issues.join(" "));
+            Object.assign(state, model.strandContext(parent.data));
+          }
+          __strandAsset = asset ? JSON.parse(JSON.stringify(asset)) : null;
+          const signature = JSON.stringify([parent?.data, asset?.data]);
+          if (signature !== __strandSignature) {
+            __strandSignature = signature;
+            state.appliedSteps = asset ? asset.data.generators.map((record) => ({ ...record })) : [];
+            state.calculationResult = null;
+            state.calculationKey = "";
+            state.calculationStale = true;
+            state.calculationLatex = "";
+            state.calculationPlain = "";
+            clearCalculationResultDisplay();
+          }
+          renderInputChart();
+          renderAll({ preserveMessage: true });
+          if (relationTaskActive()) renderRelationReference();
+          return true;
+        },
+        collect: () => __strandAsset ? { type: "strands", data: { lie: __strandAsset.data.lie, generators: state.appliedSteps.map((record) => ({ ...record })) } } : null,
+        capture: () => ({ task: state.calculationTask, target: relationTaskActive() ? state.relationTarget : basisTaskActive() ? state.basisTarget : state.calculationTarget, basis: basisTaskActive() ? state.basisBasis : state.calculationBasis }),
+        result: () => ({ text: __textResult("plain"), hasResult: __panelConfig.operation !== "strands-calculation" || !!state.calculationResult && !state.calculationStale && state.calculationKey === calculationFingerprint(), calculation: state.calculationResult && !state.calculationStale ? window.StrandMath.serializeCalculation(state.calculationResult) : null, groupType: state.groupType, strandCount: state.strandCount }),
+        io(action, value) {
+          if (action === "view") return __strandView(value);
+          if (action === "export") {
+            if (__panelConfig.operation === "strands-calculation") {
+              if (!state.calculationResult || state.calculationStale || state.calculationKey !== calculationFingerprint()) throw new Error("Compute the current word first.");
+              return value === "latex" ? calculationLatexForCopy() : state.calculationPlain;
+            }
+            if (__panelConfig.mode === "property") return __textResult(value);
+            const data2 = buildPermutationData();
+            return value === "latex" ? exportLatex(data2) : exportPlain(data2);
+          }
+        }
+      });
     })();
     (() => {
       "use strict";
@@ -85329,7 +86011,7 @@ ${rows.join("\\\\\n")}
             input.setAttribute("aria-label", `matrix entry row ${r + 1}, column ${c + 1}`);
             input.dataset.row = String(r);
             input.dataset.col = String(c);
-            input.addEventListener("input", () => {
+            window.CalculatorInputSettings.listenEditable(input, "input", () => {
               state.entries[r][c] = input.value;
               clearOperationResult();
               clearPolynomialActionResult();
@@ -90400,6 +91082,112 @@ ${rows}
           refs.polynomialActionOutput.innerHTML = '<div class="matrix-polynomial">' + inlineMathHtml(latex) + "</div>";
         }
       }, classes: { Complex, Fraction, ExactScalar, ModScalar, RationalFunctionScalar, NumberFieldScalar, SymbolicExpScalar, ExpressionParser } });
+      let __panelConfig = {}, __panelCard = null;
+      const __key = (ref2) => ref2 ? ref2.kind + ":" + ref2.id : "";
+      const __sync = (control, value) => window.CalculatorInputSettings.syncEditableValue(control, String(value ?? ""));
+      function __showCard(card) {
+        __panelCard = card;
+        card.classList.add("workspace-object-content");
+        card.classList.remove("collapsed");
+        __editor.setCardVisible(card.dataset.workspaceCardId, true);
+      }
+      function __panelStyle(text = "") {
+        const style = document2.createElement("style");
+        style.textContent = ".workspace-object-content>.card-head{display:none!important}.workspace-object-content{border:0!important;margin:0!important;max-height:none!important}.workspace-object-content>.card-body{padding:4px!important;max-height:none!important}.workspace-card-inspector{display:block!important}.workspace-object-content [data-import-export-trigger]{display:none!important}" + text;
+        document2.head.append(style);
+        __editor.inspectorShadow?.append(style.cloneNode(true));
+      }
+      const __captureControls = () => __panelCard ? [...__panelCard.querySelectorAll("input[id],select[id],textarea[id]")].filter((n) => !n.readOnly && n.type !== "hidden").map((n) => ({ id: n.id, value: n.value, checked: n.type === "checkbox" ? n.checked : void 0 })) : [];
+      let __matrixConstructed = false;
+      function __matrixData() {
+        return { rows: state.rows, cols: state.cols, entries: state.entries.map((row) => row.slice()), dataType: currentDataType(), finiteFieldPrime: state.finiteFieldPrime, rationalFunctionVariables: state.rationalFunctionVariables.slice(), numberFieldSymbol: state.numberFieldSymbol, numberFieldPolynomial: state.numberFieldPolynomial };
+      }
+      function __matrixProject(data2) {
+        const resized = state.rows !== data2.rows || state.cols !== data2.cols;
+        const oldVariables = defaultPolynomialVariables(state.cols).join(", ");
+        if (!refs.polynomialActionVariables.value.trim() || refs.polynomialActionVariables.value.trim() === oldVariables) __sync(refs.polynomialActionVariables, defaultPolynomialVariables(data2.cols).join(", "));
+        state.rows = data2.rows;
+        state.cols = data2.cols;
+        state.entries = data2.entries.map((row) => row.slice());
+        state.finiteFieldPrime = data2.finiteFieldPrime;
+        state.rationalFunctionVariables = data2.rationalFunctionVariables.slice();
+        state.numberFieldSymbol = data2.numberFieldSymbol;
+        state.numberFieldPolynomial = data2.numberFieldPolynomial;
+        __sync(refs.rows, data2.rows);
+        __sync(refs.cols, data2.cols);
+        __sync(refs.dataType, data2.dataType);
+        __sync(refs.finiteFieldPrime, data2.finiteFieldPrime);
+        __sync(refs.rationalFunctionVariable, data2.rationalFunctionVariables.join(", "));
+        __sync(refs.numberFieldGenerator, data2.numberFieldSymbol);
+        __sync(refs.numberFieldPolynomial, data2.numberFieldPolynomial);
+        if (resized) renderMatrixGrid();
+        else refs.grid.querySelectorAll("input").forEach((control) => __sync(control, data2.entries[control.dataset.row][control.dataset.col]));
+        updateFieldControls();
+        clearOperationResult();
+        clearPolynomialActionResult();
+        refreshAll();
+      }
+      __editor.setAssetAdapter({
+        panel(config) {
+          __panelConfig = config;
+          __panelStyle("#apply-bulk,#bulk-message,#export-operation,#export-polynomial-action{display:none!important}.matrix-toolbar{flex-wrap:wrap!important}.matrix-grid-wrap{overflow:auto!important}.matrix-cell{min-width:0!important}");
+          if (config.mode === "input") __showCard(refs.applyBulk.closest(".card"));
+          if (config.mode === "property") {
+            __showCard(document2.getElementById(config.marker).closest(".card"));
+            __panelCard.addEventListener("click", (event) => {
+              if (event.target.closest("#compute-operation,#compute-polynomial-action,#charpoly-factor")) queueMicrotask(() => __editor.notifyChange({ interaction: "object-compute" }));
+            });
+          }
+          return true;
+        },
+        apply(snapshot, ref2, properties, binding) {
+          const key = __key(binding?.refs?.matrix || ref2), asset = snapshot.assets.find((a) => __key(a) === key);
+          if (!asset) return false;
+          __matrixConstructed = !!asset.data.construction;
+          const projected = __matrixConstructed ? window.MathWorkspaceSlicing.materialize(asset, snapshot.assets) : asset;
+          __matrixProject(projected.data);
+          if (__panelConfig.mode === "input") __panelCard.querySelectorAll("input,select,textarea,button").forEach((control) => {
+            control.disabled = __matrixConstructed;
+          });
+          return true;
+        },
+        collect() {
+          if (__matrixConstructed) return null;
+          if (readMatrix(false).errors.length) return null;
+          const active = refs.grid.getRootNode().activeElement;
+          if (active?.classList.contains("matrix-cell") && !active.value.trim()) return null;
+          const data2 = __matrixData();
+          data2.entries = data2.entries.map((row) => row.map((value) => String(value).trim() ? value : "0"));
+          return { type: "matrix", data: data2 };
+        },
+        capture: __captureControls,
+        result: () => ({ text: __panelCard?.querySelector(".card-body")?.innerText || "", hasResult: __panelConfig.operation === "matrix-computation" ? !!state.lastOperationResult : __panelConfig.operation === "matrix-polynomial" ? !!state.lastPolynomialAction : true }),
+        io(action, value) {
+          if (action === "validate") {
+            const result = readMatrix(false);
+            if (result.errors.length) throw new Error(matrixDataErrorMessage(result.errors[0]));
+            return __matrixData();
+          }
+          if (action === "parse") {
+            const entries = parseImportedMatrix(value).rows;
+            if (!entries.length || entries.length > 8 || !entries[0]?.length || entries[0].length > 8) throw new Error("Matrix dimensions must be from 1 to 8.");
+            return { ...__matrixData(), rows: entries.length, cols: entries[0].length, entries };
+          }
+          if (action === "export") {
+            if (__panelConfig.operation === "matrix-computation") {
+              if (!state.lastOperationResult) throw new Error("Compute the result first.");
+              return exportOperationPayload(state.lastOperationResult, value);
+            }
+            if (__panelConfig.operation === "matrix-polynomial") {
+              if (!state.lastPolynomialAction) throw new Error("Compute the result first.");
+              return exportPolynomialAction(state.lastPolynomialAction, value);
+            }
+            const result = readMatrix(false);
+            if (result.errors.length) throw new Error(matrixDataErrorMessage(result.errors[0]));
+            return exportMatrix(result.details, value, result.fieldInfo);
+          }
+        }
+      });
     })();
     (() => {
       "use strict";
@@ -245629,7 +246417,7 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
           refs.categoryOpposite
         ].forEach((control) => {
           if (!control) return;
-          control.addEventListener("input", handleCategoryDraftChange);
+          window.CalculatorInputSettings.listenEditable(control, "input", handleCategoryDraftChange, { commitHandled: true });
           control.addEventListener("change", handleCategoryDraftChange);
         });
         if (refs.categoryObjectSymbol) {
@@ -245672,7 +246460,7 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
           refs.functorLabel,
           refs.functorVariance
         ].forEach((control) => {
-          control.addEventListener("input", handleFunctorDraftChange);
+          window.CalculatorInputSettings.listenEditable(control, "input", handleFunctorDraftChange, { commitHandled: true });
           control.addEventListener("change", handleFunctorDraftChange);
         });
         [refs.functorDomainButton, refs.functorCodomainButton].forEach((button) => {
@@ -246853,6 +247641,107 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         __editor.applyState(state, value.state);
         renderAll();
       }, classes: {} });
+      let __panelConfig = {}, __panelCard = null;
+      const __key = (ref2) => ref2 ? ref2.kind + ":" + ref2.id : "";
+      const __sync = (control, value) => window.CalculatorInputSettings.syncEditableValue(control, String(value ?? ""));
+      function __showCard(card) {
+        __panelCard = card;
+        card.classList.add("workspace-object-content");
+        card.classList.remove("collapsed");
+        __editor.setCardVisible(card.dataset.workspaceCardId, true);
+      }
+      function __panelStyle(text = "") {
+        const style = document2.createElement("style");
+        style.textContent = ".workspace-object-content>.card-head{display:none!important}.workspace-object-content{border:0!important;margin:0!important;max-height:none!important}.workspace-object-content>.card-body{padding:4px!important;max-height:none!important}.workspace-card-inspector{display:block!important}.workspace-object-content [data-import-export-trigger]{display:none!important}" + text;
+        document2.head.append(style);
+        __editor.inspectorShadow?.append(style.cloneNode(true));
+      }
+      const __captureControls = () => __panelCard ? [...__panelCard.querySelectorAll("input[id],select[id],textarea[id]")].filter((n) => !n.readOnly && n.type !== "hidden").map((n) => ({ id: n.id, value: n.value, checked: n.type === "checkbox" ? n.checked : void 0 })) : [];
+      let __categoryTarget = "", __categoryLayout = /* @__PURE__ */ new Map();
+      function __categoryAssetData(item, kind) {
+        if (kind === "category") return { objectSymbol: item.objectSymbol, objectCondition: item.objectCondition, morphismElement: item.morphismElement, morphismCondition: item.morphismCondition, opposite: !!item.opposite };
+        return { domain: item.domainId, codomain: item.codomainId, variance: item.variance };
+      }
+      function __categoryProject(snapshot, ref2) {
+        state.categories.forEach((item) => __categoryLayout.set(item.id, { x: item.x, y: item.y }));
+        state.categories = snapshot.assets.filter((a) => a.kind === "category").map((a, i) => ({ id: __key(a), label: a.name, ...a.data, ...__categoryLayout.get(__key(a)) || positionForNewCategory(i) }));
+        state.functors = snapshot.assets.filter((a) => a.kind === "functor").map((a) => ({ id: __key(a), label: a.name, domainId: a.data.domain, codomainId: a.data.codomain, variance: a.data.variance }));
+        if (__panelConfig.mode === "input") {
+          __categoryTarget = __key(ref2);
+          state.activeKind = ref2.kind;
+          state.activeId = __categoryTarget;
+          state.inputMode = "modify";
+          refs.objectKind.value = ref2.kind;
+          refs.inputMode.value = "modify";
+          const item = activeObject();
+          if (ref2.kind === "category") {
+            __sync(refs.categoryLabel, item.label);
+            setCategoryObjectSymbol(item.objectSymbol);
+            __sync(refs.categoryObjectCondition, item.objectCondition);
+            __sync(refs.categoryMorphismElement, item.morphismElement);
+            __sync(refs.categoryMorphismCondition, item.morphismCondition);
+            refs.categoryOpposite.checked = item.opposite;
+          } else {
+            __sync(refs.functorLabel, item.label);
+            __sync(refs.functorDomain, item.domainId);
+            __sync(refs.functorCodomain, item.codomainId);
+            __sync(refs.functorVariance, item.variance);
+          }
+          syncControls();
+        } else {
+          state.functorPickTarget = null;
+        }
+        resizeCanvas();
+        renderAll({ preserveControls: true });
+      }
+      __editor.setAssetAdapter({
+        panel(config) {
+          __panelConfig = config;
+          __panelStyle(".category-input-add,#category-input-note,.category-pick-actions,#functor-pick-status,#clear-category-canvas,#category-mode-badge{display:none!important}.category-field-row:has(#category-label),.category-field-row:has(#functor-label),.category-field-row:has(#functor-domain-button){display:none!important}");
+          if (config.mode === "input") {
+            __showCard(refs.inputMode.closest(".card"));
+            refs.categoryApplyPreset.addEventListener("click", () => {
+              if (refs.categoryPresetSelect.value) updateActiveObjectFromControls();
+            });
+          }
+          if (config.mode === "scene") {
+            const select = (kind, id) => {
+              state.activeKind = kind;
+              state.activeId = id;
+              state.functorPickTarget = null;
+              renderCanvas();
+              renderLabels();
+            };
+            setActive = select;
+            selectActiveInPlace = select;
+            handleFunctorCategoryPick = () => {
+            };
+          }
+          return true;
+        },
+        apply(snapshot, ref2) {
+          __categoryProject(snapshot, ref2);
+          return true;
+        },
+        collect() {
+          const kind = __categoryTarget.split(":")[0], item = [...state.categories, ...state.functors].find((item2) => item2.id === __categoryTarget);
+          return item ? { name: item.label, data: __categoryAssetData(item, kind) } : null;
+        },
+        capture: () => ({ layout: state.categories.map(({ id, x, y }) => ({ id, x, y })) }),
+        result: () => ({ text: exportPlain() }),
+        io(action, format) {
+          if (action === "layout") {
+            for (const point of format) {
+              __categoryLayout.set(point.id, { x: point.x, y: point.y });
+              const item = categoryById(point.id);
+              if (item) Object.assign(item, { x: point.x, y: point.y });
+            }
+            renderAll({ preserveControls: true });
+            return true;
+          }
+          if (action === "export") return format === "latex" ? exportLatex() : format === "plain" ? exportPlain() : exportJson();
+        }
+      });
     })();
     (() => {
       "use strict";

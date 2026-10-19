@@ -951,7 +951,7 @@
         input.setAttribute('aria-label', `matrix entry row ${r + 1}, column ${c + 1}`);
         input.dataset.row = String(r);
         input.dataset.col = String(c);
-        input.addEventListener('input', () => {
+        window.CalculatorInputSettings.listenEditable(input, 'input', () => {
           state.entries[r][c] = input.value;
           clearOperationResult();
           clearPolynomialActionResult();

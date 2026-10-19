@@ -518,11 +518,10 @@ assert(source.includes("selectInspectorSource('assets')"), 'Asset editing must r
 assert(source.includes('function createDefaultAsset'), 'New Assets commands must create a visible default object immediately');
 assert(source.includes('function uniqueDefaultAssetName'), 'default Assets must retain globally unique names');
 assert(source.includes('promoteInspectorCard'), 'requested Assets editing and property cards must lead the Inspector');
-assert(source.includes('cardPickerSourceId'), 'the Add card source selector must keep its own source state');
-assert(source.includes('workspace-card-options-unavailable'), 'unavailable cards must be grouped after available cards in the picker');
-assert(source.includes("addEventListener('input', changeCardPickerSource)") && source.includes("addEventListener('change', changeCardPickerSource)"), 'the native source selector must refresh the picker for both select events');
-assert(source.includes('function applyCardVisibility') && source.includes('const onScreen = preferred === \'assets\' || !session?.inspectorHost?.hidden'), 'card-picker checks must represent independently visible cards in the shared Inspector');
-assert(source.includes('onScreen && available && !!card.visible'), 'unavailable cards must never appear checked when they cannot render');
+assert(source.includes('panelCatalog.suggest(selected.map(assetKey)'), 'Add panel must derive its options from selected mathematical assets');
+assert(source.includes('More inputs needed') && source.includes('Existing panels ('), 'partial suggestions and existing panels must remain accessible');
+assert(!source.includes('cardPickerSourceId'), 'Add panel must not require a separate source selector');
+assert(source.includes('function applyCardVisibility') && source.includes('!sessions.get(sourceId).inspectorHost.hidden'), 'card-picker checks must represent independently visible cards in the shared Inspector');
 assert(source.includes('editor.listCards?.().forEach((card) => editor.setCardVisible?.(card.key, false))'), 'new calculator sessions must keep their cards unchecked until explicitly added to the Inspector');
 assert(source.includes('installWorkspaceOwnedCardChrome'), 'Assets-owned cards must receive the standard calculator-card header controls');
 assert(source.includes('enableWorkspaceOwnedCardDragging') && source.includes('workspaceCardDragSuppressed'), 'Assets-owned cards must use the standard drag-grip reordering behavior without collapsing after a drag');
@@ -545,7 +544,7 @@ assert(source.includes('function bindSheafComplexAssetDrop'), 'split view must m
 assert(source.includes('function assetDependencyClosure'), 'a Sheaf canvas drop must include transitive Assets prerequisites');
 assert(source.includes('assetProjection'), 'each workspace Sheaf canvas must retain its projected Assets and layout');
 assert(!source.includes('baseByKey'), 'a View must not retain a second copy of an Asset base');
-assert(source.includes("new Set(['input-card', 'homology-card'])"), 'legacy Sheaf Input and Homology cards must remain in their transition group');
+assert(source.includes("!['input-card','homology-card'].includes(card.key)"), 'legacy Sheaf Input and Homology must stay out of the property picker');
 assert(!source.includes('workspace-assets-toolbar'), 'Explorer controls must not duplicate the shortcut menu in a toolbar');
 assert(!historicalSheafSource.includes('WORKSPACE_ASSETS_MODE'), 'the historical Sheaf calculator must not contain workspace Assets code');
 assert(source.includes('function makeNativeCalculator'), 'workspace calculators must mount native editors');
@@ -583,8 +582,8 @@ assert(nativeBundle.includes(Buffer.from(':host{display:block;min-width:0;height
 assert(nativeBundle.includes(Buffer.from('[id$="-wide-host"]:not(:has(.card)){display:none!important}')), 'empty wide-card hosts must not reserve native canvas space');
 assert(nativeBundle.includes(Buffer.from('.workspace-editor-layout .workspace-view-card{min-width:0;width:100%;height:100%')), 'nested calculator canvas panels must fill their allocated workspace height');
 assert(/math_workspace_native_editors_v8\.js\?v=[a-f0-9]{16}/.test(html), 'native editor cache query must be derived from the reproducible bundle hash');
-assert(html.includes('css/math_workspace.css?v=20261016-objects-1'), 'workspace stylesheet changes need a cache-query bump');
-assert(html.includes('js/math_workspace.js?v=20261016-objects-1'), 'workspace controller changes need a cache-query bump');
+assert(html.includes('css/math_workspace.css?v=20261018-context-panels-1'), 'workspace stylesheet changes need a cache-query bump');
+assert(html.includes('js/math_workspace.js?v=20261018-context-panels-1'), 'workspace controller changes need a cache-query bump');
 assert(html.includes('js/calculator_cards.js?v=20260903-1'), 'workspace-owned Assets cards must reuse the shared calculator card chrome');
 assert(nativeBuilder.includes('math_workspace_native_editors_v8.js') && nativeBuilder.includes('Stale live native editor bundle'), 'the source builder must publish and verify the live runtime');
 assert(!source.includes("closeCardPicker(); const picker = assetState.referencePicker"), 'native source selection must not be closed by the global outside-pointer handler');
@@ -600,7 +599,8 @@ calculatorPages.forEach((page) => {
 assert(html.includes('id="workspace-assets-context-menu"'));
 assert(html.includes('id="workspace-assets-delete-dialog"'));
 assert(html.includes('id="workspace-add-card"'), 'the outer Inspector must own Add card');
-assert(html.includes('id="workspace-card-source"'), 'Add card must choose a calculator or Assets source');
+assert(!html.includes('id="workspace-card-source"') && html.includes('id="workspace-card-context"'), 'Add panel must show selection context instead of a source selector');
+assert(html.includes('js/math_workspace_panel_catalog.js?v=20261018-context-panels-1'), 'the shared asset/panel relationship catalog must load');
 assert(html.includes('tex-chtml.js'), 'Assets names need MathJax rendering');
 ['icons', 'list', 'details', 'tiles', 'content'].forEach((layout) => {
   assert(css.includes(`[data-layout='${layout}']`), `${layout} layout needs dedicated CSS`);
