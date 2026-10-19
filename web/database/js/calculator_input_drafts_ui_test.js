@@ -155,9 +155,9 @@ async function run() {
 
     await navigate('math_workspace.html');
     await waitFor(() => read('!!window.MathWorkspaceAssetsTest && !!window.MathWorkspaceNativeEditors'));
-    await read(`(() => { const asset = MathWorkspaceAssetsTest.createObjectAsset('young'); window.__draftPanel = MathWorkspaceObjectPanels.open('young-input', 'young:' + asset.id, 'main'); })()`);
-    await waitFor(() => read(`!!window.__draftPanel?.activeRenderer?.editor.shadow.querySelector('#grid-cols')`));
-    await read(`window.__draftNativeRoot = window.__draftPanel.activeRenderer.editor.shadow`);
+    await read(`(() => { const asset = MathWorkspaceAssetsTest.createObjectAsset('young'); window.__draftPanel = MathWorkspaceObjectPanels.open('young-view', 'young:' + asset.id, 'main'); })()`);
+    await waitFor(() => read(`!!window.__draftPanel?.propertyRenderer?.editor.shadow.querySelector('#grid-cols')`));
+    await read(`window.__draftNativeRoot = window.__draftPanel.propertyRenderer.editor.shadow`);
     await read(`window.__draftNativeRoot.querySelector('#grid-cols').focus()`);
     await key('a', 'KeyA', { modifiers: 2 }); await key('Backspace', 'Backspace');
     await delay(150);

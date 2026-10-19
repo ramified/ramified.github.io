@@ -19,6 +19,9 @@ async function run(){
       for(const p of [scene,scene2])p.computation.refs.frame=key(assets.frame);panels.refresh();
     });
     assert.deepEqual(errors,[]);assert.equal(await read(()=>scene.computation.status),'current');
+    assert.equal(await read(()=>getComputedStyle(fi.activeRenderer.host).display),'none','Frame Input must not embed a projection canvas');
+    assert.notEqual(await read(()=>getComputedStyle(fi.activeRenderer.inspectorHost).display),'none','Frame Input keeps its editing controls');
+    assert.notEqual(await read(()=>getComputedStyle(scene.propertyRenderer.host).display),'none','the dedicated projection panel keeps its canvas');
     const before=await read(()=>api.localAssetSnapshot().assets.find(a=>a.id===assets.frame.id).data);
     assert.deepEqual(await read(()=>fi.activeRenderer.editor.collectAssets().data),before);
     assert.deepEqual(await read(()=>fd.propertyRenderer.editor.readObjectResult().frame),before);
@@ -51,9 +54,12 @@ async function run(){
       for(const p of properties)for(const spec of p.definition.slots)p.computation.refs[spec.id]=key(assets[spec.kind]);panels.refresh();
     });
     assert.deepEqual(errors,[]);assert.deepEqual(await read(()=>inputs.filter(p=>p.inputIssues?.length).map(p=>[p.definition.id,p.message.textContent])),[]);
+    assert.deepEqual(await read(()=>inputs.filter(p=>p.definition.slicing&&getComputedStyle(p.activeRenderer.host).display!=='none').map(p=>p.definition.id)),[],'slicing inputs must not contain visible projection canvases');
     assert.deepEqual(await read(()=>properties.filter(p=>p.computation.status==='missing').map(p=>p.message.textContent)),[]);
+    assert.deepEqual(await read(()=>[fd,...properties].filter(p=>getComputedStyle(p.propertyRenderer.host).display!=='none').map(p=>p.definition.id)),[],'slicing property panels keep only their own results');
     assert.equal(await read(()=>panels.listCards().some(c=>/Input/.test(c.label))),false);
     await read(()=>{window.display=panels.open('slicing-display','','side');display.viewSelect.value=scene.id;display.viewSelect.dispatchEvent(new Event('change',{bubbles:true}));});
+    assert.equal(await read(()=>[...display.viewSelect.options].some(option=>option.value===fi.id)),false,'viewport controls target dedicated projection panels');
     await read(()=>{const field=display.propertyRenderer.editor.inspectorShadow.querySelector('#screen-zoom');field.value='1.7';field.dispatchEvent(new Event('input',{bubbles:true}));});
     assert.equal(await read(()=>scene.propertyRenderer.editor.objectIO('view').viewport.zoom),1.7);
     assert.notEqual(await read(()=>scene2.propertyRenderer.editor.objectIO('view').viewport.zoom),1.7);
@@ -82,6 +88,7 @@ async function run(){
     assert.deepEqual(errors,[]);
     const shot=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-slicing-assets.png'),Buffer.from(shot.data,'base64'));
     await read(()=>{api.selectCanvasTab(fi.id,'primary');panels.move(fi,'main');fi.node.scrollIntoView({block:'start'});});
+    assert.equal(await read(()=>getComputedStyle(fi.activeRenderer.host).display),'none','moving an input to the main area must not add a projection canvas');
     const frameShot=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-frame-input.png'),Buffer.from(frameShot.data,'base64'));
     console.log('math_workspace_slicing_ui_test: frame, references, independent views, drafts and atomic imports passed');
   }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}

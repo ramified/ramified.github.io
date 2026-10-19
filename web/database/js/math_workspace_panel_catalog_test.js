@@ -29,7 +29,7 @@ assert.equal(find(suggest('young:b','young:a','lie:g'),'lr').ready,true);
 assert.equal(find(suggest('young:a','young:a'),'lr').refs.mu,undefined,'duplicate selection must not supply both inputs');
 assert(!find(suggest('young:c'),'lr'),'generalized Young diagrams are incompatible with the pair engine');
 assert(find(suggest('young:c'),'statistics'));
-assert.deepEqual(suggest('matrix:m').filter(panel=>panel.ready).map(panel=>panel.id),['matrix-invariants','matrix-computation','matrix-polynomial']);
+assert.deepEqual(suggest('matrix:m').filter(panel=>panel.ready).map(panel=>panel.id),['matrix-view','matrix-invariants','matrix-computation','matrix-polynomial']);
 assert(!find(suggest('matrix:m'),'statistics'));
 assert.deepEqual(find(suggest('dynkin:d'),'dynkin-cartan').refs,{lie:'lie:g'});
 assert(!find(suggest('dynkin:missing'),'dynkin-cartan'),'a missing reference must not fall back to an unrelated Lie');
@@ -49,10 +49,10 @@ assert(!find(suggest('variety:p'),'grassmannian'));
 assert.deepEqual(find(suggest('variety:p'),'asset:hodge').refs,{asset:'variety:p'});
 assert.equal(find(suggest('variety:p'),'asset:hodge').route,'assets');
 assert(!find(suggest('variety:t'),'asset:hodge'),'legacy native properties must not claim unsupported toric geometry');
-const views=[{id:'v1',type:'strands-input',assetKeys:['strands:s'],label:'First view',active:true},
-  {id:'v2',type:'strands-input',assetKeys:['strands:s'],label:'Second view'},
-  {id:'v3',type:'strands-input',assetKeys:['strands:e'],label:'Other view'},
-  {id:'v4',type:'strands-input',assetKeys:['strands:s'],closed:true}];
+const views=[{id:'v1',type:'strands-view',assetKeys:['strands:s'],label:'First view',active:true},
+  {id:'v2',type:'strands-view',assetKeys:['strands:s'],label:'Second view'},
+  {id:'v3',type:'strands-view',assetKeys:['strands:e'],label:'Other view'},
+  {id:'v4',type:'strands-view',assetKeys:['strands:s'],closed:true}];
 assert.deepEqual(catalog.suggest(['strands:s'],assets,views).filter(p=>p.role==='view').map(p=>p.refs.view),['v1','v2']);
 assert.deepEqual(catalog.suggest([],assets,views).map(p=>p.refs.view),['v1']);
 assert.equal(catalog.bindingKey('branching',{mu:'young:b',lambda:'young:a',lie:''}),catalog.bindingKey('branching',{lambda:'young:a',mu:'young:b'},'diag-gl'));

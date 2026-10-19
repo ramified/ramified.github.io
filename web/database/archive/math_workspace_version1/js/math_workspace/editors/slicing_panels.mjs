@@ -21,6 +21,11 @@ function __withOrthonormalFrame(action) {
 }
 draw = function() { return __panelConfig.mode && __panelConfig.mode!=='kernel' ? __withOrthonormalFrame(()=>__originalSliceDraw()) : __originalSliceDraw(); };
 const __originalDynkinPicker=buildDynkinReferencePicker, __originalSliceParams=rebuildObjectParams;
+const __originalLatticeParams=buildLatticeParams;
+buildLatticeParams=function(container,object) {
+  if(__panelConfig.mode==='input'&&__panelConfig.assetKind==='lattice'&&['matrix-input','matrix-object'].includes(object.data.basisMode))return;
+  return __originalLatticeParams(container,object);
+};
 buildDynkinReferencePicker=function(...args) { if(!__panelConfig.mode)return __originalDynkinPicker(...args); };
 rebuildObjectParams=function() {
   if(__panelConfig.operation!=='slicing-display') return __originalSliceParams();
@@ -97,7 +102,7 @@ function __rememberSliceViews() {
   }
 }
 function __collectSlice() {
-  if(__sliceFrame && (__sliceTarget?.kind==='frame'||__panelConfig.operation==='slicing-scene')) return {kind:'frame',assetKey:__key(__sliceFrame),type:'frame',data:__sliceFrameData()};
+  if(__sliceFrame && (__sliceTarget?.kind==='frame'||['slicing-scene','geometry-view'].includes(__panelConfig.operation))) return {kind:'frame',assetKey:__key(__sliceFrame),type:'frame',data:__sliceFrameData()};
   if(!__sliceTarget||!__sliceModel().isAsset(__sliceTarget)||__sliceTarget.kind==='variety') return null;
   const object=state.objects.find(o=>o.id===__key(__sliceTarget)); if(!object) return null;
   const d={...object.data};
@@ -128,6 +133,8 @@ renderAll = function() {
   __sliceRendering=true;
   try {
     __originalSliceRender(); __slicePinTabs();
+    const visible=state.objects.filter(object=>(__sliceBinding.references?.nodes||[]).includes(object.id));
+    for(const control of document.querySelectorAll('[data-layer-control]')){const count=visible.filter(object=>!!object[control.dataset.layerControl]).length;control.checked=visible.length>0&&count===visible.length;control.indeterminate=count>0&&count<visible.length;control.disabled=!visible.length;}
     if(__panelConfig.operation==='lattice-character') __renderBoundCharacter();
   } finally { __sliceRendering=false; }
   __sliceNotify();
@@ -239,6 +246,7 @@ __editor.setAssetAdapter({
     $('ambient-dimension').disabled=true;
     let card;
     if(config.mode==='input') {
+      __panelStyle('#toric-cone-summary,#toric-fan-summary{display:none!important}.slice-matrix-panel,.slice-vector-panel,.slice-direct-panel{border:0!important;padding:0!important;background:transparent!important}');
       if(config.assetKind==='frame') card=$('slide-input-mode-controls').closest('.card');
       else if(config.assetKind==='cone') card=$('slice-toric-cone-card');
       else if(config.assetKind==='fan') card=$('slice-toric-fan-card');
@@ -252,8 +260,15 @@ __editor.setAssetAdapter({
         const style=document.createElement('style');style.textContent='.workspace-object-content .slice-row:has(#object-select){display:flex!important}#object-delete,#object-export{display:none!important}';__editor.inspectorShadow.append(style);
       }
     }
-    if(card) __showCard(card);
-    if(config.assetKind==='frame'||config.mode==='scene'||config.operation==='frame-details') {const note=document.createElement('p');note.className='workspace-frame-note';note.textContent='Frame: point p and all ordered basis vectors. The slice is p + span(v1, v2); drawing uses an orthonormal basis of that plane.';(__panelCard?.querySelector('.card-body')||__editor.shadow.querySelector('.slice-layout')||__editor.host).append(note);}
+    if(card) {__showCard(card);if(config.mode==='input')__editor.mountObjectSurfaces({modify:[card.querySelector('.card-body')]});}
+    if(config.mode==='scene') {
+      const toolbar=[$('screen-zoom')?.closest('.slice-control-line'),$('show-axes')?.closest('.slice-control-line')];
+      const layers=document.createElement('div');layers.className='workspace-scene-layers';layers.setAttribute('aria-label','Object layers');
+      for(const [text,key]of [['projection','visibleProjection'],['slice','visibleSlice'],['labels','labels']]){const label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.dataset.layerControl=key;check.addEventListener('change',()=>{const selected=new Set(__sliceBinding.references?.nodes||[]);for(const object of state.objects)if(selected.has(object.id))object[key]=check.checked;renderAll();});label.append(check,document.createTextNode(text));layers.append(label);}
+      toolbar.push(layers);__editor.mountObjectSurfaces({content:[$('slice-viewport').parentElement],toolbar});
+      $('clear-canvas').hidden=true;
+    }
+    if(config.assetKind==='frame'||config.operation==='frame-details') {const note=document.createElement('p');note.className='workspace-frame-note';note.textContent='Frame: point p and all ordered basis vectors. The slice is p + span(v1, v2); drawing uses an orthonormal basis of that plane.';(__panelCard?.querySelector('.card-body')||__editor.shadow.querySelector('.slice-layout')||__editor.host).append(note);}
     return true;
   },
   apply:(snapshot,ref,properties,binding)=>__sliceApply(snapshot,ref,binding),

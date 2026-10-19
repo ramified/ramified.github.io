@@ -582,8 +582,8 @@ assert(nativeBundle.includes(Buffer.from(':host{display:block;min-width:0;height
 assert(nativeBundle.includes(Buffer.from('[id$="-wide-host"]:not(:has(.card)){display:none!important}')), 'empty wide-card hosts must not reserve native canvas space');
 assert(nativeBundle.includes(Buffer.from('.workspace-editor-layout .workspace-view-card{min-width:0;width:100%;height:100%')), 'nested calculator canvas panels must fill their allocated workspace height');
 assert(/math_workspace_native_editors_v8\.js\?v=[a-f0-9]{16}/.test(html), 'native editor cache query must be derived from the reproducible bundle hash');
-assert(html.includes('css/math_workspace.css?v=20261018-context-panels-1'), 'workspace stylesheet changes need a cache-query bump');
-assert(html.includes('js/math_workspace.js?v=20261018-context-panels-1'), 'workspace controller changes need a cache-query bump');
+assert(html.includes('css/math_workspace.css?v=20261019-asset-surfaces-2'), 'workspace stylesheet changes need a cache-query bump');
+assert(html.includes('js/math_workspace.js?v=20261019-asset-surfaces-2'), 'workspace controller changes need a cache-query bump');
 assert(html.includes('js/calculator_cards.js?v=20260903-1'), 'workspace-owned Assets cards must reuse the shared calculator card chrome');
 assert(nativeBuilder.includes('math_workspace_native_editors_v8.js') && nativeBuilder.includes('Stale live native editor bundle'), 'the source builder must publish and verify the live runtime');
 assert(!source.includes("closeCardPicker(); const picker = assetState.referencePicker"), 'native source selection must not be closed by the global outside-pointer handler');
@@ -600,7 +600,7 @@ assert(html.includes('id="workspace-assets-context-menu"'));
 assert(html.includes('id="workspace-assets-delete-dialog"'));
 assert(html.includes('id="workspace-add-card"'), 'the outer Inspector must own Add card');
 assert(!html.includes('id="workspace-card-source"') && html.includes('id="workspace-card-context"'), 'Add panel must show selection context instead of a source selector');
-assert(html.includes('js/math_workspace_panel_catalog.js?v=20261018-context-panels-1'), 'the shared asset/panel relationship catalog must load');
+assert(html.includes('js/math_workspace_panel_catalog.js?v=20261019-asset-surfaces-1'), 'the shared asset/panel relationship catalog must load');
 assert(html.includes('tex-chtml.js'), 'Assets names need MathJax rendering');
 ['icons', 'list', 'details', 'tiles', 'content'].forEach((layout) => {
   assert(css.includes(`[data-layout='${layout}']`), `${layout} layout needs dedicated CSS`);

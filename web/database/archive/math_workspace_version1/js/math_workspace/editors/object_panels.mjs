@@ -11,6 +11,7 @@ function __objectConfigure(config) {
   __objectPanel = config;
   const css = document.createElement('style');
   css.textContent = '.workspace-object-content>.card-head{display:none!important}.workspace-object-content{border:0!important;margin:0!important;max-height:none!important}.workspace-object-content>.card-body{padding:4px!important;max-height:none!important}.workspace-object-content [data-import-export-trigger],.workspace-object-content .card-pin-btn{display:none!important}.workspace-card-inspector{display:block!important}.workspace-object-content .decomposition-output{max-height:650px}.workspace-object-content #lie-dominant-canvas-btn{display:none!important}';
+  if(config.mode==='input')css.textContent+='.workspace-view-card{border:0!important;box-shadow:none!important}.workspace-view-card>.panel-title>.panel-title-text{display:none!important}.workspace-view-card>.panel-title{border:0!important}';
   document.head.append(css);
   // The inspector has its own shadow root and therefore its own stylesheet.
   __editor.inspectorShadow?.append(css.cloneNode(true));
@@ -60,7 +61,7 @@ function __objectConfigureSpecific(config) {
   } else {
     const canvasPanel = document.querySelector('.canvas-panel');
     const display = document.getElementById('showhooks')?.closest('.card-body');
-    if (display) { const details = document.createElement('details'), summary = document.createElement('summary'); summary.textContent = 'Display options'; details.append(summary, display); canvasPanel.append(details); }
+    if (display && config.mode!=='view') { const details = document.createElement('details'), summary = document.createElement('summary'); summary.textContent = 'Display options'; details.append(summary, display); canvasPanel.append(details); }
     // A view grid is presentation state. Resizing must not erase the Asset.
     setGridSize = function(cols, rows, clearDiagram, customized) {
       const value = __objectRows();
@@ -70,6 +71,11 @@ function __objectConfigureSpecific(config) {
       blocks = Array.from({ length: gridRows }, (_, r) => Array.from({ length: gridCols }, (_, c) => c < (value.rows[r] || 0) ? 1 : 0));
       syncGridSizeInputs(); resize();
     };
+    if(config.mode==='view') {
+      const toolbar=document.querySelector('.canvas-toolbar');
+      const options=['showhooks','shadehooks','showcoords'].map(id=>document.getElementById(id)?.closest('label')).filter(Boolean);
+      __editor.mountObjectSurfaces({content:[document.getElementById('canvas-wrap')],toolbar:[toolbar,...options]});
+    }
     resizeGeneralizedCanvasFromControls = function(cols, rows, customized) {
       const value = __objectRows(), active = value.rows.length;
       generalizedCanvasSideCols = Math.max(1, ...value.rows.map(Math.abs), Math.min(25, Number(cols) || generalizedSideCols()));

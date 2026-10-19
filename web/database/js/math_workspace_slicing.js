@@ -109,6 +109,7 @@
     const add=(field,kind,label,optional=false,many=false)=>result.push({field,kind,label,optional,many});
     if(['roots','weyl'].includes(asset.kind)||asset.kind==='lattice'&&d.basisMode==='dynkin') add('lie','lie','Lie type');
     if(asset.kind==='matrix'&&d.construction) result.push({field:'construction.lie',kind:'lie',label:'Lie type'});
+    if(asset.kind==='matrix') add('field','field','Field',true);
     if(asset.kind==='lattice'&&d.basisMode==='matrix-object') add('matrix','matrix','Basis matrix');
     if(asset.kind==='voronoi') {add('lattice','lattice','Lattice');add('point','point','Cell center');}
     if(asset.kind==='fan') { if(d.constructionMode==='cone-list') add('cones','cone','Maximal cones',false,true); add('characterLattice','lattice','Character lattice',true); }
@@ -142,10 +143,10 @@
     const result=closure([keyOf(asset)],assets),missing=result.missing.slice(),get=k=>assets.find(a=>keyOf(a)===k);
     for(const a of result.assets) {
       let d=a.data;
-      if(a.kind==='matrix'&&d.construction) { try { d=materialize(a,assets).data; } catch(error) { missing.push(error.message); } }
+      if(a.kind==='matrix') { try { d=materialize(a,assets).data; } catch(error) { missing.push(error.message); } }
       const n=a.kind==='matrix'?d.rows:d.ambientDimension;
       if(native&&n!=null&&(n<2||n>8)) missing.push((a.plainName||a.kind)+': this slicing calculator supports dimensions 2–8; the asset is unchanged.');
-      if(a.kind==='matrix') {
+      if(a.kind==='matrix'&&native) {
         if(d.rows!==d.cols) missing.push('The slicing matrix source requires a square matrix.');
         if(!['real','rational','integer','complex'].includes(d.dataType)) missing.push('The slicing renderer requires real numeric matrix entries.');
         if(!d.construction) { try { rows(d.entries,d.rows,'Matrix'); } catch(e) { missing.push(e.message); } }
@@ -155,7 +156,7 @@
         if(parent.kind==='lie') {
           if(parent.data.rank!==n) missing.push('Lie rank must match the chosen coordinate realization dimension ('+n+').');
           if(!['A','B','C','D','E6','E7','E8','F4','G2'].includes(parent.data.family)||parent.data.family==='D'&&n<4) missing.push('This Lie type is unsupported by the slicing renderer.');
-        } else if(a.kind!=='variety') { let p=parent;try {p=materialize(parent,assets);}catch(_){} if((p.data.ambientDimension??p.data.rows)!==n) missing.push('Referenced assets must have the same ambient dimension. Their coordinates were preserved.'); }
+        } else if(a.kind!=='variety'&&parent.kind!=='field') { let p=parent;try {p=materialize(parent,assets);}catch(_){} if((p.data.ambientDimension??p.data.rows)!==n) missing.push('Referenced assets must have the same ambient dimension. Their coordinates were preserved.'); }
       }
       if(a.kind==='lattice'&&d.basisMode==='matrix-object'&&get(d.matrix)) {
         try { const p=materialize(get(d.matrix),assets); rows(p.data.entries,n,'Lattice basis',true); } catch(e) { missing.push(e.message); }
@@ -175,6 +176,11 @@
       const entries=math('lie-matrix',{lie:lie.data,basis:asset.data.construction.basis}).map(row=>row.map(String));
       return {...asset,data:{...asset.data,rows:n,cols:n,entries,dataType:'real'}};
     }
+    if(asset.kind==='matrix'&&asset.data.field) {
+      const field=assets.find(a=>keyOf(a)===asset.data.field&&a.kind==='field');
+      if(!field)throw new Error('Choose an existing Field asset for this matrix.');
+      return {...asset,data:{...asset.data,...field.data}};
+    }
     if(asset.kind==='variety'&&asset.type==='toric') {
       const parent=assets.find(a=>keyOf(a)===(asset.data.fan||asset.data.cone));
       if(parent) return {...asset,data:{...asset.data,dimension:String(parent.data.ambientDimension)}};
@@ -187,12 +193,12 @@
     for(const spec of definition.slots||[]) {
       const asset=assets.find(a=>keyOf(a)===computation.refs[spec.id]);
       if(!asset&&!spec.optional) missing.push('Choose '+spec.label+'.');
-      else if(asset&&(asset.kind!==spec.kind||spec.subtype&&asset.type!==spec.subtype)) missing.push('Choose a compatible '+spec.label+'.');
+      else if(asset&&(!(spec.kinds||[spec.kind]).includes(asset.kind)||spec.subtype&&asset.type!==spec.subtype)) missing.push('Choose a compatible '+spec.label+'.');
     }
     for(const asset of result.assets) { objects[keyOf(asset)]=asset; missing.push(...issues(asset,assets)); }
     const frame=assets.find(a=>keyOf(a)===computation.refs.frame);
     if(definition.id==='lattice-character') {const lattice=assets.find(a=>keyOf(a)===computation.refs.lattice),point=assets.find(a=>keyOf(a)===computation.refs.point);if(lattice&&point&&lattice.data.ambientDimension!==point.data.ambientDimension)missing.push('The point and lattice must have the same ambient dimension.');}
-    if(definition.slicingScene&&!(computation.refs.nodes||[]).length) missing.push('Choose one or more objects to project or slice.');
+    if(definition.slicingScene&&!(computation.refs.nodes||[]).length&&!(definition.geometryView&&assets.find(a=>keyOf(a)===computation.refs.asset)?.kind==='frame')) missing.push('Choose one or more objects to project or slice.');
     if(frame) for(const key of computation.refs.nodes||[]) {
       const asset=assets.find(a=>keyOf(a)===key); if(!asset) continue;
       try {const data=materialize(asset,assets).data,n=asset.kind==='variety'?Number(data.dimension):data.ambientDimension??data.rows;
@@ -211,7 +217,7 @@
       if(!value.data||typeof value.data!=='object') throw new Error('The imported asset has no mathematical data.');
       if(value.dependencies!=null&&!Array.isArray(value.dependencies)) throw new Error('Dependencies must be an array of assets.');
       for(const dependency of value.dependencies||[]) {
-        if(!dependency.id||!dependency.data||!(isAsset(dependency)||['matrix','lie'].includes(dependency.kind))) throw new Error('Invalid slicing dependency.');
+        if(!dependency.id||!dependency.data||!(isAsset(dependency)||['matrix','lie','field'].includes(dependency.kind))) throw new Error('Invalid slicing dependency.');
         normal(dependency);
       }
       const primary=normal({...value,id:'import-primary'});
@@ -279,8 +285,8 @@
     {id:'fan-orbits',label:'Fan / Orbits',engine:'slice',slicing:true,light:true,marker:'toric-fan-info',slots:[slot('fan','Fan','fan')]},
     {id:'fan-divisors',label:'Toric Divisors / Bundles',engine:'slice',slicing:true,light:true,marker:'toric-fan-divisor-info',slots:[slot('variety','Toric variety','variety',{subtype:'toric'})]},
     {id:'lattice-character',label:'Lattice / Equivariant Bundles',engine:'slice',slicing:true,light:true,marker:'slice-weight-info-out',slots:[slot('lattice','Lattice','lattice'),slot('point','Point / weight','point'),slot('variety','Toric variety','variety',{subtype:'toric',optional:true})]},
-    {id:'slicing-display',label:'Slice Viewport / Layers',engine:'slice',slicing:true,display:true,viewTypes:['slicing-scene','frame-input'],marker:'screen-zoom',slots:[],light:true},
-    {id:'slicing-debug',label:'Slice Diagnostics',engine:'slice',slicing:true,display:true,viewTypes:['slicing-scene'],marker:'debug-warnings',slots:[],light:true}
+    {id:'slicing-display',label:'Slice Viewport / Layers',engine:'slice',slicing:true,display:true,viewTypes:['slicing-scene','geometry-view'],marker:'screen-zoom',slots:[],light:true},
+    {id:'slicing-debug',label:'Slice Diagnostics',engine:'slice',slicing:true,display:true,viewTypes:['slicing-scene','geometry-view'],marker:'debug-warnings',slots:[],light:true}
   ];
   const api={kinds,labels,subtypes,nativeTypes,normalize,resize,number,dimension,identity,vector,rows,independent,isAsset,inputType,renderable,references,readRef,refKeys,closure,issues,inputIssues,materialize,context,prepareImport,definitions,math,setKernel,clone,keyOf};
   if(typeof module!=='undefined'&&module.exports) module.exports=api; else root.MathWorkspaceSlicing=api;

@@ -3,8 +3,15 @@
   const slicing = root.MathWorkspaceSlicing || (typeof require === 'function' ? require('./math_workspace_slicing.js') : null);
   const keyOf = ref => ref ? `${ref.kind}:${ref.id}` : '';
   const types = ['A', 'B', 'C', 'D', 'E6', 'E7', 'E8', 'F4', 'G2'];
-  const inputKinds = ['young', 'lie', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...slicing.kinds];
-  const kindLabels = { ...slicing.labels, variety: 'Toric variety', young: 'Young diagram', lie: 'Lie type', matrix: 'Matrix', category: 'Category', functor: 'Functor', dynkin: 'Dynkin diagram', strands: 'Strands' };
+  const inputKinds = ['young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...slicing.kinds];
+  const kindLabels = { ...slicing.labels, variety: 'Toric variety', young: 'Young diagram', lie: 'Lie type', field: 'Field', matrix: 'Matrix', category: 'Category', functor: 'Functor', dynkin: 'Dynkin diagram', strands: 'Strands' };
+  const coefficientTypes = [['complex','Complex numbers ℂ'],['real','Real numbers ℝ'],['rational','Rational numbers ℚ'],['integer','Integers ℤ'],['finite-field','Prime field'],['rational-function','Rational function field'],['number-field','Number field']];
+  function fieldLabel(data) {
+    if (data.dataType === 'finite-field') return 'GF(' + data.finiteFieldPrime + ')';
+    if (data.dataType === 'rational-function') return 'ℚ(' + data.rationalFunctionVariables.join(', ') + ')';
+    if (data.dataType === 'number-field') return 'ℚ(' + data.numberFieldSymbol + ') / (' + data.numberFieldPolynomial + ')';
+    return coefficientTypes.find(([type]) => type === data.dataType)?.[1] || data.dataType;
+  }
   const branchingRules = [
     ['diag-gl', 'GL(n) × GL(n) → GL(n)'], ['diag-o', 'O(n) × O(n) → O(n)'], ['diag-sp', 'Sp(2n) × Sp(2n) → Sp(2n)'],
     ['sum-gl', 'GL(n+m) → GL(n) × GL(m)'], ['sum-o', 'O(n+m) → O(n) × O(m)'], ['sum-sp', 'Sp(2n+2m) → Sp(2n) × Sp(2m)'],
@@ -14,6 +21,10 @@
   ];
   function normalize(kind, type, source = {}) {
     if (slicing.kinds.includes(kind) || kind === 'variety' && type === 'toric') return slicing.normalize(kind,type,source);
+    if (kind === 'field') {
+      const { dataType, finiteFieldPrime, rationalFunctionVariables, numberFieldSymbol, numberFieldPolynomial } = normalize('matrix','matrix',source);
+      return { dataType, finiteFieldPrime, rationalFunctionVariables, numberFieldSymbol, numberFieldPolynomial };
+    }
     if (kind === 'dynkin') {
       const vertices = source.vertices ?? [1];
       if (!Array.isArray(vertices) || !vertices.length || vertices.some(v => !Number.isSafeInteger(v) || v < 1)) throw new Error('Choose one or more positive integer vertex numbers.');
@@ -55,7 +66,7 @@
         if (!['simple-roots','fundamental-weights'].includes(source.construction.basis)) throw new Error('Choose a supported Lie basis.');
         construction = { lie: String(source.construction.lie || ''), basis: source.construction.basis };
       }
-      return { rows, cols, entries: entries.map(row => row.map(String)), dataType, finiteFieldPrime, rationalFunctionVariables: rationalFunctionVariables.slice(), numberFieldSymbol: String(source.numberFieldSymbol || 'a'), numberFieldPolynomial: String(source.numberFieldPolynomial || 'a^2 - 2'), ...(construction ? { construction } : {}) };
+      return { rows, cols, entries: entries.map(row => row.map(String)), dataType, finiteFieldPrime, rationalFunctionVariables: rationalFunctionVariables.slice(), numberFieldSymbol: String(source.numberFieldSymbol || 'a'), numberFieldPolynomial: String(source.numberFieldPolynomial || 'a^2 - 2'), ...(source.field ? { field: String(source.field) } : {}), ...(construction ? { construction } : {}) };
     }
     if (kind === 'category') return { objectSymbol: String(source.objectSymbol || 'X').trim(), objectCondition: String(source.objectCondition || '').trim(), morphismElement: String(source.morphismElement || 'f:{source}\\to {target}').trim(), morphismCondition: String(source.morphismCondition || '').trim(), opposite: !!source.opposite };
     if (kind === 'functor') {
@@ -174,11 +185,19 @@
   const definitions = [
     ...slicing.definitions,
     { id: 'young-input', label: 'Young diagram Input', input: 'young' },
+    { id: 'young-view', label: 'Young diagram', engine:'young', assetView:true, viewRole:'lambda', light:true, slots:[slot('lambda','Young diagram','young')] },
+    { id: 'dynkin-view', label:'Dynkin diagram', engine:'dynkin', assetView:true, viewRole:'dynkin', light:true, slots:[dynkin()] },
+    { id: 'strands-view', label:'Strands', engine:'strand', assetView:true, viewRole:'strands', light:true, slots:[strands()] },
+    { id: 'geometry-view', label:'Projection / 2D Slice', engine:'slice', assetView:true, geometryView:true, slicing:true, slicingScene:true, light:true, slots:[slot('asset','Asset',null,{kinds:[...slicing.kinds,'variety']}),slot('frame','Frame','frame')] },
     { id: 'lie-input', label: 'Lie type Input', input: 'lie' },
+    { id: 'field-input', label: 'Field Input', input: 'field' },
+    { id: 'field-view', label: 'Field Display', objectView: true, slots: [slot('asset','Field','field')], light: true },
+    { id: 'asset-view', label: 'Object Display', objectView: true, slots: [slot('asset','Asset',null,{kinds:['variety','sheaf','map','lie']})], light: true },
     { id: 'matrix-input', label: 'Matrix Input', input: 'matrix', engine: 'matrix' },
+    { id: 'matrix-view', label: 'Matrix Display', engine: 'matrix', slots: [slot('matrix', 'Matrix', 'matrix')], light: true },
     { id: 'category-input', label: 'Category Input', input: 'category', engine: 'category' },
     { id: 'functor-input', label: 'Functor Input', input: 'functor', engine: 'category' },
-    { id: 'dynkin-input', label: 'Dynkin diagram Input', input: 'dynkin', engine: 'dynkin' },
+    { id: 'dynkin-input', label: 'Dynkin diagram Input', input: 'dynkin' },
     { id: 'strands-input', label: 'Strands Input', input: 'strands', engine: 'strand' },
     { id: 'dynkin-invariants', label: 'Dynkin Basic Invariants', engine: 'dynkin', marker: 'dynkin-invariants', slots: [lie()], fromKinds: ['dynkin'], light: true },
     { id: 'dynkin-cartan', label: 'Cartan Matrix', engine: 'dynkin', marker: 'dynkin-cartan', slots: [lie()], fromKinds: ['dynkin'], light: true },
@@ -189,7 +208,7 @@
     { id: 'strands-calculation', label: 'Strands Calculation', engine: 'strand', marker: 'strand-calculation-card', slots: [strands()] },
     { id: 'strands-relations', label: 'Strands Relations', engine: 'strand', marker: 'strand-calculation-card', slots: [], light: true },
     { id: 'strands-basis', label: 'Strands Basis', engine: 'strand', marker: 'strand-calculation-card', slots: [classicalLie()], fromKinds: ['strands'], light: true },
-    { id: 'strands-display', label: 'Strands Display', engine: 'strand', marker: 'strand-direction', slots: [], display: true, light: true },
+    { id: 'strands-display', label: 'Strands Display', engine: 'strand', marker: 'strand-direction', slots: [], display: true, viewTypes:['strands-view'], light: true },
     { id: 'matrix-invariants', label: 'Matrix Basic Invariants', engine: 'matrix', marker: 'out-rank', slots: [slot('matrix', 'Matrix', 'matrix')], light: true },
     { id: 'matrix-computation', label: 'Matrix Computation', engine: 'matrix', marker: 'operation-output', slots: [slot('matrix', 'Matrix', 'matrix')] },
     { id: 'matrix-polynomial', label: 'Action on Polynomial', engine: 'matrix', marker: 'polynomial-action-output', slots: [slot('matrix', 'Matrix', 'matrix')] },
@@ -209,9 +228,18 @@
     { id: 'polynomials', label: 'Symmetric Polynomials', engine: 'double-young', marker: 'sympoly-output', slots: [a(), b()] },
     { id: 'slice', label: '2D Weight Slice', engine: 'double-young', marker: 'slice-card-body', slots: [a(), b(), lie()], light: true }
   ];
+  const capabilities=Object.fromEntries(['variety','sheaf','map',...inputKinds].map(kind=>[kind,{
+    open:kind==='young'?'young-view':kind==='dynkin'?'dynkin-view':kind==='strands'?'strands-view':kind==='matrix'?'matrix-view':kind==='field'?'field-view':['category','functor'].includes(kind)?'category-diagram':slicing.kinds.includes(kind)?'geometry-view':'asset-view',
+    modify:inputKinds.includes(kind)?kind+'-input':null,
+    directEdit:['young','dynkin','strands','matrix'].includes(kind),
+    properties:definitions.filter(d=>!d.input&&!d.assetView&&(d.slots||[]).some(s=>(s.kinds||[s.kind]).includes(kind))).map(d=>d.id)
+  }]));
+  function capabilityFor(asset){return asset?.kind==='variety'&&asset.type==='toric'?{...capabilities.variety,open:'geometry-view',modify:'toric-variety-input'}:capabilities[asset?.kind];}
   const byType = new Map(definitions.map(definition => [definition.id, definition]));
   function compatible(asset, spec, definition) {
-    return !!asset && asset.kind === spec.kind && (!spec.subtype || asset.type === spec.subtype)
+    return !!asset && (spec.kinds || [spec.kind]).includes(asset.kind) && (!spec.subtype || asset.type === spec.subtype)
+      && !(definition.geometryView&&asset.kind==='variety'&&asset.type!=='toric')
+      && !(spec.kind==='frame'&&definition.frameDimension&&asset.data.ambientDimension!==definition.frameDimension)
       && (!spec.families || spec.families.includes(asset.data.family))
       && !(definition.engine === 'double-young' && asset.kind === 'young' && asset.type === 'generalized');
   }
@@ -235,7 +263,7 @@
       if (computation.type === 'branching' && spec.id === 'mu' && !(computation.rule || 'diag-gl').startsWith('diag-')) continue;
       const asset = assets.find(asset => keyOf(asset) === computation.refs[spec.id]);
       if (compatible(asset, spec, definition)) {
-        if (asset.kind === 'matrix' && asset.data.construction) {
+        if (asset.kind === 'matrix') {
           const deps = slicing.closure([keyOf(asset)],assets); missing.push(...deps.missing);
           deps.assets.filter(a=>a!==asset).forEach(a=>{objects[keyOf(a)]=a;});
           try { objects[spec.id] = slicing.materialize(asset,assets); } catch(error) { missing.push(error.message); }
@@ -254,10 +282,10 @@
       const { r, n } = objects.space.data;
       for (const id of ['lambda', 'mu']) if (objects[id] && (objects[id].data.rows.length > Number(r) || Math.max(0, ...objects[id].data.rows) > Number(n) - Number(r))) missing.push(`${id === 'lambda' ? 'λ' : 'μ'} must fit inside Gr(${r}, ${n})`);
     }
-    return { objects, missing, signature: JSON.stringify([computation.rule, Object.entries(objects).map(([role, asset]) => [role, keyOf(asset), asset.type, asset.data, definition.scene ? asset.name : null])]) };
+    return { objects, missing, signature: JSON.stringify([computation.rule, Object.entries(objects).map(([role, asset]) => [role, keyOf(asset), asset.type, asset.data, definition.scene || definition.objectView || definition.id==='matrix-view' ? asset.name : null])]) };
   }
   function mount(api) {
-    const panels = new Map(), computations = new Map(), ioRenderers = new Map();
+    const panels = new Map(), computations = new Map(), ioRenderers = new Map(), legacyViews=new Map();
     let nextId = 0, snapshot = api.snapshot();
     const get = key => snapshot.assets.find(asset => keyOf(asset) === key);
     const element = (tag, className, text) => Object.assign(document.createElement(tag), { className: className || '', ...(text == null ? {} : { textContent: text }) });
@@ -268,6 +296,35 @@
     function feedback(panel, text = '', error = false) { panel.message.textContent = text; panel.message.dataset.state = error ? 'error' : ''; panel.node.classList.toggle('is-stale', panel.computation?.status === 'stale'); }
     function field(label, control) {
       const node = element('label', 'workspace-field workspace-field-inline'); node.append(element('span', 'input-label', label), control); return node;
+    }
+    function ensureMatrixField(key) {
+      const matrix=get(key); if(!matrix || matrix.kind!=='matrix' || matrix.data.field || matrix.data.construction) return;
+      const data=normalize('field','field',matrix.data);
+      const existing=snapshot.assets.find(a=>a.kind==='field'&&JSON.stringify(a.data)===JSON.stringify(data));
+      const parent=existing||api.create('field',{data});
+      api.update(refOf(matrix),{data:{...matrix.data,field:keyOf(parent)}});
+    }
+    function editMatrixAsset(asset) {
+      const key=keyOf(asset);
+      const existing=[...panels.values()].find(panel=>panel.definition.id==='matrix-input'&&panel.assetKey===key);
+      if(existing) {
+        if(existing.closed) move(existing,'side');
+        else if(existing.location==='main') api.placeMain(existing);
+        existing.node.scrollIntoView({block:'nearest'});existing.head.focus({preventScroll:true});return existing;
+      }
+      return open('matrix-input',key,'side');
+    }
+    function latticeBasisMatrix(panel) {
+      const asset=get(panel.assetKey);if(!asset)return;
+      let matrix=get(asset.data.matrix);
+      if(asset.data.basisMode!=='matrix-object') {
+        const n=asset.data.ambientDimension,basis=asset.data.basisRows||slicing.identity(n);
+        const data=normalize('matrix','matrix',{rows:n,cols:n,entries:basis.map(row=>row.map(String)),dataType:'real'});
+        matrix=api.create('matrix',{data});
+        api.update(refOf(asset),{data:{...asset.data,basisMode:'matrix-object',matrix:keyOf(matrix)}});
+      }
+      if(!matrix)throw new Error('Choose or create a basis matrix first.');
+      return matrix;
     }
     function createNative(panel, engine, role) {
       const host = element('section', 'workspace-object-native'), inspectorHost = element('section', 'workspace-object-native-inspector');
@@ -280,7 +337,8 @@
         onError: error => feedback(panel, error.message, true)
       });
       renderer.editor.listCards().forEach(card => renderer.editor.setCardVisible(card.key, false));
-      renderer.editor.configureObjectPanel({ mode: panel.definition.scene || panel.definition.slicingScene ? 'scene' : role === 'property' ? 'property' : 'input', compact: role === 'compact', marker: panel.definition.marker, operation: panel.definition.id, assetKind: panel.definition.input });
+      renderer.editor.configureObjectPanel({ mode: panel.definition.scene || panel.definition.slicingScene ? 'scene' : panel.definition.assetView?'view':role === 'property' ? 'property' : 'modify', compact: role === 'compact', marker: panel.definition.marker, operation: panel.definition.id, assetKind: panel.definition.input });
+      renderer.operation=panel.definition.id;
       renderer.applying = false;
       return renderer;
     }
@@ -292,12 +350,12 @@
         if (target?.computation && targetRenderer) { target.computation.options = targetRenderer.editor.captureAssetProperties(); target.computation.result = targetRenderer.editor.readObjectResult(); api.ioChanged(); }
         return;
       }
-      if (panel.definition.input && panel.definition.input !== 'lie') {
-        const asset = get(panel.assetKey); if (!asset || panel.inputIssues?.length || panel.activeRenderer !== renderer) return;
+      if (panel.definition.input && panel.definition.input !== 'lie' || panel.definition.id==='matrix-view' || panel.definition.assetView&&!panel.definition.geometryView) {
+        const asset = get(panel.definition.id==='matrix-view'?panel.computation.refs.matrix:panel.definition.assetView?panel.computation.refs[panel.definition.viewRole]:panel.assetKey); if (!asset || panel.inputIssues?.length || (panel.definition.input && panel.activeRenderer !== renderer)) return;
         if (asset.kind === 'strands' || panel.definition.slicing) panels.forEach(other => { if (other.definition.display && other.computation.refs.view === panel.id) refreshPanel(other); });
         const value = renderer.editor.collectAssets(); if (!value) return;
         const data = normalize(asset.kind, value.type || asset.type, value.data || { rows: value.rows });
-        if (JSON.stringify(asset.data) === JSON.stringify(data) && (!value.name || asset.name === value.name)) return;
+        if (JSON.stringify(asset.data) === JSON.stringify(data) && (!value.name || asset.name === value.name)) {if(panel.computation)panel.computation.options=renderer.editor.captureAssetProperties();api.ioChanged();return;}
         renderer.signature = '';
         try { api.update(refOf(asset), { type: value.type || asset.type, name: value.name || asset.name, data }); feedback(panel); }
         catch (error) { feedback(panel, error.message, true); }
@@ -323,18 +381,20 @@
       }
     }
     function setRendererVisible(renderer, visible, property = false) {
-      const canvas = !property || ['slice', 'category-diagram','slicing-scene'].includes(renderer.operation);
-      const inspector = property && !['category-diagram','slicing-scene'].includes(renderer.operation) || renderer.role === 'input' && ['matrix', 'category', 'strand','slice'].includes(renderer.engine);
-      const inputOnly = renderer.role === 'input' && renderer.engine === 'category';
+      const view=['young-view','dynkin-view','strands-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
+      const canvas = !property || view;
+      const inspector = property && !view || renderer.role === 'input' && ['matrix', 'category', 'strand','slice'].includes(renderer.engine);
+      // Slicing inputs edit Assets; the dedicated slicing scene owns the canvas.
+      const inputOnly = renderer.role === 'input' && (['category', 'slice','strand','matrix'].includes(renderer.engine) || renderer.constructedMatrix);
       renderer.editor.setCanvasActive(visible && canvas && !inputOnly);
-      renderer.editor.setInspectorActive(visible && inspector);
+      renderer.editor.setInspectorActive(visible && inspector && !renderer.hideInputInspector);
       // The runtime sets host.hidden, so apply the property layout after activation.
       renderer.host.hidden = !visible || !canvas || inputOnly;
-      renderer.inspectorHost.hidden = !visible || !inspector;
+      renderer.inspectorHost.hidden = !visible || !inspector || renderer.hideInputInspector;
     }
     function updateDensity(panel) {
       if (panel.definition.slicing && panel.definition.input) { const asset = get(panel.assetKey); panel.inputIssues = asset ? slicing.inputIssues(asset,snapshot.assets) : []; }
-      if(panel.definition.input==='matrix') { const asset=get(panel.assetKey); panel.inputIssues=[]; if(asset?.data.construction) { try {slicing.materialize(asset,snapshot.assets);}catch(error){panel.inputIssues=[error.message];} } }
+      if(panel.definition.input==='matrix') { const asset=get(panel.assetKey); panel.inputIssues=[]; if(asset) { try {slicing.materialize(asset,snapshot.assets);}catch(error){panel.inputIssues=[error.message];} } }
       if (['dynkin','strands'].includes(panel.definition.input)) {
         const asset = get(panel.assetKey), parent = get(asset?.data.lie);
         panel.inputIssues = asset ? [...rootObjectIssues(asset, parent), ...(parent ? lieEngineIssues(parent.data, panel.definition.engine) : [])] : [];
@@ -347,26 +407,20 @@
           panel.activeRenderer = createNative(panel, panel.definition.engine, 'input');
           panel.renderers.set('input', panel.activeRenderer); projectInput(panel);
         }
-        if (panel.activeRenderer) setRendererVisible(panel.activeRenderer, visible);
+        if (panel.activeRenderer) {
+          const asset=get(panel.assetKey);
+          panel.activeRenderer.constructedMatrix=panel.definition.input==='matrix'&&!!asset?.data.construction;
+          panel.activeRenderer.hideInputInspector=panel.activeRenderer.constructedMatrix||panel.definition.input==='lattice'&&['matrix-input','matrix-object'].includes(asset?.data.basisMode);
+          setRendererVisible(panel.activeRenderer, visible);
+        }
         return;
       }
-      if (panel.definition.input !== 'young') {
-        if (panel.propertyRenderer) setRendererVisible(panel.propertyRenderer, visible && panel.computation.status !== 'missing', true);
-        return;
-      }
-      if (!visible) { panel.renderers.forEach(renderer => setRendererVisible(renderer, false)); return; }
-      const asset = get(panel.assetKey);
-      const role = compact && asset?.type !== 'generalized' ? 'compact' : 'large';
-      if (!panel.renderers.has(role)) panel.renderers.set(role, createNative(panel, role === 'compact' ? 'double-young' : 'young', role));
-      const renderer = panel.renderers.get(role), changed = panel.activeRenderer !== renderer;
-      panel.activeRenderer = renderer;
-      for (const candidate of panel.renderers.values()) setRendererVisible(candidate, candidate === renderer);
-      if (changed) projectInput(panel);
+      if (panel.propertyRenderer) setRendererVisible(panel.propertyRenderer, visible && panel.computation.status !== 'missing', true);
     }
     function projectInput(panel) {
       const asset = get(panel.assetKey), renderer = panel.activeRenderer;
       if (!renderer || !asset || panel.inputIssues?.length) return;
-      const assets = panel.definition.slicing ? snapshot.assets : asset.kind === 'matrix' && asset.data.construction ? slicing.closure([keyOf(asset)],snapshot.assets).assets : [asset, ...snapshot.assets.filter(item => asset.kind === 'functor' && item.kind === 'category' || ['dynkin','strands'].includes(asset.kind) && keyOf(item) === asset.data.lie)];
+      const assets = panel.definition.slicing ? snapshot.assets : asset.kind === 'matrix' ? slicing.closure([keyOf(asset)],snapshot.assets).assets : [asset, ...snapshot.assets.filter(item => asset.kind === 'functor' && item.kind === 'category' || ['dynkin','strands'].includes(asset.kind) && keyOf(item) === asset.data.lie)];
       const signature = JSON.stringify(assets);
       if (renderer.signature === signature) return;
       renderer.applying = true;
@@ -384,7 +438,7 @@
       }
       select.value = value || '';
     }
-    function referenceControl(panel, spec, definition, read, write) {
+    function referenceControl(panel, spec, definition, read, write, actions = {}) {
       const row = element('div', 'workspace-object-reference'), select = element('select', 'workspace-control'); select.dataset.objectReference = spec.id;
       select.setAttribute('aria-label', spec.label);
       select.addEventListener('change', () => { write(select.value); refreshPanel(panel); });
@@ -394,12 +448,15 @@
         try { const parsed = JSON.parse(key); key = typeof parsed === 'string' ? parsed : keyOf(parsed); } catch (_) {}
         if (compatible(get(key), spec, definition)) { write(key); refreshPanel(panel); }
       });
-      row.append(field(spec.label, select), button('+', () => {
+      row.append(field(spec.label, select));
+      if(definition.objectView || definition.assetView || definition.id==='matrix-view') { panel.references.append(row);panel.selectors.push({row,select,spec,definition,read});return; }
+      row.append(button('+', () => {
+        if(actions.create){actions.create();return;}
         const asset = api.create(spec.kind, spec.subtype ? { type: spec.subtype, ...(spec.subtype === 'grassmannian' ? {data: { r: '2', n: '4' }} : {}) } : {});
         write(keyOf(asset)); refreshPanel(panel);
-        if (spec.kind === 'lie') open('lie-input', keyOf(asset), 'side');
+        if (['lie','field'].includes(spec.kind)) open(spec.kind+'-input', keyOf(asset), 'side');
       }, `Create ${spec.label}`));
-      if (!definition.input || spec.id !== 'asset') row.append(button('edit', () => { const asset = get(read()); if (asset) api.edit(refOf(asset)); }, `Edit ${spec.label}`));
+      if (!definition.input || spec.id !== 'asset') row.append(button('edit', () => { if(actions.edit){actions.edit();return;}const asset = get(read()); if (asset) api.edit(refOf(asset)); }, `Edit ${spec.label}`));
       panel.references.append(row); panel.selectors.push({ row, select, spec, definition, read });
     }
     function inputFields(panel) {
@@ -410,11 +467,36 @@
         try { api.update(refOf(asset), { name: name.value }); feedback(panel); } catch (error) { feedback(panel, error.message, true); }
       });
       if (definition.slicing) { slicingInputFields(panel); return; }
-      if (definition.input === 'matrix') {
+      if (definition.input === 'field') {
+        const type=element('select','workspace-control'); type.setAttribute('aria-label','Coefficient type'); type.append(...coefficientTypes.map(([value,label])=>new Option(label,value))); panel.coefficientType=type;
+        const prime=element('input','workspace-control'); prime.type='number'; prime.min='2'; prime.max='999983'; prime.step='1'; prime.setAttribute('aria-label','Prime');
+        const variables=element('input','workspace-control'); variables.type='text'; variables.setAttribute('aria-label','Variables');
+        const symbol=element('input','workspace-control'); symbol.type='text'; symbol.setAttribute('aria-label','Generator');
+        const polynomial=element('input','workspace-control workspace-code-control'); polynomial.type='text'; polynomial.setAttribute('aria-label','Defining polynomial');
+        panel.fieldControls={finiteFieldPrime:prime,rationalFunctionVariables:variables,numberFieldSymbol:symbol,numberFieldPolynomial:polynomial}; panel.fieldRows={};
+        const commit=()=>{
+          const asset=get(panel.assetKey); if(!asset)return;
+          try {
+            const data={...asset.data,dataType:type.value};
+            if(type.value==='finite-field') { if(!prime.value.trim())return; data.finiteFieldPrime=Number(prime.value); }
+            if(type.value==='rational-function') { if(!variables.value.trim())return; data.rationalFunctionVariables=variables.value.split(',').map(v=>v.trim()); }
+            if(type.value==='number-field') { if(!symbol.value.trim()||!polynomial.value.trim())return; data.numberFieldSymbol=symbol.value;data.numberFieldPolynomial=polynomial.value; }
+            api.update(refOf(asset),{data:normalize('field','field',data)}); feedback(panel);
+          } catch(error) { feedback(panel,error.message,true); }
+        };
+        type.addEventListener('change',commit); panel.controls.append(field('Type',type));
+        for(const [key,control] of Object.entries(panel.fieldControls)) { listen(control,commit); const row=field(control.getAttribute('aria-label'),control);panel.fieldRows[key]=row;panel.controls.append(row); }
+      } else if (definition.input === 'matrix') {
         const mode = element('select','workspace-control'); mode.setAttribute('aria-label','Matrix construction'); mode.append(new Option('Manual matrix','manual'),new Option('Simple roots from Lie type','simple-roots'),new Option('Fundamental weights from Lie type','fundamental-weights')); panel.matrixConstruction = mode;
-        mode.addEventListener('change',()=>{ const asset=get(panel.assetKey); if(!asset) return; const data={...asset.data}; if(mode.value==='manual') { try { Object.assign(data,slicing.materialize(asset,snapshot.assets).data); } catch(_) {} delete data.construction; } else data.construction={lie:asset.data.construction?.lie||'',basis:mode.value}; api.update(refOf(asset),{data}); });
+        mode.addEventListener('change',()=>{ const asset=get(panel.assetKey); if(!asset) return; const data={...asset.data}; if(mode.value==='manual') { try { Object.assign(data,slicing.materialize(asset,snapshot.assets).data); } catch(_) {} delete data.construction;delete data.field; } else {delete data.field;data.construction={lie:asset.data.construction?.lie||'',basis:mode.value};} api.update(refOf(asset),{data});if(mode.value==='manual')ensureMatrixField(panel.assetKey); });
         panel.controls.append(field('Construction',mode));
+        referenceControl(panel,slot('field','Field','field'),definition,()=>get(panel.assetKey)?.data.field||'',value=>{
+          const asset=get(panel.assetKey); if(!asset)return;
+          if(value)api.update(refOf(asset),{data:{...asset.data,field:value}});
+          else { const data={...slicing.materialize(asset,snapshot.assets).data};delete data.field;api.update(refOf(asset),{data});ensureMatrixField(panel.assetKey); }
+        },{create:()=>{const asset=get(panel.assetKey);if(!asset)return;const data=normalize('field','field',slicing.materialize(asset,snapshot.assets).data);const parent=api.create('field',{data});api.update(refOf(asset),{data:{...asset.data,field:keyOf(parent)}});open('field-input',keyOf(parent),'side');}});
         referenceControl(panel,lie(),definition,()=>get(panel.assetKey)?.data.construction?.lie||'',value=>{ const asset=get(panel.assetKey); if(asset?.data.construction) api.update(refOf(asset),{data:{...asset.data,construction:{...asset.data.construction,lie:value}}}); });
+        panel.selectors.filter(entry=>['field','lie'].includes(entry.spec.id)).forEach(entry=>panel.controls.append(entry.row));
       } else if (definition.input === 'young') {
         const type = element('select', 'workspace-control'); type.append(new Option('Young diagram', 'partition'), new Option('Generalized rows', 'generalized')); panel.youngType = type;
         const rows = element('input', 'workspace-control workspace-code-control'); rows.type = 'text'; rows.placeholder = '4, 2, 1'; rows.setAttribute('aria-label', 'Young diagram rows'); panel.rows = rows;
@@ -479,11 +561,14 @@
         type.addEventListener('change',()=>{const a=get(panel.assetKey); if(a) api.update(refOf(a),{type:type.value,data:normalize(a.kind,type.value,a.data)});}); panel.controls.append(field('Type',type));
       }
       if(kind==='lattice') {
-        const mode=element('select','workspace-control'); mode.append(...[['matrix-input','Manual basis'],['matrix-object','Matrix asset'],['dynkin','Lie root / weight lattice'],['lmfdb-field','Number field']].map(([v,t])=>new Option(t,v))); panel.latticeMode=mode;
+        const mode=element('select','workspace-control'); mode.append(...[['matrix-input','Stored basis'],['matrix-object','Matrix asset'],['dynkin','Lie root / weight lattice'],['lmfdb-field','Number field']].map(([v,t])=>new Option(t,v))); panel.latticeMode=mode;
         mode.addEventListener('change',()=>commit({basisMode:mode.value})); panel.controls.append(field('Construction',mode));
       }
       const specs=kind==='variety'?[slot('fan','Fan','fan',{optional:true}),slot('cone','Affine cone','cone',{optional:true})]:['roots','weyl','lattice'].includes(kind)?[lie(),...(kind==='lattice'?[slot('matrix','Basis matrix','matrix')]:[])]:kind==='voronoi'?[slot('lattice','Lattice','lattice'),slot('point','Cell center','point')]:kind==='fan'?[slot('characterLattice','Character lattice','lattice',{optional:true})]:[];
-      specs.forEach(spec=>referenceControl(panel,spec,definition,()=>get(panel.assetKey)?.data[spec.id]||'',value=>commit({[spec.id]:value,...(kind==='variety'?{[spec.id==='fan'?'cone':'fan']:''}:{})})));
+      specs.forEach(spec=>referenceControl(panel,spec,definition,()=>get(panel.assetKey)?.data[spec.id]||'',value=>commit({[spec.id]:value,...(kind==='variety'?{[spec.id==='fan'?'cone':'fan']:''}:{}),...(kind==='lattice'&&spec.id==='matrix'?{basisMode:'matrix-object'}:{})}),kind==='lattice'&&spec.id==='matrix'?{
+        edit:()=>editMatrixAsset(latticeBasisMatrix(panel)),
+        create:()=>{const asset=get(panel.assetKey);if(!asset)return;if(asset.data.basisMode==='matrix-input')latticeBasisMatrix(panel);else{const n=asset.data.ambientDimension,matrix=api.create('matrix',{data:normalize('matrix','matrix',{rows:n,cols:n,dataType:'real'})});commit({basisMode:'matrix-object',matrix:keyOf(matrix)});}}
+      }:{}));
       if(kind==='fan') {
         const mode=element('select','workspace-control'); mode.append(new Option('Preset','preset'),new Option('Cone assets','cone-list')); panel.fanMode=mode;
         mode.addEventListener('change',()=>commit({constructionMode:mode.value})); panel.controls.append(field('Construction',mode));
@@ -497,8 +582,11 @@
       if(panel.slicingType) panel.slicingType.value=asset.type;
       if(panel.latticeMode) panel.latticeMode.value=asset.data.basisMode;
       if(panel.fanMode) panel.fanMode.value=asset.data.constructionMode;
-      panel.selectors.forEach(({row,spec})=>{
-        if(asset.kind==='lattice'&&spec.id!=='asset') row.hidden=spec.id==='lie'?asset.data.basisMode!=='dynkin':asset.data.basisMode!=='matrix-object';
+      panel.selectors.forEach(({row,spec,select})=>{
+        if(asset.kind==='lattice'&&spec.id!=='asset') {
+          row.hidden=spec.id==='lie'?asset.data.basisMode!=='dynkin':!['matrix-input','matrix-object'].includes(asset.data.basisMode);
+          if(spec.id==='matrix')select.options[0].textContent=asset.data.basisMode==='matrix-input'?'Stored basis':`Choose ${spec.label}…`;
+        }
       });
       if(panel.coneChoices) {
         panel.coneChoices.hidden=asset.data.constructionMode!=='cone-list';
@@ -514,10 +602,10 @@
       feedback(panel,panel.inputIssues.join(' '),!!panel.inputIssues.length);
     }
     function ioEntries() {
-      const entries = snapshot.assets.filter(asset => inputKinds.includes(asset.kind) || slicing.isAsset(asset)).map(asset => ({
+      const entries = [{ id: 'workspace', label: 'Complete workspace backup (JSON)', canImport: true, filename: 'math-workspace.json' }, ...snapshot.assets.map(asset => ({
         id: keyOf(asset), label: (asset.plainName || asset.name) + ' · ' + asset.typeLabel,
         canImport: true, filename: asset.kind + '-' + asset.id + '.json'
-      }));
+      }))];
       for (const panel of panels.values()) if (panel.computation && !panel.definition.display) entries.push({
         id: 'property:' + panel.computation.id,
         label: panel.definition.label + ' · ' + Object.values(panel.computation.refs).flat().filter(Boolean).map(key => get(key)?.plainName || get(key)?.name || 'Missing asset').join(', ') + ' · ' + panel.computation.id,
@@ -553,22 +641,28 @@
         editor.listCards().forEach(card => editor.setCardVisible(card.key, false)); editor.configureObjectPanel({ mode: 'io' });
         editor.setCanvasActive(false); editor.setInspectorActive(false); ioRenderers.set(engine, editor);
       }
-      const assets = engine === 'slice' || asset.kind === 'matrix' && asset.data.construction ? slicing.closure([keyOf(asset)],snapshot.assets).assets : [asset, ...snapshot.assets.filter(item => asset.kind === 'functor' && item.kind === 'category' && [asset.data.domain, asset.data.codomain].includes(keyOf(item)) || ['dynkin','strands'].includes(asset.kind) && keyOf(item) === asset.data.lie)];
+      const assets = engine === 'slice' || asset.kind === 'matrix' ? slicing.closure([keyOf(asset)],snapshot.assets).assets : [asset, ...snapshot.assets.filter(item => asset.kind === 'functor' && item.kind === 'category' && [asset.data.domain, asset.data.codomain].includes(keyOf(item)) || ['dynkin','strands'].includes(asset.kind) && keyOf(item) === asset.data.lie)];
       editor.applyAssets({ assets }, refOf(asset)); return editor;
     }
     function exportFormats(key) {
+      if (key === 'workspace') return [{ id: 'json', label: 'Workspace JSON backup' }];
       const asset = get(key), panel = [...panels.values()].find(panel => 'property:' + panel.computation?.id === key);
       const kind = asset?.kind || panel?.definition.engine;
       const formats = slicing.isAsset(asset) || panel?.definition.slicing ? (asset?.kind==='frame'?['json','latex','plain']:['json','plain']) : ['strands','strand','dynkin'].includes(kind) ? ['json','latex','plain'] : kind === 'matrix' && panel?.definition.id !== 'matrix-invariants' ? ['json','latex','python','sage','macaulay2','mathematica','matlab','rows'] : ['category','functor'].includes(kind) ? ['json','latex','plain','preset'] : ['json'];
-      return formats.map(id => ({ id, label: { json: 'JSON asset / result', latex: 'LaTeX', plain: 'Plain text', preset: 'Category JSON preset', rows: 'Rows' }[id] || id }));
+      return [...new Set([...formats.filter(id => !asset || !['sage','macaulay2'].includes(id)), ...(asset ? window.MathWorkspaceIO.casFormats(asset) : [])])].map(id => ({ id, label: { json: 'JSON asset / result', sage: 'SageMath', macaulay2: 'Macaulay2', latex: 'LaTeX', plain: 'Plain text', preset: 'Category JSON preset', rows: 'Rows' }[id] || id }));
     }
     function exportText(key, format = 'json') {
+      if (key === 'workspace') return JSON.stringify(api.captureWorkspace(), null, 2);
       const asset = get(key);
-      if (asset && (inputKinds.includes(asset.kind) || slicing.isAsset(asset))) {
+      if (asset && ['sage','macaulay2'].includes(format)) {
+        if (!window.MathWorkspaceIO.casFormats(asset).includes(format)) throw new Error('This object has no supported native definition in the selected computer algebra system.');
+        if (asset.kind !== 'matrix') return window.MathWorkspaceIO.casExport(asset, format);
+      }
+      if (asset) {
         if (format !== 'json') return ioRenderer(asset).objectIO('export', format);
         const parent = ['dynkin','strands'].includes(asset.kind) ? get(asset.data.lie) : null;
-        const deps = slicing.references(asset).length ? slicing.closure([keyOf(asset)],snapshot.assets).assets.filter(a=>keyOf(a)!==keyOf(asset)) : [];
-        return JSON.stringify({ kind: asset.kind, name: asset.name, type: asset.type, data: asset.data, ...(deps.length ? { dependencies: deps.map(a=>({kind:a.kind,id:a.id,name:a.name,type:a.type,data:a.data})) } : {}), ...(parent ? { lieAsset: { kind: 'lie', type: parent.type, data: parent.data } } : {}) }, null, 2);
+        const dependencies = dependencyRecords(asset);
+        return JSON.stringify({ kind: asset.kind, id: asset.id, name: asset.name, type: asset.type, data: asset.data, properties: asset.properties || {}, ...(dependencies.length ? { dependencies } : {}), ...(parent ? { lieAsset: { kind: 'lie', type: parent.type, data: parent.data } } : {}) }, null, 2);
       }
       const panel = [...panels.values()].find(panel => panel.computation && 'property:' + panel.computation.id === key);
       if (!panel) throw new Error('Choose an asset or property to export.');
@@ -577,23 +671,61 @@
         if (computation.status !== 'current') throw new Error('Update the property result before exporting it.');
         return panel.propertyRenderer.editor.objectIO('export', format);
       }
-      return JSON.stringify({ property: computation.type, refs: computation.refs, rule: computation.rule, options: computation.options, result: computation.status === 'current' ? panel.propertyRenderer?.editor.readObjectResult() || null : null, status: computation.status }, null, 2);
+      return JSON.stringify({ property: computation.type, refs: computation.refs, rule: computation.rule, options: computation.options, result: computation.status === 'current' ? panel.propertyRenderer?.editor.readObjectResult() || computation.result || null : null, status: computation.status }, null, 2);
+    }
+    function dependencyRecords(asset) {
+      const found = new Set([keyOf(asset)]), result = [];
+      const visit = item => {
+        for (const ref of item.dependencies || []) {
+          const key = keyOf(ref), dependency = get(key);
+          if (!dependency || found.has(key)) continue;
+          found.add(key); visit(dependency);
+          result.push({ kind: dependency.kind, id: dependency.id, name: dependency.name, type: dependency.type, data: dependency.data, properties: dependency.properties || {} });
+        }
+      };
+      visit(asset); return result;
     }
     function importText(key, text) {
+      if (key === 'workspace') return api.restoreWorkspace(text);
       if (key === 'category-graph') return api.importCategoryGraph(JSON.parse(text));
       if (key === 'slicing-graph') return api.importSlicing(JSON.parse(text));
       const asset = get(key);
-      if (!asset || !(inputKinds.includes(asset.kind) || slicing.isAsset(asset))) throw new Error('Choose the destination asset first.');
+      if (!asset) throw new Error('Choose the destination asset first.');
       if (asset.kind === 'matrix' && !text.trim().startsWith('{')) return api.update(refOf(asset), { data: normalize('matrix', 'matrix', ioRenderer(asset).objectIO('parse', text)) });
       const raw = text.trim(), value = raw.startsWith('{') ? JSON.parse(raw) : { kind: 'young', type: asset.type, data: { partition: raw } };
-      if (slicing.isAsset(asset) || asset.kind === 'matrix' && (value.data?.construction || value.dependencies)) return api.importSlicing(value,refOf(asset));
+      if (slicing.isAsset(asset) || asset.kind === 'matrix' && (value.data?.construction || value.data?.field || value.dependencies)) return api.importSlicing(value,refOf(asset));
       if (['dynkin','strands'].includes(asset.kind)) return api.importRootObject(refOf(asset), value);
       if (value.kind !== asset.kind) throw new Error('Imported data has a different object type.');
+      if (!inputKinds.includes(asset.kind)) return api.importAsset(refOf(asset), value);
       const type = value.type || asset.type;
       if (!(asset.kind === 'young' ? ['partition', 'generalized'] : asset.kind === 'lie' ? ['simple'] : [asset.kind]).includes(type)) throw new Error('Imported data has an unsupported object subtype.');
       const data = normalize(asset.kind, type, value.data || {});
       if (asset.kind === 'matrix') ioRenderer({ ...asset, data }).objectIO('validate');
       api.update(refOf(asset), { type, data });
+    }
+    function refreshObjectView(panel) {
+      const asset=get(panel.computation.refs.asset),computation=panel.computation;
+      computation.status=asset?'current':'missing';panel.renderArea.hidden=!asset;
+      if(!asset) {feedback(panel,'Choose an asset to display.');return;}
+      panel.title.textContent=(asset.plainName||asset.name)+' · Display';
+      const signature=JSON.stringify([asset.name,asset.type,asset.data,asset.dependencies?.map(ref=>get(keyOf(ref))?.name)]);
+      if(signature!==computation.signature) {
+        computation.signature=signature;
+        const title=element('p','workspace-object-display-title',asset.definition||asset.typeLabel||asset.kind),details=element('dl','workspace-object-display-details');
+        const valueNode=value=>{
+          if(Array.isArray(value)) {
+            if(!value.length)return element('span','','∅');
+            if(value.every(row=>Array.isArray(row))) {const table=element('table','workspace-object-display-grid');for(const row of value){const tr=element('tr');for(const cell of row)tr.append(element('td','',String(cell)));table.append(tr);}return table;}
+            return element('span','',value.map(item=>typeof item==='object'?Object.entries(item).map(([key,v])=>key+': '+v).join(', '):String(item)).join('; '));
+          }
+          if(value&&typeof value==='object') {const dl=element('dl','workspace-object-display-details');for(const [key,item] of Object.entries(value)){dl.append(element('dt','',key.replace(/([A-Z])/g,' $1')),valueNode(item));}return dl;}
+          return element('span','',get(value)?.plainName||get(value)?.name||(value==null?'—':String(value)));
+        };
+        const data=['field','lie'].includes(asset.kind)?{}:Object.fromEntries(Object.entries(asset.data).filter(([,value])=>value!==''&&value!=null));
+        for(const [key,value] of Object.entries(data)) {const term=key.replace(/([A-Z])/g,' $1');const description=element('dd');description.append(valueNode(value));details.append(element('dt','',term[0].toUpperCase()+term.slice(1)),description);}
+        panel.renderArea.replaceChildren(title,...(Object.keys(data).length?[details]:[]));computation.result={text:panel.renderArea.textContent};
+      }
+      feedback(panel);
     }
     function refreshDisplayPanel(panel) {
       const select = panel.viewSelect, selected = panel.computation.refs.view || '';
@@ -615,8 +747,12 @@
       panel.refreshing = true;
       try {
           panel.selectors.forEach(({ row, select, spec, definition, read }) => {
-          updateSelector(select, spec, definition, read());
-          row.hidden = definition.id === 'branching' && spec.id === 'mu' && !panel.computation.rule.startsWith('diag-');
+          const source=definition.geometryView&&get(panel.computation.refs.asset);
+          updateSelector(select, spec, definition.geometryView&&spec.id==='frame'?{...definition,frameDimension:source?.data.ambientDimension??Number(source?.data.dimension)}:definition, read());
+          row.hidden = definition.id === 'branching' && spec.id === 'mu' && !panel.computation.rule.startsWith('diag-')
+            || !!definition.input && spec.id==='asset' && !!get(panel.assetKey)
+            || (definition.assetView||definition.objectView||definition.id==='matrix-view') && spec.id!=='frame' && !!get(read())
+            || definition.geometryView && spec.id==='frame' && get(panel.computation.refs.asset)?.kind==='frame';
         });
         if (panel.definition.input) {
           const asset = get(panel.assetKey);
@@ -624,10 +760,14 @@
           if (asset) {
             sync(panel.name, asset.name);
             if (panel.definition.slicing) refreshSlicingInput(panel,asset);
-            else if (asset.kind === 'matrix') {
+            else if (asset.kind === 'field') {
+              panel.coefficientType.value=asset.data.dataType;
+              for(const [key,control] of Object.entries(panel.fieldControls)) { sync(control,key==='rationalFunctionVariables'?asset.data[key].join(', '):asset.data[key]);panel.fieldRows[key].hidden=key==='finiteFieldPrime'?asset.data.dataType!=='finite-field':key==='rationalFunctionVariables'?asset.data.dataType!=='rational-function':asset.data.dataType!=='number-field'; }
+            } else if (asset.kind === 'matrix') {
               panel.matrixConstruction.value=asset.data.construction?.basis||'manual'; panel.inputIssues=[];
               panel.selectors.filter(entry=>entry.spec.id==='lie').forEach(entry=>{entry.row.hidden=!asset.data.construction;});
-              if(asset.data.construction) { try { slicing.materialize(asset,snapshot.assets); } catch(error) { panel.inputIssues=[error.message]; } }
+              panel.selectors.filter(entry=>entry.spec.id==='field').forEach(entry=>{entry.row.hidden=!!asset.data.construction;});
+              try { slicing.materialize(asset,snapshot.assets); } catch(error) { panel.inputIssues=[error.message]; }
               feedback(panel,panel.inputIssues.join(' '),!!panel.inputIssues.length);
             } else if (asset.kind === 'young') { sync(panel.rows, asset.data.partition); panel.youngType.value = asset.type; }
             else if (asset.kind === 'lie') { panel.family.value = asset.data.family; sync(panel.rank, asset.data.rank); panel.rank.disabled = !['A','B','C','D'].includes(asset.data.family); }
@@ -643,26 +783,32 @@
               feedback(panel, panel.inputIssues.join(' '), !!panel.inputIssues.length);
             }
           }
-          panel.title.textContent = `${asset?.plainName || asset?.name || 'Choose an asset'} · Input`;
+          panel.title.textContent = `${asset?.plainName || asset?.name || 'Choose an asset'} · Modify`;
           updateDensity(panel); projectInput(panel);
-          panel.renderArea.hidden = !asset || !!panel.inputIssues?.length;
+          panel.renderArea.hidden = !asset || !!panel.inputIssues?.length || !panel.definition.engine;
           if (!asset) feedback(panel, panel.assetKey ? 'The referenced asset was deleted. Choose another asset.' : 'Choose or create an asset to edit.');
-        } else if (panel.definition.display) { refreshDisplayPanel(panel); } else {
-          if (panel.definition.scene || panel.definition.slicingScene) refreshSceneChoices(panel);
+        } else if (panel.definition.objectView) { refreshObjectView(panel); }
+        else if (panel.definition.display) { refreshDisplayPanel(panel); } else {
+          if ((panel.definition.scene || panel.definition.slicingScene)&&!panel.definition.assetView) refreshSceneChoices(panel);
           const computation = panel.computation, context = contextFor(computation, snapshot.assets);
-          panel.title.textContent = panel.definition.label;
+          const bound=get(computation.refs[panel.definition.viewRole||'asset']);
+          panel.title.textContent = panel.definition.assetView&&bound?(bound.plainName||bound.name)+' · '+panel.definition.label:panel.definition.label;
           if (context.missing.length) {
             computation.status = 'missing'; computation.signature = ''; computation.result = null; panel.renderArea.hidden = true;
             if (panel.propertyRenderer) setRendererVisible(panel.propertyRenderer, false, true);
             feedback(panel, 'Required inputs: ' + context.missing.join('; '));
           } else {
             panel.renderArea.hidden = false;
-            if (!panel.propertyRenderer) { panel.propertyRenderer = createNative(panel, panel.definition.engine, 'property'); panel.propertyRenderer.operation = panel.definition.id; }
+            if (!panel.propertyRenderer) {
+              panel.propertyRenderer = createNative(panel, panel.definition.engine, 'property'); panel.propertyRenderer.operation = panel.definition.id;
+              const legacy=panel.definition.assetView&&legacyViews.get(keyOf(bound));
+              if(legacy){const renderer=panel.propertyRenderer;renderer.applying=true;try{renderer.editor.restore(legacy.engine===renderer.engine?legacy.snapshot:{ui:legacy.snapshot.ui});}finally{renderer.applying=false;}legacyViews.delete(keyOf(bound));}
+            }
             const renderer = panel.propertyRenderer;
             if (computation.signature !== context.signature) {
               computation.signature = context.signature; computation.result = null; computation.status = panel.definition.light ? 'current' : 'stale';
               renderer.applying = true;
-              try { renderer.editor.applyAssets({ assets: Object.values(context.objects) }, refOf(context.objects.lambda), null, { mode: 'property', operation: panel.definition.id, rule: computation.rule, light: panel.definition.light, references: computation.refs, refs: Object.fromEntries(Object.entries(context.objects).map(([role, asset]) => [role, refOf(asset)])) }); }
+              try { renderer.editor.applyAssets({ assets: Object.values(context.objects) }, refOf(panel.definition.geometryView?get(computation.refs.asset):context.objects[panel.definition.viewRole||'lambda']), null, { mode: panel.definition.assetView?'view':'property', operation: panel.definition.id, rule: computation.rule, light: panel.definition.light, references: computation.refs, refs: Object.fromEntries(Object.entries(context.objects).map(([role, asset]) => [role, refOf(asset)])) }); }
               finally { renderer.applying = false; }
               computation.options = renderer.editor.captureAssetProperties();
               if (panel.definition.light) computation.result = renderer.editor.readObjectResult();
@@ -681,6 +827,7 @@
       if (panel.location === 'main') api.removeMain(panel.id);
       panel.location = location; panel.closed = location === 'hidden'; panel.node.hidden = panel.closed;
       panel.node.dataset.location = location;
+      if(location==='main'){panel.collapsed=false;panel.node.classList.remove('collapsed');panel.head.setAttribute('aria-expanded','true');}
       if (location === 'main') api.placeMain(panel);
       else if (location === 'side') api.side.prepend(panel.node);
       else api.parking.append(panel.node);
@@ -690,21 +837,27 @@
     }
     function open(type, assetKey = '', location = 'side', options = {}) {
       const definition = byType.get(type); if (!definition) throw new Error('Unknown mathematical panel.');
-      const hiddenInput = definition.input && assetKey && [...panels.values()].find(panel => panel.closed && panel.definition === definition && panel.assetKey === assetKey);
+      if(type==='matrix-input')ensureMatrixField(assetKey);
+      const hiddenInput = !options.id && definition.input && assetKey && [...panels.values()].find(panel => panel.closed && panel.definition === definition && panel.assetKey === assetKey);
       if (hiddenInput) { move(hiddenInput, location); if (!options.keepPickerOpen) api.closePicker(); return hiddenInput; }
-      const id = `object-panel-${++nextId}`;
+      const id = options.id || `object-panel-${nextId + 1}`;
+      nextId = Math.max(nextId, Number(id.match(/\d+$/)[0]));
       const node = element('section', 'card workspace-object-panel workspace-assets-inspector-card'), head = element('div', 'card-head'), title = element('span', 'card-head-label', definition.label);
       node.dataset.objectPanel = id; node.dataset.panelType = type;
       head.setAttribute('role', 'button'); head.tabIndex = 0; head.setAttribute('aria-expanded', 'true');
       const body = element('div', 'card-body workspace-card-form'), references = element('div', 'workspace-object-references'), controls = element('div', 'workspace-form-fields'), message = element('p', 'workspace-status'), renderArea = element('div', 'workspace-object-render-area'); message.setAttribute('role', 'status');
       const panel = { id, definition, node, head, title, body, references, controls, message, renderArea, selectors: [], renderers: new Map(), assetKey, location: 'hidden', closed: false, collapsed: false, refreshing: false };
+      node.dataset.panelRole=definition.input?'modify':definition.assetView||definition.scene||definition.slicingScene||['matrix-view','slice'].includes(type)?'view':'property';
       panels.set(id, panel); head.append(title, element('em', 'toggle-icon', '▾')); body.append(references, controls, message, renderArea); node.append(head, body);
       if (definition.input) {
-        referenceControl(panel, slot('asset', kindLabels[definition.input], definition.input, {subtype:definition.subtype}), definition, () => panel.assetKey, value => { panel.assetKey = value; });
+        referenceControl(panel, slot('asset', kindLabels[definition.input], definition.input, {subtype:definition.subtype}), definition, () => panel.assetKey, value => { panel.assetKey = value; if(definition.input==='matrix')ensureMatrixField(value); });
         inputFields(panel);
+        const rows=[...panel.controls.children],primary=rows.filter(row=>['Name','Type','Construction'].includes(row.querySelector('.input-label')?.textContent)),dependencies=panel.selectors.filter(entry=>entry.spec.id!=='asset').map(entry=>entry.row);
+        panel.controls.append(...primary,...dependencies,...rows.filter(row=>!primary.includes(row)&&!dependencies.includes(row)));
+        if(panel.derivedLabel)panel.derivedLabel.hidden=true;
       } else {
-        const computation = { id: `computation-${nextId}`, type, refs: JSON.parse(JSON.stringify(options.refs || {})), options: {}, result: null, status: 'missing', signature: '' };
-        const firstSlot = definition.slots?.find(spec => spec.kind === get(assetKey)?.kind);
+        const computation = { id: options.computationId || `computation-${nextId}`, type, refs: JSON.parse(JSON.stringify(options.refs || {})), options: {}, result: null, status: 'missing', signature: '' };
+        const firstSlot = definition.slots?.find(spec => compatible(get(assetKey),spec,definition));
         if (firstSlot) computation.refs[firstSlot.id] = assetKey;
         else if (!definition.slicing && definition.fromKinds?.includes(get(assetKey)?.kind)) computation.refs.lie = get(assetKey).data.lie;
         if (definition.display) {
@@ -714,6 +867,7 @@
         }
         if (definition.scene && !computation.refs.nodes) computation.refs.nodes = assetKey ? [assetKey] : snapshot.assets.filter(asset => ['category', 'functor'].includes(asset.kind)).map(keyOf);
         if (definition.slicingScene && !computation.refs.nodes) computation.refs.nodes = get(assetKey) && get(assetKey).kind !== 'frame' ? [assetKey] : [];
+        if(definition.geometryView&&get(computation.refs.asset)?.kind==='frame')computation.refs.frame=computation.refs.asset;
         computations.set(computation.id, computation); panel.computation = computation;
         if (type === 'branching') {
           computation.rule = options.rule || 'diag-gl';
@@ -754,14 +908,63 @@
       const panel = panels.get(id); if (!panel) return;
       panel.collapsed = panel.node.classList.contains('collapsed'); updateDensity(panel);
     }
+    function capturePanels() {
+      return [...panels.values()].map(panel => ({
+        id: panel.id, type: panel.definition.id, assetKey: panel.assetKey, location: panel.location, lastLocation: panel.lastLocation,
+        canvasHeight:panel.canvasHeight,
+        presentation: { collapsed: panel.node.classList.contains('collapsed'), pinned: panel.node.classList.contains('is-pinned'), displayMode: panel.node.dataset.cardWideState || 'normal' },
+        computation: panel.computation ? { id: panel.computation.id, refs: panel.computation.refs, rule: panel.computation.rule, options: panel.computation.options, status: panel.computation.status } : null,
+        drafts:[...panel.controls.querySelectorAll('input:not([type="checkbox"]),textarea')].map((control,index)=>({index,value:control.value})),
+        legacyView:legacyViews.get(panel.assetKey)||null,
+        renderers: [...panel.renderers.entries()].map(([role, renderer]) => ({ role, snapshot: renderer.editor.capture() })).concat(panel.propertyRenderer ? [{ role: 'property', snapshot: panel.propertyRenderer.editor.capture() }] : [])
+      }));
+    }
+    function clearPanels() {
+      for (const panel of panels.values()) {
+        panel.observer?.disconnect();
+        for (const renderer of new Set([...panel.renderers.values(), panel.propertyRenderer].filter(Boolean))) renderer.editor.dispose();
+        panel.node.remove();
+      }
+      panels.clear(); computations.clear(); legacyViews.clear(); nextId = 0;
+    }
+    function restorePanels(saved) {
+      snapshot = api.snapshot();
+      for(const item of saved){const definition=byType.get(item.type),kind=definition?.input,view=capabilities[kind]?.open,role=byType.get(view)?.viewRole;
+        if(item.legacyView)legacyViews.set(item.assetKey,item.legacyView);
+        else if(['young','dynkin','strands'].includes(kind)&&!saved.some(other=>other.type===view&&other.computation?.refs[role]===item.assetKey)){
+          const native=item.renderers.find(renderer=>['input','large','compact'].includes(renderer.role));
+          if(native)legacyViews.set(item.assetKey,{engine:native.role==='compact'?'double-young':kind==='strands'?'strand':kind,snapshot:native.snapshot});
+        }
+      }
+      for (const item of saved) open(item.type, item.assetKey, item.location, { id: item.id, computationId: item.computation?.id, refs: item.computation?.refs, rule: item.computation?.rule, keepPickerOpen: true });
+      for(const panel of [...panels.values()])if(panel.definition.display){const old=panels.get(panel.computation.refs.view);if(old?.definition.input==='strands'){const view=open('strands-view',old.assetKey,'hidden',{keepPickerOpen:true});panel.computation.refs.view=view.id;}}
+      panels.forEach(refreshPanel);
+      for (const item of saved) {
+        const panel = panels.get(item.id); panel.lastLocation = item.lastLocation;
+        panel.canvasHeight=item.canvasHeight;
+        for (const savedRenderer of item.renderers) {
+          let renderer = savedRenderer.role === 'property' ? panel.propertyRenderer : panel.renderers.get(savedRenderer.role);
+          if (!renderer && panel.definition.input && panel.definition.engine && savedRenderer.role === 'input') { renderer = createNative(panel, panel.definition.engine, 'input'); panel.renderers.set('input', renderer); panel.activeRenderer = renderer; projectInput(panel); }
+          if (!renderer) continue;
+          renderer.applying = true;
+          try { renderer.editor.restore(savedRenderer.snapshot); } finally { renderer.applying = false; }
+        }
+        if (panel.computation) { panel.computation.options = item.computation.options;if(panel.computation.status!=='missing')panel.computation.status = item.computation.status; panel.computation.result = panel.propertyRenderer?.editor.readObjectResult() || panel.computation.result || null; }
+        const collapsed=panel.location!=='main'&&!!item.presentation.collapsed;
+        panel.node.classList.toggle('collapsed', collapsed); panel.node.classList.toggle('is-pinned', !!item.presentation.pinned); panel.node.dataset.cardWideState = item.presentation.displayMode;
+        panel.head.setAttribute('aria-expanded', String(!collapsed)); panel.collapsed = collapsed;
+        for(const draft of item.drafts||[]){const control=[...panel.controls.querySelectorAll('input:not([type="checkbox"]),textarea')][draft.index];if(control)window.CalculatorInputSettings.syncEditableValue(control,draft.value,{force:true});}
+        updateDensity(panel);
+      }
+    }
     slicing.setKernel((action,value)=>{
       let editor=ioRenderers.get('slice-kernel');
       if(!editor) { const host=element('section'),inspectorHost=element('section'); api.parking.append(host,inspectorHost); editor=window.MathWorkspaceNativeEditors.factories.slice.mount(host,{id:'slicing-mathematics',inspectorHost}); editor.listCards().forEach(card=>editor.setCardVisible(card.key,false)); editor.configureObjectPanel({mode:'kernel'}); editor.setCanvasActive(false); editor.setInspectorActive(false); ioRenderers.set('slice-kernel',editor); }
       return editor.objectIO(action,value);
     });
-    return { panels, computations, open, move, refresh, listCards, setVisible, syncPresentation, ioEntries, exportFormats, exportText, importText, resize: () => panels.forEach(updateDensity), closed: id => { const panel = panels.get(id); if (panel) { panel.lastLocation = 'main'; panel.location = 'hidden'; panel.closed = true; refreshPanel(panel); api.pickerChanged(); } } };
+    return { panels, computations, open, move, refresh, listCards, setVisible, syncPresentation, capturePanels, clearPanels, restorePanels, ioEntries, exportFormats, exportText, importText, resize: () => panels.forEach(updateDensity), closed: id => { const panel = panels.get(id); if (panel) { panel.lastLocation = 'main'; panel.location = 'hidden'; panel.closed = true; refreshPanel(panel); api.pickerChanged(); } } };
   }
-  const api = { normalize, definitions, contextFor, compatible, keyOf, mount, inputKinds, prepareCategoryGraph, strandContext, dynkinEdges, rootObjectIssues, lieEngineIssues, prepareRootImport };
+  const api = { normalize, fieldLabel, definitions, capabilities, capabilityFor, contextFor, compatible, keyOf, mount, inputKinds, prepareCategoryGraph, strandContext, dynkinEdges, rootObjectIssues, lieEngineIssues, prepareRootImport };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MathWorkspaceObjects = api;
 }(typeof window !== 'undefined' ? window : globalThis));

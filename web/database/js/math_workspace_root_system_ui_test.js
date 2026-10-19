@@ -16,7 +16,7 @@ async function run() {
       window.lie = api.createObjectAsset('lie', { data: { family: 'A', rank: 4 } });
       window.d = api.createObjectAsset('dynkin', { data: { lie: 'lie:' + lie.id, vertices: [1,3] } });
       window.w = api.createObjectAsset('strands', { data: { lie: 'lie:' + lie.id, generators: [{ family: 'coxeter', index: 1 }, { family: 'coxeter', index: 2 }] } });
-      window.di = panels.open('dynkin-input', 'dynkin:' + d.id, 'main');
+      window.di = panels.open('dynkin-input', 'dynkin:' + d.id, 'side');window.dv=panels.open('dynkin-view','dynkin:'+d.id,'main');
       window.vertex = panels.open('dynkin-vertex', 'dynkin:' + d.id, 'side');
       window.parabolic = panels.open('dynkin-parabolic', 'dynkin:' + d.id, 'side');
       window.cartan = panels.open('dynkin-cartan', 'dynkin:' + d.id, 'side');
@@ -31,9 +31,9 @@ async function run() {
     assert.deepEqual(await read(() => api.localAssetSnapshot().assets.find(a => a.id === d.id).data.vertices), [1,3]);
     const clickDynkin = async edge => {
       const point = await read(async edge => {
-        const canvas = di.activeRenderer.editor.shadow.querySelector('#dynkin-canvas'); canvas.scrollIntoView({ block: 'center' });
+        const canvas = dv.propertyRenderer.editor.shadow.querySelector('#dynkin-canvas'); canvas.scrollIntoView({ block: 'center' });
         await new Promise(requestAnimationFrame);
-        const rect = canvas.getBoundingClientRect(), geometry = di.activeRenderer.editor.objectIO('geometry');
+        const rect = canvas.getBoundingClientRect(), geometry = dv.propertyRenderer.editor.objectIO('geometry');
         const hit = edge ? geometry.edges[0] : geometry.vertices[1];
         const x = edge ? (hit.x1 + hit.x2) / 2 : hit.x, y = edge ? (hit.y1 + hit.y2) / 2 : hit.y;
         return { x: rect.left + x * rect.width / 900, y: rect.top + y * rect.height / 360 };
@@ -49,7 +49,7 @@ async function run() {
     assert.deepEqual(await read(() => api.localAssetSnapshot().assets.find(a => a.id === d.id).data.quiver), { '0-1': 1,'1-2': 1,'2-3': 1 });
     await clickDynkin(true);
     await waitFor(() => read(() => api.localAssetSnapshot().assets.find(a => a.id === d.id).data.quiver['0-1'] === -1));
-    await read(() => { const q = di.activeRenderer.editor.shadow.querySelector('#dynkin-quiver-mode'); q.click(); });
+    await read(() => { const q = dv.propertyRenderer.editor.shadow.querySelector('#dynkin-quiver-mode'); q.click(); });
     assert.equal(await read(() => api.localAssetSnapshot().assets.find(a => a.id === d.id).data.quiver['0-1']), -1, 'hiding arrows preserves mathematical directions');
     await read(() => ar.propertyRenderer.editor.inspectorShadow.querySelector('#dynkin-starting-ar-mode').click());
     assert.equal(await read(() => ar.propertyRenderer.editor.captureAssetProperties().arMode), true);
@@ -61,8 +61,8 @@ async function run() {
       window.calc = panels.open('strands-calculation','strands:' + w.id,'side');
       window.basis = panels.open('strands-basis','strands:' + w.id,'side');
       window.relations = panels.open('strands-relations','','side');
-      window.display = panels.open('strands-display','','side');
-      display.viewSelect.value = si.id; display.viewSelect.dispatchEvent(new Event('change',{ bubbles: true }));
+      window.sv=panels.open('strands-view','strands:'+w.id,'main');window.sv2=panels.open('strands-view','strands:'+w.id,'side');window.display = panels.open('strands-display','','side');
+      display.viewSelect.value = sv.id; display.viewSelect.dispatchEvent(new Event('change',{ bubbles: true }));
     });
     assert.deepEqual(errors, []);
     assert.equal(await read(() => info.propertyRenderer.editor.readObjectResult().strandCount), 5);
@@ -80,8 +80,8 @@ async function run() {
     await read(() => {
       const dir = display.propertyRenderer.editor.inspectorShadow.querySelector('#strand-direction'); dir.value = 'left-right'; dir.dispatchEvent(new Event('change',{ bubbles: true }));
     });
-    await waitFor(() => read(() => si.activeRenderer.editor.objectIO('view').direction === 'left-right'));
-    assert.equal(await read(() => si2.activeRenderer.editor.objectIO('view').direction), 'up-down');
+    await waitFor(() => read(() => sv.propertyRenderer.editor.objectIO('view').direction === 'left-right'));
+    assert.equal(await read(() => sv2.propertyRenderer.editor.objectIO('view').direction), 'up-down');
     assert.deepEqual(await read(() => api.localAssetSnapshot().assets.find(a => a.id === w.id).data), wordBefore);
     assert.equal(await read(() => calc.computation.status), 'current');
     const basisSignature = await read(() => basis.computation.signature);
@@ -112,11 +112,11 @@ async function run() {
     await read(() => panels.importText('strands:' + w.id,JSON.stringify({ kind:'strand-diagram-calculator',version:4,groupType:'B',strandCount:3,appliedGenerators:[{ family:'braid',index:0,sign:-1 },{ family:'kl',index:1 }] })));
     assert.equal(await read(() => api.localAssetSnapshot().assets.find(a => a.id === lie.id).data.rank), 13, 'import must never overwrite the existing shared Lie');
     assert.equal(await read(() => info.propertyRenderer.editor.readObjectResult().groupType), 'B');
-    assert.equal(await read(() => si.activeRenderer.editor.objectIO('view').direction), 'left-right');
+    assert.equal(await read(() => sv.propertyRenderer.editor.objectIO('view').direction), 'left-right');
     assert.match(await read(() => panels.exportText('strands:' + w.id,'latex')), /mixed typed word/);
     await read(() => { panels.move(si,'side'); panels.move(si,'hidden'); window.reopened = panels.open('strands-input','strands:' + w.id,'main'); });
     assert.equal(await read(() => reopened.id), await read(() => si.id));
-    assert.equal(await read(() => si.activeRenderer.editor.objectIO('view').direction), 'left-right');
+    assert.equal(await read(() => sv.propertyRenderer.editor.objectIO('view').direction), 'left-right');
     await read(() => {
       const empty = api.createObjectAsset('strands'); window.emptyPanel = panels.open('strands-input','strands:' + empty.id,'main');
       window.largeDynkin = panels.open('dynkin-input','dynkin:' + d.id,'main');
@@ -124,7 +124,7 @@ async function run() {
     assert.equal(await read(() => !!emptyPanel.activeRenderer), false, 'an unbound Input must not display a fabricated default object');
     assert.equal(await read(() => !!largeDynkin.activeRenderer), false, 'an unsupported Lie rank must be checked before mounting');
     await read(() => panels.importText('dynkin:' + d.id,JSON.stringify({ calculator:'Dynkin diagram calculator',version:1,typeKey:'D',rank:4,selectedVertices:[1,4],quiver:{enabled:true,orientations:{'0-1':-1,'1-2':1,'1-3':1}} })));
-    assert.deepEqual(await read(() => largeDynkin.activeRenderer.editor.collectAssets().data.vertices), [1,4]);
+    assert.deepEqual(await read(() => dv.propertyRenderer.editor.collectAssets().data.vertices), [1,4]);
     assert.equal(await read(() => cartan.computation.status), 'missing', 'a direct Lie property keeps its original explicit reference when the Dynkin object is retargeted');
     assert.equal(await read(() => ar.computation.status), 'current');
     const exported = await read(() => panels.exportText('dynkin:' + d.id));

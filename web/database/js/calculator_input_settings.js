@@ -426,6 +426,7 @@
   }
 
   function currentCards(session) {
+    if(session.options.showCards===false)return [];
     return Array.from(session.root?.querySelectorAll?.('.card[data-card-settings-id]') || []).map((card) => ({
       card,
       id: card.dataset.cardSettingsId,
@@ -954,7 +955,7 @@
       buildManagedDialog(session);
     }
     const host = resolveElement(options.triggerHost || '.canvas-panel .panel-title');
-    if (host) makeTrigger(session, host);
+    if (host && options.showTrigger !== false) makeTrigger(session, host);
     installGlobalListeners();
     applyCardVisibility(session);
     render(session);

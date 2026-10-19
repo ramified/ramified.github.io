@@ -6,7 +6,7 @@
 <title>Mathematical Workspace</title>
 <link rel="stylesheet" href="css/site.css?v=20260903-1">
 <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
-<link rel="stylesheet" href="css/math_workspace.css?v=20261018-context-panels-1">
+<link rel="stylesheet" href="css/math_workspace.css?v=20261019-asset-surfaces-2">
 </head>
 <body>
 <header>
@@ -22,6 +22,7 @@
         <label class="sr-only" for="workspace-open-canvas">Open panel in main area</label>
         <select id="workspace-open-canvas" class="workspace-canvas-picker workspace-control calculator-control" aria-label="Open panel in main area"></select>
         <button id="workspace-split-view" class="btn btn-ghost" type="button" aria-pressed="false" disabled>split view</button>
+        <button id="workspace-settings" class="btn btn-ghost" type="button" aria-haspopup="dialog">Settings</button>
       </div>
     </header>
     <div id="workspace-canvas-tabs" class="workspace-canvas-tabs" role="tablist" aria-label="Opened panels"></div>
@@ -50,7 +51,7 @@
         <em class="toggle-icon">▾</em>
       </div>
       <div class="card-body">
-        <span id="workspace-io-target" class="workspace-io-target">Choose an asset or property below. Import updates the selected asset.</span>
+        <span id="workspace-io-target" class="workspace-io-target">Choose a complete workspace backup, an asset, or a property.</span>
         <div class="import-export-panel">
           <div class="import-export-tabs" role="tablist" aria-label="Import and export">
             <button class="import-export-tab" type="button" role="tab" aria-selected="true" data-workspace-io-tab="export">Export</button>
@@ -111,11 +112,13 @@
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="js/calculator_cards.js?v=20260903-1"></script>
-<script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
-<script src="js/math_workspace_slicing.js?v=20261018-slicing-assets-1"></script>
-<script src="js/math_workspace_objects.js?v=20261018-context-panels-1"></script>
-<script src="js/math_workspace_panel_catalog.js?v=20261018-context-panels-1"></script>
-<script src="js/math_workspace_native_editors_v8.js?v=67fe62549210afdb"></script>
-<script src="js/math_workspace.js?v=20261018-context-panels-1"></script>
+<script src="js/calculator_input_settings.js?v=20261019-workspace-settings-1"></script>
+<script src="js/math_workspace_slicing.js?v=20261019-asset-surfaces-1"></script>
+<script src="js/math_workspace_io.js?v=20261019-asset-surfaces-2"></script>
+<script src="js/math_workspace_objects.js?v=20261019-asset-surfaces-2"></script>
+<script src="js/math_workspace_panel_catalog.js?v=20261019-asset-surfaces-1"></script>
+<script src="js/math_workspace_settings.js?v=20261019-asset-surfaces-1"></script>
+<script src="js/math_workspace_native_editors_v8.js?v=d9348deb702b0091"></script>
+<script src="js/math_workspace.js?v=20261019-asset-surfaces-2"></script>
 </body>
 </html>

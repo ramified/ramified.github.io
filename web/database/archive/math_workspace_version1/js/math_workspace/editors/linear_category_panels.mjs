@@ -10,16 +10,16 @@ function __showCard(card) {
 }
 function __panelStyle(text = '') {
   const style = document.createElement('style');
-  style.textContent = '.workspace-object-content>.card-head{display:none!important}.workspace-object-content{border:0!important;margin:0!important;max-height:none!important}.workspace-object-content>.card-body{padding:4px!important;max-height:none!important}.workspace-card-inspector{display:block!important}.workspace-object-content [data-import-export-trigger]{display:none!important}' + text;
+  style.textContent = '.workspace-object-content>.card-head{display:none!important}.workspace-object-content{border:0!important;margin:0!important;max-height:none!important;box-shadow:none!important}.workspace-object-content>.card-body{padding:4px!important;max-height:none!important}.workspace-card-inspector{display:block!important}.workspace-object-content [data-import-export-trigger]{display:none!important}' + (__panelConfig.mode==='input'?'.workspace-view-card{border:0!important;box-shadow:none!important}.workspace-view-card>.panel-title>.panel-title-text{display:none!important}.workspace-view-card>.panel-title{border:0!important}':'') + text;
   document.head.append(style); __editor.inspectorShadow?.append(style.cloneNode(true));
 }
 const __captureControls = () => __panelCard ? [...__panelCard.querySelectorAll('input[id],select[id],textarea[id]')].filter(n => !n.readOnly && n.type !== 'hidden').map(n => ({ id: n.id, value: n.value, checked: n.type === 'checkbox' ? n.checked : undefined })) : [];
 `;
 
 export const matrixObjectPanel = chrome + String.raw`
-let __matrixConstructed = false;
+let __matrixConstructed = false, __matrixDisplay = null, __matrixField = '';
 function __matrixData() {
-  return { rows: state.rows, cols: state.cols, entries: state.entries.map(row => row.slice()), dataType: currentDataType(), finiteFieldPrime: state.finiteFieldPrime, rationalFunctionVariables: state.rationalFunctionVariables.slice(), numberFieldSymbol: state.numberFieldSymbol, numberFieldPolynomial: state.numberFieldPolynomial };
+  return { rows: state.rows, cols: state.cols, entries: state.entries.map(row => row.slice()), dataType: currentDataType(), finiteFieldPrime: state.finiteFieldPrime, rationalFunctionVariables: state.rationalFunctionVariables.slice(), numberFieldSymbol: state.numberFieldSymbol, numberFieldPolynomial: state.numberFieldPolynomial, ...(__matrixField ? {field:__matrixField} : {}) };
 }
 function __matrixProject(data) {
   const resized = state.rows !== data.rows || state.cols !== data.cols;
@@ -39,8 +39,19 @@ __editor.setAssetAdapter({
   panel(config) {
     __panelConfig = config;
     __panelStyle('#apply-bulk,#bulk-message,#export-operation,#export-polynomial-action{display:none!important}.matrix-toolbar{flex-wrap:wrap!important}.matrix-grid-wrap{overflow:auto!important}.matrix-cell{min-width:0!important}');
-    if (config.mode === 'input') __showCard(refs.applyBulk.closest('.card'));
-    if (config.mode === 'property') {
+    if (config.mode === 'input') {
+      __showCard(refs.applyBulk.closest('.card'));
+      __panelStyle('.calculator-input-settings-trigger,.matrix-toolbar-group,.matrix-editor{display:none!important}');
+      __panelStyle(':host,.editor-document,.editor-body,.editor-body>.workspace-editor-layout{height:auto!important;overflow:visible!important}.workspace-editor-layout .workspace-view-card{height:auto!important;min-height:0!important;border:0!important;box-shadow:none!important}.panel-title>.panel-title-text,.panel-title>.panel-settings-btn,#matrix-summary,.matrix-action-row:has(#apply-bulk){display:none!important}.panel-title{padding:4px 0!important;border:0!important;min-height:0!important}.matrix-editor{min-height:0!important;padding:12px 0!important;justify-content:flex-start!important;--matrix-cell-size:72px}.matrix-underbar{border:0!important;padding:4px 0!important}.matrix-toolbar-group{padding-left:0!important;border:0!important}');
+      __editor.mountObjectSurfaces({modify:[document.querySelector('.canvas-size-inline'),document.getElementById('clear-matrix'),__panelCard.querySelector('.card-body')]});
+    }
+    if (config.operation === 'matrix-view') {
+      const card=document.createElement('section');card.className='card workspace-object-content';
+      __matrixDisplay=document.createElement('div');__matrixDisplay.className='card-body matrix-display-output';
+      const surface=document.createElement('div');surface.className='matrix-editor';surface.append(refs.grid);__matrixDisplay.append(surface);
+      card.append(__matrixDisplay);__editor.inspectorShadow.querySelector('.workspace-card-inspector').append(card);__panelCard=card;
+      __panelStyle(':host,.editor-document,.editor-body,.editor-body>.layout{height:auto!important;min-height:0!important;overflow:visible!important}.workspace-editor-inspector-layout>.workspace-card-inspector{display:block!important}.matrix-display-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 4px;color:var(--muted);font:0.74rem "JetBrains Mono",monospace}.matrix-display-name{color:var(--text)}.matrix-display-output .matrix-editor{display:block;min-height:0;padding:16px 4px;overflow:auto;scrollbar-gutter:auto}.matrix-display-output .matrix-grid{width:min(100%,var(--matrix-preferred-width));min-width:var(--matrix-min-width);max-width:none;grid-template-columns:repeat(var(--matrix-columns),minmax(0,1fr))!important;gap:7px;margin-inline:auto}.matrix-display-output .matrix-cell{box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%;height:36px;padding:5px 4px;font-size:.72rem}');
+    } else if (config.mode === 'property') {
       __showCard(document.getElementById(config.marker).closest('.card'));
       __panelCard.addEventListener('click', event => {
         if (event.target.closest('#compute-operation,#compute-polynomial-action,#charpoly-factor')) queueMicrotask(() => __editor.notifyChange({ interaction: 'object-compute' }));
@@ -52,8 +63,23 @@ __editor.setAssetAdapter({
     const key = __key(binding?.refs?.matrix || ref), asset = snapshot.assets.find(a => __key(a) === key);
     if (!asset) return false;
     __matrixConstructed = !!asset.data.construction;
-    const projected = __matrixConstructed ? window.MathWorkspaceSlicing.materialize(asset,snapshot.assets) : asset;
+    __matrixField = asset.data.field || '';
+    const projected = window.MathWorkspaceSlicing.materialize(asset,snapshot.assets);
     __matrixProject(projected.data);
+    if (__matrixDisplay) {
+      refs.grid.style.setProperty('--matrix-columns',state.cols);
+      refs.grid.style.setProperty('--matrix-preferred-width',(state.cols*72+(state.cols-1)*7)+'px');
+      refs.grid.style.setProperty('--matrix-min-width',(state.cols*42+(state.cols-1)*7)+'px');
+      const result=readMatrix(false);
+      let warning=__matrixDisplay.querySelector('.matrix-display-error');
+      if(!warning){warning=document.createElement('p');warning.className='err matrix-display-error';warning.setAttribute('role','status');__matrixDisplay.append(warning);}
+      warning.textContent=result.errors.length?matrixDataErrorMessage(result.errors[0]):'';warning.hidden=!result.errors.length;
+      const heading=document.createElement('div');heading.className='matrix-display-header';
+      const name=document.createElement('span');name.className='matrix-display-name';name.textContent=asset.plainName||asset.name;
+      const metadata=document.createElement('span');metadata.textContent=state.rows+' × '+state.cols+' · '+window.MathWorkspaceObjects.fieldLabel(projected.data);heading.append(name,metadata);
+      const previous=__matrixDisplay.querySelector('.matrix-display-header');if(previous)previous.replaceWith(heading);else __matrixDisplay.prepend(heading);
+      refs.grid.querySelectorAll('input').forEach(control=>{control.disabled=__matrixConstructed;control.setAttribute('aria-label','Entry '+(Number(control.dataset.row)+1)+', '+(Number(control.dataset.col)+1));});
+    }
     if (__panelConfig.mode === 'input') __panelCard.querySelectorAll('input,select,textarea,button').forEach(control=>{control.disabled=__matrixConstructed;});
     return true;
   },
@@ -68,7 +94,7 @@ __editor.setAssetAdapter({
     return { type: 'matrix', data };
   },
   capture: __captureControls,
-  result: () => ({ text: (__panelCard?.querySelector('.card-body')?.innerText || ''), hasResult: __panelConfig.operation === 'matrix-computation' ? !!state.lastOperationResult : __panelConfig.operation === 'matrix-polynomial' ? !!state.lastPolynomialAction : true }),
+  result: () => ({ text: (__panelCard?.querySelector('.card-body')?.innerText || '') + (__matrixDisplay ? '\n' + state.entries.map(row=>row.join(' ')).join('\n') : ''), hasResult: __panelConfig.operation === 'matrix-computation' ? !!state.lastOperationResult : __panelConfig.operation === 'matrix-polynomial' ? !!state.lastPolynomialAction : true }),
   io(action, value) {
     if (action === 'validate') { const result = readMatrix(false); if (result.errors.length) throw new Error(matrixDataErrorMessage(result.errors[0])); return __matrixData(); }
     if (action === 'parse') {
@@ -121,11 +147,13 @@ __editor.setAssetAdapter({
     if (config.mode === 'input') {
       __showCard(refs.inputMode.closest('.card'));
       refs.categoryApplyPreset.addEventListener('click', () => { if (refs.categoryPresetSelect.value) updateActiveObjectFromControls(); });
+      __editor.mountObjectSurfaces({modify:[refs.inputMode.closest('.card').querySelector('.card-body')]});
     }
     if (config.mode === 'scene') {
       const select = (kind, id) => { state.activeKind = kind; state.activeId = id; state.functorPickTarget = null; renderCanvas(); renderLabels(); };
       setActive = select; selectActiveInPlace = select;
       handleFunctorCategoryPick = () => {};
+      __editor.mountObjectSurfaces({content:[document.getElementById('category-canvas').parentElement]});
     }
     return true;
   },

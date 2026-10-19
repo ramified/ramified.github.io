@@ -35,7 +35,7 @@ async function run() {
       const select = testInput.node.querySelector('[data-object-reference="asset"]');
       select.value = 'young:' + testAssets.a; select.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    await waitFor(() => read(() => testInput.activeRenderer?.role === 'compact'));
+    assert.equal(await read(() => !!testInput.activeRenderer), false, 'Modify does not mount a diagram');
     assert.equal(await read(() => document.querySelector('#workspace-card-picker').hidden), false, 'checkbox selection keeps the picker open');
     assert.equal(await read(() => document.querySelector('#workspace-card-options button')), null);
     assert.equal(await read(() => document.querySelector('#workspace-card-options input[data-card-key="' + testInput.id + '"]')), null, 'Inputs stay out of Add panel');
@@ -64,10 +64,12 @@ async function run() {
     assert.equal(await read(() => testInput.node.previousElementSibling.id), 'workspace-io-card');
     await read(() => testInput.head.querySelector('[data-workspace-card-action="move-up"]').click());
     console.log('PASS shared card header, checkbox visibility, pinning, collapse and ordering');
-    assert.deepEqual(await read(() => testInput.activeRenderer.editor.collectAssets().rows), [2, 1]);
-    assert.deepEqual(await read(() => ['grid-rows','grid-cols'].map(id => testInput.activeRenderer.editor.shadow.getElementById(id).value)), ['5', '5']);
-    assert.equal(await read(() => testInput.activeRenderer.editor.shadow.getElementById('mu-canvas').closest('.diagram-slot').getBoundingClientRect().width), 0);
-    console.log('PASS compact single input, independent Assets, default 5 by 5');
+    await read(() => { window.testView = MathWorkspaceObjectPanels.open('young-view', 'young:' + testAssets.a, 'side'); });
+    await waitFor(() => read(() => !!testView.propertyRenderer));
+    assert.deepEqual(await read(() => testView.propertyRenderer.editor.collectAssets().rows), [2, 1]);
+    assert.equal(await read(() => ['grid-rows','grid-cols'].every(id => Number(testView.propertyRenderer.editor.shadow.getElementById(id).value) >= 3)), true, 'the native view contains the entire diagram');
+    assert.equal(await read(() => testInput.renderArea.hidden), true);
+    console.log('PASS separate Modify and native Open, independent Assets and canvas sizing');
 
     const key = async (key, code, options = {}) => {
       const windowsVirtualKeyCode = key === 'Backspace' ? 8 : key === 'a' ? 65 : 0;
@@ -90,7 +92,7 @@ async function run() {
     await read(() => document.querySelector('#workspace-io-input').focus()); await type('2');
     await read(() => document.querySelector('#workspace-io-import').click());
     assert.deepEqual(await read(() => MathWorkspaceAssetsTest.state.snapshot.assets.find(a => a.id === testAssets.b).data.rows), [3, 2]);
-    assert.deepEqual(await read(() => testInput.activeRenderer.editor.collectAssets().rows), [2, 1], 'import targets its selected asset, not the open Input panel');
+    assert.deepEqual(await read(() => testView.propertyRenderer.editor.collectAssets().rows), [2, 1], 'import targets its selected asset, not the open Modify panel');
     assert.deepEqual(await read(() => JSON.parse(document.querySelector('#workspace-io-output').value).data.rows), [3, 2]);
     await read(() => {
       document.querySelector('#workspace-io-input').value = '1'; document.querySelector('#workspace-io-import').click();
@@ -102,9 +104,9 @@ async function run() {
     assert.equal(await read(() => testInput.rows.value), '');
     await type('4, ');
     assert.equal(await read(() => testInput.rows.value), '4, ');
-    assert.deepEqual(await read(() => testInput.activeRenderer.editor.collectAssets().rows), [4]);
+    assert.deepEqual(await read(() => testView.propertyRenderer.editor.collectAssets().rows), [4]);
     await type('2, 1');
-    assert.deepEqual(await read(() => testInput.activeRenderer.editor.collectAssets().rows), [4, 2, 1]);
+    assert.deepEqual(await read(() => testView.propertyRenderer.editor.collectAssets().rows), [4, 2, 1]);
     await read(() => testInput.rows.setSelectionRange(3, 4)); await type('3');
     assert.equal(await read(() => testInput.rows.value), '4, 3, 1');
     assert.equal(await read(() => testInput.rows.selectionStart), 4);
@@ -123,12 +125,12 @@ async function run() {
 
     await read(() => testInput.moveButton.click()); await delay(200);
     assert.equal(await read(() => document.querySelector('#workspace-io-exporter').value), 'young:' + await read(() => testAssets.b));
-    assert.equal(await read(() => testInput.activeRenderer.role), 'large');
-    assert.deepEqual(await read(() => testInput.activeRenderer.editor.collectAssets().rows), [4, 3, 1]);
+    assert.equal(await read(() => !!testInput.activeRenderer), false);
+    assert.deepEqual(await read(() => testView.propertyRenderer.editor.collectAssets().rows), [4, 3, 1]);
     fs.writeFileSync(path.join(os.tmpdir(), 'math-workspace-object-large.png'), Buffer.from((await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })).data, 'base64'));
     await read(() => MathWorkspaceAssetsTest.setSplitView(true)); await delay(150);
-    assert.equal(await read(() => testInput.activeRenderer.role), 'compact');
-    assert.deepEqual(await read(() => testInput.activeRenderer.editor.collectAssets().rows), [4, 3, 1]);
+    assert.equal(await read(() => !!testInput.activeRenderer), false);
+    assert.deepEqual(await read(() => testView.propertyRenderer.editor.collectAssets().rows), [4, 3, 1]);
     await read(() => testInput.moveButton.click());
     assert.equal(await read(() => testInput.location), 'side');
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
@@ -138,18 +140,20 @@ async function run() {
 
     await read(() => {
       window.secondInput = MathWorkspaceObjectPanels.open('young-input', 'young:' + testAssets.a, 'main');
+      window.secondView = MathWorkspaceObjectPanels.open('young-view', 'young:' + testAssets.a, 'side');
       MathWorkspaceAssetsTest.updateObjectAsset({ kind: 'young', id: testAssets.a }, { data: { partition: '2,1' } });
     });
-    assert.deepEqual(await read(() => secondInput.activeRenderer.editor.collectAssets().rows), [2, 1]);
-    assert.deepEqual(await read(() => testInput.activeRenderer.editor.collectAssets().rows), [2, 1]);
+    assert.equal(await read(() => secondInput.rows.value), '2, 1');
+    assert.deepEqual(await read(() => testView.propertyRenderer.editor.collectAssets().rows), [2, 1]);
     const point = await read(() => {
-      const canvas = testInput.activeRenderer.editor.shadow.getElementById('lambda-canvas'); canvas.scrollIntoView({ block: 'center' });
+      const canvas = testView.propertyRenderer.editor.shadow.getElementById('yd-canvas'); canvas.scrollIntoView({ block: 'center' });
       const rect = canvas.getBoundingClientRect(); return { x: rect.left + rect.width * .65, y: rect.top + rect.height * .45 };
     });
-    const before = await read(() => JSON.stringify(testInput.activeRenderer.editor.collectAssets().rows));
+    const before = await read(() => JSON.stringify(testView.propertyRenderer.editor.collectAssets().rows));
     await mouse(client, 'mouseMoved', point.x, point.y, 0); await mouse(client, 'mousePressed', point.x, point.y, 1); await mouse(client, 'mouseReleased', point.x, point.y, 0);
-    await waitFor(() => read(previous => JSON.stringify(testInput.activeRenderer.editor.collectAssets().rows) !== previous, before));
-    assert.deepEqual(await read(() => secondInput.activeRenderer.editor.collectAssets().rows), await read(() => testInput.activeRenderer.editor.collectAssets().rows));
+    await waitFor(() => read(previous => JSON.stringify(testView.propertyRenderer.editor.collectAssets().rows) !== previous, before));
+    assert.deepEqual(await read(() => secondView.propertyRenderer.editor.collectAssets().rows), await read(() => testView.propertyRenderer.editor.collectAssets().rows));
+    assert.equal(await read(() => secondInput.rows.value), await read(() => testInput.rows.value));
     console.log('PASS actual canvas pointer editing publishes to the shared asset');
     await read(() => { MathWorkspaceAssetsTest.setSplitView(true); scrollTo(0, 0); });
     const dragPoints = await read(() => {
@@ -162,7 +166,8 @@ async function run() {
     await mouse(client, 'mouseMoved', dragPoints.toX, dragPoints.toY, 1);
     await mouse(client, 'mouseReleased', dragPoints.toX, dragPoints.toY, 0);
     await delay(100);
-    assert.deepEqual(await read(() => [secondInput, testInput].map(panel => [panel.node.closest('[data-pane]').dataset.pane, panel.activeRenderer.role])), [['primary','compact'],['secondary','compact']]);
+    assert.deepEqual(await read(() => [secondInput, testInput].map(panel => panel.node.closest('[data-pane]').dataset.pane)), ['primary','secondary']);
+    assert.equal(await read(() => [secondInput, testInput].every(panel => !panel.activeRenderer)), true);
     fs.writeFileSync(path.join(os.tmpdir(), 'math-workspace-object-split.png'), Buffer.from((await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })).data, 'base64'));
     await read(() => MathWorkspaceObjectPanels.move(testInput, 'side'));
     console.log('PASS two independent input panels naturally share the main area');
@@ -264,18 +269,18 @@ async function run() {
     console.log('PASS slice dependence and branching rule input arity');
     await read(() => {
       window.generalizedAsset = MathWorkspaceAssetsTest.createObjectAsset('young', { type:'generalized', data:{partition:'2, 0, -1'} });
-      window.generalizedPanel = MathWorkspaceObjectPanels.open('young-input', 'young:' + generalizedAsset.id, 'main');
+      window.generalizedPanel = MathWorkspaceObjectPanels.open('young-view', 'young:' + generalizedAsset.id, 'main');
     });
-    assert.deepEqual(await read(() => generalizedPanel.activeRenderer.editor.collectAssets().rows), [2, 0, -1]);
+    assert.deepEqual(await read(() => generalizedPanel.propertyRenderer.editor.collectAssets().rows), [2, 0, -1]);
     await read(() => {
-      const root = generalizedPanel.activeRenderer.editor.shadow, cols = root.getElementById('grid-cols');
+      const root = generalizedPanel.propertyRenderer.editor.shadow, cols = root.getElementById('grid-cols');
       cols.value = '1'; cols.dispatchEvent(new Event('change', { bubbles:true }));
     });
-    assert.deepEqual(await read(() => generalizedPanel.activeRenderer.editor.collectAssets().rows), [2, 0, -1], 'resizing the signed grid must not clip the object');
+    assert.deepEqual(await read(() => generalizedPanel.propertyRenderer.editor.collectAssets().rows), [2, 0, -1], 'resizing the signed grid must not clip the object');
     await read(() => MathWorkspaceAssetsTest.closeCanvas(generalizedPanel.id));
     assert.equal(await read(() => generalizedPanel.closed), true);
     await read(() => MathWorkspaceObjectPanels.move(generalizedPanel, 'side'));
-    assert.deepEqual(await read(() => generalizedPanel.activeRenderer.editor.collectAssets().rows), [2, 0, -1]);
+    assert.deepEqual(await read(() => generalizedPanel.propertyRenderer.editor.collectAssets().rows), [2, 0, -1]);
     console.log('PASS all migrated Property renderers, generalized rows and close/reopen');
 
     await read(async () => {

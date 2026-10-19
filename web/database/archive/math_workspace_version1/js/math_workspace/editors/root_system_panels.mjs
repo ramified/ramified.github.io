@@ -38,7 +38,7 @@ selectDynkinVertex = function(index) {
   state.selected = index; renderVertexData(); renderStartingFunction(); queueMathTypeset();
   if (__vertexFocus) __vertexFocus.value = String(index);
 };
-toggleQuiverEdge = function(i,j) { if (__panelConfig.mode === 'input' && __hasQuiver) return __oldToggleEdge(i,j); };
+toggleQuiverEdge = function(i,j) { if (['input','view'].includes(__panelConfig.mode) && __hasQuiver) return __oldToggleEdge(i,j); };
 function __dynkinFocusControl() {
   if (!['dynkin-vertex','dynkin-starting'].includes(__panelConfig.operation)) return;
   if (!__vertexFocus) {
@@ -58,6 +58,11 @@ __editor.setAssetAdapter({
     $('dynkin-starting-card').removeAttribute('data-card-wide');
     $('dynkin-starting-ar-mode').closest('label').title = 'Show the AR quiver from the asset’s stored directions';
     if (config.mode === 'property') __showCard($(config.marker).closest('.card'));
+    if(config.mode==='view') {
+      const toolbar=document.querySelector('.canvas-toolbar');
+      $('dynkin-type').closest('label')?.setAttribute('hidden','');$('dynkin-type').hidden=true;$('dynkin-rank-wrap').hidden=true;
+      __editor.mountObjectSurfaces({content:[$('dynkin-canvas').parentElement],toolbar:[toolbar]});
+    }
     return true;
   },
   apply(snapshot, ref, properties, binding) {
@@ -72,7 +77,7 @@ __editor.setAssetAdapter({
     const indices = asset ? asset.data.vertices.map(v => v - 1) : [0];
     state.selectedSet = indices;
     if (!indices.includes(state.selected)) state.selected = indices[0];
-    state.multiSelect = indices.length > 1 || (__panelConfig.mode === 'input' && state.multiSelect);
+    state.multiSelect = indices.length > 1 || (['input','view'].includes(__panelConfig.mode) && state.multiSelect);
     if (__panelConfig.mode === 'property') state.multiSelect = true;
     if (__hasQuiver) state.quiverOrientations[quiverLayoutKey(state.type, state.rank)] = { ...asset.data.quiver };
     state.quiverMode = __hasQuiver && (__panelConfig.mode === 'property' || !wasQuiver || state.quiverMode);
@@ -112,7 +117,11 @@ __editor.setAssetAdapter({
     __panelStyle('label[for="strand-group-type"],label[for="strand-count"],#strand-calculation-task-row,#strand-calculation-wide{display:none!important}.strand-input-chart{overflow:auto;max-height:400px}.strand-field-row{flex-wrap:wrap}');
     refs.groupType.disabled = true; refs.count.disabled = true;
     document.getElementById('strand-calculation-card').removeAttribute('data-card-wide');
-    if (config.mode === 'input') __showCard(refs.inputChart.closest('.card'));
+    if (config.mode === 'input') {
+      const card=refs.inputChart.closest('.card');__showCard(card);
+      __editor.mountObjectSurfaces({modify:[card.querySelector('.card-body')]});
+    }
+    if(config.mode==='view') __editor.mountObjectSurfaces({content:[document.getElementById('strand-canvas').parentElement],toolbar:[document.querySelector('.strand-display-controls')]});
     if (config.mode === 'property') {
       __showCard(document.getElementById(config.marker).closest('.card'));
       setCalculationTask(config.operation === 'strands-relations' ? 'relations' : config.operation === 'strands-basis' ? 'basis' : 'strand');
