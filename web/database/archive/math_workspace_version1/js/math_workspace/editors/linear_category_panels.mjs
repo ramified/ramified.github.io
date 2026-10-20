@@ -137,20 +137,36 @@ function __categoryProject(snapshot, ref) {
   } else {
     // Canvas selection and drag positions belong to this renderer only.
     state.functorPickTarget = null;
+    if (ref && snapshot.assets.some(asset=>__key(asset)===__key(ref))) {
+      state.activeKind = ref.kind; state.activeId = __key(ref);
+    } else if (!activeObject()) { state.activeKind = null; state.activeId = null; }
   }
   resizeCanvas(); renderAll({ preserveControls: true });
 }
 __editor.setAssetAdapter({
   panel(config) {
     __panelConfig = config;
-    __panelStyle('.category-input-add,#category-input-note,.category-pick-actions,#functor-pick-status,#clear-category-canvas,#category-mode-badge{display:none!important}.category-field-row:has(#category-label),.category-field-row:has(#functor-label),.category-field-row:has(#functor-domain-button){display:none!important}');
+    __panelStyle('.category-input-add,#category-input-note,.category-pick-actions,#functor-pick-status,#category-mode-badge{display:none!important}.category-field-row:has(#category-label),.category-field-row:has(#functor-label),.category-field-row:has(#functor-domain-button){display:none!important}');
     if (config.mode === 'input') {
       __showCard(refs.inputMode.closest('.card'));
       refs.categoryApplyPreset.addEventListener('click', () => { if (refs.categoryPresetSelect.value) updateActiveObjectFromControls(); });
       __editor.mountObjectSurfaces({modify:[refs.inputMode.closest('.card').querySelector('.card-body')]});
     }
     if (config.mode === 'scene') {
-      const select = (kind, id) => { state.activeKind = kind; state.activeId = id; state.functorPickTarget = null; renderCanvas(); renderLabels(); };
+      __panelStyle('.workspace-native-content>.category-stage{box-sizing:border-box;border:1px solid var(--border);border-radius:4px;overflow:hidden}');
+      refs.clearCanvas.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();options.onOverviewAction?.('clear');},{capture:true});
+      const select = (kind, id) => {
+        if (!(kind === 'category' ? categoryById(id) : functorById(id))) return false;
+        state.activeKind = kind; state.activeId = id; state.functorPickTarget = null;
+        // Preserve the pointer target when a selection starts a category drag.
+        refs.labelLayer.querySelectorAll('[data-object-kind][data-object-id]').forEach(label=>{
+          const selected = label.dataset.objectKind===kind && label.dataset.objectId===id;
+          label.classList.toggle('is-selected',selected); label.setAttribute('aria-pressed',String(selected));
+        });
+        renderCanvas();
+        options.onSelectAsset?.({kind,id:id.slice(id.indexOf(':')+1)});
+        return true;
+      };
       setActive = select; selectActiveInPlace = select;
       handleFunctorCategoryPick = () => {};
       __editor.mountObjectSurfaces({content:[document.getElementById('category-canvas').parentElement]});
@@ -165,6 +181,8 @@ __editor.setAssetAdapter({
   capture: () => ({ layout: state.categories.map(({id,x,y}) => ({id,x,y})) }),
   result: () => ({ text: exportPlain() }),
   io(action, format) {
+    if (action === 'selection') return activeObject() ? {kind:state.activeKind,id:state.activeId.slice(state.activeId.indexOf(':')+1)} : null;
+    if (action === 'select' && __panelConfig.mode === 'scene') return setActive(format.kind,__key(format));
     if (action === 'layout') { for (const point of format) { __categoryLayout.set(point.id, { x: point.x, y: point.y }); const item = categoryById(point.id); if (item) Object.assign(item, { x: point.x, y: point.y }); } renderAll({ preserveControls: true }); return true; }
     if (action === 'export') return format === 'latex' ? exportLatex() : format === 'plain' ? exportPlain() : exportJson();
   }

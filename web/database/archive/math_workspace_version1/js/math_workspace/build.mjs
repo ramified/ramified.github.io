@@ -7,7 +7,7 @@ import * as acorn from 'acorn';
 import * as walk from 'acorn-walk';
 import {parse,serialize} from 'parse5';
 import {editors} from './editors/catalog.mjs';
-import {singleObjectPanel, doubleObjectPanel} from './editors/object_panels.mjs';
+import {singleObjectPanel, doubleObjectPanel, sheafDiagramPanel} from './editors/object_panels.mjs';
 import {matrixObjectPanel, categoryObjectPanel} from './editors/linear_category_panels.mjs';
 import {dynkinObjectPanel, strandObjectPanel} from './editors/root_system_panels.mjs';
 import {slicingObjectPanel} from './editors/slicing_panels.mjs';
@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded',()=>{const actions=refs.clearCanvas
 // and UI chrome.  It is injected only into the workspace bundle.
 const complexWorkspaceAuthorityExtension=String.raw`
 function __workspaceProjectionProperties(asset,properties){resolvingActiveHomologyMapContext=null;return asset?.properties||properties?.objects?.[__workspaceAssetKey(asset)]||{};}
-function __workspaceProjectionLayout(item,asset){const point=asset?.viewPosition;if(!Number.isFinite(point?.x)||!Number.isFinite(point?.y))return item;if(point.mode==='map-curve'&&__workspaceRecordKind(item)==='map'){item.labelT=Math.max(.06,Math.min(.94,point.x));item.labelOffset=point.y;if(point.curve)item.curve=__workspaceClone(point.curve);if(Number.isFinite(point.defaultBendPx))item.defaultBendPx=point.defaultBendPx;item.modified=point.modified===true;return item;}item.labelX=Math.max(.08,Math.min(.92,point.x));item.labelY=Math.max(.08,Math.min(.92,point.y));item.labelPositionDirty=true;return item;}
+function __workspaceProjectionLayout(item,asset){const point=asset?.viewPosition;if(typeof point?.hidden==='boolean')item.hiddenOnCanvas=point.hidden;if(!Number.isFinite(point?.x)||!Number.isFinite(point?.y))return item;if(point.mode==='map-curve'&&__workspaceRecordKind(item)==='map'){item.labelT=Math.max(.06,Math.min(.94,point.x));item.labelOffset=point.y;if(point.curve)item.curve=__workspaceClone(point.curve);if(Number.isFinite(point.defaultBendPx))item.defaultBendPx=point.defaultBendPx;item.modified=point.modified===true;return item;}item.labelX=Math.max(.08,Math.min(.92,point.x));item.labelY=Math.max(.08,Math.min(.92,point.y));item.labelPositionDirty=true;return item;}
 function __workspaceSetProjectionReadOnly(locked){for(const node of document.querySelectorAll('#input-card input,#input-card select,#input-card textarea,#input-card button'))node.disabled=!!locked;for(const node of [refs.clearCanvas,refs.deleteObject])if(node)node.disabled=!!locked;}
 function __workspaceSyncHomologyPromotionLabels(){const sheaf=state.sheaves.find(item=>item.id===state.activeSheafId),base=sheaf&&state.varieties.find(item=>item.id===sheaf.baseVarietyId),label=base?.namePlain||base?.name||'the base variety';for(const node of refs.homologyRules?.querySelectorAll?.('[data-add-sheaf-chern-class],[data-add-tangent-chern-class]')||[])node.title='Add this Chern class to homology of '+label;}
 const __workspaceAppearanceCard=document.createElement('section');
@@ -176,7 +176,7 @@ async function compileEditor(e){
     const file=src?clean(src):`${e.page}:inline`;
     const original=instrument(src?await read(file):serialize(n),file,file===e.script);
     const augmented=e.id==='complex'&&file===e.script
-      ? original.replace(/\n\}\)\(\);\s*$/,`\n${complexWorkspaceExtension}\n${complexWorkspaceAuthorityExtension}\n})();\n`)
+      ? original.replace(/\n\}\)\(\);\s*$/,`\n${complexWorkspaceExtension}\n${complexWorkspaceAuthorityExtension}\n${sheafDiagramPanel}\n})();\n`)
       : original;
     scripts+=`\n// Original source: ${file}\n${augmented}\n`;
   }

@@ -2064,6 +2064,7 @@
       assetState.selected = new Set([key]); assetState.anchor = key;
     }
     assetState.renameKey = ''; syncAssetSelectionDom();
+    if (assetState.selected.size === 1) objectWorkspace?.selectAsset([...assetState.selected][0]);
   }
 
   function syncAssetSelectionDom() {
@@ -2116,9 +2117,10 @@
     // Build the display first, then place it beside Assets. Sidebar Assets
     // already remains visible, so preserve that placement and the current split.
     const assetsPane = ['primary','secondary'].find(name => paneCanvases[name] === 'assets' && (splitView || name === 'primary'));
-    const panel = objectWorkspace.open(type,assetKey(asset),'hidden');
+    const panel = objectWorkspace.openOverview(type,assetKey(asset));
     if (assetsPane) { splitView = true; focusedPane = otherPane(assetsPane); }
-    objectWorkspace.move(panel,'main');
+    if (panel.location === 'main') selectCanvasTab(panel.id);
+    else objectWorkspace.move(panel,'main');
   }
   async function modifySelectedAsset() {
     const selected = selectedAssetRecords();
@@ -2324,6 +2326,11 @@
         if (!ASSET_SUBTYPES[ref.kind]?.some(([type]) => type === value.type)) throw new Error('Unsupported object subtype.');
         return updateObjectAsset(ref, { type: value.type, data: value.data });
       }, status, closePicker: closeCardPicker, ioChanged: updateImportExport,
+      selectAsset: ref => {
+        const key = assetKey(ref); if (!assetByKey(key)) return;
+        assetState.selected = new Set([key]); assetState.anchor = key;
+        assetState.renameKey = ''; syncAssetSelectionDom();
+      },
       installChrome: panel => {
         installWorkspaceOwnedCardChrome(panel.node, panel.id, {
           hide: () => objectWorkspace.move(panel, 'hidden'),

@@ -294,3 +294,34 @@ ordered selection, dependency references, scenes and view targeting. Run
 input prefill, missing-input feedback, keyboard checkbox focus, stable panel
 restoration, native properties and placement. The existing object, linear /
 category, root-system and drag UI suites cover compatibility with shared cards.
+
+Opening an Asset in the main area keeps Assets visible in the other split pane,
+including when Assets is already on the right. If Assets is docked in the sidebar,
+Open preserves that placement without introducing another main pane. Modify and
+property actions retain their existing placement rules.
+
+Variety, Sheaf and Map Open actions use `sheaf-view`, a display surface extracted
+from the existing native Sheaf overview. It shares the workspace Sheaf Complex
+renderer, authoritative asset projection, arrows, labels and pointer geometry.
+The display includes transitive dependencies (base varieties and map endpoints),
+keeps missing references explicit, and never publishes mathematical changes from
+canvas gestures. Each overview owns its positions and curves; asset updates and
+workspace backups preserve them. Content framing keeps small diagrams readable
+in a split pane without changing saved coordinates. Toric varieties also have
+this overview; their existing geometric projection panels remain available.
+Category and Functor Open actions continue using the original Category canvas,
+with functor endpoints included automatically.
+
+Asset Open reuses one Sheaf overview and one Category overview, adding roots to
+their saved `refs.nodes` sets without replacing previous members. Reopening an
+object selects its existing drawing; reopening a closed overview retains its
+members and layout. `refs.active` records the selected object independently of
+membership. Assets selection highlights a drawn object without adding undrawn
+objects. Clicking, keyboard-activating or dragging an overview label selects the
+corresponding Asset without retargeting Modify/property panels. Selection and
+membership survive workspace backups; old single-object Sheaf displays seed
+membership from `refs.asset`.
+
+Run `node js/math_workspace_open_display_ui_test.js` for asset Open actions,
+both split orientations, sheaf/map dependencies, category/functor canvases,
+label refresh, layout preservation, backups, narrow screens and sidebar Assets.

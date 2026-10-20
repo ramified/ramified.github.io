@@ -20,6 +20,26 @@ assert.notEqual(model.contextFor(linkedContext,[linkedMatrix,field]).signature,f
 assert(model.contextFor(linkedContext,[linkedMatrix]).missing.length,'deleted fields remain explicit missing references');
 assert.throws(()=>model.normalize('field','field',{dataType:'finite-field',finiteFieldPrime:15}));
 const graphAssets = [{ kind: 'category', id: 'c', name: 'C', data: model.normalize('category', 'category') }, { kind: 'functor', id: 'f', name: 'F', data: model.normalize('functor', 'functor', { domain: 'category:c', codomain: 'category:c' }) }];
+const sheafGraph = [
+  {kind:'variety',id:'x',name:'X',type:'projective',data:{dimension:'2'},dependencies:[]},
+  {kind:'sheaf',id:'e',name:'E',type:'locally-free',data:{base:'variety:x',rank:'2'},dependencies:[{kind:'variety',id:'x'}]},
+  {kind:'map',id:'f',name:'f',type:'sheaf',data:{domain:'sheaf:e',codomain:'sheaf:e'},dependencies:[{kind:'sheaf',id:'e'}]}
+];
+const sheafView = {type:'sheaf-view',refs:{asset:'map:f'}};
+const sheafContext = model.contextFor(sheafView,sheafGraph);
+assert.deepEqual(sheafContext.missing,[]);
+assert.deepEqual(Object.values(sheafContext.objects).map(model.keyOf),['map:f','sheaf:e','variety:x'],'include transitive bases and deduplicate repeated endpoints');
+assert.deepEqual(model.contextFor(sheafView,sheafGraph.slice(1)).missing,['variety:x']);
+assert(model.contextFor({type:'sheaf-view',refs:{asset:'map:missing'}},sheafGraph).missing.length);
+sheafGraph[0].name='Y';
+assert.notEqual(model.contextFor(sheafView,sheafGraph).signature,sheafContext.signature,'dependency label changes refresh the drawing');
+const overviewContext = model.contextFor({type:'sheaf-view',refs:{asset:'variety:x',nodes:['map:f','sheaf:e','variety:x','map:f'],active:'sheaf:e'}},sheafGraph);
+assert.deepEqual(new Set(Object.values(overviewContext.objects).map(model.keyOf)),new Set(['map:f','sheaf:e','variety:x']),'an overview accumulates objects and deduplicates dependencies');
+assert.equal(Object.values(overviewContext.objects).length,3);
+assert.deepEqual(model.contextFor({type:'sheaf-view',refs:{nodes:[]}},sheafGraph).missing,[],'empty overviews do not create a default object');
+for(const kind of ['variety','sheaf','map']) assert.equal(model.capabilityFor({kind}).open,'sheaf-view');
+assert.equal(model.capabilityFor({kind:'variety',type:'toric'}).open,'sheaf-view');
+assert.equal(model.capabilityFor({kind:'variety',type:'toric'}).modify,'toric-variety-input');
 const scene = { type: 'category-diagram', refs: { nodes: ['functor:f'] } };
 assert.equal(Object.keys(model.contextFor(scene, graphAssets).objects).length, 2, 'include endpoint dependencies once for an endofunctor');
 assert.equal(model.contextFor(scene, graphAssets.slice(1)).missing.length, 2, 'missing endpoints stay missing');

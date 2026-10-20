@@ -192,7 +192,7 @@
     { id: 'young-view', label: 'Young diagram', engine:'young', assetView:true, viewRole:'lambda', light:true, slots:[slot('lambda','Young diagram','young')] },
     { id: 'dynkin-view', label:'Dynkin diagram', engine:'dynkin', assetView:true, viewRole:'dynkin', light:true, slots:[dynkin()] },
     { id: 'strands-view', label:'Strands', engine:'strand', assetView:true, viewRole:'strands', light:true, slots:[strands()] },
-    { id: 'sheaf-view', label:'Variety and Sheaf Diagram', engine:'complex', assetView:true, sheafView:true, readOnly:true, viewRole:'asset', light:true, slots:[slot('asset','Asset',null,{kinds:['variety','sheaf','map']})] },
+    { id: 'sheaf-view', label:'Variety and Sheaf Overview', engine:'complex', assetView:true, sheafView:true, overview:true, readOnly:true, viewRole:'asset', light:true, slots:[slot('asset','Add / select object',null,{kinds:['variety','sheaf','map'],optional:true,emptyLabel:'Choose an object to add…'})] },
     { id: 'geometry-view', label:'Projection / 2D Slice', engine:'slice', assetView:true, geometryView:true, slicing:true, slicingScene:true, light:true, slots:[slot('asset','Asset',null,{kinds:[...slicing.kinds,'variety']}),slot('frame','Frame','frame')] },
     { id: 'lie-input', label: 'Lie type Input', input: 'lie' },
     { id: 'field-input', label: 'Field Input', input: 'field' },
@@ -217,7 +217,7 @@
     { id: 'matrix-invariants', label: 'Matrix Basic Invariants', engine: 'matrix', marker: 'out-rank', slots: [slot('matrix', 'Matrix', 'matrix')], light: true },
     { id: 'matrix-computation', label: 'Matrix Computation', engine: 'matrix', marker: 'operation-output', slots: [slot('matrix', 'Matrix', 'matrix')] },
     { id: 'matrix-polynomial', label: 'Action on Polynomial', engine: 'matrix', marker: 'polynomial-action-output', slots: [slot('matrix', 'Matrix', 'matrix')] },
-    { id: 'category-diagram', label: 'Category and Functor Diagram', engine: 'category', scene: true, light: true, slots: [] },
+    { id: 'category-diagram', label: 'Category and Functor Overview', engine: 'category', scene: true, overview:true, light: true, slots: [] },
     { id: 'statistics', label: 'Statistics', engine: 'young', marker: 'out-size', slots: [a()], light: true },
     { id: 'weight', label: 'Lie Algebra Weight', engine: 'young', marker: 'lie-weight', slots: [a(), lie()], light: true },
     { id: 'branching', label: 'Branching Rules', engine: 'young', marker: 'br-output', slots: [a(), b()] },
@@ -276,17 +276,24 @@
       }
       else if (!spec.optional || computation.refs[spec.id]) missing.push(spec.label);
     }
-    if (definition.sheafView && objects.asset) {
+    if (definition.sheafView) {
       // Project the same authoritative records used by the sheaf calculator.
       // A sheaf needs its base, and a map needs both endpoints and their bases.
-      const visited = new Set([keyOf(objects.asset)]), pending = [objects.asset];
+      const visited = new Set(), pending = [];
+      for (const key of new Set([...(computation.refs.nodes || []),...(objects.asset ? [keyOf(objects.asset)] : [])])) {
+        const asset = assets.find(asset => keyOf(asset) === key && ['variety','sheaf','map'].includes(asset.kind));
+        if (!asset) { missing.push(key); continue; }
+        if (asset !== objects.asset) objects[key] = asset;
+        pending.push(asset);
+      }
       while (pending.length) for (const ref of pending.pop().dependencies || []) {
         const key = keyOf(ref);
         if (visited.has(key)) continue;
         visited.add(key);
         const dependency = assets.find(asset => keyOf(asset) === key);
         if (!dependency) { missing.push(key); continue; }
-        objects[key] = dependency; pending.push(dependency);
+        if (dependency !== objects.asset) objects[key] = dependency;
+        pending.push(dependency);
       }
     }
     const dependent = objects.dynkin || objects.strands;
@@ -353,6 +360,13 @@
       renderer.editor = window.MathWorkspaceNativeEditors.factories[engine].mount(host, {
         id: `${panel.id}-${role}`, inspectorHost,
         onChange: change => nativeChange(panel, renderer, change),
+        onCollectAssets: () => overviewAction(panel,'collect'),
+        onOverviewAction: action => overviewAction(panel,action),
+        onSelectAsset: ref => {
+          if (!panel.definition.overview || renderer.applying || !get(keyOf(ref))) return;
+          panel.computation.refs.active = keyOf(ref);
+          api.selectAsset?.(ref); api.ioChanged();
+        },
         onError: error => feedback(panel, error.message, true)
       });
       renderer.editor.listCards().forEach(card => renderer.editor.setCardVisible(card.key, false));
@@ -461,12 +475,21 @@
     function referenceControl(panel, spec, definition, read, write, actions = {}) {
       const row = element('div', 'workspace-object-reference'), select = element('select', 'workspace-control'); select.dataset.objectReference = spec.id;
       select.setAttribute('aria-label', spec.label);
-      select.addEventListener('change', () => { write(select.value); refreshPanel(panel); });
+      const commit = value => {
+        write(value);
+        if (definition.sheafView && value) {
+          panel.computation.refs.nodes = [...new Set([...(panel.computation.refs.nodes || []),value])];
+          panel.computation.refs.active = value;
+        }
+        refreshPanel(panel);
+        if (definition.overview && value) selectOverviewAsset(panel,value);
+      };
+      select.addEventListener('change', () => commit(select.value));
       select.addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('application/x-math-workspace-asset')) event.preventDefault(); });
       select.addEventListener('drop', event => {
         event.preventDefault(); let key = event.dataTransfer?.getData('application/x-math-workspace-asset') || '';
         try { const parsed = JSON.parse(key); key = typeof parsed === 'string' ? parsed : keyOf(parsed); } catch (_) {}
-        if (compatible(get(key), spec, definition)) { write(key); refreshPanel(panel); }
+        if (compatible(get(key), spec, definition)) commit(key);
       });
       row.append(field(spec.label, select));
       if(definition.objectView || definition.assetView || definition.id==='matrix-view') { panel.references.append(row);panel.selectors.push({row,select,spec,definition,read});return; }
@@ -838,8 +861,9 @@
         else if (panel.definition.display) { refreshDisplayPanel(panel); } else {
           if ((panel.definition.scene || panel.definition.slicingScene)&&!panel.definition.assetView) refreshSceneChoices(panel);
           const computation = panel.computation, context = contextFor(computation, snapshot.assets);
+          if (panel.definition.overview && computation.refs.active && !Object.values(context.objects).some(asset=>keyOf(asset)===computation.refs.active)) computation.refs.active = '';
           const bound=get(computation.refs[panel.definition.viewRole||'asset']);
-          panel.title.textContent = panel.definition.assetView&&bound?(bound.plainName||bound.name)+' · '+panel.definition.label:panel.definition.label;
+          panel.title.textContent = panel.definition.assetView&&!panel.definition.overview&&bound?(bound.plainName||bound.name)+' · '+panel.definition.label:panel.definition.label;
           if (context.missing.length) {
             computation.status = 'missing'; computation.signature = ''; computation.result = null; panel.renderArea.hidden = true;
             if (panel.propertyRenderer) setRendererVisible(panel.propertyRenderer, false, true);
@@ -854,8 +878,11 @@
             const renderer = panel.propertyRenderer;
             if (computation.signature !== context.signature) {
               computation.signature = context.signature; computation.result = null; computation.status = panel.definition.light ? 'current' : 'stale';
+              const layout = panel.definition.sheafView ? new Map(renderer.editor.captureAssetLayout().map(entry => [entry.key, entry.point])) : null;
+              const projectedAssets = Object.values(context.objects).map(asset => layout ? {...asset,viewPosition:layout.get(keyOf(asset)) || null} : asset);
               renderer.applying = true;
-              try { renderer.editor.applyAssets({ assets: Object.values(context.objects) }, refOf(panel.definition.geometryView?get(computation.refs.asset):context.objects[panel.definition.viewRole||'lambda']), null, { mode: panel.definition.assetView?'view':'property', operation: panel.definition.id, rule: computation.rule, settings: computation.settings, light: panel.definition.light, references: computation.refs, refs: Object.fromEntries(Object.entries(context.objects).map(([role, asset]) => [role, refOf(asset)])) }); }
+              const active = panel.definition.overview ? get(computation.refs.active) || bound : panel.definition.geometryView ? get(computation.refs.asset) : context.objects[panel.definition.viewRole||'lambda'];
+              try { renderer.editor.applyAssets({ assets: projectedAssets }, refOf(active), null, { mode: panel.definition.assetView?'view':'property', operation: panel.definition.id, rule: computation.rule, settings: computation.settings, light: panel.definition.light, references: computation.refs, refs: Object.fromEntries(Object.entries(context.objects).map(([role, asset]) => [role, refOf(asset)])) }); }
               finally { renderer.applying = false; }
               computation.options = renderer.editor.captureAssetProperties();
               if (panel.definition.light) computation.result = renderer.editor.readObjectResult();
@@ -890,9 +917,10 @@
       let refs = JSON.parse(JSON.stringify(options.refs || {}));
       if (!definition.input) {
         const firstSlot = definition.slots?.find(spec => compatible(get(assetKey), spec, definition));
-        if (firstSlot) refs[firstSlot.id] = assetKey;
-        else if (!definition.slicing && definition.fromKinds?.includes(get(assetKey)?.kind)) refs.lie = get(assetKey).data.lie;
+        if (firstSlot && !options.id) refs[firstSlot.id] = assetKey;
+        else if (!options.id && !definition.slicing && definition.fromKinds?.includes(get(assetKey)?.kind)) refs.lie = get(assetKey).data.lie;
         if (definition.scene && !refs.nodes) refs.nodes = assetKey ? [assetKey] : snapshot.assets.filter(asset => ['category', 'functor'].includes(asset.kind) && !asset.isDefault).map(keyOf);
+        if (definition.sheafView && !refs.nodes) refs.nodes = refs.asset ? [refs.asset] : [];
         if (definition.slicingScene && !refs.nodes) refs.nodes = get(assetKey) && get(assetKey).kind !== 'frame' ? [assetKey] : [];
         if (definition.geometryView && get(refs.asset)?.kind === 'frame') refs.frame = refs.asset;
         // Restored panels retain exactly their saved references, including blanks.
@@ -909,7 +937,7 @@
       node.dataset.objectPanel = id; node.dataset.panelType = type;
       head.setAttribute('role', 'button'); head.tabIndex = 0; head.setAttribute('aria-expanded', 'true');
       const body = element('div', 'card-body workspace-card-form'), references = element('div', 'workspace-object-references'), controls = element('div', 'workspace-form-fields'), message = element('p', 'workspace-status'), renderArea = element('div', 'workspace-object-render-area'); message.setAttribute('role', 'status');
-      const panel = { id, definition, node, head, title, body, references, controls, message, renderArea, selectors: [], renderers: new Map(), assetKey, location: 'hidden', closed: false, collapsed: false, refreshing: false };
+      const panel = { id, definition, node, head, title, body, references, controls, message, renderArea, selectors: [], renderers: new Map(), assetKey:definition.overview?'':assetKey, location: 'hidden', closed: false, collapsed: false, refreshing: false };
       node.dataset.panelRole=definition.input?'modify':definition.assetView||definition.scene||definition.slicingScene||['matrix-view','slice'].includes(type)?'view':'property';
       panels.set(id, panel); head.append(title, element('em', 'toggle-icon', '▾')); body.append(references, controls, message, renderArea); node.append(head, body);
       if (definition.input) {
@@ -942,12 +970,60 @@
       panel.observer = new ResizeObserver(() => updateDensity(panel)); panel.observer.observe(node);
       return panel;
     }
+    function overviewAction(panel, action) {
+      if (!panel.definition.overview) return;
+      const refs = panel.computation.refs;
+      if (action === 'clear') {
+        refs.nodes = []; refs.active = '';
+        if (panel.definition.sheafView) refs.asset = '';
+      } else if (action === 'collect') {
+        const kinds = panel.definition.sheafView ? ['variety','sheaf','map'] : ['category','functor'];
+        refs.nodes = [...new Set([...(refs.nodes || []),...snapshot.assets.filter(asset=>kinds.includes(asset.kind)).map(keyOf)])];
+      }
+      refreshPanel(panel);
+    }
+    function selectOverviewAsset(panel, key) {
+      const asset = get(key), editor = panel.propertyRenderer?.editor;
+      if (!asset || !editor || !Object.values(contextFor(panel.computation,snapshot.assets).objects).some(item=>keyOf(item)===key)) return false;
+      panel.computation.refs.active = key;
+      editor.objectIO('select',refOf(asset)); api.ioChanged(); return true;
+    }
+    function openOverview(type, key) {
+      const definition = byType.get(type);
+      if (!definition?.overview) return open(type,key,'hidden');
+      let panel = [...panels.values()].find(panel=>panel.definition===definition);
+      if (!panel) panel = open(type,key,'hidden',{refs:{active:key}});
+      else {
+        const refs = panel.computation.refs;
+        refs.nodes = [...new Set([...(refs.nodes || (refs.asset ? [refs.asset] : [])),key])];
+        refs.active = key;
+        if (definition.sheafView) refs.asset = key;
+        refreshPanel(panel);
+      }
+      selectOverviewAsset(panel,key);
+      return panel;
+    }
+    function selectAsset(key) {
+      for (const panel of panels.values()) if (panel.definition.overview && !panel.closed && !panel.node.hidden) selectOverviewAsset(panel,key);
+    }
     const bindDrop = (target, location) => {
       target.addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('application/x-math-workspace-panel')) event.preventDefault(); });
       target.addEventListener('drop', event => { const panel = panels.get(event.dataTransfer?.getData('application/x-math-workspace-panel')); if (panel) { event.preventDefault(); if (location === 'main') api.focusPane(target.dataset.pane); move(panel, location); } });
     };
     bindDrop(api.side, 'side'); document.querySelectorAll('[data-pane]').forEach(pane => bindDrop(pane, 'main'));
-    function refresh(value = api.snapshot()) { snapshot = value; panels.forEach(refreshPanel); api.ioChanged(); }
+    function refresh(value = api.snapshot()) {
+      snapshot = value;
+      for (const panel of panels.values()) {
+        if (panel.definition.overview) {
+          const refs = panel.computation.refs;
+          if (refs.nodes) refs.nodes = refs.nodes.filter(key=>get(key));
+          if (refs.asset && !get(refs.asset)) refs.asset = refs.nodes?.at(-1) || '';
+          if (refs.active && !get(refs.active)) refs.active = '';
+        }
+        refreshPanel(panel);
+      }
+      api.ioChanged();
+    }
     function listCards() {
       return definitions.filter(definition => !definition.input).flatMap(definition => {
         const instances = [...panels.values()].filter(panel => panel.definition === definition);
@@ -1006,7 +1082,11 @@
           if (!renderer && panel.definition.input && panel.definition.engine && savedRenderer.role === 'input') { renderer = createNative(panel, panel.definition.engine, 'input'); panel.renderers.set('input', renderer); panel.activeRenderer = renderer; projectInput(panel); }
           if (!renderer) continue;
           renderer.applying = true;
-          try { renderer.editor.restore(savedRenderer.snapshot); } finally { renderer.applying = false; }
+          try {
+            renderer.editor.restore(savedRenderer.snapshot);
+            const selected = panel.definition.overview && get(panel.computation.refs.active || panel.computation.refs.asset);
+            if (selected) renderer.editor.objectIO('select',refOf(selected));
+          } finally { renderer.applying = false; }
         }
         if (panel.computation) { panel.computation.options = item.computation.options;if(panel.computation.status!=='missing')panel.computation.status = item.computation.status; panel.computation.result = panel.propertyRenderer?.editor.readObjectResult() || panel.computation.result || null; }
         const collapsed=panel.location!=='main'&&!!item.presentation.collapsed;
@@ -1021,7 +1101,7 @@
       if(!editor) { const host=element('section'),inspectorHost=element('section'); api.parking.append(host,inspectorHost); editor=window.MathWorkspaceNativeEditors.factories.slice.mount(host,{id:'slicing-mathematics',inspectorHost}); editor.listCards().forEach(card=>editor.setCardVisible(card.key,false)); editor.configureObjectPanel({mode:'kernel'}); editor.setCanvasActive(false); editor.setInspectorActive(false); ioRenderers.set('slice-kernel',editor); }
       return editor.objectIO(action,value);
     });
-    return { panels, computations, open, move, refresh, listCards, setVisible, syncPresentation, capturePanels, clearPanels, restorePanels, ioEntries, exportFormats, exportText, importText, resize: () => panels.forEach(updateDensity), closed: id => { const panel = panels.get(id); if (panel) { panel.lastLocation = 'main'; panel.location = 'hidden'; panel.closed = true; refreshPanel(panel); api.pickerChanged(); } } };
+    return { panels, computations, open, openOverview, selectAsset, move, refresh, listCards, setVisible, syncPresentation, capturePanels, clearPanels, restorePanels, ioEntries, exportFormats, exportText, importText, resize: () => panels.forEach(updateDensity), closed: id => { const panel = panels.get(id); if (panel) { panel.lastLocation = 'main'; panel.location = 'hidden'; panel.closed = true; refreshPanel(panel); api.pickerChanged(); } } };
   }
   const api = { normalize, kindLabels, powerRows, fieldLabel, definitions, capabilities, capabilityFor, contextFor, compatible, keyOf, mount, inputKinds, prepareCategoryGraph, strandContext, dynkinEdges, rootObjectIssues, lieEngineIssues, prepareRootImport };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

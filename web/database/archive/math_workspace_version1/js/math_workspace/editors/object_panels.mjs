@@ -1,3 +1,106 @@
+// Use the existing sheaf scene and its authoritative Assets projection. The
+// full calculator and the object display share drawing, geometry and hit tests.
+export const sheafDiagramPanel = String.raw`
+__editor.setAssetAdapter({panel(config) {
+  if (config.operation !== 'sheaf-view') return false;
+  const style = document.createElement('style');
+  style.textContent = '.workspace-native-content>.sheaf-stage{height:100%!important;min-height:0!important;padding:0!important;box-sizing:border-box;border:1px solid var(--border);border-radius:4px;background:#fffdf8}';
+  document.head.append(style);
+  refs.clearCanvas.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();options.onOverviewAction?.('clear');},{capture:true});
+  const setProjectionReadOnly = __workspaceSetProjectionReadOnly;
+  __workspaceSetProjectionReadOnly = function(locked) { setProjectionReadOnly(locked); refs.clearCanvas.disabled=false; };
+  const collect = document.querySelector('[data-workspace-collect-assets]');
+  if (collect) collect.title = 'Show all variety, sheaf and map Assets on this overview';
+  // Selection and dragging change this view's presentation only. Creation and
+  // deletion remain Assets actions, including when a label is dragged outside.
+  removeCanvasObject = () => false;
+  startMapCanvasDrag = () => {};
+  selectObject = function(kind,id,redraw=true) {
+    const item = objectByKind(kind,id);
+    if (!item?.__workspaceAssetKey) return false;
+    state.activeVarietyId = kind==='variety' ? id : kind==='sheaf' ? item.baseVarietyId : null;
+    state.activeSheafId = kind==='sheaf' ? id : null;
+    state.activeMapId = kind==='map' ? id : null;
+    state.activeSequenceId = null; state.activeGlobalInvariantId = null;
+    state.inputMode = 'modify';
+    __workspaceSetCanvasAppearanceTargetFromNative(kind,id);
+    if (redraw) {
+      const focused = refs.canvasLabels.getRootNode().activeElement?.closest('[data-object-kind][data-object-id]');
+      const focusId = focused?.dataset.objectId, focusKind = focused?.dataset.objectKind;
+      renderCanvas(state.lastResult);
+      if (focusId) [...refs.canvasLabels.querySelectorAll('[data-object-kind][data-object-id]')].find(label=>label.dataset.objectId===focusId&&label.dataset.objectKind===focusKind)?.focus({preventScroll:true});
+    } else {
+      for (const label of refs.canvasLabels.querySelectorAll('[data-object-kind][data-object-id]')) label.classList.toggle('is-active',label.dataset.objectKind===kind&&label.dataset.objectId===id);
+    }
+    options.onSelectAsset?.({kind,id:item.__workspaceAssetKey.slice(item.__workspaceAssetKey.indexOf(':')+1)});
+    return true;
+  };
+  const startLabelDrag = startCanvasLabelDrag;
+  startCanvasLabelDrag = function(target,event) {
+    const result = startLabelDrag(target,event);
+    if (state.labelDrag) selectObject(target.dataset.objectKind,target.dataset.objectId,false);
+    return result;
+  };
+  __editor.mountObjectSurfaces({content:[refs.canvas.closest('.sheaf-stage')]});
+  const fitWholeScene = __workspaceUpdateSceneTransform;
+  __workspaceUpdateSceneTransform = function() {
+    const stage = __workspaceSceneStage(), scene = __workspaceSceneView?.scene;
+    if (!stage || !scene || !stage.clientWidth || !stage.clientHeight) return false;
+    // Keep the pointer-to-scene transform steady throughout a drag.
+    if (state.labelDrag || state.mapControlDrag) return true;
+    const points = [];
+    for (const label of refs.canvasLabels.querySelectorAll('.sheaf-canvas-label,.sheaf-map-control')) {
+      if (!label.offsetWidth || !label.offsetHeight) continue;
+      const x = label.offsetLeft, y = label.offsetTop;
+      points.push({x:x-label.offsetWidth/2,y:y-label.offsetHeight/2},{x:x+label.offsetWidth/2,y:y+label.offsetHeight/2});
+    }
+    const labels = canvasObjectLabels(__workspaceSceneCanonical.width,__workspaceSceneCanonical.height);
+    for (const map of visibleCanvasMaps()) {
+      const endpoints = mapEndpointLabels(map,labels);
+      if (!endpoints) continue;
+      const path = mapRawCurveGeometry(map,endpoints.from,endpoints.to,__workspaceSceneCanonical.width,__workspaceSceneCanonical.height);
+      for (const segment of path?.segments || []) points.push(segment.start,segment.c1,segment.c2,segment.end);
+    }
+    const valid = points.filter(point=>Number.isFinite(point?.x)&&Number.isFinite(point?.y));
+    if (!valid.length) return fitWholeScene();
+    const left = Math.min(...valid.map(p=>p.x)), right = Math.max(...valid.map(p=>p.x));
+    const top = Math.min(...valid.map(p=>p.y)), bottom = Math.max(...valid.map(p=>p.y));
+    const width = stage.clientWidth, height = stage.clientHeight;
+    const scale = Math.min(1.25,Math.max(1,width-48)/Math.max(1,right-left),Math.max(1,height-48)/Math.max(1,bottom-top));
+    const offsetX = width/2-(left+right)*scale/2, offsetY = height/2-(top+bottom)*scale/2;
+    scene.style.transform = 'translate('+offsetX+'px,'+offsetY+'px) scale('+scale+')';
+    __workspaceSceneView = {...__workspaceSceneView,width,height,scale,offsetX,offsetY};
+    return true;
+  };
+  let fitQueued = false;
+  new MutationObserver(()=>{
+    if (fitQueued) return;
+    fitQueued = true;
+    requestAnimationFrame(()=>{fitQueued=false;__workspaceUpdateSceneTransform();});
+  }).observe(refs.canvasLabels,{childList:true,subtree:true});
+  __editor.setAssetAdapter({
+    layout: () => allCanvasObjects().filter(item=>item.__workspaceAssetKey).map(item=>({
+      key:item.__workspaceAssetKey,active:item.__workspaceAssetKey===__workspaceAppearanceTargetKey,
+      point:__workspaceRecordKind(item)==='map'
+        ? {x:Number(item.labelT),y:Number(item.labelOffset),mode:'map-curve',curve:__workspaceClone(item.curve),defaultBendPx:Number(item.defaultBendPx),modified:item.modified===true,hidden:item.hiddenOnCanvas===true}
+        : {x:Number(item.labelX),y:Number(item.labelY),hidden:item.hiddenOnCanvas===true}
+    })),
+    capture: () => ({layout:__editor.captureAssetLayout()}),
+    result: () => ({text:__workspaceAssetsCurrent.map(asset=>asset.name).join('\n')}),
+    io(action,ref) {
+      if (action === 'selection') {
+        const item = __workspaceAppearanceObject();
+        return item ? {kind:__workspaceRecordKind(item),id:item.__workspaceAssetKey.slice(item.__workspaceAssetKey.indexOf(':')+1)} : null;
+      }
+      if (action === 'select') return selectObject(ref.kind,__workspaceNativeId(ref.kind,ref.id));
+      if (action === 'hide') { const item=allCanvasObjects().find(item=>item.__workspaceAssetKey===ref); if(item)hideCanvasObject(__workspaceRecordKind(item),item.id); return !!item; }
+    }
+  });
+  __workspaceUpdateSceneTransform();
+  return true;
+}});
+`;
+
 // Workspace adapters execute inside the historical calculators' lexical scopes.
 // They expose typed object projection without changing standalone source pages.
 const common = String.raw`

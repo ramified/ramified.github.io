@@ -12,6 +12,12 @@ async function run(){
   await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
   await read(()=>document.getElementById('workspace-settings').click());
   assert(await read(()=>document.querySelector('.workspace-settings-dialog').open),'Settings opens with no asset selected');
+  const settingsRect=await read(()=>{const d=document.querySelector('.workspace-settings-dialog'),r=d.getBoundingClientRect(),s=getComputedStyle(d);return {x:r.x,y:r.y,width:r.width,height:r.height,viewport:[document.documentElement.clientWidth,innerHeight],margin:s.margin,inset:s.inset,transform:s.transform};});
+  assert(Math.abs(settingsRect.x+settingsRect.width/2-settingsRect.viewport[0]/2)<2&&Math.abs(settingsRect.y+settingsRect.height/2-settingsRect.viewport[1]/2)<2,'Settings is centered on desktop: '+JSON.stringify(settingsRect));
+  await client.send('Emulation.setDeviceMetricsOverride',{width:375,height:812,deviceScaleFactor:1,mobile:false});
+  assert(await read(()=>{const r=document.querySelector('.workspace-settings-dialog').getBoundingClientRect();return r.left>=10&&r.right<=document.documentElement.clientWidth-10&&Math.abs(r.left+r.width/2-document.documentElement.clientWidth/2)<2&&Math.abs(r.top+r.height/2-innerHeight/2)<2;}),'Settings stays centered within a narrow screen');
+  const mobileSettingsShot=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-settings-mobile.png'),Buffer.from(mobileSettingsShot.data,'base64'));
+  await client.send('Emulation.clearDeviceMetricsOverride');
   assert(await read(()=>[...MathWorkspaceSettings.sessions.values()].some(record=>record.settingsOnly&&record.session.content.querySelector('[data-action-id]'))),'global Settings exposes the existing action definitions');
   const categories=await read(()=>{const select=document.querySelector('.workspace-settings-dialog>select'),result=[];for(const option of select.options){select.value=option.value;select.dispatchEvent(new Event('change'));const host=document.querySelector('.workspace-settings-engine:not([hidden])'),record=[...MathWorkspaceSettings.sessions.values()].find(record=>record.host===host);result.push({id:option.value,ready:!!record?.session.content?.querySelector('.calculator-input-section')});}select.value='young';select.dispatchEvent(new Event('change'));return result;});
   assert(categories.length>=10,'settings cover workspace calculators and property engines');for(const category of categories)assert(category.ready,'missing global settings category '+category.id);

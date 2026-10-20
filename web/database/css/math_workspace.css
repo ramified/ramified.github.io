@@ -52,10 +52,8 @@
 .workspace-native-inspector { display: block; min-width: 0; }
 .workspace-native-calculator[hidden], .workspace-native-inspector[hidden] { display: none; }
 .workspace-object-panel { min-width: 0; margin: 0; }
-.workspace-settings-dialog { width: min(760px, calc(100vw - 32px)); max-height: 88vh; overflow: auto; padding: 20px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
-.workspace-settings-dialog::backdrop { background: #0006; }
-.workspace-settings-dialog > header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 12px; padding: 0; background: transparent; color: inherit; border: 0; box-shadow: none; }
-.workspace-settings-dialog h2 { margin: 0; font-size: 1.1rem; }
+.workspace-settings-dialog > .workspace-control { flex: none; width: calc(100% - 44px); margin: 18px 22px 0; }
+.workspace-settings-body { flex: 1; min-height: 0; overflow: auto; padding: 18px 22px 22px; }
 .workspace-settings-engine { height: auto; min-height: 180px; }
 .workspace-settings-engine[hidden] { display: none; }
 .workspace-object-panel > .card-body { align-content: start; }
@@ -210,11 +208,11 @@
 .workspace-design-sample { display: grid; justify-items: center; gap: 5px; width: 70px; }
 .workspace-design-sample .workspace-asset-icon { font-size: 2.5rem; }
 .workspace-design-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.workspace-create-dialog { position: fixed; inset: 0; margin: auto; width: min(720px, calc(100vw - 32px)); height: min(720px, calc(100dvh - 40px)); max-height: calc(100dvh - 40px); box-sizing: border-box; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: 0 18px 70px rgba(24,19,15,.2); }
-.workspace-create-dialog[open] { display: flex; flex-direction: column; }
-.workspace-create-dialog::backdrop { background: rgba(24,19,15,.45); }
-.workspace-create-dialog > header { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 16px; margin: 0; padding: 18px 22px; background: transparent; color: inherit; border: 0; border-bottom: 1px solid var(--border); box-shadow: none; }
-.workspace-create-dialog h2 { margin: 0; font-size: 1.35rem; font-weight: 500; line-height: 1.2; }
+:is(.workspace-create-dialog,.workspace-settings-dialog) { position: fixed; inset: 0; margin: auto; width: min(720px, calc(100% - 32px)); height: min(720px, calc(100dvh - 40px)); max-height: calc(100dvh - 40px); box-sizing: border-box; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: 0 18px 70px rgba(24,19,15,.2); }
+:is(.workspace-create-dialog,.workspace-settings-dialog)[open] { display: flex; flex-direction: column; }
+:is(.workspace-create-dialog,.workspace-settings-dialog)::backdrop { background: rgba(24,19,15,.45); }
+:is(.workspace-create-dialog,.workspace-settings-dialog) > header { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 16px; margin: 0; padding: 18px 22px; background: transparent; color: inherit; border: 0; border-bottom: 1px solid var(--border); box-shadow: none; }
+:is(.workspace-create-dialog,.workspace-settings-dialog) h2 { margin: 0; font-size: 1.35rem; font-weight: 500; line-height: 1.2; }
 .workspace-create-search-area { flex: none; padding: 18px 22px 12px; }
 .workspace-create-search-area > input { width: 100%; padding: 10px 12px; font-size: .9rem; }
 .workspace-create-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
@@ -230,9 +228,11 @@
 .workspace-create-result:focus-visible, .workspace-create-result:hover { outline:2px solid var(--accent); outline-offset:-2px; }
 .workspace-create-result:disabled { opacity:.5; cursor:default; }
 @media (max-width: 540px) {
-  .workspace-create-dialog { width: calc(100vw - 24px); height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
-  .workspace-create-dialog > header { padding: 16px; }
-  .workspace-create-dialog h2 { font-size: 1.15rem; }
+  :is(.workspace-create-dialog,.workspace-settings-dialog) { width: calc(100% - 24px); height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
+  :is(.workspace-create-dialog,.workspace-settings-dialog) > header { padding: 16px; }
+  :is(.workspace-create-dialog,.workspace-settings-dialog) h2 { font-size: 1.15rem; }
+  .workspace-settings-dialog > .workspace-control { width: calc(100% - 32px); margin: 16px 16px 0; }
+  .workspace-settings-body { padding: 16px; }
   .workspace-create-search-area { padding: 14px 16px 10px; }
   .workspace-create-results { margin: 0 8px 14px 16px; }
 }
