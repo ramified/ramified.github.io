@@ -42,18 +42,26 @@ drawCanvas=function(field){
   __viewportFitLayer(layer,canvas.width/ratio,canvas.height/ratio);
 };
 document.addEventListener('DOMContentLoaded',()=>__editor.setViewportElement(document.querySelector('.ramification-stage')));
-__editor.setAssetAdapter({viewport:()=>{const field=activeField();if(!field.error)drawCanvas(field);}});
+__editor.setAssetAdapter({viewport:()=>drawCanvas(activeField())});
 `,
   'js/sheaf_complex_calculator.js':legacy+String.raw`
-const __viewportOriginalRender=renderCanvas;
-renderCanvas=function(result){
-  const layer=refs.canvas?.parentElement;if(!layer)return;
-  const size=__editor.getViewport();layer.style.width=Math.max(1,size.width)+'px';
-  __viewportOriginalRender(result);
-  layer.style.height=state.canvasHeight+'px';__viewportFitLayer(layer,state.canvasWidth,state.canvasHeight);
+// The existing scene adapter already fits labels, arrows and hit coordinates
+// together. Supply its stage with the available height instead of scaling twice.
+__viewportStyle('.workspace-editor-layout>.sheaf-main-column{display:flex!important;flex-direction:column}.sheaf-main-column>.workspace-view-card{flex:1}.workspace-view-card>.sheaf-workspace{display:flex;flex-direction:column}.workspace-view-card .sheaf-stage[data-workspace-scene-stage]{height:100%!important;min-height:0!important;flex:1}');
+document.addEventListener('DOMContentLoaded',()=>__editor.setViewportElement(document.querySelector('.sheaf-stage')));
+__editor.setAssetAdapter({viewport:()=>{if(state.canvasWidth!==__workspaceSceneCanonical.width)renderCanvas(state.lastResult);__workspaceUpdateSceneTransform();}});
+`,
+  'js/double_young_diagram.js':helpers+String.raw`
+const __viewportSliceSize=sizeSliceCanvasToStack;
+sizeSliceCanvasToStack=function(){
+  if(__objectPanel?.operation!=='slice')return __viewportSliceSize();
+  const size=__editor.getViewport(),canvas=sliceState.sliceCanvas;if(!canvas||size.width<1||size.height<1)return;
+  const height=size.height;
+  sliceState.displayWidth=size.width;sliceState.displayHeight=height;
+  __viewportCanvasSize(canvas,size.width,height);canvas.width=Math.round(size.width*size.dpr);canvas.height=Math.round(height*size.dpr);
+  sliceState.sliceCtx?.setTransform(size.dpr,0,0,size.dpr,0,0);
 };
-document.addEventListener('DOMContentLoaded',()=>__editor.setViewportElement(document.querySelector('.sheaf-workspace')));
-__editor.setAssetAdapter({viewport:()=>renderCanvas(state.lastResult)});
+__editor.setAssetAdapter({viewport:()=>{if(__objectPanel?.operation==='slice'){sizeSliceCanvasToStack();if(sliceState.lastData)drawSliceCanvas(sliceState.lastData);}else resizeCanvases();}});
 `,
   'js/young_diagrams.js':helpers+centered+String.raw`
 const __viewportOriginalResize=resize;
@@ -93,7 +101,15 @@ resizeCanvas=function(){
   __viewportCanvasSize(canvas,size.width,size.height);canvas.width=Math.round(size.width*size.dpr);canvas.height=Math.round(size.height*size.dpr);
   canvas.getContext('2d').setTransform(size.dpr,0,0,size.dpr,0,0);
 };
-__editor.setAssetAdapter({viewport:()=>{resizeCanvas();renderCanvas();}});
+__editor.setAssetAdapter({viewport:()=>{
+  resizeCanvas();renderCanvas();
+  // Move existing labels with their canvas; preserve focus and pointer targets.
+  for(const category of state.categories){
+    const element=refs.labelLayer?.querySelector('[data-object-kind="category"][data-object-id="'+cssEscape(category.id)+'"]');
+    if(element){const point=canvasPoint(category);element.style.left=point.x+'px';element.style.top=point.y+'px';}
+  }
+  positionFunctorLabels();
+}});
 `,
   'js/higher_dimensional_slice_explorer.js':helpers+String.raw`
 __viewportStyle('.workspace-native-content>div{padding:0!important}.workspace-native-content canvas{min-height:0!important}');

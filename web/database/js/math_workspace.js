@@ -13,7 +13,7 @@
   const paneCanvases = { primary: '', secondary: '' };
   let objectWorkspace = null, panelCatalog = null, renderingCardPicker = false, panelManagerOpen = false, restoringWorkspace = false;
   let activeCanvasId = '', focusedPane = 'primary', splitView = false, inspectorSourceId = '', suppressCanvasClickUntil = 0;
-  const DEFAULT_CANVAS_HEIGHT = 680, MIN_CANVAS_HEIGHT = 420, MAX_CANVAS_HEIGHT = 1600;
+  const DEFAULT_CANVAS_HEIGHT = 680, MIN_CANVAS_HEIGHT = 240, MAX_CANVAS_HEIGHT = 1600;
   const ASSET_LAYOUTS = ['icons', 'list', 'details', 'tiles', 'content'];
   const OBJECT_INPUT_KINDS = ['young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...(slicing?.kinds || [])];
   const ASSET_KINDS = ['variety', 'sheaf', 'map', ...OBJECT_INPUT_KINDS];
@@ -176,7 +176,7 @@
     const view = document.querySelector('.workspace-view-card'), panes = $('#workspace-canvas-panes'), resizer = $('#workspace-canvas-resizer');
     if (!view || !panes || !resizer) return;
     const ids = visibleCanvasIds(), preferred = ids.length ? Math.max(...ids.map(canvasHeightFor)) : DEFAULT_CANVAS_HEIGHT;
-    const available = Math.max(240, window.innerHeight - (view.getBoundingClientRect().top + window.scrollY) - 16);
+    const available = Math.max(MIN_CANVAS_HEIGHT, Math.floor(window.innerHeight - (view.getBoundingClientRect().top + window.scrollY) - 16));
     const outerHeight = ids.some(id=>canvasHeightModeFor(id)==='manual') ? preferred : Math.min(preferred, available);
     view.style.setProperty('--workspace-view-height', `${outerHeight}px`);
     const focusedHeight = outerHeight;

@@ -12934,7 +12934,7 @@
       shell.append(area);
       target.append(shell);
       const css = realDocument.createElement("style");
-      css.textContent = '.editor-body>[hidden],.workspace-native-surface [hidden]{display:none!important}.workspace-native-surface{height:100%;min-height:0;display:flex;flex-direction:column;min-width:0}.workspace-native-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:7px 12px;padding:6px 0;border:0;flex:0 0 auto}.workspace-native-toolbar>*,.workspace-native-toolbar .canvas-toolbar{max-width:100%;flex-wrap:wrap}.workspace-native-content{flex:1;min-height:0;min-width:0;overflow:auto}.workspace-native-content>div:has(>canvas){height:100%!important;min-height:0!important;min-width:0;box-sizing:border-box}.workspace-native-surface[data-surface-role="view"] .workspace-native-content{overflow:hidden}:host([data-density="compact"]) .workspace-native-toolbar{gap:4px 8px;padding:3px 0;font-size:.72rem}:host([data-density="compact"]) .canvas-toolbar{gap:4px!important;padding:2px!important}.workspace-native-surface[data-surface-role="modify"]{height:auto}.workspace-native-surface[data-surface-role="modify"] .workspace-native-content{overflow:visible}.workspace-native-toolbar .card-body{padding:0;border:0}.calculator-input-settings-trigger{display:none!important}';
+      css.textContent = '.editor-body>[hidden],.workspace-native-surface [hidden]{display:none!important}.workspace-native-surface{height:100%;min-height:0;display:flex;flex-direction:column;min-width:0}.workspace-native-toolbar{display:flex;align-items:center;flex-wrap:wrap;max-height:35%;overflow:auto;box-sizing:border-box;gap:7px 12px;padding:6px 0;border:0;flex:0 0 auto}.workspace-native-toolbar>*,.workspace-native-toolbar .canvas-toolbar{max-width:100%;flex-wrap:wrap}.workspace-native-content{flex:1;min-height:0;min-width:0;overflow:auto}.workspace-native-content>div:has(>canvas){height:100%!important;min-height:0!important;min-width:0;box-sizing:border-box}.workspace-native-surface[data-surface-role="view"] .workspace-native-content{overflow:hidden}:host([data-density="compact"]) .workspace-native-toolbar{gap:4px 8px;padding:3px 0;font-size:.72rem}:host([data-density="compact"]) .canvas-toolbar{gap:4px!important;padding:2px!important}.workspace-native-surface[data-surface-role="modify"]{height:auto}.workspace-native-surface[data-surface-role="modify"] .workspace-native-content{overflow:visible}.workspace-native-toolbar .card-body{padding:0;border:0}.calculator-input-settings-trigger{display:none!important}';
       (modifying && inspectorHead ? inspectorHead : head).append(css);
       if (!modifying) {
         viewportArea = area;
@@ -45310,6 +45310,7 @@ ${body}`;
         if (config.mode === "view") {
           gridCols = 5;
           gridRows = 5;
+          gridSizeWasCustomized = true;
           resetBlocks();
           syncGridSizeInputs();
           handleLayoutBreakpointChange = () => resize();
@@ -58140,9 +58141,7 @@ ${body}`;
           refreshLRModeHint2();
         }
         if (config.operation === "slice") {
-          const style = document2.createElement("style");
-          style.textContent = ".canvas-stack>.canvas-panel{display:none!important}#slice-panel{height:100%!important;min-height:300px}.canvas-stack{height:100%!important}";
-          document2.head.append(style);
+          __editor.mountObjectSurfaces({ content: [$("slice-canvas")], toolbar: [$("slice-panel").querySelector(".panel-title"), $("slice-legend")] });
           for (const id of ["slice-layer-card", "slice-weight-info-card"]) {
             const card = $(id);
             card.style.display = "";
@@ -58234,6 +58233,40 @@ ${body}`;
         capture: () => __objectCard ? [...__objectCard.querySelectorAll("input[id],select[id],textarea[id]")].filter((control) => !control.readOnly && !control.disabled).map((control) => ({ id: control.id, value: control.value, checked: control.type === "checkbox" ? control.checked : void 0 })) : [],
         result: () => __objectCard ? { text: (__objectCard.querySelector(".card-body") || __objectCard).innerText || document2.getElementById(__objectPanel.marker)?.textContent || "", stale: __objectStale } : null
       });
+      function __viewportStyle(css) {
+        const node = document2.createElement("style");
+        node.textContent = css;
+        document2.head.append(node);
+      }
+      function __viewportCanvasSize(canvas, width, height) {
+        canvas.style.setProperty("width", width + "px", "important");
+        canvas.style.setProperty("height", height + "px", "important");
+        canvas.style.setProperty("min-height", "0", "important");
+        canvas.style.setProperty("max-width", "none", "important");
+      }
+      function __viewportFit(canvas, width, height) {
+        const size = __editor.getViewport(), scale2 = Math.min(size.width / width, size.height / height);
+        if (scale2 > 0) __viewportCanvasSize(canvas, width * scale2, height * scale2);
+      }
+      const __viewportSliceSize = sizeSliceCanvasToStack;
+      sizeSliceCanvasToStack = function() {
+        if (__objectPanel?.operation !== "slice") return __viewportSliceSize();
+        const size = __editor.getViewport(), canvas = sliceState.sliceCanvas;
+        if (!canvas || size.width < 1 || size.height < 1) return;
+        const height = size.height;
+        sliceState.displayWidth = size.width;
+        sliceState.displayHeight = height;
+        __viewportCanvasSize(canvas, size.width, height);
+        canvas.width = Math.round(size.width * size.dpr);
+        canvas.height = Math.round(height * size.dpr);
+        sliceState.sliceCtx?.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
+      };
+      __editor.setAssetAdapter({ viewport: () => {
+        if (__objectPanel?.operation === "slice") {
+          sizeSliceCanvasToStack();
+          if (sliceState.lastData) drawSliceCanvas(sliceState.lastData);
+        } else resizeCanvases();
+      } });
     })();
     (() => {
       "use strict";
@@ -191547,18 +191580,12 @@ ${arrows.join("\n")}` : "";
         if (!(scale > 0)) return;
         Object.assign(layer.style, { position: "absolute", left: (size.width - width * scale) / 2 + "px", top: (size.height - height * scale) / 2 + "px", transformOrigin: "0 0", transform: "scale(" + scale + ")" });
       }
-      const __viewportOriginalRender = renderCanvas;
-      renderCanvas = function(result) {
-        const layer = refs.canvas?.parentElement;
-        if (!layer) return;
-        const size = __editor.getViewport();
-        layer.style.width = Math.max(1, size.width) + "px";
-        __viewportOriginalRender(result);
-        layer.style.height = state.canvasHeight + "px";
-        __viewportFitLayer(layer, state.canvasWidth, state.canvasHeight);
-      };
-      document2.addEventListener("DOMContentLoaded", () => __editor.setViewportElement(document2.querySelector(".sheaf-workspace")));
-      __editor.setAssetAdapter({ viewport: () => renderCanvas(state.lastResult) });
+      __viewportStyle(".workspace-editor-layout>.sheaf-main-column{display:flex!important;flex-direction:column}.sheaf-main-column>.workspace-view-card{flex:1}.workspace-view-card>.sheaf-workspace{display:flex;flex-direction:column}.workspace-view-card .sheaf-stage[data-workspace-scene-stage]{height:100%!important;min-height:0!important;flex:1}");
+      document2.addEventListener("DOMContentLoaded", () => __editor.setViewportElement(document2.querySelector(".sheaf-stage")));
+      __editor.setAssetAdapter({ viewport: () => {
+        if (state.canvasWidth !== __workspaceSceneCanonical.width) renderCanvas(state.lastResult);
+        __workspaceUpdateSceneTransform();
+      } });
       const __workspaceAssetType = (kind, type) => {
         const allowed = { variety: /* @__PURE__ */ new Set(["abstract", "curve", "symmetric-product-curve", "abelian", "ppav-moduli", "point", "projective", "grassmannian", "complete-intersection", "product"]), sheaf: /* @__PURE__ */ new Set(["abstract", "locally-free", "structure", "tangent", "cotangent", "canonical", "twist", "divisor-line", "universal-bundle", "direct-sum", "self-direct-sum", "self-tensor-product", "dual", "internal-hom", "ideal-sheaf", "normal-bundle", "conormal-bundle", "relative-tangent", "relative-cotangent", "tensor", "schur", "map-operation"]), map: /* @__PURE__ */ new Set(["ordinary", "sheaf", "abel-jacobi", "composition"]) };
         return allowed[kind]?.has(type) ? type : "abstract";
@@ -248262,6 +248289,15 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
       __editor.setAssetAdapter({ viewport: () => {
         resizeCanvas();
         renderCanvas();
+        for (const category of state.categories) {
+          const element = refs.labelLayer?.querySelector('[data-object-kind="category"][data-object-id="' + cssEscape(category.id) + '"]');
+          if (element) {
+            const point = canvasPoint(category);
+            element.style.left = point.x + "px";
+            element.style.top = point.y + "px";
+          }
+        }
+        positionFunctorLabels();
       } });
     })();
     (() => {
@@ -256945,10 +256981,7 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         __viewportFitLayer(layer, canvas.width / ratio, canvas.height / ratio);
       };
       document2.addEventListener("DOMContentLoaded", () => __editor.setViewportElement(document2.querySelector(".ramification-stage")));
-      __editor.setAssetAdapter({ viewport: () => {
-        const field = activeField();
-        if (!field.error) drawCanvas(field);
-      } });
+      __editor.setAssetAdapter({ viewport: () => drawCanvas(activeField()) });
     })();
     (() => {
       "use strict";

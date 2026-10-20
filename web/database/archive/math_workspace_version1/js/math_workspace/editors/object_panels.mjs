@@ -132,7 +132,7 @@ function __objectConfigureSpecific(config) {
   }
   if (config.operation === 'lr') { $('fixed-rank-mode').checked = true; refreshLRModeHint(); }
   if (config.operation === 'slice') {
-    const style = document.createElement('style'); style.textContent = '.canvas-stack>.canvas-panel{display:none!important}#slice-panel{height:100%!important;min-height:300px}.canvas-stack{height:100%!important}'; document.head.append(style);
+    __editor.mountObjectSurfaces({content:[$('slice-canvas')],toolbar:[$('slice-panel').querySelector('.panel-title'),$('slice-legend')]});
     for (const id of ['slice-layer-card', 'slice-weight-info-card']) {
       const card = $(id); card.style.display = ''; card.hidden = false; card.classList.add('workspace-object-content'); card.classList.remove('collapsed'); __editor.setCardVisible(card.dataset.workspaceCardId, true);
     }

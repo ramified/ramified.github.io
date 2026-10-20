@@ -18,15 +18,43 @@ Assets explorer.
 
 ## Presentation
 
-A Young Input occupying the full main area uses the existing Young Diagram
-editor. In the side column or a split main area it uses one compact diagram from
-the existing Double Young editor, initially 5 by 5. Larger objects expand the
-grid. Grid resizing cannot clip an asset. Generalized signed rows retain their
-signed editor at either size.
+Modify panels edit the Asset; Display panels own presentation. A new Young
+Display starts at 5 by 5 in every placement, including the main area. Larger
+objects expand the grid without clipping data. Existing and restored grids stay
+unchanged. One Young renderer handles ordinary and generalized signed diagrams;
+moving between main, split and sidebar changes density without replacing its
+DOM, focused draft or options. There is no Double Young workspace view.
 
-There is no Double Young workspace view. Two independent Inputs can occupy the
-main area together. Properties can also move between the main area and side
-column with their references and results intact.
+The shell owns available panel height. New main canvases use the smaller of
+680px and the viewport space below the page header, with a 240px lower bound for
+very short screens. Explicit height drags keep the chosen height; backups store
+this as `canvasHeightMode: "manual"`. Older backups without that flag use automatic
+height while retaining their saved preferred height. Split panes share the actual
+available pane height. Sidebar displays use a bounded viewport-relative height.
+
+The native runtime observes each drawing area with ResizeObserver and coalesces
+redraws into one animation frame. Toolbar wrapping is included in the measurement. Tabs and native controls have
+bounded heights and may scroll locally, so they cannot consume the whole graph
+area in a narrow split view.
+Adapters in `editors/viewport_panels.mjs` fit the graph using both available width
+and height; they preserve aspect ratio and existing logical hit coordinates.
+Young renders at the fitted size with device-pixel-ratio backing resolution.
+Dynkin fits its canonical drawing; Category, geometry and fit-mode Strands render
+in the measured viewport. The weight slice uses the same native surface contract.
+Mosaic fits its board, Place ramification scales its canvas and labels together,
+and Sheaf Complex reuses its existing scene transform with a flexible stage.
+
+Resize updates are presentation-only: they do not publish Asset edits or mark
+computations stale. Observer callbacks ignore inactive/zero-sized surfaces, and
+observers and queued frames are disposed with the renderer. Geometry camera/zoom
+and explicit fixed-spacing Strands settings remain local view state. The promise
+of no scrolling concerns the whole current graph in ordinary fit mode; forms,
+large text/matrix results and an explicitly enlarged/zoomed view may still scroll.
+
+Regression coverage: `math_workspace_viewport_ui_test.js` exercises main/split/
+sidebar fitting, initial and restored Young grids, signed diagrams, real editing
+and DPR-aware canvas clicks, unchanged Assets, all graph adapters and backups.
+Existing layout, drag, asset-view and input-draft tests cover shared interactions.
 
 Panel headers reuse `CalculatorCards` and the workspace move/hide tools. The
 existing card picker renders property panels through its checkbox list: checking

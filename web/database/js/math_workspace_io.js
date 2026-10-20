@@ -52,7 +52,7 @@
     for (const panel of value.panels) {
       if (!/^object-panel-[1-9]\d*$/.test(panel.id) || !types.has(panel.type) || !['main', 'side', 'hidden'].includes(panel.location) || !record(panel.presentation) || !Array.isArray(panel.renderers)) throw new Error('Invalid saved object panel.');
       const definition = definitions.find(d => d.id === panel.type);
-      if(panel.canvasHeight!=null&&(!Number.isFinite(panel.canvasHeight)||panel.canvasHeight<420||panel.canvasHeight>1600))throw new Error('Invalid saved panel height.');
+      if(panel.canvasHeight!=null&&(!Number.isFinite(panel.canvasHeight)||panel.canvasHeight<240||panel.canvasHeight>1600))throw new Error('Invalid saved panel height.');
       if (definition.input ? typeof panel.assetKey !== 'string' : !record(panel.computation) || !record(panel.computation.refs)) throw new Error('Invalid panel inputs.');
       if (panel.computation?.rule && !['diag-gl','diag-o','diag-sp','sum-gl','sum-o','sum-sp','pol-o-gl','pol-sp-gl','gl-o','gl-sp','gl-o-gl','gl-sp-gl'].includes(panel.computation.rule)) throw new Error('Invalid branching rule.');
       if(panel.drafts!=null&&(!Array.isArray(panel.drafts)||panel.drafts.some(d=>!Number.isInteger(d.index)||d.index<0||typeof d.value!=='string')))throw new Error('Invalid saved input drafts.');
@@ -65,7 +65,7 @@
     if(!Array.isArray(docked))throw new Error('Invalid saved docked panels.');
     unique(docked,p=>p?.id,'docked panel');
     for(const panel of docked){
-      if(!record(panel)||!['canvas','sidebar','native-card'].includes(panel.source)||!['main','side','hidden'].includes(panel.location)||panel.canvasHeight!=null&&(!Number.isFinite(panel.canvasHeight)||panel.canvasHeight<420||panel.canvasHeight>1600))throw new Error('Invalid saved docked panel.');
+      if(!record(panel)||!['canvas','sidebar','native-card'].includes(panel.source)||!['main','side','hidden'].includes(panel.location)||panel.canvasHeight!=null&&(!Number.isFinite(panel.canvasHeight)||panel.canvasHeight<240||panel.canvasHeight>1600))throw new Error('Invalid saved docked panel.');
       if(panel.source==='canvas'&&(!['assets',...value.calculators.map(c=>c.id)].includes(panel.id))||panel.source==='sidebar'&&(typeof panel.key!=='string'||panel.id!=='dock:'+panel.key)||panel.source==='native-card'&&(!value.calculators.some(c=>c.id===panel.sessionId)||typeof panel.key!=='string'||panel.id!=='native-card:'+panel.sessionId+':'+panel.key))throw new Error('Invalid docked panel reference.');
     }
     const ids = new Set(['assets', ...value.calculators.map(c => c.id), ...value.panels.filter(p => p.location === 'main').map(p => p.id), ...docked.filter(p=>p.location==='main').map(p=>p.id)]);

@@ -16,7 +16,7 @@
 .workspace-canvas-controls { display: flex; flex: 1 1 240px; min-width: 0; align-items: center; justify-content: flex-end; gap: 9px; flex-wrap: nowrap; }
 .workspace-canvas-picker { flex: 1 1 170px; min-width: 0; }
 #workspace-split-view { flex: 0 0 auto; white-space: nowrap; }
-.workspace-canvas-tabs { display: flex; gap: 5px; flex-wrap: wrap; padding: 9px 14px 0; border-bottom: 1px solid var(--border); }
+.workspace-canvas-tabs { max-height: 25%; overflow-y: auto; flex: 0 0 auto; box-sizing: border-box; display: flex; gap: 5px; flex-wrap: wrap; padding: 9px 14px 0; border-bottom: 1px solid var(--border); }
 .workspace-canvas-tabs:empty { display: none; }
 .workspace-tab-drop-placeholder { flex: 0 0 4px; width: 4px; min-height: 28px; align-self: stretch; background: var(--accent); border-radius: 2px; pointer-events: none; }
 .workspace-canvas-tab { touch-action: none; }

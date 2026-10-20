@@ -32,6 +32,13 @@ async function run(){
   await read(()=>{window.expected=api.canvasHeightFor(geometry.id);const backup=panels.exportText('workspace');panels.importText('workspace',backup);});
   assert.equal(await read(()=>api.canvasHeightFor(geometry.id)),await read(()=>expected),'workspace backups retain object panel heights');
   assert.equal(await read(()=>api.canvasHeightFor(matrixView.id)),await read(()=>expected));
+  await client.send('Emulation.setDeviceMetricsOverride',{width:1280,height:500,deviceScaleFactor:1,mobile:false});
+  await read(()=>{api.setSplitView(false);window.shortView=panels.open('young-view',key(asset),'main');});
+  await waitFor(()=>read(()=>Number(document.getElementById('workspace-canvas-resizer').getAttribute('aria-valuenow'))<420));
+  const shortHeight=await drag(20);
+  assert(shortHeight<420,'dragging a short auto-sized view must not jump to the old minimum');
+  await read(()=>{const saved=panels.exportText('workspace');panels.importText('workspace',saved);});
+  assert.equal(await read(()=>api.canvasHeightFor(shortView.id)),shortHeight,'short manually resized height survives backup');
   console.log('math_workspace_layout_ui_test: real resizer drags, views, properties, calculators, split panes, sidebar headers and height restoration passed');
  }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}
 }
