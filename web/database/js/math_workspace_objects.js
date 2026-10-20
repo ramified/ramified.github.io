@@ -217,7 +217,7 @@
     { id: 'matrix-invariants', label: 'Matrix Basic Invariants', engine: 'matrix', marker: 'out-rank', slots: [slot('matrix', 'Matrix', 'matrix')], light: true },
     { id: 'matrix-computation', label: 'Matrix Computation', engine: 'matrix', marker: 'operation-output', slots: [slot('matrix', 'Matrix', 'matrix')] },
     { id: 'matrix-polynomial', label: 'Action on Polynomial', engine: 'matrix', marker: 'polynomial-action-output', slots: [slot('matrix', 'Matrix', 'matrix')] },
-    { id: 'category-diagram', label: 'Category and Functor Overview', engine: 'category', scene: true, overview:true, light: true, slots: [] },
+    { id: 'category-diagram', label: 'Category and Functor Overview', engine: 'complex', scene: true, overview:true, readOnly:true, light: true, slots: [] },
     { id: 'statistics', label: 'Statistics', engine: 'young', marker: 'out-size', slots: [a()], light: true },
     { id: 'weight', label: 'Lie Algebra Weight', engine: 'young', marker: 'lie-weight', slots: [a(), lie()], light: true },
     { id: 'branching', label: 'Branching Rules', engine: 'young', marker: 'br-output', slots: [a(), b()] },
@@ -272,7 +272,7 @@
           const deps = slicing.closure([keyOf(asset)],assets); missing.push(...deps.missing);
           deps.assets.filter(a=>a!==asset).forEach(a=>{objects[keyOf(a)]=a;});
           try { objects[spec.id] = slicing.materialize(asset,assets); } catch(error) { missing.push(error.message); }
-        } else objects[spec.id] = asset;
+        } else objects[definition.scene ? keyOf(asset) : spec.id] = asset;
       }
       else if (!spec.optional || computation.refs[spec.id]) missing.push(spec.label);
     }
@@ -362,8 +362,10 @@
         onChange: change => nativeChange(panel, renderer, change),
         onCollectAssets: () => overviewAction(panel,'collect'),
         onOverviewAction: action => overviewAction(panel,action),
+        onRemoveOverviewAsset: key => removeOverviewAsset(panel,key),
+        onExportOverview: format => exportCategoryOverview(panel,format),
         onSelectAsset: ref => {
-          if (!panel.definition.overview || renderer.applying || !get(keyOf(ref))) return;
+          if (!panel.definition.overview || renderer.applying || (ref && !get(keyOf(ref)))) return;
           panel.computation.refs.active = keyOf(ref);
           api.selectAsset?.(ref); api.ioChanged();
         },
@@ -477,7 +479,7 @@
       select.setAttribute('aria-label', spec.label);
       const commit = value => {
         write(value);
-        if (definition.sheafView && value) {
+        if (definition.overview && value) {
           panel.computation.refs.nodes = [...new Set([...(panel.computation.refs.nodes || []),value])];
           panel.computation.refs.active = value;
         }
@@ -687,6 +689,14 @@
       const assets = engine === 'slice' || asset.kind === 'matrix' ? slicing.closure([keyOf(asset)],snapshot.assets).assets : [asset, ...snapshot.assets.filter(item => asset.kind === 'functor' && item.kind === 'category' && [asset.data.domain, asset.data.codomain].includes(keyOf(item)) || ['dynkin','strands'].includes(asset.kind) && keyOf(item) === asset.data.lie)];
       editor.applyAssets({ assets }, refOf(asset)); return editor;
     }
+    function exportCategoryOverview(panel, format) {
+      const assets = Object.values(contextFor(panel.computation,snapshot.assets).objects);
+      // Reuse the category calculator's formulas and graph formats for IO.
+      const editor = ioRenderer(assets[0] || {kind:'category',id:'overview-empty',data:{}});
+      editor.applyAssets({assets},refOf(get(panel.computation.refs.active)));
+      editor.objectIO('layout',panel.propertyRenderer.editor.captureAssetLayout().filter(entry=>entry.key.startsWith('category:')).map(entry=>({id:entry.key,x:entry.point.x,y:entry.point.y})));
+      return editor.objectIO('export',format);
+    }
     function exportFormats(key) {
       if (key === 'workspace') return [{ id: 'json', label: 'Workspace JSON backup' }];
       const asset = get(key), panel = [...panels.values()].find(panel => 'property:' + panel.computation?.id === key);
@@ -859,7 +869,7 @@
           if (!asset) feedback(panel, panel.assetKey ? 'The referenced asset was deleted. Choose another asset.' : 'Choose or create an asset to edit.');
         } else if (panel.definition.objectView) { refreshObjectView(panel); }
         else if (panel.definition.display) { refreshDisplayPanel(panel); } else {
-          if ((panel.definition.scene || panel.definition.slicingScene)&&!panel.definition.assetView) refreshSceneChoices(panel);
+          if ((panel.definition.scene || panel.definition.slicingScene)&&!panel.definition.assetView&&!panel.definition.overview) refreshSceneChoices(panel);
           const computation = panel.computation, context = contextFor(computation, snapshot.assets);
           if (panel.definition.overview && computation.refs.active && !Object.values(context.objects).some(asset=>keyOf(asset)===computation.refs.active)) computation.refs.active = '';
           const bound=get(computation.refs[panel.definition.viewRole||'asset']);
@@ -878,10 +888,11 @@
             const renderer = panel.propertyRenderer;
             if (computation.signature !== context.signature) {
               computation.signature = context.signature; computation.result = null; computation.status = panel.definition.light ? 'current' : 'stale';
-              const layout = panel.definition.sheafView ? new Map(renderer.editor.captureAssetLayout().map(entry => [entry.key, entry.point])) : null;
+              const layout = panel.definition.overview ? new Map(renderer.editor.captureAssetLayout().map(entry => [entry.key, entry.point])) : null;
               const projectedAssets = Object.values(context.objects).map(asset => layout ? {...asset,viewPosition:layout.get(keyOf(asset)) || null} : asset);
               renderer.applying = true;
-              const active = panel.definition.overview ? get(computation.refs.active) || bound : panel.definition.geometryView ? get(computation.refs.asset) : context.objects[panel.definition.viewRole||'lambda'];
+              const overviewActive = Object.hasOwn(computation.refs,'active') ? get(computation.refs.active) : bound;
+              const active = panel.definition.overview ? overviewActive : panel.definition.geometryView ? get(computation.refs.asset) : context.objects[panel.definition.viewRole||'lambda'];
               try { renderer.editor.applyAssets({ assets: projectedAssets }, refOf(active), null, { mode: panel.definition.assetView?'view':'property', operation: panel.definition.id, rule: computation.rule, settings: computation.settings, light: panel.definition.light, references: computation.refs, refs: Object.fromEntries(Object.entries(context.objects).map(([role, asset]) => [role, refOf(asset)])) }); }
               finally { renderer.applying = false; }
               computation.options = renderer.editor.captureAssetProperties();
@@ -937,6 +948,7 @@
       node.dataset.objectPanel = id; node.dataset.panelType = type;
       head.setAttribute('role', 'button'); head.tabIndex = 0; head.setAttribute('aria-expanded', 'true');
       const body = element('div', 'card-body workspace-card-form'), references = element('div', 'workspace-object-references'), controls = element('div', 'workspace-form-fields'), message = element('p', 'workspace-status'), renderArea = element('div', 'workspace-object-render-area'); message.setAttribute('role', 'status');
+      if (type==='category-diagram') references.hidden=true;
       const panel = { id, definition, node, head, title, body, references, controls, message, renderArea, selectors: [], renderers: new Map(), assetKey:definition.overview?'':assetKey, location: 'hidden', closed: false, collapsed: false, refreshing: false };
       node.dataset.panelRole=definition.input?'modify':definition.assetView||definition.scene||definition.slicingScene||['matrix-view','slice'].includes(type)?'view':'property';
       panels.set(id, panel); head.append(title, element('em', 'toggle-icon', '▾')); body.append(references, controls, message, renderArea); node.append(head, body);
@@ -975,12 +987,27 @@
       const refs = panel.computation.refs;
       if (action === 'clear') {
         refs.nodes = []; refs.active = '';
-        if (panel.definition.sheafView) refs.asset = '';
+        refs.asset = '';
       } else if (action === 'collect') {
         const kinds = panel.definition.sheafView ? ['variety','sheaf','map'] : ['category','functor'];
         refs.nodes = [...new Set([...(refs.nodes || []),...snapshot.assets.filter(asset=>kinds.includes(asset.kind)).map(keyOf)])];
       }
       refreshPanel(panel);
+    }
+    function removeOverviewAsset(panel, key) {
+      if (!panel.definition.overview || !get(key)) return false;
+      const refs = panel.computation.refs;
+      // Keep the other displayed objects, including implicit endpoints/bases.
+      // Remove dependent drawings too so their projection cannot re-add key.
+      const displayed = Object.values(contextFor(panel.computation,snapshot.assets).objects);
+      refs.nodes = [...new Set(displayed.filter(asset => {
+        const context = contextFor({type:panel.definition.id,refs:{nodes:[keyOf(asset)]}},snapshot.assets);
+        return !Object.values(context.objects).some(item=>keyOf(item)===key);
+      }).map(keyOf))];
+      if (!refs.nodes.includes(refs.asset)) refs.asset = '';
+      if (!refs.nodes.includes(refs.active)) refs.active = '';
+      refreshPanel(panel);
+      return true;
     }
     function selectOverviewAsset(panel, key) {
       const asset = get(key), editor = panel.propertyRenderer?.editor;
@@ -1051,7 +1078,7 @@
         computation: panel.computation ? { id: panel.computation.id, refs: panel.computation.refs, rule: panel.computation.rule, settings: panel.computation.settings, options: panel.computation.options, status: panel.computation.status } : null,
         drafts:[...panel.controls.querySelectorAll('input:not([type="checkbox"]),textarea')].map((control,index)=>({index,value:control.value})),
         legacyView:legacyViews.get(panel.assetKey)||null,
-        renderers: [...panel.renderers.entries()].map(([role, renderer]) => ({ role, snapshot: renderer.editor.capture() })).concat(panel.propertyRenderer ? [{ role: 'property', snapshot: panel.propertyRenderer.editor.capture() }] : [])
+        renderers: [...panel.renderers.entries()].map(([role, renderer]) => ({ role, snapshot: renderer.editor.capture() })).concat(panel.propertyRenderer ? [{ role: 'property', snapshot: panel.propertyRenderer.editor.capture(), ...(panel.definition.overview ? {overviewLayout:panel.propertyRenderer.editor.captureAssetLayout()} : {}) }] : [])
       }));
     }
     function clearPanels() {
@@ -1083,8 +1110,15 @@
           if (!renderer) continue;
           renderer.applying = true;
           try {
-            renderer.editor.restore(savedRenderer.snapshot);
-            const selected = panel.definition.overview && get(panel.computation.refs.active || panel.computation.refs.asset);
+            const savedEntry = (value,key) => value?.$kind==='object' ? value.entries.find(entry=>entry[0]===key)?.[1] : value?.[key];
+            const legacyCategories = panel.definition.id==='category-diagram' && savedEntry(savedEntry(savedRenderer.snapshot?.model,'state'),'categories');
+            if (legacyCategories) renderer.editor.objectIO('layout',legacyCategories.map(item=>({id:savedEntry(item,'id'),x:savedEntry(item,'x'),y:savedEntry(item,'y')})));
+            else renderer.editor.restore(savedRenderer.snapshot);
+            // Restore diagram geometry as complete values. The historical
+            // state merge can otherwise retain a stale straight-curve tag.
+            const overviewLayout=savedRenderer.overviewLayout || item.computation?.options?.layout;
+            if (panel.definition.overview && !legacyCategories && overviewLayout) renderer.editor.objectIO('layout',overviewLayout);
+            const selected = panel.definition.overview && get(Object.hasOwn(panel.computation.refs,'active') ? panel.computation.refs.active : panel.computation.refs.asset);
             if (selected) renderer.editor.objectIO('select',refOf(selected));
           } finally { renderer.applying = false; }
         }

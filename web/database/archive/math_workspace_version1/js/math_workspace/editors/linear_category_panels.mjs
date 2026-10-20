@@ -152,25 +152,6 @@ __editor.setAssetAdapter({
       refs.categoryApplyPreset.addEventListener('click', () => { if (refs.categoryPresetSelect.value) updateActiveObjectFromControls(); });
       __editor.mountObjectSurfaces({modify:[refs.inputMode.closest('.card').querySelector('.card-body')]});
     }
-    if (config.mode === 'scene') {
-      __panelStyle('.workspace-native-content>.category-stage{box-sizing:border-box;border:1px solid var(--border);border-radius:4px;overflow:hidden}');
-      refs.clearCanvas.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();options.onOverviewAction?.('clear');},{capture:true});
-      const select = (kind, id) => {
-        if (!(kind === 'category' ? categoryById(id) : functorById(id))) return false;
-        state.activeKind = kind; state.activeId = id; state.functorPickTarget = null;
-        // Preserve the pointer target when a selection starts a category drag.
-        refs.labelLayer.querySelectorAll('[data-object-kind][data-object-id]').forEach(label=>{
-          const selected = label.dataset.objectKind===kind && label.dataset.objectId===id;
-          label.classList.toggle('is-selected',selected); label.setAttribute('aria-pressed',String(selected));
-        });
-        renderCanvas();
-        options.onSelectAsset?.({kind,id:id.slice(id.indexOf(':')+1)});
-        return true;
-      };
-      setActive = select; selectActiveInPlace = select;
-      handleFunctorCategoryPick = () => {};
-      __editor.mountObjectSurfaces({content:[document.getElementById('category-canvas').parentElement]});
-    }
     return true;
   },
   apply(snapshot, ref) { __categoryProject(snapshot, ref); return true; },

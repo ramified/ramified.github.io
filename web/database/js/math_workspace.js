@@ -2327,6 +2327,10 @@
         return updateObjectAsset(ref, { type: value.type, data: value.data });
       }, status, closePicker: closeCardPicker, ioChanged: updateImportExport,
       selectAsset: ref => {
+        if (!ref) {
+          assetState.selected.clear(); assetState.anchor='';
+          assetState.renameKey=''; syncAssetSelectionDom(); return;
+        }
         const key = assetKey(ref); if (!assetByKey(key)) return;
         assetState.selected = new Set([key]); assetState.anchor = key;
         assetState.renameKey = ''; syncAssetSelectionDom();

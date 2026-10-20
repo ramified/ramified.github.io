@@ -116,7 +116,7 @@ async function run() {
     assert.equal(await read(() => api.localAssetSnapshot().assets.find(x => x.id === c.id).data.objectCondition), 'daily task');
     await read(() => { const control = fInput.node.querySelector('[data-object-reference="codomain"]'); control.value = 'category:' + d.id; control.dispatchEvent(new Event('change')); });
     assert.equal(await read(() => JSON.parse(scene.propertyRenderer.editor.objectIO('export', 'preset')).categories.length), 2);
-    await read(() => scene.propertyRenderer.editor.shadow.querySelector('[data-object-kind="category"]').click());
+    await read(() => scene.propertyRenderer.editor.shadow.querySelector('[data-workspace-asset-key^="category:"]').click());
     assert.equal(await read(() => cInput.assetKey), 'category:' + await read(() => c.id));
     assert.equal(await read(() => fInput.assetKey), 'functor:' + await read(() => f.id));
     await read(() => {

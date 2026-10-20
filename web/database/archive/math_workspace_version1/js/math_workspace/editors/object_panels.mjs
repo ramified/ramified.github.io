@@ -2,18 +2,35 @@
 // full calculator and the object display share drawing, geometry and hit tests.
 export const sheafDiagramPanel = String.raw`
 __editor.setAssetAdapter({panel(config) {
-  if (config.operation !== 'sheaf-view') return false;
+  const categoryOverview = config.operation === 'category-diagram';
+  if (config.operation !== 'sheaf-view' && !categoryOverview) return false;
+  if (categoryOverview) __workspaceConfigureCategoryOverview();
+  const assetRef = item => {
+    const key=item?.__workspaceAssetKey || '', split=key.indexOf(':');
+    return split<0 ? null : {kind:key.slice(0,split),id:key.slice(split+1)};
+  };
   const style = document.createElement('style');
   style.textContent = '.workspace-native-content>.sheaf-stage{height:100%!important;min-height:0!important;padding:0!important;box-sizing:border-box;border:1px solid var(--border);border-radius:4px;background:#fffdf8}';
   document.head.append(style);
+  __workspaceConfigureOverviewArrows();
   refs.clearCanvas.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();options.onOverviewAction?.('clear');},{capture:true});
   const setProjectionReadOnly = __workspaceSetProjectionReadOnly;
   __workspaceSetProjectionReadOnly = function(locked) { setProjectionReadOnly(locked); refs.clearCanvas.disabled=false; };
   const collect = document.querySelector('[data-workspace-collect-assets]');
-  if (collect) collect.title = 'Show all variety, sheaf and map Assets on this overview';
-  // Selection and dragging change this view's presentation only. Creation and
-  // deletion remain Assets actions, including when a label is dragged outside.
-  removeCanvasObject = () => false;
+  if (collect) collect.title = categoryOverview ? 'Show all category and functor Assets on this overview' : 'Show all variety, sheaf and map Assets on this overview';
+  // Dragging out removes membership in this overview, preserving Assets.
+  removeCanvasObject = (kind,id) => {
+    const item = objectByKind(kind,id);
+    return item?.__workspaceAssetKey ? options.onRemoveOverviewAsset?.(item.__workspaceAssetKey) : false;
+  };
+  const finishLabelDrag = finishCanvasLabelDrag;
+  finishCanvasLabelDrag = function(event) {
+    if (state.labelDrag) {
+      state.labelDrag.canvasRect = refs.canvas.closest('.sheaf-stage').getBoundingClientRect();
+      if (event?.type === 'pointercancel') state.labelDrag.moved = false;
+    }
+    return finishLabelDrag(event);
+  };
   startMapCanvasDrag = () => {};
   selectObject = function(kind,id,redraw=true) {
     const item = objectByKind(kind,id);
@@ -32,7 +49,7 @@ __editor.setAssetAdapter({panel(config) {
     } else {
       for (const label of refs.canvasLabels.querySelectorAll('[data-object-kind][data-object-id]')) label.classList.toggle('is-active',label.dataset.objectKind===kind&&label.dataset.objectId===id);
     }
-    options.onSelectAsset?.({kind,id:item.__workspaceAssetKey.slice(item.__workspaceAssetKey.indexOf(':')+1)});
+    options.onSelectAsset?.(assetRef(item));
     return true;
   };
   const startLabelDrag = startCanvasLabelDrag;
@@ -41,6 +58,31 @@ __editor.setAssetAdapter({panel(config) {
     if (state.labelDrag) selectObject(target.dataset.objectKind,target.dataset.objectId,false);
     return result;
   };
+  const stage=refs.canvas.closest('.sheaf-stage');
+  let blankPress=null;
+  const isBlank = event => {
+    if (event.target.closest('[data-object-kind],[data-map-control],button,input,select,textarea,a')) return false;
+    const rect=refs.canvas.getBoundingClientRect();
+    const x=Math.floor((event.clientX-rect.left)*refs.canvas.width/rect.width),y=Math.floor((event.clientY-rect.top)*refs.canvas.height/rect.height);
+    // Painted arrows are not blank, even though their canvas ignores hits.
+    return x<0 || y<0 || x>=refs.canvas.width || y>=refs.canvas.height || refs.canvas.getContext('2d').getImageData(x,y,1,1).data[3]===0;
+  };
+  stage.addEventListener('pointerdown',event=>{
+    blankPress=event.button===0 && isBlank(event) ? {id:event.pointerId,x:event.clientX,y:event.clientY,moved:false} : null;
+  },{capture:true});
+  stage.addEventListener('pointermove',event=>{
+    if (blankPress?.id===event.pointerId && Math.hypot(event.clientX-blankPress.x,event.clientY-blankPress.y)>4) blankPress.moved=true;
+  });
+  stage.addEventListener('pointercancel',()=>{blankPress=null;});
+  stage.addEventListener('click',event=>{
+    const press=blankPress;blankPress=null;
+    if (!press || press.moved || !isBlank(event) || state.labelDrag || state.mapControlDrag) return;
+    state.activeVarietyId=null;state.activeSheafId=null;state.activeMapId=null;
+    state.activeSequenceId=null;state.activeGlobalInvariantId=null;
+    __workspaceSetCanvasAppearanceTarget(null);
+    renderCanvas(state.lastResult);
+    options.onSelectAsset?.(null);
+  });
   __editor.mountObjectSurfaces({content:[refs.canvas.closest('.sheaf-stage')]});
   const fitWholeScene = __workspaceUpdateSceneTransform;
   __workspaceUpdateSceneTransform = function() {
@@ -90,10 +132,21 @@ __editor.setAssetAdapter({panel(config) {
     io(action,ref) {
       if (action === 'selection') {
         const item = __workspaceAppearanceObject();
-        return item ? {kind:__workspaceRecordKind(item),id:item.__workspaceAssetKey.slice(item.__workspaceAssetKey.indexOf(':')+1)} : null;
+        return assetRef(item);
       }
-      if (action === 'select') return selectObject(ref.kind,__workspaceNativeId(ref.kind,ref.id));
+      if (action === 'select') {
+        const item=allCanvasObjects().find(item=>item.__workspaceAssetKey===__workspaceAssetKey(ref));
+        return item ? selectObject(__workspaceRecordKind(item),item.id) : false;
+      }
       if (action === 'hide') { const item=allCanvasObjects().find(item=>item.__workspaceAssetKey===ref); if(item)hideCanvasObject(__workspaceRecordKind(item),item.id); return !!item; }
+      if (categoryOverview && action === 'export') return options.onExportOverview?.(ref);
+      if (action === 'layout') {
+        for (const point of ref) {
+          const item=allCanvasObjects().find(item=>item.__workspaceAssetKey===(point.id||point.key));
+          if (item) __workspaceProjectionLayout(item,{viewPosition:point.point||point});
+        }
+        renderCanvas(state.lastResult); return true;
+      }
     }
   });
   __workspaceUpdateSceneTransform();

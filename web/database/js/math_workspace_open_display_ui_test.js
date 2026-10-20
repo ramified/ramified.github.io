@@ -75,7 +75,7 @@ async function run(){
     assert.equal(await read(()=>view.definition.id),'category-diagram');
     assert.equal(await read(()=>JSON.parse(view.propertyRenderer.editor.objectIO('export','preset')).categories.length),2);
     assert.equal(await read(()=>JSON.parse(view.propertyRenderer.editor.objectIO('export','preset')).functors.length),1);
-    assert(await read(()=>view.propertyRenderer.editor.shadow.querySelector('#category-canvas').getClientRects().length>0));
+    assert(await read(()=>view.propertyRenderer.editor.shadow.querySelector('#sheaf-canvas').getClientRects().length>0));
     await read(()=>openAsset(c));
     assert.equal(await read(()=>view.definition.id),'category-diagram');
     assert.equal(await read(()=>JSON.parse(view.propertyRenderer.editor.objectIO('export','preset')).categories.length),2,'opening a category retains the other endpoint');
@@ -84,12 +84,12 @@ async function run(){
     assert.deepEqual(await read(()=>view.propertyRenderer.editor.objectIO('selection')),await read(()=>({kind:c.kind,id:c.id})));
     await read(()=>document.querySelector('[data-asset-key="'+key(functor)+'"]').click());
     assert.deepEqual(await read(()=>view.propertyRenderer.editor.objectIO('selection')),await read(()=>({kind:functor.kind,id:functor.id})),'Assets selection highlights the functor');
-    assert(await read(()=>view.propertyRenderer.editor.shadow.querySelector('[data-object-kind="functor"]').classList.contains('is-selected')));
-    const categoryPoint=await read(()=>{const label=view.propertyRenderer.editor.shadow.querySelector('[data-object-kind="category"][data-object-id="'+key(d)+'"]'),r=label.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};});
+    assert(await read(()=>view.propertyRenderer.editor.shadow.querySelector('[data-workspace-asset-key="'+key(functor)+'"]').classList.contains('is-active')));
+    const categoryPoint=await read(()=>{const label=view.propertyRenderer.editor.shadow.querySelector('[data-workspace-asset-key="'+key(d)+'"]'),r=label.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};});
     await clickPoint(categoryPoint);
     assert.deepEqual(await read(()=>[...api.state.selected]),await read(()=>[key(d)]),'clicking a category selects its Asset');
     const categoryX=await read(()=>JSON.parse(view.propertyRenderer.editor.objectIO('export','preset')).categories.find(item=>item.id===key(d)).x);
-    const categoryDrag=await read(()=>{const label=view.propertyRenderer.editor.shadow.querySelector('[data-object-id="'+key(d)+'"]'),r=label.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};});
+    const categoryDrag=await read(()=>{const label=view.propertyRenderer.editor.shadow.querySelector('[data-workspace-asset-key="'+key(d)+'"]'),r=label.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};});
     await mouse(client,'mouseMoved',categoryDrag.x,categoryDrag.y,0);await mouse(client,'mousePressed',categoryDrag.x,categoryDrag.y,1);await mouse(client,'mouseMoved',categoryDrag.x+25,categoryDrag.y+12,1);await mouse(client,'mouseReleased',categoryDrag.x+25,categoryDrag.y+12,0);
     assert.notEqual(await read(()=>JSON.parse(view.propertyRenderer.editor.objectIO('export','preset')).categories.find(item=>item.id===key(d)).x),categoryX,'selecting a category retains the live drag target');
     await read(()=>{window.categoryOverviewId=view.id;api.closeCanvas(view.id);openAsset(functor);});

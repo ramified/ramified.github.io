@@ -9,6 +9,8 @@ import {parse,serialize} from 'parse5';
 import {editors} from './editors/catalog.mjs';
 import {singleObjectPanel, doubleObjectPanel, sheafDiagramPanel} from './editors/object_panels.mjs';
 import {matrixObjectPanel, categoryObjectPanel} from './editors/linear_category_panels.mjs';
+import {categoryOverviewProjection} from './editors/category_overview.mjs';
+import {overviewArrowPresentation} from './editors/overview_arrows.mjs';
 import {dynkinObjectPanel, strandObjectPanel} from './editors/root_system_panels.mjs';
 import {slicingObjectPanel} from './editors/slicing_panels.mjs';
 import {viewportPanels} from './editors/viewport_panels.mjs';
@@ -176,7 +178,7 @@ async function compileEditor(e){
     const file=src?clean(src):`${e.page}:inline`;
     const original=instrument(src?await read(file):serialize(n),file,file===e.script);
     const augmented=e.id==='complex'&&file===e.script
-      ? original.replace(/\n\}\)\(\);\s*$/,`\n${complexWorkspaceExtension}\n${complexWorkspaceAuthorityExtension}\n${sheafDiagramPanel}\n})();\n`)
+      ? original.replace(/\n\}\)\(\);\s*$/,`\n${complexWorkspaceExtension}\n${complexWorkspaceAuthorityExtension}\n${categoryOverviewProjection}\n${overviewArrowPresentation}\n${sheafDiagramPanel}\n})();\n`)
       : original;
     scripts+=`\n// Original source: ${file}\n${augmented}\n`;
   }
