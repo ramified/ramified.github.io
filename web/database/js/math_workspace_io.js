@@ -54,6 +54,10 @@
       const definition = definitions.find(d => d.id === panel.type);
       if(panel.canvasHeight!=null&&(!Number.isFinite(panel.canvasHeight)||panel.canvasHeight<240||panel.canvasHeight>1600))throw new Error('Invalid saved panel height.');
       if (definition.input ? typeof panel.assetKey !== 'string' : !record(panel.computation) || !record(panel.computation.refs)) throw new Error('Invalid panel inputs.');
+      if (panel.computation?.settings != null) {
+        const settings=panel.computation.settings;
+        if (panel.type!=='plethysm' || !record(settings) || !['symmetric','exterior','advanced'].includes(settings.mode) || !Number.isInteger(settings.degree) || settings.degree<0 || settings.degree>12) throw new Error('Invalid plethysm power settings.');
+      }
       if (panel.computation?.rule && !['diag-gl','diag-o','diag-sp','sum-gl','sum-o','sum-sp','pol-o-gl','pol-sp-gl','gl-o','gl-sp','gl-o-gl','gl-sp-gl'].includes(panel.computation.rule)) throw new Error('Invalid branching rule.');
       if(panel.drafts!=null&&(!Array.isArray(panel.drafts)||panel.drafts.some(d=>!Number.isInteger(d.index)||d.index<0||typeof d.value!=='string')))throw new Error('Invalid saved input drafts.');
       if(panel.legacyView!=null&&(!['young','double-young','dynkin','strand'].includes(panel.legacyView.engine)||!record(panel.legacyView.snapshot)))throw new Error('Invalid saved legacy view.');

@@ -1,0 +1,16 @@
+'use strict';
+const assert=require('node:assert/strict'), creation=require('./math_workspace_creation.js'), model=require('./math_workspace_objects.js');
+const kinds=['variety','sheaf','map',...model.inputKinds];
+const catalog=creation.catalog(Object.fromEntries(kinds.map(kind=>[kind,[[kind,model.kindLabels[kind]||kind]]])),model.kindLabels);
+assert.equal(catalog.length,kinds.length);assert.equal(new Set(catalog.map(x=>x.kind)).size,kinds.length);
+assert(catalog.every(x=>x.subjects.length&&x.description));
+const both=creation.filter(catalog,'',['linear','representation']);
+assert.equal(both.filter(x=>x.kind==='matrix').length,1);assert(both.some(x=>x.kind==='young'));assert(both.some(x=>x.kind==='field'));
+assert.deepEqual(creation.filter(catalog,'braid').map(x=>x.kind),['strands']);
+assert.equal(creation.filter(catalog,'braid',['linear']).length,0);
+assert(creation.filter(catalog,'representation theory').some(x=>x.kind==='matrix'));
+assert.equal(creation.filter(catalog,'zzzz').length,0);
+assert.equal(catalog.find(x=>x.kind==='variety').label,'Variety');
+assert.deepEqual(model.powerRows('symmetric',0),[]);assert.deepEqual(model.powerRows('symmetric',3),[3]);assert.deepEqual(model.powerRows('exterior',3),[1,1,1]);
+assert.throws(()=>model.powerRows('symmetric',13));assert.throws(()=>model.powerRows('exterior',1.5));
+console.log('creation catalog coverage, overlapping subjects, search, and power shapes passed');

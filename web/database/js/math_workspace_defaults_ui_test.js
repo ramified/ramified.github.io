@@ -38,12 +38,13 @@ async function run() {
     };
     assert.equal(await read(() => api.localAssetSnapshot().assets.length), 0, 'an empty workspace loads no unused defaults');
     await backgroundMenu();
-    assert.deepEqual(await read(() => [...document.querySelectorAll('#workspace-assets-context-menu > .workspace-assets-menu-cascade > button')].map(button => button.firstChild.textContent)), ['View', 'Sort by', 'New']);
+    assert.deepEqual(await read(() => [...document.querySelectorAll('#workspace-assets-context-menu > .workspace-assets-menu-cascade > button')].map(button => button.firstChild.textContent)), ['View', 'Sort by']);
     await read(() => {
       const menu = document.querySelector('#workspace-assets-context-menu');
-      const button = [...menu.querySelectorAll('button')].find(button => button.textContent === 'Dynkin');
+      const button = [...menu.querySelectorAll('button')].find(button => button.textContent === 'New…');
       button.click();
     });
+    await read(() => document.querySelector('[data-create-kind="dynkin"]').click());
     await waitFor(() => read(() => api.localAssetSnapshot().assets.some(asset => asset.kind === 'dynkin')));
     await read(() => { window.d = api.localAssetSnapshot().assets.find(asset => asset.kind === 'dynkin'); window.dv = panels.open('dynkin-view', key(d), 'main'); });
     assert.equal(await read(() => dv.computation.status), 'current');

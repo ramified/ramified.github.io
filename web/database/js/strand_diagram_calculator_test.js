@@ -29,7 +29,7 @@ function loadCalculator() {
 })();`);
   const sandbox = {
     console,
-    window: { StrandMath: math, setTimeout() {} },
+    window: { StrandMath: math, StrandDrawing: require('./strand_drawing.js'), setTimeout() {} },
     document: { addEventListener() {} },
     navigator: {}
   };

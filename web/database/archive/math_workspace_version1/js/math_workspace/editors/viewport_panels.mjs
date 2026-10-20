@@ -89,7 +89,7 @@ desiredCanvasSize=function(canvas){
   if(document.querySelector('.workspace-native-surface')&&state.strandSizeMode!=='fixed'&&size.width>0&&size.height>0)return {width:size.width,height:size.height,scrollAxes:{x:false,y:false}};
   return __viewportDesiredCanvasSize(canvas);
 };
-__editor.setAssetAdapter({viewport:()=>{resizeCanvas();renderCanvas();}});
+__editor.setAssetAdapter({viewport:()=>{resizeCanvas();renderCanvas(buildPermutationData());}});
 `,
   'js/category_calculator.js':helpers+String.raw`
 __viewportStyle('.workspace-native-content>div{padding:0!important}.workspace-native-content canvas{min-height:0!important}');

@@ -11,6 +11,9 @@
   const byId = new Map([...calculators, assetsDefinition].map((item) => [item.id, item]));
   const canvases = new Map(), sessions = new Map(), liveCards = new Map(), dockedPanels = new Map();
   const paneCanvases = { primary: '', secondary: '' };
+  let designLab = null, creationPicker = null;
+  let defaultCleanupQueued = false, collectingDefaults = false;
+  const DESIGN_LAB_ID = 'dock:workspace-design-lab';
   let objectWorkspace = null, panelCatalog = null, renderingCardPicker = false, panelManagerOpen = false, restoringWorkspace = false;
   let activeCanvasId = '', focusedPane = 'primary', splitView = false, inspectorSourceId = '', suppressCanvasClickUntil = 0;
   const DEFAULT_CANVAS_HEIGHT = 680, MIN_CANVAS_HEIGHT = 240, MAX_CANVAS_HEIGHT = 1600;
@@ -232,6 +235,7 @@
   }
 
   function renderInspector() {
+    scheduleDefaultCleanup();
     sessions.forEach((session) => {
       const hasVisibleCard = session.editor?.listCards?.().some((card) => !card.docked && card.available !== false && card.visible);
       session.editor?.setInspectorActive?.(!!hasVisibleCard);
@@ -521,7 +525,11 @@
         row.append(check,text);parent.append(row);
       };
       const appendSuggestion = suggestion => {
-        const panel = suggestion.route==='objects' ? allPanels.filter(panel=>panel.computation && panelCatalog.bindingKey(panel.definition.id,panel.computation.refs,panel.computation.rule)===suggestion.key).sort((a,b)=>Number(a.closed)-Number(b.closed))[0] : null;
+        const panel = suggestion.route==='objects' ? allPanels.filter(panel=>{
+          if(!panel.computation)return false;
+          const refs=panel.definition.id==='plethysm'&&!suggestion.refs.lambda&&panel.computation.settings?.mode!=='advanced'?{mu:panel.computation.refs.mu}:panel.computation.refs;
+          return panelCatalog.bindingKey(panel.definition.id,refs,panel.computation.rule)===suggestion.key;
+        }).sort((a,b)=>Number(a.closed)-Number(b.closed))[0] : null;
         const slot = suggestion.route==='assets' ? assetsCardState.slots.get(suggestion.cardType) : null;
         const target = suggestion.refs.asset, instanceKey = target && assetCardInstanceKey(assetRefFromKey(target),suggestion.cardType);
         const isBound = !!slot && !!instanceKey && slot.activeInstanceKey===instanceKey;
@@ -552,8 +560,9 @@
         const sourceId=activeCanvasId,cards=availableCardsFor(sourceId).filter(card=>card.available!==false&&!['input-card','homology-card'].includes(card.key));
         if(cards.length){heading('Current view · '+byId.get(sourceId).label);cards.forEach(card=>append(options,{key:card.key,label:card.label,checked:!!card.visible&&(card.docked?[...dockedPanels.values()].some(record=>record.sessionId===sourceId&&record.key===card.key&&record.location!=='hidden'):!sessions.get(sourceId).inspectorHost.hidden),action:visible=>applyCardVisibility(sourceId,card.key,visible)}));}
       }
-      const closedDocked=[...dockedPanels.values()].filter(record=>record.location==='hidden');
+      const closedDocked=[...dockedPanels.values()].filter(record=>record.location==='hidden'&&record.id!==DESIGN_LAB_ID);
       if(closedDocked.length){heading('Closed panels');closedDocked.forEach(record=>append(options,{key:record.id,label:record.entry.definition.label,checked:false,action:visible=>{if(visible){if(record.source==='native-card')sessions.get(record.sessionId).editor.setCardVisible(record.key,true);placeDockedPanel(record,'side');}}}));}
+      if(designLab?.active) append(options,{key:'design-lab',label:'Design Lab',checked:!document.getElementById('workspace-design-lab')?.hidden,action:visible=>{if(visible)designLab.open();else {const record=dockedPanels.get(DESIGN_LAB_ID);if(record)placeDockedPanel(record,'hidden');}}});
       heading('Workspace');append(options,{key:'importExport',label:'Import / Export',checked:workspaceOwnedCardSlot('importExport').visible,action:visible=>applyCardVisibility('assets','importExport',visible)});
       if(focusedOption)[...options.querySelectorAll('input')].find(input=>input.dataset.optionIdentity===focusedOption)?.focus({preventScroll:true});
     } finally { renderingCardPicker=false; }
@@ -1109,6 +1118,7 @@
     }
   }
   function renderAssetsEditor() {
+    scheduleDefaultCleanup();
     const form = editorForm(); if (!form) return;
     const instance = activeAssetInputInstance(), record = instance ? assetByKey(assetKey(instance.targetRef)) : null;
     if (record) assetState.editorMode = 'modify';
@@ -1853,6 +1863,47 @@
     syncAssetProjectionSessions();
     renderAssets(); renderInspector();
     objectWorkspace?.refresh(localAssetSnapshot());
+    scheduleDefaultCleanup();
+  }
+
+  function defaultAssetRoots() {
+    const roots = new Set(), add = key => { if (typeof key === 'string' && key) roots.add(key); };
+    // Hidden panels retain their saved bindings so reopening remains lossless.
+    for (const panel of objectWorkspace?.panels.values() || []) {
+      add(panel.assetKey);
+      Object.values(panel.computation?.refs || {}).flat().forEach(add);
+    }
+    // Current slot bindings survive hiding; historical instances are caches.
+    for (const slot of assetsCardState.slots.values()) {
+      const instance = assetsCardState.instances.get(slot.activeInstanceKey);
+      if (instance?.targetRef) add(assetKey(instance.targetRef));
+    }
+    for (const instance of assetsCardState.instances.values()) if (instance.dirty) {
+      if (instance.targetRef) add(assetKey(instance.targetRef));
+      const draft = instance.draft;
+      if (draft) { try { referenceKeys(draft.kind, draft.type, draft.data).forEach(add); } catch (_) { /* Keep the model dependency closure for incomplete drafts. */ } }
+    }
+    for (const session of sessions.values()) for (const key of session.assetProjection?.keys || []) add(key);
+    return roots;
+  }
+  function collectUnusedDefaults() {
+    if (restoringWorkspace || collectingDefaults || !objectWorkspace) return;
+    const unused = new Set(window.MathWorkspaceDefaults.unusedDefaultKeys(assetState.snapshot.assets, defaultAssetRoots()));
+    if (!unused.size) return;
+    collectingDefaults = true;
+    try {
+      assetState.snapshot.assets = assetState.snapshot.assets.filter(asset => !unused.has(assetKey(asset)));
+      assetState.snapshot.revision += 1;
+      removeAssetInputInstances(unused);
+      applyAssetSnapshot(localAssetSnapshot(), null, { affectedAssetKeys: unused });
+    } finally { collectingDefaults = false; }
+  }
+  function scheduleDefaultCleanup() {
+    if (!objectWorkspace || restoringWorkspace || collectingDefaults || defaultCleanupQueued) return;
+    defaultCleanupQueued = true;
+    // Finish the current binding/creation transaction before examining owners.
+    // This runs before the next user event, without a debounce or timer delay.
+    Promise.resolve().then(() => { defaultCleanupQueued = false; collectUnusedDefaults(); });
   }
 
   function assetDependencyClosure(keys) {
@@ -1951,7 +2002,6 @@
     return entries;
   }
 
-  const assetIcon = (kind) => ({ young: '▦', lie: '𝔤', field: '𝕂', dynkin: '●—●', strands: '⋈', matrix: '▦', category: '𝒞', functor: '⇒', variety: '𝕍', sheaf: '𝒽', map: '→' }[kind] || '◇');
   const formatAssetTime = (value) => value ? new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—';
   function createAssetItem(asset) {
     const key = assetKey(asset), meta = assetState.metadata.get(key) || {}, item = document.createElement('div');
@@ -1960,7 +2010,7 @@
     item.draggable = true;
     item.setAttribute('role', assetState.layout === 'details' ? 'row' : 'option'); item.setAttribute('aria-selected', String(assetState.selected.has(key)));
     item.setAttribute('aria-label', `${asset.plainName || asset.name}, ${asset.typeLabel}${asset.isDefault ? ', Default asset' : ''}`); item.tabIndex = assetState.selected.has(key) ? 0 : -1;
-    const icon = Object.assign(document.createElement('span'), { className: 'workspace-asset-icon', textContent: assetIcon(asset.kind) }); icon.setAttribute('aria-hidden', 'true');
+    const icon = window.MathWorkspaceAssetIcons.render(asset, assetByKey);
     const name = Object.assign(document.createElement('span'), { className: 'workspace-asset-name', title: asset.name, textContent: `\\(${asset.name}\\)` });
     const type = Object.assign(document.createElement('span'), { className: 'workspace-asset-type', textContent: asset.typeLabel + (asset.isDefault ? ' · Default' : '') });
     const definition = Object.assign(document.createElement('span'), { className: 'workspace-asset-definition', textContent: asset.definition || asset.typeLabel });
@@ -1999,7 +2049,7 @@
     }
     entries.forEach((asset) => content.appendChild(createAssetItem(asset)));
     const rename = content.querySelector('.workspace-asset-rename'); if (rename) { rename.focus(); rename.select(); }
-    if (!assetState.renameKey && window.MathJax?.typesetPromise) { window.MathJax.typesetClear?.([content]); window.MathJax.typesetPromise([content]).catch(() => {}); }
+    if (!assetState.renameKey && window.MathJax?.typesetPromise) { window.MathJax.typesetClear?.([content]); window.MathJax.typesetPromise([content]).then(() => window.MathWorkspaceAssetIcons.typeset(content)).catch(() => {}); }
   }
 
   function selectAssetKey(key, event = {}) {
@@ -2061,7 +2111,14 @@
   async function openSelectedAsset() {
     const selected=selectedAssetRecords();if(selected.length!==1)return;
     const asset=selected[0],type=window.MathWorkspaceObjects.capabilityFor(asset).open;
-    closeAssetsContextMenu();objectWorkspace?.open(type,assetKey(asset),'main');
+    closeAssetsContextMenu();
+    if (!objectWorkspace) return;
+    // Build the display first, then place it beside Assets. Sidebar Assets
+    // already remains visible, so preserve that placement and the current split.
+    const assetsPane = ['primary','secondary'].find(name => paneCanvases[name] === 'assets' && (splitView || name === 'primary'));
+    const panel = objectWorkspace.open(type,assetKey(asset),'hidden');
+    if (assetsPane) { splitView = true; focusedPane = otherPane(assetsPane); }
+    objectWorkspace.move(panel,'main');
   }
   async function modifySelectedAsset() {
     const selected = selectedAssetRecords();
@@ -2135,6 +2192,7 @@
     return record;
   }
   function ensureDefaultDependency(kind, options = {}) {
+    scheduleDefaultCleanup();
     const type = options.type || ASSET_SUBTYPES[kind][0][0];
     const source = window.MathWorkspaceDefaults.assetData(kind, type, options.data || {}, ensureDefaultDependency);
     const data = normalizedAssetData(kind, type, source);
@@ -2296,7 +2354,7 @@
       removeMain: closeCanvas,
       title: (id, label) => { const definition = byId.get(id); if (definition && definition.label !== label) { definition.label = label; renderCanvasTabs(); if (activeCanvasId === id) $('#workspace-canvas-name').textContent = label; } },
       focusPane: name => { if (name === 'primary' || name === 'secondary') focusedPane = name; },
-      pickerChanged: () => { if (!$('#workspace-card-picker').hidden) renderCardPicker(); }
+      pickerChanged: () => { if (!$('#workspace-card-picker').hidden) renderCardPicker(); scheduleDefaultCleanup(); }
     });
     window.MathWorkspaceObjectPanels = objectWorkspace;
   }
@@ -2437,7 +2495,6 @@
       const viewItems = ASSET_LAYOUTS.map((layout) => menuButton(layout[0].toUpperCase() + layout.slice(1), () => { assetState.layout = layout; renderAssets(); }, { checked: assetState.layout === layout }));
       const sortItems = [['creation', 'Creation order'], ['name', 'Name'], ['type', 'Object type'], ['modified', 'Date modified']].map(([value, label]) => menuButton(label, () => { assetState.sort = value; renderAssets(); }, { checked: assetState.sort === value }));
       sortItems.push(Object.assign(document.createElement('div'), { className: 'workspace-assets-menu-separator' }), menuButton('Ascending', () => { assetState.direction = 'asc'; renderAssets(); }, { checked: assetState.direction === 'asc', disabled: assetState.sort === 'creation' }), menuButton('Descending', () => { assetState.direction = 'desc'; renderAssets(); }, { checked: assetState.direction === 'desc', disabled: assetState.sort === 'creation' }));
-      const newItems = ASSET_KINDS.map((assetKind) => menuButton(assetKind === 'young' ? 'Young diagram' : assetKind === 'lie' ? 'Lie type' : assetKind[0].toUpperCase() + assetKind.slice(1), () => createAsset(assetKind), { disabled: assetState.snapshot.capabilities?.[assetKind] === false }));
       const defaults = menuButton('Show default assets', () => {
         assetState.showDefaults = !assetState.showDefaults;
         const visible = new Set(orderedAssets().map(assetKey));
@@ -2446,7 +2503,7 @@
         renderAssets();
       }, { checked: assetState.showDefaults });
       defaults.setAttribute('role', 'menuitemcheckbox'); defaults.setAttribute('aria-checked', String(assetState.showDefaults));
-      menu.append(menuCascade('View', viewItems), menuCascade('Sort by', sortItems), menuCascade('New', newItems), defaults);
+      menu.append(menuCascade('View', viewItems), menuCascade('Sort by', sortItems), menuButton('New…', () => creationPicker.open()), defaults);
     }
     menu.hidden = false; menu.classList.toggle('workspace-assets-menu-left', x > window.innerWidth - 460); menu.style.left = '0px'; menu.style.top = '0px';
     const rect = menu.getBoundingClientRect(); menu.style.left = `${Math.max(6, Math.min(x, window.innerWidth - rect.width - 6))}px`; menu.style.top = `${Math.max(6, Math.min(y, window.innerHeight - rect.height - 6))}px`;
@@ -2494,6 +2551,11 @@
       targetRef: instance.targetRef, cardType: instance.cardType, localUiState: instance.localUiState || {},
       ...(instance.cardType === 'input' ? { draft: instance.draft, dirty: instance.dirty, validation: instance.validation, autosaveStatus: instance.autosaveStatus } : {})
     }));
+    const tabs = openedCanvasIds().filter(id => id !== DESIGN_LAB_ID);
+    const panes = { ...paneCanvases };
+    for (const name of ['primary','secondary']) if (panes[name] === DESIGN_LAB_ID) panes[name] = tabs.find(id => id !== panes[otherPane(name)]) || '';
+    const savedSplit = splitView && !!panes.primary && !!panes.secondary && panes.primary !== panes.secondary;
+    if (!savedSplit) { panes.primary = panes.primary || panes.secondary || tabs[0] || ''; panes.secondary = ''; }
     return window.MathWorkspaceIO.clone({
       schema: window.MathWorkspaceIO.schema, version: 1, assets: localAssetSnapshot().assets,
       panels: objectWorkspace.capturePanels(),
@@ -2501,9 +2563,9 @@
         assetProjection: session.assetProjection ? { keys: [...session.assetProjection.keys], layout: [...session.assetProjection.layout], activeRef: session.assetProjection.activeRef } : null })),
       assetCards: { slots, instances, activeInputInstanceKey: assetState.activeInputInstanceKey, editorMode: assetState.editorMode,
         importExport: { visible: importExportSlot.visible, collapsed: importExportSlot.collapsed, pinned: importExportSlot.pinned, displayMode: importExportSlot.displayMode } },
-      workspace: { tabs: openedCanvasIds(), panes: { ...paneCanvases }, split: splitView, focusedPane, inspectorSourceId,
-        dockedPanels:[...dockedPanels.values()].map(({id,source,key,sessionId,location,canvasHeight,canvasHeightMode})=>({id,source,key,sessionId,location,canvasHeight,canvasHeightMode})),
-        inspectorOrder: [...$('#workspace-cards').children].map(inspectorNodeKey),
+      workspace: { tabs, panes, split: savedSplit, focusedPane: savedSplit ? focusedPane : 'primary', inspectorSourceId: inspectorSourceId === DESIGN_LAB_ID ? '' : inspectorSourceId,
+        dockedPanels:[...dockedPanels.values()].filter(record => record.id !== DESIGN_LAB_ID).map(({id,source,key,sessionId,location,canvasHeight,canvasHeightMode})=>({id,source,key,sessionId,location,canvasHeight,canvasHeightMode})),
+        inspectorOrder: [...$('#workspace-cards').children].filter(node => node.id !== 'workspace-design-lab').map(inspectorNodeKey),
         settings: window.MathWorkspaceSettings?.capture(),
         assets: { layout: assetState.layout, sort: assetState.sort, direction: assetState.direction, showDefaults: assetState.showDefaults, selected: [...assetState.selected], anchor: assetState.anchor, canvasHeight: assetState.canvasHeight, canvasHeightMode: assetState.canvasHeightMode, metadata: [...assetState.metadata] } }
     });
@@ -2605,7 +2667,7 @@
     restoringWorkspace = true;
     try { applyWorkspaceBackup(saved); }
     catch (error) { applyWorkspaceBackup(before); throw new Error('Workspace import failed; the previous workspace was restored. ' + error.message); }
-    finally { restoringWorkspace = false; updateImportExport(); }
+    finally { restoringWorkspace = false; scheduleDefaultCleanup(); updateImportExport(); }
   }
   function chooseOptions(select, entries, placeholder) {
     const previous = select.value; select.replaceChildren(new Option(placeholder, '')); entries.filter((entry) => !entry.disabled).forEach((entry) => select.appendChild(new Option(entry.label, entry.id)));
@@ -2677,6 +2739,21 @@
     window.addEventListener('blur', () => { closeAssetsContextMenu(); closeReferencePicker(); }); window.addEventListener('resize', () => { updateCanvasHeightLayout(); closeAssetsContextMenu(); closeCardPicker(); closeReferencePicker(); });
     document.querySelectorAll('[data-workspace-io-tab]').forEach((tab) => tab.addEventListener('click', () => { const name = tab.dataset.workspaceIoTab; document.querySelectorAll('[data-workspace-io-tab]').forEach((item) => item.setAttribute('aria-selected', String(item === tab))); $('#workspace-io-export-panel').hidden = name !== 'export'; $('#workspace-io-import-panel').hidden = name !== 'import'; }));
     openCanvas('assets');
+    creationPicker = window.MathWorkspaceCreation.init({entries:window.MathWorkspaceCreation.catalog(ASSET_SUBTYPES,window.MathWorkspaceObjects.kindLabels),create:createAsset,capabilities:()=>assetState.snapshot.capabilities,returnFocus:()=>assetState.view});
+    designLab = window.MathWorkspaceDesignLab.init({
+      render: renderAssets,
+      mount(node) {
+        $('#workspace-cards').prepend(node);
+        createDockedPanel({id:DESIGN_LAB_ID,key:node.id,source:'sidebar'});
+        const current = () => dockedPanels.get(DESIGN_LAB_ID) || createDockedPanel({id:DESIGN_LAB_ID,key:node.id,source:'sidebar'});
+        installWorkspaceOwnedCardChrome(node,'design-lab',{hide:()=>placeDockedPanel(current(),'hidden'),actions:[['move-area','Move to main area','↗',()=>placeDockedPanel(current(),'main')]]});
+        const head=node.querySelector('.card-head');
+        const toggle=event=>{if(!shouldToggleWorkspaceOwnedCard(event,node))return;node.classList.toggle('collapsed');head.setAttribute('aria-expanded',String(!node.classList.contains('collapsed')));};
+        head.addEventListener('click',toggle);head.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();toggle(event);}});
+      },
+      show(node) {const record=dockedPanels.get(DESIGN_LAB_ID)||createDockedPanel({id:DESIGN_LAB_ID,key:node.id,source:'sidebar'});placeDockedPanel(record,'side');node.hidden=false;node.scrollIntoView({block:'nearest'});},
+      remove(node) {if(canvases.has(DESIGN_LAB_ID))closeCanvas(DESIGN_LAB_ID);dockedPanels.delete(DESIGN_LAB_ID);byId.delete(DESIGN_LAB_ID);node.remove();renderCardPicker();}
+    });
   }
 
   window.MathWorkspaceAssetsTest = { assetKey, layouts: ASSET_LAYOUTS.slice(), selectAssetKey, orderedAssets, state: assetState, assetRequest, renderAssetsEditor, canonicalAssetName, normalizedAssetData, validateAssetData, referenceFieldSpecs, referenceEligibility, referenceWouldCreateCycle, referenceDragKey, isDirectSheafType, inferredSheafBase, assetMathSignature, invalidateDerivedAssetProperties, createAssetPropertyCommand, commitAssetPropertyCommand, captureAndCommitAssetPropertyCommand, captureSheafComplexLayout, cardSupportsAsset, assetCardInstanceKey, ASSET_CARD_REGISTRY, NATIVE_ASSET_CARD_TYPES, assetsCardState, assetsUtilitySlots, assetInputCardTitleState, createAssetsCardCoordinator, planAssetPropertySlotBinding, bindAssetPropertySlot, handleAssetPropertySessionChange, createAssetInputInstance, bindAssetInputInstance, activeAssetInputInstance, assetInputInstanceForRef, validateAssetInputDraft, createAssetInputCommitCommand, commitAssetInputCommand, updateAssetInputDraft, scheduleAssetInputAutosave, flushAssetInputInstance, cancelAssetInputAutosave, queueAssetInputAutosave, drainAssetInputQueue, removeAssetInputInstances, acceptAssetInputAsyncResult, markAffectedAssetPropertyInstances, reprojectActiveAssetPropertySlots, INPUT_AUTOSAVE_DEBOUNCE_MS, INPUT_AUTOSAVE_MAX_WAIT_MS, DEFAULT_CANVAS_HEIGHT, MIN_CANVAS_HEIGHT, MAX_CANVAS_HEIGHT, canvasHeightFor, sessions };

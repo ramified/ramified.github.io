@@ -500,7 +500,7 @@ assert(source.includes('beginAssetMarquee'), 'rubber-band selection must remain 
 assert(source.includes("layout: 'icons'"), 'Icons must remain the initial layout');
 assert(source.includes("menuCascade('View'"), 'View must use a cascading shortcut menu');
 assert(source.includes("menuCascade('Sort by'"), 'Sort by must use a cascading shortcut menu');
-assert(source.includes("menuCascade('New'"), 'New must use a cascading shortcut menu');
+assert(source.includes("menuButton('New…'"), 'New opens the searchable creation picker');
 assert(source.includes("menuCascade('Properties'"), 'Asset item menus must expose a Properties cascade');
 assert(source.includes('ASSET_CARD_REGISTRY') && source.includes('cardSupportsAsset'), 'all Assets Card compatibility must come from one registry helper');
 assert(source.includes("button.addEventListener('pointerdown', activate)"), 'Asset property submenu actions must activate before a floating submenu can close');
@@ -582,8 +582,8 @@ assert(nativeBundle.includes(Buffer.from(':host{display:block;min-width:0;height
 assert(nativeBundle.includes(Buffer.from('[id$="-wide-host"]:not(:has(.card)){display:none!important}')), 'empty wide-card hosts must not reserve native canvas space');
 assert(nativeBundle.includes(Buffer.from('.workspace-editor-layout .workspace-view-card{min-width:0;width:100%;height:100%')), 'nested calculator canvas panels must fill their allocated workspace height');
 assert(/math_workspace_native_editors_v8\.js\?v=[a-f0-9]{16}/.test(html), 'native editor cache query must be derived from the reproducible bundle hash');
-assert(html.includes('css/math_workspace.css?v=20261020-responsive-views-1'), 'workspace stylesheet changes need a cache-query bump');
-assert(html.includes('js/math_workspace.js?v=20261020-responsive-views-1'), 'workspace controller changes need a cache-query bump');
+assert(html.includes('css/math_workspace.css?v=20261020-polish-3'), 'workspace stylesheet changes need a cache-query bump');
+assert(html.includes('js/math_workspace.js?v=20261020-default-cleanup-1'), 'workspace controller changes need a cache-query bump');
 assert(html.includes('js/calculator_cards.js?v=20260903-1'), 'workspace-owned Assets cards must reuse the shared calculator card chrome');
 assert(nativeBuilder.includes('math_workspace_native_editors_v8.js') && nativeBuilder.includes('Stale live native editor bundle'), 'the source builder must publish and verify the live runtime');
 assert(!source.includes("closeCardPicker(); const picker = assetState.referencePicker"), 'native source selection must not be closed by the global outside-pointer handler');

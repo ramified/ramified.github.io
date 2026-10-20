@@ -70,7 +70,18 @@
     }
     return refs;
   }
-  const api = { assetData, panelRefs };
+  function unusedDefaultKeys(assets, roots = []) {
+    const byKey = new Map(assets.map(asset => [keyOf(asset), asset]));
+    const pending = [...roots, ...assets.filter(asset => !asset.isDefault).map(keyOf)], reachable = new Set();
+    while (pending.length) {
+      const key = pending.pop(), asset = byKey.get(key);
+      if (!asset || reachable.has(key)) continue;
+      reachable.add(key);
+      for (const ref of asset.dependencies || []) pending.push(typeof ref === 'string' ? ref : keyOf(ref));
+    }
+    return assets.filter(asset => asset.isDefault && !reachable.has(keyOf(asset))).map(keyOf);
+  }
+  const api = { assetData, panelRefs, unusedDefaultKeys };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MathWorkspaceDefaults = api;
 }(typeof window !== 'undefined' ? window : globalThis));

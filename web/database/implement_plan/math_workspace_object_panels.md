@@ -1,5 +1,50 @@
 # Mathematical object panels
 
+## Workspace polish and Design Lab
+
+Asset icons are derived by `MathWorkspaceAssetIcons`: nonempty ordinary Young
+diagrams fit within 5 by 5; generalized diagrams have at most five rows and a
+total signed span of six cells. Empty diagrams retain the generic Young icon.
+Small Strands use the same `StrandDrawing` routines as the full editor. Other
+single-letter mathematical labels use MathJax, with a generic fallback.
+Generic icons use a muted color without a corner marker. Details columns scroll
+inside the Assets view when docked; they cannot widen the sidebar or page.
+Strands viewport redraws build the current diagram data before rendering.
+
+The Design Lab is a transient movable panel in the production workspace. Open
+`math_workspace.html?designLab=1` or press Ctrl+Alt+Shift+D outside editable
+controls. Its appearance overrides and panel placement never enter workspace
+backups. Copy design settings exports a candidate preset; Exit removes the
+overrides. There is no second workspace implementation or authentication gate.
+
+LR has an optional `nu` target; its result is the multiplicity in the selected
+stable/fixed-rank decomposition. Incomplete dimension checks cannot certify a
+coefficient. Plethysm saves `{mode, degree}` in computation `settings`, separately
+from native control `options`. New single-representation panels default to
+Symmetric power at degree 2. Power modes bind matching Young assets without
+rewriting shared objects. Old panels without settings restore in Advanced mode.
+
+Automatically created defaults are collected as soon as their last owner releases
+them, after the current synchronous binding transaction. Roots include user-created
+assets, saved panel/slot bindings, dirty input drafts, and explicit scene objects;
+dependencies are followed transitively. Hidden panels retain their bindings for
+lossless reopening. Unused history caches do not retain defaults. Changing a power
+degree therefore releases its previous outer diagram immediately unless another
+owner uses it. Backup restoration waits until every binding is restored before
+collecting old orphan defaults. Run `math_workspace_defaults_test.js` and
+`math_workspace_default_cleanup_ui_test.js` for this lifecycle.
+
+New… uses one searchable creation dialog. The declarative creation catalog has
+overlapping subject tags; subject selection is a union and search narrows it.
+Every kind appears once. Run the icon/creation unit tests and
+`math_workspace_polish_ui_test.js` in addition to affected workspace suites.
+The five polish blocks are implemented. Additional acceptance coverage in
+`math_workspace_computations_creation_ui_test.js` checks LR target lifecycle
+and exports, symmetric/exterior power identities and limits, backup validation,
+and keyboard creation. Picker results retain their DOM when filtering is
+unchanged, including the search field's blur commit. Cancellation restores the
+previous focus; successful creation preserves the new object's input focus.
+
 The Young diagram migration uses three separate records:
 
 - **Asset**: a named mathematical object in the existing workspace asset store.

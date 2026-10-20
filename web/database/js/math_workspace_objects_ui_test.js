@@ -291,7 +291,7 @@ async function run() {
     await waitFor(() => read(() => lrPanel.computation.status === 'missing'));
     assert.equal(await read(() => lrPanel.computation.refs.lie), 'lie:' + await read(() => testAssets.g));
     assert.equal(await read(() => lrPanel.renderArea.hidden), true);
-    assert.equal(await read(() => MathWorkspaceAssetsTest.state.snapshot.assets.filter(a => a.kind === 'young').length), 3);
+    assert.equal(await read(() => MathWorkspaceAssetsTest.state.snapshot.assets.filter(a => a.kind === 'young' && !a.isDefault).length), 3);
     await client.send('Emulation.setDeviceMetricsOverride', { width: 760, height: 1000, deviceScaleFactor: 1, mobile: false }); await delay(200);
     assert.equal(await read(() => document.documentElement.scrollWidth > innerWidth + 1), false);
     assert.deepEqual(errors, []);

@@ -115,6 +115,42 @@ function __objectProject(objects, binding) {
 ` + common;
 
 export const doubleObjectPanel = String.raw`
+let __lrTarget = null;
+let __powerSettings = null;
+const __renderPlethysmDecomposition = renderCoefficientDecomposition;
+renderCoefficientDecomposition = function(outputId, left, terms, options) {
+  if(outputId==='plethysm-out' && __powerSettings && __powerSettings.mode!=='advanced') left=(__powerSettings.mode==='symmetric'?'Sym':'∧')+'<sup>'+__powerSettings.degree+'</sup>(S<sub>'+partitionToString(state.mu.rows)+'</sub>)';
+  return __renderPlethysmDecomposition(outputId,left,terms,options);
+};
+const __renderFullDecomposition = renderDecomposition;
+renderDecomposition = function(terms, lambda, mu, type, rank, fixed) {
+  if(__objectPanel?.operation==='lr') state.workspaceLRCompleteness={warning:terms.warning||'',dimensionCheck:terms.dimensionCheck||null};
+  if (__lrTarget === null || __objectPanel?.operation !== 'lr') return __renderFullDecomposition(terms, lambda, mu, type, rank, fixed);
+  const target = trimPartition(__lrTarget), labels = fixed ? diagramToDynkinLabels(target, rank) : null;
+  const matches = term => fixed ? key(term.labels) === key(labels) : key(trimPartition(term.nu)) === key(target);
+  const coefficient = terms.filter(matches).reduce((sum,term)=>sum+term.coefficient,0);
+  const mode = fixed ? 'fixed ' + lieAlgebraLabel(type,rank) : 'stable ' + type;
+  const output = $('schur-out'); output.replaceChildren();
+  const title = document.createElement('div'); title.className='decomp-formula';
+  title.textContent = 'Multiplicity of ' + partitionToString(target) + ' in ' + partitionToString(lambda) + ' ⊗ ' + partitionToString(mu) + ' (' + mode + ')'; output.append(title);
+  const result = document.createElement('div'); result.dataset.lrCoefficient='';
+  if (terms.warning || terms.dimensionCheck?.ok === false) { result.className='warning-text'; result.textContent='Coefficient is not certified: ' + (terms.warning || 'The decomposition failed its dimension completeness check.'); }
+  else result.textContent = 'Coefficient = ' + coefficient;
+  output.append(result);
+  if(fixed) {const detail=document.createElement('div');detail.className='hint';detail.textContent='Target Dynkin labels: ['+labels.join(', ')+']';output.append(detail);}
+};
+__editor.setAssetAdapter({afterRestore: () => {
+  if(__objectPanel?.operation==='lr' && state.lastDecomposition) {
+    const value=state.lastDecomposition;
+    // Array metadata is not preserved by the native state encoder. Store the
+    // completeness certificate on state so restored targets cannot lose it.
+    Object.assign(value.terms,state.workspaceLRCompleteness || (value.fixed&&__lrTarget!==null?{warning:'Saved result has no completeness certificate. Compute again.'}:{}));
+    renderDecomposition(value.terms,value.lambda,value.mu,value.type,value.rank,value.fixed);__objectStale=false;
+  } else if(__objectPanel?.operation==='plethysm' && state.lastPlethysm) {
+    const value=state.lastPlethysm;
+    renderCoefficientDecomposition('plethysm-out','s<sub>'+partitionToString(value.lambda)+'</sub> ∘ s<sub>'+partitionToString(value.mu)+'</sub>',value.terms,{hue:315});__objectStale=false;
+  }
+}});
 function __objectRows() { return { rows: state.lambda.rows.slice(), type: 'partition' }; }
 function __objectConfigureSpecific(config) {
   if (config.mode === 'input') {
@@ -139,6 +175,8 @@ function __objectConfigureSpecific(config) {
   }
 }
 function __objectProject(objects, binding) {
+  __lrTarget = binding.operation === 'lr' && objects.nu ? objects.nu.data.rows.slice() : null;
+  __powerSettings = binding.operation === 'plethysm' ? binding.settings : null;
   const partitions = ['lambda','mu'].map(slot => objects[slot]?.data?.rows || []);
   const space = objects.space?.data;
   const rows = space ? Number(space.r) : Math.max(state.lambda.maxRows, state.mu.maxRows, ...partitions.map(value => value.length), 5);

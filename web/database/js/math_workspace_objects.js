@@ -182,12 +182,17 @@
   const classicalLie = () => slot('lie', 'Lie type (A–D)', 'lie', { families: ['A','B','C','D'] });
   const dynkin = () => slot('dynkin', 'Dynkin diagram', 'dynkin');
   const strands = () => slot('strands', 'Strands', 'strands');
+  function powerRows(mode, degree) {
+    if (!['symmetric','exterior'].includes(mode) || !Number.isInteger(degree) || degree < 0 || degree > 12) throw new Error('Power degree must be an integer from 0 to 12.');
+    return degree === 0 ? [] : mode === 'symmetric' ? [degree] : Array(degree).fill(1);
+  }
   const definitions = [
     ...slicing.definitions,
     { id: 'young-input', label: 'Young diagram Input', input: 'young' },
     { id: 'young-view', label: 'Young diagram', engine:'young', assetView:true, viewRole:'lambda', light:true, slots:[slot('lambda','Young diagram','young')] },
     { id: 'dynkin-view', label:'Dynkin diagram', engine:'dynkin', assetView:true, viewRole:'dynkin', light:true, slots:[dynkin()] },
     { id: 'strands-view', label:'Strands', engine:'strand', assetView:true, viewRole:'strands', light:true, slots:[strands()] },
+    { id: 'sheaf-view', label:'Variety and Sheaf Diagram', engine:'complex', assetView:true, sheafView:true, readOnly:true, viewRole:'asset', light:true, slots:[slot('asset','Asset',null,{kinds:['variety','sheaf','map']})] },
     { id: 'geometry-view', label:'Projection / 2D Slice', engine:'slice', assetView:true, geometryView:true, slicing:true, slicingScene:true, light:true, slots:[slot('asset','Asset',null,{kinds:[...slicing.kinds,'variety']}),slot('frame','Frame','frame')] },
     { id: 'lie-input', label: 'Lie type Input', input: 'lie' },
     { id: 'field-input', label: 'Field Input', input: 'field' },
@@ -218,23 +223,23 @@
     { id: 'branching', label: 'Branching Rules', engine: 'young', marker: 'br-output', slots: [a(), b()] },
     { id: 'symmetric', label: 'Symmetric Functions', engine: 'young', marker: 'symfun-output', slots: [a()], light: true },
     { id: 'pair-statistics', label: 'Pair Statistics', engine: 'double-young', marker: 'stats-out', slots: [a(), b(), lie()], light: true },
-    { id: 'lr', label: 'Littlewood–Richardson Decomposition', engine: 'double-young', marker: 'schur-out', slots: [a(), b(), lie()] },
+    { id: 'lr', label: 'Littlewood–Richardson Decomposition', engine: 'double-young', marker: 'schur-out', slots: [a(), b(), slot('nu','Target ν','young',{optional:true,emptyLabel:'None — full decomposition'}), lie()] },
     { id: 'invariants', label: 'Lie Algebra Invariants', engine: 'double-young', marker: 'invariants-out', slots: [a(), b(), lie()], light: true },
     { id: 'kostka', label: 'Kostka Tableaux', engine: 'double-young', marker: 'kostka-out', slots: [slot('lambda', 'Shape λ', 'young'), slot('mu', 'Weight μ', 'young')] },
     { id: 'kronecker', label: 'Kronecker Decomposition', engine: 'double-young', marker: 'kronecker-out', slots: [a(), b()] },
-    { id: 'plethysm', label: 'Plethysm Decomposition', engine: 'double-young', marker: 'plethysm-out', slots: [a(), b()] },
+    { id: 'plethysm', label: 'Plethysm Decomposition', engine: 'double-young', marker: 'plethysm-out', slots: [slot('mu','Representation μ','young'), slot('lambda','Outer diagram λ','young',{optional:true,emptyLabel:'Choose outer diagram λ…'})] },
     { id: 'schur', label: 'Schur Functor', engine: 'double-young', marker: 'schur-functor-out', slots: [slot('lambda', 'Representation λ', 'young'), slot('mu', 'Functor shape μ', 'young'), lie()] },
     { id: 'grassmannian', label: 'Grassmannian Cup Product', engine: 'double-young', marker: 'grassmannian-out', slots: [a(), b(), slot('space', 'Grassmannian', 'variety', { subtype: 'grassmannian' })] },
     { id: 'polynomials', label: 'Symmetric Polynomials', engine: 'double-young', marker: 'sympoly-output', slots: [a(), b()] },
     { id: 'slice', label: '2D Weight Slice', engine: 'double-young', marker: 'slice-card-body', slots: [a(), b(), lie()], light: true }
   ];
   const capabilities=Object.fromEntries(['variety','sheaf','map',...inputKinds].map(kind=>[kind,{
-    open:kind==='young'?'young-view':kind==='dynkin'?'dynkin-view':kind==='strands'?'strands-view':kind==='matrix'?'matrix-view':kind==='field'?'field-view':['category','functor'].includes(kind)?'category-diagram':slicing.kinds.includes(kind)?'geometry-view':'asset-view',
+    open:kind==='young'?'young-view':kind==='dynkin'?'dynkin-view':kind==='strands'?'strands-view':kind==='matrix'?'matrix-view':kind==='field'?'field-view':['category','functor'].includes(kind)?'category-diagram':['variety','sheaf','map'].includes(kind)?'sheaf-view':slicing.kinds.includes(kind)?'geometry-view':'asset-view',
     modify:inputKinds.includes(kind)?kind+'-input':null,
     directEdit:['young','dynkin','strands','matrix'].includes(kind),
     properties:definitions.filter(d=>!d.input&&!d.assetView&&(d.slots||[]).some(s=>(s.kinds||[s.kind]).includes(kind))).map(d=>d.id)
   }]));
-  function capabilityFor(asset){return asset?.kind==='variety'&&asset.type==='toric'?{...capabilities.variety,open:'geometry-view',modify:'toric-variety-input'}:capabilities[asset?.kind];}
+  function capabilityFor(asset){return asset?.kind==='variety'&&asset.type==='toric'?{...capabilities.variety,modify:'toric-variety-input'}:capabilities[asset?.kind];}
   const byType = new Map(definitions.map(definition => [definition.id, definition]));
   function compatible(asset, spec, definition) {
     return !!asset && (spec.kinds || [spec.kind]).includes(asset.kind) && (!spec.subtype || asset.type === spec.subtype)
@@ -271,6 +276,19 @@
       }
       else if (!spec.optional || computation.refs[spec.id]) missing.push(spec.label);
     }
+    if (definition.sheafView && objects.asset) {
+      // Project the same authoritative records used by the sheaf calculator.
+      // A sheaf needs its base, and a map needs both endpoints and their bases.
+      const visited = new Set([keyOf(objects.asset)]), pending = [objects.asset];
+      while (pending.length) for (const ref of pending.pop().dependencies || []) {
+        const key = keyOf(ref);
+        if (visited.has(key)) continue;
+        visited.add(key);
+        const dependency = assets.find(asset => keyOf(asset) === key);
+        if (!dependency) { missing.push(key); continue; }
+        objects[key] = dependency; pending.push(dependency);
+      }
+    }
     const dependent = objects.dynkin || objects.strands;
     if (dependent) {
       const parent = assets.find(asset => keyOf(asset) === dependent.data.lie && asset.kind === 'lie');
@@ -282,7 +300,8 @@
       const { r, n } = objects.space.data;
       for (const id of ['lambda', 'mu']) if (objects[id] && (objects[id].data.rows.length > Number(r) || Math.max(0, ...objects[id].data.rows) > Number(n) - Number(r))) missing.push(`${id === 'lambda' ? 'λ' : 'μ'} must fit inside Gr(${r}, ${n})`);
     }
-    return { objects, missing, signature: JSON.stringify([computation.rule, Object.entries(objects).map(([role, asset]) => [role, keyOf(asset), asset.type, asset.data, definition.scene || definition.objectView || definition.id==='matrix-view' ? asset.name : null])]) };
+    if (computation.type === 'plethysm' && !objects.lambda) missing.push('Outer diagram λ');
+    return { objects, missing, signature: JSON.stringify([computation.rule, computation.settings, Object.entries(objects).map(([role, asset]) => [role, keyOf(asset), asset.type, asset.data, definition.scene || definition.assetView || definition.objectView || definition.id==='matrix-view' ? asset.name : null])]) };
   }
   function mount(api) {
     const panels = new Map(), computations = new Map(), ioRenderers = new Map(), legacyViews=new Map();
@@ -350,7 +369,7 @@
         if (target?.computation && targetRenderer) { target.computation.options = targetRenderer.editor.captureAssetProperties(); target.computation.result = targetRenderer.editor.readObjectResult(); api.ioChanged(); }
         return;
       }
-      if (panel.definition.input && panel.definition.input !== 'lie' || panel.definition.id==='matrix-view' || panel.definition.assetView&&!panel.definition.geometryView) {
+      if (panel.definition.input && panel.definition.input !== 'lie' || panel.definition.id==='matrix-view' || panel.definition.assetView&&!panel.definition.geometryView&&!panel.definition.readOnly) {
         const asset = get(panel.definition.id==='matrix-view'?panel.computation.refs.matrix:panel.definition.assetView?panel.computation.refs[panel.definition.viewRole]:panel.assetKey); if (!asset || panel.inputIssues?.length || (panel.definition.input && panel.activeRenderer !== renderer)) return;
         if (asset.kind === 'strands' || panel.definition.slicing) panels.forEach(other => { if (other.definition.display && other.computation.refs.view === panel.id) refreshPanel(other); });
         const value = renderer.editor.collectAssets(); if (!value) return;
@@ -381,7 +400,7 @@
       }
     }
     function setRendererVisible(renderer, visible, property = false) {
-      const view=['young-view','dynkin-view','strands-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
+      const view=['young-view','dynkin-view','strands-view','sheaf-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
       const canvas = !property || view;
       const inspector = property && !view || renderer.role === 'input' && ['matrix', 'category', 'strand','slice'].includes(renderer.engine);
       // Slicing inputs edit Assets; the dedicated slicing scene owns the canvas.
@@ -432,7 +451,7 @@
       const candidates = snapshot.assets.filter(asset => compatible(asset, spec, definition));
       const signature = JSON.stringify(candidates.map(asset => [keyOf(asset), asset.name, asset.definition]));
       if (select.dataset.signature !== signature || (value && ![...select.options].some(option => option.value === value))) {
-        select.replaceChildren(new Option(spec.optional ? 'None (when the rule uses one input)' : `Choose ${spec.label}…`, ''));
+        select.replaceChildren(new Option(spec.emptyLabel || (spec.optional ? 'None (when the rule uses one input)' : `Choose ${spec.label}…`), ''));
         candidates.forEach(asset => select.append(new Option(`${asset.plainName || asset.name} · ${asset.definition || asset.typeLabel}`, keyOf(asset))));
         if (value && !candidates.some(asset => keyOf(asset) === value)) select.append(new Option('Missing or incompatible asset', value));
         select.dataset.signature = signature;
@@ -672,7 +691,7 @@
         if (computation.status !== 'current') throw new Error('Update the property result before exporting it.');
         return panel.propertyRenderer.editor.objectIO('export', format);
       }
-      return JSON.stringify({ property: computation.type, refs: computation.refs, rule: computation.rule, options: computation.options, result: computation.status === 'current' ? panel.propertyRenderer?.editor.readObjectResult() || computation.result || null : null, status: computation.status }, null, 2);
+      return JSON.stringify({ property: computation.type, refs: computation.refs, rule: computation.rule, settings: computation.settings, options: computation.options, result: computation.status === 'current' ? panel.propertyRenderer?.editor.readObjectResult() || computation.result || null : null, status: computation.status }, null, 2);
     }
     function dependencyRecords(asset) {
       const found = new Set([keyOf(asset)]), result = [];
@@ -743,14 +762,41 @@
       if (panel.propertyRenderer) setRendererVisible(panel.propertyRenderer, !!valid && !panel.closed && !panel.collapsed && !panel.node.hidden, true);
       feedback(panel, valid ? '' : 'Choose an available view. Display settings belong to that view.');
     }
+    function bindPower(panel) {
+      const settings = panel.computation.settings;
+      if (settings.mode === 'advanced' || !get(panel.computation.refs.mu)) return;
+      const rows = powerRows(settings.mode, settings.degree), revision = snapshot.revision;
+      const asset = api.ensureDefault('young',{type:'partition',data:{rows}});
+      panel.computation.refs.lambda = keyOf(asset);
+      panel.powerBinding = JSON.stringify(rows);
+      snapshot = api.snapshot();
+      if (snapshot.revision !== revision) api.publishDefaults();
+    }
+    function powerControls(panel) {
+      const mode = element('select','workspace-control'); mode.dataset.plethysmMode='';mode.setAttribute('aria-label','Plethysm mode');
+      mode.append(new Option('Symmetric power','symmetric'),new Option('Exterior power','exterior'),new Option('Advanced','advanced'));
+      const degree = element('input','workspace-control'); degree.type='number';degree.min='0';degree.max='12';degree.step='1';degree.setAttribute('aria-label','Power degree');degree.dataset.powerDegree='';
+      panel.powerMode=mode;panel.powerDegree=degree;panel.powerDegreeRow=field('Degree n',degree);panel.controls.append(field('Operation',mode),panel.powerDegreeRow);
+      mode.addEventListener('change',()=>{panel.computation.settings.mode=mode.value;if(mode.value!=='advanced')bindPower(panel);refreshPanel(panel);});
+      listen(degree,()=>{const n=Number(degree.value);if(!Number.isInteger(n)||n<0||n>12)return;panel.computation.settings.degree=n;bindPower(panel);refreshPanel(panel);});
+    }
     function refreshPanel(panel) {
       if (panel.refreshing) return;
       panel.refreshing = true;
       try {
+        if (panel.definition.id === 'plethysm') {
+          const settings=panel.computation.settings, outer=get(panel.computation.refs.lambda);
+          if(settings.mode!=='advanced') {
+            if(panel.powerBinding && (!outer || outer.type!=='partition' || JSON.stringify(outer.data.rows)!==panel.powerBinding)) settings.mode='advanced';
+            else if(!panel.powerBinding) bindPower(panel);
+          }
+          panel.powerMode.value=settings.mode;sync(panel.powerDegree,settings.degree);panel.powerDegreeRow.hidden=settings.mode==='advanced';
+        }
           panel.selectors.forEach(({ row, select, spec, definition, read }) => {
           const source=definition.geometryView&&get(panel.computation.refs.asset);
           updateSelector(select, spec, definition.geometryView&&spec.id==='frame'?{...definition,frameDimension:source?.data.ambientDimension??Number(source&&slicing.materialize(source,snapshot.assets).data.dimension)}:definition, read());
           row.hidden = definition.id === 'branching' && spec.id === 'mu' && !panel.computation.rule.startsWith('diag-')
+            || definition.id === 'plethysm' && spec.id === 'lambda' && panel.computation.settings.mode !== 'advanced'
             || !!definition.input && spec.id==='asset' && !!get(panel.assetKey)
             || (definition.assetView||definition.objectView||definition.id==='matrix-view') && spec.id!=='frame' && !!get(read())
             || definition.geometryView && spec.id==='frame' && get(panel.computation.refs.asset)?.kind==='frame';
@@ -809,7 +855,7 @@
             if (computation.signature !== context.signature) {
               computation.signature = context.signature; computation.result = null; computation.status = panel.definition.light ? 'current' : 'stale';
               renderer.applying = true;
-              try { renderer.editor.applyAssets({ assets: Object.values(context.objects) }, refOf(panel.definition.geometryView?get(computation.refs.asset):context.objects[panel.definition.viewRole||'lambda']), null, { mode: panel.definition.assetView?'view':'property', operation: panel.definition.id, rule: computation.rule, light: panel.definition.light, references: computation.refs, refs: Object.fromEntries(Object.entries(context.objects).map(([role, asset]) => [role, refOf(asset)])) }); }
+              try { renderer.editor.applyAssets({ assets: Object.values(context.objects) }, refOf(panel.definition.geometryView?get(computation.refs.asset):context.objects[panel.definition.viewRole||'lambda']), null, { mode: panel.definition.assetView?'view':'property', operation: panel.definition.id, rule: computation.rule, settings: computation.settings, light: panel.definition.light, references: computation.refs, refs: Object.fromEntries(Object.entries(context.objects).map(([role, asset]) => [role, refOf(asset)])) }); }
               finally { renderer.applying = false; }
               computation.options = renderer.editor.captureAssetProperties();
               if (panel.definition.light) computation.result = renderer.editor.readObjectResult();
@@ -874,12 +920,14 @@
         if(panel.derivedLabel)panel.derivedLabel.hidden=true;
       } else {
         const computation = { id: options.computationId || `computation-${nextId}`, type, refs, options: {}, result: null, status: 'missing', signature: '' };
+        if(type==='plethysm') computation.settings = options.settings ? {...options.settings} : {mode:options.id || refs.lambda ? 'advanced' : 'symmetric',degree:2};
         if (definition.display) {
           const select = element('select', 'workspace-control'); select.setAttribute('aria-label', 'Target view'); panel.viewSelect = select;
           select.addEventListener('change', () => { computation.refs.view = select.value; refreshPanel(panel); });
           panel.references.append(field('View', select));
         }
         computations.set(computation.id, computation); panel.computation = computation;
+        if(type==='plethysm'){powerControls(panel);if(options.id&&computation.settings.mode!=='advanced')panel.powerBinding=JSON.stringify(powerRows(computation.settings.mode,computation.settings.degree));}
         if (type === 'branching') {
           computation.rule = options.rule || 'diag-gl';
           const rule = element('select', 'workspace-control'); rule.dataset.branchingRule = '';
@@ -924,7 +972,7 @@
         id: panel.id, type: panel.definition.id, assetKey: panel.assetKey, location: panel.location, lastLocation: panel.lastLocation,
         canvasHeight:panel.canvasHeight, canvasHeightMode:panel.canvasHeightMode,
         presentation: { collapsed: panel.node.classList.contains('collapsed'), pinned: panel.node.classList.contains('is-pinned'), displayMode: panel.node.dataset.cardWideState || 'normal' },
-        computation: panel.computation ? { id: panel.computation.id, refs: panel.computation.refs, rule: panel.computation.rule, options: panel.computation.options, status: panel.computation.status } : null,
+        computation: panel.computation ? { id: panel.computation.id, refs: panel.computation.refs, rule: panel.computation.rule, settings: panel.computation.settings, options: panel.computation.options, status: panel.computation.status } : null,
         drafts:[...panel.controls.querySelectorAll('input:not([type="checkbox"]),textarea')].map((control,index)=>({index,value:control.value})),
         legacyView:legacyViews.get(panel.assetKey)||null,
         renderers: [...panel.renderers.entries()].map(([role, renderer]) => ({ role, snapshot: renderer.editor.capture() })).concat(panel.propertyRenderer ? [{ role: 'property', snapshot: panel.propertyRenderer.editor.capture() }] : [])
@@ -947,7 +995,7 @@
           if(native)legacyViews.set(item.assetKey,{engine:native.role==='compact'?'double-young':kind==='strands'?'strand':kind,snapshot:native.snapshot});
         }
       }
-      for (const item of saved) open(item.type, item.assetKey, item.location, { id: item.id, computationId: item.computation?.id, refs: item.computation?.refs, rule: item.computation?.rule, keepPickerOpen: true });
+      for (const item of saved) open(item.type, item.assetKey, item.location, { id: item.id, computationId: item.computation?.id, refs: item.computation?.refs, rule: item.computation?.rule, settings: item.computation?.settings, keepPickerOpen: true });
       for(const panel of [...panels.values()])if(panel.definition.display){const old=panels.get(panel.computation.refs.view);if(old?.definition.input==='strands'){const view=open('strands-view',old.assetKey,'hidden',{keepPickerOpen:true});panel.computation.refs.view=view.id;}}
       panels.forEach(refreshPanel);
       for (const item of saved) {
@@ -975,7 +1023,7 @@
     });
     return { panels, computations, open, move, refresh, listCards, setVisible, syncPresentation, capturePanels, clearPanels, restorePanels, ioEntries, exportFormats, exportText, importText, resize: () => panels.forEach(updateDensity), closed: id => { const panel = panels.get(id); if (panel) { panel.lastLocation = 'main'; panel.location = 'hidden'; panel.closed = true; refreshPanel(panel); api.pickerChanged(); } } };
   }
-  const api = { normalize, fieldLabel, definitions, capabilities, capabilityFor, contextFor, compatible, keyOf, mount, inputKinds, prepareCategoryGraph, strandContext, dynkinEdges, rootObjectIssues, lieEngineIssues, prepareRootImport };
+  const api = { normalize, kindLabels, powerRows, fieldLabel, definitions, capabilities, capabilityFor, contextFor, compatible, keyOf, mount, inputKinds, prepareCategoryGraph, strandContext, dynkinEdges, rootObjectIssues, lieEngineIssues, prepareRootImport };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MathWorkspaceObjects = api;
 }(typeof window !== 'undefined' ? window : globalThis));

@@ -1,0 +1,11 @@
+'use strict';
+const assert=require('node:assert/strict'),{unusedDefaultKeys}=require('./math_workspace_defaults.js');
+const asset=(id,isDefault=true,dependencies=[])=>({kind:'test',id,isDefault,dependencies:dependencies.map(id=>({kind:'test',id}))});
+const assets=[asset('user',false,['shared']),asset('shared',true,['leaf']),asset('leaf'),asset('orphan',true,['orphan-leaf']),asset('orphan-leaf'),asset('cycle-a',true,['cycle-b']),asset('cycle-b',true,['cycle-a']),asset('panel')];
+assert.deepEqual(unusedDefaultKeys(assets,['test:panel']),['test:orphan','test:orphan-leaf','test:cycle-a','test:cycle-b']);
+assert.deepEqual(unusedDefaultKeys(assets,['test:orphan']),['test:cycle-a','test:cycle-b','test:panel']);
+assert(!unusedDefaultKeys(assets).includes('test:user'),'user-created assets are never collected');
+assert.deepEqual(unusedDefaultKeys([asset('root',false,['middle']),asset('middle',true,['leaf']),asset('leaf')]),[]);
+assert.deepEqual(unusedDefaultKeys([asset('middle',true,['leaf']),asset('leaf')]),['test:middle','test:leaf']);
+assert.deepEqual(unusedDefaultKeys([asset('root',false,['missing'])]),[]);
+console.log('default collection: user roots, shared and transitive dependencies, panel roots, and orphan cycles passed');
