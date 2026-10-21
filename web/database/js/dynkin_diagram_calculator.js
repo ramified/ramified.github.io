@@ -54,7 +54,7 @@
   }
 
   function isSimplyLacedFinite(type) {
-    return type === 'A' || type === 'D' || type === 'E6' || type === 'E7' || type === 'E8';
+    return type === 'A' || type === 'D' || type === 'E6' || type === 'E7' || type === 'E8' || (state.rank === 1 && (type === 'B' || type === 'C'));
   }
 
   function supportsStartingFunction(type) {
@@ -71,8 +71,8 @@
 
   function rankBounds(type) {
     if (type === 'A') return { min: 1, max: 12, fallback: 6 };
-    if (type === 'B' || type === 'C') return { min: 2, max: 12, fallback: 6 };
-    if (type === 'D') return { min: 4, max: 12, fallback: 6 };
+    if (type === 'B' || type === 'C') return { min: 1, max: 12, fallback: 6 };
+    if (type === 'D') return { min: 2, max: 12, fallback: 6 };
     const r = EXCEPTIONAL_RANK[type] || 1;
     return { min: r, max: r, fallback: r };
   }
@@ -91,49 +91,7 @@
     return Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => callback(i, j)));
   }
 
-  function cartanMatrix(type, rank) {
-    if (type === 'A') return makeMatrix(rank, (i, j) => i === j ? 2 : Math.abs(i - j) === 1 ? -1 : 0);
-    if (type === 'B') {
-      const C = makeMatrix(rank, (i, j) => i === j ? 2 : Math.abs(i - j) === 1 ? -1 : 0);
-      C[rank - 2][rank - 1] = -2;
-      C[rank - 1][rank - 2] = -1;
-      return C;
-    }
-    if (type === 'C') {
-      const C = makeMatrix(rank, (i, j) => i === j ? 2 : Math.abs(i - j) === 1 ? -1 : 0);
-      C[rank - 2][rank - 1] = -1;
-      C[rank - 1][rank - 2] = -2;
-      return C;
-    }
-    if (type === 'D') {
-      const C = makeMatrix(rank, (i, j) => i === j ? 2 : 0);
-      for (let i = 0; i < rank - 2; i++) {
-        C[i][i + 1] = -1;
-        C[i + 1][i] = -1;
-      }
-      C[rank - 3][rank - 1] = -1;
-      C[rank - 1][rank - 3] = -1;
-      return C;
-    }
-    if (type === 'G2') return [[2, -1], [-3, 2]];
-    if (type === 'F4') return [[2, -1, 0, 0], [-1, 2, -2, 0], [0, -1, 2, -1], [0, 0, -1, 2]];
-    if (type === 'E6') {
-      const C = makeMatrix(6, (i, j) => i === j ? 2 : 0);
-      [[0, 1], [1, 2], [2, 3], [3, 4], [2, 5]].forEach(([a, b]) => { C[a][b] = -1; C[b][a] = -1; });
-      return C;
-    }
-    if (type === 'E7') {
-      const C = makeMatrix(7, (i, j) => i === j ? 2 : 0);
-      [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [2, 6]].forEach(([a, b]) => { C[a][b] = -1; C[b][a] = -1; });
-      return C;
-    }
-    if (type === 'E8') {
-      const C = makeMatrix(8, (i, j) => i === j ? 2 : 0);
-      [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [2, 7]].forEach(([a, b]) => { C[a][b] = -1; C[b][a] = -1; });
-      return C;
-    }
-    throw new Error('Unsupported Dynkin type.');
-  }
+  function cartanMatrix(type, rank) { return window.DynkinDiagramGeometry.cartanMatrix(type, rank); }
 
   function positiveRoots(C) {
     const n = C.length;
@@ -190,7 +148,7 @@
         : type === 'D' ? 2 * n - 2
           : { E6: 12, E7: 18, E8: 30, F4: 12, G2: 6 }[type];
     const dualCoxeter = type === 'A' ? n + 1
-      : type === 'B' ? 2 * n - 1
+      : type === 'B' ? (n === 1 ? 2 : 2 * n - 1)
         : type === 'C' ? n + 1
           : type === 'D' ? 2 * n - 2
             : { E6: 12, E7: 18, E8: 30, F4: 9, G2: 4 }[type];
@@ -465,33 +423,7 @@
     else window.setTimeout(run, 0);
   }
 
-  function layoutNodes(type, rank, width, height) {
-    const midY = height * 0.52;
-    const edge = Math.min(118, Math.max(70, Math.min((width - 172) / Math.max(1, rank - 1), height * 0.22)));
-    const nodes = [];
-    function line(count, y = midY, centerX = width / 2) {
-      const startX = centerX - edge * (count - 1) / 2;
-      for (let i = 0; i < count; i++) nodes[i] = { x: startX + edge * i, y };
-    }
-    if (type === 'A' || type === 'B' || type === 'C' || type === 'F4' || type === 'G2') {
-      line(rank);
-    } else if (type === 'D') {
-      const chainCount = rank - 2;
-      const centerX = width / 2 - edge / 2;
-      const startX = centerX - edge * (chainCount - 1) / 2;
-      for (let i = 0; i < chainCount; i++) {
-        nodes[i] = { x: startX + edge * i, y: midY };
-      }
-      const fork = nodes[rank - 3];
-      nodes[rank - 2] = { x: fork.x + edge * Math.cos(Math.PI / 6), y: midY - edge * Math.sin(Math.PI / 6) };
-      nodes[rank - 1] = { x: fork.x + edge * Math.cos(Math.PI / 6), y: midY + edge * Math.sin(Math.PI / 6) };
-    } else if (type === 'E6' || type === 'E7' || type === 'E8') {
-      const chain = rank - 1;
-      line(chain);
-      nodes[rank - 1] = { x: nodes[2].x, y: midY - edge };
-    }
-    return nodes;
-  }
+  function layoutNodes(type, rank, width, height) { return window.DynkinDiagramGeometry.layoutNodes(type, rank, width, height); }
 
   function drawDynkin() {
     const canvas = $('dynkin-canvas');
@@ -534,7 +466,7 @@
 
     const sym = cartanSymmetrizer(C);
     const maxD = Math.max(...sym);
-    const selectedLookup = new Set(selectedIndices());
+    const selectedLookup = new Set(state.highlightSelection === false ? [] : selectedIndices());
     nodes.forEach((node, index) => {
       const selected = selectedLookup.has(index);
       const longRoot = Math.abs(sym[index] - maxD) < 1e-8;
@@ -690,6 +622,10 @@
 
   function parabolicMatrixModel(type, rank, selected) {
     const indices = Array.isArray(selected) ? selected.slice().sort((a, b) => a - b) : [selected];
+    if (type === 'D' && rank === 2) {
+      const factors = [0,1].map(vertex => indices.includes(vertex) ? '\\mathfrak{b}' : '\\mathfrak{sl}_2');
+      return {title:'so(4)',titleLatex:'\\mathfrak{so}_4\\cong\\mathfrak{sl}_2\\oplus\\mathfrak{sl}_2',blockSizes:[],matrixShape:[],flag:factors.join('\\oplus'),definitionLines:[`The parabolic is ${inlineMath(factors.join('\\oplus'))}; each marked vertex selects the Borel in its own A1 factor.`]};
+    }
     const nodes = indices.map((index) => index + 1);
     const i = nodes[0];
     if (type === 'A') {
@@ -1502,7 +1438,7 @@
 
   function quiverOrientationMatches(a, b) {
     const keys = Object.keys(b);
-    return keys.length > 0 && keys.every((keyName) => a[keyName] === b[keyName]);
+    return keys.every((keyName) => a[keyName] === b[keyName]);
   }
 
   function bipartiteVertexColors(C) {

@@ -2001,8 +2001,8 @@
   }
 
   function rankBoundsForGroup(groupType = state.groupType) {
-    if (groupType === 'B' || groupType === 'C') return { min: 2 };
-    if (groupType === 'D') return { min: 4 };
+    if (groupType === 'B' || groupType === 'C') return { min: 1 };
+    if (groupType === 'D') return { min: 2 };
     return { min: 1 };
   }
 

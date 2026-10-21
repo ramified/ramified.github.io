@@ -4953,6 +4953,7 @@ function cartanMatrix(typeStr) {
   }
 }
 function makeBn(n) {
+  if (n === 1) return [[2]];
   const C = [];
   for(let i=0;i<n;i++){C.push([]); for(let j=0;j<n;j++){
     if(i===j) C[i][j]=2;
@@ -4966,6 +4967,7 @@ function makeBn(n) {
   return C;
 }
 function makeCn(n) {
+  if (n === 1) return [[2]];
   const C = [];
   for(let i=0;i<n;i++){C.push([]); for(let j=0;j<n;j++){
     if(i===j) C[i][j]=2;
@@ -4978,6 +4980,7 @@ function makeCn(n) {
   return C;
 }
 function makeDn(n) {
+  if (n === 2) return [[2,0],[0,2]];
   const C = [];
   for(let i=0;i<n;i++){C.push([]); for(let j=0;j<n;j++){
     if(i===j) C[i][j]=2;
@@ -5834,7 +5837,7 @@ function onTypeChange() {
   // Set sensible default rank and min per type
   const rankInput = document.getElementById('lie-rank');
   if (isClassical) {
-    const mins = {A:1, B:2, C:2, D:3};
+    const mins = {A:1, B:1, C:1, D:2};
     rankInput.min = mins[type];
     if (parseInt(rankInput.value) < mins[type]) rankInput.value = mins[type];
   }

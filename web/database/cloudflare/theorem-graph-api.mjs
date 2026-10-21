@@ -31,11 +31,17 @@ function validateWrite(data) {
   if (!Number.isSafeInteger(data.baseRevision) || data.baseRevision < 0 || !idPattern.test(data.writeId) || !idPattern.test(data.sessionId)) throw fault(400, 'Invalid save version.');
   validatePayload(data.payload);
 }
+function savedName(data, fallback) {
+  if (data.title === undefined) return fallback;
+  if (typeof data.title !== 'string' || !data.title.trim() || data.title.trim().length > 240) throw fault(400, 'Use a saved version name between 1 and 240 characters.');
+  return data.title.trim();
+}
 async function updateGraph(env, id, existing, data, now, shareHash = null) {
   validateWrite(data);
-  const title = validatePayload(data.payload), content = JSON.stringify(data.payload);
+  // Shared editing changes graph content; only the owner controls its library name.
+  const title = shareHash ? existing.title : savedName(data, existing.title), content = JSON.stringify(data.payload);
   if (existing.write_id === data.writeId) {
-    if (existing.content !== content) throw fault(409, 'Save identifier was reused with different content.');
+    if (existing.content !== content || existing.title !== title) throw fault(409, 'Save identifier was reused with different content.');
     return { revision: existing.revision, updatedAt: existing.updated_at };
   }
   // Permission is checked again inside the conditional write so revocation wins
@@ -157,12 +163,8 @@ async function routes(request, env, ctx) {
   }
   if (operation === 'rename' && method === 'POST') {
     const data = await readJson(request);
-    if (typeof data.title !== 'string' || !data.title.trim() || data.title.trim().length > 120) throw fault(400, 'Use a graph name between 1 and 120 characters.');
+    if (typeof data.title !== 'string' || !data.title.trim() || data.title.trim().length > 120) throw fault(400, 'Use a saved version name between 1 and 120 characters.');
     const payload = JSON.parse(row.content);
-    payload.graph.title = data.title.trim();
-    if (payload.graph.titleNode) payload.graph.titleNode.label = payload.graph.title;
-    payload.drafts = (payload.drafts || []).filter(draft => draft.selector !== '#graph-title');
-    if (payload.editor) payload.editor.detailEditBaseline = null;
     return json({ ...await updateGraph(env, id, row, { ...data, payload, checkpoint: true }, now), payload });
   }
   if (operation) throw fault(405, 'Method not allowed.');
@@ -187,7 +189,7 @@ async function routes(request, env, ctx) {
       SELECT ?,?,?,1,?,?,?,? WHERE (SELECT COUNT(*) FROM documents d LEFT JOIN graph_owners o ON o.document_id=d.id WHERE COALESCE(o.username,?)=?)<500
       AND NOT EXISTS (SELECT 1 FROM graph_deletions WHERE document_id=?)
       ON CONFLICT(id) DO NOTHING RETURNING revision,updated_at AS updatedAt`)
-      .bind(id, validatePayload(data.payload), JSON.stringify(data.payload), now, now, data.sessionId, data.writeId, adminName(env), user.username, id),
+      .bind(id, savedName(data, validatePayload(data.payload)), JSON.stringify(data.payload), now, now, data.sessionId, data.writeId, adminName(env), user.username, id),
     env.DB.prepare(`INSERT INTO graph_owners SELECT id,? FROM documents WHERE changes()=1 AND id=? AND write_id=? AND session_id=?
       ON CONFLICT(document_id) DO NOTHING`).bind(user.username, id, data.writeId, data.sessionId)
   ]);

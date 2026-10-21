@@ -4181,7 +4181,7 @@
     window.onTypeChange = function onTypeChange() {
       const type = currentType(), rankInput = $('lie-rank'), rankWrap = $('lie-rank-wrap');
       if (isClassicalType(type)) {
-        const mins = { A:1, B:2, C:2, D:3 };
+        const mins = { A:1, B:1, C:1, D:2 };
         rankWrap.style.display = 'flex'; rankInput.min = String(mins[type]);
         if (Number(rankInput.value) < mins[type]) rankInput.value = String(mins[type]);
       } else rankWrap.style.display = 'none';

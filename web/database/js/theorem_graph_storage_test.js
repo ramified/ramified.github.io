@@ -30,7 +30,7 @@ class Remote {
     if (this.hold) await this.hold();
     if (existing?.writeId === body.writeId) return { revision: existing.revision };
     if ((existing?.revision || 0) !== body.baseRevision) throw Object.assign(new Error('Cloud conflict'), { status: 409 });
-    this.records.set(id, { id, title: body.payload.graph.title, payload: clone(body.payload), revision: body.baseRevision + 1, writeId: body.writeId, updatedAt: Date.now() });
+    this.records.set(id, { id, title: body.title ?? existing?.title ?? body.payload.graph.title, payload: clone(body.payload), revision: body.baseRevision + 1, writeId: body.writeId, updatedAt: Date.now() });
     if (this.loseReply) { this.loseReply = false; throw new Error('Connection lost after commit'); }
     return { revision: body.baseRevision + 1 };
   }
@@ -41,6 +41,7 @@ async function run() {
   await a.create(payload('Initial'));
   const id = a.current.id;
   await a.save(payload('Offline edit'));
+  assert.equal(a.current.title, 'Initial', 'content title edits preserve the saved version name');
   assert(a.dirty()); await a.sync(); assert.equal(api.calls.length, 0);
   const reloaded = new Library({ store, api });
   assert.equal((await reloaded.openLocal(id)).graph.title, 'Offline edit');
@@ -61,8 +62,10 @@ async function run() {
   await reloaded.save(payload('First request'));
   const syncing = reloaded.sync(); await inFlight;
   await reloaded.save(payload('Edit while saving'));
+  await reloaded.rename(id, 'Named during sync');
   api.hold = null; release(); await syncing;
   assert.equal(api.records.get(id).payload.graph.title, 'Edit while saving');
+  assert.equal(api.records.get(id).title, 'Named during sync', 'a rename during a content save is drained separately');
   assert(!reloaded.dirty());
 
   api.records.get(id).revision++;
@@ -73,6 +76,7 @@ async function run() {
   const restored = await reloaded.useCloudVersion();
   assert.equal(restored.graph.title, 'Another device');
   assert((await store.list()).some(record => record.recovered && record.payload.graph.title === 'My unsynced work'));
+  assert.equal((await store.list()).find(record => record.recovered).title, 'Named during sync', 'recovered copies retain their saved name');
 
   const tab = new Library({ store, api });
   await tab.openLocal(id);
@@ -98,18 +102,26 @@ async function run() {
   const original = payload('Before rename');
   original.graph.titleNode = { label: 'Before rename' };
   original.drafts = [{ selector: '#graph-title', value: 'Old raw title ' }, { selector: '#node-label', value: 'Node draft ' }];
-  await management.create(original); await management.sync();
+  await management.create(original, 'First proof'); await management.sync();
   const firstId = management.current.id;
-  await management.create(payload('Keep this open')); await management.sync();
+  await management.create(original, 'Alternative proof'); await management.sync();
   const currentId = management.current.id;
   await management.rename(firstId, '  Renamed graph  '); await management.sync();
   assert.equal(management.current.id, currentId, 'renaming another row keeps the editor on its current graph');
   const renamed = await management.store.read(firstId);
-  assert.equal(renamed.payload.graph.title, 'Renamed graph');
-  assert.equal(renamed.payload.graph.titleNode.label, 'Renamed graph');
-  assert.deepEqual(renamed.payload.drafts, [{ selector: '#node-label', value: 'Node draft ' }]);
-  assert(renamed.history.some(entry => entry.payload.graph.title === 'Before rename'));
+  assert.equal(renamed.title, 'Renamed graph');
+  assert.deepEqual(renamed.payload, original, 'renaming preserves graph content, title node, editor state and raw drafts');
+  assert.equal(renamed.history.length, 0, 'a library rename does not create a graph-content checkpoint');
+  assert.equal(management.current.title, 'Alternative proof');
+  assert.deepEqual(management.current.payload, original, 'different saved names can distinguish the same graph title');
   assert.equal(management.api.records.get(firstId).title, 'Renamed graph');
+  assert.deepEqual(management.api.records.get(firstId).payload, original);
+  await management.openLocal(firstId);
+  await management.save(payload('Edited graph title')); await management.sync();
+  assert.equal(management.current.title, 'Renamed graph', 'autosave keeps the saved name after a title change');
+  await management.save(original, true); await management.sync();
+  assert.equal(management.current.title, 'Renamed graph', 'restoring content keeps the saved name');
+  await management.openLocal(currentId);
   management.api.records.get(firstId).revision++;
   await assert.rejects(management.remove(firstId), /changed on another device/);
   assert(await management.store.read(firstId), 'a rejected delete retains the local graph');
@@ -122,6 +134,30 @@ async function run() {
   assert.equal(await management.store.read(firstId), null);
   assert(!management.api.records.has(firstId));
   assert(await management.store.read(currentId), 'deleting one graph preserves the other rows');
-  console.log('PASS theorem storage: rename checkpoints and drafts, non-active rows, stale/offline delete rejection, local/cloud removal');
+  console.log('PASS theorem storage: independent saved names, same-title versions, content/draft preservation, non-active rows, restores, stale/offline delete rejection, local/cloud removal');
+
+  const legacyStore = new MemoryStore();
+  const legacy = new Library({ store: legacyStore, api: management.api });
+  const oldRecord = management.api.records.get(currentId);
+  await legacyStore.put({ ...legacy.make(oldRecord.payload), id: currentId, title: oldRecord.title,
+    cloudRevision: oldRecord.revision, syncedPayload: JSON.stringify(oldRecord.payload) }, 0);
+  await legacy.openLocal(currentId);
+  assert(!legacy.dirty(), 'legacy records need no forced upload');
+  await legacy.rename(currentId, 'Legacy name');
+  assert(legacy.dirty(), 'metadata-only edits to legacy records are dirty');
+  const legacyReload = new Library({ store: legacyStore, api: management.api });
+  await legacyReload.openLocal(currentId); legacyReload.online = true; legacyReload.api.loseReply = true;
+  await assert.rejects(legacyReload.sync(), /Connection lost/);
+  await legacyReload.rename(currentId, 'After lost rename response');
+  await legacyReload.sync();
+  assert.equal(management.api.records.get(currentId).title, 'After lost rename response');
+  assert.deepEqual(management.api.records.get(currentId).payload, original);
+  assert(!legacyReload.dirty());
+  const remoteOnly = new Library({ store: new MemoryStore(), api: management.api }); remoteOnly.online = true;
+  await remoteOnly.rename(currentId, 'Remote-only name'); await remoteOnly.sync();
+  assert.equal(remoteOnly.current, null, 'renaming a cloud-only row does not open it');
+  await legacyReload.openCloud(currentId);
+  assert.equal(legacyReload.current.title, 'Remote-only name', 'cloud reload restores name independently of content');
+  console.log('PASS theorem storage: legacy metadata migration, offline rename reload, uncertain rename retries and remote-only names');
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

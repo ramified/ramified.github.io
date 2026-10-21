@@ -72,7 +72,7 @@ async function run() {
     assert.equal(await read(()=>panels.panels.get(scene.id).propertyRenderer.editor.objectIO('view').viewport.zoom),1.7);
     assert.equal(await read(()=>panels.panels.get(display.id).computation.refs.view),await read(()=>scene.id));
     assert.equal(await read(()=>panels.panels.get(hiddenInput.id).location),'hidden');
-    assert.deepEqual(await read(()=>panels.panels.get(diagram.id).propertyRenderer.editor.captureAssetProperties().layout.find(item=>item.id===key(c))),await read(()=>({id:key(c),x:.3,y:.7})));
+    assert.deepEqual(await read(()=>{const point=panels.panels.get(diagram.id).propertyRenderer.editor.captureAssetLayout().find(item=>item.key===key(c)).point;return {x:point.x,y:point.y};}),{x:.3,y:.7});
     assert.equal(await read(()=>api.activeAssetInputInstance().draft.name),'unfinished ');
     assert.equal(await read(()=>api.activeAssetInputInstance().draft.data.dimension),'');
     assert.equal(await read(()=>api.sessions.has('sheaf-complexes')),true);

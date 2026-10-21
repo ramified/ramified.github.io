@@ -8,6 +8,7 @@ function loadCalculator() {
   let source = fs.readFileSync(path.join(__dirname, 'strand_diagram_calculator.js'), 'utf8');
   source = source.replace(/\}\)\(\);\s*$/, `return {
     state,
+    buildPermutationData,
     calculationTaskValue,
     setCalculationTask,
     basisTaskActive,
@@ -363,6 +364,25 @@ function testHtmlIntegration() {
 }
 
 testUiWordOrderAndStaleState();
+for(const [groupType,rank] of [['B',1],['C',1],['D',2]]) {
+  const api=loadCalculator();
+  const value=indices=>{api.importJson(JSON.stringify({kind:'strand-diagram-calculator',version:4,groupType,strandCount:rank,appliedGenerators:indices.map(index=>({family:'coxeter',index}))}));return api.buildPermutationData();};
+  const generator=value([0]);assert.strictEqual(api.state.strandCount,rank);assert.strictEqual(generator.length,1);assert.strictEqual(generator.tracks.length,rank*2);
+  assert.deepStrictEqual(host(value([0,0]).signedOneLine),Array.from({length:rank},(_,i)=>i+1));
+  if(groupType==='D') {
+    assert.deepStrictEqual(host(value([0,1]).signedOneLine),host(value([1,0]).signedOneLine),'the D2 generators commute');
+    assert.strictEqual(new Set([[],[0],[1],[0,1]].map(indices=>value(indices).signedOneLine.join(','))).size,4);
+  }
+}
+{
+  const api=loadCalculator();
+  api.importJson(JSON.stringify({kind:'strand-diagram-calculator',version:4,groupType:'D',strandCount:3,appliedGenerators:[{family:'coxeter',index:0},{family:'coxeter',index:2}]}));
+  assert.strictEqual(api.state.strandCount,3,'D3 imports must retain rank 3');
+  assert.deepStrictEqual(host(api.state.appliedSteps),[{family:'coxeter',index:0},{family:'coxeter',index:2}]);
+  const data=api.buildPermutationData();
+  assert.strictEqual(data.rank,3);assert.strictEqual(data.tracks.length,6);
+  assert.strictEqual(data.signedOneLine.filter(n=>n<0).length%2,0,'D3 preserves even signs');
+}
 testVersionThreeAndFourImports();
 testRelationTaskPreservesStrandCalculation();
 testBasisTaskPreservesStrandCalculation();

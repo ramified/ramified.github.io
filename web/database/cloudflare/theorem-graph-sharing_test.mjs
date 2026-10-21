@@ -44,7 +44,9 @@ try {
   assert.equal((await request('/documents/alice-graph', 'DELETE', { baseRevision: 1 }, bob)).status, 404);
   assert.equal((await request('/documents/alice-graph/rename', 'POST', { ...write('', 1), title: 'Stolen' }, bob)).status, 404);
   const rename = await request('/documents/alice-graph/rename', 'POST', { ...write('', 1), title: 'Renamed' }, alice);
-  assert.equal(rename.status, 200); assert.equal(rename.body.revision, 2); assert.equal(rename.body.payload.graph.titleNode.label, 'Renamed');
+  assert.equal(rename.status, 200); assert.equal(rename.body.revision, 2);
+  assert.deepEqual(rename.body.payload, payload('Alice only'), 'renaming preserves graph content and private drafts');
+  assert.equal((await request('/documents/alice-graph', 'GET', undefined, alice)).body.title, 'Renamed');
   assert.equal((await request('/documents/alice-graph/history/1', 'GET', undefined, alice)).body.payload.graph.title, 'Alice only');
   assert.equal((await request('/documents/alice-graph/shares', 'POST', { canEdit: false, canSave: true }, alice)).status, 400);
   const tokens = [];
@@ -57,11 +59,12 @@ try {
     if (!canSave) assert.equal((await request('/shared', 'PUT', write('Forbidden', 2), '', { 'X-Theorem-Share': link.body.token })).status, 403);
   }
   const writable = tokens[2], headers = { 'X-Theorem-Share': writable.token };
-  const sharedWrite = write('Shared update', 2);
+  const sharedWrite = { ...write('Shared update', 2), title: 'Recipient cannot rename the library entry' };
   assert.equal((await request('/shared', 'PUT', sharedWrite, '', headers)).body.revision, 3);
   assert.equal((await request('/shared', 'PUT', sharedWrite, '', headers)).body.revision, 3, 'uncertain shared save retries are idempotent');
   assert.equal((await request('/shared', 'PUT', write('Stale shared write', 2), '', headers)).status, 409);
   assert.equal((await request('/documents/alice-graph', 'GET', undefined, alice)).body.payload.graph.title, 'Shared update');
+  assert.equal((await request('/documents/alice-graph', 'GET', undefined, alice)).body.title, 'Renamed', 'shared content edits preserve the owner’s saved name');
   assert.equal((await request('/documents/alice-graph/shares/' + writable.id, 'DELETE', undefined, bob)).status, 404);
   assert.equal((await request('/documents/alice-graph/shares/' + writable.id, 'DELETE', undefined, alice)).status, 200);
   assert.equal((await request('/shared', 'GET', undefined, '', headers)).status, 404);

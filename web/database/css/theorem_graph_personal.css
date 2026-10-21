@@ -16,7 +16,7 @@
 .theorem-personal-history { max-height: 260px; overflow: auto; }
 .theorem-personal-history li { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin: 8px 0; }
 .theorem-personal-preview { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: .8rem/1.5 monospace; }
-#personal-wide-host { grid-column: 1 / -1; min-width: 0; }
+#personal-wide-host { min-width: 0; margin: 0 16px 16px; container-type: inline-size; }
 #personal-wide-host[hidden], #personal-shared-banner[hidden], #personal-shared-banner [hidden] { display: none !important; }
 .theorem-personal-list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0 6px; font-size: .86rem; }
 .theorem-personal-list { border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
@@ -29,8 +29,10 @@
 .theorem-personal-item-date { font-size: .72rem; color: var(--muted); }
 .theorem-personal-item-actions { display: flex; flex-wrap: wrap; gap: 5px; grid-column: 1 / -1; }
 .theorem-personal-current-tag { display: inline-block; margin-left: 7px; color: var(--accent); font: .65rem/1.4 monospace; }
-.theorem-personal.wide .theorem-personal-item { grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr) auto; }
-.theorem-personal.wide .theorem-personal-item-actions { grid-column: auto; }
+@container (min-width: 560px) {
+  .theorem-personal.wide .theorem-personal-item { grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr) auto; }
+  .theorem-personal.wide .theorem-personal-item-actions { grid-column: auto; }
+}
 .theorem-personal-subpanel { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
 .theorem-personal-subpanel input[type="text"], .theorem-personal-subpanel input[type="password"] { width: 100%; min-width: 0; }
 #personal-share-form > label { display: block; margin: 8px 0; font-size: .85rem; }

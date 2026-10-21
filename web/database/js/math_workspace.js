@@ -40,14 +40,17 @@
     input: Object.freeze({ cardType: 'input', label: 'Input', nativeCardKey: null, supportedKinds: Object.freeze(['variety', 'sheaf', 'map', 'young', 'lie']) }),
     hodge: Object.freeze({ cardType: 'hodge', label: 'Hodge Numbers', nativeCardKey: 'hodge-card', supportedKinds: Object.freeze(['variety']) }),
     betti: Object.freeze({ cardType: 'betti', label: 'Betti Table', nativeCardKey: 'betti-card', supportedKinds: Object.freeze(['variety']) }),
-    homology: Object.freeze({ cardType: 'homology', label: 'Homology Classes', nativeCardKey: 'homology-card', supportedKinds: Object.freeze(['variety', 'sheaf', 'map']) }),
+    'homology-variety': Object.freeze({ cardType: 'homology-variety', label: 'Variety Homology Classes', nativeCardKey: 'homology-card', supportedKinds: Object.freeze(['variety']) }),
+    'homology-sheaf': Object.freeze({ cardType: 'homology-sheaf', label: 'Sheaf Class Relations', nativeCardKey: 'homology-card', supportedKinds: Object.freeze(['sheaf']) }),
+    'homology-map': Object.freeze({ cardType: 'homology-map', label: 'Map Pullback / Pushforward', nativeCardKey: 'homology-card', supportedKinds: Object.freeze(['map']) }),
     'characteristic-classes': Object.freeze({ cardType: 'characteristic-classes', label: 'Characteristic Classes', nativeCardKey: 'class-card', supportedKinds: Object.freeze(['sheaf']) }),
     'sheaf-cohomology': Object.freeze({ cardType: 'sheaf-cohomology', label: 'Sheaf Cohomology', nativeCardKey: 'cohomology-card', supportedKinds: Object.freeze(['sheaf']) })
   });
   const NATIVE_ASSET_CARD_TYPES = Object.freeze(Object.keys(ASSET_CARD_REGISTRY).filter((cardType) => ASSET_CARD_REGISTRY[cardType].nativeCardKey));
   const ASSET_PROPERTY_CARDS = new Set(NATIVE_ASSET_CARD_TYPES.map((cardType) => ASSET_CARD_REGISTRY[cardType].nativeCardKey));
-  const cardSupportsAsset = (cardType, assetKind) => ASSET_CARD_REGISTRY[cardType]?.supportedKinds.includes(assetKind) === true;
-  const assetCardInstanceKey = (targetRef, cardType) => `asset:${targetRef?.kind || ''}:${targetRef?.id || ''}:${cardType}`;
+  const propertyCardType = (cardType,kind) => cardType==='homology' ? 'homology-'+kind : cardType;
+  const cardSupportsAsset = (cardType, assetKind) => ASSET_CARD_REGISTRY[propertyCardType(cardType,assetKind)]?.supportedKinds.includes(assetKind) === true;
+  const assetCardInstanceKey = (targetRef, cardType) => `asset:${targetRef?.kind || ''}:${targetRef?.id || ''}:${propertyCardType(cardType,targetRef?.kind)}`;
   const createAssetCardSlot = (cardType) => ({
     cardType, visible: cardType === 'input', activeInstanceKey: null, recentInstanceKeys: [],
     order: null, collapsed: false, pinned: false, displayMode: 'normal',
@@ -73,6 +76,7 @@
   const cloneAssetRef = (ref) => ref ? { kind: ref.kind, id: ref.id } : null;
   const workspaceOwnedCardSlot = (key) => key === 'input' ? assetsCardState.slots.get('input') : assetsUtilitySlots.get(key) || null;
   function createAssetCardInstance(targetRef, cardType) {
+    cardType=propertyCardType(cardType,targetRef?.kind);
     const stableRef = Object.freeze(cloneAssetRef(targetRef));
     return { key: assetCardInstanceKey(stableRef, cardType), targetRef: stableRef, cardType, localUiState: {}, capturedRevision: assetState.snapshot.revision, derivedStale: false };
   }
@@ -543,7 +547,7 @@
           else if(isBound)slot.visible=false;
         }});
       };
-      for(const [label,items] of [['For selected assets',suggestions.filter(s=>s.ready&&s.role!=='view')],['More inputs needed',suggestions.filter(s=>!s.ready)],['View settings',suggestions.filter(s=>s.role==='view')]]) {
+      for(const [label,items] of [['Properties',suggestions.filter(s=>s.ready&&s.role==='property')],['More inputs needed',suggestions.filter(s=>!s.ready&&s.role==='property')],['Open / display',suggestions.filter(s=>s.role==='display')],['View settings',suggestions.filter(s=>s.role==='view')]]) {
         if(items.length){heading(label);items.forEach(appendSuggestion);}
       }
       if(selected.length&&!suggestions.length)options.appendChild(Object.assign(document.createElement('p'),{className:'workspace-card-context',textContent:'No additional panels for this selection.'}));
@@ -554,7 +558,7 @@
         details.appendChild(Object.assign(document.createElement('summary'),{textContent:'Existing panels ('+(existing.length+nativeExisting.length)+')'}));
         details.addEventListener('toggle',()=>{if(details.isConnected)panelManagerOpen=details.open;});options.append(details);
         existing.forEach(panel=>append(details,{key:panel.id,type:panel.definition.id,label:panelLabel(panel),checked:!panel.closed,action:visible=>objectWorkspace.setVisible(panel.id,visible)}));
-        nativeExisting.forEach(type=>{const slot=assetsCardState.slots.get(type),instance=assetsCardState.instances.get(slot.activeInstanceKey);append(details,{key:'asset:'+type,label:ASSET_CARD_REGISTRY[type].label,detail:instance?name(assetKey(instance.targetRef)):'',checked:slot.visible,action:visible=>{slot.visible=visible;}});});
+        nativeExisting.forEach(type=>{const slot=assetsCardState.slots.get(type),instance=assetsCardState.instances.get(slot.activeInstanceKey),card=ASSET_CARD_REGISTRY[type];append(details,{key:'asset:'+type,label:card.targetLabels?.[instance?.targetRef?.kind]||card.label,detail:instance?name(assetKey(instance.targetRef)):'',checked:slot.visible,action:visible=>{slot.visible=visible;}});});
       }
       if(sessions.has(activeCanvasId)&&byId.get(activeCanvasId)?.kind==='calculator') {
         const sourceId=activeCanvasId,cards=availableCardsFor(sourceId).filter(card=>card.available!==false&&!['input-card','homology-card'].includes(card.key));
@@ -909,7 +913,7 @@
 
   const ASSET_SUBTYPES = {
     ...(slicing?.subtypes || {}),
-    dynkin: [['dynkin', 'Dynkin diagram']],
+    dynkin: [['dynkin', 'Marked Dynkin diagram']],
     strands: [['strands', 'Strands']],
     matrix: [['matrix', 'Matrix']],
     field: [['field', 'Field']],
@@ -1609,6 +1613,7 @@
   }
 
   function planAssetPropertySlotBinding(cardType, targetRef, coordinator = assetsCardState) {
+    cardType=propertyCardType(cardType,targetRef?.kind);
     const card = ASSET_CARD_REGISTRY[cardType], slot = coordinator.slots.get(cardType);
     if (!card?.nativeCardKey || !slot) throw new Error('Unknown Assets Property Card.');
     const target = assetByKey(assetKey(targetRef));
@@ -1631,8 +1636,9 @@
   }
 
   function updateAssetPropertyCardTitle(session, card, target) {
-    const mathTitle = `\\(${target.name}\\) · ${card.label}`;
-    const plainTitle = `${target.plainName || target.name} · ${card.label}`;
+    const label=card.targetLabels?.[target.kind]||card.label;
+    const mathTitle = `\\(${target.name}\\) · ${label}`;
+    const plainTitle = `${target.plainName || target.name} · ${label}`;
     session.editor?.setCardLabel?.(card.nativeCardKey, mathTitle, plainTitle);
   }
 
@@ -1667,6 +1673,7 @@
   }
 
   function bindAssetPropertySlot(cardType, targetRef, options = {}) {
+    cardType=propertyCardType(cardType,targetRef?.kind);
     const coordinator = options.coordinator || assetsCardState;
     const plan = planAssetPropertySlotBinding(cardType, targetRef, coordinator);
     const slot = plan.slot, session = options.session || ensureAssetsPropertySlotSession(cardType), snapshot = options.snapshot || localAssetSnapshot();
@@ -2109,6 +2116,10 @@
     if (parent && parent.firstElementChild !== card) parent.insertBefore(card, parent.firstElementChild);
   }
 
+  function focusPaneBesideAssets() {
+    const assetsPane = ['primary','secondary'].find(name => paneCanvases[name] === 'assets' && (splitView || name === 'primary'));
+    if (assetsPane) { splitView = true; focusedPane = otherPane(assetsPane); }
+  }
   async function openSelectedAsset() {
     const selected=selectedAssetRecords();if(selected.length!==1)return;
     const asset=selected[0],type=window.MathWorkspaceObjects.capabilityFor(asset).open;
@@ -2116,9 +2127,8 @@
     if (!objectWorkspace) return;
     // Build the display first, then place it beside Assets. Sidebar Assets
     // already remains visible, so preserve that placement and the current split.
-    const assetsPane = ['primary','secondary'].find(name => paneCanvases[name] === 'assets' && (splitView || name === 'primary'));
     const panel = objectWorkspace.openOverview(type,assetKey(asset));
-    if (assetsPane) { splitView = true; focusedPane = otherPane(assetsPane); }
+    focusPaneBesideAssets();
     if (panel.location === 'main') selectCanvasTab(panel.id);
     else objectWorkspace.move(panel,'main');
   }
@@ -2126,22 +2136,27 @@
     const selected = selectedAssetRecords();
     if (selected.length !== 1) return;
     closeAssetsContextMenu();
-    const modifyType=window.MathWorkspaceObjects.capabilityFor(selected[0])?.modify;
-    if (modifyType) { objectWorkspace?.open(modifyType, assetKey(selected[0]), 'main'); return; }
+    return modifyAsset(selected[0]);
+  }
+  async function modifyAsset(asset) {
+    if (!asset) return;
+    const modifyType=window.MathWorkspaceObjects.capabilityFor(asset)?.modify;
+    if (modifyType) { focusPaneBesideAssets(); return objectWorkspace?.open(modifyType, assetKey(asset), 'main'); }
     revealAssetsEditor();
     try {
-      await assetRequest('select-for-modify', { ref: assetRef(selected[0]) });
-      status(`Editing ${selected[0].plainName || selected[0].name}.`, 'success');
+      await assetRequest('select-for-modify', { ref: assetRef(asset) });
+      status(`Editing ${asset.plainName || asset.name}.`, 'success');
     } catch (error) { status(error.message, 'error'); }
   }
 
   function openAssetProperty(cardType, contextTargetRef = assetState.contextTargetRef) {
+    cardType=propertyCardType(cardType,contextTargetRef?.kind);
     const ref = cloneAssetRef(contextTargetRef), asset = assetByKey(assetKey(ref)), card = ASSET_CARD_REGISTRY[cardType];
     closeAssetsContextMenu();
     try {
       if (!asset || !card?.nativeCardKey) throw new Error('The context Asset no longer exists.');
       bindAssetPropertySlot(cardType, ref);
-      status(`Showing ${card.label} for ${asset.plainName || asset.name}.`, 'success');
+      status(`Showing ${card.targetLabels?.[asset.kind]||card.label} for ${asset.plainName || asset.name}.`, 'success');
     } catch (error) { status(error?.message || String(error), 'error'); }
   }
   function assetPropertiesMenuItems(contextTargetRef = assetState.contextTargetRef) {
@@ -2150,7 +2165,7 @@
     const capturedRef = cloneAssetRef(contextTargetRef);
     const capturedKey = assetKey(target);
     const items = [];
-    for(const suggestion of panelCatalog?.suggest([capturedKey],assetState.snapshot.assets) || []) items.push(menuButton(suggestion.label,()=>{
+    for(const suggestion of (panelCatalog?.suggest([capturedKey],assetState.snapshot.assets) || []).filter(item=>item.role==='property')) items.push(menuButton(suggestion.label,()=>{
       closeAssetsContextMenu();
       if(suggestion.route==='assets')openAssetProperty(suggestion.cardType,capturedRef);
       else objectWorkspace?.open(suggestion.id,'','side',{refs:suggestion.refs,rule:suggestion.rule});
@@ -2160,7 +2175,7 @@
 
   const reservedAssetNames = new Set();
   function uniqueDefaultAssetName(kind) {
-    const base = ({field:'K',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'sigma',fan:'Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
+    const base = ({field:'K',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
     const numbered = (number) => kind === 'sheaf' ? `\\mathcal{E}_{${number}}` : `${base}_{${number}}`;
     let name = base, number = 2;
     const isTaken = (candidate) => reservedAssetNames.has(canonicalAssetName(candidate)) || assetState.snapshot.assets.some((asset) => canonicalAssetName(asset.name) === canonicalAssetName(candidate));
@@ -2203,7 +2218,7 @@
   }
   async function createAsset(kind) {
     if (OBJECT_INPUT_KINDS.includes(kind)) {
-      closeAssetsContextMenu(); const record = createObjectAsset(kind); objectWorkspace?.open(`${kind}-input`, assetKey(record), 'side'); return;
+      closeAssetsContextMenu(); const record = createObjectAsset(kind); const panel=objectWorkspace?.open(`${kind}-input`, assetKey(record), 'side'); return ()=>panel?.name?.focus();
     }
     closeAssetsContextMenu(); revealAssetsEditor();
     try {
@@ -2213,7 +2228,8 @@
       renderAssetsEditor();
       editorForm()?.querySelector('[data-assets-name]')?.focus();
       status(`Created ${record.plainName || record.name}. Edit it in the Input card.`, 'success');
-    } catch (error) { status(error.message, 'error'); }
+      return ()=>editorForm()?.querySelector('[data-assets-name]')?.focus();
+    } catch (error) { status(error.message, 'error'); return null; }
   }
   function updateObjectAsset(ref, patch = {}) {
     const record = assetByKey(assetKey(ref));
@@ -2352,10 +2368,7 @@
         refreshWorkspaceOwnedCardChrome();
       },
       side: $('#workspace-cards'), parking: $('#workspace-canvas-parking'), split: () => splitView,
-      edit: ref => {
-        if (OBJECT_INPUT_KINDS.includes(ref.kind) || slicing?.isAsset(assetByKey(assetKey(ref)))) objectWorkspace.open(slicing.inputType(assetByKey(assetKey(ref))), assetKey(ref), 'side');
-        else { revealAssetsEditor(); bindAssetInputInstance(ref); }
-      },
+      edit: ref => modifyAsset(assetByKey(assetKey(ref))),
       placeMain: panel => {
         const definition = { id: panel.id, label: panel.title.textContent, kind: 'object-panel' };
         byId.set(panel.id, definition);
@@ -2583,6 +2596,7 @@
   }
   function prepareWorkspace(text) {
     const io = window.MathWorkspaceIO, raw = io.parse(text);
+    io.migrateHomologyCards(raw);
     window.MathWorkspaceSettings?.validate(raw.workspace.settings);
     for(const panel of raw.panels)if(panel.type==='asset-view'){
       const key=panel.computation?.refs?.asset,asset=raw.assets.find(a=>assetKey(a)===key),capability=window.MathWorkspaceObjects.capabilityFor(asset);
@@ -2603,6 +2617,7 @@
     for (const slot of prepared.assetCards.slots) if (!types.has(slot.cardType) || !Array.isArray(slot.recentInstanceKeys)) throw new Error('Invalid saved Assets card.');
     for (const instance of prepared.assetCards.instances) {
       if (!types.has(instance.cardType) || !prepared.assets.some(a => assetKey(a) === assetKey(instance.targetRef)) || instance.cardType === 'input' && (!instance.draft || typeof instance.draft.name !== 'string' || !instance.draft.data)) throw new Error('Invalid saved Assets input.');
+      if(instance.cardType!=='input'&&!cardSupportsAsset(instance.cardType,instance.targetRef.kind))throw new Error('Incompatible saved Assets property target.');
     }
     for (const asset of prepared.assets) if (['formula','tropical'].includes(asset.kind) && asset.data.ambientDimension <= 8) slicing.math('validate',{asset,assets:prepared.assets});
     return prepared;
@@ -2647,9 +2662,13 @@
       Object.assign(slot,{visible:!!item.visible,activeInstanceKey:item.activeInstanceKey,recentInstanceKeys:item.recentInstanceKeys,collapsed:!!item.collapsed,pinned:!!item.pinned,displayMode:item.displayMode});
       const instance = assetsCardState.instances.get(slot.activeInstanceKey);
       if (instance && item.cardType !== 'input') {
+        slot.activeInstanceKey = null; // This renderer is new; it has no previous presentation to capture.
         bindAssetPropertySlot(item.cardType,instance.targetRef,{render:false,focus:false,promote:false});
         if (item.snapshot) { slot.rendererSession.applyingAssets = true; try { slot.rendererSession.editor.restore(item.snapshot); } finally { slot.rendererSession.applyingAssets = false; } }
-        slot.visible = !!item.visible;
+        Object.assign(slot,{visible:!!item.visible,recentInstanceKeys:item.recentInstanceKeys,collapsed:!!item.collapsed,pinned:!!item.pinned,displayMode:item.displayMode});
+        const card=ASSET_CARD_REGISTRY[item.cardType];
+        slot.rendererSession.editor.setCardPresentation(card.nativeCardKey,{collapsed:slot.collapsed,pinned:slot.pinned,displayMode:slot.displayMode});
+        slot.rendererSession.editor.setCardVisible(card.nativeCardKey,slot.visible);
       }
     }
     assetState.activeInputInstanceKey = saved.assetCards.activeInputInstanceKey; assetState.editorMode = saved.assetCards.editorMode;
@@ -2734,6 +2753,7 @@
       }
     });
     window.MathWorkspacePanelRegistry = panelCatalog;
+    window.MathWorkspacePrincipalAssets.init({catalog:panelCatalog,changed:()=>{closeAssetsContextMenu();renderCardPicker();}});
     initialiseObjectPanels();
     initialiseImportExport();
     const picker = $('#workspace-open-canvas'); picker.appendChild(new Option('Open view…', '', true, true));

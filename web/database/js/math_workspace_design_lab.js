@@ -1,44 +1,81 @@
 (function (root) {
   'use strict';
+  const experiments = new Map(), labs = new Set();
+
+  // mount(host, api) builds one experiment's preview and controls. It returns
+  // optional reset(), settings(), and destroy() methods. Reset and destroy also
+  // run on removal or exit, restoring temporary workspace changes.
+  function register(experiment) {
+    if (!experiment || !/^[a-z][a-z0-9-]*$/.test(experiment.id) || !experiment.title || typeof experiment.mount !== 'function') throw new Error('A design experiment needs an id, title, and mount function.');
+    if (experiments.has(experiment.id)) throw new Error('This design experiment is already registered.');
+    experiments.set(experiment.id, experiment);
+    labs.forEach(lab => lab.add(experiment));
+    return () => {
+      if (experiments.get(experiment.id) !== experiment) return;
+      experiments.delete(experiment.id);
+      labs.forEach(lab => lab.remove(experiment.id));
+    };
+  }
+
   function init(api) {
     let panel = null, active = false;
-    const icons = root.MathWorkspaceAssetIcons;
-    function refresh() { api.render(); if (panel) gallery(panel.querySelector('[data-design-gallery]')); }
-    function gallery(host) {
-      host.replaceChildren();
-      const lie = {kind:'lie', id:'fixture-lie', data:{family:'A',rank:3}};
-      const samples = [
-        ['Empty', {kind:'young',type:'partition',data:{rows:[]}}],
-        ['5 × 5', {kind:'young',type:'partition',data:{rows:[5,4,3,2,1]}}],
-        ['Signed', {kind:'young',type:'generalized',data:{rows:[3,1,0,-1,-3]}}],
-        ['Generic', {kind:'young',type:'partition',data:{rows:[6]}}],
-        ['Notation', {kind:'sheaf',name:'\\mathcal{F}^{st}_{2}'}],
-        ...['coxeter','braid','kl','tl'].map(family => [family, {kind:'strands',data:{lie:'lie:fixture-lie',generators:[{family,index:1,...(family==='braid'?{sign:-1}:{})}]}}])
-      ];
-      samples.forEach(([label, asset]) => { const tile = document.createElement('div'); tile.className='workspace-design-sample'; tile.append(icons.render(asset,()=>lie), Object.assign(document.createElement('small'),{textContent:label})); host.append(tile); });
-      icons.typeset(host);
+    const mounted = new Map();
+    function element(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text) node.textContent = text;
+      return node;
+    }
+    function emptyState() { if (panel) panel.querySelector('[data-design-empty]').hidden = mounted.size > 0; }
+    function add(experiment) {
+      if (!panel || mounted.has(experiment.id)) return;
+      const section = element('details', 'workspace-design-experiment'); section.open = true; section.dataset.designExperiment = experiment.id;
+      const summary = element('summary', '', experiment.title), content = element('div', 'workspace-design-experiment-content');
+      section.append(summary);
+      if (experiment.description) section.append(element('p', 'workspace-card-context', experiment.description));
+      section.append(content); panel.querySelector('[data-design-experiments]').append(section);
+      const controller = experiment.mount(content, { renderWorkspace: api.render }) || {};
+      const actions = element('div', 'workspace-design-actions'), status = element('output', 'workspace-design-status'); status.setAttribute('role', 'status');
+      if (typeof controller.reset === 'function') {
+        const reset = element('button', 'btn btn-ghost', 'Reset'); reset.type = 'button'; reset.dataset.designReset = experiment.id; reset.setAttribute('aria-label', 'Reset ' + experiment.title);
+        reset.addEventListener('click', () => { controller.reset(); status.textContent = 'Experiment reset.'; api.render(); }); actions.append(reset);
+      }
+      if (typeof controller.settings === 'function') {
+        const copy = element('button', 'btn btn-ghost', 'Copy settings'); copy.type = 'button'; copy.dataset.designCopy = experiment.id; copy.setAttribute('aria-label', 'Copy ' + experiment.title + ' settings');
+        copy.addEventListener('click', async () => {
+          const text = JSON.stringify(controller.settings(), null, 2);
+          try { await navigator.clipboard.writeText(text); status.textContent = 'Settings copied.'; }
+          catch (_) { status.textContent = text; }
+        }); actions.append(copy);
+      }
+      section.append(actions, status); mounted.set(experiment.id, { section, controller }); emptyState();
+    }
+    function remove(id) {
+      const entry = mounted.get(id); if (!entry) return;
+      entry.controller.reset?.(); entry.controller.destroy?.(); entry.section.remove(); mounted.delete(id); emptyState(); api.render();
     }
     function build() {
-      panel = document.createElement('section'); panel.id='workspace-design-lab'; panel.className='card workspace-assets-inspector-card workspace-design-lab';
-      panel.innerHTML='<div class="card-head" role="button" tabindex="0" aria-expanded="true"><span class="card-head-label">Design Lab</span><em class="toggle-icon">▾</em></div><div class="card-body"><h3>Icons</h3><p class="workspace-card-context">Temporary previews in this tab. Asset data and saved defaults stay unchanged.</p><div data-design-controls></div><div class="workspace-design-gallery" data-design-gallery></div><div class="workspace-design-actions"><button class="btn btn-ghost" data-design-reset>Reset</button><button class="btn btn-ghost" data-design-copy>Copy design settings</button><button class="btn btn-ghost" data-design-exit>Exit Design Lab</button></div><output data-design-status role="status"></output></div>';
-      const controls=panel.querySelector('[data-design-controls]');
-      for(const [key,label,type] of [['exactColor','Exact color','color'],['genericColor','Generic color','color'],['stroke','Cell stroke','range'],['hatch','Hatch negative cells','checkbox']]) {
-        const row=document.createElement('label'), text=document.createElement('span'), input=document.createElement('input'); row.className='workspace-design-control';text.textContent=label;input.type=type;input.dataset.designSetting=key;input.setAttribute('aria-label',label);
-        if(type==='range'){input.min='0.3';input.max='1.6';input.step='0.1';}
-        input.addEventListener('input',()=>{const next=icons.settings();next[key]=type==='checkbox'?input.checked:type==='range'?Number(input.value):input.value;icons.configure(next);refresh();});row.append(text,input);controls.append(row);
-      }
-      panel.querySelector('[data-design-reset]').addEventListener('click',()=>{icons.configure();sync();refresh();});
-      panel.querySelector('[data-design-copy]').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(JSON.stringify(icons.settings(),null,2));panel.querySelector('[data-design-status]').textContent='Design settings copied.';}catch(_){panel.querySelector('[data-design-status]').textContent=JSON.stringify(icons.settings());}});
-      panel.querySelector('[data-design-exit]').addEventListener('click',exit);
-      api.mount(panel);sync();gallery(panel.querySelector('[data-design-gallery]'));
+      panel = element('section', 'card workspace-assets-inspector-card workspace-design-lab'); panel.id = 'workspace-design-lab';
+      panel.innerHTML = '<div class="card-head" role="button" tabindex="0" aria-expanded="true"><span class="card-head-label">Design Lab</span><em class="toggle-icon">▾</em></div><div class="card-body"><p class="workspace-card-context">Try temporary interface changes. Each experiment has its own preview and settings.</p><div data-design-empty class="workspace-design-empty"><h3>No active experiments</h3><p>New experiments will appear here.</p></div><div data-design-experiments></div><div class="workspace-design-actions"><button type="button" class="btn btn-ghost" data-design-exit>Exit Design Lab</button></div></div>';
+      panel.querySelector('[data-design-exit]').addEventListener('click', exit);
+      api.mount(panel); experiments.forEach(add); emptyState();
     }
-    function sync(){const values=icons.settings(), css=getComputedStyle(document.documentElement);panel.querySelectorAll('[data-design-setting]').forEach(input=>{const key=input.dataset.designSetting;if(input.type==='checkbox')input.checked=values[key];else input.value=values[key] || (key==='exactColor'?css.getPropertyValue('--accent').trim():css.getPropertyValue('--muted').trim());});}
-    function open(){active=true;const url=new URL(location.href);url.searchParams.set('designLab','1');history.replaceState(null,'',url);if(!panel)build();api.show(panel);refresh();}
-    function exit(){active=false;icons.configure();if(panel){api.remove(panel);panel=null;}const url=new URL(location.href);url.searchParams.delete('designLab');history.replaceState(null,'',url);api.render();}
-    document.addEventListener('keydown',event=>{if(event.isComposing||event.composedPath().some(node=>node.matches?.('input,textarea,select,[contenteditable="true"]')))return;if(event.ctrlKey&&event.altKey&&event.shiftKey&&event.code==='KeyD'){event.preventDefault();open();}});
-    root.addEventListener('load',refresh,{once:true});
-    icons.configure();if(new URL(location.href).searchParams.get('designLab')==='1')open();
-    return {open,exit,get active(){return active;}};
+    function open() {
+      active = true; const url = new URL(location.href); url.searchParams.set('designLab', '1'); history.replaceState(null, '', url);
+      if (!panel) build(); api.show(panel); api.render();
+    }
+    function exit() {
+      active = false; [...mounted.keys()].forEach(remove);
+      if (panel) { api.remove(panel); panel = null; }
+      const url = new URL(location.href); url.searchParams.delete('designLab'); history.replaceState(null, '', url); api.render();
+    }
+    document.addEventListener('keydown', event => {
+      if (event.isComposing || event.composedPath().some(node => node.matches?.('input,textarea,select,[contenteditable="true"]'))) return;
+      if (event.ctrlKey && event.altKey && event.shiftKey && event.code === 'KeyD') { event.preventDefault(); open(); }
+    });
+    labs.add({ add, remove });
+    if (new URL(location.href).searchParams.get('designLab') === '1') open();
+    return { open, exit, get active() { return active; } };
   }
-  root.MathWorkspaceDesignLab={init};
+  root.MathWorkspaceDesignLab = { init, register };
 })(window);

@@ -3134,7 +3134,7 @@
       { key: "B", type: "B", rank: n, label: `B_${n}` },
       { key: "C", type: "C", rank: n, label: `C_${n}` },
     ];
-    if (n >= 4) options.push({ key: "D", type: "D", rank: n, label: `D_${n}` });
+    if (n >= 2) options.push({ key: "D", type: "D", rank: n, label: `D_${n}` });
     if (n === 2) options.push({ key: "G", type: "G", rank: 2, label: "G_2" });
     if (n === 4) options.push({ key: "F", type: "F", rank: 4, label: "F_4" });
     if (n >= 6 && n <= 8) options.push({ key: "E", type: "E", rank: n, label: `E_${n}` });

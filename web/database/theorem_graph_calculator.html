@@ -6,7 +6,7 @@
   <title>Maintenance Tracker</title>
   <link rel="stylesheet" href="css/site.css?v=20260903-1">
   <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
-  <link rel="stylesheet" href="css/theorem_graph_personal.css?v=20261015-sharing-1">
+  <link rel="stylesheet" href="css/theorem_graph_personal.css?v=20261021-library-1">
   <style>
     .theorem-layout {
       max-width: 1260px;
@@ -1396,6 +1396,7 @@
       <button id="personal-shared-reload" class="btn btn-ghost" type="button">Reload shared graph</button>
       <button id="personal-shared-leave" class="btn btn-ghost" type="button">Leave shared graph</button>
     </div>
+    <div id="personal-wide-host" hidden></div>
   </section>
 
   <aside class="side" id="cards">
@@ -1414,9 +1415,10 @@
         <div id="personal-graph-list" class="theorem-personal-list" aria-label="Saved graphs"></div>
         <p id="personal-list-empty" class="hint">No saved graphs yet.</p>
         <form id="personal-rename" class="theorem-personal-subpanel" hidden>
-          <label class="input-label" for="personal-rename-title">Rename graph</label>
-          <input id="personal-rename-title" class="theorem-input" type="text" maxlength="120" required>
-          <div class="theorem-personal-row"><button class="btn" type="submit">Rename</button><button id="personal-rename-cancel" class="btn btn-ghost" type="button">Cancel</button></div>
+          <label id="personal-name-label" class="input-label" for="personal-rename-title">Saved version name</label>
+          <input id="personal-rename-title" class="theorem-input" type="text" maxlength="120" aria-describedby="personal-name-hint" required>
+          <p id="personal-name-hint" class="hint">Use this name to distinguish saved versions. The graph title stays unchanged.</p>
+          <div class="theorem-personal-row"><button id="personal-name-submit" class="btn" type="submit">Rename</button><button id="personal-rename-cancel" class="btn btn-ghost" type="button">Cancel</button></div>
         </form>
         <div id="personal-share-panel" class="theorem-personal-subpanel" hidden>
           <p id="personal-share-title"></p>
@@ -1893,7 +1895,6 @@
       </div>
     </section>
   </aside>
-  <div id="personal-wide-host" hidden></div>
 </main>
 
 <footer>
@@ -1924,8 +1925,8 @@
 <script src="js/calculator_cards.js?v=20261015-wide-1"></script>
 <script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
 <script src="js/theorem_graph_cloud_config.js?v=20261015-sharing-1"></script>
-<script src="js/theorem_graph_storage.js?v=20261015-sharing-1"></script>
-<script src="js/theorem_graph_personal.js?v=20261015-sharing-1"></script>
+<script src="js/theorem_graph_storage.js?v=20261021-library-1"></script>
+<script src="js/theorem_graph_personal.js?v=20261021-library-1"></script>
 <script src="js/theorem_graph_calculator.js?v=20261015-sharing-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script src="js/import_export_page_adapters.js?v=20261014-personal-1"></script>

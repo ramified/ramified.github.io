@@ -60,6 +60,20 @@ try {
   assert.equal(latest.headers.get('cache-control'), 'no-store');
   assert.equal((await request('/documents')).body.documents.length, 1);
   assert(!('payload' in (await request('/documents')).body.documents[0]), 'lists must not download every graph');
+  const named = save('Same graph title', 0, { title: 'First proof' });
+  assert.equal((await request('/documents/named-version-one', 'PUT', named)).status, 200);
+  assert.equal((await request('/documents/named-version-two', 'PUT', save('Same graph title', 0, { title: 'Alternative proof' }))).status, 200);
+  assert.equal((await request('/documents/named-version-one', 'PUT', { ...named, title: 'Reused ID with different name' })).status, 409);
+  assert.equal((await request('/documents/named-version-one', 'PUT', save('Edited title', 1))).status, 200);
+  const namedSaved = (await request('/documents/named-version-one')).body;
+  assert.equal(namedSaved.title, 'First proof', 'content-only saves preserve the library name, including legacy clients');
+  assert.equal(namedSaved.payload.graph.title, 'Edited title');
+  assert.equal((await request('/documents/named-version-one', 'PUT', save('Edited title', 2, { title: '  Revised proof  ' }))).status, 200);
+  assert.equal((await request('/documents/named-version-one')).body.title, 'Revised proof');
+  for (const title of ['', ' ', null, 42, 'x'.repeat(241)]) {
+    assert.equal((await request('/documents/named-version-one', 'PUT', save('Edited title', 3, { title }))).status, 400);
+  }
+  console.log('PASS theorem cloud: independent names, same-title versions, metadata saves, retries and name validation');
   assert.equal((await request('/documents/document-two', 'PUT', { ...save('Bad', 0), payload: { graph: {} } })).status, 400);
   assert.equal((await request('/documents/document-two', 'PUT', save('x'.repeat(1024 * 1024), 0))).status, 413);
   assert.equal((await request('/documents/document-two', 'PUT', save('Future schema', 0, { payload: { ...payload('x'), graph: { ...payload('x').graph, schemaVersion: 999 } } }))).status, 400);

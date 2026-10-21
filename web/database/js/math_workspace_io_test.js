@@ -29,6 +29,28 @@ assert.deepEqual(io.casFormats(asset('matrix',{})),['sage','macaulay2']);
 assert.throws(()=>io.parse('{"schema":"other"}'),/supported/);
 assert.throws(()=>io.parse('{"__proto__":{}}'),/Invalid backup property/);
 const backup = {schema:io.schema,version:1,assets:[],panels:[],calculators:[],assetCards:{slots:[],instances:[]},workspace:{tabs:['assets'],panes:{primary:'assets',secondary:''},focusedPane:'primary',split:false,assets:{},inspectorOrder:[]}};
+const legacy=JSON.parse(JSON.stringify(backup));
+legacy.assetCards.instances=['variety','sheaf','map'].map((kind,index)=>({cardType:'homology',targetRef:{kind,id:'A'+index},localUiState:{draft:kind}}));
+legacy.assetCards.slots=[{cardType:'homology',activeInstanceKey:'asset:map:A2:homology',recentInstanceKeys:['asset:sheaf:A1:homology','asset:variety:A0:homology'],visible:true,pinned:true,collapsed:true,snapshot:{mapOnly:true}}];
+legacy.workspace.inspectorOrder=['asset-card:homology'];
+legacy.workspace.dockedPanels=[{id:'dock:asset-card:homology',source:'sidebar',key:'asset-card:homology',location:'main'}];
+legacy.workspace.tabs.push('dock:asset-card:homology');legacy.workspace.panes.primary='dock:asset-card:homology';legacy.workspace.inspectorSourceId='dock:asset-card:homology';
+const migrated=io.migrateHomologyCards(legacy);
+assert.deepEqual(migrated.assetCards.instances.map(item=>item.cardType),['homology-variety','homology-sheaf','homology-map']);
+assert.deepEqual(migrated.assetCards.instances.map(item=>item.localUiState.draft),['variety','sheaf','map']);
+for(const [index,kind] of ['variety','sheaf','map'].entries()){
+  const slot=migrated.assetCards.slots[index];
+  assert.equal(slot.activeInstanceKey,`asset:${kind}:A${index}:homology-${kind}`);
+  assert.equal(slot.visible,kind==='map');assert.equal(slot.pinned,true);assert.equal(slot.collapsed,true);
+  assert.deepEqual(slot.snapshot,kind==='map'?{mapOnly:true}:null);
+}
+assert.equal(migrated.workspace.panes.primary,'dock:asset-card:homology-map');
+assert.equal(migrated.workspace.inspectorSourceId,'dock:asset-card:homology-map');
+assert.equal(migrated.workspace.dockedPanels[0].key,'asset-card:homology-map');
+assert.deepEqual(migrated.workspace.inspectorOrder,['asset-card:homology-map','asset-card:homology-variety','asset-card:homology-sheaf']);
+assert.deepEqual(io.migrateHomologyCards(JSON.parse(JSON.stringify(migrated))),migrated,'migration is idempotent');
+assert.throws(()=>io.migrateHomologyCards({assetCards:{instances:[],slots:[{cardType:'homology'},{cardType:'homology'}]}}),/Duplicate/);
+assert.throws(()=>io.migrateHomologyCards({assetCards:{instances:[{cardType:'homology',targetRef:{kind:'matrix'}}],slots:[]}}),/Invalid legacy/);
 const options = {subtypes:{young:[['partition','Young']],frame:slicing.subtypes.frame},definitions:model.definitions,calculatorIds:[],nameKey:name=>name,validName:name=>!!name,normalize:model.normalize,references:()=>[]};
 assert.deepEqual(io.validate(io.parse(JSON.stringify(backup)),options),backup);
 const docked={id:'dock:workspace-io-card',source:'sidebar',key:'workspace-io-card',location:'main',canvasHeight:720};

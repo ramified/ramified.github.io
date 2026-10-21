@@ -16,6 +16,14 @@ const lie=asset('lie','g',{family:'A',rank:3},'simple'),matrix=asset('matrix','m
 slicing.setKernel((action,{lie})=>{assert.equal(action,'lie-matrix');return slicing.identity(lie.rank);});
 assert.equal(slicing.materialize(matrix,[matrix,lie]).data.rows,3);
 assert.deepEqual(slicing.issues(matrix,[matrix,lie]),[],'generated matrix dimensions follow the Lie type');
+assert.equal(slicing.fitsFrame(matrix,f,[matrix,lie,f]),true,'collection uses the materialized matrix dimension');
+assert.equal(slicing.fitsFrame(sphere,f,[sphere,f]),true);
+assert.equal(slicing.fitsFrame(asset('sphere','other',{ambientDimension:4}),f,[f]),false);
+assert.equal(slicing.fitsFrame(voronoi,f,[voronoi,lattice,f]),false,'unresolved dependencies cannot be collected');
+assert.equal(slicing.fitsFrame(sphere,null,[sphere]),false,'collection requires a chosen frame');
+assert.equal(slicing.fitsFrame(lie,f,[lie,f]),false,'nongeometric dependencies are not collected');
+assert.deepEqual(objects.contextFor({type:'slicing-scene',refs:{frame:'frame:f',nodes:[]}},[f]).missing,[],'a cleared scene retains its frame');
+assert.deepEqual(objects.contextFor({type:'geometry-view',refs:{asset:'',frame:'frame:f',nodes:[]}},[f]).missing,[],'a cleared object display remains usable');
 assert.equal(matrix.data.rows,2,'projection does not mutate stored assets');
 const graph={version:1,module:'higher-dimensional-slice-explorer',ambientDimension:3,position:[1,2,3],frame:[[2,0,0],[1,3,0],[0,0,4]],objects:[
   {id:'g',name:'g',data:{objectType:'dynkin-type',dynkinType:'A',dynkinRank:3}},

@@ -33,6 +33,7 @@ setStartingFunctionARMode = function(enabled) {
   renderStartingFunction(); queueMathTypeset();
 };
 selectDynkinVertex = function(index) {
+  if (__panelConfig.operation === 'lie-view') return;
   if (__panelConfig.mode !== 'property') return __oldSelectVertex(index);
   if (!selectedIndices().includes(index)) return;
   state.selected = index; renderVertexData(); renderStartingFunction(); queueMathTypeset();
@@ -53,6 +54,8 @@ function __dynkinFocusControl() {
 __editor.setAssetAdapter({
   panel(config) {
     __panelConfig = config;
+    state.highlightSelection = config.operation !== 'lie-view';
+    if (config.operation === 'lie-view') __panelStyle('label[for="dynkin-multi-select"],label[for="dynkin-quiver-mode"]{display:none!important}');
     __panelStyle('#dynkin-type,label[for="dynkin-type"],#dynkin-rank-wrap,#dynkin-starting-wide{display:none!important}.canvas-toolbar{flex-wrap:wrap!important}');
     $('dynkin-type').disabled = true; $('dynkin-rank').disabled = true;
     $('dynkin-starting-card').removeAttribute('data-card-wide');
@@ -89,11 +92,12 @@ __editor.setAssetAdapter({
     return { type: 'dynkin', data: { lie: __dynkinAsset.data.lie, vertices: selectedIndices().map(i => i + 1), quiver: __hasQuiver ? { ...state.quiverOrientations[quiverLayoutKey(state.type,state.rank)] } : null } };
   },
   capture: () => ({ vertex: state.selected + 1, arMode: state.startingFunctionARMode, transpose: state.startingFunctionTransposed }),
-  result: () => ({ text: __textResult('plain'), hasResult: true, vertex: state.selected + 1, vertices: selectedIndices().map(i => i + 1), cartan: state.cartan.map(row => row.slice()) }),
+  result: () => ({ text: __textResult('plain'), hasResult: true, vertex: __panelConfig.operation === 'lie-view' ? null : state.selected + 1, vertices: __panelConfig.operation === 'lie-view' ? [] : selectedIndices().map(i => i + 1), cartan: state.cartan.map(row => row.slice()) }),
   io(action, format) {
     if (action === 'geometry') return { vertices: state.hitboxes, edges: state.edgeHitboxes };
     if (action === 'export') {
       if (__panelConfig.mode === 'property') return __textResult(format);
+      if (__panelConfig.operation === 'lie-view') return format === 'latex' ? '\\[' + typeLatex() + '\\qquad ' + matrixLatex(state.cartan) + '\\]' : typeLabel();
       if (format === 'latex') return '\\[' + typeLatex() + '\\qquad ' + matrixLatex(state.cartan) + '\\qquad I=\\{' + selectedIndices().map(i => i + 1).join(',') + '\\}\\]';
       return typeLabel() + '; vertices: ' + selectedIndices().map(i => i + 1).join(', ') + (__hasQuiver ? '; quiver: ' + JSON.stringify(__dynkinAsset.data.quiver) : '');
     }

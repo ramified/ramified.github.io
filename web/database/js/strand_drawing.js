@@ -8,7 +8,8 @@
     if (!tracks.length) return;
     const trackIndex = trackIndexMap(tracks);
     const records = (view.records || []).filter((record) => record.pairs.some(([left, right]) => trackIndex.has(left) && trackIndex.has(right)));
-    const layout = strandLayerLayout(records.length);
+    const rows = state.thumbnail ? consecutiveRows(records) : records.map(record => [record]);
+    const layout = strandLayerLayout(rows.length);
     const layerMax = layout.total;
     const order = tracks.slice();
     const strandSegments = new Map();
@@ -23,43 +24,45 @@
       });
     } else {
       const glyphs = [];
-      records.forEach((record, stepIndex) => {
+      rows.forEach((row, stepIndex) => {
         const previousLayer = stepIndex === 0
           ? 0
           : layout.intervals[stepIndex - 1]?.end ?? layout.crossingEnds[stepIndex - 1];
         const crossingEnd = layout.crossingEnds[stepIndex];
         const crossingLayer = (previousLayer + crossingEnd) / 2;
-        const recordGlyphs = [];
-        record.pairs.forEach(([leftTrack, rightTrack]) => {
-          const left = trackIndex.get(leftTrack);
-          const right = trackIndex.get(rightTrack);
-          if (left == null || right == null) return;
-          const glyph = {
-            record,
-            leftIndex: left,
-            rightIndex: right,
-            leftLabel: order[left],
-            rightLabel: order[right],
-            startLayer: previousLayer,
-            crossingLayer,
-            endLayer: crossingEnd
-          };
-          glyphs.push(glyph);
-          recordGlyphs.push(glyph);
-        });
-        const nextOrder = order.slice();
-        if (record.shouldSwap !== false) {
+        const nextOrder = order.slice(), klBreaks = new Map(), tlBreaks = new Map();
+        row.forEach(record => {
+          const recordGlyphs = [];
           record.pairs.forEach(([leftTrack, rightTrack]) => {
             const left = trackIndex.get(leftTrack);
             const right = trackIndex.get(rightTrack);
             if (left == null || right == null) return;
-            nextOrder[left] = order[right];
-            nextOrder[right] = order[left];
+            const glyph = {
+              record,
+              leftIndex: left,
+              rightIndex: right,
+              leftLabel: order[left],
+              rightLabel: order[right],
+              startLayer: previousLayer,
+              crossingLayer,
+              endLayer: crossingEnd
+            };
+            glyphs.push(glyph);
+            recordGlyphs.push(glyph);
           });
-        }
-        addBraidClipMasks(recordGlyphs, record, strandClipMasks, tracks.length, layerMax, width, height, lineWidthForTrackCount(tracks.length));
-        const klBreaks = klVisualBreaks(recordGlyphs, record);
-        const tlBreaks = tlVisualBreaks(recordGlyphs, record);
+          if (record.shouldSwap !== false) {
+            record.pairs.forEach(([leftTrack, rightTrack]) => {
+              const left = trackIndex.get(leftTrack);
+              const right = trackIndex.get(rightTrack);
+              if (left == null || right == null) return;
+              nextOrder[left] = order[right];
+              nextOrder[right] = order[left];
+            });
+          }
+          addBraidClipMasks(recordGlyphs, record, strandClipMasks, tracks.length, layerMax, width, height, lineWidthForTrackCount(tracks.length));
+          klVisualBreaks(recordGlyphs, record).forEach((value,key)=>klBreaks.set(key,value));
+          tlVisualBreaks(recordGlyphs, record).forEach((value,key)=>tlBreaks.set(key,value));
+        });
         nextOrder.forEach((label, index) => {
           const tlBreak = tlBreaks.get(label);
           if (tlBreak) {
@@ -109,13 +112,13 @@
   }
 
   function lineWidthForTrackCount(trackCount) {
-    if (state.thumbnail) return 6;
+    if (state.thumbnail) return state.thumbnailStrokeWidth || 12;
     return trackCount > 42 ? 1.05 : trackCount > 20 ? 1.45 : 2.2;
   }
 
   function addBraidClipMasks(recordGlyphs, record, strandClipMasks, trackCount, layerMax, width, height, lineWidth) {
     if (record.family !== 'braid') return;
-    const radius = Math.max(5.5, lineWidth * 2.6 + 3);
+    const radius = state.thumbnail ? lineWidth * 1.4 + 1 : Math.max(5.5, lineWidth * 2.6 + 3);
     recordGlyphs.forEach((glyph) => {
       const positive = record.sign !== -1;
       const label = positive ? glyph.rightLabel : glyph.leftLabel;
@@ -259,7 +262,7 @@
     ctx.lineWidth = lineWidth;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.globalAlpha = 0.92;
+    ctx.globalAlpha = state.thumbnail ? 1 : 0.92;
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     if (style === 'soft') drawSoftPathSegments(ctx, points);
@@ -320,9 +323,10 @@
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.globalAlpha = 0.92;
-    drawTlCurve(ctx, topLeft, center, topRight, '#211c18', lineWidth);
-    drawTlCurve(ctx, bottomLeft, center, bottomRight, '#211c18', lineWidth);
+    ctx.globalAlpha = state.thumbnail ? 1 : 0.92;
+    const color = state.thumbnail ? strandColor(glyph.leftLabel) : '#211c18';
+    drawTlCurve(ctx, topLeft, center, topRight, color, lineWidth);
+    drawTlCurve(ctx, bottomLeft, center, bottomRight, color, lineWidth);
     ctx.restore();
   }
 
@@ -345,9 +349,10 @@
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.globalAlpha = 0.92;
-    drawTlArc(ctx, topLeft, topControls[0], topControls[1], topRight, '#7b477e', lineWidth);
-    drawTlArc(ctx, bottomLeft, bottomControls[0], bottomControls[1], bottomRight, '#7b477e', lineWidth);
+    ctx.globalAlpha = state.thumbnail ? 1 : 0.92;
+    const color = state.thumbnail ? strandColor(glyph.leftLabel) : '#7b477e';
+    drawTlArc(ctx, topLeft, topControls[0], topControls[1], topRight, color, lineWidth);
+    drawTlArc(ctx, bottomLeft, bottomControls[0], bottomControls[1], bottomRight, color, lineWidth);
     ctx.restore();
   }
 
@@ -525,11 +530,22 @@
     });
     return {tracks, records, steps:generators};
   }
-  function thumbnail(ctx,width,height,model,color='#486c68') {
-    const state={direction:'up-down',generatorSpacing:0.3,generatorGapEnabled:false,strandDisplayStyle:'straight',thumbnail:true};
+  function consecutiveRows(records) {
+    // Only extend the current row. Mirrored signed crossings stay together,
+    // and any shared physical track starts a new row; never backfill a row.
+    const rows=[];let occupied=new Set();
+    for(const record of records){
+      const support=new Set(record.pairs.flat());
+      if(!rows.length||[...support].some(track=>occupied.has(track))){rows.push([]);occupied=new Set();}
+      rows[rows.length-1].push(record);support.forEach(track=>occupied.add(track));
+    }
+    return rows;
+  }
+  function thumbnail(ctx,width,height,model,color='#486c68',{strokeWidth=12}={}) {
+    const state={direction:'up-down',generatorSpacing:0.3,generatorGapEnabled:false,strandDisplayStyle:'soft',thumbnail:true,thumbnailStrokeWidth:strokeWidth};
     const drawing=create({state,fixedTrackOffset:()=>0,fixedLayerOffset:()=>0,fixedGeometryActive:()=>false,strandColor:()=>color,GENERATOR_CUT_SIZE:0.34});
     drawing.drawStrands(ctx,width,height,scene(model));
   }
-  const api={create,swapPairs,scene,thumbnail};
+  const api={create,swapPairs,scene,thumbnail,consecutiveRows};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.StrandDrawing=api;
 })(typeof window!=='undefined'?window:globalThis);

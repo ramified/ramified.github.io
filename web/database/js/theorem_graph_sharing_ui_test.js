@@ -32,11 +32,16 @@ async function run() {
   async function browser(url) {
     const session = await launchBrowser(url); sessions.push(session);
     const c = session.client;
-    await c.send('Page.enable'); await c.send('Runtime.enable');
+    await c.send('Page.enable'); await c.send('Runtime.enable'); await c.send('Network.enable');
+    const requests = new Set(); let lastNetworkActivity = Date.now();
     c.socket.addEventListener('message', event => {
       const message = JSON.parse(String(event.data));
       if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails.exception?.description || message.params.exceptionDetails.text);
       if (message.method === 'Page.javascriptDialogOpening') c.send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
+      if (message.method === 'Network.requestWillBeSent' && message.params.request.url.startsWith(backend.origin)) {
+        requests.add(message.params.requestId); lastNetworkActivity = Date.now();
+      }
+      if (['Network.loadingFinished', 'Network.loadingFailed'].includes(message.method) && requests.delete(message.params.requestId)) lastNetworkActivity = Date.now();
     });
     const read = expression => evaluate(c, expression);
     const ready = () => waitFor(() => read(`document.getElementById('theorem-personal')?.dataset.ready === 'true'`), 20000);
@@ -71,7 +76,8 @@ async function run() {
       await waitFor(() => read(`document.getElementById('personal-status').textContent === 'Saved to cloud'`), 15000);
     };
     const navigate = async url => { await c.send('Page.navigate', { url }); await delay(150); await ready(); };
-    await ready(); return { c, read, click, type, login, sync, navigate };
+    const settled = () => waitFor(() => !requests.size && Date.now() - lastNetworkActivity >= 300, 15000, 'account requests finish');
+    await ready(); return { c, read, click, type, login, sync, navigate, settled };
   }
   try {
     const owner = await browser(page);
@@ -81,22 +87,49 @@ async function run() {
     const row = `document.querySelector('#personal-graph-list [data-id="${documentId}"]')`;
     assert(await owner.read(`${row}.classList.contains('is-current') && ${row}.hasAttribute('aria-current')`));
     assert(await owner.read(`${row}.querySelector('time').dateTime.length > 0`));
+    const sidebarBefore = await owner.read(`document.getElementById('cards').getBoundingClientRect().top + scrollY`);
     await owner.read(`document.querySelector('#theorem-personal .calculator-card-wide-btn').click()`);
     assert(await owner.read(`document.getElementById('theorem-personal').parentElement.id === 'personal-wide-host'`));
-    assert(await owner.read(`document.getElementById('theorem-personal').getBoundingClientRect().width > 900`));
+    const checkWideBounds = async () => {
+      const bounds = await owner.read(`(() => {
+        const panel = document.getElementById('theorem-personal').getBoundingClientRect();
+        const canvas = document.getElementById('theorem-graph-canvas').getBoundingClientRect();
+        const side = document.getElementById('cards').getBoundingClientRect();
+        return { left: panel.left, right: panel.right, width: panel.width,
+          canvasLeft: canvas.left, canvasRight: canvas.right, canvasWidth: canvas.width,
+          sidebarLeft: side.left, sidebarTop: side.top + scrollY, overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+      })()`);
+      assert(Math.abs(bounds.width - bounds.canvasWidth) <= 1, JSON.stringify(bounds));
+      assert(Math.abs(bounds.left - bounds.canvasLeft) <= 1 && Math.abs(bounds.right - bounds.canvasRight) <= 1, 'wide panel follows both canvas edges');
+      assert(bounds.right < bounds.sidebarLeft && !bounds.overflow, 'wide panel stays outside the sidebar column');
+      assert(Math.abs(bounds.sidebarTop - sidebarBefore) <= 1, 'expanding the panel preserves sidebar placement');
+    };
+    await checkWideBounds();
+    for (const width of [1200, 1000, 960]) {
+      await owner.c.send('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: false });
+      await owner.read(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+      await checkWideBounds();
+    }
+    await owner.c.send('Emulation.clearDeviceMetricsOverride');
     await owner.read(`document.querySelector('#theorem-personal .calculator-card-wide-btn').click()`);
     assert(await owner.read(`document.getElementById('theorem-personal').parentElement.id === 'cards'`));
     await owner.read(`document.querySelector('#theorem-personal .calculator-card-wide-btn').click()`);
     await owner.read(`${row}.querySelector('.theorem-personal-item-actions button').click()`);
-    await owner.type('personal-rename-title', 'Owner renamed');
+    await owner.type('personal-rename-title', 'Owner ');
+    await delay(250);
+    assert.equal(await owner.read(`document.getElementById('personal-rename-title').value`), 'Owner ', 'name drafts preserve trailing spaces');
+    await owner.c.send('Input.insertText', { text: 'renamed' });
     await owner.read(`document.getElementById('personal-rename').requestSubmit()`);
-    await waitFor(() => owner.read(`document.getElementById('graph-title').value === 'Owner renamed'`)); await owner.sync();
+    await waitFor(() => owner.read(`document.getElementById('personal-current').textContent === 'Current: Owner renamed'`)); await owner.sync();
+    assert.equal(await owner.read(`document.getElementById('graph-title').value`), 'Owner graph');
+    assert.equal(JSON.parse(backend.db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(documentId).content).graph.titleNode.label, 'Owner graph');
     assert.equal(backend.db.sqlite.prepare('SELECT title FROM documents WHERE id=?').get(documentId).title, 'Owner renamed');
     await owner.read(`document.getElementById('personal-users').open = true`); await delay(200);
     await owner.type('personal-user-name', 'alice'); await owner.type('personal-user-password', password);
     await owner.read(`document.getElementById('personal-user-form').requestSubmit()`);
     await waitFor(() => owner.read(`document.getElementById('personal-user-status').textContent.includes('alice created')`));
     assert.equal(await owner.read(`document.getElementById('personal-user-password').value`), '');
+    await waitFor(() => owner.read(`!${row}.querySelectorAll('.theorem-personal-item-actions button')[1].disabled`));
     await owner.read(`${row}.querySelectorAll('.theorem-personal-item-actions button')[1].click()`);
     await waitFor(() => owner.read(`!document.getElementById('personal-share-panel').hidden`));
     const links = [];
@@ -113,7 +146,7 @@ async function run() {
     const viewer = await browser(links[0]);
     assert(await viewer.read(`document.getElementById('theorem-personal').hidden && document.getElementById('graph-title').readOnly`));
     await viewer.type('graph-title', 'Forbidden');
-    assert.equal(await viewer.read(`document.getElementById('graph-title').value`), 'Owner renamed');
+    assert.equal(await viewer.read(`document.getElementById('graph-title').value`), 'Owner graph');
     assert(await viewer.read(`document.querySelector('#node-card .card-body').inert`));
     await viewer.navigate(links[1]); await viewer.type('graph-title', 'Temporary edit'); await delay(500);
     assert(await viewer.read(`document.getElementById('personal-shared-save').hidden`));
@@ -123,7 +156,8 @@ async function run() {
     assert.equal(await viewer.read(`document.getElementById('graph-title').value`), 'Temporary edit', 'temporary shared drafts survive reload without entering My graphs');
     await viewer.navigate(links[2]); await viewer.type('graph-title', 'Saved by recipient'); await viewer.click('personal-shared-save');
     await waitFor(() => viewer.read(`document.getElementById('personal-shared-status').textContent === 'Saved to the original graph.'`));
-    assert.equal(backend.db.sqlite.prepare('SELECT title FROM documents WHERE id=?').get(documentId).title, 'Saved by recipient');
+    assert.equal(backend.db.sqlite.prepare('SELECT title FROM documents WHERE id=?').get(documentId).title, 'Owner renamed');
+    assert.equal(JSON.parse(backend.db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(documentId).content).graph.title, 'Saved by recipient');
     await viewer.type('graph-title', 'Unsaved next edit ');
     assert(await viewer.read(`document.getElementById('personal-shared-status').textContent.includes('Unsaved shared changes')`), 'new edits replace the previous saved message');
     await viewer.click('personal-shared-reload');
@@ -150,7 +184,10 @@ async function run() {
     await viewer.c.send('Network.setBlockedURLs', { urls: [] });
     await viewer.read(`window.dispatchEvent(new Event('online'))`);
     await waitFor(() => viewer.read(`document.getElementById('personal-status').textContent === 'Saved to cloud'`), 15000);
-    assert.equal(backend.db.sqlite.prepare('SELECT title FROM documents WHERE id=?').get(aliceId).title, 'Alice offline');
+    // Reconnecting still refreshes the catalog after acknowledging its save.
+    // Finish that flow before the separate sign-out scenario revokes its session.
+    await viewer.settled();
+    assert.equal(JSON.parse(backend.db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(aliceId).content).graph.title, 'Alice offline');
     await viewer.click('personal-logout'); await waitFor(() => viewer.read(`document.getElementById('theorem-personal').hidden`));
     assert.notEqual(await viewer.read(`document.getElementById('graph-title').value`), 'Alice offline', 'sign-out clears the private graph from the editor');
     await viewer.login('ramified'); await delay(250);
@@ -158,7 +195,19 @@ async function run() {
     await owner.click('personal-refresh'); await delay(250);
     await owner.read(`${row}.querySelector('.theorem-personal-item-name').click()`); await delay(400);
     assert.equal(await owner.read(`document.getElementById('graph-title').value`), 'Saved by recipient');
-    await owner.click('personal-copy'); await delay(300); await owner.sync();
+    const countBeforeCopy = backend.db.sqlite.prepare('SELECT COUNT(*) AS n FROM documents').get().n;
+    await owner.click('personal-copy'); await delay(150);
+    assert.equal(await owner.read(`document.getElementById('personal-rename-title').value`), 'Owner renamed (2)', 'copies suggest a distinct library name');
+    await owner.click('personal-rename-cancel');
+    assert.equal(backend.db.sqlite.prepare('SELECT COUNT(*) AS n FROM documents').get().n, countBeforeCopy, 'cancelling a named copy creates no entry');
+    await owner.click('personal-copy'); await owner.type('personal-rename-title', 'Alternative proof');
+    await owner.read(`document.getElementById('personal-rename').requestSubmit()`);
+    await waitFor(() => owner.read(`document.getElementById('personal-current').textContent === 'Current: Alternative proof'`));
+    await owner.sync();
+    assert.equal(await owner.read(`document.getElementById('graph-title').value`), 'Saved by recipient');
+    const copies = backend.db.sqlite.prepare('SELECT title,content FROM documents WHERE title IN (?,?)').all('Owner renamed', 'Alternative proof');
+    assert.equal(copies.length, 2);
+    assert(copies.every(copy => JSON.parse(copy.content).graph.title === 'Saved by recipient'), 'distinct saved names can share the same graph title');
     await owner.read(`document.getElementById('personal-share-panel').hidden=true; document.getElementById('personal-users').open=false; document.getElementById('personal-wide-host').scrollIntoView({block:'center'})`);
     const shot = await owner.c.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     fs.writeFileSync(path.join(root, 'cloudflare/.theorem-local/ui-wide-library.png'), Buffer.from(shot.data, 'base64'));

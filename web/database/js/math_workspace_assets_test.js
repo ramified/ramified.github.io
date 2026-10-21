@@ -234,26 +234,28 @@ const makePropertyCommand = (sourceRef, revision, before, after) => api.createAs
   assert.strictEqual(api.cardSupportsAsset('hodge', 'variety'), true);
   assert.strictEqual(api.cardSupportsAsset('hodge', 'sheaf'), false);
   assert.strictEqual(api.cardSupportsAsset('homology', 'map'), true);
-  assert.strictEqual(Array.from(api.NATIVE_ASSET_CARD_TYPES).length, 5, 'native property sessions must have a fixed five-slot upper bound');
+  assert.strictEqual(Array.from(api.NATIVE_ASSET_CARD_TYPES).length, 7, 'the three Homology interfaces each have an independent bounded slot');
 
   const hodgeSession = makeFakeSession('hodge');
-  const homologySession = makeFakeSession('homology');
+  const homologySession = makeFakeSession('homology-map'),sheafHomologySession=makeFakeSession('homology-sheaf');
   const classSession = makeFakeSession('characteristic-classes');
   const hodgeX = bind('hodge', { kind: 'variety', id: 'X1' }, hodgeSession);
-  const homologyE = bind('homology', { kind: 'sheaf', id: 'E2' }, homologySession);
+  const homologyE = bind('homology-sheaf', { kind: 'sheaf', id: 'E2' }, sheafHomologySession);
   const classesE = bind('characteristic-classes', { kind: 'sheaf', id: 'E2' }, classSession);
   assert.strictEqual(hodgeX.targetRef.id, 'X1');
   assert.strictEqual(homologyE.targetRef.id, 'E2');
   assert.strictEqual(classesE.targetRef.id, 'E2');
-  assert.notStrictEqual(coordinator.slots.get('hodge').rendererSession, coordinator.slots.get('homology').rendererSession, 'each Property Slot owns a different bounded renderer session');
+  assert.notStrictEqual(coordinator.slots.get('hodge').rendererSession, coordinator.slots.get('homology-sheaf').rendererSession, 'each Property Slot owns a different bounded renderer session');
 
-  const oldHomologyToken = homologySession.bindingToken;
+  const oldHomologyToken = sheafHomologySession.bindingToken;
   bind('homology', { kind: 'map', id: 'M3' }, homologySession, { promote: true, focus: true });
-  assert.strictEqual(coordinator.instances.get(coordinator.slots.get('homology').activeInstanceKey).targetRef.id, 'M3', 'opening map Homology retargets only Homology');
+  assert.strictEqual(coordinator.instances.get(coordinator.slots.get('homology-map').activeInstanceKey).targetRef.id, 'M3');
+  assert.strictEqual(coordinator.instances.get(coordinator.slots.get('homology-sheaf').activeInstanceKey).targetRef.id, 'E2','opening the Map panel does not retarget the Sheaf panel');
+  assert.notStrictEqual(coordinator.slots.get('homology-map').rendererSession,coordinator.slots.get('homology-sheaf').rendererSession);
   assert.strictEqual(coordinator.instances.get(coordinator.slots.get('hodge').activeInstanceKey).targetRef.id, 'X1', 'Hodge remains bound to its variety');
   assert.strictEqual(coordinator.instances.get(coordinator.slots.get('characteristic-classes').activeInstanceKey).targetRef.id, 'E2', 'other visible Property Slots retain their target');
   assert.deepStrictEqual(hodgeSession.calls.applies.at(-1).ref, { kind: 'variety', id: 'X1' }, 'retargeting Homology must not replace Hodge baseline');
-  assert.strictEqual(coordinator.slots.get('homology').collapsed, false, 'the directed Property Slot is expanded');
+  assert.strictEqual(coordinator.slots.get('homology-map').collapsed, false, 'the directed Property Slot is expanded');
   assert.strictEqual(homologySession.calls.prioritized.at(-1), 'homology-card', 'the directed Property Slot is promoted inside its renderer');
   assert.strictEqual(homologySession.calls.focused.at(-1), 'homology-card', 'the directed Property Card is focused after binding');
 
@@ -582,8 +584,8 @@ assert(nativeBundle.includes(Buffer.from(':host{display:block;min-width:0;height
 assert(nativeBundle.includes(Buffer.from('[id$="-wide-host"]:not(:has(.card)){display:none!important}')), 'empty wide-card hosts must not reserve native canvas space');
 assert(nativeBundle.includes(Buffer.from('.workspace-editor-layout .workspace-view-card{min-width:0;width:100%;height:100%')), 'nested calculator canvas panels must fill their allocated workspace height');
 assert(/math_workspace_native_editors_v8\.js\?v=[a-f0-9]{16}/.test(html), 'native editor cache query must be derived from the reproducible bundle hash');
-assert(html.includes('css/math_workspace.css?v=20261021-assets-empty-2'), 'workspace stylesheet changes need a cache-query bump');
-assert(html.includes('js/math_workspace.js?v=20261020-overview-deselect-5'), 'workspace controller changes need a cache-query bump');
+assert(html.includes('css/math_workspace.css?v=20261021-approved-designs-1'), 'workspace stylesheet changes need a cache-query bump');
+assert(html.includes('js/math_workspace.js?v=20261021-homology-panels-1'), 'workspace controller changes need a cache-query bump');
 assert(html.includes('js/calculator_cards.js?v=20260903-1'), 'workspace-owned Assets cards must reuse the shared calculator card chrome');
 assert(nativeBuilder.includes('math_workspace_native_editors_v8.js') && nativeBuilder.includes('Stale live native editor bundle'), 'the source builder must publish and verify the live runtime');
 assert(!source.includes("closeCardPicker(); const picker = assetState.referencePicker"), 'native source selection must not be closed by the global outside-pointer handler');
@@ -600,7 +602,7 @@ assert(html.includes('id="workspace-assets-context-menu"'));
 assert(html.includes('id="workspace-assets-delete-dialog"'));
 assert(html.includes('id="workspace-add-card"'), 'the outer Inspector must own Add card');
 assert(!html.includes('id="workspace-card-source"') && html.includes('id="workspace-card-context"'), 'Add panel must show selection context instead of a source selector');
-assert(html.includes('js/math_workspace_panel_catalog.js?v=20261019-default-assets-1'), 'the shared asset/panel relationship catalog must load');
+assert(html.includes('js/math_workspace_panel_catalog.js?v=20261021-homology-panels-1'), 'the shared asset/panel relationship catalog must load');
 assert(html.includes('tex-chtml.js'), 'Assets names need MathJax rendering');
 ['icons', 'list', 'details', 'tiles', 'content'].forEach((layout) => {
   assert(css.includes(`[data-layout='${layout}']`), `${layout} layout needs dedicated CSS`);

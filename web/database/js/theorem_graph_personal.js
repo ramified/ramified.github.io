@@ -288,9 +288,8 @@
           const date = document.createElement('time'); date.className = 'theorem-personal-item-date';
           const actions = document.createElement('div'); actions.className = 'theorem-personal-item-actions';
           actions.append(button('Rename', () => {
-            renameId = item.id; $('personal-rename').hidden = false;
             const title = library.current?.id === item.id ? library.current.title : entries.find(entry => entry.id === item.id)?.title || item.title;
-            $('personal-rename-title').value = title; $('personal-rename-title').focus(); $('personal-rename-title').select();
+            openNameForm(item.id, title);
           }), button('Share', () => action(() => openSharing(item.id))), button('Delete', () => action(async () => {
             if (!confirm('Delete this graph and its history? Its share links will stop working.')) return;
             await library.remove(item.id);
@@ -315,6 +314,14 @@
       rows.forEach(row => row.remove());
       $('personal-list-empty').hidden = values.size > 0;
     }
+    function openNameForm(id, name) {
+      renameId = id;
+      $('personal-rename').hidden = false;
+      text('personal-name-label', id ? 'Rename saved version' : 'New saved version name');
+      text('personal-name-submit', id ? 'Rename' : 'Save as new graph');
+      window.CalculatorInputSettings.syncEditableValue($('personal-rename-title'), name, { force: true });
+      $('personal-rename-title').focus(); $('personal-rename-title').select();
+    }
     async function openGraph(id) {
       leaveShared();
       const cloud = library.online && cloudList.some(item => item.id === id);
@@ -324,8 +331,9 @@
     }
     $('personal-rename').addEventListener('submit', event => {
       event.preventDefault(); action(async () => {
-        const payload = await library.rename(renameId, $('personal-rename-title').value);
-        if (!shared && library.current?.id === renameId) restore(payload);
+        const name = $('personal-rename-title').value;
+        if (renameId) await library.rename(renameId, name);
+        else { await library.create(capture(), name); lastKey = contentKey(); }
         $('personal-rename').hidden = true; await sync(); await list();
       });
     });
@@ -567,7 +575,11 @@
       $('personal-history-panel').hidden = true;
     }));
     $('personal-copy').addEventListener('click', () => action(async () => {
-      await library.create(capture()); lastKey = contentKey(); await list(); scheduleCloud();
+      const names = new Set([...entries, ...await library.store.summaries()].map(item => item.title));
+      const baseName = String(library.current?.title || capture().graph.title || 'Untitled graph').slice(0, 100);
+      let name = baseName, suffix = 2;
+      while (names.has(name)) name = `${baseName} (${suffix++})`;
+      openNameForm(null, name);
     }));
     $('personal-cloud-version').addEventListener('click', () => action(async () => {
       restore(await library.useCloudVersion(flushLocal)); await list();

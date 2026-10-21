@@ -7,10 +7,18 @@
   const clone = value => JSON.parse(JSON.stringify(value));
   const signature = value => JSON.stringify(value);
   const title = payload => String(payload?.graph?.title || 'Untitled graph');
+  // `title` on a storage record is the library name, independent of payload.graph.title.
+  const normalizeName = value => {
+    const name = String(value).trim();
+    if (!name || name.length > 120) throw new Error('Use a saved version name between 1 and 120 characters.');
+    return name;
+  };
+  const dirty = record => !!record && (!!record.pending || signature(record.payload) !== record.syncedPayload
+    || record.title !== (record.syncedTitle ?? record.title));
   const conflict = () => Object.assign(new Error('Another tab updated this local graph.'), { status: 409 });
   const summary = record => ({ id: record.id, title: record.title, updatedAt: record.updatedAt,
     cloudRevision: record.cloudRevision, recovered: !!record.recovered, conflict: !!record.conflict,
-    dirty: !!record.pending || signature(record.payload) !== record.syncedPayload });
+    dirty: dirty(record) });
 
   class IndexedStore {
     constructor(name = 'theorem-personal-graphs-v1') { this.name = name; }
@@ -145,20 +153,21 @@
       return result;
     }
     emit() { this.onChange(this.current); }
-    dirty(record = this.current) { return !!record && (record.pending || signature(record.payload) !== record.syncedPayload); }
+    dirty(record = this.current) { return dirty(record); }
     async write(record, expected = record.localVersion || 0) {
       const saved = await this.store.put(record, expected);
       if (this.current?.id === saved.id) this.current = saved;
       return saved;
     }
-    make(payload) {
-      return { id: this.uuid(), title: title(payload), payload: clone(payload), cloudRevision: 0,
+    make(payload, name = title(payload)) {
+      return { id: this.uuid(), title: name, payload: clone(payload), cloudRevision: 0,
         syncedPayload: null, pending: null, localVersion: 0, updatedAt: this.now(),
         checkpointAt: this.now(), history: [], conflict: false };
     }
-    async create(payload) {
+    async create(payload, name = title(payload).slice(0, 120).trim() || 'Untitled graph') {
+      const normalized = normalizeName(name);
       return this.serial(async () => {
-        this.current = await this.store.put(this.make(payload), 0);
+        this.current = await this.store.put(this.make(payload, normalized), 0);
         this.opening = clone(payload); this.emit(); return this.current;
       });
     }
@@ -178,13 +187,13 @@
         if (signature(payload) === signature(this.current.payload) && !forceCheckpoint) return this.current;
         const record = clone(this.current);
         if (!record.history.length || forceCheckpoint || this.now() - record.checkpointAt >= 300000) this.checkpoint(record, forceCheckpoint ? 'Before restore' : 'Autosave checkpoint');
-        record.payload = clone(payload); record.title = title(payload); record.updatedAt = this.now();
+        record.payload = clone(payload); record.updatedAt = this.now();
         record.forceCheckpoint ||= forceCheckpoint;
         try { this.current = await this.write(record); }
         catch (error) {
           if (error.status !== 409) throw error;
           // A different tab owns a newer head. Preserve this tab as a new graph.
-          const copy = this.make(payload);
+          const copy = this.make(payload, record.title);
           copy.recovered = true;
           this.current = await this.store.put(copy, 0);
           this.opening = clone(payload);
@@ -213,7 +222,7 @@
           if (local.cloudRevision !== remote.revision) this.current = await this.write({ ...local, conflict: true });
         } else {
           const record = { ...(local || this.make(remote.payload)), id, payload: remote.payload, title: remote.title,
-            cloudRevision: remote.revision, updatedAt: remote.updatedAt, syncedPayload: signature(remote.payload), pending: null, conflict: false };
+            cloudRevision: remote.revision, updatedAt: remote.updatedAt, syncedPayload: signature(remote.payload), syncedTitle: remote.title, pending: null, conflict: false };
           this.current = await this.store.put(record, local?.localVersion || 0);
         }
         this.opening = clone(this.current.payload); this.sessionId = this.uuid();
@@ -229,32 +238,28 @@
         if (this.current?.id !== id) return;
         const latest = await this.store.read(id);
         // Keep the displaced local draft as its own recoverable document.
-        if (this.dirty(latest)) await this.store.put({ ...this.make(latest.payload), recovered: true }, 0);
+        if (this.dirty(latest)) await this.store.put({ ...this.make(latest.payload, latest.title), recovered: true }, 0);
         this.current = await this.store.put({ ...latest, payload: remote.payload, title: remote.title,
-          cloudRevision: remote.revision, updatedAt: remote.updatedAt, syncedPayload: signature(remote.payload),
+          cloudRevision: remote.revision, updatedAt: remote.updatedAt, syncedPayload: signature(remote.payload), syncedTitle: remote.title,
           pending: null, conflict: false, forceCheckpoint: false }, latest.localVersion);
         this.opening = clone(remote.payload); this.sessionId = this.uuid(); this.emit();
         return clone(remote.payload);
       });
     }
     async rename(id, name) {
-      const normalized = String(name).trim();
-      if (!normalized || normalized.length > 120) throw new Error('Use a graph name between 1 and 120 characters.');
+      const normalized = normalizeName(name);
       // Cache remote-only rows without changing the graph open in the editor.
       if (!await this.store.read(id)) {
         const remote = await this.api.request(`/documents/${encodeURIComponent(id)}`);
         await this.store.put({ ...this.make(remote.payload), id, title: remote.title, payload: remote.payload,
-          cloudRevision: remote.revision, updatedAt: remote.updatedAt, syncedPayload: signature(remote.payload) }, 0);
+          cloudRevision: remote.revision, updatedAt: remote.updatedAt, syncedPayload: signature(remote.payload), syncedTitle: remote.title }, 0);
       }
       return this.serial(async () => {
         const record = await this.store.read(id);
         if (record.conflict) throw new Error('Resolve this graph’s conflict before renaming it.');
-        this.checkpoint(record, 'Before rename');
-        record.payload.graph.title = normalized;
-        if (record.payload.graph.titleNode) record.payload.graph.titleNode.label = normalized;
-        record.payload.drafts = (record.payload.drafts || []).filter(draft => draft.selector !== '#graph-title');
-        if (record.payload.editor) record.payload.editor.detailEditBaseline = null;
-        record.title = normalized; record.updatedAt = this.now(); record.forceCheckpoint = true;
+        // Remember the metadata baseline for records cached before names were independent.
+        record.syncedTitle ??= record.title;
+        record.title = normalized; record.updatedAt = this.now();
         await this.write(record); this.emit(); return clone(record.payload);
       });
     }
@@ -297,7 +302,7 @@
             if (!fresh || fresh.conflict || !this.dirty(fresh)) return null;
             if (!fresh.pending) fresh = await this.write({ ...fresh, forceCheckpoint: false, pending: {
               writeId: this.uuid(), sessionId: this.sessionId, baseRevision: fresh.cloudRevision,
-              payload: clone(fresh.payload), checkpoint: !!fresh.forceCheckpoint
+              payload: clone(fresh.payload), title: fresh.title, checkpoint: !!fresh.forceCheckpoint
             } });
             return fresh;
           });
@@ -308,7 +313,8 @@
               const latest = await this.store.read(record.id);
               if (latest?.pending?.writeId !== record.pending.writeId) return;
               await this.write({ ...latest, cloudRevision: acknowledgement.revision,
-                syncedPayload: signature(record.pending.payload), pending: null, conflict: false });
+                syncedPayload: signature(record.pending.payload), syncedTitle: record.pending.title ?? record.title,
+                pending: null, conflict: false });
               this.emit();
             });
           } catch (error) {

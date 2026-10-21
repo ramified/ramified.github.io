@@ -19,7 +19,7 @@ async function run() {
       window.di = panels.open('dynkin-input', 'dynkin:' + d.id, 'side');window.dv=panels.open('dynkin-view','dynkin:'+d.id,'main');
       window.vertex = panels.open('dynkin-vertex', 'dynkin:' + d.id, 'side');
       window.parabolic = panels.open('dynkin-parabolic', 'dynkin:' + d.id, 'side');
-      window.cartan = panels.open('dynkin-cartan', 'dynkin:' + d.id, 'side');
+      window.cartan = panels.open('dynkin-cartan', 'lie:' + lie.id, 'side');
       window.ar = panels.open('dynkin-starting', 'dynkin:' + d.id, 'side');
     });
     assert.deepEqual(errors, []);
@@ -59,7 +59,7 @@ async function run() {
       window.si2 = panels.open('strands-input','strands:' + w.id,'side');
       window.info = panels.open('strands-info','strands:' + w.id,'side');
       window.calc = panels.open('strands-calculation','strands:' + w.id,'side');
-      window.basis = panels.open('strands-basis','strands:' + w.id,'side');
+      window.basis = panels.open('strands-basis','lie:' + lie.id,'side');
       window.relations = panels.open('strands-relations','','side');
       window.sv=panels.open('strands-view','strands:'+w.id,'main');window.sv2=panels.open('strands-view','strands:'+w.id,'side');window.display = panels.open('strands-display','','side');
       display.viewSelect.value = sv.id; display.viewSelect.dispatchEvent(new Event('change',{ bubbles: true }));

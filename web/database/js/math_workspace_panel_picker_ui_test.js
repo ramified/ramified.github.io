@@ -77,7 +77,7 @@ async function run() {
     await read(()=>option('matrix-invariants').click());
     await waitFor(()=>read(()=>[...panels.panels.values()].find(p=>p.definition.id==='matrix-invariants')?.computation.status==='current'));
     await read(()=>select(x,m));
-    assert.equal(await read(()=>!!option('grassmannian')),true);
+    assert.equal(await read(()=>!!option('grassmannian')),false,'the variety is supporting input; the confirmed principal type is Young diagram');
     await read(()=>option('asset:hodge').click());
     assert.deepEqual(await read(()=>[...api.state.selected]),await read(()=>[key(x),key(m)]),'opening a native property preserves the selected assets');
     assert.equal(await read(()=>api.assetsCardState.instances.get(api.assetsCardState.slots.get('hodge').activeInstanceKey).targetRef.id),await read(()=>x.id));
@@ -94,7 +94,8 @@ async function run() {
     assert.equal(await read(()=>scene.computation.status),'current');
     await read(()=>option('slicing-display').click());
     assert.equal(await read(()=>[...panels.panels.values()].find(p=>p.definition.id==='slicing-display').computation.refs.view),await read(()=>scene.id));
-    await read(()=>{select(d);option('dynkin-cartan').click();});
+    await read(()=>select(d));assert.equal(await read(()=>option('dynkin-cartan')),null,'Lie-only panels are absent from marked diagrams');
+    await read(()=>{select(g);option('dynkin-cartan').click();});
     assert.equal(await read(()=>[...panels.panels.values()].find(p=>p.definition.id==='dynkin-cartan').computation.refs.lie),await read(()=>key(g)));
     await read(()=>{panels.open('strands-input',key(w),'side',{keepPickerOpen:true});panels.open('strands-view',key(w),'side',{keepPickerOpen:true});select(w);});
     assert.equal(await read(()=>!!option('strands-display')),true);

@@ -568,6 +568,8 @@ async function main() {
 
       api.bindAssetPropertySlot('hodge', { kind: 'variety', id: firstVariety.id }, { focus: false });
       api.bindAssetPropertySlot('betti', { kind: 'variety', id: firstVariety.id }, { focus: false });
+      api.bindAssetPropertySlot('homology', { kind: 'variety', id: firstVariety.id }, { focus: false });
+      api.bindAssetPropertySlot('homology', { kind: 'sheaf', id: sheaf.id }, { focus: false });
       api.bindAssetPropertySlot('homology', { kind: 'map', id: boundMap.id }, { focus: false });
       api.bindAssetPropertySlot('characteristic-classes', { kind: 'sheaf', id: sheaf.id }, { focus: false });
       api.bindAssetPropertySlot('sheaf-cohomology', { kind: 'sheaf', id: sheaf.id }, { focus: false });
@@ -581,7 +583,7 @@ async function main() {
         propertyShells[type] = { ...shell(card), title: card.querySelector('.card-head').getAttribute('aria-label') };
       }
 
-      const homologySlot = api.assetsCardState.slots.get('homology');
+      const homologySlot = api.assetsCardState.slots.get('homology-map');
       const homologyCard = homologySlot.rendererSession.editor.inspectorShadow.querySelector('[data-workspace-card-id="homology-card"]');
       homologyCard.querySelector('.card-pin-btn').click();
       homologyCard.querySelector('.card-head').click();
@@ -800,6 +802,7 @@ async function main() {
       const api = window.MathWorkspaceAssetsTest;
       api.bindAssetPropertySlot('hodge', { kind: 'variety', id: 'X1' });
       api.bindAssetPropertySlot('betti', { kind: 'variety', id: 'X2' });
+      api.bindAssetPropertySlot('homology', { kind: 'variety', id: 'X1' });
       api.bindAssetPropertySlot('homology', { kind: 'sheaf', id: 'E3' });
       api.bindAssetPropertySlot('characteristic-classes', { kind: 'sheaf', id: 'E3' });
       api.bindAssetPropertySlot('sheaf-cohomology', { kind: 'sheaf', id: 'E3' });
@@ -809,10 +812,10 @@ async function main() {
         count: sessions.filter(Boolean).length,
         uniqueHosts: new Set(sessions.map((session) => session?.host)).size,
         canvasesHidden: sessions.every((session) => session?.host.hidden),
-        homologyInstance: api.assetsCardState.slots.get('homology').activeInstanceKey
+        homologyInstance: api.assetsCardState.slots.get('homology-map').activeInstanceKey
       };
     })()`);
-    assert.deepStrictEqual(propertySessions, { count: 5, uniqueHosts: 5, canvasesHidden: true, homologyInstance: 'asset:map:M4:homology' });
+    assert.deepStrictEqual(propertySessions, { count: 7, uniqueHosts: 7, canvasesHidden: true, homologyInstance: 'asset:map:M4:homology-map' });
     await delay(180);
     const geometryWithCards = await sceneGeometry(client);
     assert.deepStrictEqual(geometryWithCards.layout, geometryBeforeCards.layout, 'opening Property Cards must not rewrite canonical scene geometry');

@@ -2,12 +2,60 @@
 
 ## Workspace polish and Design Lab
 
+Fan and cone negative rays use the approved 0.7 length; Frame keeps both full
+negative axes. New cone and fan names use `\sigma` and `\Sigma`, with the existing
+unique-name numbering. Cartan matrices use 19px Georgia, zero row/column gaps,
+linked spacing, stroke 2 parentheses, zero opacity 0.2, and no diagonal highlights
+or indices. The completed Cartan and icon geometry Design Lab experiments have
+been removed. The shared Design Lab and Principal asset types experiment remain.
+`math_workspace_cartan_ui_test.js` verifies the approved preset and panel removal.
+
+Marked Dynkin icons show the referenced Lie diagram, all marked vertices, edge
+multiplicities and stored quiver directions for the native renderer's supported
+ranks (up to 12). Invalid/missing references and larger ranks use D5 with vertex
+2 marked as the generic representative. Exact and generic colors remain separate.
+`dynkin_diagram_geometry.js` owns the Cartan matrices and vertex placement shared
+by the native display and SVG thumbnails. Asset IDs and data remain unchanged.
+Run `math_workspace_dynkin_icons_ui_test.js` for all layouts, types, live parent
+updates, native geometry equivalence and the creation preview.
+
+Assets Modify and property-reference Edit use the same pane placement as Open:
+when Assets is visible in a main pane, the requested editor opens in the opposite
+split pane. Repeated edits preserve the Assets pane. Docked sidebar Assets stays
+docked without forcing an extra split. Legacy variety/sheaf/map editors retain
+their Inspector placement. `math_workspace_modify_split_ui_test.js` covers both
+pane orientations, closed editor reuse, property Edit, docked Assets and restore.
+
+Lie types open an unmarked Dynkin diagram using the shared native renderer,
+and their icons show family/rank notation such as E₆, independent of asset names.
+The `dynkin` object is labelled Marked Dynkin diagram: it stores a Lie reference,
+selected vertices and optional quiver directions. Its IDs and backup format are
+unchanged. Lie displays cannot alter those markings and retain the renderer's
+rank limits. `math_workspace_lie_display_ui_test.js` covers display routing,
+notation, live updates, unmarked geometry, split placement and restoration.
+
+Low-rank audit: D3 is supported directly in Dynkin and Strands, preserving D
+vertex/generator numbering and existing Young weight labels. Its Cartan matrix and
+positive roots agree with A3 after swapping the first two vertex coordinates;
+it has 12 roots, dimension 15 and Weyl order 24. A1 and B2/C2 are regression
+tested; B2/C2 keep their distinct long/short-root numbering. A0 remains available
+for the one-strand identity, outside positive-rank Dynkin/Young views.
+B1/C1 and D2 are supported without changing asset identities or family labels.
+Rank-one B/C use Cartan matrix [2], including dual Coxeter number 2 for B1.
+D2 uses diag(2,2), two disconnected vertices, independent marked/quiver data,
+and a product parabolic description. Its signed generators commute. Young
+dimension and fixed-rank decomposition engines retain their existing weight
+conventions, with product dimensions for D2. Root geometry also accepts D2/D3;
+the geometric canvas still requires ambient dimension at least 2. Run
+`dynkin_diagram_calculator_test.js`, `young_low_rank_test.js`, the Lie display
+suite and `math_workspace_degenerate_lie_ui_test.js`.
+
 Asset icons are derived by `MathWorkspaceAssetIcons`: nonempty ordinary Young
 diagrams fit within 5 by 5; generalized diagrams have at most five rows and a
 total signed span of six cells. Empty diagrams retain the generic Young icon.
 Small Strands use the same `StrandDrawing` routines as the full editor. Other
 single-letter mathematical labels use MathJax, with a generic fallback.
-Generic icons use a muted color without a corner marker. Details columns scroll
+Generic icons use #a8510b without a corner marker. Details columns scroll
 inside the Assets view when docked; they cannot widen the sidebar or page.
 Strands viewport redraws build the current diagram data before rendering.
 
@@ -35,9 +83,35 @@ collecting old orphan defaults. Run `math_workspace_defaults_test.js` and
 `math_workspace_default_cleanup_ui_test.js` for this lifecycle.
 
 New… uses one searchable creation dialog. The declarative creation catalog has
-overlapping subject tags; subject selection is a union and search narrows it.
-Every kind appears once. Run the icon/creation unit tests and
+overlapping subject tags; one subject can be active, with All objects as the
+default, and search narrows that subject's results. Every kind appears once in a
+compact, responsive icon grid. Descriptions are available on hover and focus.
+Stay open is unchecked by default; when checked, creation preserves the dialog,
+search, subject and scroll position for successive additions. Closing after an
+addition focuses the last created object's Input; cancellation without creating
+restores the previous focus. Run the icon/creation unit tests and
 `math_workspace_polish_ui_test.js` in addition to affected workspace suites.
+`math_workspace_creation_grid_ui_test.js` checks visible grid density, single
+subject selection, grid/radio keyboard navigation, successive creation of the
+same type, Stay open defaults, retained filters/scroll, desktop/mobile sizing
+and focus on the last created object's Input after dismissal.
+
+Generic Young icons depict (3,1); generic Strands icons depict the A2 braid
+sigma1 sigma2^-1 on three strands. These are type representatives and leave
+Asset data unchanged. Exact Strands icons require fewer than five strands and
+fewer than five compressed rows, regardless of generator count. Exact icons use
+the accent color and generic icons use #a8510b. Every strand, including
+KL/TL glyphs, uses the same ink in a thumbnail, with soft curves and round ends.
+Thumbnail rows greedily group consecutive generators with disjoint physical
+tracks, otherwise starting a new row, without backfilling or rewriting the word.
+Signed generators keep their mirrored crossings together. The full calculator's
+spacing, colors and style controls retain their existing behavior.
+Design Lab has a separate strandStroke slider (4–24, default 19 at the 256px
+thumbnail backing size); overrides remain local to the tab and reset on exit.
+Creation icons refresh when appearance settings change. Run
+`math_workspace_asset_icons_test.js` for the row examples and drawing semantics,
+and `math_workspace_strand_icons_ui_test.js` for all five layouts, representative
+geometry, uniform ink, live stroke changes, backup isolation and picker previews.
 The five polish blocks are implemented. Additional acceptance coverage in
 `math_workspace_computations_creation_ui_test.js` checks LR target lifecycle
 and exports, symmetric/exterior power identities and limits, backup validation,
@@ -153,7 +227,7 @@ spacing and sizing do not change the asset or invalidate calculations.
 
 Lie assets no longer have a global rank-12 cap. Consumers validate their own
 limits before mounting: the existing Dynkin/Young calculators keep rank <=12;
-Dynkin and Strands require D rank >=4. The Strands view bounds its generator
+Dynkin and Strands support B/C rank >=1 and D rank >=2. The Strands view bounds its generator
 palette allocation at Lie rank 1000. Unsupported inputs retain all mathematical
 data and show a message. Shrinking/changing a shared Lie asset cannot silently
 clip vertices, discard generators, replace references or rewrite quiver edges.

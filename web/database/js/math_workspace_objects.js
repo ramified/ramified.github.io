@@ -4,7 +4,7 @@
   const keyOf = ref => ref ? `${ref.kind}:${ref.id}` : '';
   const types = ['A', 'B', 'C', 'D', 'E6', 'E7', 'E8', 'F4', 'G2'];
   const inputKinds = ['young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...slicing.kinds];
-  const kindLabels = { ...slicing.labels, variety: 'Toric variety', young: 'Young diagram', lie: 'Lie type', field: 'Field', matrix: 'Matrix', category: 'Category', functor: 'Functor', dynkin: 'Dynkin diagram', strands: 'Strands' };
+  const kindLabels = { ...slicing.labels, variety: 'Variety', sheaf:'Sheaf', map:'Map', young: 'Young diagram', lie: 'Lie type', field: 'Field', matrix: 'Matrix', category: 'Category', functor: 'Functor', dynkin: 'Marked Dynkin diagram', strands: 'Strands' };
   const coefficientTypes = [['complex','Complex numbers ℂ'],['real','Real numbers ℝ'],['rational','Rational numbers ℚ'],['integer','Integers ℤ'],['finite-field','Prime field'],['rational-function','Rational function field'],['number-field','Number field']];
   function fieldLabel(data) {
     if (data.dataType === 'finite-field') return 'GF(' + data.finiteFieldPrime + ')';
@@ -88,7 +88,7 @@
       const family = source.family || 'A', exceptional = { E6: 6, E7: 7, E8: 8, F4: 4, G2: 2 };
       if (!types.includes(family)) throw new Error('Choose a supported Lie type.');
       // A0 is the empty root system used by the existing one-strand identity.
-      const rank = exceptional[family] || Number(source.rank ?? 3), min = { A: 0, B: 2, C: 2, D: 3 }[family] ?? 1;
+      const rank = exceptional[family] || Number(source.rank ?? 3), min = { A: 0, B: 1, C: 1, D: 2 }[family] ?? 1;
       if (!Number.isSafeInteger(rank) || rank < min || rank >= Number.MAX_SAFE_INTEGER) throw new Error(`Rank for ${family} must be an integer at least ${min}.`);
       return { family, rank };
     }
@@ -102,7 +102,7 @@
     const { family, rank } = lie;
     const chainLength = family === 'D' || family.startsWith('E') ? rank - 1 : rank;
     const edges = Array.from({ length: Math.max(0, chainLength - 1) }, (_, i) => i + '-' + (i + 1));
-    if (family === 'D') edges.push((rank - 3) + '-' + (rank - 1));
+    if (family === 'D' && rank >= 3) edges.push((rank - 3) + '-' + (rank - 1));
     if (family.startsWith('E')) edges.push('2-' + (rank - 1));
     return edges;
   }
@@ -116,10 +116,10 @@
     } else if (asset.kind === 'dynkin') {
       if (data.vertices.some(v => v > lie.rank)) issues.push('The vertex set exceeds the Lie rank. Edit the vertices or Lie reference; the set has been preserved.');
       if (data.quiver != null) {
-        if (!['A','D','E6','E7','E8'].includes(lie.family)) issues.push('Quiver directions require a simply laced type A, D or E.');
+        if (!['A','D','E6','E7','E8'].includes(lie.family) && !(lie.rank === 1 && ['B','C'].includes(lie.family))) issues.push('Quiver directions require a simply laced diagram.');
         const edges = Object.keys(data.quiver), chainEnd = lie.family === 'D' || lie.family.startsWith('E') ? lie.rank - 2 : lie.rank - 1;
         const valid = edge => { const [i,j] = edge.split('-').map(Number); return j === i + 1 && j <= chainEnd || lie.family === 'D' && i === lie.rank - 3 && j === lie.rank - 1 || lie.family.startsWith('E') && i === 2 && j === lie.rank - 1; };
-        if (edges.length !== Math.max(0, lie.rank - 1) || edges.some(edge => !valid(edge))) issues.push('Stored quiver edges do not match the Lie diagram. Remove or replace the optional directions; they have been preserved.');
+        if (edges.length !== (lie.family === 'D' && lie.rank === 2 ? 0 : Math.max(0, lie.rank - 1)) || edges.some(edge => !valid(edge))) issues.push('Stored quiver edges do not match the Lie diagram. Remove or replace the optional directions; they have been preserved.');
       }
     }
     return issues;
@@ -127,11 +127,11 @@
   function lieEngineIssues(lie, engine) {
     if (engine === 'strand') {
       if (!['A','B','C','D'].includes(lie.family)) return ['Strands requires a Lie type in A–D.'];
-      if (lie.family === 'D' && lie.rank < 4) return ['The Strands calculator supports D ranks starting at 4.'];
+      if (lie.family === 'D' && lie.rank < 2) return ['The Strands calculator supports D ranks starting at 2.'];
       // Bound the native palette allocation, not the mathematical asset.
       if (lie.rank > 1000) return ['This Strands view supports Lie ranks up to 1000. The asset is unchanged.'];
     } else if (['dynkin','young','double-young'].includes(engine)) {
-      const min = lie.family === 'D' && engine === 'dynkin' ? 4 : 1;
+      const min = lie.family === 'D' ? 2 : 1;
       if (lie.rank < min || lie.rank > 12) return ['This ' + engine + ' calculator supports this Lie rank from ' + min + ' to 12. The asset is unchanged.'];
     }
     return [];
@@ -180,7 +180,7 @@
   const b = () => slot('mu', 'Young diagram μ', 'young');
   const lie = () => slot('lie', 'Lie type', 'lie');
   const classicalLie = () => slot('lie', 'Lie type (A–D)', 'lie', { families: ['A','B','C','D'] });
-  const dynkin = () => slot('dynkin', 'Dynkin diagram', 'dynkin');
+  const dynkin = () => slot('dynkin', 'Marked Dynkin diagram', 'dynkin');
   const strands = () => slot('strands', 'Strands', 'strands');
   function powerRows(mode, degree) {
     if (!['symmetric','exterior'].includes(mode) || !Number.isInteger(degree) || degree < 0 || degree > 12) throw new Error('Power degree must be an integer from 0 to 12.');
@@ -190,10 +190,11 @@
     ...slicing.definitions,
     { id: 'young-input', label: 'Young diagram Input', input: 'young' },
     { id: 'young-view', label: 'Young diagram', engine:'young', assetView:true, viewRole:'lambda', light:true, slots:[slot('lambda','Young diagram','young')] },
-    { id: 'dynkin-view', label:'Dynkin diagram', engine:'dynkin', assetView:true, viewRole:'dynkin', light:true, slots:[dynkin()] },
+    { id: 'dynkin-view', label:'Marked Dynkin diagram', engine:'dynkin', assetView:true, viewRole:'dynkin', light:true, slots:[dynkin()] },
+    { id: 'lie-view', label:'Dynkin diagram', engine:'dynkin', assetView:true, readOnly:true, viewRole:'lie', light:true, slots:[lie()] },
     { id: 'strands-view', label:'Strands', engine:'strand', assetView:true, viewRole:'strands', light:true, slots:[strands()] },
     { id: 'sheaf-view', label:'Variety and Sheaf Overview', engine:'complex', assetView:true, sheafView:true, overview:true, readOnly:true, viewRole:'asset', light:true, slots:[slot('asset','Add / select object',null,{kinds:['variety','sheaf','map'],optional:true,emptyLabel:'Choose an object to add…'})] },
-    { id: 'geometry-view', label:'Projection / 2D Slice', engine:'slice', assetView:true, geometryView:true, slicing:true, slicingScene:true, light:true, slots:[slot('asset','Asset',null,{kinds:[...slicing.kinds,'variety']}),slot('frame','Frame','frame')] },
+    { id: 'geometry-view', label:'Projection / 2D Slice', engine:'slice', assetView:true, geometryView:true, slicing:true, slicingScene:true, light:true, slots:[slot('asset','Object',null,{kinds:[...slicing.kinds,'variety'],optional:true,emptyLabel:'Choose an object…'}),slot('frame','Frame','frame')] },
     { id: 'lie-input', label: 'Lie type Input', input: 'lie' },
     { id: 'field-input', label: 'Field Input', input: 'field' },
     { id: 'field-view', label: 'Field Display', objectView: true, slots: [slot('asset','Field','field')], light: true },
@@ -202,17 +203,17 @@
     { id: 'matrix-view', label: 'Matrix Display', engine: 'matrix', slots: [slot('matrix', 'Matrix', 'matrix')], light: true },
     { id: 'category-input', label: 'Category Input', input: 'category', engine: 'category' },
     { id: 'functor-input', label: 'Functor Input', input: 'functor', engine: 'category' },
-    { id: 'dynkin-input', label: 'Dynkin diagram Input', input: 'dynkin' },
+    { id: 'dynkin-input', label: 'Marked Dynkin diagram Input', input: 'dynkin' },
     { id: 'strands-input', label: 'Strands Input', input: 'strands', engine: 'strand' },
-    { id: 'dynkin-invariants', label: 'Dynkin Basic Invariants', engine: 'dynkin', marker: 'dynkin-invariants', slots: [lie()], fromKinds: ['dynkin'], light: true },
-    { id: 'dynkin-cartan', label: 'Cartan Matrix', engine: 'dynkin', marker: 'dynkin-cartan', slots: [lie()], fromKinds: ['dynkin'], light: true },
+    { id: 'dynkin-invariants', label: 'Dynkin Basic Invariants', engine: 'dynkin', marker: 'dynkin-invariants', slots: [lie()], light: true },
+    { id: 'dynkin-cartan', label: 'Cartan Matrix', engine: 'dynkin', marker: 'dynkin-cartan', slots: [lie()], light: true },
     { id: 'dynkin-vertex', label: 'Vertex Data', engine: 'dynkin', marker: 'dynkin-vertex-data', slots: [dynkin()], light: true },
     { id: 'dynkin-parabolic', label: 'Parabolic Subalgebra', engine: 'dynkin', marker: 'dynkin-parabolic', slots: [dynkin()], light: true },
     { id: 'dynkin-starting', label: 'Starting Function / AR Quiver', engine: 'dynkin', marker: 'dynkin-starting-function', slots: [dynkin()], light: true },
     { id: 'strands-info', label: 'Strands Basic Info', engine: 'strand', marker: 'strand-basic-info', slots: [strands()], light: true },
     { id: 'strands-calculation', label: 'Strands Calculation', engine: 'strand', marker: 'strand-calculation-card', slots: [strands()] },
     { id: 'strands-relations', label: 'Strands Relations', engine: 'strand', marker: 'strand-calculation-card', slots: [], light: true },
-    { id: 'strands-basis', label: 'Strands Basis', engine: 'strand', marker: 'strand-calculation-card', slots: [classicalLie()], fromKinds: ['strands'], light: true },
+    { id: 'strands-basis', label: 'Strands Basis', engine: 'strand', marker: 'strand-calculation-card', slots: [classicalLie()], light: true },
     { id: 'strands-display', label: 'Strands Display', engine: 'strand', marker: 'strand-direction', slots: [], display: true, viewTypes:['strands-view'], light: true },
     { id: 'matrix-invariants', label: 'Matrix Basic Invariants', engine: 'matrix', marker: 'out-rank', slots: [slot('matrix', 'Matrix', 'matrix')], light: true },
     { id: 'matrix-computation', label: 'Matrix Computation', engine: 'matrix', marker: 'operation-output', slots: [slot('matrix', 'Matrix', 'matrix')] },
@@ -234,10 +235,10 @@
     { id: 'slice', label: '2D Weight Slice', engine: 'double-young', marker: 'slice-card-body', slots: [a(), b(), lie()], light: true }
   ];
   const capabilities=Object.fromEntries(['variety','sheaf','map',...inputKinds].map(kind=>[kind,{
-    open:kind==='young'?'young-view':kind==='dynkin'?'dynkin-view':kind==='strands'?'strands-view':kind==='matrix'?'matrix-view':kind==='field'?'field-view':['category','functor'].includes(kind)?'category-diagram':['variety','sheaf','map'].includes(kind)?'sheaf-view':slicing.kinds.includes(kind)?'geometry-view':'asset-view',
+    open:kind==='lie'?'lie-view':kind==='young'?'young-view':kind==='dynkin'?'dynkin-view':kind==='strands'?'strands-view':kind==='matrix'?'matrix-view':kind==='field'?'field-view':['category','functor'].includes(kind)?'category-diagram':['variety','sheaf','map'].includes(kind)?'sheaf-view':slicing.kinds.includes(kind)?'geometry-view':'asset-view',
     modify:inputKinds.includes(kind)?kind+'-input':null,
     directEdit:['young','dynkin','strands','matrix'].includes(kind),
-    properties:definitions.filter(d=>!d.input&&!d.assetView&&(d.slots||[]).some(s=>(s.kinds||[s.kind]).includes(kind))).map(d=>d.id)
+    properties:definitions.filter(d=>!d.input&&!d.assetView&&!d.objectView&&!d.display&&!d.scene&&!d.slicingScene&&d.id!=='matrix-view'&&(d.slots||[]).some(s=>(s.kinds||[s.kind]).includes(kind))).map(d=>d.id)
   }]));
   function capabilityFor(asset){return asset?.kind==='variety'&&asset.type==='toric'?{...capabilities.variety,modify:'toric-variety-input'}:capabilities[asset?.kind];}
   const byType = new Map(definitions.map(definition => [definition.id, definition]));
@@ -416,7 +417,8 @@
       }
     }
     function setRendererVisible(renderer, visible, property = false) {
-      const view=['young-view','dynkin-view','strands-view','sheaf-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
+      if (renderer.operation==='dynkin-cartan') {renderer.editor.setCanvasActive(false);renderer.editor.setInspectorActive(false);renderer.host.hidden=true;renderer.inspectorHost.hidden=true;return;}
+      const view=['young-view','dynkin-view','lie-view','strands-view','sheaf-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
       const canvas = !property || view;
       const inspector = property && !view || renderer.role === 'input' && ['matrix', 'category', 'strand','slice'].includes(renderer.engine);
       // Slicing inputs edit Assets; the dedicated slicing scene owns the canvas.
@@ -479,6 +481,16 @@
       select.setAttribute('aria-label', spec.label);
       const commit = value => {
         write(value);
+        if(definition.slicingScene) {
+          const refs=panel.computation.refs;
+          if(spec.id==='asset'&&value&&get(value)?.kind!=='frame') refs.nodes=[...new Set([...(refs.nodes||[]),value])];
+          if(spec.id==='asset'&&get(value)?.kind==='frame') refs.frame=value;
+          if(spec.id==='frame'||spec.id==='asset'&&get(value)?.kind==='frame') {
+            const frame=get(refs.frame);
+            refs.nodes=(refs.nodes||[]).filter(key=>key!==refs.frame&&slicing.fitsFrame(get(key),frame,snapshot.assets));
+            if(refs.asset&&refs.asset!==refs.frame&&!slicing.fitsFrame(get(refs.asset),frame,snapshot.assets)) refs.asset='';
+          }
+        }
         if (definition.overview && value) {
           panel.computation.refs.nodes = [...new Set([...(panel.computation.refs.nodes || []),value])];
           panel.computation.refs.active = value;
@@ -662,10 +674,12 @@
     }
     function refreshSceneChoices(panel) {
       panel.controls.classList.add('workspace-object-scene-choices');
-      const assets = snapshot.assets.filter(asset => panel.definition.slicingScene ? slicing.renderable(asset) : ['category', 'functor'].includes(asset.kind));
-      const signature = JSON.stringify(assets.map(asset => [keyOf(asset), asset.name]));
+      const frame=get(panel.computation.refs.frame);
+      const assets = snapshot.assets.filter(asset => panel.definition.slicingScene ? keyOf(asset)!==keyOf(frame)&&slicing.fitsFrame(asset,frame,snapshot.assets) : ['category', 'functor'].includes(asset.kind));
+      const signature = JSON.stringify([panel.computation.refs.nodes,assets.map(asset => [keyOf(asset), asset.name])]);
       if (panel.sceneSignature !== signature) {
         panel.controls.replaceChildren();
+        if(panel.definition.slicingScene) panel.controls.append(element('span','workspace-scene-choices-label','Geometric objects:'));
         for (const asset of assets) {
           const label = element('label', 'workspace-check workspace-card-option'), check = element('input'); check.type = 'checkbox'; check.dataset.sceneAsset = keyOf(asset);
           check.addEventListener('change', () => { const nodes = new Set(panel.computation.refs.nodes); if (check.checked) nodes.add(keyOf(asset)); else nodes.delete(keyOf(asset)); panel.computation.refs.nodes = [...nodes]; refreshPanel(panel); });
@@ -857,7 +871,7 @@
               panel.derivedLabel.textContent = parent ? (parent.plainName || parent.name) + ' · ' + parent.data.family + parent.data.rank + (asset.kind === 'strands' && ['A','B','C','D'].includes(parent.data.family) ? ' · ' + (parent.data.family === 'A' ? 'S' + (parent.data.rank + 1) : parent.data.family + parent.data.rank) : '') : 'Choose a Lie type for this object.';
               if (panel.vertices) {
                 sync(panel.vertices, asset.data.vertices.join(', ')); panel.quiver.checked = asset.data.quiver != null;
-                panel.quiver.disabled = !asset.data.quiver && (!parent || !['A','D','E6','E7','E8'].includes(parent.data.family) || lieEngineIssues(parent.data, 'dynkin').length > 0);
+                panel.quiver.disabled = !asset.data.quiver && (!parent || (!['A','D','E6','E7','E8'].includes(parent.data.family) && parent.data.rank !== 1) || lieEngineIssues(parent.data, 'dynkin').length > 0);
               }
               if (panel.repairWord) panel.repairWord.hidden = !panel.inputIssues.length || !asset.data.generators.length;
               feedback(panel, panel.inputIssues.join(' '), !!panel.inputIssues.length);
@@ -869,7 +883,7 @@
           if (!asset) feedback(panel, panel.assetKey ? 'The referenced asset was deleted. Choose another asset.' : 'Choose or create an asset to edit.');
         } else if (panel.definition.objectView) { refreshObjectView(panel); }
         else if (panel.definition.display) { refreshDisplayPanel(panel); } else {
-          if ((panel.definition.scene || panel.definition.slicingScene)&&!panel.definition.assetView&&!panel.definition.overview) refreshSceneChoices(panel);
+          if (panel.definition.slicingScene || panel.definition.scene&&!panel.definition.assetView&&!panel.definition.overview) refreshSceneChoices(panel);
           const computation = panel.computation, context = contextFor(computation, snapshot.assets);
           if (panel.definition.overview && computation.refs.active && !Object.values(context.objects).some(asset=>keyOf(asset)===computation.refs.active)) computation.refs.active = '';
           const bound=get(computation.refs[panel.definition.viewRole||'asset']);
@@ -901,6 +915,14 @@
             }
             setRendererVisible(renderer, !panel.closed && !panel.collapsed && !panel.node.hidden, true);
             feedback(panel, computation.status === 'pending' ? 'Computing…' : computation.status === 'stale' ? 'Inputs changed. Use compute to update the result.' : '');
+          }
+        }
+        if(panel.definition.id==='dynkin-cartan') {
+          const matrix=panel.computation.status==='current'&&panel.computation.result?.cartan,lie=get(panel.computation.refs.lie);
+          panel.addCartan.disabled=!matrix?.length;
+          if(matrix&&lie) {
+            if(!panel.cartanView){panel.cartanView=element('div');panel.renderArea.append(panel.cartanView);}
+            window.MathWorkspaceCartan.renderInto(panel.cartanView,matrix,lie.data.family[0]+lie.data.rank);
           }
         }
         api.title(panel.id, panel.title.textContent);
@@ -952,6 +974,7 @@
       const panel = { id, definition, node, head, title, body, references, controls, message, renderArea, selectors: [], renderers: new Map(), assetKey:definition.overview?'':assetKey, location: 'hidden', closed: false, collapsed: false, refreshing: false };
       node.dataset.panelRole=definition.input?'modify':definition.assetView||definition.scene||definition.slicingScene||['matrix-view','slice'].includes(type)?'view':'property';
       panels.set(id, panel); head.append(title, element('em', 'toggle-icon', '▾')); body.append(references, controls, message, renderArea); node.append(head, body);
+      if(definition.slicingScene) body.append(references,controls,message);
       if (definition.input) {
         referenceControl(panel, slot('asset', kindLabels[definition.input], definition.input, {subtype:definition.subtype}), definition, () => panel.assetKey, value => { panel.assetKey = value; if(definition.input==='matrix')ensureMatrixField(value); });
         inputFields(panel);
@@ -967,6 +990,14 @@
           panel.references.append(field('View', select));
         }
         computations.set(computation.id, computation); panel.computation = computation;
+        if(type==='dynkin-cartan') {
+          panel.addCartan=button('Add to Assets',()=>{
+            const matrix=panel.computation.status==='current'&&panel.computation.result?.cartan;
+            if(!matrix?.length)return;
+            const asset=api.create('matrix',{data:normalize('matrix','matrix',{rows:matrix.length,cols:matrix.length,entries:matrix.map(row=>row.map(String)),dataType:'integer'})});
+            api.selectAsset?.(refOf(asset));feedback(panel,'Added '+(asset.plainName||asset.name)+' to Assets.');
+          },'Add the displayed Cartan matrix to Assets');panel.addCartan.dataset.addCartanAsset='';panel.body.append(panel.addCartan);
+        }
         if(type==='plethysm'){powerControls(panel);if(options.id&&computation.settings.mode!=='advanced')panel.powerBinding=JSON.stringify(powerRows(computation.settings.mode,computation.settings.degree));}
         if (type === 'branching') {
           computation.rule = options.rule || 'diag-gl';
@@ -983,6 +1014,16 @@
       return panel;
     }
     function overviewAction(panel, action) {
+      if(panel.definition.slicingScene) {
+        const refs=panel.computation.refs,frame=get(refs.frame);
+        if(action==='clear') { refs.nodes=[];refs.asset=''; }
+        else if(action==='collect') {
+          if(!frame)return;
+          refs.nodes=snapshot.assets.filter(asset=>keyOf(asset)!==refs.frame&&slicing.fitsFrame(asset,frame,snapshot.assets)).map(keyOf);
+          if(refs.asset&&refs.asset!==refs.frame&&!refs.nodes.includes(refs.asset))refs.asset='';
+        } else return;
+        refreshPanel(panel);return;
+      }
       if (!panel.definition.overview) return;
       const refs = panel.computation.refs;
       if (action === 'clear') {

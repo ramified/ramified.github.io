@@ -6,6 +6,8 @@ const __copySlice = value => JSON.parse(JSON.stringify(value));
 let __sliceSnapshot = {assets:[]}, __sliceRef = null, __sliceBinding = {}, __sliceFrame = null, __sliceTarget = null;
 let __sliceApplying = false, __sliceRendering = false, __sliceNotifyQueued = false;
 const __sliceLayers = new Map(), __sliceInputModes = new Map();
+let __sliceSceneUI = null;
+const __sceneObjects = () => state.objects.filter(object=>object.id!==__key(__sliceFrame)&&(__sliceBinding.references?.nodes||[]).includes(object.id));
 let __sliceSourceSignature = '', __sliceFrameSignature = '', __sliceRawFrame = null;
 const __originalSliceRender = renderAll, __originalReadouts = updateReadouts, __originalDirectFrame = applyDirectFrameRows, __originalSliceDraw = draw;
 const __originalSourceLabel=sourceLabel;
@@ -133,8 +135,16 @@ renderAll = function() {
   __sliceRendering=true;
   try {
     __originalSliceRender(); __slicePinTabs();
-    const visible=state.objects.filter(object=>(__sliceBinding.references?.nodes||[]).includes(object.id));
+    const visible=__sceneObjects();
     for(const control of document.querySelectorAll('[data-layer-control]')){const count=visible.filter(object=>!!object[control.dataset.layerControl]).length;control.checked=visible.length>0&&count===visible.length;control.indeterminate=count>0&&count<visible.length;control.disabled=!visible.length;}
+    if(__sliceSceneUI) {
+      const object=state.objects.find(object=>object.id===__key(__sliceFrame));
+      __sliceSceneUI.frame.textContent=__sliceFrame?(__sliceFrame.plainName||__sliceFrame.name)+' · '+state.ambientDim+'D':'Choose a frame';
+      __sliceSceneUI.count.textContent=visible.length+' displayed';
+      for(const control of __sliceSceneUI.frameControls) {control.checked=!!object?.[control.dataset.frameControl];control.disabled=!object;}
+      __sliceSceneUI.clear.disabled=!visible.length;
+      __sliceSceneUI.collect.disabled=!__sliceFrame;
+    }
     if(__panelConfig.operation==='lattice-character') __renderBoundCharacter();
   } finally { __sliceRendering=false; }
   __sliceNotify();
@@ -163,13 +173,13 @@ toricCharacterFanForCandidate=function(candidate) {
 const __originalSliceObjectSelect=syncObjectSelect;
 syncObjectSelect=function() {
   __originalSliceObjectSelect();if(__panelConfig.operation!=='slicing-display')return;
-  const select=$('object-select');for(const option of [...select.options])if(state.objects.find(o=>o.id===option.value)?.__dependency)option.remove();
+  const select=$('object-select');for(const option of [...select.options])if(option.value===__key(__sliceFrame)||state.objects.find(o=>o.id===option.value)?.__dependency)option.remove();
   if(![...select.options].some(o=>o.value===state.activeObjectId)){state.activeObjectId=select.options[0]?.value||null;select.value=state.activeObjectId||'';}
 };
 function __sliceApply(snapshot,ref,binding={}) {
   const model=__sliceModel(),all=snapshot.assets||[],refs=binding.references||{};
   const target=all.find(a=>__key(a)===__key(ref));
-  const frame=target?.kind==='frame'?target:all.find(a=>__key(a)===refs.frame&&a.kind==='frame');
+  const frame=all.find(a=>__key(a)===refs.frame&&a.kind==='frame')||(target?.kind==='frame'?target:null);
   const primary=target||all.find(a=>__key(a)===(refs.cone||refs.fan||refs.variety||refs.lattice));
   const primaryData=primary?model.materialize(primary,all).data:null;
   const n=frame?.data.ambientDimension??primaryData?.ambientDimension??primaryData?.rows??(Number(primaryData?.dimension)||4);
@@ -189,6 +199,7 @@ function __sliceApply(snapshot,ref,binding={}) {
     if(changedDimension) {state.activeDirection=defaultDirection(n);state.rotationPair=defaultRotationPair(n);rebuildDynamicControls();}
     if(sourceSignature!==__sliceSourceSignature) {
       const selected=new Set(refs.nodes|| (primary?[__key(primary)]:[]));
+      if(__panelConfig.mode==='scene'&&frame) selected.add(__key(frame));
       if(__panelConfig.operation==='lattice-character'&&refs.variety) selected.add(refs.variety);
       const old=new Map(state.objects.map(o=>[o.id,o]));
       state.objects=all.filter(a=>{if(!(model.isAsset(a)||['matrix','lie'].includes(a.kind)))return false;try{const d=model.materialize(a,all).data;return (d.ambientDimension??d.rows??d.rank??Number(d.dimension))===n;}catch(_){return false;}}).flatMap(a=>{
@@ -196,6 +207,10 @@ function __sliceApply(snapshot,ref,binding={}) {
         let object;
         if(unchangedTarget&&!['frame','voronoi'].includes(a.kind)&&__key(a)===__key(target)&&old.has(__key(a))) object=old.get(__key(a)); else object=__sliceNative(a,all);
         if(!object) return [];
+        if(__panelConfig.mode==='scene'&&__key(a)===__key(frame)) {
+          const layer=__sliceLayers.get(object.id);
+          object.visibleProjection=layer?.visibleProjection??true;object.visibleSlice=false;
+        }
         object.__dependency=!selected.has(object.id); if(object.__dependency){object.visibleProjection=false;object.visibleSlice=false;}
         return [object];
       });
@@ -216,7 +231,7 @@ function __sliceApply(snapshot,ref,binding={}) {
 function __sliceResult() {
   const refs=__sliceBinding.references||{},op=__panelConfig.operation;
   const result={hasResult:true,text:__panelCard?.querySelector('.card-body')?.innerText||'',frame:__sliceFrame?__sliceFrameData():null};
-  if(op==='slicing-scene') __withOrthonormalFrame(()=>{result.sliceBasis=frameRows(state.frame.slice(0,2));result.coordinates='orthonormal slice coordinates';result.objects=state.objects.filter(o=>(refs.nodes||[]).includes(o.id)).map(o=>({asset:o.id,slice:o.visibleSlice?exactSliceData(o):null}));});
+  if(['slicing-scene','geometry-view'].includes(op)) __withOrthonormalFrame(()=>{result.sliceBasis=frameRows(state.frame.slice(0,2));result.coordinates='orthonormal slice coordinates';result.objects=__sceneObjects().map(o=>({asset:o.id,slice:o.visibleSlice?exactSliceData(o):null}));});
   if(['cone-faces','cone-variety','fan-orbits','fan-divisors'].includes(op)) {const o=activeObject();if(o){const a=objectTypeKey(o)==='toric-fan'?toricFanAnalysis(o):toricConeAnalysis(o);result.hasResult=a?.status!=='pending';result.analysis=__copySlice(a);}}
   if(op==='lattice-character') result.point=refs.point;
   return result;
@@ -262,10 +277,22 @@ __editor.setAssetAdapter({
     }
     if(card) {__showCard(card);if(config.mode==='input')__editor.mountObjectSurfaces({modify:[card.querySelector('.card-body')]});}
     if(config.mode==='scene') {
-      const toolbar=[$('screen-zoom')?.closest('.slice-control-line'),$('show-axes')?.closest('.slice-control-line')];
-      const layers=document.createElement('div');layers.className='workspace-scene-layers';layers.setAttribute('aria-label','Object layers');
-      for(const [text,key]of [['projection','visibleProjection'],['slice','visibleSlice'],['labels','labels']]){const label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.dataset.layerControl=key;check.addEventListener('change',()=>{const selected=new Set(__sliceBinding.references?.nodes||[]);for(const object of state.objects)if(selected.has(object.id))object[key]=check.checked;renderAll();});label.append(check,document.createTextNode(text));layers.append(label);}
-      toolbar.push(layers);__editor.mountObjectSurfaces({content:[$('slice-viewport').parentElement],toolbar});
+      const group=(title,key)=>{const node=document.createElement('div');node.className='workspace-scene-control-group';node.dataset.sceneControlGroup=key;node.setAttribute('role','group');node.setAttribute('aria-label',title);const heading=document.createElement('strong');heading.textContent=title;node.append(heading);return node;};
+      const view=group('View','view');
+      for(const node of [$('screen-zoom')?.closest('.slice-control-line'),$('show-axes')?.closest('label')]) if(node)view.append(node);
+      const frame=group('Frame','frame'),name=document.createElement('span');name.className='workspace-scene-frame-name';frame.append(name);
+      const frameControls=[];
+      for(const [text,key]of [['Basis vectors','visibleProjection'],['Labels','labels']]) {
+        const label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.dataset.frameControl=key;check.setAttribute('aria-label','Frame: '+text);
+        check.addEventListener('change',()=>{const object=state.objects.find(object=>object.id===__key(__sliceFrame));if(object)object[key]=check.checked;renderAll();});label.append(check,document.createTextNode(text));frame.append(label);frameControls.push(check);
+      }
+      const layers=group('Geometric objects','objects'),count=document.createElement('span');count.className='workspace-scene-object-count';count.setAttribute('aria-live','polite');layers.append(count);
+      for(const [text,key]of [['Projection','visibleProjection'],['2D slice','visibleSlice'],['Labels','labels']]){const label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.dataset.layerControl=key;check.setAttribute('aria-label','Geometric objects: '+text);check.addEventListener('change',()=>{for(const object of __sceneObjects())object[key]=check.checked;renderAll();});label.append(check,document.createTextNode(text));layers.append(label);}
+      const action=(text,key,title)=>{const button=document.createElement('button');button.type='button';button.className='btn btn-ghost';button.dataset.sceneAction=key;button.textContent=text;button.title=title;button.setAttribute('aria-label',title);button.addEventListener('click',()=>options.onOverviewAction?.(key));layers.append(button);return button;};
+      const clear=action('Clear','clear','Remove geometric objects from this display'),collect=action('Collect','collect','Collect valid objects with the same ambient dimension as the selected frame');
+      __sliceSceneUI={frame:name,count,frameControls,clear,collect};
+      __panelStyle('.workspace-native-surface .workspace-native-toolbar{align-items:flex-start;max-height:48%;gap:6px 16px}.workspace-scene-control-group{display:flex;align-items:center;flex-wrap:wrap;gap:5px 10px;min-width:0}.workspace-scene-control-group>strong{font-size:.75rem;color:var(--muted);font-weight:600}.workspace-scene-control-group label{display:inline-flex;align-items:center;gap:4px;margin:0}.workspace-scene-control-group input[type="checkbox"]{margin:0}.workspace-scene-control-group .slice-control-line{display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin:0}.workspace-scene-control-group #screen-zoom{width:110px;min-width:70px;flex:initial}.workspace-scene-frame-name{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.workspace-scene-object-count{font-size:.75rem;color:var(--muted)}.workspace-scene-control-group .btn{padding:3px 8px}');
+      __editor.mountObjectSurfaces({content:[$('slice-viewport').parentElement],toolbar:[view,frame,layers]});
       $('clear-canvas').hidden=true;
     }
     if(config.assetKind==='frame'||config.operation==='frame-details') {const note=document.createElement('p');note.className='workspace-frame-note';note.textContent='Frame: point p and all ordered basis vectors. The slice is p + span(v1, v2); drawing uses an orthonormal basis of that plane.';(__panelCard?.querySelector('.card-body')||__editor.shadow.querySelector('.slice-layout')||__editor.host).append(note);}

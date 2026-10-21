@@ -1,6 +1,11 @@
 'use strict';
 const assert = require('node:assert/strict');
 const model = require('./math_workspace_objects.js');
+assert.equal(model.kindLabels.variety,'Variety');
+for(const capability of Object.values(model.capabilities))for(const id of capability.properties) {
+  const definition=model.definitions.find(item=>item.id===id);
+  assert(!definition.input&&!definition.display&&!definition.assetView&&!definition.objectView&&!definition.scene&&!definition.slicingScene&&id!=='matrix-view','display and modify panels must not be properties');
+}
 const matrix = model.normalize('matrix', 'matrix', { rows: 2, cols: 3 });
 assert.deepEqual(matrix.entries, [['1','0','0'],['0','1','0']]);
 assert.throws(() => model.normalize('matrix', 'matrix', { rows: 9 }));
@@ -54,7 +59,7 @@ assert.deepEqual(rows('4, 2, 1'), { rows: [4, 2, 1], partition: '4, 2, 1' });
 assert.deepEqual(rows(''), { rows: [], partition: '' });
 for (const draft of ['4,', '-', '1e', '2, 4', '-1', '26']) assert.throws(() => rows(draft));
 assert.deepEqual(model.normalize('young', 'generalized', { partition: '2, 0, -1' }).rows, [2, 0, -1]);
-assert.throws(() => model.normalize('lie', 'simple', { family: 'D', rank: 2 }));
+assert.deepEqual(model.normalize('lie', 'simple', { family: 'D', rank: 2 }),{family:'D',rank:2});
 assert.equal(model.normalize('lie', 'simple', { family: 'E6', rank: 3 }).rank, 6);
 const assets = [
   { kind: 'young', id: 'a', type: 'partition', data: rows('2,1') },
@@ -88,6 +93,20 @@ assert.deepEqual(model.strandContext(root.data), { groupType: 'symmetric', stran
 assert.equal(model.lieEngineIssues(root.data, 'strand').length, 0);
 assert.equal(model.lieEngineIssues(root.data, 'dynkin').length, 1);
 assert.deepEqual(model.strandContext({ family: 'D', rank: 4 }), { groupType: 'D', strandCount: 4 });
+assert.deepEqual(model.strandContext({ family: 'D', rank: 3 }), { groupType: 'D', strandCount: 3 });
+for(const engine of ['dynkin','strand','young','double-young'])assert.deepEqual(model.lieEngineIssues({family:'D',rank:3},engine),[],engine+' supports native D3 numbering');
+assert.deepEqual(model.dynkinEdges({family:'D',rank:3}),['0-1','0-2']);
+assert.deepEqual(model.strandContext({family:'A',rank:0}),{groupType:'symmetric',strandCount:1});
+assert.deepEqual(model.lieEngineIssues({family:'A',rank:0},'strand'),[],'A0 remains the one-strand identity');
+for(const [family,rank] of [['B',1],['C',1],['D',2]]) {
+  assert.deepEqual(model.normalize('lie','simple',{family,rank}),{family,rank});
+  for(const engine of ['dynkin','young','double-young','strand'])assert.deepEqual(model.lieEngineIssues({family,rank},engine),[]);
+  assert.deepEqual(model.rootObjectIssues({kind:'dynkin',data:{vertices:[1],quiver:{}}},{kind:'lie',data:{family,rank}}),[]);
+}
+assert.deepEqual(model.dynkinEdges({family:'D',rank:2}),[]);
+assert(model.rootObjectIssues({kind:'dynkin',data:{vertices:[1],quiver:{'0-1':1}}},{kind:'lie',data:{family:'D',rank:2}}).length,'D2 cannot acquire an edge between its independent factors');
+for(const [family,rank] of [['B',0],['C',0],['D',1]])assert.throws(()=>model.normalize('lie','simple',{family,rank}),/Rank/);
+assert.deepEqual(model.rootObjectIssues({kind:'dynkin',data:{vertices:[1,3],quiver:{'0-1':1,'0-2':-1}}},{kind:'lie',data:{family:'D',rank:3}}),[]);
 assert.throws(() => model.strandContext({ family: 'G2', rank: 2 }));
 assert.deepEqual(model.dynkinEdges({ family: 'D', rank: 4 }), ['0-1','1-2','1-3']);
 assert.deepEqual(model.dynkinEdges({ family: 'E6', rank: 6 }), ['0-1','1-2','2-3','3-4','2-5']);

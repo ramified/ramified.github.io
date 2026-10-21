@@ -19,19 +19,44 @@ async function run(){
     assert.equal(await read(()=>new URL(location.href).searchParams.get('designLab')),'1');
     assert.equal(await read(()=>!!document.querySelector('[data-design-setting="marker"]')),false);
     assert.equal(await read(()=>getComputedStyle(document.querySelector('[data-asset-key="'+key(empty)+'"] .workspace-asset-icon'),'::after').content),'none');
-    await read(()=>{const color=document.querySelector('[data-design-setting="exactColor"]');color.value='#13579b';color.dispatchEvent(new Event('input'));});
+    assert.equal(await read(()=>document.querySelectorAll('[data-design-setting]').length),0,'finished icon controls are removed');
+    assert.equal(await read(()=>document.querySelector('[data-design-empty]').hidden),true);
+    await read(()=>{
+      window.labExperimentTitles=[...document.querySelectorAll('[data-design-experiment] > summary')].map(node=>node.textContent);
+      window.originalDesign=MathWorkspaceAssetIcons.settings();window.destroyedDesign=0;window.removedDesign=0;
+      window.unregisterColor=MathWorkspaceDesignLab.register({id:'test-color',title:'Color experiment',description:'Preview a temporary color.',mount(host,{renderWorkspace}){
+        const button=document.createElement('button');button.type='button';button.textContent='Preview color';button.dataset.testDesignColor='';host.append(button);
+        button.addEventListener('click',()=>{MathWorkspaceAssetIcons.configure({...MathWorkspaceAssetIcons.settings(),exactColor:'#13579b'});renderWorkspace();});
+        return {reset(){MathWorkspaceAssetIcons.configure(originalDesign);},settings(){return {exactColor:MathWorkspaceAssetIcons.settings().exactColor};},destroy(){destroyedDesign++;}};
+      }});
+      window.unregisterOther=MathWorkspaceDesignLab.register({id:'test-other',title:'Another experiment',mount(host){host.textContent='Independent preview';return {reset(){removedDesign++;},destroy(){removedDesign++;}};}});
+      document.querySelector('[data-test-design-color]').click();
+    });
+    assert.deepEqual(await read(()=>[...document.querySelectorAll('[data-design-experiment] > summary')].map(node=>node.textContent)),await read(()=>[...labExperimentTitles,'Color experiment','Another experiment']));
+    assert.equal(await read(()=>document.querySelector('[data-design-empty]').hidden),true);
     assert.equal(await read(()=>getComputedStyle(document.querySelector('[data-asset-key="'+key(a)+'"] .workspace-asset-icon')).color),'rgb(19, 87, 155)');
+    await read(()=>{window.copiedDesign='';Object.defineProperty(navigator.clipboard,'writeText',{configurable:true,value:async text=>{copiedDesign=text;}});document.querySelector('[data-design-copy="test-color"]').click();});
+    await waitFor(()=>read(()=>!!copiedDesign));assert.deepEqual(await read(()=>JSON.parse(copiedDesign)),{exactColor:'#13579b'});
+    await read(()=>document.querySelector('[data-design-reset="test-color"]').click());
+    assert.equal(await read(()=>MathWorkspaceAssetIcons.settings().exactColor),'');assert.equal(await read(()=>removedDesign),0,'reset affects only its own experiment');
+    await read(()=>{unregisterOther();unregisterOther();document.querySelector('[data-test-design-color]').click();});
+    assert.equal(await read(()=>removedDesign),2,'unregister resets and destroys once');
+    assert.equal(await read(()=>document.querySelectorAll('[data-design-experiment]').length),await read(()=>labExperimentTitles.length+1));
     await read(()=>document.querySelector('#workspace-design-lab [data-workspace-card-action="move-area"]').click());
     const backup=await read(()=>panels.exportText('workspace'));const saved=JSON.parse(backup);
     assert(!JSON.stringify(saved.workspace).includes('workspace-design-lab'));assert(!backup.includes('#13579b'));
     await read(text=>panels.importText('workspace',text),backup);
     await read(()=>document.querySelector('[data-design-exit]').click());assert.equal(await read(()=>!!document.querySelector('#workspace-design-lab')),false);
-    // Searchable creation uses subject union, has no duplicate results, and restores focus.
+    assert.equal(await read(()=>destroyedDesign),1);assert.equal(await read(()=>MathWorkspaceAssetIcons.settings().exactColor),'');
+    await read(()=>unregisterColor());assert.equal(await read(()=>destroyedDesign),1,'removing an inactive experiment does not destroy twice');
+    // Searchable creation uses one subject at a time and restores focus.
     await read(()=>document.querySelector('[data-assets-content]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:100,clientY:150})));
     await read(()=>[...document.querySelectorAll('#workspace-assets-context-menu button')].find(b=>b.textContent==='New…').click());
     assert.equal(await read(()=>document.querySelector('#workspace-create-dialog').open),true);
     await read(()=>{document.querySelector('[data-subject="linear"]').click();document.querySelector('[data-subject="representation"]').click();});
     assert.equal(await read(()=>document.querySelectorAll('[data-create-kind="matrix"]').length),1);
+    assert.equal(await read(()=>document.querySelectorAll('.workspace-create-filters input:checked').length),1);
+    assert.equal(await read(()=>!!document.querySelector('[data-create-kind="field"]')),false);
     await read(()=>{document.querySelector('[data-all-subjects]').click();const input=document.querySelector('[data-create-search]');input.value='braid';input.dispatchEvent(new Event('input'));});
     assert.deepEqual(await read(()=>[...document.querySelectorAll('[data-create-kind]')].map(b=>b.dataset.createKind)),['strands']);
     await client.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await client.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
@@ -82,7 +107,8 @@ async function run(){
     await read(text=>panels.importText('workspace',text),JSON.stringify(legacy));
     assert.equal(await read(()=>[...panels.panels.values()].find(p=>p.definition.id==='plethysm').computation.settings.mode),'advanced');
     await client.send('Page.navigate',{url:'http://127.0.0.1:'+server.address().port+'/math_workspace.html?designLab=1'});await waitFor(()=>read(()=>!!document.querySelector('#workspace-design-lab')),20000);
-    assert.equal(await read(()=>document.querySelectorAll('.workspace-design-sample').length),9);
+    assert(await read(()=>!!document.querySelector('[data-design-experiment="principal-assets"]')));
+    assert.equal(await read(()=>document.querySelector('[data-design-empty]').hidden),true);
     const shot=await client.send('Page.captureScreenshot',{format:'png'});const filename=path.join(os.tmpdir(),'math-workspace-polish.png');fs.writeFileSync(filename,Buffer.from(shot.data,'base64'));console.log('SCREENSHOT '+filename);
     assert.deepEqual(errors,[]);console.log('workspace polish: shared icons, lab entry/backup isolation, creation filtering, LR targets, power modes/drafts/restoration passed');
   } finally {if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}

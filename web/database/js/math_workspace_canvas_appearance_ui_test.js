@@ -187,15 +187,15 @@ async function main() {
     assert.strictEqual(appearanceTitle.aria, 'varphi · Canvas Appearance');
 
     await evaluate(client, `window.MathWorkspaceAssetsTest.bindAssetPropertySlot('homology', { kind: 'map', id: 'M4' }, { selectTarget: false, focus: false, promote: false })`);
-    await waitFor(() => evaluate(client, `!!window.MathWorkspaceAssetsTest.assetsCardState.slots.get('homology')?.rendererSession?.editor?.inspectorShadow?.querySelector('#homology-card .card-head-label mjx-container')`), 10000, 'Property MathJax title');
+    await waitFor(() => evaluate(client, `!!window.MathWorkspaceAssetsTest.assetsCardState.slots.get('homology-map')?.rendererSession?.editor?.inspectorShadow?.querySelector('#homology-card .card-head-label mjx-container')`), 10000, 'Property MathJax title');
     const propertyTitle = await evaluate(client, `(() => {
-      const session = window.MathWorkspaceAssetsTest.assetsCardState.slots.get('homology').rendererSession;
+      const session = window.MathWorkspaceAssetsTest.assetsCardState.slots.get('homology-map').rendererSession;
       const card = session.editor.inspectorShadow.querySelector('#homology-card');
       const math = card.querySelector('.card-head-label mjx-container');
       return { aria: card.querySelector('.card-head').getAttribute('aria-label'), textTransform: getComputedStyle(math).textTransform };
     })()`);
     assert.strictEqual(propertyTitle.textTransform, 'none', 'Property title must preserve case');
-    assert.strictEqual(propertyTitle.aria, 'varphi · Homology Classes');
+    assert.strictEqual(propertyTitle.aria, 'varphi · Map Pullback / Pushforward');
 
     assertAligned(await layoutMetrics(client), 'normal inspector');
     await evaluate(client, `window.MathWorkspaceAssetsTest.sessions.get('sheaf-complexes').editor.setCardPresentation('canvas-appearance-card', { displayMode: 'wide' })`);

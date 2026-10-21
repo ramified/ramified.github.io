@@ -17,6 +17,39 @@
     if (!Array.isArray(value.assets) || !Array.isArray(value.panels) || !Array.isArray(value.calculators) || !record(value.workspace)) throw new Error('The workspace backup is incomplete.');
     return value;
   }
+  function migrateHomologyCards(value) {
+    const cards=value.assetCards;
+    if(!Array.isArray(cards?.instances)||!Array.isArray(cards?.slots))return value;
+    const legacy=cards.slots.filter(slot=>slot.cardType==='homology');
+    if(legacy.length>1)throw new Error('Duplicate legacy Homology slot.');
+    const keys=new Map(),instances=[];
+    for(const instance of cards.instances) {
+      if(instance.cardType!=='homology')continue;
+      const ref=instance.targetRef;
+      if(!['variety','sheaf','map'].includes(ref?.kind))throw new Error('Invalid legacy Homology target.');
+      const oldKey=`asset:${ref.kind}:${ref.id}:homology`,type='homology-'+ref.kind;
+      instance.cardType=type;keys.set(oldKey,{key:`asset:${ref.kind}:${ref.id}:${type}`,type});instances.push(instance);
+    }
+    if(!legacy.length)return value;
+    const slot=legacy[0],active=keys.get(slot.activeInstanceKey),replacements=[];
+    if(!Array.isArray(slot.recentInstanceKeys))throw new Error('Invalid legacy Homology history.');
+    for(const kind of ['variety','sheaf','map']) {
+      const type='homology-'+kind;
+      if(cards.slots.some(item=>item.cardType===type))throw new Error('Conflicting Homology slots.');
+      const history=slot.recentInstanceKeys.map(key=>keys.get(key)).filter(item=>item?.type===type).map(item=>item.key);
+      const first=instances.find(item=>item.cardType===type),firstKey=first&&`asset:${kind}:${first.targetRef.id}:${type}`;
+      const current=active?.type===type?active.key:history[0]||firstKey||null;
+      replacements.push({...slot,cardType:type,activeInstanceKey:current,recentInstanceKeys:[...new Set(history)].filter(key=>key!==current),visible:!!slot.visible&&active?.type===type,snapshot:active?.type===type?slot.snapshot:null});
+    }
+    cards.slots=cards.slots.flatMap(item=>item===slot?replacements:[item]);
+    const workspace=value.workspace,activeType=active?.type||'homology-variety',oldNode='asset-card:homology',node='asset-card:'+activeType,oldDock='dock:'+oldNode,dock='dock:'+node;
+    if(Array.isArray(workspace?.inspectorOrder))workspace.inspectorOrder=workspace.inspectorOrder.flatMap(key=>key===oldNode?[node,...replacements.filter(item=>item.cardType!==activeType).map(item=>'asset-card:'+item.cardType)]:[key]);
+    if(Array.isArray(workspace?.dockedPanels))for(const panel of workspace.dockedPanels)if(panel.source==='sidebar'&&panel.key===oldNode){panel.key=node;panel.id=dock;}
+    if(Array.isArray(workspace?.tabs))workspace.tabs=workspace.tabs.map(id=>id===oldDock?dock:id);
+    if(workspace?.panes)for(const name of ['primary','secondary'])if(workspace.panes[name]===oldDock)workspace.panes[name]=dock;
+    if(workspace?.inspectorSourceId===oldDock)workspace.inspectorSourceId=dock;
+    return value;
+  }
   function unique(items, key, label) {
     const seen = new Set();
     for (const item of items) {
@@ -127,7 +160,7 @@
     n /= a; d /= a;
     return d === 1n ? String(n) : '(' + n + '/' + d + ')';
   }
-  const api = { schema, clone, parse, validate, casFormats, casExport };
+  const api = { schema, clone, parse, validate, migrateHomologyCards, casFormats, casExport };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MathWorkspaceIO = api;
 }(typeof window !== 'undefined' ? window : globalThis));
