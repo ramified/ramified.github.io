@@ -45317,7 +45317,56 @@ ${body}`;
           handleLayoutBreakpointChange = () => resize();
           const toolbar = document2.querySelector(".canvas-toolbar");
           const options2 = ["showhooks", "shadehooks", "showcoords"].map((id) => document2.getElementById(id)?.closest("label")).filter(Boolean);
-          __editor.mountObjectSurfaces({ content: [document2.getElementById("canvas-wrap")], toolbar: [toolbar, ...options2] });
+          const surface = __editor.mountObjectSurfaces({ content: [document2.getElementById("canvas-wrap")], toolbar: [toolbar] });
+          const details = document2.createElement("details"), summary = document2.createElement("summary"), controls = document2.createElement("div");
+          details.className = "workspace-young-display-options";
+          summary.textContent = "Display options";
+          controls.className = "workspace-young-display-options-controls";
+          controls.setAttribute("popover", "auto");
+          controls.setAttribute("role", "group");
+          controls.setAttribute("aria-label", "Display options");
+          controls.append(...options2);
+          details.append(summary, controls);
+          surface.shell.append(details);
+          const style = document2.createElement("style");
+          style.textContent = ".workspace-young-display-options{flex:0 0 auto;box-sizing:border-box;padding:6px 0}.workspace-young-display-options>summary{cursor:pointer;color:var(--muted);font-size:.85rem}.workspace-young-display-options-controls{position:fixed;inset:auto;margin:0;box-sizing:border-box;max-width:calc(100vw - 24px);max-height:min(240px,calc(100dvh - 24px));overflow:auto;padding:10px 12px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);box-shadow:0 5px 20px rgba(0,0,0,.16)}.workspace-young-display-options-controls:popover-open{display:grid;gap:6px}.workspace-young-display-options-controls:not(:popover-open){display:none}.workspace-young-display-options-controls .opt-row{margin:0}";
+          document2.head.append(style);
+          const closeOptions = () => {
+            details.open = false;
+            if (controls.matches(":popover-open")) controls.hidePopover();
+          };
+          const positionOptions = () => {
+            if (!controls.matches(":popover-open")) return;
+            const anchor = summary.getBoundingClientRect(), panel = controls.getBoundingClientRect();
+            if (__editor.host.hidden || anchor.bottom < 0 || anchor.top > window.innerHeight) {
+              closeOptions();
+              return;
+            }
+            const left = Math.max(12, Math.min(anchor.left, window.innerWidth - panel.width - 12));
+            const top = anchor.bottom + 6 + panel.height <= window.innerHeight - 12 ? anchor.bottom + 6 : Math.max(12, anchor.top - panel.height - 6);
+            controls.style.left = left + "px";
+            controls.style.top = top + "px";
+          };
+          details.addEventListener("toggle", () => {
+            if (__editor.host.hidden) {
+              closeOptions();
+              return;
+            }
+            if (details.open && !controls.matches(":popover-open")) {
+              controls.showPopover();
+              positionOptions();
+            } else if (!details.open && controls.matches(":popover-open")) controls.hidePopover();
+          });
+          controls.addEventListener("toggle", () => {
+            details.open = controls.matches(":popover-open");
+            positionOptions();
+          });
+          window.addEventListener("resize", positionOptions);
+          window.addEventListener("scroll", positionOptions, { capture: true });
+          new MutationObserver(() => {
+            if (__editor.host.hidden) closeOptions();
+          }).observe(__editor.host, { attributes: true, attributeFilter: ["hidden"] });
+          new ResizeObserver(positionOptions).observe(surface.shell);
         }
         resizeGeneralizedCanvasFromControls = function(cols, rows, customized) {
           const value = __objectRows(), active = value.rows.length;

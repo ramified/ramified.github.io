@@ -185,7 +185,7 @@
 .workspace-assets-view:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 65%, transparent); }
 .workspace-assets-count { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .workspace-assets-content { position: relative; width: 100%; min-width: 0; max-width: 100%; min-height: 100%; box-sizing: border-box; padding: 14px; overflow: auto; outline: none; }
-.workspace-assets-empty { display: grid; place-content: center; gap: 5px; min-height: 430px; color: var(--muted); text-align: center; }
+.workspace-assets-empty { display: grid; place-content: center; gap: 5px; margin: 0; color: var(--muted); text-align: center; }
 .workspace-assets-empty strong { color: var(--text); font-size: 1.05rem; font-weight: 500; }
 .workspace-asset-item { position: relative; min-width: 0; border: 1px solid transparent; border-radius: 4px; color: var(--text); cursor: default; }
 .workspace-asset-item[draggable='true'] { cursor: grab; }
@@ -281,8 +281,8 @@
 .workspace-assets-content[data-layout='content'] .workspace-asset-name { font-size: 1.05rem; }
 .workspace-assets-content[data-layout='content'] .workspace-asset-definition { white-space: normal; font-size: 0.8rem; line-height: 1.35; }
 
-/* An empty explorer deliberately uses Content geometry, whatever layout is selected. */
-.workspace-assets-content[data-assets-empty='empty'], .workspace-assets-content[data-assets-empty='loading'] { display: grid !important; grid-template-columns: minmax(0, 1fr) !important; column-count: auto !important; column-width: auto !important; align-content: start !important; gap: 5px !important; padding: 14px !important; overflow: auto !important; }
+/* Center empty/loading content in the available space in every layout. */
+.workspace-assets-content[data-assets-empty='empty'], .workspace-assets-content[data-assets-empty='loading'] { display: grid !important; grid-template-columns: minmax(0, 1fr) !important; column-count: auto !important; column-width: auto !important; align-content: center !important; gap: 5px !important; padding: 14px !important; overflow: auto !important; }
 
 .workspace-assets-marquee { position: fixed; z-index: 9998; pointer-events: none; border: 1px solid color-mix(in srgb, var(--accent) 75%, white); background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .workspace-assets-context-menu[hidden] { display: none; }

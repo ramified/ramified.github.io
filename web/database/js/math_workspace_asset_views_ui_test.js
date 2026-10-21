@@ -31,6 +31,14 @@ async function run(){
   assert(await read(()=>view.propertyRenderer.editor.shadow.querySelector('#yd-canvas').getClientRects().length>0),'Open shows the original Young canvas');
   assert.equal(await read(()=>[...view.propertyRenderer.editor.shadow.querySelectorAll('.workspace-view-card,.panel-title,.calculator-input-settings-trigger')].filter(node=>node.getClientRects().length).length),0,'Open does not retain the inner panel chrome');
   assert(await read(()=>view.propertyRenderer.editor.shadow.querySelector('.workspace-native-toolbar #grid-rows')),'view size controls are in the top toolbar');
+  assert(await read(()=>{const root=view.propertyRenderer.editor.shadow,details=root.querySelector('.workspace-young-display-options');return !details.open&&details.querySelector('summary').textContent==='Display options'&&details.querySelectorAll('.opt-row').length===3&&!root.querySelector('.workspace-native-toolbar .opt-row');}),'display options start collapsed below the canvas, not in the toolbar');
+  const collapsedCanvas=await read(()=>{const root=view.propertyRenderer.editor.shadow,r=root.querySelector('#yd-canvas').getBoundingClientRect();return {width:r.width,height:r.height};});
+  await read(()=>view.propertyRenderer.editor.shadow.querySelector('.workspace-young-display-options summary').click());
+  await waitFor(()=>read(()=>view.propertyRenderer.editor.shadow.querySelector('.workspace-young-display-options-controls').matches(':popover-open')),15000,'display options popover');
+  assert.deepEqual(await read(()=>{const r=view.propertyRenderer.editor.shadow.querySelector('#yd-canvas').getBoundingClientRect();return {width:r.width,height:r.height};}),collapsedCanvas,'opening the display options never resizes the canvas');
+  assert(await read(()=>{const root=view.propertyRenderer.editor.shadow,r=root.querySelector('.workspace-young-display-options-controls').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&getComputedStyle(root.querySelector('.workspace-young-display-options')).borderTopWidth==='0px';}),'options fit the screen and the separator line is removed');
+  const displayOptionsShot=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-young-display-options.png'),Buffer.from(displayOptionsShot.data,'base64'));
+  await read(()=>view.propertyRenderer.editor.shadow.querySelector('.workspace-young-display-options summary').click());
   await read(()=>{api.updateObjectAsset({kind:'young',id:young.id},{data:{partition:'4,2,1'}});});
   assert.deepEqual(await read(()=>view.propertyRenderer.editor.collectAssets().rows),[4,2,1]);
   await read(()=>{const root=view.propertyRenderer.editor.shadow,input=root.querySelector('#grid-cols');input.value='2';input.dispatchEvent(new Event('change',{bubbles:true}));});
