@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const generic = { young: '▦', lie: '𝔤', field: '𝕂', dynkin: '●—●', strands: '⋈', matrix: '▦', category: '𝒞', functor: '⇒', variety: '𝕍', sheaf: 'ℱ', map: '→', frame:'⊞', point:'•', vector:'↗', polytope:'⬡', sphere:'◯', roots:'✳', lattice:'▦', voronoi:'⬡', formula:'ƒ', tropical:'⊕', weyl:'◈', cone:'△', fan:'⋔' };
+  const generic = { 'mosaic-space':'⬡','mosaic-diagram':'⋈', young: '▦', lie: '𝔤', field: '𝕂', dynkin: '●—●', strands: '⋈', matrix: '▦', category: '𝒞', functor: '⇒', variety: '𝕍', sheaf: 'ℱ', map: '→', frame:'⊞', point:'•', vector:'↗', polytope:'⬡', sphere:'◯', roots:'✳', lattice:'▦', voronoi:'⬡', formula:'ƒ', tropical:'⊕', weyl:'◈', cone:'△', fan:'⋔' };
   const defaults = Object.freeze({ exactColor: '', genericColor: '#a8510b', stroke: 0.7, strandStroke:19, hatch: true,
     matrixStroke: 2.1, matrixEntryStroke: 0.7, matrixFontSize: 20, matrixFontFamily: '"Times New Roman", serif',
     matrixRowGap: 0, matrixColumnGap: 0, matrixBracketGap: 1, matrixBracketCurve: 3, matrixPadding: 0,

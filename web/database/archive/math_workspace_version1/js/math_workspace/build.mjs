@@ -14,6 +14,7 @@ import {overviewArrowPresentation} from './editors/overview_arrows.mjs';
 import {dynkinObjectPanel, strandObjectPanel} from './editors/root_system_panels.mjs';
 import {slicingObjectPanel} from './editors/slicing_panels.mjs';
 import {viewportPanels} from './editors/viewport_panels.mjs';
+import {mosaicObjectPanel} from './editors/mosaic_panels.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 // The archived workspace owns its builder/runtime, while calculator source
 // pages remain at the live repository root.  This keeps the generated bundle
@@ -26,7 +27,7 @@ const clean=s=>s.split(/[?#]/)[0];
 const attr=(n,k)=>n.attrs?.find(a=>a.name===k)?.value;
 const nodes=n=>[n,...(n.childNodes||[]).flatMap(nodes)];
 const names=body=>body.flatMap(n=>n.type==='VariableDeclaration'?n.declarations.filter(d=>d.id.type==='Identifier').map(d=>d.id.name):['FunctionDeclaration','ClassDeclaration'].includes(n.type)?[n.id.name]:[]);
-const exclusions=new Set(['window','document','self','globalThis','location','localStorage','sessionStorage','Worker','ResizeObserver','MutationObserver','requestAnimationFrame','cancelAnimationFrame','setTimeout','clearTimeout','setInterval','clearInterval','fetch','MathWorkspaceObjects','MathWorkspaceSlicing']);
+const exclusions=new Set(['window','document','self','globalThis','location','localStorage','sessionStorage','Worker','ResizeObserver','MutationObserver','requestAnimationFrame','cancelAnimationFrame','setTimeout','clearTimeout','setInterval','clearInterval','fetch','MathWorkspaceObjects','MathWorkspaceSlicing','MathWorkspaceMosaic']);
 const complexWorkspaceExtension=String.raw`
 const __workspaceAssetType=(kind,type)=>{const allowed={variety:new Set(['abstract','curve','symmetric-product-curve','abelian','ppav-moduli','point','projective','grassmannian','complete-intersection','product']),sheaf:new Set(['abstract','locally-free','structure','tangent','cotangent','canonical','twist','divisor-line','universal-bundle','direct-sum','self-direct-sum','self-tensor-product','dual','internal-hom','ideal-sheaf','normal-bundle','conormal-bundle','relative-tangent','relative-cotangent','tensor','schur','map-operation']),map:new Set(['ordinary','sheaf','abel-jacobi','composition'])};return allowed[kind]?.has(type)?type:'abstract';};
 const __workspaceRecordKind=item=>state.varieties.includes(item)?'variety':state.sheaves.includes(item)?'sheaf':'map';
@@ -132,6 +133,7 @@ function instrument(source,file,primary){
     if(outer&&ast.body.length<5){body=outer.expression.callee.body.body;end=outer.expression.callee.body.end-1;}
     const bound=new Set(names(body)), classNames=body.filter(n=>n.type==='ClassDeclaration').map(n=>n.id.name);
     if(viewportPanels[file]) patches.push({start:end,end,text:viewportPanels[file]});
+    if(file==='js/mosaic_calculator.js') patches.push({start:end,end,text:mosaicObjectPanel});
     if(file==='js/young_diagrams.js') patches.push({start:end,end,text:singleObjectPanel});
     if(file==='js/double_young_diagram.js') patches.push({start:end,end,text:doubleObjectPanel});
     if(file==='js/matrix_calculator.js') patches.push({start:end,end,text:matrixObjectPanel});

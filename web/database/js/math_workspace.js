@@ -18,7 +18,7 @@
   let activeCanvasId = '', focusedPane = 'primary', splitView = false, inspectorSourceId = '', suppressCanvasClickUntil = 0;
   const DEFAULT_CANVAS_HEIGHT = 680, MIN_CANVAS_HEIGHT = 240, MAX_CANVAS_HEIGHT = 1600;
   const ASSET_LAYOUTS = ['icons', 'list', 'details', 'tiles', 'content'];
-  const OBJECT_INPUT_KINDS = ['young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...(slicing?.kinds || [])];
+  const OBJECT_INPUT_KINDS = ['young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...(slicing?.kinds || []), ...window.MathWorkspaceMosaic.kinds];
   const ASSET_KINDS = ['variety', 'sheaf', 'map', ...OBJECT_INPUT_KINDS];
   const INPUT_AUTOSAVE_DEBOUNCE_MS = 450, INPUT_AUTOSAVE_MAX_WAIT_MS = 1500;
   const assetState = {
@@ -128,7 +128,16 @@
           if (change?.interaction === 'canvas-appearance' || change?.interaction === 'canvas-appearance-live' || change?.interaction === 'card-chrome') return;
           projectAssetsToSheafComplex(session);
         }
-      } : {};
+      } : definition.id==='mosaic'?{onCollectAssets:editor=>{
+        try{
+          const payload=editor.objectIO('mosaic-payload'),model=window.MathWorkspaceMosaic;
+          const spaceData=model.fromPayload('mosaic-space',payload),diagramData=model.fromPayload('mosaic-diagram',payload,'');
+          const space=createObjectAsset('mosaic-space',{data:spaceData});
+          const diagram=createObjectAsset('mosaic-diagram',{data:{...diagramData,space:assetKey(space)}});
+          objectWorkspace.open('mosaic-diagram-input',assetKey(diagram),'main');
+          status('Saved Mosaic space and diagram to Assets.','success');
+        }catch(error){status(error.message,'error');}
+      }}:{};
       const created = makeNativeCalculator(definition, options);
       session = { kind: 'calculator', definition, canvasHeight: DEFAULT_CANVAS_HEIGHT, applyingAssets: false, assetProjection: definition.id === 'sheaf-complexes' ? { keys: new Set(), layout: new Map(), activeRef: null } : null, ...created };
       sessions.set(definition.id, session);
@@ -912,6 +921,7 @@
   }
 
   const ASSET_SUBTYPES = {
+    'mosaic-space':[['mosaic-space','Mosaic Space']], 'mosaic-diagram':[['mosaic-diagram','Mosaic Diagram']],
     ...(slicing?.subtypes || {}),
     dynkin: [['dynkin', 'Marked Dynkin diagram']],
     strands: [['strands', 'Strands']],
@@ -1027,6 +1037,8 @@
   const ASSET_DRAG_TYPE = 'application/x-math-workspace-asset';
   const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   function referenceFieldSpecs(kind, type) {
+    if(kind==='mosaic-space')return [];
+    if(kind==='mosaic-diagram')return [{field:'space',label:'Mosaic space',expectedKind:'mosaic-space'}];
     if (kind === 'variety' && type === 'toric') return [{field:'fan',label:'Fan',expectedKind:'fan'},{field:'cone',label:'Affine cone',expectedKind:'cone'}];
     if (['dynkin','strands'].includes(kind)) return [{ field: 'lie', label: 'Lie type', expectedKind: 'lie' }];
     if (kind === 'functor') return ['domain', 'codomain'].map(field => ({ field, label: field === 'domain' ? 'Domain' : 'Codomain', expectedKind: 'category' }));
@@ -1507,6 +1519,8 @@
     control.addEventListener('drop', (event) => { const { spec, key, result } = dragResult(event); if (!result.allowed) { markReferenceDrop(control, 'invalid'); return; } event.preventDefault(); markReferenceDrop(control, ''); chooseAssetReference(control, spec, key); });
   }
   function assetDefinitionFor(kind, type, data) {
+    if(kind==='mosaic-space')return data.rows+' × '+data.cols+' · '+data.lattice+' · '+data.boundary;
+    if(kind==='mosaic-diagram')return (data.diagramType==='dual'?'Dual graph':'Knot / link')+' on '+data.space;
     if (kind === 'field') return window.MathWorkspaceObjects.fieldLabel(data);
     if (slicing?.isAsset({kind,type})) return kind === 'frame' ? 'Point and full basis in R^'+data.ambientDimension : kind === 'variety' ? 'Toric variety · '+(data.fan?'fan':'affine cone') : (slicing.labels[kind]||kind)+' in R^'+data.ambientDimension;
     if (kind === 'dynkin') return (data.lie || 'Choose Lie type') + ' · vertices ' + data.vertices.join(', ') + (data.quiver ? ' · quiver' : '');
@@ -2175,7 +2189,7 @@
 
   const reservedAssetNames = new Set();
   function uniqueDefaultAssetName(kind) {
-    const base = ({field:'K',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
+    const base = ({'mosaic-space':'S','mosaic-diagram':'D',field:'K',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
     const numbered = (number) => kind === 'sheaf' ? `\\mathcal{E}_{${number}}` : `${base}_{${number}}`;
     let name = base, number = 2;
     const isTaken = (candidate) => reservedAssetNames.has(canonicalAssetName(candidate)) || assetState.snapshot.assets.some((asset) => canonicalAssetName(asset.name) === canonicalAssetName(candidate));
@@ -2216,14 +2230,39 @@
     const existing = assetState.snapshot.assets.find(asset => asset.kind === kind && asset.type === type && JSON.stringify(normalizedAssetData(kind, type, asset.data)) === JSON.stringify(data));
     return existing || createDefaultAsset(kind, { type, data, defaults: false, isDefault: true, select: false, bindInput: false });
   }
-  async function createAsset(kind) {
+  function creationDependencies(kind) {
+    const type = ASSET_SUBTYPES[kind][0][0], requested = [];
+    // Inspect the constructor without creating defaults or changing the workspace.
+    const template = window.MathWorkspaceDefaults.assetData(kind, type, {}, (parentKind, options) => {
+      const ref = { kind: parentKind, id: 'creation-preview-' + requested.length };
+      requested.push({ key: assetKey(ref), kind: parentKind, options });
+      return ref;
+    });
+    const normalized = normalizedAssetData(kind, type, {});
+    const specs = slicing?.isAsset({kind,type}) || kind === 'matrix'
+      ? slicing.references({kind,type,data:normalized}) : referenceFieldSpecs(kind,type);
+    return Object.entries(template).flatMap(([field, value]) => {
+      const request = requested.find(item => item.key === value);
+      if (!request) return [];
+      const candidates = assetState.snapshot.assets.filter(asset => {
+        if (asset.kind !== request.kind || asset.isDefault) return false;
+        if (['roots','weyl','voronoi'].includes(kind)) {
+          const dimension = request.kind === 'lie' ? asset.data.rank : asset.data.ambientDimension;
+          if (dimension !== normalized.ambientDimension) return false;
+        }
+        return true;
+      }).map(asset => ({key:assetKey(asset),label:(asset.plainName || asset.name)+' · '+asset.typeLabel}));
+      return candidates.length ? [{field,label:specs.find(spec=>spec.field===field)?.label || field,candidates}] : [];
+    });
+  }
+  async function createAsset(kind, options = {}) {
     if (OBJECT_INPUT_KINDS.includes(kind)) {
-      closeAssetsContextMenu(); const record = createObjectAsset(kind); const panel=objectWorkspace?.open(`${kind}-input`, assetKey(record), 'side'); return ()=>panel?.name?.focus();
+      closeAssetsContextMenu(); const record = createObjectAsset(kind, options); const panel=objectWorkspace?.open(`${kind}-input`, assetKey(record), 'side'); return ()=>panel?.name?.focus();
     }
     closeAssetsContextMenu(); revealAssetsEditor();
     try {
       flushAssetInputInstance(activeAssetInputInstance());
-      const record = createObjectAsset(kind);
+      const record = createObjectAsset(kind, options);
       bindAssetInputInstance(assetRef(record), { flush: false, render: false });
       renderAssetsEditor();
       editorForm()?.querySelector('[data-assets-name]')?.focus();
@@ -2770,7 +2809,7 @@
     window.addEventListener('blur', () => { closeAssetsContextMenu(); closeReferencePicker(); }); window.addEventListener('resize', () => { updateCanvasHeightLayout(); closeAssetsContextMenu(); closeCardPicker(); closeReferencePicker(); });
     document.querySelectorAll('[data-workspace-io-tab]').forEach((tab) => tab.addEventListener('click', () => { const name = tab.dataset.workspaceIoTab; document.querySelectorAll('[data-workspace-io-tab]').forEach((item) => item.setAttribute('aria-selected', String(item === tab))); $('#workspace-io-export-panel').hidden = name !== 'export'; $('#workspace-io-import-panel').hidden = name !== 'import'; }));
     openCanvas('assets');
-    creationPicker = window.MathWorkspaceCreation.init({entries:window.MathWorkspaceCreation.catalog(ASSET_SUBTYPES,window.MathWorkspaceObjects.kindLabels),create:createAsset,capabilities:()=>assetState.snapshot.capabilities,returnFocus:()=>assetState.view});
+    creationPicker = window.MathWorkspaceCreation.init({entries:window.MathWorkspaceCreation.catalog(ASSET_SUBTYPES,window.MathWorkspaceObjects.kindLabels),create:createAsset,dependencies:creationDependencies,capabilities:()=>assetState.snapshot.capabilities,returnFocus:()=>assetState.view});
     designLab = window.MathWorkspaceDesignLab.init({
       render: renderAssets,
       mount(node) {

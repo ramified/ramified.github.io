@@ -9,6 +9,7 @@
       if (!Object.hasOwn(data, field)) data[field] = keyOf(ensure(parentKind, options));
     };
     const n = Number(data.ambientDimension ?? data.position?.length ?? data.basis?.length ?? 4);
+    if(kind==='mosaic-diagram')put('space','mosaic-space');
     const lie = rank => ({ data: { family: 'A', rank } });
     const space = { type: 'projective', data: { dimension: '3' } };
     if (['dynkin', 'strands'].includes(kind)) {

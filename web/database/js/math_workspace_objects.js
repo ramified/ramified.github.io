@@ -1,9 +1,10 @@
 (function (root) {
   'use strict';
   const slicing = root.MathWorkspaceSlicing || (typeof require === 'function' ? require('./math_workspace_slicing.js') : null);
+  const mosaic = root.MathWorkspaceMosaic || (typeof require === 'function' ? require('./math_workspace_mosaic.js') : null);
   const keyOf = ref => ref ? `${ref.kind}:${ref.id}` : '';
   const types = ['A', 'B', 'C', 'D', 'E6', 'E7', 'E8', 'F4', 'G2'];
-  const inputKinds = ['young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...slicing.kinds];
+  const inputKinds = ['young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...slicing.kinds, ...mosaic.kinds];
   const kindLabels = { ...slicing.labels, variety: 'Variety', sheaf:'Sheaf', map:'Map', young: 'Young diagram', lie: 'Lie type', field: 'Field', matrix: 'Matrix', category: 'Category', functor: 'Functor', dynkin: 'Marked Dynkin diagram', strands: 'Strands' };
   const coefficientTypes = [['complex','Complex numbers ℂ'],['real','Real numbers ℝ'],['rational','Rational numbers ℚ'],['integer','Integers ℤ'],['finite-field','Prime field'],['rational-function','Rational function field'],['number-field','Number field']];
   function fieldLabel(data) {
@@ -20,6 +21,7 @@
     ['gl-o-gl', 'GL(2n) → O(2n) → GL(n)'], ['gl-sp-gl', 'GL(2n) → Sp(2n) → GL(n)']
   ];
   function normalize(kind, type, source = {}) {
+    if(mosaic.kinds.includes(kind))return mosaic.normalize(kind,source);
     if (slicing.kinds.includes(kind) || kind === 'variety' && type === 'toric') return slicing.normalize(kind,type,source);
     if (kind === 'field') {
       const { dataType, finiteFieldPrime, rationalFunctionVariables, numberFieldSymbol, numberFieldPolynomial } = normalize('matrix','matrix',source);
@@ -187,6 +189,9 @@
     return degree === 0 ? [] : mode === 'symmetric' ? [degree] : Array(degree).fill(1);
   }
   const definitions = [
+    ...mosaic.kinds.map(kind=>({id:kind+'-input',label:(kind==='mosaic-space'?'Mosaic Space':'Mosaic Diagram')+' Input',input:kind,engine:'mosaic'})),
+    {id:'mosaic-view',label:'Mosaic Canvas',engine:'mosaic',assetView:true,readOnly:true,viewRole:'asset',light:true,slots:[slot('asset','Mosaic object',null,{kinds:mosaic.kinds})]},
+    ...[['mosaic-statistics','Mosaic Statistics','statistics-card'],['mosaic-homology','Cellular Homology','homology-card'],['mosaic-knot','Knot / Link','knot-card'],['mosaic-dual','Dual Graph','dual-graph-card'],['mosaic-seifert','Seifert Surface','seifert-surface-card'],['mosaic-poincare','Poincaré Disk','poincare-card']].map(([id,label,marker])=>({id,label,marker,engine:'mosaic',viewRole:'asset',light:true,slots:[slot('asset','Mosaic object',null,{kinds:['mosaic-knot','mosaic-dual','mosaic-seifert'].includes(id)?['mosaic-diagram']:mosaic.kinds})]})),
     ...slicing.definitions,
     { id: 'young-input', label: 'Young diagram Input', input: 'young' },
     { id: 'young-view', label: 'Young diagram', engine:'young', assetView:true, viewRole:'lambda', light:true, slots:[slot('lambda','Young diagram','young')] },
@@ -241,6 +246,7 @@
     properties:definitions.filter(d=>!d.input&&!d.assetView&&!d.objectView&&!d.display&&!d.scene&&!d.slicingScene&&d.id!=='matrix-view'&&(d.slots||[]).some(s=>(s.kinds||[s.kind]).includes(kind))).map(d=>d.id)
   }]));
   function capabilityFor(asset){return asset?.kind==='variety'&&asset.type==='toric'?{...capabilities.variety,modify:'toric-variety-input'}:capabilities[asset?.kind];}
+  for(const kind of mosaic.kinds){kindLabels[kind]=kind==='mosaic-space'?'Mosaic Space':'Mosaic Diagram';capabilities[kind].open='mosaic-view';}
   const byType = new Map(definitions.map(definition => [definition.id, definition]));
   function compatible(asset, spec, definition) {
     return !!asset && (spec.kinds || [spec.kind]).includes(asset.kind) && (!spec.subtype || asset.type === spec.subtype)
@@ -309,6 +315,7 @@
       for (const id of ['lambda', 'mu']) if (objects[id] && (objects[id].data.rows.length > Number(r) || Math.max(0, ...objects[id].data.rows) > Number(n) - Number(r))) missing.push(`${id === 'lambda' ? 'λ' : 'μ'} must fit inside Gr(${r}, ${n})`);
     }
     if (computation.type === 'plethysm' && !objects.lambda) missing.push('Outer diagram λ');
+    if(definition.engine==='mosaic'&&objects.asset){missing.push(...mosaic.issues(objects.asset,assets));const space=assets.find(a=>keyOf(a)===objects.asset.data.space);if(space)objects.mosaicSpace=space;}
     return { objects, missing, signature: JSON.stringify([computation.rule, computation.settings, Object.entries(objects).map(([role, asset]) => [role, keyOf(asset), asset.type, asset.data, definition.scene || definition.assetView || definition.objectView || definition.id==='matrix-view' ? asset.name : null])]) };
   }
   function mount(api) {
@@ -418,9 +425,9 @@
     }
     function setRendererVisible(renderer, visible, property = false) {
       if (renderer.operation==='dynkin-cartan') {renderer.editor.setCanvasActive(false);renderer.editor.setInspectorActive(false);renderer.host.hidden=true;renderer.inspectorHost.hidden=true;return;}
-      const view=['young-view','dynkin-view','lie-view','strands-view','sheaf-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
+      const view=['mosaic-view','mosaic-seifert','mosaic-homology','young-view','dynkin-view','lie-view','strands-view','sheaf-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
       const canvas = !property || view;
-      const inspector = property && !view || renderer.role === 'input' && ['matrix', 'category', 'strand','slice'].includes(renderer.engine);
+      const inspector = ['mosaic-seifert','mosaic-homology'].includes(renderer.operation) || property && !view || renderer.role === 'input' && ['mosaic','matrix', 'category', 'strand','slice'].includes(renderer.engine);
       // Slicing inputs edit Assets; the dedicated slicing scene owns the canvas.
       const inputOnly = renderer.role === 'input' && (['category', 'slice','strand','matrix'].includes(renderer.engine) || renderer.constructedMatrix);
       renderer.editor.setCanvasActive(visible && canvas && !inputOnly);
@@ -430,6 +437,7 @@
       renderer.inspectorHost.hidden = !visible || !inspector || renderer.hideInputInspector;
     }
     function updateDensity(panel) {
+      if(panel.definition.engine==='mosaic'&&panel.definition.input){const asset=get(panel.assetKey);panel.inputIssues=asset?mosaic.issues(asset,snapshot.assets):[];feedback(panel,panel.inputIssues.join(' '),!!panel.inputIssues.length);}
       if (panel.definition.slicing && panel.definition.input) { const asset = get(panel.assetKey); panel.inputIssues = asset ? slicing.inputIssues(asset,snapshot.assets) : []; }
       if(panel.definition.input==='matrix') { const asset=get(panel.assetKey); panel.inputIssues=[]; if(asset) { try {slicing.materialize(asset,snapshot.assets);}catch(error){panel.inputIssues=[error.message];} } }
       if (['dynkin','strands'].includes(panel.definition.input)) {
@@ -458,7 +466,7 @@
     function projectInput(panel) {
       const asset = get(panel.assetKey), renderer = panel.activeRenderer;
       if (!renderer || !asset || panel.inputIssues?.length) return;
-      const assets = panel.definition.slicing ? snapshot.assets : asset.kind === 'matrix' ? slicing.closure([keyOf(asset)],snapshot.assets).assets : [asset, ...snapshot.assets.filter(item => asset.kind === 'functor' && item.kind === 'category' || ['dynkin','strands'].includes(asset.kind) && keyOf(item) === asset.data.lie)];
+      const assets = panel.definition.slicing || panel.definition.engine==='mosaic' ? snapshot.assets : asset.kind === 'matrix' ? slicing.closure([keyOf(asset)],snapshot.assets).assets : [asset, ...snapshot.assets.filter(item => asset.kind === 'functor' && item.kind === 'category' || ['dynkin','strands'].includes(asset.kind) && keyOf(item) === asset.data.lie)];
       const signature = JSON.stringify(assets);
       if (renderer.signature === signature) return;
       renderer.applying = true;
@@ -524,6 +532,11 @@
         try { api.update(refOf(asset), { name: name.value }); feedback(panel); } catch (error) { feedback(panel, error.message, true); }
       });
       if (definition.slicing) { slicingInputFields(panel); return; }
+      if(definition.input==='mosaic-diagram'){
+        referenceControl(panel,slot('space','Mosaic space','mosaic-space'),definition,()=>get(panel.assetKey)?.data.space||'',value=>{const asset=get(panel.assetKey);if(asset)api.update(refOf(asset),{data:{...asset.data,space:value}});});
+        return;
+      }
+      if(definition.input==='mosaic-space')return;
       if (definition.input === 'field') {
         const type=element('select','workspace-control'); type.setAttribute('aria-label','Coefficient type'); type.append(...coefficientTypes.map(([value,label])=>new Option(label,value))); panel.coefficientType=type;
         const prime=element('input','workspace-control'); prime.type='number'; prime.min='2'; prime.max='999983'; prime.step='1'; prime.setAttribute('aria-label','Prime');

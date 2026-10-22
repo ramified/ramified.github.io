@@ -17,7 +17,7 @@ async function run(){
       openPicker();
     });
     const grid=await read(()=>{const list=document.querySelector('.workspace-create-results'),r=list.getBoundingClientRect(),buttons=[...list.querySelectorAll('button')];return{count:buttons.length,columns:getComputedStyle(list).gridTemplateColumns.split(' ').length,visible:buttons.filter(b=>{const q=b.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length,icons:buttons.every(b=>{const icon=b.querySelector('.workspace-create-icon');return !!icon&&(!!icon.textContent||!!icon.querySelector('svg,canvas'));})};});
-    assert(grid.columns>=4&&grid.visible>=12,'desktop exposes many compact choices: '+JSON.stringify(grid));assert(grid.icons);assert.equal(grid.count,24);
+    assert(grid.columns>=4&&grid.visible>=12,'desktop exposes many compact choices: '+JSON.stringify(grid));assert(grid.icons);assert.equal(grid.count,26);
     assert.equal(await read(()=>document.querySelector('[data-create-stay-open]').checked),false);
     const desktop=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-create-grid.png'),Buffer.from(desktop.data,'base64'));
     await read(()=>{document.querySelector('[data-subject="linear"]').click();document.querySelector('[data-subject="representation"]').click();});

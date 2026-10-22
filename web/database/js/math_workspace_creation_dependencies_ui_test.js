@@ -1,0 +1,75 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {startServer,launchBrowser,stopBrowser,waitFor,evaluate}=require('./math_workspace_drag_regression_test.js');
+async function run(){
+  const server=await startServer();let session;
+  try{
+    session=await launchBrowser('http://127.0.0.1:'+server.address().port+'/math_workspace.html');
+    const {client}=session,read=(fn,...args)=>evaluate(client,'('+fn.toString()+')(...'+JSON.stringify(args)+')');
+    await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
+    await read(()=>{
+      window.api=MathWorkspaceAssetsTest;
+      window.assets=()=>api.localAssetSnapshot().assets;
+      window.openPicker=()=>{api.openCanvas('assets');document.querySelector('[data-assets-content]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:100,clientY:150}));[...document.querySelectorAll('#workspace-assets-context-menu button')].find(b=>b.textContent==='New…').click();};
+      window.key=a=>a.kind+':'+a.id;
+      window.field=api.createObjectAsset('field');
+      window.variety1=api.createObjectAsset('variety');window.variety2=api.createObjectAsset('variety');
+      openPicker();
+    });
+    assert.equal(await read(()=>document.querySelector('[data-create-dependency-mode]').value),'existing');
+    await read(()=>document.querySelector('[data-create-kind="map"]').click());
+    await waitFor(()=>read(()=>assets().some(a=>a.kind==='map')));
+    assert.equal(await read(()=>!!document.querySelector('[data-create-dependencies]')),false,'prefer existing creates without review');
+    assert.deepEqual(await read(()=>{const a=assets().filter(a=>a.kind==='map').at(-1);return[a.data.domain,a.data.codomain];}),await read(()=>[key(variety1),key(variety1)]));
+    await read(()=>openPicker());
+    await read(()=>{document.querySelector('[data-create-dependency-mode]').value='review';window.before=assets().length;document.querySelector('[data-create-kind="matrix"]').click();});
+    assert.equal(await read(()=>assets().length),await read(()=>before),'opening the chooser creates no assets');
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-dependency]').length),1);
+    await client.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+    await client.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+    await waitFor(()=>read(()=>!document.querySelector('[data-create-dependencies]')));
+    assert.equal(await read(()=>assets().length),await read(()=>before),'Escape cancels without defaults or objects');
+    assert(await read(()=>document.querySelector('#workspace-create-dialog').open));
+    await read(()=>{document.querySelector('[data-create-kind="matrix"]').click();document.querySelector('[data-create-dependency="field"]').value=key(field);document.querySelector('[data-create-confirm]').click();});
+    await waitFor(()=>read(()=>assets().some(a=>a.kind==='matrix')));
+    assert.equal(await read(()=>assets().find(a=>a.kind==='matrix').data.field),await read(()=>key(field)));
+    assert.equal(await read(()=>document.querySelector('#workspace-create-dialog').open),false);
+    await read(()=>{openPicker();document.querySelector('[data-create-dependency-mode]').value='review';document.querySelector('[data-create-stay-open]').click();document.querySelector('[data-create-kind="map"]').click();});
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-dependency]').length),2);
+    assert.deepEqual(await read(()=>[...document.querySelectorAll('[data-create-dependency]')].map(s=>s.value)),await read(()=>[key(variety1),key(variety1)]),'review preselects named suggestions');
+    await client.send('Emulation.setDeviceMetricsOverride',{width:375,height:812,deviceScaleFactor:1,mobile:false});
+    assert(await read(()=>{const d=document.querySelector('[data-create-dependencies]'),r=d.getBoundingClientRect();return r.left>=10&&r.right<=innerWidth-10&&r.bottom<=innerHeight&&d.scrollWidth<=d.clientWidth;}),'review fits on mobile');
+    const screenshot=await client.send('Page.captureScreenshot',{format:'png'});
+    const screenshotPath=path.join(os.tmpdir(),'math-workspace-dependency-review-mobile.png');fs.writeFileSync(screenshotPath,Buffer.from(screenshot.data,'base64'));console.log('Review screenshot: '+screenshotPath);
+    await client.send('Emulation.clearDeviceMetricsOverride');
+    await read(()=>{document.querySelector('[data-create-dependency="domain"]').value=key(variety1);document.querySelector('[data-create-dependency="codomain"]').value=key(variety2);document.querySelector('[data-create-confirm]').click();});
+    await waitFor(()=>read(()=>assets().some(a=>a.kind==='map')));
+    assert.deepEqual(await read(()=>{const a=assets().filter(a=>a.kind==='map').at(-1);return[a.data.domain,a.data.codomain];}),await read(()=>[key(variety1),key(variety2)]));
+    assert(await read(()=>document.querySelector('#workspace-create-dialog').open));
+    await read(()=>document.querySelector('[data-create-kind="sheaf"]').click());
+    await read(()=>{document.querySelector('[data-create-dependency="base"]').value=key(variety2);document.querySelector('[data-create-confirm]').click();});
+    await waitFor(()=>read(()=>assets().some(a=>a.kind==='sheaf')));
+    assert.equal(await read(()=>assets().find(a=>a.kind==='sheaf').data.base),await read(()=>key(variety2)));
+    await read(()=>{document.querySelector('[data-create-kind="map"]').click();document.querySelector('[data-create-dependency="codomain"]').value='';document.querySelector('[data-create-confirm]').click();});
+    await waitFor(()=>read(()=>!document.querySelector('[data-create-dependencies]')));
+    assert.deepEqual(await read(()=>{const a=assets().filter(a=>a.kind==='map').at(-1);return[a.data.domain,assets().find(b=>key(b)===a.data.codomain).isDefault];}),await read(()=>[key(variety1),true]),'review supports mixed existing and automatic dependencies');
+    await read(()=>{document.querySelector('[data-create-dependency-mode]').value='automatic';document.querySelector('[data-create-kind="map"]').click();});
+    await waitFor(()=>read(()=>{const a=assets().filter(a=>a.kind==='map').at(-1);return assets().find(b=>key(b)===a.data.domain).isDefault;}));
+    assert.equal(await read(()=>!!document.querySelector('[data-create-dependencies]')),false,'automatic mode creates without review');
+    await read(()=>{document.querySelector('[data-create-dependency-mode]').value='review';document.querySelector('[data-create-kind="map"]').click();});
+    assert.equal(await read(()=>[...document.querySelectorAll('[data-create-dependency] option')].filter(o=>o.value).some(o=>assets().find(a=>key(a)===o.value).isDefault)),false,'temporary supporting assets are not suggested as existing objects');
+    await read(()=>document.querySelector('[data-create-dependencies] button[type="button"]').click());
+    await waitFor(()=>read(()=>!document.querySelector('[data-create-dependencies]')));
+    // A rank-three Lie type is incompatible with the default four-dimensional roots.
+    await read(()=>{api.createObjectAsset('lie',{data:{family:'A',rank:3}});document.querySelector('[data-create-kind="roots"]').click();});
+    await waitFor(()=>read(()=>assets().some(a=>a.kind==='roots')));
+    assert.equal(await read(()=>!!document.querySelector('[data-create-dependencies]')),false,'no compatible match uses defaults');
+    assert.equal(await read(()=>{const r=assets().find(a=>a.kind==='roots');return assets().find(a=>key(a)===r.data.lie).data.rank;}),4);
+    await read(()=>{window.before=assets().length;document.querySelector('[data-create-kind="field"]').click();});
+    await waitFor(()=>read(()=>assets().length===before+1));
+    assert.equal(await read(()=>!!document.querySelector('[data-create-dependencies]')),false,'independent assets need no chooser');
+    console.log('PASS dependency creation: prefer existing, review suggestions, automatic support, mixed choices, cancellation, Stay open, mobile layout and fallback');
+  }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}
+}
+if(require.main===module)run().catch(error=>{console.error(error.stack||error);process.exitCode=1;});
