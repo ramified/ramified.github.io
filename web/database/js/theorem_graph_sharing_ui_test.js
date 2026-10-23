@@ -71,18 +71,30 @@ async function run() {
       await waitFor(() => read(`!document.getElementById('theorem-personal').hidden && document.getElementById('personal-account-name').textContent === ${JSON.stringify('Signed in as ' + username)}`));
       await waitFor(() => read(`!document.getElementById('personal-logout').disabled && document.getElementById('personal-login').hidden`));
     }
+    const save = async name => {
+      await waitFor(() => read(`!document.getElementById('personal-login-submit').disabled`));
+      await click('personal-save');
+      if (name) {
+        await waitFor(() => read(`!document.getElementById('personal-rename').hidden`));
+        await type('personal-rename-title', name);
+        await read(`document.getElementById('personal-rename').requestSubmit()`);
+      }
+      await waitFor(() => read(`!document.getElementById('personal-login-submit').disabled`));
+    };
     const sync = async () => {
+      await waitFor(() => read(`!document.getElementById('personal-login-submit').disabled`));
       await delay(350); await click('personal-sync');
-      await waitFor(() => read(`document.getElementById('personal-status').textContent === 'Saved to cloud'`), 15000);
+      await waitFor(() => read(`!document.getElementById('personal-login-submit').disabled`));
+      await waitFor(() => read(`(async()=> (await new TheoremGraphStorage.IndexedStore('theorem-graphs-v2:'+window.THEOREM_GRAPH_API_BASE+':'+document.getElementById('personal-username').value).summaries()).every(row=>!row.dirty))()`), 15000);
     };
     const navigate = async url => { await c.send('Page.navigate', { url }); await delay(150); await ready(); };
     const settled = () => waitFor(() => !requests.size && Date.now() - lastNetworkActivity >= 300, 15000, 'account requests finish');
-    await ready(); return { c, read, click, type, login, sync, navigate, settled };
+    await ready(); return { c, read, click, type, login, save, sync, navigate, settled };
   }
   try {
     const owner = await browser(page);
     assert.equal(await owner.read('location.origin'), origin);
-    await owner.type('graph-title', 'Owner graph'); await delay(500); await owner.login('ramified'); await owner.sync();
+    await owner.type('graph-title', 'Owner graph'); await delay(500); await owner.login('ramified'); await owner.save('Owner graph'); await owner.sync();
     const documentId = backend.db.sqlite.prepare('SELECT id FROM documents').get().id;
     const row = `document.querySelector('#personal-graph-list [data-id="${documentId}"]')`;
     assert(await owner.read(`${row}.classList.contains('is-current') && ${row}.hasAttribute('aria-current')`));
@@ -144,7 +156,7 @@ async function run() {
     }
     console.log('PASS browser: cross-origin login, user provisioning, wide rows, current highlight, rename, and share creation');
     const viewer = await browser(links[0]);
-    assert(await viewer.read(`document.getElementById('theorem-personal').hidden && document.getElementById('graph-title').readOnly`));
+    assert(await viewer.read(`document.getElementById('graph-title').readOnly`));
     await viewer.type('graph-title', 'Forbidden');
     assert.equal(await viewer.read(`document.getElementById('graph-title').value`), 'Owner graph');
     assert(await viewer.read(`document.querySelector('#node-card .card-body').inert`));
@@ -170,15 +182,15 @@ async function run() {
     await viewer.click('personal-shared-leave'); await viewer.login('alice');
     assert.equal(await viewer.read(`document.querySelectorAll('#personal-graph-list .theorem-personal-item').length`), 0, 'Alice sees no administrator or shared graphs');
     assert(await viewer.read(`document.getElementById('personal-users').hidden`));
-    await viewer.type('graph-title', 'Alice private'); await viewer.sync();
+    await viewer.type('graph-title', 'Alice private'); await viewer.save('Alice private'); await viewer.sync();
     const aliceId = backend.db.sqlite.prepare('SELECT document_id FROM graph_owners WHERE username=?').get('alice').document_id;
     assert.equal(await viewer.read(`document.querySelectorAll('#personal-graph-list .theorem-personal-item').length`), 1);
     await viewer.c.send('Network.enable');
     await viewer.c.send('Network.setBlockedURLs', { urls: [backend.origin + '/*'] });
     await viewer.navigate(page);
     assert.equal(await viewer.read(`document.getElementById('graph-title').value`), 'Alice private', 'offline reload restores only the signed-in account cache');
-    assert(await viewer.read(`!document.getElementById('theorem-personal').hidden`));
-    await viewer.type('graph-title', 'Alice offline'); await delay(500);
+    assert(await viewer.read(`!!document.getElementById('personal-sign-in').hidden`));
+    await viewer.type('graph-title', 'Alice offline'); await viewer.save(); await delay(500);
     await viewer.navigate(page);
     assert.equal(await viewer.read(`document.getElementById('graph-title').value`), 'Alice offline');
     await viewer.c.send('Network.setBlockedURLs', { urls: [] });
@@ -188,7 +200,7 @@ async function run() {
     // Finish that flow before the separate sign-out scenario revokes its session.
     await viewer.settled();
     assert.equal(JSON.parse(backend.db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(aliceId).content).graph.title, 'Alice offline');
-    await viewer.click('personal-logout'); await waitFor(() => viewer.read(`document.getElementById('theorem-personal').hidden`));
+    await viewer.click('personal-logout'); await waitFor(() => viewer.read(`!document.getElementById('personal-sign-in').hidden`));
     assert.notEqual(await viewer.read(`document.getElementById('graph-title').value`), 'Alice offline', 'sign-out clears the private graph from the editor');
     await viewer.login('ramified'); await delay(250);
     assert(!await viewer.read(`!!document.querySelector('#personal-graph-list [data-id="${aliceId}"]')`), 'switching accounts isolates local caches');

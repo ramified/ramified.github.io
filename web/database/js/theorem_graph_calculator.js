@@ -7698,6 +7698,7 @@
     const wholeImport = scope === 'whole';
     const refreshReferences = importRefreshesReferenceCollection(scope);
     if (wholeImport) {
+      if (options.recordUndo !== false) personalStorage?.detachForImport();
       state.rootGraph = next.graph;
       state.activePath = [];
       syncLinkedGraphTitlesFromOwners(state.rootGraph);
@@ -7731,6 +7732,9 @@
     setExportMessage(`Loaded ${state.nodes.length} nodes and ${state.arrows.length} arrows from ${sourceLabel} into ${wholeImport ? 'the whole graph' : 'the current tab'}.`);
     setStatus(wholeImport ? 'Imported whole graph.' : 'Imported current tab.');
     renderAll();
+    if (wholeImport && options.recordUndo !== false && window.CalculatorInputSettings?.syncEditableValue) {
+      window.CalculatorInputSettings.syncEditableValue(refs.graphTitle, state.graphTitle, { force: true });
+    }
     markCurrentExportClean();
   }
 

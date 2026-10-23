@@ -179,14 +179,14 @@
       }
       record.checkpointAt = this.now();
     }
-    async save(payload, forceCheckpoint = false) {
+    async save(payload, forceCheckpoint = false, checkpointReason = 'Before restore') {
       const id = this.current?.id;
       if (!id) return this.create(payload);
       return this.serial(async () => {
         if (this.current?.id !== id) return;
         if (signature(payload) === signature(this.current.payload) && !forceCheckpoint) return this.current;
         const record = clone(this.current);
-        if (!record.history.length || forceCheckpoint || this.now() - record.checkpointAt >= 300000) this.checkpoint(record, forceCheckpoint ? 'Before restore' : 'Autosave checkpoint');
+        if (!record.history.length || forceCheckpoint || this.now() - record.checkpointAt >= 300000) this.checkpoint(record, forceCheckpoint ? checkpointReason : 'Autosave checkpoint');
         record.payload = clone(payload); record.updatedAt = this.now();
         record.forceCheckpoint ||= forceCheckpoint;
         try { this.current = await this.write(record); }
@@ -333,5 +333,27 @@
       }
     }
   }
-  return { IndexedStore, CloudAPI, Library, signature };
+  // Drafts use a separate database and never enter Library's cloud-sync queue.
+  class WorkspaceDrafts {
+    constructor(store) { this.store = store; this.current = null; this.generation = 0; }
+    async save(payload, sourceId, baselineKey, name, sourceSignature = null) {
+      const generation = this.generation;
+      const record = { ...this.current, id: this.current?.id || crypto.randomUUID(),
+        title: name || title(payload), payload: clone(payload), sourceId, baselineKey, sourceSignature,
+        updatedAt: Date.now() };
+      let saved;
+      try { saved = await this.store.put(record, record.localVersion || 0); }
+      catch (error) {
+        if (error.status !== 409) throw error;
+        // Two tabs may restore the same draft. Keep both instead of overwriting.
+        saved = await this.store.put({ ...record, id: crypto.randomUUID(), localVersion: 0 }, 0);
+      }
+      if (generation === this.generation) this.current = saved;
+      return saved;
+    }
+    async open(id) { this.generation++; this.current = await this.store.read(id); return this.current; }
+    async list() { return (await (this.store.summaries ? this.store.summaries() : this.store.list())).sort((a, b) => b.updatedAt - a.updatedAt); }
+    release() { this.generation++; this.current = null; }
+  }
+  return { IndexedStore, CloudAPI, Library, WorkspaceDrafts, signature };
 });

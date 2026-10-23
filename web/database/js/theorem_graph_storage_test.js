@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { Library } = require('./theorem_graph_storage.js');
+const { Library, WorkspaceDrafts } = require('./theorem_graph_storage.js');
 const clone = value => JSON.parse(JSON.stringify(value));
 const payload = title => ({ formatVersion: 1, graph: { schemaVersion: 11, title, nodes: [], arrows: [] }, drafts: [] });
 class MemoryStore {
@@ -159,5 +159,30 @@ async function run() {
   await legacyReload.openCloud(currentId);
   assert.equal(legacyReload.current.title, 'Remote-only name', 'cloud reload restores name independently of content');
   console.log('PASS theorem storage: legacy metadata migration, offline rename reload, uncertain rename retries and remote-only names');
+
+  const draftStore = new MemoryStore(), drafts = new WorkspaceDrafts(draftStore);
+  const savedBefore = clone(await legacyReload.store.read(currentId));
+  await drafts.save(payload('Experiment'), currentId, 'saved-baseline', 'Independent name');
+  const draftId = drafts.current.id;
+  await legacyReload.sync();
+  assert.deepEqual(await legacyReload.store.read(currentId), savedBefore, 'backing up drafts never writes to the saved library');
+  const otherTab = new WorkspaceDrafts(draftStore);
+  await otherTab.open(draftId);
+  await drafts.save(payload('First tab'), currentId, 'saved-baseline', 'Independent name');
+  await otherTab.save(payload('Second tab'), currentId, 'saved-baseline', 'Independent name');
+  assert.notEqual(otherTab.current.id, draftId, 'concurrent draft updates preserve both tabs');
+  assert.equal((await draftStore.read(draftId)).payload.graph.title, 'First tab');
+  drafts.release();
+  await drafts.save(payload('Temporary'), null, '', 'Temporary');
+  assert.equal(drafts.current.sourceId, null);
+  assert.equal((await drafts.list()).length, 3, 'detaching retains old drafts for recovery');
+  const reloadedDrafts = new WorkspaceDrafts(draftStore);
+  assert.equal((await reloadedDrafts.open(drafts.current.id)).payload.graph.title, 'Temporary');
+  let releaseWrite;
+  const delayed = new WorkspaceDrafts({ put: record => new Promise(resolve => { releaseWrite = () => resolve(record); }) });
+  const flight = delayed.save(payload('Before import'), currentId, 'baseline', 'A');
+  delayed.release(); releaseWrite(); await flight;
+  assert.equal(delayed.current, null, 'a late backup must not rebind an imported or detached workspace');
+  console.log('PASS theorem drafts: separate storage, reload, detaching, concurrent tabs and late backup isolation');
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

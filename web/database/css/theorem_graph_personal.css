@@ -9,6 +9,7 @@
 #personal-login { margin-top: 10px; }
 #personal-login input { display: block; width: 100%; min-width: 0; }
 .theorem-personal .btn { white-space: normal; }
+.theorem-personal button:disabled { opacity: .45; cursor: not-allowed; }
 .theorem-personal-history { padding-left: 0; list-style: none; }
 .theorem-personal-status { color: #466449; }
 .theorem-personal-status[data-warning="true"] { color: #99512b; }
