@@ -30,6 +30,7 @@ async function run(){
         return {reset(){MathWorkspaceAssetIcons.configure(originalDesign);},settings(){return {exactColor:MathWorkspaceAssetIcons.settings().exactColor};},destroy(){destroyedDesign++;}};
       }});
       window.unregisterOther=MathWorkspaceDesignLab.register({id:'test-other',title:'Another experiment',mount(host){host.textContent='Independent preview';return {reset(){removedDesign++;},destroy(){removedDesign++;}};}});
+      const experiment=document.querySelector('[data-design-picker]');experiment.value='test-color';experiment.dispatchEvent(new Event('change'));
       document.querySelector('[data-test-design-color]').click();
     });
     assert.deepEqual(await read(()=>[...document.querySelectorAll('[data-design-experiment] > summary')].map(node=>node.textContent)),await read(()=>[...labExperimentTitles,'Color experiment','Another experiment']));

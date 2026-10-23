@@ -10,6 +10,7 @@ async function run(){
     const press=async(key,modifiers=0)=>{for(const type of ['keyDown','keyUp'])await client.send('Input.dispatchKeyEvent',{type,key,code:key==='a'?'KeyA':key,modifiers,windowsVirtualKeyCode:({Backspace:8,Escape:27,a:65})[key]||0});};
     await waitFor(()=>read(()=>!!document.querySelector('[data-design-experiment="asset-subjects"]')),20000);
     await read(()=>{
+      const experiment=document.querySelector('[data-design-picker]');experiment.value='asset-subjects';experiment.dispatchEvent(new Event('change'));
       window.api=MathWorkspaceAssetsTest;
       window.openPicker=()=>{api.openCanvas('assets');document.querySelector('[data-assets-content]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:100,clientY:150}));[...document.querySelectorAll('#workspace-assets-context-menu button')].find(button=>button.textContent==='New…').click();};
       window.setSubject=value=>{const select=document.querySelector('[data-create-subject]');select.value=value;select.dispatchEvent(new Event('change'));};

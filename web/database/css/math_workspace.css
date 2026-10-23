@@ -208,6 +208,9 @@
 .workspace-design-lab h3 { margin: 0 0 8px; }
 .workspace-design-empty { margin: 16px 0; padding: 18px 12px; border: 1px dashed var(--border); border-radius: 6px; text-align: center; }
 .workspace-design-empty p { margin: 0; color: var(--muted); font-size: .85rem; }
+.workspace-design-picker { display: grid; gap: 6px; margin: 10px 0; font-size: .85rem; font-weight: 600; }
+.workspace-design-picker[hidden], .workspace-design-experiment[hidden] { display: none; }
+.workspace-design-picker select { width: 100%; min-width: 0; padding: 6px; font: inherit; font-weight: 400; }
 .workspace-design-experiment { margin: 14px 0; padding: 12px; border: 1px solid var(--border); border-radius: 6px; min-width: 0; }
 .workspace-design-experiment summary { cursor: pointer; font-weight: 600; }
 .workspace-design-experiment-content { margin: 12px 0; min-width: 0; }

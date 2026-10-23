@@ -6,329 +6,329 @@
 const SHOP_CONFIG = {
   wechatName: "XxxxXxxxx-Zzzz",
   products: [
-      {
-    id: "hair-dryer",
-    image: "hair_dryer.jpg",
-    price: 10,
-    name: { en: "Hair dryer", zh: "吹风机" },
-    description: {
-      en: "Reliable hair dryer that has been in regular use for 6 years and still works great. €10.",
-      zh: "稳定使用6年了，贼好用，10欧出。"
-    }
-  },
-  {
-    id: "barbecue-grill-plate",
-    image: "barbecue_grill_plate.jpg",
-    price: 1,
-    name: { en: "Barbecue grill plate", zh: "烧烤盘" },
-    description: {
-      en: "Bought it but never used it. €1.",
-      zh: "买来之后就没用过，1欧出。"
-    }
-  },
-  // {
-  //   id: "esi-49-key-keyboard",
-  //   image: "esi_49_key_keyboard.jpg",
-  //   price: 15,
-  //   name: { en: "ESI 49-key keyboard", zh: "ESI 49键电子琴" },
+  //     {
+  //   id: "hair-dryer",
+  //   image: "hair_dryer.jpg",
+  //   price: 10,
+  //   name: { en: "Hair dryer", zh: "吹风机" },
   //   description: {
-  //     en: "ESI 49-key electronic keyboard, €15.",
-  //     zh: "ESI 49键电子琴，15欧出。"
+  //     en: "Reliable hair dryer that has been in regular use for 6 years and still works great. €10.",
+  //     zh: "稳定使用6年了，贼好用，10欧出。"
   //   }
   // },
   // {
-  //   id: "small-strainer",
-  //   image: "strainer.jpg",
-  //   price: 3,
-  //   name: { en: "Small strainer", zh: "小漏勺" },
-  //   description: {
-  //     en: "Small strainer, €3 each.",
-  //     zh: "小漏勺，3欧1个。"
-  //   }
-  // },
-
-  // {
-  //   id: "large-strainer",
-  //   image: "strainer.jpg",
-  //   price: 2,
-  //   name: { en: "Large strainer", zh: "大漏勺" },
-  //   description: {
-  //     en: "Large strainer, €2 each.",
-  //     zh: "大漏勺，2欧1个。"
-  //   }
-  // },
-
-  {
-    id: "small-baking-tray",
-    image: "small_baking_tray.jpg",
-    price: 1.5,
-    name: { en: "Small baking tray", zh: "小型烤盘" },
-    description: {
-      en: "Small baking tray, €1.50.",
-      zh: "小型烤盘，1.5欧1个。"
-    }
-  },
-
-  {
-    id: "large-storage-box",
-    image: "large_storage_box.jpg",
-    price: 2,
-    name: { en: "Large storage box", zh: "大盒子" },
-    description: {
-      en: "Large storage box, €2.",
-      zh: "大盒子，2欧。"
-    }
-  },
-
-  {
-    id: "medium-lunch-box",
-    image: "medium_lunch_box.jpg",
-    price: 1.5,
-    name: { en: "Medium lunch box", zh: "饭盒（中盒子）" },
-    description: {
-      en: "Medium-sized lunch/storage box, €1.50.",
-      zh: "饭盒（中盒子），1.5欧。"
-    }
-  },
-
-  {
-    id: "small-storage-box",
-    image: "small_storage_box.jpg",
-    price: 0.3,
-    name: { en: "Small storage box", zh: "小盒子" },
-    description: {
-      en: "Small storage box, €0.30 each. Five available.",
-      zh: "小盒子，0.3欧1个，共5个。"
-    },
-    quantity: 5
-  },
-
-  // {
-  //   id: "dish-drying-rack",
-  //   image: "dish_drying_rack.jpg",
+  //   id: "barbecue-grill-plate",
+  //   image: "barbecue_grill_plate.jpg",
   //   price: 1,
-  //   name: { en: "Dish drying rack", zh: "沥水架" },
+  //   name: { en: "Barbecue grill plate", zh: "烧烤盘" },
   //   description: {
-  //     en: "Practical dish drying rack, €1.",
-  //     zh: "实用沥水架，1欧1个。"
+  //     en: "Bought it but never used it. €1.",
+  //     zh: "买来之后就没用过，1欧出。"
   //   }
   // },
+  // // {
+  // //   id: "esi-49-key-keyboard",
+  // //   image: "esi_49_key_keyboard.jpg",
+  // //   price: 15,
+  // //   name: { en: "ESI 49-key keyboard", zh: "ESI 49键电子琴" },
+  // //   description: {
+  // //     en: "ESI 49-key electronic keyboard, €15.",
+  // //     zh: "ESI 49键电子琴，15欧出。"
+  // //   }
+  // // },
+  // // {
+  // //   id: "small-strainer",
+  // //   image: "strainer.jpg",
+  // //   price: 3,
+  // //   name: { en: "Small strainer", zh: "小漏勺" },
+  // //   description: {
+  // //     en: "Small strainer, €3 each.",
+  // //     zh: "小漏勺，3欧1个。"
+  // //   }
+  // // },
 
-  {
-    id: "blue-raincoat",
-    image: "blue_raincoat.jpg",
-    price: 2,
-    name: { en: "Blue raincoat", zh: "蓝色雨衣" },
-    description: {
-      en: "Blue raincoat, €2.",
-      zh: "蓝色雨衣，2欧。"
-    }
-  },
-
-  {
-    id: "seasoning-bottles",
-    image: "seasoning_bottles.jpg",
-    price: 2,
-    name: { en: "10 small seasoning bottles", zh: "小型调味瓶（10个）" },
-    description: {
-      en: "Set of 10 small seasoning bottles, €2 for all. They can be emptied before pickup upon request.",
-      zh: "小型调味瓶10个，共2欧。如有需要，可以在交付之前清空。"
-    }
-  },
+  // // {
+  // //   id: "large-strainer",
+  // //   image: "strainer.jpg",
+  // //   price: 2,
+  // //   name: { en: "Large strainer", zh: "大漏勺" },
+  // //   description: {
+  // //     en: "Large strainer, €2 each.",
+  // //     zh: "大漏勺，2欧1个。"
+  // //   }
+  // // },
 
   // {
-  //   id: "extra-large-wmf-pot",
-  //   image: "extra_large_wmf_pot.jpg",
-  //   price: 19,
-  //   name: { en: "Extra-large WMF pot", zh: "特大号 WMF 锅" },
+  //   id: "small-baking-tray",
+  //   image: "small_baking_tray.jpg",
+  //   price: 1.5,
+  //   name: { en: "Small baking tray", zh: "小型烤盘" },
   //   description: {
-  //     en: "Extra-large WMF cooking pot. Originally around €120, now offered for €19.",
-  //     zh: "特大号WMF铁锅，原价约120欧，现在19欧出。"
+  //     en: "Small baking tray, €1.50.",
+  //     zh: "小型烤盘，1.5欧1个。"
   //   }
   // },
 
-  {
-    id: "heat-resistant-gloves",
-    image: "heat_resistant_gloves.jpg",
-    price: 1,
-    name: { en: "Heat-resistant gloves", zh: "防烫手套" },
-    description: {
-      en: "A pair of heat-resistant kitchen gloves, €1.",
-      zh: "防烫手套一副，1欧。"
-    }
-  },
+  // {
+  //   id: "large-storage-box",
+  //   image: "large_storage_box.jpg",
+  //   price: 2,
+  //   name: { en: "Large storage box", zh: "大盒子" },
+  //   description: {
+  //     en: "Large storage box, €2.",
+  //     zh: "大盒子，2欧。"
+  //   }
+  // },
 
-  {
-    id: "quiet-fan",
-    image: "quiet_fan.jpg",
-    price: 15,
-    name: { en: "Very quiet fan", zh: "静音风扇" },
-    description: {
-      en: "A very quiet and comfortable fan, suitable for sleeping or working. €19.",
-      zh: "非常舒适的静音风扇，15欧出。"
-    }
-  },
-  {
-    id: "books",
-    image: "books.jpg",
-    price: 2.5,
-    name: { en: "Books", zh: "书籍" },
-    description: {
-      en: "A small selection of books, 2.5 euro for each book, 6 for all",
-      zh: "一些保存良好的全彩二手书籍，2.5欧一本，多买可以优惠"
-    },
-    quantity: 3,
-  },
-  {
-    id: "cup-and-others",
-    image: "cup_and_others.jpg",
-    price: 2,
-    name: { en: "Cups & others", zh: "杯子及杂物" },
-    description: {
-      en: "Cups and a few useful small household objects.",
-      zh: "杯子和一些实用的家居小物，买其他物品可送，单买2欧打包"
-    }
-  },
-  {
-    id: "electric-grill",
-    image: "electric_grill.jpg",
-    price: 22,
-    name: { en: "Electric grill", zh: "电烤炉" },
-    description: {
-      en: "Electric grill only used once, ready for a barbecue party.",
-      zh: "崭新电烤炉，只用过一次，适合barbecue"
-    }
-  },
-  {
-    id: "pot",
-    image: "pot.jpg",
-    price: 7,
-    name: { en: "Pot", zh: "锅" },
-    description: {
-      en: "A practical cooking pot.",
-      zh: "实用的烹饪锅,适合煮泡面"
-    }
-  },
   // {
-  //   id: "rice-cooker",
-  //   image: "rice_cooker.jpg",
-  //   price: 5,
-  //   name: { en: "Rice cooker", zh: "电饭煲" },
+  //   id: "medium-lunch-box",
+  //   image: "medium_lunch_box.jpg",
+  //   price: 1.5,
+  //   name: { en: "Medium lunch box", zh: "饭盒（中盒子）" },
   //   description: {
-  //     en: "Rice cooker for everyday meals.",
-  //     zh: "适合日常使用的电饭煲。"
+  //     en: "Medium-sized lunch/storage box, €1.50.",
+  //     zh: "饭盒（中盒子），1.5欧。"
   //   }
   // },
-  {
-    id: "umeshu",
-    image: "Umeshu.jpg",
-    price: 9,
-    name: { en: "Umeshu", zh: "梅酒" },
-    description: {
-      en: "Umeshu bottle, offered for 10 euros.",
-      zh: "梅酒一瓶，价格9欧元。"
-    }
-  },
+
   // {
-  //   id: "thick-cotton-quilt",
-  //   image: "thick_cotton_quilt.jpg",
-  //   price: 35,
-  //   name: { en: "Thick cotton quilt", zh: "厚棉被" },
+  //   id: "small-storage-box",
+  //   image: "small_storage_box.jpg",
+  //   price: 0.3,
+  //   name: { en: "Small storage box", zh: "小盒子" },
   //   description: {
-  //     en: "A very thick, high-quality cotton quilt, newly bought and shipped from China. Never used because the apartment has heating. €35 with the cover, or €29 without the cover.",
-  //     zh: "非常厚、质量很好的棉被，从中国新买寄来，因为家里有暖气所以从未使用。带外套（被套）35欧，不需要外套则29欧。"
+  //     en: "Small storage box, €0.30 each. Five available.",
+  //     zh: "小盒子，0.3欧1个，共5个。"
+  //   },
+  //   quantity: 5
+  // },
+
+  // // {
+  // //   id: "dish-drying-rack",
+  // //   image: "dish_drying_rack.jpg",
+  // //   price: 1,
+  // //   name: { en: "Dish drying rack", zh: "沥水架" },
+  // //   description: {
+  // //     en: "Practical dish drying rack, €1.",
+  // //     zh: "实用沥水架，1欧1个。"
+  // //   }
+  // // },
+
+  // {
+  //   id: "blue-raincoat",
+  //   image: "blue_raincoat.jpg",
+  //   price: 2,
+  //   name: { en: "Blue raincoat", zh: "蓝色雨衣" },
+  //   description: {
+  //     en: "Blue raincoat, €2.",
+  //     zh: "蓝色雨衣，2欧。"
   //   }
   // },
-  {
-    id: "red-sweater",
-    image: "red_sweater.jpg",
-    price: 2,
-    name: { en: "Red sweater", zh: "红色毛衣" },
-    description: {
-      en: "Red sweater. As far as I remember, it has never been worn.",
-      zh: "红色毛衣，印象中没有穿过。"
-    }
-  },
-  {
-    id: "padded-trousers-1",
-    image: "padded_trousers_1.jpg",
-    price: 3,
-    name: { en: "Padded winter trousers", zh: "棉裤" },
-    description: {
-      en: "Warm padded winter trousers.",
-      zh: "保暖棉裤。"
-    }
-  },
-  {
-    id: "padded-trousers-2",
-    image: "padded_trousers_2.jpg",
-    price: 3,
-    name: { en: "Padded winter trousers", zh: "另一件棉裤" },
-    description: {
-      en: "Warm padded winter trousers.",
-      zh: "保暖棉裤。"
-    }
-  },
-  {
-    id: "black-trousers",
-    image: "black_trousers.jpg",
-    price: 2,
-    name: { en: "Black trousers", zh: "黑色长裤" },
-    description: {
-      en: "Black long trousers.",
-      zh: "黑色长裤。"
-    }
-  },
-  {
-    id: "grey-trousers",
-    image: "grey_trousers.jpg",
-    price: 2,
-    name: { en: "Grey trousers", zh: "灰色长裤" },
-    description: {
-      en: "Grey long trousers.",
-      zh: "灰色长裤。"
-    }
-  },
-  {
-    id: "bosideng-down-jacket",
-    image: "bosideng_down_jacket.jpg",
-    price: 4,
-    name: { en: "Bosideng down jacket", zh: "波司登羽绒服" },
-    description: {
-      en: "Bosideng down jacket. There is some damage around the zipper, hence the low price.",
-      zh: "波司登牌羽绒服，拉链处有些破损，因此低价出售。"
-    }
-  },
-  {
-    id: "duvet-cover-pillowcase",
-    image: "duvet_cover_pillowcase.jpg",
-    price: 2,
-    name: { en: "Duvet cover & pillowcase", zh: "被套和枕头套" },
-    description: {
-      en: "Duvet cover and pillowcase set. €2, or free if your other items total more than €10.",
-      zh: "被套和枕头套，2欧。购买其他物品总价超过10欧可免费赠送。"
-    }
-  },
-  {
-    id: "pillowcases-pair",
-    image: "pillowcases_pair.jpg",
-    price: 2,
-    name: { en: "Two pillowcases", zh: "枕套（2件）" },
-    description: {
-      en: "Two pillowcases, €2 for the pair, or free if your other items total more than €8.",
-      zh: "枕套2件，共2欧。购买其他物品总价超过8欧可免费赠送。"
-    }
-  },
-  {
-    id: "fitted-sheet",
-    image: "fitted_sheet.jpg",
-    price: 2,
-    name: { en: "Fitted sheet", zh: "弹性床单" },
-    description: {
-      en: "Elasticated fitted sheet. €2, or free if your other items total more than €8.",
-      zh: "弹性床单，2欧。购买其他物品总价超过8欧可免费赠送。"
-    }
-  },
+
+  // {
+  //   id: "seasoning-bottles",
+  //   image: "seasoning_bottles.jpg",
+  //   price: 2,
+  //   name: { en: "10 small seasoning bottles", zh: "小型调味瓶（10个）" },
+  //   description: {
+  //     en: "Set of 10 small seasoning bottles, €2 for all. They can be emptied before pickup upon request.",
+  //     zh: "小型调味瓶10个，共2欧。如有需要，可以在交付之前清空。"
+  //   }
+  // },
+
+  // // {
+  // //   id: "extra-large-wmf-pot",
+  // //   image: "extra_large_wmf_pot.jpg",
+  // //   price: 19,
+  // //   name: { en: "Extra-large WMF pot", zh: "特大号 WMF 锅" },
+  // //   description: {
+  // //     en: "Extra-large WMF cooking pot. Originally around €120, now offered for €19.",
+  // //     zh: "特大号WMF铁锅，原价约120欧，现在19欧出。"
+  // //   }
+  // // },
+
+  // {
+  //   id: "heat-resistant-gloves",
+  //   image: "heat_resistant_gloves.jpg",
+  //   price: 1,
+  //   name: { en: "Heat-resistant gloves", zh: "防烫手套" },
+  //   description: {
+  //     en: "A pair of heat-resistant kitchen gloves, €1.",
+  //     zh: "防烫手套一副，1欧。"
+  //   }
+  // },
+
+  // {
+  //   id: "quiet-fan",
+  //   image: "quiet_fan.jpg",
+  //   price: 15,
+  //   name: { en: "Very quiet fan", zh: "静音风扇" },
+  //   description: {
+  //     en: "A very quiet and comfortable fan, suitable for sleeping or working. €19.",
+  //     zh: "非常舒适的静音风扇，15欧出。"
+  //   }
+  // },
+  // {
+  //   id: "books",
+  //   image: "books.jpg",
+  //   price: 2.5,
+  //   name: { en: "Books", zh: "书籍" },
+  //   description: {
+  //     en: "A small selection of books, 2.5 euro for each book, 6 for all",
+  //     zh: "一些保存良好的全彩二手书籍，2.5欧一本，多买可以优惠"
+  //   },
+  //   quantity: 3,
+  // },
+  // {
+  //   id: "cup-and-others",
+  //   image: "cup_and_others.jpg",
+  //   price: 2,
+  //   name: { en: "Cups & others", zh: "杯子及杂物" },
+  //   description: {
+  //     en: "Cups and a few useful small household objects.",
+  //     zh: "杯子和一些实用的家居小物，买其他物品可送，单买2欧打包"
+  //   }
+  // },
+  // {
+  //   id: "electric-grill",
+  //   image: "electric_grill.jpg",
+  //   price: 22,
+  //   name: { en: "Electric grill", zh: "电烤炉" },
+  //   description: {
+  //     en: "Electric grill only used once, ready for a barbecue party.",
+  //     zh: "崭新电烤炉，只用过一次，适合barbecue"
+  //   }
+  // },
+  // {
+  //   id: "pot",
+  //   image: "pot.jpg",
+  //   price: 7,
+  //   name: { en: "Pot", zh: "锅" },
+  //   description: {
+  //     en: "A practical cooking pot.",
+  //     zh: "实用的烹饪锅,适合煮泡面"
+  //   }
+  // },
+  // // {
+  // //   id: "rice-cooker",
+  // //   image: "rice_cooker.jpg",
+  // //   price: 5,
+  // //   name: { en: "Rice cooker", zh: "电饭煲" },
+  // //   description: {
+  // //     en: "Rice cooker for everyday meals.",
+  // //     zh: "适合日常使用的电饭煲。"
+  // //   }
+  // // },
+  // {
+  //   id: "umeshu",
+  //   image: "Umeshu.jpg",
+  //   price: 9,
+  //   name: { en: "Umeshu", zh: "梅酒" },
+  //   description: {
+  //     en: "Umeshu bottle, offered for 10 euros.",
+  //     zh: "梅酒一瓶，价格9欧元。"
+  //   }
+  // },
+  // // {
+  // //   id: "thick-cotton-quilt",
+  // //   image: "thick_cotton_quilt.jpg",
+  // //   price: 35,
+  // //   name: { en: "Thick cotton quilt", zh: "厚棉被" },
+  // //   description: {
+  // //     en: "A very thick, high-quality cotton quilt, newly bought and shipped from China. Never used because the apartment has heating. €35 with the cover, or €29 without the cover.",
+  // //     zh: "非常厚、质量很好的棉被，从中国新买寄来，因为家里有暖气所以从未使用。带外套（被套）35欧，不需要外套则29欧。"
+  // //   }
+  // // },
+  // {
+  //   id: "red-sweater",
+  //   image: "red_sweater.jpg",
+  //   price: 2,
+  //   name: { en: "Red sweater", zh: "红色毛衣" },
+  //   description: {
+  //     en: "Red sweater. As far as I remember, it has never been worn.",
+  //     zh: "红色毛衣，印象中没有穿过。"
+  //   }
+  // },
+  // {
+  //   id: "padded-trousers-1",
+  //   image: "padded_trousers_1.jpg",
+  //   price: 3,
+  //   name: { en: "Padded winter trousers", zh: "棉裤" },
+  //   description: {
+  //     en: "Warm padded winter trousers.",
+  //     zh: "保暖棉裤。"
+  //   }
+  // },
+  // {
+  //   id: "padded-trousers-2",
+  //   image: "padded_trousers_2.jpg",
+  //   price: 3,
+  //   name: { en: "Padded winter trousers", zh: "另一件棉裤" },
+  //   description: {
+  //     en: "Warm padded winter trousers.",
+  //     zh: "保暖棉裤。"
+  //   }
+  // },
+  // {
+  //   id: "black-trousers",
+  //   image: "black_trousers.jpg",
+  //   price: 2,
+  //   name: { en: "Black trousers", zh: "黑色长裤" },
+  //   description: {
+  //     en: "Black long trousers.",
+  //     zh: "黑色长裤。"
+  //   }
+  // },
+  // {
+  //   id: "grey-trousers",
+  //   image: "grey_trousers.jpg",
+  //   price: 2,
+  //   name: { en: "Grey trousers", zh: "灰色长裤" },
+  //   description: {
+  //     en: "Grey long trousers.",
+  //     zh: "灰色长裤。"
+  //   }
+  // },
+  // {
+  //   id: "bosideng-down-jacket",
+  //   image: "bosideng_down_jacket.jpg",
+  //   price: 4,
+  //   name: { en: "Bosideng down jacket", zh: "波司登羽绒服" },
+  //   description: {
+  //     en: "Bosideng down jacket. There is some damage around the zipper, hence the low price.",
+  //     zh: "波司登牌羽绒服，拉链处有些破损，因此低价出售。"
+  //   }
+  // },
+  // {
+  //   id: "duvet-cover-pillowcase",
+  //   image: "duvet_cover_pillowcase.jpg",
+  //   price: 2,
+  //   name: { en: "Duvet cover & pillowcase", zh: "被套和枕头套" },
+  //   description: {
+  //     en: "Duvet cover and pillowcase set. €2, or free if your other items total more than €10.",
+  //     zh: "被套和枕头套，2欧。购买其他物品总价超过10欧可免费赠送。"
+  //   }
+  // },
+  // {
+  //   id: "pillowcases-pair",
+  //   image: "pillowcases_pair.jpg",
+  //   price: 2,
+  //   name: { en: "Two pillowcases", zh: "枕套（2件）" },
+  //   description: {
+  //     en: "Two pillowcases, €2 for the pair, or free if your other items total more than €8.",
+  //     zh: "枕套2件，共2欧。购买其他物品总价超过8欧可免费赠送。"
+  //   }
+  // },
+  // {
+  //   id: "fitted-sheet",
+  //   image: "fitted_sheet.jpg",
+  //   price: 2,
+  //   name: { en: "Fitted sheet", zh: "弹性床单" },
+  //   description: {
+  //     en: "Elasticated fitted sheet. €2, or free if your other items total more than €8.",
+  //     zh: "弹性床单，2欧。购买其他物品总价超过8欧可免费赠送。"
+  //   }
+  // },
   // {
   //   id: "blanket",
   //   image: "blanket.jpg",

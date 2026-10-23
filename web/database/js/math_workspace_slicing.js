@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const labels = { frame: 'Frame', polytope: 'Polytope', sphere: 'Sphere', point: 'Coordinate point', vector: 'Vector', roots: 'Roots', lattice: 'Lattice', voronoi: 'Voronoi cell', formula: 'Formula set', tropical: 'Tropical polynomial', weyl: 'Weyl chambers', cone: 'Rational cone', fan: 'Fan' };
+  const labels = { frame: 'Frame', polytope: 'Polytope', sphere: 'Sphere', point: 'Coordinate point', vector: 'Vector', roots: 'Roots', lattice: 'Lattice', voronoi: 'Voronoi cell', formula: 'Equations', tropical: 'Tropical polynomial', weyl: 'Weyl chambers', cone: 'Rational cone', fan: 'Fan' };
   const kinds = Object.keys(labels), keyOf = a => a ? a.kind + ':' + a.id : '';
   const clone = value => JSON.parse(JSON.stringify(value));
   const subtypes = Object.fromEntries(kinds.map(kind => [kind, [[kind, labels[kind]]]]));

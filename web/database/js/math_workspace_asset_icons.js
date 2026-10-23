@@ -51,6 +51,7 @@
     return true;
   }
   function describeValue(asset, resolve = () => null) {
+    if (asset.kind === 'mosaic-space' || asset.kind === 'mosaic-diagram') return { source: 'generic', kind: asset.kind, symbol: generic[asset.kind] };
     if (asset.kind === 'matrix') {
       let data = asset.data || {};
       if (data.construction) {
@@ -220,10 +221,20 @@
     svg.append(svgNode('circle',{cx:20,cy:20,r:1.2,fill:'currentColor'}));
     return svg;
   }
+  function mosaicIcon(kind) {
+    const svg=svgNode('svg',{viewBox:'0 0 40 40',fill:'none',stroke:'currentColor','stroke-width':1.5,'stroke-linecap':'round','stroke-linejoin':'round'});
+    const field='M13 5L21 9.5V18.5L13 23L5 18.5V9.5ZM29 5L37 9.5V18.5L29 23L21 18.5V9.5ZM21 18.5L29 23V32L21 36.5L13 32V23Z';
+    svg.append(svgNode('path',{d:field,...(kind==='mosaic-diagram'?{'stroke-opacity':'.55'}:{})}));
+    if(kind==='mosaic-space')svg.append(svgNode('path',{d:'M13 23L21 18.5L29 23','stroke-opacity':'.5'}));
+    else for(const d of ['M13 10L16.5 12V16L13 18L9.5 16V12Z','M21 23.5L24.5 25.5V29.5L21 31.5L17.5 29.5V25.5Z'])
+      svg.append(svgNode('path',{'data-mosaic-piece':'',d,fill:'currentColor',stroke:'none'}));
+    return svg;
+  }
   function render(asset, resolve) {
     const description = describe(asset, resolve), model=description.representative || description, host = document.createElement('span');
     host.className = 'workspace-asset-icon'; host.dataset.iconSource = description.source; host.setAttribute('aria-hidden', 'true');
-    if (model.kind === 'matrix') host.append(matrixIcon(model));
+    if (model.kind === 'mosaic-space' || model.kind === 'mosaic-diagram') host.append(mosaicIcon(model.kind));
+    else if (model.kind === 'matrix') host.append(matrixIcon(model));
     else if (model.kind === 'roots' || model.kind === 'weyl') host.append(a2Icon(model.kind==='weyl'));
     else if (model.kind === 'frame') host.append(frameIcon());
     else if (model.kind === 'fan' || model.kind === 'cone') host.append(fanIcon(model));

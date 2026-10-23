@@ -41,6 +41,9 @@ linked spacing, stroke 2 parentheses, zero opacity 0.2, and no diagonal highligh
 or indices. The completed Cartan and icon geometry Design Lab experiments have
 been removed. The shared Design Lab, Principal asset types, and Asset subject
 assignments experiments remain.
+The approved creation experiment is removed: `formula` is labelled Equations,
+with inequalities mentioned in its description, and Mosaic Space/Diagram use
+the matching hex field icons, with two full-color pieces only on Diagram.
 `math_workspace_cartan_ui_test.js` verifies the approved preset and panel removal.
 
 Marked Dynkin icons show the referenced Lie diagram, all marked vertices, edge
@@ -97,6 +100,10 @@ The Design Lab is a transient movable panel in the production workspace. Open
 controls. Its appearance overrides and panel placement never enter workspace
 backups. Copy design settings exports a candidate preset; Exit removes the
 overrides. There is no second workspace implementation or authentication gate.
+An Experiment selector shows one experiment at a time while keeping each mounted
+experiment's state when switching. Removing a selected experiment moves to the
+next available one. `math_workspace_creation_defaults_ui_test.js` checks the
+approved picker and selector behavior.
 
 LR has an optional `nu` target; its result is the multiplicity in the selected
 stable/fixed-rank decomposition. Incomplete dimension checks cannot certify a

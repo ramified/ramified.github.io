@@ -4,6 +4,8 @@ global.MathWorkspaceObjects = require('./math_workspace_objects.js');
 global.StrandDrawing = require('./strand_drawing.js');
 const icons = require('./math_workspace_asset_icons.js');
 assert.deepEqual(icons.settings(),{exactColor:'',genericColor:'#a8510b',stroke:0.7,strandStroke:19,hatch:true,matrixStroke:2.1,matrixEntryStroke:0.7,matrixFontSize:20,matrixFontFamily:'"Times New Roman", serif',matrixRowGap:0,matrixColumnGap:0,matrixBracketGap:1,matrixBracketCurve:3,matrixPadding:0,fanNegativeLength:0.7,coneNegativeLength:0.7});
+assert.equal(icons.describe({kind:'mosaic-space',name:'S',data:{}}).kind,'mosaic-space');
+assert.equal(icons.describe({kind:'mosaic-diagram',name:'D',data:{}}).kind,'mosaic-diagram');
 const young = (rows,type='partition') => ({kind:'young',type,data:{rows}});
 assert.deepEqual(icons.describe({kind:'sheaf',name:'Sheaf',data:{}}).representative,{kind:'sheaf',name:'\\mathcal{F}',fallback:'ℱ'});
 assert.equal(icons.describe({kind:'sheaf',name:'\\mathcal{E}',data:{}}).name,'\\mathcal{E}','a supported asset name retains its exact icon');

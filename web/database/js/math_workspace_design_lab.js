@@ -18,7 +18,7 @@
   }
 
   function init(api) {
-    let panel = null, active = false;
+    let panel = null, active = false, selectedId = '';
     const mounted = new Map();
     function element(tag, className, text) {
       const node = document.createElement(tag);
@@ -26,7 +26,17 @@
       if (text) node.textContent = text;
       return node;
     }
-    function emptyState() { if (panel) panel.querySelector('[data-design-empty]').hidden = mounted.size > 0; }
+    function emptyState() {
+      if (!panel) return;
+      panel.querySelector('[data-design-empty]').hidden = mounted.size > 0;
+      panel.querySelector('[data-design-picker-row]').hidden = mounted.size === 0;
+    }
+    function showExperiment(id) {
+      if (!panel) return;
+      selectedId = mounted.has(id) ? id : mounted.keys().next().value || '';
+      panel.querySelector('[data-design-picker]').value = selectedId;
+      mounted.forEach(({ section }, key) => { section.hidden = key !== selectedId; if (!section.hidden) section.open = true; });
+    }
     function add(experiment) {
       if (!panel || mounted.has(experiment.id)) return;
       const section = element('details', 'workspace-design-experiment'); section.open = true; section.dataset.designExperiment = experiment.id;
@@ -48,16 +58,21 @@
           catch (_) { status.textContent = text; }
         }); actions.append(copy);
       }
-      section.append(actions, status); mounted.set(experiment.id, { section, controller }); emptyState();
+      section.append(actions, status); mounted.set(experiment.id, { section, controller });
+      panel.querySelector('[data-design-picker]').append(new Option(experiment.title, experiment.id));
+      showExperiment(selectedId || experiment.id); emptyState();
     }
     function remove(id) {
       const entry = mounted.get(id); if (!entry) return;
-      entry.controller.reset?.(); entry.controller.destroy?.(); entry.section.remove(); mounted.delete(id); emptyState(); api.render();
+      entry.controller.reset?.(); entry.controller.destroy?.(); entry.section.remove(); mounted.delete(id);
+      [...panel.querySelector('[data-design-picker]').options].find(option => option.value === id)?.remove();
+      showExperiment(selectedId === id ? '' : selectedId); emptyState(); api.render();
     }
     function build() {
       panel = element('section', 'card workspace-assets-inspector-card workspace-design-lab'); panel.id = 'workspace-design-lab';
-      panel.innerHTML = '<div class="card-head" role="button" tabindex="0" aria-expanded="true"><span class="card-head-label">Design Lab</span><em class="toggle-icon">▾</em></div><div class="card-body"><p class="workspace-card-context">Try temporary interface changes. Each experiment has its own preview and settings.</p><div data-design-empty class="workspace-design-empty"><h3>No active experiments</h3><p>New experiments will appear here.</p></div><div data-design-experiments></div><div class="workspace-design-actions"><button type="button" class="btn btn-ghost" data-design-exit>Exit Design Lab</button></div></div>';
+      panel.innerHTML = '<div class="card-head" role="button" tabindex="0" aria-expanded="true"><span class="card-head-label">Design Lab</span><em class="toggle-icon">▾</em></div><div class="card-body"><p class="workspace-card-context">Try temporary interface changes. Each experiment has its own preview and settings.</p><label class="workspace-design-picker" data-design-picker-row>Experiment<select class="workspace-control" data-design-picker aria-label="Design Lab experiment"></select></label><div data-design-empty class="workspace-design-empty"><h3>No active experiments</h3><p>New experiments will appear here.</p></div><div data-design-experiments></div><div class="workspace-design-actions"><button type="button" class="btn btn-ghost" data-design-exit>Exit Design Lab</button></div></div>';
       panel.querySelector('[data-design-exit]').addEventListener('click', exit);
+      panel.querySelector('[data-design-picker]').addEventListener('change', event => showExperiment(event.target.value));
       api.mount(panel); experiments.forEach(add); emptyState();
     }
     function open() {
