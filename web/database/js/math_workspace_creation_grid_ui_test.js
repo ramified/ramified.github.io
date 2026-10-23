@@ -7,6 +7,12 @@ async function run(){
   try{
     session=await launchBrowser('http://127.0.0.1:'+server.address().port+'/math_workspace.html');const{client}=session,errors=[];
     const read=(fn,...args)=>evaluate(client,'('+fn.toString()+')(...'+JSON.stringify(args)+')');
+    const checkFilterRow=async()=>{
+      const layout=await read(()=>{const row=document.querySelector('.workspace-create-filters'),rect=row.getBoundingClientRect(),selects=[...row.querySelectorAll('select')].map(select=>{const r=select.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right,width:r.width};});return {height:rect.height,left:rect.left,right:rect.right,client:row.clientWidth,scroll:row.scrollWidth,selects};});
+      assert.equal(layout.selects.length,2);
+      assert(Math.abs(layout.selects[0].top-layout.selects[1].top)<1&&layout.height<=36,'both filters occupy one compact row: '+JSON.stringify(layout));
+      assert(layout.scroll<=layout.client+1&&layout.selects.every(r=>r.width>=60&&r.left>=layout.left&&r.right<=layout.right+1),'filter controls fit without horizontal overflow: '+JSON.stringify(layout));
+    };
     const press=async(key,modifiers=0)=>{const codes={ArrowDown:40,ArrowUp:38,ArrowLeft:37,ArrowRight:39,Home:36,End:35,Enter:13,Escape:27,Backspace:8,a:65};for(const type of ['keyDown','keyUp'])await client.send('Input.dispatchKeyEvent',{type,key,code:key==='a'?'KeyA':key,modifiers,windowsVirtualKeyCode:codes[key]||0});};
     await client.send('Runtime.enable');client.socket.addEventListener('message',event=>{const m=JSON.parse(String(event.data));if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.exception?.description||m.params.exceptionDetails.text);});
     await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
@@ -19,21 +25,24 @@ async function run(){
     const grid=await read(()=>{const list=document.querySelector('.workspace-create-results'),r=list.getBoundingClientRect(),buttons=[...list.querySelectorAll('button')];return{count:buttons.length,columns:getComputedStyle(list).gridTemplateColumns.split(' ').length,visible:buttons.filter(b=>{const q=b.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length,icons:buttons.every(b=>{const icon=b.querySelector('.workspace-create-icon');return !!icon&&(!!icon.textContent||!!icon.querySelector('svg,canvas'));})};});
     assert(grid.columns>=4&&grid.visible>=12,'desktop exposes many compact choices: '+JSON.stringify(grid));assert(grid.icons);assert.equal(grid.count,26);
     assert.equal(await read(()=>document.querySelector('[data-create-stay-open]').checked),false);
+    await checkFilterRow();
     const desktop=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-create-grid.png'),Buffer.from(desktop.data,'base64'));
-    await read(()=>{document.querySelector('[data-subject="linear"]').click();document.querySelector('[data-subject="representation"]').click();});
-    assert.equal(await read(()=>document.querySelectorAll('.workspace-create-filters input:checked').length),1);
+    await read(()=>{const select=document.querySelector('[data-create-subject]');select.value='representation';select.dispatchEvent(new Event('change'));});
+    assert.equal(await read(()=>document.querySelectorAll('.workspace-create-filters select').length),2);
     assert.equal(await read(()=>!!document.querySelector('[data-create-kind="field"]')),false);
     assert(await read(()=>!!document.querySelector('[data-create-kind="young"]')));
-    await read(()=>{document.querySelector('[data-subject="linear"]').focus();});await press('ArrowRight');
-    assert.equal(await read(()=>document.querySelector('.workspace-create-filters input:checked').value),'representation','subjects support native radio keyboard navigation');
-    await read(()=>document.querySelector('[data-subject="algebraic"]').click());
+    await read(()=>{const select=document.querySelector('[data-create-display]');select.value='geometry';select.dispatchEvent(new Event('change'));select.focus();});await press('ArrowDown');
+    assert.equal(await read(()=>document.querySelector('[data-create-display]').value),'mosaic','display dropdown supports native keyboard navigation');
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-kind]').length),0,'display and subject filters intersect');
+    await read(()=>{const display=document.querySelector('[data-create-display]');display.value='sheaf';display.dispatchEvent(new Event('change'));const select=document.querySelector('[data-create-subject]');select.value='algebraic';select.dispatchEvent(new Event('change'));});
     await read(()=>document.querySelector('[data-create-search]').focus());for(const text of 'bundle')await client.send('Input.insertText',{text});
     assert.deepEqual(await read(()=>[...document.querySelectorAll('[data-create-kind]')].map(b=>b.dataset.createKind)),['sheaf']);
     await read(()=>{document.querySelector('[data-create-stay-open]').click();window.resultButton=document.querySelector('[data-create-kind="sheaf"]');window.beforeSheaves=userCount('sheaf');resultButton.click();});
     await waitFor(()=>read(()=>userCount('sheaf')===beforeSheaves+1));
     assert(await read(()=>document.querySelector('#workspace-create-dialog').open));
     assert.equal(await read(()=>document.querySelector('[data-create-search]').value),'bundle');
-    assert.equal(await read(()=>document.querySelector('.workspace-create-filters input:checked').value),'algebraic');
+    assert.equal(await read(()=>document.querySelector('[data-create-subject]').value),'algebraic');
+    assert.equal(await read(()=>document.querySelector('[data-create-display]').value),'sheaf');
     assert(await read(()=>document.activeElement===resultButton&&resultButton===document.querySelector('[data-create-kind="sheaf"]')),'creation retains the result button and focus');
     await press('Enter');await waitFor(()=>read(()=>userCount('sheaf')===beforeSheaves+2));
     assert(await read(()=>document.querySelector('#workspace-create-dialog').open),'the same type can be added repeatedly');
@@ -58,12 +67,16 @@ async function run(){
     await client.send('Emulation.setDeviceMetricsOverride',{width:375,height:812,deviceScaleFactor:1,mobile:false});await read(()=>openPicker());
     const mobileGrid=await read(()=>{const d=document.querySelector('#workspace-create-dialog'),r=d.getBoundingClientRect(),list=d.querySelector('.workspace-create-results');return {left:r.left,right:r.right,width:document.documentElement.clientWidth,columns:getComputedStyle(list).gridTemplateColumns.split(' ').length,clientWidth:list.clientWidth,scrollWidth:list.scrollWidth};});
     assert(mobileGrid.left>=10&&mobileGrid.right<=mobileGrid.width-10&&mobileGrid.columns>=3&&mobileGrid.clientWidth>=mobileGrid.scrollWidth-1,'mobile keeps a three-column grid within the centered dialog: '+JSON.stringify(mobileGrid));
+    await checkFilterRow();
     const mobile=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-create-grid-mobile.png'),Buffer.from(mobile.data,'base64'));
+    await client.send('Emulation.setDeviceMetricsOverride',{width:320,height:812,deviceScaleFactor:1,mobile:false});await checkFilterRow();
+    await read(()=>{const select=document.querySelector('[data-create-subject]');select.value='representation';select.dispatchEvent(new Event('change'));});await checkFilterRow();
+    assert.equal(await read(()=>document.querySelector('[data-create-subject]').title),'Representation theory','long selected names remain available in the tooltip');
     await read(()=>document.querySelector('[data-create-search]').focus());await client.send('Input.insertText',{text:'no_matching_type'});
     assert.match(await read(()=>document.querySelector('.workspace-create-results').textContent),/No objects match/);
     await press('Escape');await waitFor(()=>read(()=>document.activeElement===api.state.view));
     assert.deepEqual(errors,[]);
-    console.log('PASS Creation grid: dense desktop/mobile icons, single subjects, keyboard navigation, repeat creation, Stay open state, filters/scroll retention and final input focus');
+    console.log('PASS Creation grid: dense desktop/mobile icons, intersecting display/subject filters, keyboard navigation, repeat creation, Stay open state, filters/scroll retention and final input focus');
   }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}
 }
 if(require.main===module)run().catch(error=>{console.error(error.stack||error);process.exitCode=1;});

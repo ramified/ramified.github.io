@@ -1,5 +1,37 @@
 # Mathematical object panels
 
+## Mosaic ownership
+
+Mosaic Space owns the background grid, removed/recovered tiles, boundary cuts,
+gluing and background geometry. Its Modify panel offers only background tools;
+the Hyperbolic Metric and Poincaré Disk property panels set the shared metric.
+Mosaic Diagram owns knot/link or dual graph data and decorations, including
+chess pieces. Its Pieces mode reuses the native decoration tools; grid controls
+are disabled, topology tools are absent, and the shared-space reference has an
+Edit action. A shared Space change affects every referencing Diagram without
+rewriting its decoration record. Native projections that have not changed do
+not write normalized copies back into Assets.
+
+`MathWorkspaceMosaic.propertyPanels` and `editTools` centralize ownership.
+Background Statistics, Cellular Homology, Poincaré Disk and the experimental
+metric, local geometry, homology cords and universal-cover panels bind Space.
+Diagram Statistics, Knot / Link, Dual Graph and Seifert Surface bind Diagram.
+Experimental controls use the existing engine and its availability rules;
+property interactions do not write source assets. Existing background-property
+panels bound to a Diagram resolve to its Space, including restored panels.
+The metric selectors in Hyperbolic Metric and Poincaré Disk are the exception:
+they update the shared Space metric. Universal Cover's complete-interior view
+mode remains local to that panel and does not change the Space asset.
+
+Compatibility checks include piece-only and other decorated diagrams. Grid
+changes or removal of occupied tiles suspend incompatible editors/calculations,
+preserve the records, and recover when the background becomes compatible.
+Run `math_workspace_mosaic_test.js`, `math_workspace_mosaic_ui_test.js`, and
+`math_workspace_mosaic_ownership_ui_test.js`. The ownership browser test uses
+actual canvas clicks for chess placement, tile removal/recovery, boundary
+creation/removal and gluing, and checks shared records and property bindings.
+Rebuild/check the native bundle when changing `editors/mosaic_panels.mjs`.
+
 ## Workspace polish and Design Lab
 
 Fan and cone negative rays use the approved 0.7 length; Frame keeps both full
@@ -7,7 +39,8 @@ negative axes. New cone and fan names use `\sigma` and `\Sigma`, with the existi
 unique-name numbering. Cartan matrices use 19px Georgia, zero row/column gaps,
 linked spacing, stroke 2 parentheses, zero opacity 0.2, and no diagonal highlights
 or indices. The completed Cartan and icon geometry Design Lab experiments have
-been removed. The shared Design Lab and Principal asset types experiment remain.
+been removed. The shared Design Lab, Principal asset types, and Asset subject
+assignments experiments remain.
 `math_workspace_cartan_ui_test.js` verifies the approved preset and panel removal.
 
 Marked Dynkin icons show the referenced Lie diagram, all marked vertices, edge
@@ -82,19 +115,38 @@ owner uses it. Backup restoration waits until every binding is restored before
 collecting old orphan defaults. Run `math_workspace_defaults_test.js` and
 `math_workspace_default_cleanup_ui_test.js` for this lifecycle.
 
-New… uses one searchable creation dialog. The declarative creation catalog has
-overlapping subject tags; one subject can be active, with All objects as the
-default, and search narrows that subject's results. Every kind appears once in a
-compact, responsive icon grid. Descriptions are available on hover and focus.
+New… uses one searchable creation dialog. Display type is the primary filter,
+derived from each asset kind's existing Open view; Lie and marked Dynkin share
+one browsing group. All displays is the default. Display and Subject use compact
+dropdowns on one row, including mobile. Subject retains overlapping tags and
+defaults to All subjects. Display, subject,
+and search intersect. Search includes current subject assignments and display
+group names alongside names, subtypes, and aliases. Every kind appears once in
+a compact, responsive icon grid. Descriptions are available on hover and focus.
 Stay open is unchecked by default; when checked, creation preserves the dialog,
-search, subject and scroll position for successive additions. Closing after an
+search, display, subject and scroll position for successive additions. Closing after an
 addition focuses the last created object's Input; cancellation without creating
 restores the previous focus. Run the icon/creation unit tests and
 `math_workspace_polish_ui_test.js` in addition to affected workspace suites.
-`math_workspace_creation_grid_ui_test.js` checks visible grid density, single
-subject selection, grid/radio keyboard navigation, successive creation of the
+`math_workspace_creation_grid_ui_test.js` checks visible grid density, combined
+display/subject selection, grid/dropdown keyboard navigation, successive creation of the
 same type, Stay open defaults, retained filters/scroll, desktop/mobile sizing
 and focus on the last created object's Input after dismissal.
+
+Design Lab's Asset subject assignments experiment edits global asset-type
+membership, not individual saved objects. Its searchable list and subject
+checkboxes use the same creation catalog. Types may have multiple subjects or
+none; Unassigned only helps review the latter, which stay discoverable under
+All subjects. Changes refresh the creation dialog immediately. Reset and Exit
+restore defaults; Copy settings exports a versioned `subjectsByKind` mapping
+containing every asset kind and stable subject IDs. Preview settings never enter
+workspace backups. `math_workspace_subject_assignments_ui_test.js` covers draft
+editing/IME, filtering, live reassignment, export, reset, exit/remount, backup
+isolation, and responsive layout. Run `math_workspace_creation_test.js` for
+catalog coverage, view routing, dynamic subject search, and assignment validation.
+The approved subject mapping is now the default, including Point in Linear
+algebra, Fan in Representation theory, and Matrix only in Linear algebra.
+Reset and Exit restore this approved configuration.
 
 Generic Young icons depict (3,1); generic Strands icons depict the A2 braid
 sigma1 sigma2^-1 on three strands. These are type representatives and leave

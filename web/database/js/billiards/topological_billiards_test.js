@@ -239,7 +239,7 @@ function testPageIntegration() {
   assert.ok(setup.includes('topological_billiards_physics.js'));
   assert.ok(setup.includes('topological_billiards_renderer.js'));
   assert.ok(setup.includes('topological_billiards_native.js'));
-  assert.ok(setup.includes('topological_billiards_native.js?v=20261022-r13-1'));
+  assert.ok(setup.includes('topological_billiards_native.js?v=20261023-r13-rack-1'));
   assert.ok(html.includes('id="billiards-physics-profile"'));
   assert.ok(html.includes('id="fullscreen-billiards-physics-profile"'));
   assert.ok(setup.includes('wrappedViewCamera().scale'), 'wrapped billiards snapping uses the visible camera scale');
@@ -1277,6 +1277,28 @@ function testCompactRackRecipes() {
   assert.strictEqual(legacy.balls.length, 1);
 }
 
+function testLegacyRackRadiusPreservation() {
+  for (const lattice of ['square','hexagonal']) for (const radius of [0.02,0.05,0.1]) {
+    const preset={lattice,rows:3,cols:3,removedTiles:[],cutEdges:[],gluedEdges:[],billiards:{ballRadius:radius,pockets:[]}};
+    const state=N.createState(preset);
+    near(N.cloneState(state).ballRadius,radius,1e-12,'cloning must not resize legacy balls');
+    near(N.createState({...preset,billiards:N.presetBlockFromState(state)}).ballRadius,radius,1e-12,'preset export must preserve the legacy radius');
+    for (const angle of [0,Math.PI/4,Math.PI/2]) {
+      const direction={x:Math.cos(angle),y:Math.sin(angle)};
+      assert(N.rackPreviewEntries(state,6,4,{x:0,y:0},direction).every(ball=>ball.valid));
+      const placed=N.placeRack(state,6,4,{x:0,y:0},direction);
+      assert(placed.changed,'a valid preview must place successfully: '+placed.message);
+      assert.equal(placed.state.balls.length,6);
+      placed.state.balls.forEach(ball=>near(ball.radius,radius,1e-12));
+      const restored=N.createState({...preset,billiards:N.presetBlockFromState(placed.state)});
+      near(restored.ballRadius,radius,1e-12);
+      assert.equal(restored.balls.length,6);
+      assert.deepStrictEqual(N.presetBlockFromState(restored).rack,N.presetBlockFromState(placed.state).rack);
+      assert.equal(state.balls.length,0,'placement leaves the original state unchanged');
+    }
+  }
+}
+
 function testCompleteSetupHoverCircle() {
   const state = N.createState({ lattice: 'square', rows: 1, cols: 2, removedTiles: [], cutEdges: [], gluedEdges: [], billiards: { ballRadius: 0.1, pockets: [] } });
   const geometry = { width: 200, height: 100, size: 100, radius: 50, cells: [{ x: 50, y: 50 }, { x: 150, y: 50 }] };
@@ -1324,6 +1346,7 @@ function run() {
   testNativeSeamConditionedGlueImages();
   testMagneticPlacementSnapping();
   testCompactRackRecipes();
+  testLegacyRackRadiusPreservation();
   testCompleteSetupHoverCircle();
   testControllerStatusAndRecordIntegration();
   testPageIntegration();

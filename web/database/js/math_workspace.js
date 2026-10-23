@@ -2809,7 +2809,9 @@
     window.addEventListener('blur', () => { closeAssetsContextMenu(); closeReferencePicker(); }); window.addEventListener('resize', () => { updateCanvasHeightLayout(); closeAssetsContextMenu(); closeCardPicker(); closeReferencePicker(); });
     document.querySelectorAll('[data-workspace-io-tab]').forEach((tab) => tab.addEventListener('click', () => { const name = tab.dataset.workspaceIoTab; document.querySelectorAll('[data-workspace-io-tab]').forEach((item) => item.setAttribute('aria-selected', String(item === tab))); $('#workspace-io-export-panel').hidden = name !== 'export'; $('#workspace-io-import-panel').hidden = name !== 'import'; }));
     openCanvas('assets');
-    creationPicker = window.MathWorkspaceCreation.init({entries:window.MathWorkspaceCreation.catalog(ASSET_SUBTYPES,window.MathWorkspaceObjects.kindLabels),create:createAsset,dependencies:creationDependencies,capabilities:()=>assetState.snapshot.capabilities,returnFocus:()=>assetState.view});
+    const creationEntries=window.MathWorkspaceCreation.catalog(ASSET_SUBTYPES,window.MathWorkspaceObjects.kindLabels);
+    creationPicker = window.MathWorkspaceCreation.init({entries:creationEntries,create:createAsset,dependencies:creationDependencies,capabilities:()=>assetState.snapshot.capabilities,returnFocus:()=>assetState.view});
+    window.MathWorkspaceSubjectAssignments.init({entries:creationEntries,assignments:creationPicker.assignments});
     designLab = window.MathWorkspaceDesignLab.init({
       render: renderAssets,
       mount(node) {

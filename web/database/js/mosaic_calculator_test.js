@@ -789,7 +789,7 @@ function testBilliardsPaletteDropAndRackDirection() {
     tileIndex: 0,
     position: { x: 0, y: 0 }
   });
-  assert.strictEqual(mosaic.toggleBackgroundDecoration(1, { clientX: 80, clientY: 50, update: false }), true);
+  assert.strictEqual(mosaic.toggleBackgroundDecoration(-1, { clientX: 215, clientY: 50, update: false }), true, 'rack direction can be confirmed outside the tiles');
   assert.strictEqual(mosaic.state.billiardsRack, null);
   const exportedRack = mosaic.buildMinigamePresetExport().billiards;
   assert.deepStrictEqual(exportedRack.rack, {

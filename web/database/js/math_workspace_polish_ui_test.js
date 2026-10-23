@@ -53,11 +53,12 @@ async function run(){
     await read(()=>document.querySelector('[data-assets-content]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:100,clientY:150})));
     await read(()=>[...document.querySelectorAll('#workspace-assets-context-menu button')].find(b=>b.textContent==='New…').click());
     assert.equal(await read(()=>document.querySelector('#workspace-create-dialog').open),true);
-    await read(()=>{document.querySelector('[data-subject="linear"]').click();document.querySelector('[data-subject="representation"]').click();});
-    assert.equal(await read(()=>document.querySelectorAll('[data-create-kind="matrix"]').length),1);
-    assert.equal(await read(()=>document.querySelectorAll('.workspace-create-filters input:checked').length),1);
+    await read(()=>{const select=document.querySelector('[data-create-subject]');select.value='representation';select.dispatchEvent(new Event('change'));});
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-kind="matrix"]').length),0);
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-kind="fan"]').length),1);
+    assert.equal(await read(()=>document.querySelectorAll('.workspace-create-filters select').length),2);
     assert.equal(await read(()=>!!document.querySelector('[data-create-kind="field"]')),false);
-    await read(()=>{document.querySelector('[data-all-subjects]').click();const input=document.querySelector('[data-create-search]');input.value='braid';input.dispatchEvent(new Event('input'));});
+    await read(()=>{document.querySelector('[data-create-clear]').click();const input=document.querySelector('[data-create-search]');input.value='braid';input.dispatchEvent(new Event('input'));});
     assert.deepEqual(await read(()=>[...document.querySelectorAll('[data-create-kind]')].map(b=>b.dataset.createKind)),['strands']);
     await client.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await client.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     assert.equal(await read(()=>document.querySelector('#workspace-create-dialog').open),false);

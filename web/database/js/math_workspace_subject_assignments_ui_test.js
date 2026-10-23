@@ -1,0 +1,88 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {startServer,launchBrowser,stopBrowser,waitFor,evaluate}=require('./math_workspace_drag_regression_test.js');
+async function run(){
+  const server=await startServer();let session;
+  try{
+    session=await launchBrowser('http://127.0.0.1:'+server.address().port+'/math_workspace.html?designLab=1');
+    const {client}=session,errors=[],read=(fn,...args)=>evaluate(client,'('+fn.toString()+')(...'+JSON.stringify(args)+')');
+    await client.send('Runtime.enable');client.socket.addEventListener('message',event=>{const message=JSON.parse(String(event.data));if(message.method==='Runtime.exceptionThrown')errors.push(message.params.exceptionDetails.exception?.description||message.params.exceptionDetails.text);});
+    const press=async(key,modifiers=0)=>{for(const type of ['keyDown','keyUp'])await client.send('Input.dispatchKeyEvent',{type,key,code:key==='a'?'KeyA':key,modifiers,windowsVirtualKeyCode:({Backspace:8,Escape:27,a:65})[key]||0});};
+    await waitFor(()=>read(()=>!!document.querySelector('[data-design-experiment="asset-subjects"]')),20000);
+    await read(()=>{
+      window.api=MathWorkspaceAssetsTest;
+      window.openPicker=()=>{api.openCanvas('assets');document.querySelector('[data-assets-content]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:100,clientY:150}));[...document.querySelectorAll('#workspace-assets-context-menu button')].find(button=>button.textContent==='New…').click();};
+      window.setSubject=value=>{const select=document.querySelector('[data-create-subject]');select.value=value;select.dispatchEvent(new Event('change'));};
+      window.setDisplay=value=>{const select=document.querySelector('[data-create-display]');select.value=value;select.dispatchEvent(new Event('change'));};
+      window.kinds=()=>[...document.querySelectorAll('[data-create-kind]')].map(button=>button.dataset.createKind);
+      Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.copiedSubjects=JSON.parse(text);}}});
+      document.querySelector('[data-assignment-kind="matrix"]').click();
+      window.assetsBefore=JSON.stringify(api.localAssetSnapshot().assets);
+      document.querySelector('[data-design-copy="asset-subjects"]').click();
+    });
+    await waitFor(()=>read(()=>!!window.copiedSubjects));
+    const defaults=await read(()=>copiedSubjects);
+    assert.equal(Object.keys(defaults.subjectsByKind).length,26);
+    assert.deepEqual(defaults.subjectsByKind.matrix,['linear']);
+    // Real sequential typing keeps spaces, insertion, replacement and IME drafts intact.
+    await read(()=>document.querySelector('[data-subject-assignment-search]').focus());
+    for(const text of 'matrix ')await client.send('Input.insertText',{text});
+    assert.equal(await read(()=>document.querySelector('[data-subject-assignment-search]').value),'matrix ');
+    assert.deepEqual(await read(()=>[...document.querySelectorAll('[data-assignment-kind]:not([hidden])')].map(button=>button.dataset.assignmentKind)),['matrix']);
+    await read(()=>document.querySelector('[data-subject-assignment-search]').setSelectionRange(3,3));
+    await client.send('Input.insertText',{text:'x'});
+    assert.equal(await read(()=>document.querySelector('[data-subject-assignment-search]').value),'matxrix ');
+    await press('Backspace');
+    await press('a',2);await client.send('Input.insertText',{text:'young'});
+    assert.deepEqual(await read(()=>[...document.querySelectorAll('[data-assignment-kind]:not([hidden])')].map(button=>button.dataset.assignmentKind)),['young']);
+    await press('a',2);await press('Backspace');
+    await read(()=>{const input=document.querySelector('[data-subject-assignment-search]');input.dispatchEvent(new CompositionEvent('compositionstart'));input.value='matrix';input.dispatchEvent(new InputEvent('input',{bubbles:true,isComposing:true}));});
+    assert.equal(await read(()=>document.querySelectorAll('[data-assignment-kind]:not([hidden])').length),26,'composition defers filtering');
+    await read(()=>document.querySelector('[data-subject-assignment-search]').dispatchEvent(new CompositionEvent('compositionend')));
+    assert.equal(await read(()=>document.querySelectorAll('[data-assignment-kind]:not([hidden])').length),1);
+    await read(()=>{document.querySelector('[data-assignment-kind="matrix"]').click();document.querySelector('[data-assignment-subject="linear"]').click();});
+    assert.match(await read(()=>document.querySelector('[data-assignment-kind="matrix"]').textContent),/Unassigned/);
+    await read(()=>{document.querySelector('[data-subject-assignment-unassigned]').click();openPicker();setDisplay('matrix');});
+    assert.deepEqual(await read(()=>kinds()),['matrix'],'unassigned objects stay discoverable');
+    await read(()=>setSubject('linear'));assert.deepEqual(await read(()=>kinds()),[]);
+    await press('Escape');
+    await read(()=>document.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,ctrlKey:true,altKey:true,shiftKey:true,code:'KeyD'})));
+    await read(()=>{document.querySelector('[data-assignment-subject="topology"]').focus();document.querySelector('[data-assignment-subject="topology"]').click();});
+    assert(await read(()=>document.activeElement.matches('[data-assignment-subject="topology"]')),'assignment retains checkbox focus when the row leaves Unassigned only');
+    await read(()=>{document.querySelector('[data-assignment-subject="categories"]').click();document.querySelector('[data-design-copy="asset-subjects"]').click();});
+    await waitFor(()=>read(()=>copiedSubjects.subjectsByKind.matrix.includes('categories')));
+    assert.deepEqual(await read(()=>copiedSubjects.subjectsByKind.matrix),['topology','categories']);
+    assert.equal(await read(()=>JSON.stringify(api.localAssetSnapshot().assets)),await read(()=>assetsBefore),'classification edits leave saved assets unchanged');
+    assert(!await read(()=>MathWorkspaceObjectPanels.exportText('workspace').includes('subjectsByKind')),'workspace exports exclude preview settings');
+    await read(()=>{openPicker();setSubject('topology');setDisplay('matrix');});
+    assert.deepEqual(await read(()=>kinds()),['matrix']);
+    // A programmatic Lab change also refreshes an already-open modal without reload.
+    await read(()=>document.querySelector('[data-assignment-subject="topology"]').click());
+    assert.deepEqual(await read(()=>kinds()),[]);
+    await read(()=>document.querySelector('[data-create-clear]').click());
+    assert.equal(await read(()=>kinds().length),26);assert.equal(await read(()=>document.querySelector('[data-create-subject]').value),'');
+    assert.equal(await read(()=>document.querySelector('[data-create-display]').value),'');
+    for(const text of 'categories ')await client.send('Input.insertText',{text});
+    assert(await read(()=>kinds().includes('matrix')),'search indexes new subjects');
+    assert.equal(await read(()=>document.querySelector('[data-create-search]').value),'categories ');
+    await press('Escape');
+    await read(()=>{document.querySelector('[data-design-reset="asset-subjects"]').click();document.querySelector('[data-design-copy="asset-subjects"]').click();});
+    await waitFor(()=>read(()=>copiedSubjects.subjectsByKind.matrix.includes('linear')));
+    assert.deepEqual(await read(()=>copiedSubjects),defaults);
+    await read(()=>{document.querySelector('[data-assignment-subject="linear"]').click();document.querySelector('[data-design-exit]').click();openPicker();setSubject('linear');setDisplay('matrix');});
+    assert.deepEqual(await read(()=>kinds()),['matrix'],'exiting Lab restores defaults');
+    await press('Escape');
+    await read(()=>document.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,ctrlKey:true,altKey:true,shiftKey:true,code:'KeyD'})));
+    assert(await read(()=>!!document.querySelector('[data-design-experiment="asset-subjects"]')),'experiment remounts after exit');
+    await read(()=>{document.querySelector('[data-assignment-kind="matrix"]').click();document.querySelector('[data-design-copy="asset-subjects"]').click();});
+    assert.deepEqual(await read(()=>copiedSubjects),defaults);
+    await read(()=>{const section=document.querySelector('[data-design-experiment="principal-assets"]');section.open=false;document.querySelector('[data-design-experiment="asset-subjects"]').scrollIntoView({block:'start'});});
+    const desktop=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-subjects.png'),Buffer.from(desktop.data,'base64'));
+    await client.send('Emulation.setDeviceMetricsOverride',{width:375,height:812,deviceScaleFactor:1,mobile:false});
+    await read(()=>document.querySelector('[data-design-experiment="asset-subjects"]').scrollIntoView({block:'start'}));
+    const sizes=await read(()=>{const node=document.querySelector('[data-design-experiment="asset-subjects"]');return {scroll:node.scrollWidth,client:node.clientWidth};});assert(sizes.scroll<=sizes.client+1,'subject editor fits its panel');
+    const mobile=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-subjects-mobile.png'),Buffer.from(mobile.data,'base64'));
+    assert.deepEqual(errors,[]);console.log('PASS Subject assignments: search drafts/IME, overlapping and empty membership, live filtering, export, reset, exit/remount, backup isolation and responsive layout');
+  }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}
+}
+if(require.main===module)run().catch(error=>{console.error(error.stack||error);process.exitCode=1;});

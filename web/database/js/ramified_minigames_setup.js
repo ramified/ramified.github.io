@@ -390,7 +390,7 @@
   const BILLIARDS_SQUARE_BOARD_SIZE = 4;
   const BILLIARDS_RECTANGLE_ROWS = 3;
   const BILLIARDS_RECTANGLE_COLS = 5;
-  const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20261022-r13-1';
+  const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20261023-r13-rack-1';
   const HEX_HOMOLOGY_WORKER_URL = 'js/hex_homology_worker.js?v=20260827-1';
   const BILLIARDS_FALLBACK_FRAME_BUDGET_MS = 8;
   const BILLIARDS_FALLBACK_STEP_CHUNK = 8;
@@ -547,7 +547,7 @@
       'js/billiards/topological_billiards_math.js?v=20260823-1',
       'js/billiards/topological_billiards_physics.js?v=20260823-1',
       'js/billiards/topological_billiards_renderer.js?v=20260905-3',
-      'js/billiards/topological_billiards_native.js?v=20261022-r13-1'
+      'js/billiards/topological_billiards_native.js?v=20261023-r13-rack-1'
       ]),
     [GAME_MODES.LIANLIANKAN]: Object.freeze([
       'archive/lianliankan/lianliankan_engine.js?v=20260830-1',

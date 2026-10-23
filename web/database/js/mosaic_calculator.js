@@ -6439,7 +6439,7 @@
     const placementDescriptor = dragging && state.drag.decoration && state.drag.decoration.type === 'billiards-ball'
       ? { kind: 'ball' }
       : descriptor;
-    const local = placementDescriptor && placementDescriptor.kind !== 'pocket'
+    const local = isBilliardsRackDirectionAction() ? state.billiardsRack : placementDescriptor && placementDescriptor.kind !== 'pocket'
       ? billiardsPlacementLocalAtClientPoint(clientX, clientY, nativeState, snapDisabled)
       : rawLocal;
     if (!nativeState || !local) return null;
@@ -7201,6 +7201,8 @@
   function toggleBackgroundDecoration(index, options = {}) {
     const kind = normalizeBackgroundDecorationKind(state.backgroundDecorationKind);
     if (kind === 'input-hole') return toggleInputHole(index, options);
+    // A rack's second click specifies an angle, not a destination tile.
+    if (isBilliardsRackDirectionAction()) index = state.billiardsRack.tileIndex;
     if (!isGluedBoundaryMode() || index < 0 || index >= state.rows * state.cols) return false;
     if (state.removedTiles.has(index)) return false;
     clearBackgroundBilliard(false);
@@ -7247,6 +7249,17 @@
     const snapDisabled = Object.prototype.hasOwnProperty.call(options, 'snapDisabled')
       ? !!options.snapDisabled
       : billiardsSnapBypass;
+    if (descriptor.kind === 'rack' && state.billiardsRack) {
+      const center = state.billiardsRack;
+      const point = clientPointToBoardPoint(options.clientX, options.clientY);
+      const direction = billiardsRackDirectionChoice(nativeState, center, point, snapDisabled);
+      if (!direction) return false;
+      const result = Billiards.placeRack(nativeState, center.count, center.tileIndex, center.position, direction.direction);
+      if (!result.changed) return false;
+      saveBilliardsBallsFromNative(result.state);
+      state.billiardsRack = null;
+      return true;
+    }
     const local = options.clientX != null && options.clientY != null
       ? (descriptor.kind === 'pocket'
         ? billiardsLocalAtClientPoint(options.clientX, options.clientY, nativeState)
@@ -7258,18 +7271,7 @@
     // palette drop works equally on every displayed copy.
     if (!nativeState || !local || !nativeState.atlas.tiles[local.tileIndex] || nativeState.atlas.tiles[local.tileIndex].removed) return false;
     if (descriptor.kind === 'rack') {
-      if (!state.billiardsRack) {
-        state.billiardsRack = { count: descriptor.count, tileIndex: local.tileIndex, position: { ...local.position } };
-        return true;
-      }
-      const center = state.billiardsRack;
-      const point = clientPointToBoardPoint(options.clientX, options.clientY);
-      const direction = billiardsRackDirectionChoice(nativeState, center, point, snapDisabled);
-      if (!direction) return false;
-      const result = Billiards.placeRack(nativeState, center.count, center.tileIndex, center.position, direction.direction);
-      if (!result.changed) return false;
-      saveBilliardsBallsFromNative(result.state);
-      state.billiardsRack = null;
+      state.billiardsRack = { count: descriptor.count, tileIndex: local.tileIndex, position: { ...local.position } };
       return true;
     }
     if (descriptor.kind === 'pocket') {
@@ -10364,6 +10366,11 @@
     return state.backgroundAction === 'decoration';
   }
 
+  function isBilliardsRackDirectionAction() {
+    const descriptor = billiardsDecorationDescriptor(state.backgroundDecorationKind);
+    return isBackgroundDecorationAction() && !!state.billiardsRack && descriptor && descriptor.kind === 'rack';
+  }
+
   function isBilliardsDecorationInteraction() {
     if (!isBackgroundDecorationAction()) return false;
     const kind = normalizeBackgroundDecorationKind(state.backgroundDecorationKind);
@@ -10680,7 +10687,7 @@
       lastY: event.clientY,
       moved: false
     };
-    state.drag = billiardsDecoration ? {
+    state.drag = isBilliardsRackDirectionAction() ? null : billiardsDecoration ? {
       type: 'billiards-decoration',
       decoration: billiardsDecoration,
       active: false
@@ -10754,6 +10761,12 @@
 
   function finishBackgroundGesture(event) {
     if (!pointerState || event.pointerId !== pointerState.id) return;
+    if (isBilliardsRackDirectionAction()) {
+      if (!pointerState.moved && isOverCanvas(event.clientX, event.clientY)) {
+        toggleBackgroundDecoration(state.billiardsRack.tileIndex, { clientX: event.clientX, clientY: event.clientY, snapDisabled: !!event.ctrlKey });
+      }
+      return;
+    }
     if (state.drag && state.drag.type === 'background-decoration' && state.drag.active) {
       const hit = isOverCanvas(event.clientX, event.clientY)
         ? hitTest(event.clientX, event.clientY)

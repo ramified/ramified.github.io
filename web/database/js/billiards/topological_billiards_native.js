@@ -901,6 +901,12 @@
         return { id: exported.id, vertex: exported.vertex };
       })
     };
+    // Legacy presets can store radii outside the physical-scale slider's range.
+    // Their inferred scale is clamped; exporting it as an explicit scale would
+    // override ballRadius on reload (including cloneState during rack placement).
+    // Keep radius authoritative unless the physical scale actually reproduces it.
+    const scaledRadius = ballRadiusForTileEdgeLength(equipmentProfile(block.equipmentProfileId), block.tileEdgeLengthM);
+    if (Math.abs(scaledRadius - state.ballRadius) > EPSILON) delete block.tileEdgeLengthM;
     if (compactRack) block.rack = clonePlain(compactRack);
     return block;
   }
