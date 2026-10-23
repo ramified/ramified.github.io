@@ -239,7 +239,7 @@ function testPageIntegration() {
   assert.ok(setup.includes('topological_billiards_physics.js'));
   assert.ok(setup.includes('topological_billiards_renderer.js'));
   assert.ok(setup.includes('topological_billiards_native.js'));
-  assert.ok(setup.includes('topological_billiards_native.js?v=20260909-3'));
+  assert.ok(setup.includes('topological_billiards_native.js?v=20261022-r13-1'));
   assert.ok(html.includes('id="billiards-physics-profile"'));
   assert.ok(html.includes('id="fullscreen-billiards-physics-profile"'));
   assert.ok(setup.includes('wrappedViewCamera().scale'), 'wrapped billiards snapping uses the visible camera scale');
@@ -1244,7 +1244,11 @@ function testCompactRackRecipes() {
       balls: [{ id: 'cue', kind: 'cue', at: { row: 1, col: 1, anchor: 'center' } }]
     }
   };
-  const placed = N.placeRack(N.createState(preset), 6, 4, { x: 0, y: 0 }, { x: 1, y: 0 });
+  const original = N.createState(preset);
+  const cloned = N.cloneState(original);
+  assert.strictEqual(cloned.ballRadius, original.ballRadius, 'cloning preserves legacy ball size outside the metric slider range');
+  assert.strictEqual(cloned.pocketRadius, original.pocketRadius);
+  const placed = N.placeRack(original, 6, 4, { x: 0, y: 0 }, { x: 1, y: 0 });
   assert.strictEqual(placed.changed, true);
   const block = N.presetBlockFromState(placed.state);
   assert.deepStrictEqual(block.rack, { count: 6, center: { row: 2, col: 2, anchor: 'center' }, angle: 0 });

@@ -63,7 +63,7 @@ assert.deepStrictEqual(minigames.__test.optionalScriptGroups.billiards.map((url)
   'js/billiards/topological_billiards_renderer.js',
   'js/billiards/topological_billiards_native.js'
 ]);
-assert.ok(minigames.__test.optionalScriptGroups.billiards.some((url) => url.includes('topological_billiards_native.js?v=20260909-3')));
+assert.ok(minigames.__test.optionalScriptGroups.billiards.some((url) => url.includes('topological_billiards_native.js?v=20261022-r13-1')));
 assert.deepStrictEqual(minigames.__test.optionalScriptGroups.lianliankan.map((url) => url.split('?')[0]), [
   'archive/lianliankan/lianliankan_engine.js',
   'archive/lianliankan/mosaic_adapter.js'

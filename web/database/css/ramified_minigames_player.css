@@ -155,6 +155,9 @@ body.ramified-player .mosaic-underbar { flex: none; height: 44px; box-sizing: bo
 #player-confirm { text-align: center; }
 #player-confirm > p { max-width: 720px; margin-inline: auto; }
 #player-slot-list { max-width: 720px; margin-inline: auto; }
+.player-slot-status { font-size: .85rem; font-weight: normal; line-height: 1.4; }
+.player-slot-actions > .btn { background: transparent; color: var(--text); }
+#player-save-status { margin: 0; font-size: .85rem; line-height: 1.4; text-align: center; }
 .player-slot-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
   gap: var(--player-gap); padding-block: var(--player-gap); border-bottom: 1px solid var(--border);

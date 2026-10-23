@@ -390,7 +390,7 @@
   const BILLIARDS_SQUARE_BOARD_SIZE = 4;
   const BILLIARDS_RECTANGLE_ROWS = 3;
   const BILLIARDS_RECTANGLE_COLS = 5;
-  const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20260909-3';
+  const BILLIARDS_SIMULATION_WORKER_URL = 'js/billiards/topological_billiards_simulation_worker.js?v=20261022-r13-1';
   const HEX_HOMOLOGY_WORKER_URL = 'js/hex_homology_worker.js?v=20260827-1';
   const BILLIARDS_FALLBACK_FRAME_BUDGET_MS = 8;
   const BILLIARDS_FALLBACK_STEP_CHUNK = 8;
@@ -547,7 +547,7 @@
       'js/billiards/topological_billiards_math.js?v=20260823-1',
       'js/billiards/topological_billiards_physics.js?v=20260823-1',
       'js/billiards/topological_billiards_renderer.js?v=20260905-3',
-      'js/billiards/topological_billiards_native.js?v=20260909-3'
+      'js/billiards/topological_billiards_native.js?v=20261022-r13-1'
       ]),
     [GAME_MODES.LIANLIANKAN]: Object.freeze([
       'archive/lianliankan/lianliankan_engine.js?v=20260830-1',
@@ -34897,14 +34897,26 @@ const api = {
         aiPauseReason: localAiPauseReason
       };
     },
-    async restore(saved, { isCurrent = () => true } = {}) {
-      if (!saved || saved.version !== 1 || !saved.payload || onlineIsInRoom()) throw new Error('Invalid player save');
+    async inspectSave(saved) {
+      const payload = saved?.payload;
+      if (saved?.version !== 1 || !payload || Array.isArray(payload)
+        || !Object.values(GAME_MODES).includes(payload.gameMode)
+        || !(payload.gameMode === GAME_MODES.BILLIARDS ? ['ready', 'ball-in-hand', 'gameover']
+          : payload.gameMode === GAME_MODES.LIANLIANKAN ? ['ready', 'deadlock', 'complete']
+          : ['ready', 'paused', 'animating', 'gameover']).includes(payload.phase)) throw new Error('Invalid player save');
       for (const values of [saved.controllers, saved.checkersControllers]) {
         if (values != null && (!Array.isArray(values) || !values.every(value => Array.isArray(value) && value.length === 2))) throw new Error('Invalid saved controllers');
       }
-      await ensureModeDependencies(saved.payload.gameMode);
+      // Validate using the actual importer without applying settings or replacing the live game.
+      try { await ensureModeDependencies(payload.gameMode); }
+      catch (error) { error.saveDependency = true; throw error; }
+      const imported = gameStateFromDebugImportPayload(payload);
+      return { imported, status: ['gameover', 'complete'].includes(imported.state.phase) ? 'ended' : 'ready' };
+    },
+    async restore(saved, { isCurrent = () => true } = {}) {
+      if (onlineIsInRoom() || playerOnlineSession) throw new Error('Invalid player save');
+      const { imported } = await api.player.inspectSave(saved);
       if (!isCurrent()) return false;
-      const imported = gameStateFromDebugImportPayload(saved.payload);
       imported.settings = saved.payload.settings;
       if (playerShellEnabled && isSokobanGame(imported.state) && api.player.sokobanLevels().some(level => level.id === saved.sokobanLevelId)) {
         imported.state.playerSokobanLevelId = saved.sokobanLevelId;
@@ -35066,6 +35078,7 @@ const api = {
   surfaceSuccessor,
   getFullscreenDiagnostics,
   __test: {
+    confirmGoScore,
     restartDefaultBindings,
     backgroundPresetForExport,
     backgroundBoundarySourceEnabled,
@@ -35224,7 +35237,8 @@ const api = {
       geometry = value;
       if (canvas) refs.canvas = canvas;
     },
-    getGame() { return game; }
+    getGame() { return game; },
+    getGeometry() { return geometry; }
   }
 };
 

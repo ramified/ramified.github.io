@@ -3,7 +3,7 @@
 importScripts(
   './topological_billiards_math.js?v=20260823-1',
   './topological_billiards_physics.js?v=20260823-1',
-  './topological_billiards_native.js?v=20260909-3'
+  './topological_billiards_native.js?v=20261022-r13-1'
 );
 
 const activeResearchShots = new Map();

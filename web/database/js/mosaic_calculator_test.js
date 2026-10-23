@@ -1147,14 +1147,15 @@ function testEveryMinigameCatalogLevelMaterializesForImport() {
       assert.ok(Array.isArray(payload.gluedEdges) && payload.gluedEdges.length, `${entry.id} needs compact gluing normalized`);
     }
   });
-  const rubiks = registry.find((entry) => entry.id === 'rubiks-cube-2x2x2');
-  const rubiksPayload = mosaic.materializeMinigamePresetForMosaic(
+  const rubiks = registry.find((entry) => entry.id === 'rubiks-cube-3x3x3');
+  assert.ok(rubiks, 'the current Rubik cube preset is registered');
+  const rubiksPayload = mosaic.normalizeExportImportPayload(mosaic.materializeMinigamePresetForMosaic(
     rubiks,
-    require('../presets/ramified_minigames/rubiks_cube_2x2x2.preset.js')
-  );
-  assert.strictEqual(rubiksPayload.rows, 6);
-  assert.strictEqual(rubiksPayload.cols, 8);
-  assert.strictEqual(rubiksPayload.gluedEdges.length, 14);
+    require(`../presets/ramified_minigames/${rubiks.file}`)
+  ));
+  assert.strictEqual(rubiksPayload.rows, 9);
+  assert.strictEqual(rubiksPayload.cols, 12);
+  assert.strictEqual(rubiksPayload.gluedEdges.length, 21);
   assert.ok(rubiksPayload.removedTiles.length > 0);
 }
 

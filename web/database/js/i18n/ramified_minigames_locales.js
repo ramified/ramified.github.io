@@ -2,6 +2,15 @@
   'use strict';
 
   const pairs = {
+    'player.saveChecking': ['Checking saved game…', '正在检查棋局…'],
+    'player.saveReady': ['In progress', '进行中'],
+    'player.saveEnded': ['Finished', '已结束'],
+    'player.saveProgressOnly': ['Level progress only', '仅有通关进度'],
+    'player.saveInvalid': ['This game cannot be restored. The saved data is kept.', '此棋局无法恢复，原始存档已保留。'],
+    'player.saveUnavailable': ['Game resources could not load. Return and select this save to retry.', '游戏资源加载失败，请返回并重新选择此存档以重试。'],
+    'player.slotStatusLabel': ['Save {{number}} — {{detail}} — {{status}}', '存档 {{number}} — {{detail}} — {{status}}'],
+    'player.viewResult': ['View result', '查看结果'],
+    'player.viewSavedResult': ['View result: {{game}}', '查看结果：{{game}}'],
     'setup.presetRegistryEmpty': ['No presets are registered in {{path}}.', '{{path}} 中未注册任何预设。'],
     'lobby.timeControl': ['Time control', '计时方式'],
     'lobby.unlimited': ['Unlimited', '不限时'],

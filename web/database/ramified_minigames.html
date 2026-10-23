@@ -2054,7 +2054,7 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="css/ramified_minigames_player.css?v=20261014-1">
+  <link rel="stylesheet" href="css/ramified_minigames_player.css?v=20261022-r09-1">
 </head>
 <body class="ramified-player player-menu-open">
 
@@ -2101,9 +2101,10 @@
           </section>
           <section id="player-games" class="player-page" hidden>
             <button class="btn" id="player-continue" type="button" hidden disabled>
-              <span data-i18n="player.continueLast">Continue last game</span>
+              <span id="player-continue-label" data-i18n="player.continueLast">Continue last game</span>
               <span id="player-continue-game"></span>
             </button>
+            <p id="player-save-status" role="status" aria-live="polite" hidden></p>
             <div id="player-game-browser">
               <button class="btn player-game-page-arrow" id="player-games-previous" type="button" aria-controls="player-game-list" data-i18n-aria-label="player.previousGamesPage" aria-label="Previous page of games">&#9664;</button>
               <div id="player-game-list"></div>
@@ -3249,18 +3250,18 @@
 <script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20261014-2"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20261022-r09-1"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
 <script src="js/ramified_minigames_sfx.js?v=20260913-2"></script>
-<script src="js/ramified_minigames_setup.js?v=20261014-input-drafts-1"></script>
+<script src="js/ramified_minigames_setup.js?v=20261022-r13-1"></script>
 <script src="js/ramified_minigames_sokoban_progress.js?v=20261008-3"></script>
 <script src="js/ramified_minigames_save_slots.js?v=20261010-1"></script>
 <script src="js/ramified_minigames_online.js?v=20261014-1"></script>
-<script src="js/ramified_minigames_player.js?v=20261014-1"></script>
+<script src="js/ramified_minigames_player.js?v=20261022-r09-1"></script>
 <script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
 </body>

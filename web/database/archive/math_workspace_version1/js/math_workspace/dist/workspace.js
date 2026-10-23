@@ -205409,6 +205409,8 @@ ${arrows.join("\n")}` : "";
       function cloneState(source) {
         const preset = source.preset;
         const clone = createState({ ...preset, billiards: presetBlockFromState(source, { activeOnly: false }) }, { rules: source.rules });
+        clone.ballRadius = source.ballRadius;
+        clone.pocketRadius = source.pocketRadius;
         clone.phase = source.phase;
         clone.balls = source.balls.map((ball) => ({
           ...ball,

@@ -116,7 +116,8 @@ async function run() {
         await shot(`restart-${locale}-${width}-${full}`); await click('#player-slot-cancel');
         await click('#player-slot-1');
         assert.strictEqual(await visible('player-games'),true);
-        assert.strictEqual(await read('document.querySelector("#player-continue span").textContent'),locale==='en'?'Continue last game':'继续上次游戏');
+        await waitFor(()=>read('!document.querySelector("#player-continue").disabled'));
+        assert.strictEqual(await read('document.querySelector("#player-continue span").textContent'),locale==='en'?'View result':'查看结果');
         assert.strictEqual(await read('document.querySelector("#player-continue-game").textContent'),locale==='en'?'Sokoban':'推箱子');
         assert.strictEqual(await read(`(() => {
           const p=document.querySelector('#player-games'), b=p.getBoundingClientRect(), n=document.querySelector('#player-continue'), r=n.getBoundingClientRect();
@@ -236,6 +237,36 @@ async function run() {
     await selectGame('sokoban');
     assert.strictEqual(await read('[...document.querySelectorAll("#player-level-list button:not(:disabled)")].length'),4);
     assert.deepStrictEqual(await stored(),progressOnly,'browsing keeps progress-only data unchanged');
+    // R09: isolated fixtures exercise actual import validation, not just save-envelope shape.
+    const fixture = async game => {
+      await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/robots.txt`});
+      await waitFor(()=>read('document.readyState==="complete"'));
+      const raw = JSON.stringify({version:1,slots:[{game,sokoban:legacyProgress},null,null]});
+      await read(`localStorage.setItem('ramified.minigames.player.slots.v1',${JSON.stringify(raw)})`);
+      await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/ramified_minigames.html`}); await ready();
+      await click('#player-new'); await click('#player-slot-1');
+      await waitFor(()=>read('document.querySelector("#player-save-status").textContent !== SiteI18n.t("player.saveChecking")'));
+      assert.strictEqual(await read('localStorage.getItem(RamifiedSaveSlots.SAVE_KEY)'),raw,'inspection preserves original bytes');
+      return raw;
+    };
+    for (const game of [
+      {...legacyGame,payload:{...legacyGame.payload,gameMode:'unknown'}},
+      {...legacyGame,payload:{...legacyGame.payload,preset:{rows:-1,cols:-1}}},
+      {...legacyGame,payload:{...legacyGame.payload,phase:'setup'}},
+      {...legacyGame,controllers:{}},
+    ]) {
+      await fixture(game);
+      assert.strictEqual(await read('document.querySelector("#player-continue").disabled'),true);
+      assert.strictEqual(await read('document.querySelector("#player-save-status").textContent'),await read('SiteI18n.t("player.saveInvalid")'));
+      await click('#player-back');
+      assert.strictEqual(await read('document.querySelector("#player-slot-row-1").dataset.saveStatus'),'invalid');
+      assert.strictEqual(await read('document.querySelector("#player-slot-1").getAttribute("aria-label").includes(SiteI18n.t("player.saveInvalid"))'),true);
+    }
+    await fixture(legacyGame);
+    assert.strictEqual(await read('document.querySelector("#player-continue-label").textContent'),await read('SiteI18n.t("player.viewResult")'));
+    await click('#player-continue');
+    await waitFor(()=>read('RamifiedMinigames.player.state().solved'),5000,'finished result restored');
+    console.log('R09: invalid content, unknown mode, setup-only save, controllers, non-mutating inspection and finished-result entry passed');
     assert.deepStrictEqual(errors,[]);
     console.log('ramified_minigames_save_slots_ui_test: save-first entry, explicit continue, keyboard/touch, bilingual paginated lists, isolated progress, restart/delete, failures, canceled restore, migration and refresh passed');
   } finally {

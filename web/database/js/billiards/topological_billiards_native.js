@@ -908,6 +908,10 @@
   function cloneState(source) {
     const preset = source.preset;
     const clone = createState({ ...preset, billiards: presetBlockFromState(source, { activeOnly: false }) }, { rules: source.rules });
+    // A clone must preserve legacy radii even when their inferred metric scale
+    // exceeds the current equipment controls' range. New rack balls use these defaults.
+    clone.ballRadius = source.ballRadius;
+    clone.pocketRadius = source.pocketRadius;
     clone.phase = source.phase;
     clone.balls = source.balls.map((ball) => ({
       ...ball,

@@ -59,7 +59,40 @@
     });
     let levelsParent = 'games';
     let pendingLevelId = null;
+    const saveChecks = new Map();
     engine.setSokobanProgress([]);
+
+    function saveStatus(index, slot = slots.slot(index)) {
+      if (slots.error() === 'read') return 'unreadable';
+      if (!slot) return 'empty';
+      if (!slot.game) return slot.sokoban.completed.length ? 'progress' : 'noGame';
+      const key = JSON.stringify(slot.game);
+      let check = saveChecks.get(index);
+      if (!check || check.key !== key) {
+        check = { key, status: 'checking' };
+        saveChecks.set(index, check);
+        engine.inspectSave(slot.game).then(result => { check.status = result.status; }, error => {
+          check.status = error.saveDependency ? 'unavailable' : 'invalid';
+        }).finally(() => {
+          if (saveChecks.get(index) === check) sync();
+        });
+      }
+      return check.status;
+    }
+
+    function saveStatusText(status) {
+      switch (status) {
+        case 'checking': return tk('player.saveChecking', 'Checking saved game…');
+        case 'ready': return tk('player.saveReady', 'In progress');
+        case 'ended': return tk('player.saveEnded', 'Finished');
+        case 'progress': return tk('player.saveProgressOnly', 'Level progress only');
+        case 'noGame': return tk('player.slotNoGame', 'No current game');
+        case 'invalid': return tk('player.saveInvalid', 'This game cannot be restored. The saved data is kept.');
+        case 'unavailable': return tk('player.saveUnavailable', 'Game resources could not load. Return and select this save to retry.');
+        case 'unreadable': return tk('player.slotReadError', 'Some save data could not be read. The original data has been kept.');
+        default: return tk('player.slotEmpty', 'Empty');
+      }
+    }
 
     function message(text = '') {
       byId('player-message').textContent = text;
@@ -295,7 +328,7 @@
         if (!row) {
           row = document.createElement('div'); row.id = `player-slot-row-${number}`; row.className = 'player-slot-row';
           const choose = document.createElement('button'); choose.type = 'button'; choose.className = 'btn player-slot-choice'; choose.id = `player-slot-${number}`;
-          for (const name of ['name', 'summary', 'progress']) {
+          for (const name of ['name', 'summary', 'status', 'progress']) {
             const span = document.createElement('span'); span.className = `player-slot-${name}`; choose.append(span);
           }
           choose.addEventListener('click', () => selectSlot(index));
@@ -312,13 +345,16 @@
         const detail = slot ? engine.games().find(item => item.mode === mode)?.label || tk('player.slotNoGame', 'No current game') : tk('player.slotEmpty', 'Empty');
         row.querySelector('.player-slot-name').textContent = name;
         row.querySelector('.player-slot-summary').textContent = detail;
+        const status = saveStatus(index, slot);
+        row.querySelector('.player-slot-status').textContent = saveStatusText(status);
+        row.dataset.saveStatus = status;
         const progress = row.querySelector('.player-slot-progress');
         const completed = slot?.sokoban.completed.length || 0;
         progress.hidden = !slot || (!completed && mode !== 'sokoban');
         progress.textContent = tk('player.slotProgress', 'Sokoban: {{completed}}/{{total}} completed', { completed, total: levelIds.length });
         const busy = setupBusy || restoring || !state.canPrepare || state.online;
         byId(`player-slot-${number}`).disabled = busy;
-        byId(`player-slot-${number}`).setAttribute('aria-label', tk('player.slotLabel', 'Save {{number}} — {{detail}}', { number, detail }));
+        byId(`player-slot-${number}`).setAttribute('aria-label', tk('player.slotStatusLabel', 'Save {{number}} — {{detail}} — {{status}}', { number, detail, status: saveStatusText(status) }));
         for (const action of ['restart', 'delete']) {
           const button = byId(`player-slot-${action}-${number}`);
           button.hidden = !slot; button.disabled = busy;
@@ -341,6 +377,7 @@
 
     function selectSlot(index) {
       if (setupBusy || restoring || !engine.state().canPrepare || engine.state().online) return;
+      if (saveChecks.get(index)?.status === 'unavailable') saveChecks.delete(index);
       selectedSlot = index;
       showGames({ resetPage: true });
     }
@@ -348,17 +385,27 @@
     function syncGameEntry(state) {
       if (online?.flow()) { byId('player-continue').hidden = true; byId('player-games').classList.remove('has-saved-game'); return; }
       const saved = slots.slot(selectedSlot)?.game;
+      const status = saveStatus(selectedSlot);
       const button = byId('player-continue');
       button.hidden = !saved;
-      button.disabled = !saved || restoring || setupBusy || !state.canPrepare || state.online;
+      button.disabled = !saved || !['ready', 'ended'].includes(status) || restoring || setupBusy || !state.canPrepare || state.online;
+      const feedback = byId('player-save-status');
+      feedback.hidden = !saved && status !== 'unreadable';
+      feedback.textContent = saveStatusText(status);
       byId('player-games').classList.toggle('has-saved-game', !!saved);
       const label = engine.games().find(item => item.mode === saved?.payload.gameMode)?.label || '';
       byId('player-continue-game').textContent = label;
-      button.setAttribute('aria-label', tk('player.continueSavedGame', 'Continue last game: {{game}}', { game: label }));
+      const actionLabel = byId('player-continue-label');
+      actionLabel.dataset.i18n = status === 'ended' ? 'player.viewResult' : 'player.continueLast';
+      actionLabel.textContent = status === 'ended' ? tk('player.viewResult', 'View result') : tk('player.continueLast', 'Continue last game');
+      button.setAttribute('aria-label', status === 'ended'
+        ? tk('player.viewSavedResult', 'View result: {{game}}', { game: label })
+        : tk('player.continueSavedGame', 'Continue last game: {{game}}', { game: label }));
     }
 
     async function continueSelectedGame() {
       if (selectedSlot === null || setupBusy || restoring || !engine.state().canPrepare || engine.state().online) return;
+      if (!['ready', 'ended'].includes(saveStatus(selectedSlot))) return;
       save();
       const index = selectedSlot;
       const slot = slots.slot(index);

@@ -30,6 +30,16 @@ async function run() {
     assert.strictEqual(engine.__test.getGame(), originalState, 'opening menus must preserve the live game');
     const saved = JSON.parse(JSON.stringify(engine.player.snapshot()));
     assert.ok(saved?.payload, `${mode}: stable game can be saved`);
+    const inspected = await engine.player.inspectSave(saved);
+    assert.strictEqual(inspected.status, 'ready', `${mode}: initial started game is resumable`);
+    assert.strictEqual(engine.__test.getGame(), originalState, 'inspection never replaces the live game');
+    for (const payload of [{ ...saved.payload, phase: 'setup' }, { ...saved.payload, phase: 'unknown' },
+      { ...saved.payload, gameMode: 'unknown' }, { ...saved.payload, preset: { rows: -1, cols: -1 } }]) {
+      await assert.rejects(engine.player.inspectSave({ ...saved, payload }));
+      await assert.rejects(engine.player.restore({ ...saved, payload }));
+      assert.strictEqual(engine.__test.getGame(), originalState, 'invalid inspection/restore preserves live game');
+    }
+    assert.strictEqual((await engine.player.inspectSave({ ...saved, payload: { ...saved.payload, phase: 'gameover' } })).status, 'ended');
     engine.player.prepare();
     assert.strictEqual(engine.player.state().active, false, `${mode}: new game preview`);
     assert.strictEqual(engine.player.snapshot(), null, 'a new preview must not replace the last game');

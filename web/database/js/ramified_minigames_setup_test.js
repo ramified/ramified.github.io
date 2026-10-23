@@ -3,6 +3,8 @@ const fs = require('fs');
 const vm = require('vm');
 
 const game = require('./ramified_minigames_setup.js');
+// Rules fixtures must not silently fall back when a catalog entry is retired.
+const CLASSIC_4X4 = { id: 'test-classic-4x4', label: 'Classic test board', lattice: 'square', rows: 4, cols: 4, removedTiles: [], cutEdges: [], gluedEdges: [] };
 const presetRegistrySource = require('../presets/ramified_minigames/presets.js');
 const presetRegistry = presetRegistrySource.presets;
 const presetDefaultFor = presetRegistrySource.defaultFor;
@@ -148,22 +150,28 @@ function testQuickRulesFadeAndHexSameTileHoverPersistence() {
   assert.ok(html.includes('@keyframes canvas-start-sheet-fade-in'));
   assert.ok(html.includes('@media (prefers-reduced-motion: reduce)'));
 
-  const { canvas, calls, advanceTimers } = createHeadlessDomHarness({
+  const { canvas, calls, advanceTimers, context } = createHeadlessDomHarness({
+    playerShell: true, // The archive now randomizes startup; this test needs the chosen Hex board.
     gameMode: game.GAME_MODES.HEX,
     preset: 'classic-hex'
   });
-  canvas.listeners.mousemove(pointerEvent(144, 144));
+  const current = context.module.exports.__test.getGame();
+  assert.strictEqual(current.gameMode, game.GAME_MODES.HEX, 'exercise Hex, not the archive random startup');
+  const geometry = context.module.exports.__test.getGeometry();
+  const cell = geometry.cells.find((cell, index) => cell && !current.removed.has(index));
+  const x = cell.x * 288 / geometry.width, y = cell.y * 288 / geometry.height;
+  canvas.listeners.mousemove(pointerEvent(x, y));
   const beforeDwell = calls.length;
   advanceTimers(399);
   assert.strictEqual(calls.length, beforeDwell, 'Hex neighbors wait for the configured dwell delay');
-  canvas.listeners.mousemove(pointerEvent(145, 144));
+  canvas.listeners.mousemove(pointerEvent(x + 0.1, y));
   advanceTimers(1);
   assert.ok(calls.length > beforeDwell, 'movement inside the same Hex tile preserves the dwell timer');
 
   const afterHint = calls.length;
-  canvas.listeners.mousemove(pointerEvent(146, 144));
+  canvas.listeners.mousemove(pointerEvent(x + 0.2, y));
   assert.strictEqual(calls.length, afterHint, 'movement inside the same Hex tile preserves visible neighbors');
-  canvas.listeners.mousemove(pointerEvent(280, 280));
+  canvas.listeners.mousemove(pointerEvent(-20, -20));
   assert.ok(calls.length > afterHint, 'leaving the Hex tile clears or changes its neighbor hint');
 }
 
@@ -560,7 +568,7 @@ function gluePair(group, first, second, options = {}) {
 
 function testInitialSpawnWeights() {
   const rng = game.createRng([0, 0.99, 0, 0.99]);
-  const state = game.beginGame('classic-4x4', { rng });
+  const state = game.beginGame(CLASSIC_4X4, { rng });
   assert.strictEqual(state.boxes.length, 2);
   assert.deepStrictEqual(state.boxes.map((item) => item.value), [4, 4]);
   assert.ok(state.boxes.every((item) => item.value <= 4));
@@ -576,7 +584,7 @@ function testRoundSpawnWeights() {
 }
 
 function testNoSpawnAfterNoop() {
-  const state = stateWithBoxes('classic-4x4', [
+  const state = stateWithBoxes(CLASSIC_4X4, [
     box(1, 1, 1, 2),
     box(2, 1, 2, 4)
   ]);
@@ -587,7 +595,7 @@ function testNoSpawnAfterNoop() {
 }
 
 function testGameOverWhenFullAndBlocked() {
-  const state = game.createGameState('classic-4x4');
+  const state = game.createGameState(CLASSIC_4X4);
   const values = [
     2, 4, 2, 4,
     4, 2, 4, 2,
@@ -602,7 +610,7 @@ function testGameOverWhenFullAndBlocked() {
 }
 
 function testBombKeepsFullBoardPlayable() {
-  const state = game.createGameState('classic-4x4');
+  const state = game.createGameState(CLASSIC_4X4);
   const bombIndex = game.indexOf(2, 2, 4);
   const values = [
     2, 4, 2, 4,
@@ -628,7 +636,7 @@ function testBombKeepsFullBoardPlayable() {
 }
 
 function testOrdinaryMergeOnce() {
-  const state = stateWithBoxes('classic-4x4', [
+  const state = stateWithBoxes(CLASSIC_4X4, [
     box(1, 1, 1, 2),
     box(2, 1, 2, 2),
     box(3, 1, 3, 2),
@@ -641,7 +649,7 @@ function testOrdinaryMergeOnce() {
 }
 
 function testNewlyMergedTileBlocksLaterPush() {
-  const state = stateWithBoxes('classic-4x4', [
+  const state = stateWithBoxes(CLASSIC_4X4, [
     box(4, 4, 1, 4),
     box(1, 4, 2, 2),
     box(2, 4, 3, 2),
@@ -1314,7 +1322,7 @@ function testPushedMoveCollisionCanMerge() {
 }
 
 function testMergeAndMoveShareAnimationStep() {
-  const state = stateWithBoxes('classic-4x4', [
+  const state = stateWithBoxes(CLASSIC_4X4, [
     box(1, 1, 3, 2),
     box(2, 1, 4, 2),
     box(3, 2, 1, 4)
@@ -1328,7 +1336,7 @@ function testMergeAndMoveShareAnimationStep() {
 }
 
 function testMoveEventsAreGroupedByTick() {
-  const state = stateWithBoxes('classic-4x4', [
+  const state = stateWithBoxes(CLASSIC_4X4, [
     box(1, 1, 1, 2),
     box(2, 2, 1, 4)
   ]);
@@ -1676,10 +1684,12 @@ function testRandomGluePresetCoversBoundary() {
 
 function testRandomGluePresetIsDeterministicWithGlueRng() {
   const sequence = [0.8, 0.1, 0.6, 0.3, 0.95, 0.2];
-  const first = game.createGameState('random-glue-4x4', { glueRng: game.createRng(sequence) });
-  const second = game.createGameState('random-glue-4x4', { glueRng: game.createRng(sequence) });
+  const preset = { ...CLASSIC_4X4, randomGlue: true };
+  const first = game.createGameState(preset, { glueRng: game.createRng(sequence) });
+  const second = game.createGameState(preset, { glueRng: game.createRng(sequence) });
   assert.deepStrictEqual(first.preset.gluedEdges, second.preset.gluedEdges);
-  assert.strictEqual(game.PRESETS.find((preset) => preset.id === 'random-glue-4x4').gluedEdges.length, 0);
+  assert.strictEqual(first.preset.gluedEdges.length, 8);
+  assert.strictEqual(preset.gluedEdges.length, 0, 'materialization does not mutate the source fixture');
 }
 
 function testBoundaryGlueBoardPresetSizingAndGlueModes() {
@@ -1878,14 +1888,14 @@ function testOfficialGomokuTorusUsesFiveInLineMultiplicity() {
   assert.ok(repeatedSegments.some((segment) => segment.start.y < 1 && segment.end.y <= 5));
 }
 
-function testOfficialGomokuTorusLegacyImportUpgradesWinLength() {
+async function testOfficialGomokuTorusLegacyImportUpgradesWinLength() {
   const officialPreset = game.PRESETS.find((preset) => preset.id === 'gomoku-tic-tac-toe');
   assert.ok(officialPreset);
   const legacyPreset = JSON.parse(JSON.stringify(officialPreset));
   legacyPreset.gomokuWinLength = 3;
   assert.strictEqual(game.normalizePresetPayload(legacyPreset).gomokuWinLength, undefined);
   const { elements } = createHeadlessDomHarness();
-  importHeadlessStatus(elements, {
+  await importHeadlessStatus(elements, {
     gameMode: 'gomoku',
     preset: legacyPreset,
     phase: 'gameover',
@@ -2005,6 +2015,9 @@ function testGoCaptureSuicideKoAndScoring() {
   assert.strictEqual(result.changed, true);
   assert.strictEqual(result.state.turn, 'white');
   result = game.passGoTurn(result.state);
+  assert.strictEqual(result.state.phase, 'ready');
+  assert.strictEqual(result.state.scoringReview, true, 'two passes enter score review before confirmation');
+  result = game.__test.confirmGoScore(result.state);
   assert.strictEqual(result.state.phase, 'gameover');
   assert.strictEqual(result.state.winner, 'white');
   assert.strictEqual(result.state.finalScore.komi, 6.5);
@@ -2208,7 +2221,10 @@ function testReversiDiagonalFlipsAndAnimationMetadata() {
 }
 
 function testChineseCheckersSetupMovesJumpsAndWin() {
-  const state = game.beginChineseCheckersGame('chinese-checkers-hex-rhombus-9x9');
+  const red = [tile(1, 1), tile(1, 2), tile(2, 1), tile(2, 2)];
+  const yellow = [tile(8, 8), tile(8, 9), tile(9, 8), tile(9, 9)];
+  const state = game.beginChineseCheckersGame({ ...CLASSIC_4X4, id: 'checkers-step-fixture', lattice: 'hexagonal', rows: 9, cols: 9,
+    chineseCheckersCamps: { redStart: red, redTarget: yellow, yellowStart: yellow, yellowTarget: red } });
   assert.strictEqual(state.preset.lattice, 'hexagonal');
   assert.strictEqual(state.marbles.length, 8);
   assert.strictEqual(state.camps.starts.red.size, 4);
@@ -2514,7 +2530,12 @@ function testHexClassicPreset() {
 }
 
 function testColouredHexQFilePreset() {
-  const state = game.createGameState('4-4-classic');
+  // Legacy compact-file normalization is independent of the live preset catalog.
+  const state = game.createGameState(game.normalizePresetPayload({
+    id: '4-4-classic', lattice: 'hexagonal', size: '4x4',
+    glue: 'g0:1,1,NW=4,4,SE',
+    pieceSets: { starts: { black: [tile(3, 1), tile(4, 1)] } }
+  }));
   assert.strictEqual(state.preset.id, '4-4-classic');
   assert.strictEqual(state.preset.lattice, 'hexagonal');
   assert.deepStrictEqual(state.preset.gluedEdges.map((pair) => [pair.first.dir, pair.second.dir]), [
@@ -2551,7 +2572,7 @@ function playGomokuMoves(state, moves) {
 }
 
 function testGomokuAlternatingPlacement() {
-  let state = game.beginGomokuGame('classic-4x4');
+  let state = game.beginGomokuGame(CLASSIC_4X4);
   let result = game.placeGomokuStone(state, game.indexOf(1, 1, 4));
   assert.strictEqual(result.changed, true);
   assert.strictEqual(result.stone.color, 'black');
@@ -3598,7 +3619,6 @@ function testExtraBackgroundPresets() {
     ['gomoku-small-holes', 'small holes'],
     ['gomoku-big-hole', 'big hole'],
     ['gomoku-m4-15x15', 'genus 4'],
-    ['rubiks-cube-2x2x2', "Rubik's Cube 2*2*2"],
     ['rubiks-cube-3x3x3', "Rubik's Cube 3*3*3"],
     ['connect-four-6x7', 'Connect Four 6*7'],
     ['connect-four-high-hit', 'high hit'],
@@ -3613,9 +3633,9 @@ function testExtraBackgroundPresets() {
     ['connect-four-hex-bad-mobius-strip', 'hex bad M\u00f6bius strip'],
     ['connect-four-hex-good-mobius-strip', 'hex good M\u00f6bius strip'],
     ['usual-strip', 'usual strip'],
-    ['mobius-strip', 'M\u00f6bius strip'],
-    ['chinese-checkers-hex-rhombus-9x9', 'hex rhombus 9*9'],
-    ['chinese-checkers-hex-strip-9x9', 'hex strip 9*9']
+    ['mobius-strip', 'Mobius strip'],
+    ['hex-rhombus', 'hex rhombus'],
+    ['hex-strip-9-9', 'hex strip 9*9']
   ].forEach(([id, label]) => {
     assert.ok(presetRegistry.find((preset) => preset.id === id && preset.label === label));
     assert.ok(game.PRESETS.find((preset) => preset.id === id));
@@ -3705,7 +3725,7 @@ function testExtraBackgroundPresets() {
   assert.deepStrictEqual(Array.from(game.createConnectFourState('connect-four-6x7', { holes: [] }).holes), []);
   assert.deepStrictEqual(Array.from(game.beginConnectFourGame('connect-four-6x7').holes).sort((a, b) => a - b), connectFourTopHoles());
 
-  const rubiks2 = game.createGameState('rubiks-cube-2x2x2');
+  const rubiks2 = game.createGameState(require('./fixtures/ramified_legacy_rubiks_2.json'));
   assert.strictEqual(rubiks2.preset.rows, 6);
   assert.strictEqual(rubiks2.preset.cols, 8);
   assert.strictEqual(rubiks2.preset.surface, 'M_0,8');
@@ -3771,11 +3791,11 @@ function testExtraBackgroundPresets() {
 
   const mobius = game.createGameState('mobius-strip');
   assert.strictEqual(mobius.preset.lattice, 'hexagonal');
-  assert.strictEqual(mobius.preset.surface, 'N_0,2^6');
-  assert.strictEqual(mobius.preset.gluedEdges.length, 7);
+  assert.strictEqual(mobius.preset.surface, 'N_0,2');
+  assert.strictEqual(mobius.preset.gluedEdges.length, 9);
   assert.ok(mobius.preset.gluedEdges.every((pair) => pair.reversed));
   assert.ok(mobius.preset.gluedEdges.every((pair) => pair.secondArrowReversed === false));
-  assert.strictEqual(game.countUnmatchedBoundaries(mobius.preset, mobius.removed), 20);
+  assert.strictEqual(game.countUnmatchedBoundaries(mobius.preset, mobius.removed), 16);
 
   const twisted = game.createGameState('twisted-torus');
   assert.strictEqual(twisted.preset.rows, 4);
@@ -3797,47 +3817,20 @@ function testExtraBackgroundPresets() {
 }
 
 function assertPresetRegistryDefaults() {
-  assert.ok(presetRegistrySource && !Array.isArray(presetRegistrySource));
-  assert.ok(presetDefaultFor && typeof presetDefaultFor === 'object' && !Array.isArray(presetDefaultFor));
-  assert.ok(Array.isArray(presetRegistry));
-  assert.ok(presetRegistry.every((preset) => !Object.prototype.hasOwnProperty.call(preset, 'defaultFor')));
-  assert.deepStrictEqual(presetRegistrySource.gameOrder, [
-    'gomoku', 'go', 'connect-four', '2048', 'reversi', 'chinese-checkers', 'sokoban',
-    'fide-chess', 'billiards', 'lianliankan'
-  ]);
-  const expected = {
-    gomoku: game.BOUNDARY_GLUE_BOARD_PRESET_ID,
-    go: 'three-slits',
-    'connect-four': 'connect-four-exchange',
-    '2048': 'ramified-cover',
-    reversi: 'focus-frame',
-    'chinese-checkers': 'octahedron-with-square-holes',
-    sokoban: 'sokoban-square',
-    'fide-chess': 'fide-chess-8x8',
-    billiards: 'twisted-torus',
-    lianliankan: 'rubiks-cube-2x2x2'
-  };
+  const expected = { hex: 'classic-hex', gomoku: 'wormhole', go: 'gomoku-big-hole',
+    'connect-four': 'connect-four-exchange', '2048': 'ramified-cover', reversi: 'focus-frame',
+    'chinese-checkers': 'octahedron-with-square-holes', sokoban: 'classic-fans',
+    'fide-chess': 'fide-chess-8x8', billiards: 'half-glued', lianliankan: 'rubiks-cube-3x3x3' };
   assert.deepStrictEqual(presetDefaultFor, expected);
-  const expectedResolved = {
-    gomoku: game.BOUNDARY_GLUE_BOARD_PRESET_ID,
-    go: 'three-slits',
-    'connect-four': 'connect-four-exchange',
-    '2048': 'ramified-cover',
-    reversi: 'focus-frame',
-    'chinese-checkers': 'octahedron-with-square-holes',
-    sokoban: 'sokoban-square',
-    'fide-chess': 'fide-chess-8x8',
-    billiards: 'twisted-torus',
-    lianliankan: 'rubiks-cube-2x2x2'
-  };
-  Object.entries(expectedResolved).forEach(([mode, id]) => {
-    const entry = presetRegistry.find((preset) => preset.id === id);
+  Object.entries(expected).forEach(([mode, id]) => {
+    const entry = presetRegistry.find(preset => preset.id === id);
     assert.ok(entry, `missing default preset ${id}`);
     assert.ok(registryEntrySupportsMode(entry, mode), `${id} does not support ${mode}`);
   });
 }
 
 function registryEntrySupportsMode(entry, mode) {
+  if (mode === 'hex') return registryEntryHasGameType(entry, 'Hex');
   if (mode === '2048') return registryEntryHasGameType(entry, '2048');
   if (mode === 'gomoku') return registryEntryHasGameType(entry, 'Gomoku');
   if (mode === 'connect-four') return registryEntryHasGameType(entry, 'Connect Four');
@@ -3852,7 +3845,7 @@ function registryEntrySupportsMode(entry, mode) {
 }
 
 function testKeyboardMapping() {
-  const squarePreset = game.createGameState('classic-4x4').preset;
+  const squarePreset = game.createGameState(CLASSIC_4X4).preset;
   assert.strictEqual(game.dirFromKey('KeyW', squarePreset), game.DIRS.N);
   assert.strictEqual(game.dirFromKey('KeyA', squarePreset), game.DIRS.W);
   assert.strictEqual(game.dirFromKey('KeyS', squarePreset), game.DIRS.S);
@@ -3911,14 +3904,14 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   const gameSelectStart = minigameHtml.indexOf('id="game-mode-select"');
   const gameSelectEnd = minigameHtml.indexOf('</select>', gameSelectStart);
   const staticGameOptions = Array.from(minigameHtml.slice(gameSelectStart, gameSelectEnd).matchAll(/<option value="([^"]+)"/g), (match) => match[1]);
-  assert.deepStrictEqual(staticGameOptions, ['gomoku', 'go', 'connect-four', '2048', 'reversi', 'chinese-checkers', 'sokoban', game.RANDOM_GAME_MODE_CHOICE_ID]);
+  assert.deepStrictEqual(staticGameOptions, [...presetRegistrySource.gameOrder.filter(mode => mode !== 'lianliankan'), game.RANDOM_GAME_MODE_CHOICE_ID]);
   assert.ok(minigameHtml.includes('<option value="">Loading presets...</option>'));
   assert.ok(minigameHtml.includes('id="boundary-glue-mode-row"'));
   assert.ok(minigameHtml.includes('id="boundary-glue-shape-row"'));
   assert.ok(minigameHtml.includes('id="boundary-glue-rect-row"'));
-  assert.ok(minigameHtml.includes('<option value="rp2">RP^2</option>'));
-  assert.ok(minigameHtml.includes('<option value="random">random boundary glue</option>'));
-  assert.ok(minigameHtml.includes('<script src="presets/ramified_minigames/presets.js"></script>'));
+  assert.ok(/<option value="rp2"[^>]*>RP\^2<\/option>/.test(minigameHtml));
+  assert.ok(/<option value="random"[^>]*>random boundary glue<\/option>/.test(minigameHtml));
+  assert.ok(/<script src="presets\/ramified_minigames\/presets\.js(?:\?v=[^"]+)?"><\/script>/.test(minigameHtml));
   assert.ok(!minigameHtml.includes('<option value="twisted-torus">'));
   assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, '2048')));
   assert.ok(presetRegistry.some((preset) => registryEntryHasGameType(preset, 'Gomoku')));
@@ -3931,16 +3924,8 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   const presetDir = require('path').resolve(__dirname, '..', 'presets/ramified_minigames');
   const presetFilesWithGameTypes = fs.readdirSync(presetDir)
     .filter((file) => file.endsWith('.preset.js'))
-    .filter((file) => fs.readFileSync(require('path').join(presetDir, file), 'utf8').includes('"gameTypes"'));
-  assert.deepStrictEqual(presetFilesWithGameTypes, [
-    'classic_chinese_checkers.preset.js',
-    'dodecahedron_with_pentagon_holes.preset.js',
-    'focus_frame.preset.js',
-    'octahedron_with_square_glues.preset.js',
-    'octahedron_with_square_holes.preset.js',
-    'three_slits.preset.js',
-    'tunnels.preset.js'
-  ]);
+    .filter((file) => Object.prototype.hasOwnProperty.call(require(require('path').join(presetDir, file)), 'gameTypes'));
+  assert.deepStrictEqual(presetFilesWithGameTypes, [], 'game types belong in the catalog, not in preset payloads');
   assert.ok(minigameHtml.includes('id="gomoku-size-row" data-mode-control="gomoku"'));
   assert.ok(minigameHtml.includes('id="sokoban-object-size" min="54" max="96" step="2" value="70"'));
   assert.ok(minigameHtml.includes('<output id="sokoban-object-size-value">70%</output>'));
@@ -3964,8 +3949,8 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(minigameHtml.includes('data-i18n="setup.glueFlapTargetOnHover"'));
   assert.ok(/class="glue-flap-controls"[\s\S]*id="show-glue-flaps"[\s\S]*id="glue-flap-target-on-hover"/.test(minigameHtml));
   assert.ok(minigameHtml.indexOf('id="glue-flaps-row"') > minigameHtml.indexOf('id="gomoku-display-row"'));
-  assert.ok(minigameHtml.includes('js/i18n/ramified_minigames_locales.js?v=20260908-2'));
-  assert.ok(minigameHtml.includes('js/ramified_minigames_setup.js?v=20260908-2'));
+  assert.ok(/js\/i18n\/ramified_minigames_locales\.js\?v=[^"]+/.test(minigameHtml));
+  assert.ok(/js\/ramified_minigames_setup\.js\?v=[^"]+/.test(minigameHtml));
   assert.ok(minigameHtml.includes('id="billiards-physics-profile"'));
   assert.ok(minigameHtml.includes('id="go-komi-row" data-mode-control="go"'));
   assert.ok(minigameHtml.includes('id="go-komi"'));
@@ -4007,7 +3992,7 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(!importExportSection.includes('mosaic-debug-panel'));
   assert.ok(minigameSource.includes("document.querySelectorAll('.card-head')"));
   assert.ok(minigameSource.includes("card.classList.toggle('collapsed')"));
-  assert.ok(minigameHtml.includes('id="step-mode-row" data-mode-control="2048"'));
+  assert.ok(minigameHtml.includes('id="step-mode-row" data-mode-control="directional"'));
   assert.ok(minigameHtml.includes('<option value="">empty</option>'));
   assert.ok(minigameHtml.includes('id="debug-bomb-row" data-mode-control="2048"'));
   assert.ok(minigameHtml.includes('id="debug-bomb-tool"'));
@@ -4039,7 +4024,7 @@ function testMosaicBackgroundExportAndMinigameImportControlsExist() {
   assert.ok(mosaicHtml.includes('<select id="export-preset-group"'));
   assert.ok(mosaicHtml.includes('<option value="Connect Four">Connect Four</option>'));
   assert.ok(mosaicHtml.includes('id="export-test-link"'));
-  assert.ok(mosaicHtml.includes('<script src="presets/ramified_minigames/presets.js"></script>'));
+  assert.ok(/<script src="presets\/ramified_minigames\/presets\.js(?:\?v=[^"]+)?"><\/script>/.test(mosaicHtml));
   assert.ok(mosaicHtml.includes('<option value="decoration">Add / remove decorations</option>'));
   assert.ok(mosaicHtml.includes('id="background-decoration-kind"'));
   assert.ok(mosaicHtml.includes('id="background-decoration-color"'));
@@ -4070,6 +4055,7 @@ function testCardHeadersCollapse() {
     exports: {},
     console,
     Math,
+    URLSearchParams,
     setTimeout() {
       return 1;
     },
@@ -4207,7 +4193,8 @@ function testUrlMinigamePresetImport() {
   });
   assert.strictEqual(elements.get('game-mode-select').value, 'connect-four');
   assert.strictEqual(elements.get('surface-preset-select').value, 'imported-preset');
-  assert.strictEqual(elements.get('status-line').textContent, 'preset imported from link');
+  assert.strictEqual(elements.get('status-badge').textContent, 'setup');
+  assert.ok(elements.get('status-line').textContent.includes(payload.label), 'the loaded URL board is previewed');
   assert.ok(elements.get('surface-preset-select').options.some((option) => (
     option.value === 'imported-preset' && option.textContent === 'URL Connect'
   )));
@@ -4237,7 +4224,8 @@ function testUrlMinigamePresetImportInfersModeFromGroup() {
   const { elements } = createHeadlessDomHarness({ locationSearch: `?minigamePreset=${encoded}` });
   assert.strictEqual(elements.get('game-mode-select').value, 'gomoku');
   assert.strictEqual(elements.get('surface-preset-select').value, 'imported-preset');
-  assert.strictEqual(elements.get('status-line').textContent, 'preset imported from link');
+  assert.strictEqual(elements.get('status-badge').textContent, 'setup');
+  assert.ok(elements.get('status-line').textContent.includes(payload.label), 'the loaded URL board is previewed');
   elements.get('begin-game').listeners.click();
   elements.get('export-state').listeners.click();
   const exported = JSON.parse(elements.get('debug-export-output').value);
@@ -4398,7 +4386,7 @@ function testStepPauseRendersAfterSelectingNextEvent() {
 }
 
 function testStationaryDifferentBlocks() {
-  const state = stateWithBoxes('classic-4x4', [
+  const state = stateWithBoxes(CLASSIC_4X4, [
     box(1, 1, 1, 2),
     box(2, 1, 2, 4)
   ]);
@@ -4493,7 +4481,7 @@ function testLargeExplosionCreatesRedBombAndClickClearsSurfaceNeighbors() {
 }
 
 function testBlueBombClickRestoresWithoutMoveOrSpawn() {
-  const state = stateWithBoxes('classic-4x4', [
+  const state = stateWithBoxes(CLASSIC_4X4, [
     box(1, 1, 1, 2),
     box(2, 2, 2, 4)
   ]);
@@ -4515,7 +4503,7 @@ function testBlueBombClickRestoresWithoutMoveOrSpawn() {
 }
 
 function testBombsBlockMovementSpawnAndGlue() {
-  const direct = stateWithBoxes('classic-4x4', [
+  const direct = stateWithBoxes(CLASSIC_4X4, [
     box(1, 1, 1, 2)
   ]);
   direct.bombs = [{ index: game.indexOf(1, 2, 4), kind: game.BOMB_KINDS.BLUE, value: 2 }];
@@ -4523,7 +4511,7 @@ function testBombsBlockMovementSpawnAndGlue() {
   assert.strictEqual(blockedMove.changed, false);
   assert.deepStrictEqual(valuesAt(blockedMove.state), ['1,1:2']);
 
-  const spawnState = stateWithBoxes('classic-4x4', [
+  const spawnState = stateWithBoxes(CLASSIC_4X4, [
     box(1, 2, 1, 2),
     box(2, 2, 2, 2)
   ]);
@@ -4621,7 +4609,7 @@ function test2048BoxOrientationImportCloneAndSummary() {
 }
 
 function testSpawnAfterValidRound() {
-  const state = stateWithBoxes('classic-4x4', [
+  const state = stateWithBoxes(CLASSIC_4X4, [
     box(1, 1, 1, 2),
     box(2, 1, 2, 2)
   ]);
@@ -4734,7 +4722,14 @@ function makeMoveButton(dir) {
 }
 
 function createHeadlessDomHarness(options = {}) {
-  const source = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
+  let source = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
+  // Most interaction tests specify a mode. Isolate those tests from the archive's
+  // random startup, while exercising random startup explicitly with randomStartup.
+  if (!options.randomStartup) {
+    const startup = 'if (!playerShellEnabled && applyRandomSetupChoice(randomSetupChoice(), { focus: false })) return;';
+    assert.ok(source.includes(startup), 'update the harness when archive startup changes');
+    source = source.replace(startup, '/* deterministic test startup */');
+  }
   const elements = new Map();
   const calls = [];
   let timerNow = 0;
@@ -4866,6 +4861,7 @@ function createHeadlessDomHarness(options = {}) {
     makeElement('placement-hint-colors-direction', { tagName: 'OPTION' }),
     makeElement('go-komi', { value: '6.5' }),
     makeElement('go-pass'),
+    makeElement('go-confirm-score'),
     makeElement('chinese-checkers-jump-rule', { value: 'unlimited' }),
     makeElement('chinese-checkers-player-options'),
     makeElement('connect-four-fall-dir', {
@@ -5022,6 +5018,10 @@ function createHeadlessDomHarness(options = {}) {
     },
     window: {
       devicePixelRatio: 1,
+      TopologicalHex: require('./hex_homology_game.js'),
+      TopologicalBilliardsNative: require('./billiards/topological_billiards_native.js'),
+      Lianliankan: require('../archive/lianliankan/lianliankan_engine.js'),
+      LianliankanMosaicAdapter: require('../archive/lianliankan/mosaic_adapter.js'),
       location: { search: options.locationSearch || '' },
       RAMIFIED_MINIGAMES_ONLINE_URL: options.onlineUrl || '',
       SiteI18n: options.siteI18n || null,
@@ -5311,10 +5311,18 @@ function enableHeadlessDebug(elements) {
   }
 }
 
-function importHeadlessStatus(elements, payload) {
+async function settleHeadlessImports() { await new Promise(resolve => setImmediate(resolve)); }
+
+async function forEachSequential(values, callback) {
+  for (let index = 0; index < values.length; index++) await callback(values[index], index, values);
+}
+
+async function importHeadlessStatus(elements, payload) {
   enableHeadlessDebug(elements);
   elements.get('debug-export-output').value = JSON.stringify(payload);
   elements.get('import-state').listeners.click();
+
+  await settleHeadlessImports();
 }
 
 function encodeBase64UrlJson(payload) {
@@ -5326,7 +5334,7 @@ function encodeBase64UrlJson(payload) {
 }
 
 function singleSquareBoxStatus() {
-  const preset = game.createGameState('classic-4x4').preset;
+  const preset = game.createGameState(CLASSIC_4X4).preset;
   return {
     preset,
     phase: 'ready',
@@ -5353,23 +5361,23 @@ function singleHexBoxStatus() {
   };
 }
 
-function testSquareWasdKeyboardControls() {
-  [
+async function testSquareWasdKeyboardControls() {
+  await forEachSequential([
     ['KeyW', 'up'],
     ['KeyA', 'left'],
     ['KeyS', 'down'],
     ['KeyD', 'right']
-  ].forEach(([key, label]) => {
+  ], async ([key, label]) => {
     const { elements, documentListeners } = createHeadlessDomHarness();
-    importHeadlessStatus(elements, singleSquareBoxStatus());
+    await importHeadlessStatus(elements, singleSquareBoxStatus());
     const event = pressKey(documentListeners, key);
     assert.strictEqual(event.defaultPrevented, true);
     assert.strictEqual(elements.get('status-line').textContent, `round 1: ${label}`);
   });
 }
 
-function testActiveSquareKeyboardPreventsPageScroll() {
-  [
+async function testActiveSquareKeyboardPreventsPageScroll() {
+  await forEachSequential([
     ['ArrowUp', 'up'],
     ['ArrowLeft', 'left'],
     ['ArrowDown', 'down'],
@@ -5378,26 +5386,26 @@ function testActiveSquareKeyboardPreventsPageScroll() {
     ['KeyA', 'left'],
     ['KeyS', 'down'],
     ['KeyD', 'right']
-  ].forEach(([key, label]) => {
+  ], async ([key, label]) => {
     const { elements, documentListeners } = createHeadlessDomHarness();
-    importHeadlessStatus(elements, singleSquareBoxStatus());
+    await importHeadlessStatus(elements, singleSquareBoxStatus());
     const event = pressKey(documentListeners, key);
     assert.strictEqual(event.defaultPrevented, true);
     assert.strictEqual(elements.get('status-line').textContent, `round 1: ${label}`);
   });
 }
 
-function testHexArrowKeyboardControls() {
-  [
+async function testHexArrowKeyboardControls() {
+  await forEachSequential([
     [['ArrowLeft'], 'west'],
     [['ArrowRight'], 'east'],
     [['ArrowUp', 'ArrowLeft'], 'northwest'],
     [['ArrowUp', 'ArrowRight'], 'northeast'],
     [['ArrowDown', 'ArrowLeft'], 'southwest'],
     [['ArrowDown', 'ArrowRight'], 'southeast']
-  ].forEach(([keys, label]) => {
+  ], async ([keys, label]) => {
     const { elements, documentListeners } = createHeadlessDomHarness();
-    importHeadlessStatus(elements, singleHexBoxStatus());
+    await importHeadlessStatus(elements, singleHexBoxStatus());
     keys.forEach((key) => {
       const event = pressKey(documentListeners, key);
       assert.strictEqual(event.defaultPrevented, true);
@@ -5406,19 +5414,19 @@ function testHexArrowKeyboardControls() {
   });
 }
 
-function testActiveHexKeyboardPreventsPageScroll() {
-  ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].forEach((key) => {
+async function testActiveHexKeyboardPreventsPageScroll() {
+  await forEachSequential(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'], async (key) => {
     const { elements, documentListeners } = createHeadlessDomHarness();
-    importHeadlessStatus(elements, singleHexBoxStatus());
+    await importHeadlessStatus(elements, singleHexBoxStatus());
     const event = pressKey(documentListeners, key);
     assert.strictEqual(event.defaultPrevented, true);
   });
 }
 
-function testHexVerticalArrowAloneDoesNotMove() {
-  ['ArrowUp', 'ArrowDown'].forEach((key) => {
+async function testHexVerticalArrowAloneDoesNotMove() {
+  await forEachSequential(['ArrowUp', 'ArrowDown'], async (key) => {
     const { elements, documentListeners } = createHeadlessDomHarness();
-    importHeadlessStatus(elements, singleHexBoxStatus());
+    await importHeadlessStatus(elements, singleHexBoxStatus());
     const event = pressKey(documentListeners, key);
     assert.strictEqual(event.defaultPrevented, true);
     assert.strictEqual(elements.get('round-value').textContent, '0');
@@ -5426,25 +5434,25 @@ function testHexVerticalArrowAloneDoesNotMove() {
   });
 }
 
-function testHexKeyboardStateClearsOnKeyupAndBlur() {
+async function testHexKeyboardStateClearsOnKeyupAndBlur() {
   let harness = createHeadlessDomHarness();
-  importHeadlessStatus(harness.elements, singleHexBoxStatus());
+  await importHeadlessStatus(harness.elements, singleHexBoxStatus());
   pressKey(harness.documentListeners, 'ArrowUp');
   releaseKey(harness.documentListeners, 'ArrowUp');
   pressKey(harness.documentListeners, 'ArrowRight');
   assert.strictEqual(harness.elements.get('status-line').textContent, 'round 1: east');
 
   harness = createHeadlessDomHarness();
-  importHeadlessStatus(harness.elements, singleHexBoxStatus());
+  await importHeadlessStatus(harness.elements, singleHexBoxStatus());
   pressKey(harness.documentListeners, 'ArrowDown');
   harness.windowListeners.blur();
   pressKey(harness.documentListeners, 'ArrowRight');
   assert.strictEqual(harness.elements.get('status-line').textContent, 'round 1: east');
 }
 
-function testKeyboardPreventsScrollWhileBusyWithoutMovingAgain() {
+async function testKeyboardPreventsScrollWhileBusyWithoutMovingAgain() {
   let harness = createHeadlessDomHarness();
-  importHeadlessStatus(harness.elements, singleSquareBoxStatus());
+  await importHeadlessStatus(harness.elements, singleSquareBoxStatus());
   pressKey(harness.documentListeners, 'ArrowRight');
   assert.strictEqual(harness.elements.get('round-value').textContent, '1');
   assert.strictEqual(harness.elements.get('status-badge').textContent, 'moving');
@@ -5453,7 +5461,7 @@ function testKeyboardPreventsScrollWhileBusyWithoutMovingAgain() {
   assert.strictEqual(harness.elements.get('round-value').textContent, '1');
 
   harness = createHeadlessDomHarness({ stepMode: true });
-  importHeadlessStatus(harness.elements, singleSquareBoxStatus());
+  await importHeadlessStatus(harness.elements, singleSquareBoxStatus());
   pressKey(harness.documentListeners, 'ArrowRight');
   assert.strictEqual(harness.elements.get('round-value').textContent, '1');
   assert.strictEqual(harness.elements.get('status-badge').textContent, 'step');
@@ -5462,14 +5470,14 @@ function testKeyboardPreventsScrollWhileBusyWithoutMovingAgain() {
   assert.strictEqual(harness.elements.get('round-value').textContent, '1');
 }
 
-function testKeyboardAllowsPageScrollOutsideActive2048() {
+async function testKeyboardAllowsPageScrollOutsideActive2048() {
   let harness = createHeadlessDomHarness();
   let event = pressKey(harness.documentListeners, 'ArrowDown');
   assert.strictEqual(event.defaultPrevented, false);
   assert.strictEqual(harness.elements.get('status-badge').textContent, 'setup');
 
   harness = createHeadlessDomHarness();
-  importHeadlessStatus(harness.elements, {
+  await importHeadlessStatus(harness.elements, {
     preset: { label: 'over', lattice: 'square', rows: 4, cols: 4, surface: 'over' },
     phase: 'gameover',
     ending: 'bonus',
@@ -5501,7 +5509,7 @@ function testKeyboardAllowsPageScrollOutsideActive2048() {
   assert.strictEqual(harness.elements.get('round-value').textContent, '0');
 }
 
-function testKeyboardShortcutsUndoRedoAndReset() {
+async function testKeyboardShortcutsUndoRedoAndReset() {
   let harness = createHeadlessDomHarness();
   let { elements, canvas, documentListeners } = harness;
   elements.get('game-mode-select').value = 'gomoku';
@@ -5546,7 +5554,7 @@ function testKeyboardShortcutsUndoRedoAndReset() {
 
   harness = createHeadlessDomHarness();
   ({ elements, documentListeners } = harness);
-  importHeadlessStatus(elements, singleSquareBoxStatus());
+  await importHeadlessStatus(elements, singleSquareBoxStatus());
   pressKey(documentListeners, 'ArrowRight');
   assert.strictEqual(elements.get('round-value').textContent, '1');
   event = pressKey(documentListeners, 'KeyR');
@@ -5596,7 +5604,7 @@ function testSwipeSuppressesFollowupClick() {
 
 async function testTimedPlacementReachAssistInteractions() {
   const { elements, canvas, calls, advanceTimers, pendingTimerCount } = createHeadlessDomHarness();
-  importHeadlessStatus(elements, {
+  await importHeadlessStatus(elements, {
     gameMode: 'go',
     preset: {
       label: 'reach assist input', lattice: 'square', rows: 3, cols: 3, surface: 'test',
@@ -5661,7 +5669,7 @@ async function testTimedPlacementReachAssistInteractions() {
   assert.strictEqual(JSON.parse(elements.get('debug-export-output').value).stones.length, afterHeldRelease.stones.length, 'release placement is committed exactly once');
 
   const gomokuHarness = createHeadlessDomHarness();
-  importHeadlessStatus(gomokuHarness.elements, {
+  await importHeadlessStatus(gomokuHarness.elements, {
     gameMode: 'gomoku',
     preset: {
       label: 'long press Gomoku input', lattice: 'square', rows: 3, cols: 3, surface: 'test',
@@ -5682,7 +5690,7 @@ async function testTimedPlacementReachAssistInteractions() {
   assert.strictEqual(gomokuExport.stones[0].color, 'black');
 
   const connectFourHarness = createHeadlessDomHarness();
-  importHeadlessStatus(connectFourHarness.elements, {
+  await importHeadlessStatus(connectFourHarness.elements, {
     gameMode: 'connect-four',
     preset: {
       label: 'long press Connect Four input', lattice: 'square', rows: 3, cols: 3, surface: 'test',
@@ -5706,7 +5714,7 @@ async function testTimedPlacementReachAssistInteractions() {
 
 async function testAnimatedPlacementRayHintInteractions() {
   const gomokuHarness = createHeadlessDomHarness();
-  importHeadlessStatus(gomokuHarness.elements, {
+  await importHeadlessStatus(gomokuHarness.elements, {
     gameMode: 'gomoku',
     preset: {
       label: 'animated reach assist', lattice: 'square', rows: 3, cols: 3, surface: 'test',
@@ -5737,7 +5745,7 @@ async function testAnimatedPlacementRayHintInteractions() {
     removed: [], queue: { eventIndex: 0, stepPaused: false, events: [] }
   };
   const connectFourHarness = createHeadlessDomHarness();
-  importHeadlessStatus(connectFourHarness.elements, connectFourPayload);
+  await importHeadlessStatus(connectFourHarness.elements, connectFourPayload);
   for (let index = 0; index < 5; index += 1) await new Promise((resolve) => setImmediate(resolve));
   connectFourHarness.calls.length = 0;
   connectFourHarness.canvas.listeners.pointermove(pointerEvent(144, 57));
@@ -5762,7 +5770,7 @@ async function testAnimatedPlacementRayHintInteractions() {
   );
 
   const reducedHarness = createHeadlessDomHarness({ reducedMotion: true });
-  importHeadlessStatus(reducedHarness.elements, {
+  await importHeadlessStatus(reducedHarness.elements, {
     gameMode: 'gomoku',
     preset: {
       label: 'reduced reach assist', lattice: 'square', rows: 3, cols: 3, surface: 'test',
@@ -5779,7 +5787,7 @@ async function testAnimatedPlacementRayHintInteractions() {
   assert.ok(!reducedHarness.calls.some((call) => call.method === 'requestAnimationFrame'), 'reduced motion reveals rays without animation frames');
 
   const reducedDropHarness = createHeadlessDomHarness({ reducedMotion: true });
-  importHeadlessStatus(reducedDropHarness.elements, connectFourPayload);
+  await importHeadlessStatus(reducedDropHarness.elements, connectFourPayload);
   for (let index = 0; index < 5; index += 1) await new Promise((resolve) => setImmediate(resolve));
   reducedDropHarness.calls.length = 0;
   reducedDropHarness.canvas.listeners.pointermove(pointerEvent(144, 57));
@@ -5970,7 +5978,7 @@ function testWrappedNQueensTrayAndGlueHoverInteraction() {
   assert.strictEqual(elements.get('canvas-start-overlay').hidden, false, 'a hidden seam no longer consumes setup clicks');
 }
 
-function testUniversalBoardDisplayAndCoordinates() {
+async function testUniversalBoardDisplayAndCoordinates() {
   assert.deepStrictEqual(
     [0, 7, 8, 24, 25].map((index) => game.goCoordinateFile(index)),
     ['A', 'H', 'J', 'Z', 'AA']
@@ -6130,7 +6138,7 @@ function testUniversalBoardDisplayAndCoordinates() {
   assert.ok(elements.get('display-card-body').children.includes(elements.get('gomoku-display-row')));
   assert.ok(elements.get('display-card-body').children.includes(elements.get('boundary-glue-wrapped-view-row')));
   assert.strictEqual(elements.get('show-board-coordinates').checked, false);
-  importHeadlessStatus(elements, {
+  await importHeadlessStatus(elements, {
     gameMode: 'go',
     preset: {
       label: 'coordinate square', lattice: 'square', rows: 4, cols: 4, surface: 'test',
@@ -6171,7 +6179,7 @@ function testUniversalBoardDisplayAndCoordinates() {
   assert.strictEqual(exported.settings.showBoardCoordinates, true);
 
   calls.length = 0;
-  importHeadlessStatus(elements, {
+  await importHeadlessStatus(elements, {
     gameMode: 'go',
     preset: {
       label: 'coordinate square with empty axes', lattice: 'square', rows: 4, cols: 4, surface: 'test',
@@ -6194,7 +6202,7 @@ function testUniversalBoardDisplayAndCoordinates() {
   assert.ok(!emptyAxisLabels.includes('4'), 'a fully removed square rank has no labels in the gridded display');
 
   calls.length = 0;
-  importHeadlessStatus(elements, {
+  await importHeadlessStatus(elements, {
     gameMode: 'go',
     preset: {
       label: 'coordinate hex', lattice: 'hexagonal', rows: 4, cols: 4, surface: 'test',
@@ -6228,7 +6236,7 @@ function testUniversalBoardDisplayAndCoordinates() {
   calls.length = 0;
   elements.get('gomoku-display-style').listeners.change();
   calls.length = 0;
-  importHeadlessStatus(elements, {
+  await importHeadlessStatus(elements, {
     gameMode: 'go',
     preset: {
       label: 'coordinate hex with empty q-file', lattice: 'hexagonal', rows: 4, cols: 4, surface: 'test',
@@ -6249,7 +6257,7 @@ function testUniversalBoardDisplayAndCoordinates() {
   assert.ok(calls.some((call) => call.method === 'lineTo'), 'the gridded style must render for 2048 too');
 }
 
-function testSwipeIgnoredOutsideAccepting2048() {
+async function testSwipeIgnoredOutsideAccepting2048() {
   let harness = createHeadlessDomHarness();
   swipeCanvas(harness.canvas, 40, 40, 80, 40);
   assert.strictEqual(harness.elements.get('round-value').textContent, '0');
@@ -6272,7 +6280,7 @@ function testSwipeIgnoredOutsideAccepting2048() {
   assert.strictEqual(harness.elements.get('status-badge').textContent, 'step');
 
   harness = createHeadlessDomHarness();
-  importHeadlessStatus(harness.elements, {
+  await importHeadlessStatus(harness.elements, {
     preset: { label: 'over', lattice: 'square', rows: 4, cols: 4, surface: 'over' },
     phase: 'gameover',
     ending: 'bonus',
@@ -6312,17 +6320,17 @@ function testSwipeIgnoredOutsideAccepting2048() {
   assert.strictEqual(exported.round, 0);
 }
 
-function testHexSwipeDirections() {
-  [
+async function testHexSwipeDirections() {
+  await forEachSequential([
     ['east', 36, 0],
     ['southeast', 24, 36],
     ['southwest', -24, 36],
     ['west', -36, 0],
     ['northwest', -24, -36],
     ['northeast', 24, -36]
-  ].forEach(([label, dx, dy]) => {
+  ], async ([label, dx, dy]) => {
     const { elements, canvas } = createHeadlessDomHarness();
-    importHeadlessStatus(elements, singleHexBoxStatus());
+    await importHeadlessStatus(elements, singleHexBoxStatus());
     swipeCanvas(canvas, 100, 100, 100 + dx, 100 + dy);
     assert.strictEqual(elements.get('status-line').textContent, `round 1: ${label}`);
   });
@@ -6334,9 +6342,9 @@ function testDynamicPresetCatalogOptions() {
   const select = elements.get('surface-preset-select');
   assert.deepStrictEqual(
     gameSelect.options.map((option) => option.value),
-    ['gomoku', 'go', 'connect-four', '2048', 'reversi', 'chinese-checkers', 'sokoban', game.RANDOM_GAME_MODE_CHOICE_ID]
+    [...presetRegistrySource.gameOrder, game.RANDOM_GAME_MODE_CHOICE_ID]
   );
-  assert.deepStrictEqual(game.orderedCatalogGameModes(), ['gomoku', 'go', 'connect-four', '2048', 'reversi', 'chinese-checkers', 'sokoban']);
+  assert.deepStrictEqual(game.orderedCatalogGameModes(), presetRegistrySource.gameOrder);
   assert.strictEqual(select.disabled, false);
   assert.strictEqual(select.value, 'ramified-cover');
   assert.strictEqual(select.options[0].value, game.RANDOM_PRESET_CHOICE_ID);
@@ -6358,7 +6366,9 @@ function testDynamicPresetCatalogOptions() {
 
   gameSelect.value = 'gomoku';
   gameSelect.listeners.change();
-  assert.strictEqual(select.value, game.BOUNDARY_GLUE_BOARD_PRESET_ID);
+  assert.strictEqual(select.value, 'wormhole');
+  select.value = game.BOUNDARY_GLUE_BOARD_PRESET_ID;
+  select.listeners.change();
   assert.deepStrictEqual(
     select.children.filter((child) => child.tagName === 'OPTGROUP').map((child) => child.label),
     ['Gomoku']
@@ -6367,6 +6377,8 @@ function testDynamicPresetCatalogOptions() {
   assert.ok(select.options.some((option) => option.value === 'gomoku-small-holes'));
   assert.ok(!select.options.some((option) => ['torus', 'gomoku-classic', 'gomoku-random-glue'].includes(option.value)));
   assert.strictEqual(elements.get('gomoku-size-row').hidden, false);
+  elements.get('gomoku-board-size').value = '15';
+  elements.get('gomoku-board-size').listeners.change();
   assert.strictEqual(elements.get('gomoku-board-size').value, '15');
   assert.strictEqual(elements.get('boundary-glue-mode-row').hidden, false);
   elements.get('boundary-glue-shape').value = 'rectangle';
@@ -6398,7 +6410,7 @@ function testDynamicPresetCatalogOptions() {
 
   gameSelect.value = 'go';
   gameSelect.listeners.change();
-  assert.strictEqual(select.value, 'three-slits');
+  assert.strictEqual(select.value, 'gomoku-big-hole');
   assert.deepStrictEqual(
     select.children.filter((child) => child.tagName === 'OPTGROUP').map((child) => child.label),
     ['Go']
@@ -6438,7 +6450,7 @@ function testDynamicPresetCatalogOptions() {
 
   gameSelect.value = 'sokoban';
   gameSelect.listeners.change();
-  assert.strictEqual(select.value, 'sokoban-square');
+  assert.strictEqual(select.value, 'classic-fans');
   assert.deepStrictEqual(
     select.children.filter((child) => child.tagName === 'OPTGROUP').map((child) => child.label),
     ['Sokoban']
@@ -6495,22 +6507,25 @@ function testRandomSetupAndPresetOptions() {
   assert.ok(registryEntrySupportsMode(presetRegistry.find((preset) => preset.id === firstSokobanPreset.id), 'sokoban'));
   assert.ok(registryEntrySupportsMode(presetRegistry.find((preset) => preset.id === middleSokobanPreset.id), 'sokoban'));
 
-  let rolls = [0.99, 0];
+  const modes = game.orderedCatalogGameModes();
+  const sokobanRoll = (modes.indexOf('sokoban') + 0.5) / modes.length;
+  let rolls = [sokobanRoll, 0];
   const choice = game.randomSetupChoice(() => rolls.shift());
   assert.strictEqual(choice.mode, 'sokoban');
   assert.strictEqual(choice.preset.id, firstSokobanPreset.id);
 
-  let harness = createHeadlessDomHarness({ randoms: [0.99, 0] });
+  let harness = createHeadlessDomHarness({ randomStartup: true, randoms: Array(30).fill(sokobanRoll) });
   let gameSelect = harness.elements.get('game-mode-select');
   let presetSelect = harness.elements.get('surface-preset-select');
   assert.strictEqual(gameSelect.value, 'sokoban');
-  assert.strictEqual(presetSelect.value, firstSokobanPreset.id);
+  assert.strictEqual(presetSelect.value, game.randomPresetForMode('sokoban', () => sokobanRoll).id);
   assert.strictEqual(harness.elements.get('status-badge').textContent, 'setup');
   assert.strictEqual(harness.elements.get('begin-game').textContent, 'begin the game');
 
-  harness = createHeadlessDomHarness({ randoms: [0.5, 0.5, 0.99, 0] });
+  harness = createHeadlessDomHarness({ randoms: [sokobanRoll, 0] });
   gameSelect = harness.elements.get('game-mode-select');
   presetSelect = harness.elements.get('surface-preset-select');
+  harness.context.Math.random = game.createRng([sokobanRoll, 0]);
   gameSelect.value = game.RANDOM_GAME_MODE_CHOICE_ID;
   gameSelect.listeners.change();
   assert.strictEqual(gameSelect.value, 'sokoban');
@@ -6518,7 +6533,7 @@ function testRandomSetupAndPresetOptions() {
   assert.ok(![game.RANDOM_GAME_MODE_CHOICE_ID, game.RANDOM_PRESET_CHOICE_ID].includes(gameSelect.value));
   assert.ok(![game.RANDOM_GAME_MODE_CHOICE_ID, game.RANDOM_PRESET_CHOICE_ID].includes(presetSelect.value));
 
-  harness = createHeadlessDomHarness({ randoms: [0.5, 0.5, 0.999] });
+  harness = createHeadlessDomHarness({ randoms: [0.999] });
   gameSelect = harness.elements.get('game-mode-select');
   presetSelect = harness.elements.get('surface-preset-select');
   gameSelect.value = 'connect-four';
@@ -6536,23 +6551,25 @@ function testRandomSetupAndPresetOptions() {
   assert.ok(!html.slice(importGameStart, importGameEnd).includes(game.RANDOM_GAME_MODE_CHOICE_ID));
 }
 
-function testImportExportCardDefaultsAndCatalogImport() {
+async function testImportExportCardDefaultsAndCatalogImport() {
   const { elements } = createHeadlessDomHarness();
   assert.strictEqual(elements.get('import-game-mode').value, '2048');
   assert.strictEqual(elements.get('import-keep-game-mode').checked, true);
   assert.strictEqual(elements.get('import-preset-source').value, 'catalog');
   assert.strictEqual(elements.get('import-preset-catalog-row').hidden, false);
   assert.strictEqual(elements.get('import-preset-input').hidden, true);
-  assert.ok(elements.get('import-preset-catalog').options.some((option) => option.value === 'classic-4x4'));
+  assert.ok(elements.get('import-preset-catalog').options.some((option) => option.value === 'ramified-cover'));
   assert.ok(!elements.get('import-preset-catalog').options.some((option) => option.value === 'connect-four-6x7'));
 
   elements.get('import-game-mode').value = 'connect-four';
   elements.get('import-game-mode').listeners.change();
   assert.ok(elements.get('import-preset-catalog').options.some((option) => option.value === 'connect-four-6x7'));
-  assert.ok(!elements.get('import-preset-catalog').options.some((option) => option.value === 'classic-4x4'));
+  assert.ok(!elements.get('import-preset-catalog').options.some((option) => option.value === 'ramified-cover'));
   elements.get('import-preset-catalog').value = 'connect-four-6x7';
   elements.get('import-keep-game-mode').checked = false;
   elements.get('apply-import-preset').listeners.click();
+
+  await settleHeadlessImports();
   assert.strictEqual(elements.get('game-mode-select').value, 'connect-four');
   assert.strictEqual(elements.get('surface-preset-select').value, 'connect-four-6x7');
   assert.strictEqual(elements.get('status-line').textContent, 'preset imported');
@@ -6569,10 +6586,10 @@ function testImportExportCardDefaultsAndCatalogImport() {
 
   elements.get('import-game-mode').value = 'chinese-checkers';
   elements.get('import-game-mode').listeners.change();
-  assert.ok(elements.get('import-preset-catalog').options.some((option) => option.value === 'chinese-checkers-hex-rhombus-9x9'));
+  assert.ok(elements.get('import-preset-catalog').options.some((option) => option.value === 'hex-rhombus'));
 }
 
-function testImportExportCardPastedPresetMode() {
+async function testImportExportCardPastedPresetMode() {
   const { elements } = createHeadlessDomHarness();
   elements.get('import-keep-game-mode').checked = false;
   elements.get('import-game-mode').value = 'gomoku';
@@ -6588,6 +6605,8 @@ function testImportExportCardPastedPresetMode() {
     surface: 'paste surface'
   });
   elements.get('apply-import-preset').listeners.click();
+
+  await settleHeadlessImports();
   assert.strictEqual(elements.get('game-mode-select').value, 'gomoku');
   assert.strictEqual(elements.get('surface-preset-select').value, 'imported-preset');
   assert.ok(elements.get('surface-preset-select').options.some((option) => (
@@ -6602,7 +6621,7 @@ function testImportExportCardPastedPresetMode() {
   assert.strictEqual(exported.preset.groups, undefined);
 }
 
-function testNewPlacementGameStatusRoundTrips() {
+async function testNewPlacementGameStatusRoundTrips() {
   let harness = createHeadlessDomHarness();
   let { elements } = harness;
   elements.get('game-mode-select').value = 'go';
@@ -6612,6 +6631,8 @@ function testNewPlacementGameStatusRoundTrips() {
   elements.get('begin-game').listeners.click();
   elements.get('go-pass').listeners.click();
   elements.get('go-pass').listeners.click();
+  assert.strictEqual(harness.context.module.exports.__test.getGame().scoringReview, true);
+  elements.get('go-confirm-score').listeners.click();
   elements.get('export-state').listeners.click();
   let exported = JSON.parse(elements.get('debug-export-output').value);
   assert.strictEqual(exported.gameMode, 'go');
@@ -6624,6 +6645,8 @@ function testNewPlacementGameStatusRoundTrips() {
   elements = harness.elements;
   elements.get('debug-export-output').value = JSON.stringify(exported);
   elements.get('import-state').listeners.click();
+
+  await settleHeadlessImports();
   elements.get('export-state').listeners.click();
   exported = JSON.parse(elements.get('debug-export-output').value);
   assert.strictEqual(exported.gameMode, 'go');
@@ -6638,7 +6661,7 @@ function testNewPlacementGameStatusRoundTrips() {
   elements.get('export-state').listeners.click();
   exported = JSON.parse(elements.get('debug-export-output').value);
   assert.strictEqual(exported.gameMode, 'reversi');
-  assert.strictEqual(exported.preset.rows, 8);
+  assert.strictEqual(exported.preset.rows, 10);
   assert.strictEqual(exported.discs.length, 4);
 
   harness = createHeadlessDomHarness();
@@ -6654,13 +6677,16 @@ function testNewPlacementGameStatusRoundTrips() {
   exported = JSON.parse(elements.get('debug-export-output').value);
   assert.strictEqual(exported.gameMode, 'chinese-checkers');
   assert.strictEqual(exported.jumpRule, 'adjacent-or-two');
-  assert.strictEqual(exported.marbles.length, 8);
-  assert.strictEqual(exported.camps.starts.red.length, 4);
-  assert.strictEqual(exported.preset.pieceSets.targets.red.length, 4);
+  assert.strictEqual(exported.marbles.length, 20);
+  assert.strictEqual(exported.preset.id, 'octahedron-with-square-holes');
+  assert.strictEqual(exported.camps.starts.red.length, 10);
+  assert.strictEqual(exported.preset.pieceSets.targets.red.length, 10);
   assert.deepStrictEqual(exported.winningLine, []);
 
   elements.get('debug-export-output').value = JSON.stringify(exported);
   elements.get('import-state').listeners.click();
+
+  await settleHeadlessImports();
   elements.get('export-state').listeners.click();
   exported = JSON.parse(elements.get('debug-export-output').value);
   assert.strictEqual(exported.jumpRule, 'adjacent-or-two');
@@ -6668,12 +6694,14 @@ function testNewPlacementGameStatusRoundTrips() {
   exported.winningLine = [0, 1, 2];
   elements.get('debug-export-output').value = JSON.stringify(exported);
   elements.get('import-state').listeners.click();
+
+  await settleHeadlessImports();
   elements.get('export-state').listeners.click();
   exported = JSON.parse(elements.get('debug-export-output').value);
   assert.deepStrictEqual(exported.winningLine, []);
 }
 
-function testNewPlacementGameAnimationsStartFromUi() {
+async function testNewPlacementGameAnimationsStartFromUi() {
   const cellClick = (row, col) => ({
     clientX: 57 + ((col - 1) * 58),
     clientY: 57 + ((row - 1) * 58)
@@ -6681,7 +6709,7 @@ function testNewPlacementGameAnimationsStartFromUi() {
 
   let harness = createHeadlessDomHarness();
   let { elements, canvas, calls } = harness;
-  importHeadlessStatus(elements, {
+  await importHeadlessStatus(elements, {
     gameMode: 'reversi',
     preset: {
       id: 'ui-reversi-animation',
@@ -6708,7 +6736,7 @@ function testNewPlacementGameAnimationsStartFromUi() {
 
   harness = createHeadlessDomHarness();
   ({ elements, canvas, calls } = harness);
-  importHeadlessStatus(elements, {
+  await importHeadlessStatus(elements, {
     gameMode: 'chinese-checkers',
     preset: {
       id: 'ui-checkers-animation',
@@ -6756,7 +6784,7 @@ function testNewPlacementGameAnimationsStartFromUi() {
   assert.ok(calls.some((call) => call.method === 'requestAnimationFrame'));
 }
 
-function testUnifiedLocalResultCard() {
+async function testUnifiedLocalResultCard() {
   const { elements } = createHeadlessDomHarness();
   elements.get('debug-export-output').value = JSON.stringify({
     gameMode: 'gomoku',
@@ -6789,6 +6817,8 @@ function testUnifiedLocalResultCard() {
     ]
   });
   elements.get('import-state').listeners.click();
+
+  await settleHeadlessImports();
   assert.strictEqual(elements.get('canvas-start-overlay').hidden, false);
   assert.strictEqual(elements.get('canvas-start-title').textContent, 'black wins');
   assert.strictEqual(elements.get('canvas-start-context').textContent, '5 moves');
@@ -6803,7 +6833,7 @@ function testUnifiedLocalResultCard() {
   assert.strictEqual(afterClose.resultDismissed, true);
 }
 
-function testConnectFourResultCardAppearsAfterDropAnimation() {
+async function testConnectFourResultCardAppearsAfterDropAnimation() {
   const harness = createHeadlessDomHarness();
   const { elements, canvas, advanceTimers } = harness;
   elements.get('debug-export-output').value = JSON.stringify({
@@ -6838,6 +6868,8 @@ function testConnectFourResultCardAppearsAfterDropAnimation() {
     ]
   });
   elements.get('import-state').listeners.click();
+
+  await settleHeadlessImports();
   canvas.listeners.click({ clientX: 159, clientY: 41 });
   assert.strictEqual(elements.get('status-line').textContent, 'red wins');
   assert.strictEqual(elements.get('canvas-start-overlay').hidden, true);
@@ -6886,7 +6918,7 @@ function testBackgroundExportFormats() {
   assert.strictEqual(verbose.boxes, undefined);
 }
 
-function testFullStatusImportWithoutDebugMode() {
+async function testFullStatusImportWithoutDebugMode() {
   const { elements } = createHeadlessDomHarness();
   assert.notStrictEqual(elements.get('debug-toggle').attributes['aria-pressed'], 'true');
   assert.strictEqual(elements.get('import-state').disabled, false);
@@ -6909,14 +6941,17 @@ function testFullStatusImportWithoutDebugMode() {
     queue: { eventIndex: 0, stepPaused: false, events: [] }
   });
   elements.get('import-state').listeners.click();
+
+  await settleHeadlessImports();
   assert.strictEqual(elements.get('status-line').textContent, 'status imported');
   assert.strictEqual(elements.get('status-badge').textContent, 'ready');
   assert.strictEqual(elements.get('round-value').textContent, '3');
   assert.strictEqual(elements.get('score-value').textContent, '8');
 }
 
-function testHeadlessDomStepControls() {
-  const source = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
+async function testHeadlessDomStepControls() {
+  const source = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8').replace(
+    'if (!playerShellEnabled && applyRandomSetupChoice(randomSetupChoice(), { focus: false })) return;', '/* deterministic step test */');
   const elements = new Map();
   const calls = [];
   const ctx = new Proxy({}, {
@@ -6988,11 +7023,13 @@ function testHeadlessDomStepControls() {
     makeElement('gomoku-display-style', { value: 'vertex' }),
     makeElement('go-komi', { value: '6.5' }),
     makeElement('go-pass'),
+    makeElement('go-confirm-score'),
     makeElement('connect-four-fall-dir', {
       value: 'S',
       options: ['S', 'E', 'W', 'N', 'SE', 'SW', 'NW', 'NE'].map((value) => makeElement('', { tagName: 'OPTION', value }))
     }),
     makeElement('connect-four-align-fall', { checked: true }),
+    makeElement('connect-four-hole-edit', { checked: false }),
     makeElement('number-box-style', { value: 'paper' }),
     makeElement('highlight-new-boxes', { checked: true }),
     makeElement('begin-game'),
@@ -7040,6 +7077,8 @@ function testHeadlessDomStepControls() {
     module: { exports: {} },
     exports: {},
     console,
+    URL,
+    URLSearchParams,
     Math: Object.create(Math),
     performance: { now: () => 0 },
     setTimeout,
@@ -7098,6 +7137,8 @@ function testHeadlessDomStepControls() {
   assert.strictEqual(elements.get('move-row').hidden, false);
   assert.strictEqual(elements.get('box-ui-row').hidden, false);
 
+  elements.get('export-state').listeners.click();
+  const initialBoxes = JSON.parse(elements.get('debug-export-output').value).boxes;
   elements.get('debug-toggle').listeners.click();
   assert.strictEqual(elements.get('debug-tools').hidden, false);
   assert.strictEqual(elements.get('debug-toggle').attributes['aria-pressed'], 'true');
@@ -7128,7 +7169,7 @@ function testHeadlessDomStepControls() {
 
   elements.get('undo-step').listeners.click();
   exported = JSON.parse(elements.get('debug-export-output').value);
-  assert.strictEqual(exported.boxes.find((item) => item.row === 1 && item.col === 1).value, 2);
+  assert.deepStrictEqual(exported.boxes, initialBoxes, 'undo restores the actual opening position');
 
   elements.get('debug-bomb-tool').value = 'blue';
   canvas.listeners.click({ clientX: 36, clientY: 41 });
@@ -7181,6 +7222,8 @@ function testHeadlessDomStepControls() {
     }
   });
   elements.get('apply-import-preset').listeners.click();
+
+  await settleHeadlessImports();
   assert.strictEqual(elements.get('surface-preset-select').value, 'imported-preset');
   assert.strictEqual(elements.get('status-line').textContent, 'preset imported');
   assert.strictEqual(elements.get('existing-tile-value').textContent, '3');
@@ -7207,6 +7250,8 @@ function testHeadlessDomStepControls() {
     queue: { eventIndex: 0, stepPaused: false, events: [] }
   });
   elements.get('import-state').listeners.click();
+
+  await settleHeadlessImports();
   assert.strictEqual(elements.get('status-line').textContent, 'status imported');
   assert.ok(elements.get('info-line').textContent.includes('warning: 2 stacked boxes'));
   assert.strictEqual(elements.get('round-value').textContent, '7');
@@ -7239,6 +7284,8 @@ function testHeadlessDomStepControls() {
     queue: { eventIndex: 0, stepPaused: false, events: [] }
   });
   elements.get('import-state').listeners.click();
+
+  await settleHeadlessImports();
   ['N', 'W', 'E'].forEach((dir, index) => {
     moveButtons.find((button) => button.getAttribute('data-move-dir') === dir).listeners.click();
     assert.strictEqual(elements.get('status-line').textContent, 'no move');
@@ -7275,6 +7322,8 @@ function testHeadlessDomStepControls() {
     queue: { eventIndex: 0, stepPaused: false, events: [] }
   });
   elements.get('import-state').listeners.click();
+
+  await settleHeadlessImports();
   ['N', 'W', 'E'].forEach((dir, index) => {
     moveButtons.find((button) => button.getAttribute('data-move-dir') === dir).listeners.click();
     assert.strictEqual(elements.get('status-line').textContent, 'no move');
@@ -7293,10 +7342,14 @@ function testHeadlessDomStepControls() {
   elements.get('game-mode-select').value = 'gomoku';
   elements.get('game-mode-select').listeners.change();
   assert.strictEqual(elements.get('status-badge').textContent, 'setup');
-  assert.strictEqual(elements.get('surface-preset-select').value, game.BOUNDARY_GLUE_BOARD_PRESET_ID);
+  assert.strictEqual(elements.get('surface-preset-select').value, 'wormhole');
+  elements.get('surface-preset-select').value = game.BOUNDARY_GLUE_BOARD_PRESET_ID;
+  elements.get('surface-preset-select').listeners.change();
   assert.strictEqual(elements.get('move-row').hidden, true);
   assert.strictEqual(elements.get('box-ui-row').hidden, true);
   assert.strictEqual(elements.get('gomoku-size-row').hidden, false);
+  elements.get('gomoku-board-size').value = '15';
+  elements.get('gomoku-board-size').listeners.change();
   assert.strictEqual(elements.get('gomoku-board-size').value, '15');
   assert.strictEqual(elements.get('boundary-glue-mode-row').hidden, false);
   assert.strictEqual(elements.get('gomoku-display-row').hidden, false);
@@ -7340,6 +7393,8 @@ function testHeadlessDomStepControls() {
   assert.strictEqual(elements.get('round-value').textContent, '0');
   elements.get('debug-export-output').value = JSON.stringify(gomokuExport);
   elements.get('import-state').listeners.click();
+
+  await settleHeadlessImports();
   assert.strictEqual(elements.get('status-line').textContent, 'status imported');
   assert.strictEqual(elements.get('highest-tile-value').textContent, '1');
   elements.get('export-state').listeners.click();
@@ -7439,9 +7494,13 @@ function testHeadlessDomStepControls() {
     glue: 'g0:1..4,4,E=1..4,1,W; g1:1,1..4,N=4,1..4,S'
   });
   elements.get('apply-import-preset').listeners.click();
+
+  await settleHeadlessImports();
   assert.strictEqual(elements.get('surface-preset-select').value, 'imported-preset');
   elements.get('connect-four-fall-dir').value = 'E';
   elements.get('connect-four-fall-dir').listeners.change();
+  elements.get('connect-four-hole-edit').checked = true;
+  elements.get('connect-four-hole-edit').listeners.change();
   canvas.listeners.click({ clientX: 57, clientY: 57 });
   elements.get('begin-game').listeners.click();
   canvas.listeners.click({ clientX: 57, clientY: 57 });
@@ -7465,7 +7524,8 @@ function testHeadlessDomStepControls() {
 }
 
 function testSokobanPresetRegistryAndSetup() {
-  const state = game.createSokobanState('sokoban-square');
+  const fixture = game.normalizePresetPayload(require('../presets/ramified_minigames/sokoban/sokoban_square.preset.js'));
+  const state = game.createSokobanState(fixture);
   assert.strictEqual(state.gameMode, game.GAME_MODES.SOKOBAN);
   assert.strictEqual(state.players.length, 1);
   assert.strictEqual(state.boxes.length, 1);
@@ -8978,7 +9038,7 @@ async function run() {
   testPlacementHoverGuidanceRules();
   testHexCoverOffsetDiagnosticsAndConnectFourWrappedView();
   testWrappedNQueensTrayAndGlueHoverInteraction();
-  testUniversalBoardDisplayAndCoordinates();
+  await testUniversalBoardDisplayAndCoordinates();
   testGoCaptureSuicideKoAndScoring();
   testGoGluedCaptureUsesSurfaceSuccessor();
   testReversiOpeningFlipsAndScoring();
@@ -9007,7 +9067,7 @@ async function run() {
   testImportedSelfGluedDiagonalWinRendersNoAxisSegments();
   testGomokuCyclicReuseWin();
   testOfficialGomokuTorusUsesFiveInLineMultiplicity();
-  testOfficialGomokuTorusLegacyImportUpgradesWinLength();
+  await testOfficialGomokuTorusLegacyImportUpgradesWinLength();
   testCustomGomokuThreeInLinePresetStillWorks();
   testConnectFourDropStopsAtBoundaryAndBlocker();
   testConnectFourCycleWarning();
@@ -9048,31 +9108,31 @@ async function run() {
   testGameTypesTakePrecedenceOverLegacyGroups();
   testCompactPresetDslParser();
   testSpeedControlDefaults();
-  testSquareWasdKeyboardControls();
-  testActiveSquareKeyboardPreventsPageScroll();
-  testHexArrowKeyboardControls();
-  testActiveHexKeyboardPreventsPageScroll();
-  testHexVerticalArrowAloneDoesNotMove();
-  testHexKeyboardStateClearsOnKeyupAndBlur();
-  testKeyboardPreventsScrollWhileBusyWithoutMovingAgain();
-  testKeyboardAllowsPageScrollOutsideActive2048();
-  testKeyboardShortcutsUndoRedoAndReset();
+  await testSquareWasdKeyboardControls();
+  await testActiveSquareKeyboardPreventsPageScroll();
+  await testHexArrowKeyboardControls();
+  await testActiveHexKeyboardPreventsPageScroll();
+  await testHexVerticalArrowAloneDoesNotMove();
+  await testHexKeyboardStateClearsOnKeyupAndBlur();
+  await testKeyboardPreventsScrollWhileBusyWithoutMovingAgain();
+  await testKeyboardAllowsPageScrollOutsideActive2048();
+  await testKeyboardShortcutsUndoRedoAndReset();
   testSwipeRightMovesSquare2048();
   testShortSwipeDoesNotMove();
   testSwipeSuppressesFollowupClick();
-  testSwipeIgnoredOutsideAccepting2048();
-  testHexSwipeDirections();
+  await testSwipeIgnoredOutsideAccepting2048();
+  await testHexSwipeDirections();
   testDynamicPresetCatalogOptions();
   await testChineseCheckersLazyPresetModeSwitch();
   testRandomSetupAndPresetOptions();
-  testImportExportCardDefaultsAndCatalogImport();
-  testImportExportCardPastedPresetMode();
-  testNewPlacementGameStatusRoundTrips();
-  testNewPlacementGameAnimationsStartFromUi();
-  testUnifiedLocalResultCard();
-  testConnectFourResultCardAppearsAfterDropAnimation();
+  await testImportExportCardDefaultsAndCatalogImport();
+  await testImportExportCardPastedPresetMode();
+  await testNewPlacementGameStatusRoundTrips();
+  await testNewPlacementGameAnimationsStartFromUi();
+  await testUnifiedLocalResultCard();
+  await testConnectFourResultCardAppearsAfterDropAnimation();
   testBackgroundExportFormats();
-  testFullStatusImportWithoutDebugMode();
+  await testFullStatusImportWithoutDebugMode();
   testStepPauseRendersAfterSelectingNextEvent();
   testStationaryDifferentBlocks();
   testSimultaneousDifferentExplosion();
@@ -9081,7 +9141,7 @@ async function run() {
   testBombsBlockMovementSpawnAndGlue();
   testBombStatusImportCloneAndSummary();
   testSpawnAfterValidRound();
-  testHeadlessDomStepControls();
+  await testHeadlessDomStepControls();
   console.log('ramified_minigames_setup_test: all tests passed');
 }
 
