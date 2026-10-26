@@ -2170,11 +2170,11 @@
 
   function handleAssetClick(event) {
     const item = event.target.closest('[data-asset-key]');
-    if (item && !event.target.closest('input')) selectAssetKey(item.dataset.assetKey, event);
+    if (item && !event.target.closest('input')) selectAssetKey(item.dataset.assetKey, assetState.touchMultiSelect && (event.pointerType === 'touch' || event.sourceCapabilities?.firesTouchEvents) ? { ctrlKey: true } : event);
   }
   function handleAssetDoubleClick(event) {
     const item = event.target.closest('[data-asset-key]');
-    if (!item || event.target.closest('input')) return;
+    if (!item || event.target.closest('input') || assetState.touchMultiSelect && (event.workspaceTouch || event.pointerType === 'touch' || event.sourceCapabilities?.firesTouchEvents)) return;
     assetState.selected = new Set([item.dataset.assetKey]); assetState.anchor = item.dataset.assetKey; renderAssets(); openSelectedAsset();
   }
   const selectedAssetRecords = () => orderedAssets().filter((asset) => assetState.selected.has(assetKey(asset)));
@@ -2540,6 +2540,7 @@
       event.preventDefault(); if (!closeAssetsContextMenu()) { assetState.selected.clear(); assetState.anchor = ''; renderAssets(); }
     } else if ((event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) && assetState.selected.size) {
       event.preventDefault();
+      assetState.touchMenu = false;
       const selected = selectedAssetRecords();
       assetState.contextTargetRef = selected.length === 1 ? assetRef(selected[0]) : null;
       const rect = assetState.view.querySelector('[aria-selected="true"]')?.getBoundingClientRect();
@@ -2548,7 +2549,7 @@
   }
 
   function beginAssetMarquee(event) {
-    if (event.button !== 0 || event.target.closest('[data-asset-key],input,select,button')) return;
+    if (event.pointerType === 'touch' || event.button !== 0 || event.target.closest('[data-asset-key],input,select,button')) return;
     closeAssetsContextMenu(); event.preventDefault();
     const marquee = Object.assign(document.createElement('div'), { className: 'workspace-assets-marquee' }); document.body.appendChild(marquee);
     const baseline = (event.ctrlKey || event.metaKey) ? new Set(assetState.selected) : new Set();
@@ -2578,14 +2579,16 @@
   }
 
   function handleAssetsContextMenu(event) {
-    event.preventDefault(); const item = event.target.closest('[data-asset-key]');
+    event.preventDefault(); assetState.touchMenu = !!event.workspaceTouch; const item = event.target.closest('[data-asset-key]');
     if (item) {
       const target = assetByKey(item.dataset.assetKey);
       assetState.contextTargetRef = target ? assetRef(target) : null;
-      assetState.selected = new Set([item.dataset.assetKey]); assetState.anchor = item.dataset.assetKey; renderAssets();
+      if (!assetState.touchMenu || !assetState.selected.has(item.dataset.assetKey)) { assetState.selected = new Set([item.dataset.assetKey]); assetState.anchor = item.dataset.assetKey; }
+      if (assetState.selected.size !== 1) assetState.contextTargetRef = null;
+      renderAssets();
       showAssetsContextMenu(event.clientX, event.clientY, 'item');
     } else {
-      assetState.contextTargetRef = null; assetState.selected.clear(); assetState.anchor = ''; renderAssets(); showAssetsContextMenu(event.clientX, event.clientY, 'background');
+      assetState.contextTargetRef = null; if (!assetState.touchMenu || !assetState.touchMultiSelect) { assetState.selected.clear(); assetState.anchor = ''; } renderAssets(); showAssetsContextMenu(event.clientX, event.clientY, 'background');
     }
   }
   function menuButton(label, action, options = {}) {
@@ -2596,7 +2599,7 @@
     // for keyboard activation and assistive technologies.
     let activated = false;
     const activate = (event) => {
-      if (activated) return;
+      if (activated || button.disabled || event?.type === 'pointerdown' && event.pointerType === 'touch') return;
       activated = true;
       if (event?.type === 'pointerdown') event.preventDefault();
       action(); closeAssetsContextMenu();
@@ -2618,8 +2621,8 @@
       });
       setOpen(true);
     };
-    wrapper.addEventListener('mouseenter', openExclusive); wrapper.addEventListener('mouseleave', () => setOpen(false)); trigger.addEventListener('focus', openExclusive);
-    trigger.addEventListener('click', (event) => { event.stopPropagation(); openExclusive(); });
+    wrapper.addEventListener('mouseenter', () => { if (!assetState.touchMenu) openExclusive(); }); wrapper.addEventListener('mouseleave', () => { if (!assetState.touchMenu) setOpen(false); }); trigger.addEventListener('focus', () => { if (!assetState.touchMenu) openExclusive(); });
+    trigger.addEventListener('click', (event) => { event.stopPropagation(); if (assetState.touchMenu && wrapper.dataset.open === 'true') setOpen(false); else openExclusive(); });
     trigger.addEventListener('keydown', (event) => {
       if (event.key === 'ArrowRight') { event.preventDefault(); setOpen(true); submenu.querySelector('button:not(:disabled)')?.focus(); }
       else if (event.key === 'ArrowLeft') { event.preventDefault(); setOpen(false); trigger.focus(); }
@@ -2628,7 +2631,7 @@
     wrapper.append(trigger, submenu); return wrapper;
   }
   function showAssetsContextMenu(x, y, kind) {
-    const menu = $('#workspace-assets-context-menu'); menu.replaceChildren();
+    const menu = $('#workspace-assets-context-menu'); menu.replaceChildren(); menu.style.maxHeight = ''; menu.classList.toggle('workspace-touch-menu', !!assetState.touchMenu);
     if (kind === 'item') {
       menu.append(
         menuButton('Open', openSelectedAsset, { disabled: assetState.selected.size !== 1 }),
@@ -2651,8 +2654,13 @@
       defaults.setAttribute('role', 'menuitemcheckbox'); defaults.setAttribute('aria-checked', String(assetState.showDefaults));
       menu.append(menuCascade('View', viewItems), menuCascade('Sort by', sortItems), menuButton('New…', () => creationPicker.open()), defaults);
     }
+    if (assetState.touchMenu) {
+      menu.append(menuButton(assetState.touchMultiSelect ? 'Finish multiple selection' : 'Select multiple', () => { assetState.touchMultiSelect = !assetState.touchMultiSelect; assetState.view.dataset.touchMultiselect = String(assetState.touchMultiSelect); syncAssetSelectionDom(); }));
+      menu.append(menuButton('Select all', () => { assetState.touchMultiSelect = true; assetState.view.dataset.touchMultiselect = 'true'; assetState.selected = new Set(orderedAssets().map(assetKey)); syncAssetSelectionDom(); }));
+    }
     menu.hidden = false; menu.classList.toggle('workspace-assets-menu-left', x > window.innerWidth - 460); menu.style.left = '0px'; menu.style.top = '0px';
     const rect = menu.getBoundingClientRect(); menu.style.left = `${Math.max(6, Math.min(x, window.innerWidth - rect.width - 6))}px`; menu.style.top = `${Math.max(6, Math.min(y, window.innerHeight - rect.height - 6))}px`;
+    if (assetState.touchMenu) menu.style.maxHeight = `${window.innerHeight - parseFloat(menu.style.top) - 6}px`;
     menu.querySelector('button:not(:disabled)')?.focus();
   }
   function closeAssetsContextMenu() {

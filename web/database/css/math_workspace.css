@@ -367,6 +367,23 @@
 .workspace-assets-menu-left .workspace-assets-submenu { right: calc(100% - 3px); left: auto; }
 .workspace-assets-menu-separator { height: 1px; margin: 4px; background: var(--border); }
 
+/* Applied only to menus opened with touch; mouse menus keep their compact cascade. */
+.workspace-touch-menu { max-height: calc(100dvh - 12px); max-width: calc(100vw - 12px); overflow: auto; overscroll-behavior: contain; }
+.workspace-touch-menu button { min-height: 40px; }
+.workspace-touch-menu .workspace-assets-submenu { position: static; min-width: 0; margin-left: 10px; box-shadow: none; }
+.workspace-touch-menu .workspace-assets-menu-cascade:hover > .workspace-assets-submenu { display: none; }
+.workspace-touch-menu .workspace-assets-menu-cascade[data-open='true'] > .workspace-assets-submenu { display: grid; }
+.workspace-assets-view { -webkit-touch-callout: none; }
+.workspace-asset-item { touch-action: manipulation; }
+.workspace-assets-view[data-touch-multiselect='true'] .workspace-asset-item::after { content: '○'; position: absolute; top: 2px; right: 4px; color: var(--accent); }
+.workspace-assets-view[data-touch-multiselect='true'] .workspace-asset-item[aria-selected='true']::after { content: '✓'; }
+[data-touch-held='true'] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.workspace-touch-drag-ghost { position: fixed; z-index: 10030; pointer-events: none; max-width: 180px; max-height: 100px; overflow: hidden; background: var(--surface); opacity: .8; }
+.math-workspace-layout .drag-handle { touch-action: none; }
+@media (any-pointer: coarse) {
+  .workspace-canvas-resizer::after { content: ''; position: absolute; inset: -9px 0; z-index: 2; }
+}
+
 .workspace-assets-delete-dialog { width: min(520px, calc(100vw - 28px)); max-height: min(620px, calc(100vh - 36px)); margin: auto; padding: 20px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); box-shadow: 0 20px 70px rgba(0, 0, 0, .3); }
 .workspace-assets-delete-dialog::backdrop { background: rgba(24, 19, 15, .48); }
 .workspace-assets-delete-dialog h2 { margin: 0 0 8px; font-size: 1.25rem; font-weight: 500; }
