@@ -96,6 +96,32 @@ __editor.setAssetAdapter({
   capture: __captureControls,
   result: () => ({ text: (__panelCard?.querySelector('.card-body')?.innerText || '') + (__matrixDisplay ? '\n' + state.entries.map(row=>row.join(' ')).join('\n') : ''), hasResult: __panelConfig.operation === 'matrix-computation' ? !!state.lastOperationResult : __panelConfig.operation === 'matrix-polynomial' ? !!state.lastPolynomialAction : true }),
   io(action, value) {
+    if (action === 'number') {
+      const data=value.field, raw=String(value.value).trim();
+      if(!raw || raw.length>1024 || /[+*/^(-]$/.test(raw) || /(?:^|[^A-Za-z])\d+(?:\.\d*)?[eE][+-]?$/.test(raw)) throw new Error('Enter a complete number.');
+      const kind=data.dataType;let field={kind};
+      if(kind==='finite-field')field.p=data.finiteFieldPrime;
+      if(kind==='rational-function')field.variables=data.rationalFunctionVariables;
+      if(kind==='number-field') {
+        const symbol=data.numberFieldSymbol;let polynomial;
+        try {polynomial=parsePolynomialQExpression(data.numberFieldPolynomial,symbol);} catch(error) {if(symbol==='x')throw error;polynomial=parsePolynomialQExpression(data.numberFieldPolynomial,'x');}
+        const modulus=polyQMonic(polynomial);
+        if(polyQDegree(modulus)<1)throw new Error('Number field polynomial must have positive degree.');
+        field={kind,symbol,modulus,key:symbol+':'+polyQKey(modulus)};
+      }
+      const parsed=parseEntryForField(raw,field);let scalar=parsed.scalar;
+      if(!scalar) {
+        scalar=exactScalarFromDetail(parsed);
+        if(kind!=='complex'&&!scalar.im.isZero())throw new Error('This field requires a real value.');
+        if(kind==='integer'&&scalar.re.den!==1n)throw new Error('This field requires an integer.');
+        if(kind==='finite-field') {
+          const p=BigInt(field.p),numerator=Number(scalar.re.num%p),denominator=Number(scalar.re.den%p);
+          scalar=new ModScalar(numerator,field.p).div(new ModScalar(denominator,field.p));
+        }
+      }
+      const text=exactScalarSource(scalar,'text');
+      return {text,latex:exactScalarSource(scalar,'latex'),integer:/^-?\d+$/.test(text)?text:null};
+    }
     if (action === 'validate') { const result = readMatrix(false); if (result.errors.length) throw new Error(matrixDataErrorMessage(result.errors[0])); return __matrixData(); }
     if (action === 'parse') {
       const entries = parseImportedMatrix(value).rows;

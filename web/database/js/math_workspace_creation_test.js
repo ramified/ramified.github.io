@@ -26,7 +26,7 @@ assert.deepEqual(defaults,{version:1,subjectsByKind:{
   polytope:['geometry'],sphere:['geometry'],point:['linear','geometry'],vector:['linear','geometry'],
   roots:['representation','geometry'],lattice:['linear','geometry'],voronoi:['geometry'],formula:['geometry'],
   tropical:['geometry'],weyl:['representation','geometry'],cone:['geometry'],fan:['representation','algebraic','geometry'],
-  dynkin:['representation'],strands:['representation'],matrix:['linear'],field:['linear'],category:['categories'],
+  dynkin:['representation'],strands:['representation'],matrix:['linear'],field:['linear'],number:['linear','algebraic'],category:['categories'],
   functor:['categories'],young:['representation'],lie:['representation'],variety:['algebraic'],sheaf:['algebraic'],map:['algebraic']
 }},'defaults exactly match the approved subject configuration');
 const unsubscribe=assignments.subscribe(()=>updates++);

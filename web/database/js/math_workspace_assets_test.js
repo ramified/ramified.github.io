@@ -30,6 +30,8 @@ const document = {
   querySelector() { return null; }
 };
 const window = {
+  MathWorkspaceMosaic: require('./math_workspace_mosaic.js'),
+  MathWorkspaceNumbers: require('./math_workspace_numbers.js'),
   addEventListener(type, handler) { windowListeners[type] = handler; }
 };
 vm.runInNewContext(source, {
@@ -469,7 +471,7 @@ assert.deepStrictEqual(Array.from(api.referenceFieldSpecs('variety', 'product'),
 assert.deepStrictEqual(Array.from(api.referenceFieldSpecs('map', 'composition'), (spec) => spec.expectedKind), ['map', 'map'], 'map composition must accept only maps');
 assert.strictEqual(api.isDirectSheafType('abstract'), true, 'direct sheaves retain an editable base variety');
 assert.strictEqual(api.isDirectSheafType('dual'), false, 'constructed sheaves infer their base variety');
-assert.deepStrictEqual(Array.from(api.referenceFieldSpecs('sheaf', 'abstract'), (spec) => spec.field), ['base'], 'direct sheaves expose a base picker');
+assert.deepStrictEqual(Array.from(api.referenceFieldSpecs('sheaf', 'abstract'), (spec) => spec.field), ['base', 'rank'], 'direct sheaves expose a base picker and one rank parameter');
 assert.deepStrictEqual(Array.from(api.referenceFieldSpecs('sheaf', 'dual'), (spec) => spec.field), ['parent'], 'derived sheaves must not expose an independently editable base picker');
 assert.strictEqual(api.inferredSheafBase('dual', { parent: 'sheaf:E2' }), 'variety:X1', 'a derived sheaf takes its base from its parent');
 assert.strictEqual(api.normalizedAssetData('sheaf', 'dual', { parent: 'sheaf:E2' }).base, 'variety:X1', 'derived bases are normalized before validation and saving');
@@ -584,8 +586,8 @@ assert(nativeBundle.includes(Buffer.from(':host{display:block;min-width:0;height
 assert(nativeBundle.includes(Buffer.from('[id$="-wide-host"]:not(:has(.card)){display:none!important}')), 'empty wide-card hosts must not reserve native canvas space');
 assert(nativeBundle.includes(Buffer.from('.workspace-editor-layout .workspace-view-card{min-width:0;width:100%;height:100%')), 'nested calculator canvas panels must fill their allocated workspace height');
 assert(/math_workspace_native_editors_v8\.js\?v=[a-f0-9]{16}/.test(html), 'native editor cache query must be derived from the reproducible bundle hash');
-assert(html.includes('css/math_workspace.css?v=20261021-approved-designs-1'), 'workspace stylesheet changes need a cache-query bump');
-assert(html.includes('js/math_workspace.js?v=20261021-homology-panels-1'), 'workspace controller changes need a cache-query bump');
+assert(html.includes('css/math_workspace.css?v=20261026-scalar-input-1'), 'workspace stylesheet changes need a cache-query bump');
+assert(html.includes('js/math_workspace.js?v=20261026-scalar-input-1'), 'workspace controller changes need a cache-query bump');
 assert(html.includes('js/calculator_cards.js?v=20260903-1'), 'workspace-owned Assets cards must reuse the shared calculator card chrome');
 assert(nativeBuilder.includes('math_workspace_native_editors_v8.js') && nativeBuilder.includes('Stale live native editor bundle'), 'the source builder must publish and verify the live runtime');
 assert(!source.includes("closeCardPicker(); const picker = assetState.referencePicker"), 'native source selection must not be closed by the global outside-pointer handler');

@@ -91964,6 +91964,40 @@ ${rows}
         capture: __captureControls,
         result: () => ({ text: (__panelCard?.querySelector(".card-body")?.innerText || "") + (__matrixDisplay ? "\n" + state.entries.map((row) => row.join(" ")).join("\n") : ""), hasResult: __panelConfig.operation === "matrix-computation" ? !!state.lastOperationResult : __panelConfig.operation === "matrix-polynomial" ? !!state.lastPolynomialAction : true }),
         io(action, value) {
+          if (action === "number") {
+            const data2 = value.field, raw = String(value.value).trim();
+            if (!raw || raw.length > 1024 || /[+*/^(-]$/.test(raw) || /(?:^|[^A-Za-z])\d+(?:\.\d*)?[eE][+-]?$/.test(raw)) throw new Error("Enter a complete number.");
+            const kind = data2.dataType;
+            let field = { kind };
+            if (kind === "finite-field") field.p = data2.finiteFieldPrime;
+            if (kind === "rational-function") field.variables = data2.rationalFunctionVariables;
+            if (kind === "number-field") {
+              const symbol = data2.numberFieldSymbol;
+              let polynomial;
+              try {
+                polynomial = parsePolynomialQExpression(data2.numberFieldPolynomial, symbol);
+              } catch (error) {
+                if (symbol === "x") throw error;
+                polynomial = parsePolynomialQExpression(data2.numberFieldPolynomial, "x");
+              }
+              const modulus = polyQMonic(polynomial);
+              if (polyQDegree(modulus) < 1) throw new Error("Number field polynomial must have positive degree.");
+              field = { kind, symbol, modulus, key: symbol + ":" + polyQKey(modulus) };
+            }
+            const parsed = parseEntryForField(raw, field);
+            let scalar = parsed.scalar;
+            if (!scalar) {
+              scalar = exactScalarFromDetail(parsed);
+              if (kind !== "complex" && !scalar.im.isZero()) throw new Error("This field requires a real value.");
+              if (kind === "integer" && scalar.re.den !== 1n) throw new Error("This field requires an integer.");
+              if (kind === "finite-field") {
+                const p = BigInt(field.p), numerator = Number(scalar.re.num % p), denominator = Number(scalar.re.den % p);
+                scalar = new ModScalar(numerator, field.p).div(new ModScalar(denominator, field.p));
+              }
+            }
+            const text = exactScalarSource(scalar, "text");
+            return { text, latex: exactScalarSource(scalar, "latex"), integer: /^-?\d+$/.test(text) ? text : null };
+          }
           if (action === "validate") {
             const result = readMatrix(false);
             if (result.errors.length) throw new Error(matrixDataErrorMessage(result.errors[0]));
@@ -191938,6 +191972,14 @@ ${arrows.join("\n")}` : "";
         if (state.canvasWidth !== __workspaceSceneCanonical.width) renderCanvas(state.lastResult);
         __workspaceUpdateSceneTransform();
       } });
+      const __workspaceOriginalSymbolToLatex = symbolToLatex;
+      symbolToLatex = function(name2) {
+        const number = __workspaceAssetsCurrent.find((asset) => asset.kind === "number" && window.MathWorkspaceNumbers.symbol(asset) === name2);
+        return number ? number.name : __workspaceOriginalSymbolToLatex(name2);
+      };
+      function __workspaceProjectNumbers(assets) {
+        state.globalInvariants = assets.filter((asset) => asset.kind === "number").map((asset) => ({ id: __workspaceNativeId("number", asset.id), type: "rational-number", name: window.MathWorkspaceNumbers.symbol(asset), hasValue: false, value: "0", replaceWithValue: false, positive: asset.data.positive !== false, auto: false }));
+      }
       const __workspaceAssetType = (kind, type) => {
         const allowed = { variety: /* @__PURE__ */ new Set(["abstract", "curve", "symmetric-product-curve", "abelian", "ppav-moduli", "point", "projective", "grassmannian", "complete-intersection", "product"]), sheaf: /* @__PURE__ */ new Set(["abstract", "locally-free", "structure", "tangent", "cotangent", "canonical", "twist", "divisor-line", "universal-bundle", "direct-sum", "self-direct-sum", "self-tensor-product", "dual", "internal-hom", "ideal-sheaf", "normal-bundle", "conormal-bundle", "relative-tangent", "relative-cotangent", "tensor", "schur", "map-operation"]), map: /* @__PURE__ */ new Set(["ordinary", "sheaf", "abel-jacobi", "composition"]) };
         return allowed[kind]?.has(type) ? type : "abstract";
@@ -192483,7 +192525,8 @@ ${arrows.join("\n")}` : "";
           state.globalInvariants = [];
           __workspaceAssetsApplied = true;
         }
-        const project = (asset, make) => __workspaceProjectionLayout(make(asset, ids, scoped), asset);
+        __workspaceProjectNumbers(assets);
+        const project = (asset, make) => __workspaceProjectionLayout(make(window.MathWorkspaceNumbers.project(asset, assets), ids, scoped), asset);
         const previousBases = new Map(state.sheaves.filter((item) => item.__workspaceAssetKey).map((item) => [item.__workspaceAssetKey, item.baseVarietyId]));
         state.varieties = assets.filter((asset) => asset.kind === "variety").map((asset) => project(asset, __workspaceVarietyFromAsset));
         state.sheaves = assets.filter((asset) => asset.kind === "sheaf").map((asset) => project(asset, __workspaceSheafFromAsset));

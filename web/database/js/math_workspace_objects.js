@@ -4,8 +4,9 @@
   const mosaic = root.MathWorkspaceMosaic || (typeof require === 'function' ? require('./math_workspace_mosaic.js') : null);
   const keyOf = ref => ref ? `${ref.kind}:${ref.id}` : '';
   const types = ['A', 'B', 'C', 'D', 'E6', 'E7', 'E8', 'F4', 'G2'];
-  const inputKinds = ['young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...slicing.kinds, ...mosaic.kinds];
-  const kindLabels = { ...slicing.labels, variety: 'Variety', sheaf:'Sheaf', map:'Map', young: 'Young diagram', lie: 'Lie type', field: 'Field', matrix: 'Matrix', category: 'Category', functor: 'Functor', dynkin: 'Marked Dynkin diagram', strands: 'Strands' };
+  const numbers = root.MathWorkspaceNumbers || (typeof require === 'function' ? require('./math_workspace_numbers.js') : null);
+  const inputKinds = ['number', 'young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...slicing.kinds, ...mosaic.kinds];
+  const kindLabels = { ...slicing.labels, variety: 'Variety', sheaf:'Sheaf', map:'Map', number:'Number', young: 'Young diagram', lie: 'Lie type', field: 'Field', matrix: 'Matrix', category: 'Category', functor: 'Functor', dynkin: 'Marked Dynkin diagram', strands: 'Strands' };
   const coefficientTypes = [['complex','Complex numbers ℂ'],['real','Real numbers ℝ'],['rational','Rational numbers ℚ'],['integer','Integers ℤ'],['finite-field','Prime field'],['rational-function','Rational function field'],['number-field','Number field']];
   function fieldLabel(data) {
     if (data.dataType === 'finite-field') return 'GF(' + data.finiteFieldPrime + ')';
@@ -23,6 +24,7 @@
   function normalize(kind, type, source = {}) {
     if(mosaic.kinds.includes(kind))return mosaic.normalize(kind,source);
     if (slicing.kinds.includes(kind) || kind === 'variety' && type === 'toric') return slicing.normalize(kind,type,source);
+    if (kind === 'number') return numbers.normalize(source);
     if (kind === 'field') {
       const { dataType, finiteFieldPrime, rationalFunctionVariables, numberFieldSymbol, numberFieldPolynomial } = normalize('matrix','matrix',source);
       return { dataType, finiteFieldPrime, rationalFunctionVariables, numberFieldSymbol, numberFieldPolynomial };
@@ -201,6 +203,8 @@
     { id: 'sheaf-view', label:'Variety and Sheaf Overview', engine:'complex', assetView:true, sheafView:true, overview:true, readOnly:true, viewRole:'asset', light:true, slots:[slot('asset','Add / select object',null,{kinds:['variety','sheaf','map'],optional:true,emptyLabel:'Choose an object to add…'})] },
     { id: 'geometry-view', label:'Projection / 2D Slice', engine:'slice', assetView:true, geometryView:true, slicing:true, slicingScene:true, light:true, slots:[slot('asset','Object',null,{kinds:[...slicing.kinds,'variety'],optional:true,emptyLabel:'Choose an object…'}),slot('frame','Frame','frame')] },
     { id: 'lie-input', label: 'Lie type Input', input: 'lie' },
+    { id: 'number-input', label: 'Number Input', input: 'number' },
+    { id: 'number-view', label: 'Number Display', objectView: true, slots: [slot('asset','Number','number')], light: true },
     { id: 'field-input', label: 'Field Input', input: 'field' },
     { id: 'field-view', label: 'Field Display', objectView: true, slots: [slot('asset','Field','field')], light: true },
     { id: 'asset-view', label: 'Object Display', objectView: true, slots: [slot('asset','Asset',null,{kinds:['variety','sheaf','map','lie']})], light: true },
@@ -240,7 +244,7 @@
     { id: 'slice', label: '2D Weight Slice', engine: 'double-young', marker: 'slice-card-body', slots: [a(), b(), lie()], light: true }
   ];
   const capabilities=Object.fromEntries(['variety','sheaf','map',...inputKinds].map(kind=>[kind,{
-    open:kind==='lie'?'lie-view':kind==='young'?'young-view':kind==='dynkin'?'dynkin-view':kind==='strands'?'strands-view':kind==='matrix'?'matrix-view':kind==='field'?'field-view':['category','functor'].includes(kind)?'category-diagram':['variety','sheaf','map'].includes(kind)?'sheaf-view':slicing.kinds.includes(kind)?'geometry-view':'asset-view',
+    open:kind==='number'?'number-view':kind==='lie'?'lie-view':kind==='young'?'young-view':kind==='dynkin'?'dynkin-view':kind==='strands'?'strands-view':kind==='matrix'?'matrix-view':kind==='field'?'field-view':['category','functor'].includes(kind)?'category-diagram':['variety','sheaf','map'].includes(kind)?'sheaf-view':slicing.kinds.includes(kind)?'geometry-view':'asset-view',
     modify:inputKinds.includes(kind)?kind+'-input':null,
     directEdit:['young','dynkin','strands','matrix'].includes(kind),
     properties:definitions.filter(d=>!d.input&&!d.assetView&&!d.objectView&&!d.display&&!d.scene&&!d.slicingScene&&d.id!=='matrix-view'&&(d.slots||[]).some(s=>(s.kinds||[s.kind]).includes(kind))).map(d=>d.id)
@@ -284,6 +288,10 @@
       }
       else if (!spec.optional || computation.refs[spec.id]) missing.push(spec.label);
     }
+    if (objects.asset?.kind === 'number') {
+      const parent=assets.find(a=>keyOf(a)===objects.asset.data.field&&a.kind==='field');
+      if(parent)objects.field=parent;else missing.push('Field');
+    }
     if (definition.sheafView) {
       // Project the same authoritative records used by the sheaf calculator.
       // A sheaf needs its base, and a map needs both endpoints and their bases.
@@ -304,6 +312,7 @@
         pending.push(dependency);
       }
     }
+    if (definition.sheafView) { try { numbers.validateGraph(Object.values(objects)); } catch(error) { missing.push(error.message); } }
     const dependent = objects.dynkin || objects.strands;
     if (dependent) {
       const parent = assets.find(asset => keyOf(asset) === dependent.data.lie && asset.kind === 'lie');
@@ -547,7 +556,19 @@
         return;
       }
       if(definition.input==='mosaic-space'){panel.controls.append(element('p','workspace-card-context','Changes to this background affect every diagram that references it. Diagram decorations are preserved.'));return;}
-      if (definition.input === 'field') {
+      if (definition.input === 'number') {
+        referenceControl(panel,slot('field','Field','field'),definition,()=>get(panel.assetKey)?.data.field||'',value=>{
+          const asset=get(panel.assetKey);if(asset)try{api.update(refOf(asset),{data:{...asset.data,field:value}});feedback(panel);}catch(error){feedback(panel,error.message,true);}
+        });
+        const mode=element('select','workspace-control');mode.setAttribute('aria-label','Number mode');mode.append(new Option('Symbolic','symbolic'),new Option('Value','value'));
+        const value=element('input','workspace-control workspace-code-control');value.type='text';value.setAttribute('aria-label','Number value');value.spellcheck=false;
+        const replace=element('input');replace.type='checkbox';replace.setAttribute('aria-label','Substitute value in calculations');
+        const positive=element('input');positive.type='checkbox';positive.setAttribute('aria-label','Assume positive');
+        const commit=()=>{const asset=get(panel.assetKey);if(!asset)return;panel.numberDraftMode={key:panel.assetKey,mode:mode.value,replace:replace.checked,positive:positive.checked};try{api.update(refOf(asset),{data:{...asset.data,hasValue:mode.value==='value',value:value.value,replaceWithValue:replace.checked,positive:positive.checked}});panel.numberDraftMode=null;feedback(panel);}catch(error){feedback(panel,error.message,true);}};
+        mode.addEventListener('change',()=>{replace.checked=mode.value==='value';panel.numberValueRow.hidden=panel.numberReplaceRow.hidden=mode.value!=='value';panel.numberPositiveRow.hidden=mode.value==='value';commit();});listen(value,commit);replace.addEventListener('change',commit);positive.addEventListener('change',commit);
+        panel.numberControls={mode,value,replace,positive};panel.numberValueRow=field('Value',value);panel.numberReplaceRow=field('Substitute value in calculations',replace);panel.numberPositiveRow=field('Assume positive',positive);
+        panel.controls.append(field('Mode',mode),panel.numberValueRow,panel.numberReplaceRow,panel.numberPositiveRow,element('p','workspace-card-context','Choose Asset in a variety’s Genus or a sheaf’s Rank to use this Number. References follow renames and shared value changes.'));
+      } else if (definition.input === 'field') {
         const type=element('select','workspace-control'); type.setAttribute('aria-label','Coefficient type'); type.append(...coefficientTypes.map(([value,label])=>new Option(label,value))); panel.coefficientType=type;
         const prime=element('input','workspace-control'); prime.type='number'; prime.min='2'; prime.max='999983'; prime.step='1'; prime.setAttribute('aria-label','Prime');
         const variables=element('input','workspace-control'); variables.type='text'; variables.setAttribute('aria-label','Variables');
@@ -784,6 +805,7 @@
       if (asset.kind === 'matrix' && !text.trim().startsWith('{')) return api.update(refOf(asset), { data: normalize('matrix', 'matrix', ioRenderer(asset).objectIO('parse', text)) });
       const raw = text.trim(), value = raw.startsWith('{') ? JSON.parse(raw) : { kind: 'young', type: asset.type, data: { partition: raw } };
       if (slicing.isAsset(asset) || asset.kind === 'matrix' && (value.data?.construction || value.data?.field || value.dependencies)) return api.importSlicing(value,refOf(asset));
+      if (asset.kind === 'number') return api.importNumberAsset(refOf(asset),value);
       if (['dynkin','strands'].includes(asset.kind)) return api.importRootObject(refOf(asset), value);
       if (value.kind !== asset.kind) throw new Error('Imported data has a different object type.');
       if (!inputKinds.includes(asset.kind)) return api.importAsset(refOf(asset), value);
@@ -798,6 +820,17 @@
       computation.status=asset?'current':'missing';panel.renderArea.hidden=!asset;
       if(!asset) {feedback(panel,'Choose an asset to display.');return;}
       panel.title.textContent=(asset.plainName||asset.name)+' · Display';
+      if(asset.kind==='number') {
+        try {
+          const result=numbers.evaluate(asset,snapshot.assets),title=element('p','workspace-object-display-title');
+          title.textContent='\\('+asset.name+(asset.data.hasValue?' = '+result.latex:'')+'\\)';
+          const fieldText=element('p','workspace-card-context',(result.field.plainName||result.field.name)+' · '+fieldLabel(result.field.data));
+          const usage=element('p','workspace-card-context',asset.data.hasValue?(asset.data.replaceWithValue?'Values are substituted in linked calculations.':'Linked calculations retain the symbol.'):(asset.data.positive?'Symbolic; assumed positive.':'Symbolic.'));
+          const signature=JSON.stringify([asset,result.field]);if(signature!==computation.signature){computation.signature=signature;panel.renderArea.replaceChildren(title,fieldText,usage);window.MathJax?.typesetPromise?.([title]).catch(()=>{});}
+          computation.result={text:(asset.name+(asset.data.hasValue?' = '+result.text:''))+' in '+fieldLabel(result.field.data)};feedback(panel);
+        } catch(error){computation.status='missing';panel.renderArea.replaceChildren();feedback(panel,error.message,true);}
+        return;
+      }
       const signature=JSON.stringify([asset.name,asset.type,asset.data,asset.dependencies?.map(ref=>get(keyOf(ref))?.name)]);
       if(signature!==computation.signature) {
         computation.signature=signature;
@@ -881,7 +914,10 @@
           if (asset) {
             sync(panel.name, asset.name);
             if (panel.definition.slicing) refreshSlicingInput(panel,asset);
-            else if (asset.kind === 'field') {
+            else if (asset.kind === 'number') {
+              const controls=panel.numberControls,pending=panel.numberDraftMode?.key===panel.assetKey?panel.numberDraftMode:null;controls.mode.value=pending?.mode||(asset.data.hasValue?'value':'symbolic');sync(controls.value,asset.data.value);controls.replace.checked=pending?pending.replace:asset.data.replaceWithValue;controls.positive.checked=pending?pending.positive:asset.data.positive;
+              panel.numberValueRow.hidden=panel.numberReplaceRow.hidden=controls.mode.value!=='value';panel.numberPositiveRow.hidden=controls.mode.value==='value';
+            } else if (asset.kind === 'field') {
               panel.coefficientType.value=asset.data.dataType;
               for(const [key,control] of Object.entries(panel.fieldControls)) { sync(control,key==='rationalFunctionVariables'?asset.data[key].join(', '):asset.data[key]);panel.fieldRows[key].hidden=key==='finiteFieldPrime'?asset.data.dataType!=='finite-field':key==='rationalFunctionVariables'?asset.data.dataType!=='rational-function':asset.data.dataType!=='number-field'; }
             } else if (asset.kind === 'matrix') {
@@ -1199,6 +1235,11 @@
         updateDensity(panel);
       }
     }
+    numbers.setKernel((value,field)=>{
+      let editor=ioRenderers.get('number-kernel');
+      if(!editor){const host=element('section'),inspectorHost=element('section');api.parking.append(host,inspectorHost);editor=window.MathWorkspaceNativeEditors.factories.matrix.mount(host,{id:'number-mathematics',inspectorHost});editor.listCards().forEach(card=>editor.setCardVisible(card.key,false));editor.setCanvasActive(false);editor.setInspectorActive(false);ioRenderers.set('number-kernel',editor);}
+      return editor.objectIO('number',{value,field});
+    });
     slicing.setKernel((action,value)=>{
       let editor=ioRenderers.get('slice-kernel');
       if(!editor) { const host=element('section'),inspectorHost=element('section'); api.parking.append(host,inspectorHost); editor=window.MathWorkspaceNativeEditors.factories.slice.mount(host,{id:'slicing-mathematics',inspectorHost}); editor.listCards().forEach(card=>editor.setCardVisible(card.key,false)); editor.configureObjectPanel({mode:'kernel'}); editor.setCanvasActive(false); editor.setInspectorActive(false); ioRenderers.set('slice-kernel',editor); }

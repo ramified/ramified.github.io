@@ -18,7 +18,7 @@
   let activeCanvasId = '', focusedPane = 'primary', splitView = false, inspectorSourceId = '', suppressCanvasClickUntil = 0;
   const DEFAULT_CANVAS_HEIGHT = 680, MIN_CANVAS_HEIGHT = 240, MAX_CANVAS_HEIGHT = 1600;
   const ASSET_LAYOUTS = ['icons', 'list', 'details', 'tiles', 'content'];
-  const OBJECT_INPUT_KINDS = ['young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...(slicing?.kinds || []), ...window.MathWorkspaceMosaic.kinds];
+  const OBJECT_INPUT_KINDS = ['number', 'young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...(slicing?.kinds || []), ...window.MathWorkspaceMosaic.kinds];
   const ASSET_KINDS = ['variety', 'sheaf', 'map', ...OBJECT_INPUT_KINDS];
   const INPUT_AUTOSAVE_DEBOUNCE_MS = 450, INPUT_AUTOSAVE_MAX_WAIT_MS = 1500;
   const assetState = {
@@ -927,6 +927,7 @@
     strands: [['strands', 'Strands']],
     matrix: [['matrix', 'Matrix']],
     field: [['field', 'Field']],
+    number: [['number', 'Number']],
     category: [['category', 'Category']],
     functor: [['functor', 'Functor']],
     young: [['partition', 'Young diagram'], ['generalized', 'Generalized Young diagram']],
@@ -979,11 +980,20 @@
   function captureAssetInputDraftFromForm(instanceKey, rendererEpoch, options = {}) {
     const instance = assetsCardState.instances.get(instanceKey), form = editorForm();
     if (!instance || instance !== activeAssetInputInstance() || instance.rendererEpoch !== rendererEpoch || form?.dataset.inputInstanceKey !== instanceKey || Number(form.dataset.rendererEpoch) !== rendererEpoch) return false;
+    const data = assetEditorData(instance);
+    if (options.type && options.type !== instance.draft.type) {
+      const next = window.MathWorkspaceNumbers.references(instance.draft.kind, options.type);
+      for (const spec of window.MathWorkspaceNumbers.references(instance.draft.kind, instance.draft.type).filter(spec => spec.scalar)) {
+        if (next.some(item => item.field === spec.field)) continue;
+        if (options.type === 'ppav-moduli' && spec.field === 'genus') data.genus = window.MathWorkspaceNumbers.literalValue({data}, spec, assetState.snapshot.assets);
+        else delete data[spec.field];
+      }
+    }
     const draft = cloneInputDraft({
       ...instance.draft,
       name: form.querySelector('[data-assets-name]').value,
       type: options.type || form.querySelector('[data-assets-subtype]').value,
-      data: assetEditorData(instance)
+      data
     });
     if (JSON.stringify(draft) === JSON.stringify(instance.draft)) return true;
     return updateAssetInputDraft(instance, draft, options);
@@ -1017,18 +1027,21 @@
   function normalizedAssetData(kind, type, source = {}) {
     if (kind === 'variety' && type === 'toric') return slicing.normalize(kind,type,source);
     if (OBJECT_INPUT_KINDS.includes(kind)) return window.MathWorkspaceObjects.normalize(kind, type, source);
-    const data = { ...source };
+    const data = window.MathWorkspaceNumbers.normalizeInputs(kind, type, source);
+    if (kind === 'variety' && type === 'ppav-moduli' && typeof data.genus === 'object') {
+      data.genus = window.MathWorkspaceNumbers.literalValue({data}, window.MathWorkspaceNumbers.references('variety','curve')[0], assetState.snapshot.assets);
+      if (!data.genus) throw new Error('Enter a genus value for this variety type.');
+    }
     if (kind === 'variety') {
       if (type === 'point') data.dimension = '0';
-      else if (type === 'curve') { data.dimension = '1'; data.genus = String(nonnegativeInt(data.genus, 2)); }
-      else if (type === 'symmetric-product-curve') { data.power = String(positiveInt(data.power, 3)); data.genus = String(nonnegativeInt(data.genus, 2)); data.dimension = data.power; }
+      else if (type === 'curve') { data.dimension = '1'; }
+      else if (type === 'symmetric-product-curve') { data.power = String(positiveInt(data.power, 3)); data.dimension = data.power; }
       else if (type === 'ppav-moduli') { const genus = positiveInt(data.genus, 2); data.genus = String(genus); data.dimension = String((genus * (genus + 1)) / 2); }
       else if (type === 'grassmannian') { const r = positiveInt(data.r, 2), n = Math.max(r, positiveInt(data.n, 4)); data.r = String(r); data.n = String(n); data.dimension = String(r * (n - r)); }
       else if (type === 'complete-intersection') { const degrees = degreeList(data.degrees || '2, 3'); const ambient = nonnegativeInt(data.ambientDimension, 4); data.degrees = degrees.join(', '); data.ambientDimension = String(ambient); data.dimension = String(Math.max(0, ambient - degrees.length)); }
       else if (type === 'product') { const left = assetByKey(data.first, 'variety'), right = assetByKey(data.second, 'variety'); data.dimension = left && right ? String(varietyDimension(left) + varietyDimension(right)) : ''; }
       else data.dimension = String(nonnegativeInt(data.dimension, 3));
     } else if (kind === 'sheaf') {
-      if (['abstract', 'locally-free'].includes(type)) data.rank = String(positiveInt(data.rank, 1));
       if (type === 'twist') data.twist = String(Math.round(Number(data.twist) || 0));
       if (!isDirectSheafType(type)) data.base = inferredSheafBase(type, data);
     }
@@ -1042,21 +1055,26 @@
     if (kind === 'variety' && type === 'toric') return [{field:'fan',label:'Fan',expectedKind:'fan'},{field:'cone',label:'Affine cone',expectedKind:'cone'}];
     if (['dynkin','strands'].includes(kind)) return [{ field: 'lie', label: 'Lie type', expectedKind: 'lie' }];
     if (kind === 'functor') return ['domain', 'codomain'].map(field => ({ field, label: field === 'domain' ? 'Domain' : 'Codomain', expectedKind: 'category' }));
+    if (kind === 'number') return window.MathWorkspaceNumbers.references(kind,type);
     if (OBJECT_INPUT_KINDS.includes(kind)) return [];
+    if (kind === 'variety' && ['curve','symmetric-product-curve'].includes(type)) return window.MathWorkspaceNumbers?.references(kind,type) || [];
     if (kind === 'variety') return type === 'product' ? [{ field: 'first', label: 'First factor', expectedKind: 'variety' }, { field: 'second', label: 'Second factor', expectedKind: 'variety' }] : [];
     if (kind === 'sheaf') {
       const specs = isDirectSheafType(type) ? [{ field: 'base', label: 'Base variety', expectedKind: 'variety' }] : [];
       if (['direct-sum', 'tensor', 'internal-hom'].includes(type)) specs.push({ field: 'first', label: 'First sheaf', expectedKind: 'sheaf', distinctFrom: 'second' }, { field: 'second', label: 'Second sheaf', expectedKind: 'sheaf', distinctFrom: 'first' });
       if (['dual', 'self-direct-sum', 'self-tensor-product', 'schur'].includes(type)) specs.push({ field: 'parent', label: 'Parent sheaf', expectedKind: 'sheaf' });
       if (MAP_BASE_ENDPOINT[type] || type === 'map-operation') specs.push({ field: 'map', label: 'Source map', expectedKind: 'map' });
-      return specs;
+      return [...specs,...(window.MathWorkspaceNumbers?.references(kind,type)||[])];
     }
     const expectedKind = type === 'sheaf' ? 'sheaf' : type === 'composition' ? 'map' : 'variety';
     return [{ field: 'domain', label: type === 'composition' ? 'First map' : 'Domain', expectedKind }, { field: 'codomain', label: type === 'composition' ? 'Second map' : 'Codomain', expectedKind }];
   }
   function referenceKeys(kind, type, data) {
     if (slicing?.isAsset({kind,type}) || kind === 'matrix') return slicing.refKeys({kind,type,data});
-    return [...new Set(referenceFieldSpecs(kind, type).map((spec) => data[spec.field]).filter(Boolean))];
+    return [...new Set(referenceFieldSpecs(kind, type).map((spec) => window.MathWorkspaceNumbers.referenceKey(data, spec)).filter(Boolean))];
+  }
+  function dataWithReference(data, spec, key) {
+    return { ...data, [spec.field]: spec.scalar ? { kind: 'reference', ref: key } : key };
   }
   function referenceWouldCreateCycle(currentKey, candidateKey, kind, type, data) {
     if (!currentKey || !candidateKey) return false;
@@ -1074,10 +1092,11 @@
   function referenceEligibility(spec, candidateKey, context) {
     const candidate = assetByKey(candidateKey);
     if (!candidate) return { allowed: false, reason: 'missing' };
+    if (spec.scalar) { try { window.MathWorkspaceNumbers.scalar({kind:context.kind,type:context.type,data:dataWithReference(context.data,spec,candidateKey)},spec,assetState.snapshot.assets); } catch(error) { return {allowed:false,reason:error.message}; } }
     if (candidate.kind !== spec.expectedKind) return { allowed: false, reason: 'type' };
     if (candidateKey === context.currentKey) return { allowed: false, reason: 'self' };
     if (spec.distinctFrom && candidateKey && candidateKey === context.data[spec.distinctFrom]) return { allowed: false, reason: 'duplicate' };
-    const projected = normalizedAssetData(context.kind, context.type, { ...context.data, [spec.field]: candidateKey });
+    const projected = dataWithReference(context.data, spec, candidateKey);
     if (referenceWouldCreateCycle(context.currentKey, candidateKey, context.kind, context.type, projected)) return { allowed: false, reason: 'cycle' };
     return { allowed: true, asset: candidate };
   }
@@ -1087,14 +1106,53 @@
   function referenceContext(form) {
     const kind = form.querySelector('[data-assets-kind]').value, type = form.querySelector('[data-assets-subtype]').value;
     const instance = activeAssetInputInstance(), record = instance ? assetByKey(assetKey(instance.targetRef)) : null;
-    return { kind, type, currentKey: record ? assetKey(record) : '', data: normalizedAssetData(kind, type, { ...(instance?.draft?.data || {}), ...assetEditorData(instance) }) };
+    return { kind, type, currentKey: record ? assetKey(record) : '', data: { ...(instance?.draft?.data || {}), ...assetEditorData(instance) } };
   }
-  function referenceFieldHtml(spec, context) {
-    const selected = referenceEligibility(spec, context.data[spec.field], context).asset;
+  function referenceFieldHtml(spec, context, controlOnly = false) {
+    const selected = referenceEligibility(spec, window.MathWorkspaceNumbers.referenceKey(context.data, spec), context).asset;
     const eligible = eligibleReferenceAssets(spec, context);
     const text = selected ? `\\(${escapeHtml(selected.name)}\\)` : `Choose ${spec.expectedKind}…`;
     const label = selected ? `${spec.label}: ${selected.plainName || selected.name}` : `${spec.label}: choose a ${spec.expectedKind}`;
-    return `<label class="workspace-field workspace-field-inline"><span class="input-label">${spec.label}</span><button class="workspace-control workspace-reference-control" type="button" data-assets-reference="${spec.field}" data-assets-reference-value="${selected ? assetKey(selected) : ''}" data-assets-expected-kind="${spec.expectedKind}" data-assets-reference-label="${escapeHtml(spec.label)}" aria-haspopup="listbox" aria-expanded="false" aria-label="${escapeHtml(label)}"${eligible.length ? '' : ' disabled'}><span class="workspace-reference-value${selected ? ' workspace-reference-math' : ''}">${text}</span><span class="workspace-reference-arrow" aria-hidden="true">⌄</span></button></label>`;
+    const control = `<button class="workspace-control workspace-reference-control" type="button" data-assets-reference="${spec.field}" data-assets-reference-value="${selected ? assetKey(selected) : ''}" data-assets-expected-kind="${spec.expectedKind}" data-assets-reference-label="${escapeHtml(spec.label)}" aria-haspopup="listbox" aria-expanded="false" aria-label="${escapeHtml(label)}"${eligible.length || spec.scalar ? '' : ' disabled'}><span class="workspace-reference-value${selected ? ' workspace-reference-math' : ''}">${text}</span><span class="workspace-reference-arrow" aria-hidden="true">⌄</span></button>`;
+    return controlOnly ? control : `<label class="workspace-field workspace-field-inline"><span class="input-label">${spec.label}</span>${control}</label>`;
+  }
+  function scalarFieldHtml(spec, context) {
+    const parameter = window.MathWorkspaceNumbers.input(context.data, spec), literal = parameter.kind === 'literal';
+    const control = literal ? `<input class="workspace-control" type="text" inputmode="numeric" data-scalar-value="${spec.field}" aria-label="${spec.label}" value="${escapeHtml(parameter.value)}" placeholder="Enter an integer">` : referenceFieldHtml(spec, context, true);
+    const action = literal ? `<button type="button" class="btn btn-ghost" data-scalar-promote="${spec.field}" aria-label="Save ${spec.label.toLowerCase()} as a Number asset" title="Save this value as a reusable Number asset">Save as Number</button>`
+      : `<button type="button" class="btn btn-ghost" data-scalar-edit="${spec.field}" aria-label="Edit ${spec.label.toLowerCase()} Number asset"${parameter.ref ? '' : ' disabled'}>Edit</button>`;
+    return `<div class="workspace-field workspace-field-inline workspace-scalar-field" role="group" aria-label="${spec.label}"><span class="input-label">${spec.label}</span><div class="workspace-scalar-controls"><select class="workspace-control" data-scalar-mode="${spec.field}" aria-label="${spec.label} input source"><option value="literal"${literal ? ' selected' : ''}>Value</option><option value="reference"${literal ? '' : ' selected'}>Asset</option></select>${control}${action}</div></div>`;
+  }
+  function bindScalarField(group, spec, instance) {
+    const numbers = window.MathWorkspaceNumbers, mode = group.querySelector('[data-scalar-mode]');
+    mode.addEventListener('change', () => {
+      captureAssetInputDraftFromForm(instance.key, instance.rendererEpoch, { schedule: false });
+      const current = numbers.input(instance.draft.data, spec), saved = numbers.input(assetByKey(assetKey(instance.targetRef)).data, spec);
+      const parameter = mode.value === 'literal' ? { kind: 'literal', value: numbers.literalValue(instance.draft, spec, assetState.snapshot.assets) }
+        : saved.kind === 'reference' ? saved : { kind: 'reference', ref: '' };
+      if (current.kind === 'reference' && !current.ref && saved.kind === 'literal' && mode.value === 'literal') parameter.value = saved.value;
+      updateAssetInputDraft(instance, { data: { [spec.field]: parameter } }, { immediate: true });
+      renderAssetsEditorFields(); renderAssetInputStatus(instance);
+      editorForm().querySelector(`[data-scalar-mode="${spec.field}"]`)?.focus();
+    });
+    const value = group.querySelector('[data-scalar-value]');
+    if (value) {
+      window.CalculatorInputSettings.listenEditable(value, 'input', () => captureAssetInputDraftFromForm(instance.key, instance.rendererEpoch, { immediate: false }), { commitHandled: true });
+      value.addEventListener('blur', () => { captureAssetInputDraftFromForm(instance.key, instance.rendererEpoch, { schedule: false }); flushAssetInputInstance(instance); });
+    }
+    group.querySelector('[data-scalar-promote]')?.addEventListener('click', () => {
+      captureAssetInputDraftFromForm(instance.key, instance.rendererEpoch, { schedule: false });
+      const validation = validateAssetInputDraft(instance);
+      if (!validation.valid) { instance.validation = validation; renderAssetInputStatus(instance); return; }
+      const parameter = numbers.normalizeInput(numbers.input(instance.draft.data, spec), spec);
+      flushAssetInputInstance(instance);
+      if (instance.dirty) return;
+      const number = createObjectAsset('number', { data: { hasValue: true, value: parameter.value, replaceWithValue: true }, bindInput: false });
+      updateAssetInputDraft(instance, { data: dataWithReference(instance.draft.data, spec, assetKey(number)) }, { immediate: true });
+      renderAssetsEditorFields(); renderAssetInputStatus(instance);
+      objectWorkspace.open('number-input', assetKey(number), 'side');
+    });
+    group.querySelector('[data-scalar-edit]')?.addEventListener('click', () => objectWorkspace.open('number-input', numbers.referenceKey(instance.draft.data, spec), 'side'));
   }
   function inferredBaseFieldHtml(type, data) {
     const base = assetByKey(data.base, 'variety');
@@ -1162,7 +1220,7 @@
     closeReferencePicker();
     const kind = form.querySelector('[data-assets-kind]').value, type = form.querySelector('[data-assets-subtype]').value;
     const instance = activeAssetInputInstance(), record = instance ? assetByKey(assetKey(instance.targetRef)) : null;
-    const currentKey = record ? assetKey(record) : '', rawData = { ...(instance?.draft?.data || {}) }, data = ['young', 'lie'].includes(kind) ? rawData : { ...normalizedAssetData(kind, type, rawData), ...rawData }, fields = form.querySelector('[data-assets-fields]'); let html = '';
+    const currentKey = record ? assetKey(record) : '', rawData = { ...(instance?.draft?.data || {}) }, data = ['young', 'lie'].includes(kind) ? rawData : { ...normalizedAssetData(kind, type, record?.type === type ? record.data : {}), ...window.MathWorkspaceNumbers.migrateInputs(kind, type, rawData) }, fields = form.querySelector('[data-assets-fields]'); let html = '';
     const context = { kind, type, currentKey, data };
     if (kind === 'young') {
       html += fieldHtml('Rows', 'partition', data.partition ?? (data.rows || []).join(', '));
@@ -1172,18 +1230,17 @@
     } else if (kind === 'variety') {
       const derivedDimension = ['curve', 'symmetric-product-curve', 'ppav-moduli', 'grassmannian', 'complete-intersection', 'product'].includes(type);
       html += fieldHtml('Dimension', 'dimension', data.dimension ?? 3, 'number', { readOnly: type === 'point' || derivedDimension });
-      if (['curve', 'symmetric-product-curve', 'ppav-moduli'].includes(type)) html += fieldHtml('Genus', 'genus', data.genus ?? 2, 'number');
+      if (type === 'ppav-moduli') html += fieldHtml('Genus', 'genus', data.genus ?? 2, 'number');
       if (type === 'symmetric-product-curve') html += fieldHtml('Symmetric power m', 'power', data.power ?? 3, 'number');
       if (type === 'grassmannian') html += fieldHtml('r', 'r', data.r ?? 2, 'number') + fieldHtml('n', 'n', data.n ?? 4, 'number');
       if (type === 'complete-intersection') html += fieldHtml('Ambient dimension', 'ambientDimension', data.ambientDimension ?? 4, 'number') + fieldHtml('Degrees', 'degrees', data.degrees ?? '2, 3');
-      referenceFieldSpecs(kind, type).forEach((spec) => { html += referenceFieldHtml(spec, context); });
+      referenceFieldSpecs(kind, type).forEach((spec) => { html += spec.scalar ? scalarFieldHtml(spec, context) : referenceFieldHtml(spec, context); });
     } else if (kind === 'sheaf') {
       const specs = referenceFieldSpecs(kind, type);
       specs.filter((spec) => spec.field === 'base').forEach((spec) => { html += referenceFieldHtml(spec, context); });
-      if (['abstract', 'locally-free'].includes(type)) html += fieldHtml('Rank', 'rank', data.rank ?? 1, 'number');
       if (type === 'twist') html += fieldHtml('Twist r', 'twist', data.twist ?? 1, 'number');
       if (type === 'map-operation') html += `<label class="workspace-field workspace-field-inline"><span class="input-label">Operation</span><select class="workspace-control" data-assets-field="operation"><option value="pullback"${data.operation === 'pushforward' ? '' : ' selected'}>Pullback</option><option value="pushforward"${data.operation === 'pushforward' ? ' selected' : ''}>Pushforward</option></select></label>`;
-      specs.filter((spec) => spec.field !== 'base').forEach((spec) => { html += referenceFieldHtml(spec, context); });
+      specs.filter((spec) => spec.field !== 'base').forEach((spec) => { html += spec.scalar ? scalarFieldHtml(spec, context) : referenceFieldHtml(spec, context); });
       if (!isDirectSheafType(type)) html += inferredBaseFieldHtml(type, data);
       if (type === 'schur') html += fieldHtml('Partition', 'partition', data.partition ?? '2,1');
     } else {
@@ -1191,6 +1248,7 @@
     }
     fields.innerHTML = html;
     fields.querySelectorAll('[data-assets-reference]').forEach(bindReferenceField);
+    if (instance) fields.querySelectorAll('.workspace-scalar-field').forEach(group => bindScalarField(group, referenceFieldSpecs(kind, type).find(spec => spec.field === group.querySelector('[data-scalar-mode]').dataset.scalarMode), instance));
     if (window.MathJax?.typesetPromise) {
       const instanceKey = instance?.key || '', rendererEpoch = instance?.rendererEpoch || 0, taskGeneration = instance?.taskGeneration || 0;
       window.MathJax.typesetClear?.([fields]);
@@ -1200,8 +1258,10 @@
   function assetEditorData(instance = activeAssetInputInstance()) {
     const form = editorForm(), data = {};
     form.querySelectorAll('[data-assets-field]').forEach((field) => { data[field.dataset.assetsField] = field.value; });
+    form.querySelectorAll('[data-scalar-value]').forEach(field => { data[field.dataset.scalarValue] = { kind: 'literal', value: field.value }; });
     form.querySelectorAll('[data-assets-reference]').forEach((field) => {
-      const name = field.dataset.assetsReference, value = field.dataset.assetReferenceValue || '';
+      const name = field.dataset.assetsReference, value = field.dataset.assetsReferenceValue || '';
+      if (field.closest('.workspace-scalar-field')) { data[name] = { kind: 'reference', ref: value }; return; }
       // Reference controls are replaced when another reference is chosen.  A
       // transient empty button must never erase a value already kept in the
       // draft (notably the other endpoint of a map).
@@ -1210,6 +1270,10 @@
     return data;
   }
   function validateAssetData(kind, type, data, currentKey) {
+    if(window.MathWorkspaceNumbers && (['number','field'].includes(kind)||window.MathWorkspaceNumbers.references(kind,type).some(spec=>spec.scalar&&data[spec.field]))) {
+      const candidate={...(assetByKey(currentKey)||{kind,id:'draft',name:'a'}),type,data};
+      window.MathWorkspaceNumbers.validateGraph([...assetState.snapshot.assets.filter(asset=>assetKey(asset)!==currentKey),candidate]);
+    }
     if (slicing?.isAsset({kind,type}) || kind === 'matrix') {
       const candidate={kind,type,data,...assetRefFromKey(currentKey||kind+':draft')};
       for(const spec of slicing.references(candidate)) for(const key of (spec.many?slicing.readRef(data,spec.field)||[]:[slicing.readRef(data,spec.field)])) {
@@ -1231,7 +1295,9 @@
     }
     const context = { kind, type, data, currentKey };
     referenceFieldSpecs(kind, type).forEach((spec) => {
-      const result = referenceEligibility(spec, data[spec.field], context);
+      const key = window.MathWorkspaceNumbers.referenceKey(data, spec);
+      if (spec.scalar && !key) return;
+      const result = referenceEligibility(spec, key, context);
       if (!result.allowed) throw new Error(`${spec.label} must reference an allowed ${spec.expectedKind}.`);
     });
     if (kind === 'variety') {
@@ -1246,7 +1312,7 @@
     }
   }
   const cloneInputDraft = (draft) => ({
-    name: String(draft?.name ?? ''), kind: draft?.kind || 'variety', type: draft?.type || 'abstract', data: { ...(draft?.data || {}) }
+    name: String(draft?.name ?? ''), kind: draft?.kind || 'variety', type: draft?.type || 'abstract', data: window.MathWorkspaceNumbers.migrateInputs(draft?.kind, draft?.type, draft?.data || {})
   });
   const inputDraftFromRecord = (record) => cloneInputDraft({ name: record?.name || '', kind: record?.kind || 'variety', type: record?.type || 'abstract', data: record?.data || {} });
   function createAssetInputInstance(targetRef, record = assetByKey(assetKey(targetRef)), revision = assetState.snapshot.revision) {
@@ -1286,7 +1352,7 @@
     const numericFields = new Set(['dimension', 'genus', 'power', 'r', 'n', 'ambientDimension', 'rank', 'twist']);
     for (const [field, value] of Object.entries(draft.data)) {
       if (typeof value === 'string' && !balancedLatex(value)) return { valid: false, message: `${field} contains incomplete LaTeX.`, field };
-      if (numericFields.has(field) && (String(value).trim() === '' || !Number.isFinite(Number(value)) || !Number.isInteger(Number(value)))) return { valid: false, message: `${field} must be a complete integer.`, field };
+      if (numericFields.has(field) && typeof value !== 'object' && (String(value).trim() === '' || !Number.isFinite(Number(value)) || !Number.isInteger(Number(value)))) return { valid: false, message: `${field} must be a complete integer.`, field };
     }
     if (draft.kind === 'variety' && draft.type === 'complete-intersection' && !/^\s*\d+(?:\s*[, ]\s*\d+)*\s*$/.test(String(draft.data.degrees || ''))) return { valid: false, message: 'Degrees must be a complete list of positive integers.', field: 'degrees' };
     try {
@@ -1363,7 +1429,7 @@
     if (compact) compact.textContent = instance.autosaveStatus;
     if (message) message.textContent = instance.validation?.message || '';
     form.dataset.autosaveState = instance.autosaveStatus.toLowerCase().replace(/[^a-z]+/g, '-');
-    form.querySelectorAll('[data-assets-name],[data-assets-field]').forEach((field) => field.setAttribute('aria-invalid', String(!instance.validation?.valid && (!instance.validation.field || instance.validation.field === (field.dataset.assetsField || 'name')))));
+    form.querySelectorAll('[data-assets-name],[data-assets-field],[data-scalar-value],[data-assets-reference]').forEach((field) => field.setAttribute('aria-invalid', String(!instance.validation?.valid && (!instance.validation.field || instance.validation.field === (field.dataset.assetsField || field.dataset.scalarValue || field.dataset.assetsReference || 'name')))));
   }
   function drainAssetInputQueue(coordinator = assetsCardState) {
     if (coordinator.inputTaskRunning) return;
@@ -1464,7 +1530,7 @@
     // clicked control's transient DOM snapshot can omit its sibling (for
     // example, a map's Domain while choosing its Codomain).
     const instance = boundInstance;
-    updateAssetInputDraft(instance, { data: { ...context.data, [spec.field]: key } }, { immediate: true });
+    updateAssetInputDraft(instance, { data: dataWithReference(context.data, spec, key) }, { immediate: true });
     closeReferencePicker(); renderAssetsEditorFields(); renderAssetInputStatus(instance);
     const taskGeneration = instance.taskGeneration;
     setTimeout(() => acceptAssetInputAsyncResult(instance.key, instance.rendererEpoch, taskGeneration, () => editorForm()?.querySelector(`[data-assets-reference="${CSS.escape(spec.field)}"]`)?.focus()), 0);
@@ -1521,6 +1587,7 @@
   function assetDefinitionFor(kind, type, data) {
     if(kind==='mosaic-space')return data.rows+' × '+data.cols+' · '+data.lattice+' · '+data.boundary;
     if(kind==='mosaic-diagram')return (data.diagramType==='dual'?'Dual graph':'Knot / link')+' on '+data.space;
+    if (kind === 'number') return (data.hasValue?data.value:'Symbolic number')+' · '+(assetByKey(data.field)?.plainName||'Field');
     if (kind === 'field') return window.MathWorkspaceObjects.fieldLabel(data);
     if (slicing?.isAsset({kind,type})) return kind === 'frame' ? 'Point and full basis in R^'+data.ambientDimension : kind === 'variety' ? 'Toric variety · '+(data.fan?'fan':'affine cone') : (slicing.labels[kind]||kind)+' in R^'+data.ambientDimension;
     if (kind === 'dynkin') return (data.lie || 'Choose Lie type') + ' · vertices ' + data.vertices.join(', ') + (data.quiver ? ' · quiver' : '');
@@ -1534,7 +1601,7 @@
       if (type === 'projective') return `Projective space of dimension ${data.dimension || 0}`;
       if (type === 'grassmannian') return `Gr(${data.r || '?'}, ${data.n || '?'})`;
       if (type === 'complete-intersection') return `Complete intersection of degrees ${data.degrees || '—'} in ℙ^${data.ambientDimension || '?'}`;
-      if (type === 'curve') return `Curve of genus ${data.genus || '?'}`;
+      if (type === 'curve') { const parameter = window.MathWorkspaceNumbers.input(data, window.MathWorkspaceNumbers.references(kind,type)[0]); return `Curve of genus ${parameter.kind === 'literal' ? parameter.value : assetByKey(parameter.ref)?.plainName || '?'}`; }
       return `${ASSET_SUBTYPES.variety.find(([value]) => value === type)?.[1] || 'Variety'} · dimension ${type === 'point' ? 0 : data.dimension || '?'}`;
     }
     if (kind === 'sheaf') return `${ASSET_SUBTYPES.sheaf.find(([value]) => value === type)?.[1] || 'Sheaf'} on ${data.base ? data.base.split(':')[1] : 'a variety'}`;
@@ -2189,7 +2256,7 @@
 
   const reservedAssetNames = new Set();
   function uniqueDefaultAssetName(kind) {
-    const base = ({'mosaic-space':'S','mosaic-diagram':'D',field:'K',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
+    const base = ({'mosaic-space':'S','mosaic-diagram':'D',number:'a',field:'K',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
     const numbered = (number) => kind === 'sheaf' ? `\\mathcal{E}_{${number}}` : `${base}_{${number}}`;
     let name = base, number = 2;
     const isTaken = (candidate) => reservedAssetNames.has(canonicalAssetName(candidate)) || assetState.snapshot.assets.some((asset) => canonicalAssetName(asset.name) === canonicalAssetName(candidate));
@@ -2374,10 +2441,26 @@
     }
     return destination?assetByKey(assetKey(destination)):created;
   }
+  function importNumberAsset(ref,value) {
+    if(value.kind!=='number'||value.type!=='number')throw new Error('Choose a Number asset JSON file.');
+    const record=assetByKey(assetKey(ref));if(!record)throw new Error('The Number was deleted.');
+    const data=window.MathWorkspaceNumbers.normalize(value.data);
+    if(!value.dependencies?.length)return updateObjectAsset(ref,{data});
+    if(!Array.isArray(value.dependencies)||value.dependencies.length!==1)throw new Error('A Number export must contain its Field dependency.');
+    const source=value.dependencies[0];
+    if(source.kind!=='field'||source.type!=='field'||assetKey(source)!==data.field)throw new Error('The Number export has an incompatible Field.');
+    const fieldData=window.MathWorkspaceObjects.normalize('field','field',source.data);
+    const existing=assetState.snapshot.assets.find(asset=>asset.kind==='field'&&JSON.stringify(asset.data)===JSON.stringify(fieldData));
+    const parent=existing||{kind:'field',id:'import-number-field',name:'K',type:'field',data:fieldData};
+    const candidate={...record,data:{...data,field:assetKey(parent)}};
+    window.MathWorkspaceNumbers.validateGraph([...assetState.snapshot.assets.filter(asset=>assetKey(asset)!==assetKey(ref)),...(!existing?[parent]:[]),candidate]);
+    const target=existing||createDefaultAsset('field',{data:fieldData,select:false,bindInput:false});
+    return updateObjectAsset(ref,{data:{...data,field:assetKey(target)}});
+  }
   function initialiseObjectPanels() {
     if (!window.MathWorkspaceObjects) return;
     objectWorkspace = window.MathWorkspaceObjects.mount({
-      snapshot: localAssetSnapshot, create: createObjectAsset, update: updateObjectAsset, ensureDefault: ensureDefaultDependency, publishDefaults: () => applyAssetSnapshot(localAssetSnapshot()), importCategoryGraph, importRootObject, importSlicing, captureWorkspace, restoreWorkspace, importAsset: (ref, value) => {
+      snapshot: localAssetSnapshot, create: createObjectAsset, update: updateObjectAsset, ensureDefault: ensureDefaultDependency, publishDefaults: () => applyAssetSnapshot(localAssetSnapshot()), importCategoryGraph, importRootObject, importSlicing, importNumberAsset, captureWorkspace, restoreWorkspace, importAsset: (ref, value) => {
         if (!ASSET_SUBTYPES[ref.kind]?.some(([type]) => type === value.type)) throw new Error('Unsupported object subtype.');
         return updateObjectAsset(ref, { type: value.type, data: value.data });
       }, status, closePicker: closeCardPicker, ioChanged: updateImportExport,
@@ -2647,15 +2730,17 @@
     const prepared = io.validate(raw, {
       subtypes: ASSET_SUBTYPES, definitions: window.MathWorkspaceObjects.definitions, calculatorIds: calculators.map(c => c.id),
       nameKey: canonicalAssetName, validName: name => typeof name === 'string' && !!name.trim() && balancedLatex(name),
-      normalize: (kind, type, data) => OBJECT_INPUT_KINDS.includes(kind) || slicing.isAsset({kind,type}) ? window.MathWorkspaceObjects.normalize(kind,type,data) : io.clone(data),
+      normalize: (kind, type, data) => OBJECT_INPUT_KINDS.includes(kind) || slicing.isAsset({kind,type}) ? window.MathWorkspaceObjects.normalize(kind,type,data) : window.MathWorkspaceNumbers.normalizeInputs(kind,type,io.clone(data)),
       references: asset => slicing.isAsset(asset) || asset.kind === 'matrix'
         ? slicing.references(asset).flatMap(spec => (spec.many ? slicing.readRef(asset.data,spec.field) || [] : [slicing.readRef(asset.data,spec.field)]).map(key => ({key,kind:spec.kind})))
-        : referenceFieldSpecs(asset.kind,asset.type).map(spec => ({key:asset.data[spec.field],kind:spec.expectedKind}))
+        : referenceFieldSpecs(asset.kind,asset.type).map(spec => ({key:window.MathWorkspaceNumbers.referenceKey(asset.data,spec),kind:spec.expectedKind}))
     });
+    window.MathWorkspaceNumbers.validateGraph(prepared.assets);
     const types = new Set(Object.keys(ASSET_CARD_REGISTRY));
     for (const slot of prepared.assetCards.slots) if (!types.has(slot.cardType) || !Array.isArray(slot.recentInstanceKeys)) throw new Error('Invalid saved Assets card.');
     for (const instance of prepared.assetCards.instances) {
       if (!types.has(instance.cardType) || !prepared.assets.some(a => assetKey(a) === assetKey(instance.targetRef)) || instance.cardType === 'input' && (!instance.draft || typeof instance.draft.name !== 'string' || !instance.draft.data)) throw new Error('Invalid saved Assets input.');
+      if (instance.cardType === 'input') instance.draft = cloneInputDraft(instance.draft);
       if(instance.cardType!=='input'&&!cardSupportsAsset(instance.cardType,instance.targetRef.kind))throw new Error('Incompatible saved Assets property target.');
     }
     for (const asset of prepared.assets) if (['formula','tropical'].includes(asset.kind) && asset.data.ambientDimension <= 8) slicing.math('validate',{asset,assets:prepared.assets});

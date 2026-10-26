@@ -23,7 +23,7 @@ async function run(){
     });
     await waitFor(()=>read(()=>!!window.copiedSubjects));
     const defaults=await read(()=>copiedSubjects);
-    assert.equal(Object.keys(defaults.subjectsByKind).length,26);
+    assert.equal(Object.keys(defaults.subjectsByKind).length,27);
     assert.deepEqual(defaults.subjectsByKind.matrix,['linear']);
     // Real sequential typing keeps spaces, insertion, replacement and IME drafts intact.
     await read(()=>document.querySelector('[data-subject-assignment-search]').focus());
@@ -38,7 +38,7 @@ async function run(){
     assert.deepEqual(await read(()=>[...document.querySelectorAll('[data-assignment-kind]:not([hidden])')].map(button=>button.dataset.assignmentKind)),['young']);
     await press('a',2);await press('Backspace');
     await read(()=>{const input=document.querySelector('[data-subject-assignment-search]');input.dispatchEvent(new CompositionEvent('compositionstart'));input.value='matrix';input.dispatchEvent(new InputEvent('input',{bubbles:true,isComposing:true}));});
-    assert.equal(await read(()=>document.querySelectorAll('[data-assignment-kind]:not([hidden])').length),26,'composition defers filtering');
+    assert.equal(await read(()=>document.querySelectorAll('[data-assignment-kind]:not([hidden])').length),27,'composition defers filtering');
     await read(()=>document.querySelector('[data-subject-assignment-search]').dispatchEvent(new CompositionEvent('compositionend')));
     assert.equal(await read(()=>document.querySelectorAll('[data-assignment-kind]:not([hidden])').length),1);
     await read(()=>{document.querySelector('[data-assignment-kind="matrix"]').click();document.querySelector('[data-assignment-subject="linear"]').click();});
@@ -61,7 +61,7 @@ async function run(){
     await read(()=>document.querySelector('[data-assignment-subject="topology"]').click());
     assert.deepEqual(await read(()=>kinds()),[]);
     await read(()=>document.querySelector('[data-create-clear]').click());
-    assert.equal(await read(()=>kinds().length),26);assert.equal(await read(()=>document.querySelector('[data-create-subject]').value),'');
+    assert.equal(await read(()=>kinds().length),27);assert.equal(await read(()=>document.querySelector('[data-create-subject]').value),'');
     assert.equal(await read(()=>document.querySelector('[data-create-display]').value),'');
     for(const text of 'categories ')await client.send('Input.insertText',{text});
     assert(await read(()=>kinds().includes('matrix')),'search indexes new subjects');

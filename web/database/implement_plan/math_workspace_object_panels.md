@@ -1,5 +1,44 @@
 # Mathematical object panels
 
+## Numbers and shared scalar parameters
+
+New… includes Number, with its own Modify and Display panels. A Number owns
+a Field reference (a shared rational field by default), a symbolic or valued
+mode, its value draft, and the choice to substitute that value in calculations.
+The existing coefficient engine handles exact fractions, decimals, complex
+values, prime fields, rational functions, and number-field elements. The
+positive assumption applies to symbolic parameters.
+
+Curves and symmetric products of curves have one Genus parameter; abstract
+and locally free sheaves have one Rank parameter. Each uses the same
+Value / Asset source selector. Its data is a discriminated union:
+`{kind: 'literal', value: '2'}` or `{kind: 'reference', ref: 'number:N1'}`.
+Only the selected source is stored. Save as Number promotes a literal, and
+Edit opens the shared asset. Switching to Value copies a known integer;
+a purely symbolic reference starts an empty draft and remains the saved
+source until a valid value is entered. These are
+ID-based dependencies, so renaming a Number preserves its uses, edits refresh
+the native properties, and deletion previews include dependent objects.
+Genus and rank require characteristic zero and, when valued, integers at
+least zero and one respectively. Incompatible edits leave the model intact.
+The ppav genus remains the existing numerical dimension parameter.
+Old backups with genus/genusNumber or rank/rankNumber pairs are migrated,
+with the old active reference taking precedence over its unused literal.
+Incomplete drafts remain separate from saved values and survive backup.
+
+The standalone sheaf calculators remain unchanged. Workspace projections
+resolve scalar references and render the Number's mathematical name; native
+internal symbols never become asset identities. Workspace backups and Number
+JSON exports retain the field dependency. Import validates before publication
+and never rewrites a shared field to match an imported Number.
+
+Run `math_workspace_numbers_ui_test.js` for real sequential edits, exact field
+values, genus/Hodge and rank updates, symbolic substitution, creation from the
+picker and genus field, reference removal, backup/import, and deletion closure.
+Also run the input draft suites, the creation/catalog tests, and the existing
+matrix/field and Homology browser regressions. Rebuild and check the native
+bundle after changing the coefficient or sheaf adapters.
+
 ## Mosaic ownership
 
 Mosaic Space owns the background grid, removed/recovered tiles, boundary cuts,

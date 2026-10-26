@@ -2,14 +2,14 @@
   'use strict';
   const subjects = [
     {id:'topology',label:'Topology and Mosaic',kinds:['mosaic-space','mosaic-diagram']},
-    {id:'linear',label:'Linear algebra',kinds:['field','matrix','point','vector','frame','lattice']},
+    {id:'linear',label:'Linear algebra',kinds:['number','field','matrix','point','vector','frame','lattice']},
     {id:'representation',label:'Representation theory',kinds:['young','lie','dynkin','strands','roots','weyl','fan']},
     {id:'categories',label:'Categories',kinds:['category','functor']},
-    {id:'algebraic',label:'Algebraic geometry',kinds:['variety','sheaf','map','fan']},
+    {id:'algebraic',label:'Algebraic geometry',kinds:['number','variety','sheaf','map','fan']},
     {id:'geometry',label:'Geometry and coordinates',kinds:['frame','point','vector','polytope','sphere','roots','lattice','voronoi','formula','weyl','cone','fan','tropical']}
   ];
-  const descriptions={'mosaic-space':'A tiled space with cuts and edge identifications.','mosaic-diagram':'A knot, link or graph on a Mosaic space.',young:'Ordinary or generalized rows of a Young diagram.',lie:'A Lie family and rank.',field:'Coefficients for algebraic objects.',matrix:'A matrix with an explicit coefficient field.',category:'Objects and morphisms of a category.',functor:'A covariant or contravariant functor.',dynkin:'A Lie type with marked vertices and optional quiver directions.',strands:'An ordered word of crossings or generators.',variety:'A variety, including Grassmannian and toric models.',sheaf:'A sheaf or vector bundle on a variety.',map:'A map of varieties, sheaves, or other maps.',frame:'A position and coordinate basis.',point:'A coordinate point.',vector:'A vector in an ambient space.',polytope:'A regular polytope or simplex.',sphere:'A sphere in an ambient space.',roots:'A Lie root system.',lattice:'A lattice specified by a basis or another object.',voronoi:'A Voronoi cell of a lattice.',formula:'Equations or inequalities defining a set.',tropical:'A tropical polynomial.',weyl:'Weyl chambers of a root system.',cone:'A rational cone.',fan:'A collection of rational cones.'};
-  const aliases={dynkin:'marked pointed decorated vertex quiver',young:'partition tableau symmetric exterior',lie:'lie algebra root system',strands:'braid coxeter temperley lieb kazhdan lusztig',matrix:'linear transformation coefficients',sheaf:'bundle coherent locally free',map:'morphism arrow',cone:'toric convex',fan:'toric',point:'coordinates',formula:'formula set equation inequality constraint implicit zero locus',weyl:'reflection chamber',voronoi:'dirichlet cell'};
+  const descriptions={number:'A symbolic or valued element of a shared field; usable as genus or rank.','mosaic-space':'A tiled space with cuts and edge identifications.','mosaic-diagram':'A knot, link or graph on a Mosaic space.',young:'Ordinary or generalized rows of a Young diagram.',lie:'A Lie family and rank.',field:'Coefficients for algebraic objects.',matrix:'A matrix with an explicit coefficient field.',category:'Objects and morphisms of a category.',functor:'A covariant or contravariant functor.',dynkin:'A Lie type with marked vertices and optional quiver directions.',strands:'An ordered word of crossings or generators.',variety:'A variety, including Grassmannian and toric models.',sheaf:'A sheaf or vector bundle on a variety.',map:'A map of varieties, sheaves, or other maps.',frame:'A position and coordinate basis.',point:'A coordinate point.',vector:'A vector in an ambient space.',polytope:'A regular polytope or simplex.',sphere:'A sphere in an ambient space.',roots:'A Lie root system.',lattice:'A lattice specified by a basis or another object.',voronoi:'A Voronoi cell of a lattice.',formula:'Equations or inequalities defining a set.',tropical:'A tropical polynomial.',weyl:'Weyl chambers of a root system.',cone:'A rational cone.',fan:'A collection of rational cones.'};
+  const aliases={number:'scalar rational integer genus rank parameter',dynkin:'marked pointed decorated vertex quiver',young:'partition tableau symmetric exterior',lie:'lie algebra root system',strands:'braid coxeter temperley lieb kazhdan lusztig',matrix:'linear transformation coefficients',sheaf:'bundle coherent locally free',map:'morphism arrow',cone:'toric convex',fan:'toric',point:'coordinates',formula:'formula set equation inequality constraint implicit zero locus',weyl:'reflection chamber',voronoi:'dirichlet cell'};
   const displays = [
     {id:'geometry',label:'Geometry',views:['geometry-view']},
     {id:'mosaic',label:'Mosaic',views:['mosaic-view']},
@@ -17,6 +17,7 @@
     {id:'young',label:'Young diagrams',views:['young-view']},
     {id:'strands',label:'Strands',views:['strands-view']},
     {id:'matrix',label:'Matrices',views:['matrix-view']},
+    {id:'number',label:'Numbers',views:['number-view']},
     {id:'field',label:'Fields',views:['field-view']},
     {id:'category',label:'Category diagrams',views:['category-diagram']},
     {id:'sheaf',label:'Variety & sheaf diagrams',views:['sheaf-view']},

@@ -147,6 +147,14 @@
 .workspace-field > .input-label { margin: 0; }
 .workspace-field-inline { grid-template-columns: minmax(68px, max-content) minmax(0, 1fr); align-items: center; column-gap: 8px; row-gap: 0; }
 .workspace-field-inline > .input-label { white-space: nowrap; }
+.workspace-scalar-field { container-type: inline-size; align-items: start; }
+.workspace-scalar-field > .input-label { padding-top: 7px; }
+.workspace-scalar-controls { display: grid; grid-template-columns: 84px minmax(72px, 1fr) auto; align-items: center; gap: 6px; min-width: 0; }
+.workspace-scalar-controls .btn { padding: 5px 7px; white-space: nowrap; }
+@container (max-width: 370px) {
+  .workspace-scalar-controls { grid-template-columns: 84px minmax(72px, 1fr); }
+  .workspace-scalar-controls > .btn { grid-column: 2; justify-self: end; }
+}
 .workspace-control { box-sizing: border-box; width: 100%; min-width: 0; min-height: 29px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); color: var(--text); font-family: 'EB Garamond', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', Georgia, serif; font-size: 0.9rem; }
 .workspace-code-control { font-family: 'JetBrains Mono', 'Noto Sans SC', 'Microsoft YaHei', Consolas, monospace; font-size: 0.78rem; }
 .workspace-control:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
