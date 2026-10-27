@@ -86,6 +86,10 @@
 .workspace-object-panel[data-panel-type='matrix-input'] .workspace-form-fields .workspace-object-reference > label { grid-template-columns: minmax(68px, max-content) minmax(0, 1fr); }
 .workspace-object-reference > .btn { padding: 4px 6px; flex-shrink: 0; }
 .workspace-object-references { display: grid; gap: 8px; }
+.workspace-object-panel[data-panel-type='complex-diagrams'] .workspace-object-references details { font-size: .8rem; color: var(--muted); }
+.workspace-object-panel[data-panel-type='complex-diagrams'] .workspace-object-references summary { cursor: pointer; padding: 3px 0; }
+.workspace-object-panel[data-panel-type='complex-diagrams'] .workspace-object-references .workspace-form-fields { padding-top: 8px; gap: 6px; color: var(--text); }
+.workspace-object-panel[data-panel-type='complex-diagrams'] .workspace-object-references label { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
 .workspace-object-render-area { min-width: 0; padding: 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
 .workspace-object-native { display: block; height: 500px; min-width: 0; width: 100%; }
 .workspace-object-native:focus { outline: none; }

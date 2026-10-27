@@ -18,6 +18,7 @@
     && !(input.excludeTypes || []).includes(asset.type);
   // Extra relations supplement the authoritative input slots in calculator definitions.
   const relations = {
+    'complex-diagrams': {nodes:{id:'nodes',label:'Complexes / filtrations',kinds:['complex','filtration'],min:0}},
     'strands-relations': { selection: [{ kind: 'strands' }, { kind: 'lie', families: ['A','B','C','D'] }] },
     'strands-display': { views: ['strands-input'] },
     'category-diagram': { nodes: { id: 'nodes', label: 'Categories / functors', kinds: ['category','functor'], min: 1 } },
@@ -26,7 +27,7 @@
   };
   function create({ assets = {}, definitions = [], nativePanels = {}, resolveRefs = (id, refs) => refs } = {}) {
     const assetTypes = Object.entries(assets).map(([kind, subtypes]) => ({ kind, subtypes: subtypes.map(([type,label]) => ({ type,label })) }));
-    const panels = definitions.map(definition => ({
+    const panels = definitions.filter(definition=>!definition.legacy).map(definition => ({
       id: definition.id, label: definition.label, route: 'objects',
       role: definition.input ? 'input' : definition.display ? 'view' : definition.assetView || definition.objectView || definition.scene || definition.slicingScene || definition.id==='matrix-view' ? 'display' : 'property',
       inputs: (definition.slots || []).map(slot => ({ ...slot, ...(definition.engine === 'double-young' && slot.kind === 'young' ? { excludeTypes: ['generalized'] } : {}) })),

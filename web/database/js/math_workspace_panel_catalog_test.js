@@ -108,4 +108,7 @@ for(const [key,label] of [['variety:p','Variety Homology Classes'],['sheaf:e','S
   const kind=key.split(':')[0],list=catalog.suggest([key],homologyAssets).filter(panel=>panel.id.startsWith('asset:homology-'));
   assert.deepEqual(list.map(panel=>panel.id),['asset:homology-'+kind]);assert.equal(list[0].label,label);
 }
+const diagrams=catalog.suggest(['complex:c','filtration:f'],[asset('complex','c'),asset('filtration','f')]);
+assert.deepEqual(diagrams.filter(p=>p.id==='complex-diagrams').map(p=>p.refs.nodes),[['complex:c','filtration:f']]);
+assert(!diagrams.some(p=>['complex-view','filtration-view','complex-operations','filtration-operations'].includes(p.id)),'legacy panels are restored, not advertised as new choices');
 console.log('math_workspace_panel_catalog_test: selection, ordered inputs, linked references, principal ownership, scenes and views passed');

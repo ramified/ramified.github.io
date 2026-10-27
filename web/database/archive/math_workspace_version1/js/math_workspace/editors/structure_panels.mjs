@@ -30,7 +30,7 @@ __editor.extendAssetAdapter(previous=>{
     panel(config){
       if(!['complex-view','complex-operations','filtration-view','filtration-operations'].includes(config.operation))return previous.panel?.(config);
       operations=config.operation.endsWith('-operations');
-      enabled=true;display=document.createElement('div');display.className='workspace-complex-display';
+      enabled=true;display=document.createElement('div');display.className='workspace-complex-display';display.style.padding='12px';
       const toolbar=[];
       if(config.operation.startsWith('complex-')){
         const label=document.createElement('label');label.textContent='Layout ';layoutSelect=document.createElement('select');layoutSelect.setAttribute('aria-label','Complex display layout');layoutSelect.append(new Option('Inline','inline'),new Option('Snake','snake'));label.append(layoutSelect);toolbar.push(label);
@@ -91,6 +91,7 @@ __editor.extendAssetAdapter(previous=>{
       $('extra-prime-input').setAttribute('aria-label','Additional prime or function-field place');
       const places=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Places';places.append(summary,$('extra-prime-input').parentElement,$('place-chip-list'));
       const outputs={'field-extension-invariants':$('field-invariants'),'field-extension-decomposition':$('decomposition-table'),'field-extension-selected':$('selected-place-data')};
+      Object.assign(document.querySelector('.ramification-stage').style,{position:'relative',height:'100%',minHeight:'0',padding:'0',overflow:'hidden'});
       const surface=__editor.mountObjectSurfaces({content:[outputs[config.operation]||document.querySelector('.ramification-stage')],toolbar:[document.querySelector('.canvas-toolbar'),controls,places,status]});
       if(outputs[config.operation])surface.content.style.overflow='auto';
     },

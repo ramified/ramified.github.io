@@ -14,6 +14,7 @@ import {overviewArrowPresentation} from './editors/overview_arrows.mjs';
 import {dynkinObjectPanel, strandObjectPanel} from './editors/root_system_panels.mjs';
 import {slicingObjectPanel} from './editors/slicing_panels.mjs';
 import {viewportPanels} from './editors/viewport_panels.mjs';
+import {diagramDisplayPanel} from './editors/diagram_display_panel.mjs';
 import {complexStructurePanel,extensionStructurePanel} from './editors/structure_panels.mjs';
 import {mosaicObjectPanel} from './editors/mosaic_panels.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
@@ -187,7 +188,7 @@ async function compileEditor(e){
     const file=src?clean(src):`${e.page}:inline`;
     const original=instrument(src?await read(file):serialize(n),file,file===e.script);
     const augmented=e.id==='complex'&&file===e.script
-      ? original.replace(/\n\}\)\(\);\s*$/,`\n${complexWorkspaceExtension}\n${complexWorkspaceAuthorityExtension}\n${categoryOverviewProjection}\n${overviewArrowPresentation}\n${sheafDiagramPanel}\n${complexStructurePanel}\n})();\n`)
+      ? original.replace(/\n\}\)\(\);\s*$/,`\n${complexWorkspaceExtension}\n${complexWorkspaceAuthorityExtension}\n${categoryOverviewProjection}\n${overviewArrowPresentation}\n${sheafDiagramPanel}\n${complexStructurePanel}\n${diagramDisplayPanel}\n})();\n`)
       : original;
     scripts+=`\n// Original source: ${file}\n${augmented}\n`;
   }

@@ -15,6 +15,7 @@ try{
   assert.equal(await read(()=>fv.computation.status),'current');
   assert(await read(()=>fv.propertyRenderer.editor.shadow.querySelector('.workspace-complex-display').textContent.includes('decreasing')));
   assert.equal(await read(()=>fi.structureRows.length),3);
+  if(process.env.WORKSPACE_TEST_SCREENSHOT){const shot=await client.send('Page.captureScreenshot',{format:'png'});require('node:fs').writeFileSync(process.env.WORKSPACE_TEST_SCREENSHOT+'-filtration.png',Buffer.from(shot.data,'base64'));}
   await read(()=>api.updateObjectAsset(term,{name:'H'}));
   assert(await read(()=>fv.propertyRenderer.editor.shadow.querySelector('.workspace-complex-display').textContent.includes('H')),'linked quotient names update');
   await read(()=>{window.fo=panels.open('filtration-operations','filtration:'+f.id,'main');});
@@ -41,7 +42,7 @@ try{
     [...fieldView.renderArea.querySelectorAll('button')].find(b=>b.textContent==='Ramification of the defining extension').click();
     window.ext=api.localAssetSnapshot().assets.find(a=>a.kind==='field-extension'&&a.data.target==='field:'+ff.id);
     window.view=[...panels.panels.values()].find(p=>p.definition.id==='field-extension-view'&&p.computation.refs.asset==='field-extension:'+ext.id);
-    if(!view.propertyRenderer)view=panels.open('field-extension-view','field-extension:'+ext.id,'main');view.propertyRenderer.editor.shadow.querySelector('[data-extension-compute]').click();
+    view.propertyRenderer.editor.shadow.querySelector('[data-extension-compute]').click();
   });
   await waitFor(()=>read(()=>view.propertyRenderer.editor.readObjectResult()?.hasResult),30000);
   assert.equal(await read(()=>JSON.parse(view.propertyRenderer.editor.objectIO('extension-export')).base.kind),'Fqt');
@@ -52,6 +53,8 @@ try{
   await read(()=>view.propertyRenderer.editor.shadow.querySelector('[data-extension-compute]').click());
   await waitFor(()=>read(()=>view.propertyRenderer.editor.readObjectResult()?.hasResult),30000);
   assert.equal(await read(()=>String(JSON.parse(view.propertyRenderer.editor.objectIO('extension-export')).base.q)),'4');
+  if(process.env.WORKSPACE_TEST_SCREENSHOT){const shot=await client.send('Page.captureScreenshot',{format:'png'});require('node:fs').writeFileSync(process.env.WORKSPACE_TEST_SCREENSHOT+'-function.png',Buffer.from(shot.data,'base64'));}
+  assert(await read(()=>{const root=view.propertyRenderer.editor.shadow,stage=root.querySelector('.ramification-stage'),status=root.querySelector('#generic-status');return getComputedStyle(stage).position==='relative'&&stage.getBoundingClientRect().top>=status.getBoundingClientRect().bottom;}),'the diagram is contained below the visible computation status');
   await read(()=>{
     window.unsupported=api.createObjectAsset('field-extension',{data:{base:'field:'+ff.id,polynomial:'x^2-u'}});
     window.uv=panels.open('field-extension-view','field-extension:'+unsupported.id,'main');

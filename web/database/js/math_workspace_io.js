@@ -88,6 +88,7 @@
       if(panel.canvasHeight!=null&&(!Number.isFinite(panel.canvasHeight)||panel.canvasHeight<240||panel.canvasHeight>1600))throw new Error('Invalid saved panel height.');
       if(panel.comparison!=null&&typeof panel.comparison!=='boolean'||panel.comparisonIndex!=null&&(!Number.isSafeInteger(panel.comparisonIndex)||panel.comparisonIndex<2))throw new Error('Invalid saved comparison view.');
       if (definition.input ? typeof panel.assetKey !== 'string' : !record(panel.computation) || !record(panel.computation.refs)) throw new Error('Invalid panel inputs.');
+      if(definition.structureScene){const nodes=panel.computation.refs.nodes;if(!Array.isArray(nodes)||nodes.some(key=>typeof key!=='string'||! /^(complex|filtration):[A-Za-z0-9_-]+$/.test(key))||new Set(nodes).size!==nodes.length)throw new Error('Invalid complex / filtration display references.');}
       if (panel.computation?.settings != null) {
         const settings=panel.computation.settings;
         if (panel.type!=='plethysm' || !record(settings) || !['symmetric','exterior','advanced'].includes(settings.mode) || !Number.isInteger(settings.degree) || settings.degree<0 || settings.degree>12) throw new Error('Invalid plethysm power settings.');

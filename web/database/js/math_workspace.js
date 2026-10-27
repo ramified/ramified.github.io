@@ -135,7 +135,7 @@
             const existing=assetState.snapshot.assets.find(a=>a.kind===kind&&a.data.legacy?.id===entry.id);
             const view=presentation.split(kind,{legacy:entry}).view;
             const asset=existing?updateObjectAsset(assetRef(existing),{data,view}):createObjectAsset(kind,{data,view});
-            if(asset)objectWorkspace.open(kind+'-view',assetKey(asset),'main');saved++;
+            if(asset)objectWorkspace.open('complex-diagrams',assetKey(asset),'main');saved++;
           }
           status(`Saved ${saved} complex / filtration assets.${skipped?' Unsupported entries were retained in the original editor.':''}`,'success');
         },
@@ -1640,6 +1640,9 @@
     control.addEventListener('drop', (event) => { const { spec, key, result } = dragResult(event); if (!result.allowed) { markReferenceDrop(control, 'invalid'); return; } event.preventDefault(); markReferenceDrop(control, ''); chooseAssetReference(control, spec, key); });
   }
   function assetDefinitionFor(kind, type, data) {
+    if(kind==='filtration')return 'Filtration · '+data.objects.length+' terms · '+data.direction+' from '+data.startDegree;
+    if(kind==='complex')return 'Complex · '+data.objects.length+' terms · '+data.direction+' from '+data.startDegree;
+    if(kind==='field-extension')return (assetByKey(data.target)?.plainName||data.generator)+' / '+(assetByKey(data.base)?.plainName||'Choose base field')+' · '+data.polynomial;
     if(kind==='mosaic-space')return data.rows+' × '+data.cols+' · '+data.lattice+' · '+data.boundary;
     if(kind==='mosaic-diagram')return (data.diagramType==='dual'?'Dual graph':'Knot / link')+' on '+data.space;
     if (kind === 'number') return (data.hasValue?data.value:'Symbolic number')+' · '+(assetByKey(data.field)?.plainName||'Ring');
@@ -2827,7 +2830,7 @@
       const key=panel.computation?.refs?.asset,asset=raw.assets.find(a=>assetKey(a)===key),capability=window.MathWorkspaceObjects.capabilityFor(asset);
       if(capability&&capability.open!=='asset-view'){
         const definition=window.MathWorkspaceObjects.definitions.find(d=>d.id===capability.open);panel.type=definition.id;
-        panel.computation.refs=definition.geometryView?{asset:key,frame:asset.kind==='frame'?key:'',nodes:asset.kind==='frame'?[]:[key]}:{[definition.viewRole||'asset']:key};
+        panel.computation.refs=definition.structureScene?{nodes:[key]}:definition.geometryView?{asset:key,frame:asset.kind==='frame'?key:'',nodes:asset.kind==='frame'?[]:[key]}:{[definition.viewRole||'asset']:key};
       }
     }
     const prepared = io.validate(raw, {

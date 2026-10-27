@@ -208,6 +208,7 @@
     return degree === 0 ? [] : mode === 'symmetric' ? [degree] : Array(degree).fill(1);
   }
   const definitions = [
+    {id:'complex-diagrams',label:'Complexes & Filtrations',engine:'complex',assetView:true,readOnly:true,structureScene:true,light:true,slots:[]},
     ...structures.kinds.map(kind=>({id:kind+'-input',label:structures.labels[kind]+' Input',input:kind})),
     {id:'complex-view',label:'Complex Display',engine:'complex',assetView:true,readOnly:true,viewRole:'asset',light:true,structure:true,slots:[slot('asset','Complex','complex')]},
     {id:'field-extension-view',label:'Place Ramification',engine:'ramification',assetView:true,readOnly:true,viewRole:'asset',light:true,structure:true,slots:[slot('asset','Field extension','field-extension')]},
@@ -276,6 +277,8 @@
   function capabilityFor(asset){return asset?.kind==='variety'&&asset.type==='toric'?{...capabilities.variety,modify:'toric-variety-input'}:capabilities[asset?.kind];}
   for(const kind of mosaic.kinds){kindLabels[kind]=kind==='mosaic-space'?'Mosaic Space':'Mosaic Diagram';capabilities[kind].open='mosaic-view';}
   for(const kind of structures.kinds)capabilities[kind].open=kind+'-view';
+  for(const kind of ['complex','filtration']){capabilities[kind].open='complex-diagrams';capabilities[kind].properties=capabilities[kind].properties.filter(id=>!id.endsWith('-operations'));}
+  for(const definition of definitions)if(['complex-view','filtration-view','complex-operations','filtration-operations'].includes(definition.id))definition.legacy=true;
   const byType = new Map(definitions.map(definition => [definition.id, definition]));
   function compatible(asset, spec, definition) {
     return !!asset && (spec.kinds || [spec.kind]).includes(asset.kind) && (!spec.subtype || asset.type === spec.subtype)
@@ -318,6 +321,14 @@
     if (objects.asset?.kind === 'number') {
       const parent=assets.find(a=>keyOf(a)===objects.asset.data.field&&a.kind==='field');
       if(parent)objects.field=parent;else missing.push('Coefficient ring');
+    }
+    if(definition.structureScene){
+      for(const key of computation.refs.nodes||[]){
+        const asset=assets.find(a=>keyOf(a)===key&&['complex','filtration'].includes(a.kind));
+        if(!asset)continue;
+        objects[key]=asset;missing.push(...structures.issues(asset,assets));
+        for(const ref of structures.references(asset.kind,asset.data)){const item=assets.find(a=>keyOf(a)===ref);if(item)objects[ref]=item;}
+      }
     }
     if(definition.structure&&objects.asset){
       missing.push(...structures.issues(objects.asset,assets));
@@ -409,8 +420,18 @@
         onChange: change => nativeChange(panel, renderer, change),
         onCollectAssets: () => overviewAction(panel,'collect'),
         onCollectComplexAssets: entries => {
-          for(const entry of entries||[]){if(!['chain-complex','filtration'].includes(entry.kind))continue;const kind=entry.kind==='filtration'?'filtration':'complex',asset=api.create(kind,{data:structures.fromComplexEntry(entry),view:root.MathWorkspacePresentation.split(kind,{legacy:entry}).view});open(kind+'-view',keyOf(asset),'main');}
+          const added=[];
+          for(const entry of entries||[]){if(!['chain-complex','filtration'].includes(entry.kind))continue;const kind=entry.kind==='filtration'?'filtration':'complex',asset=api.create(kind,{data:structures.fromComplexEntry(entry),view:root.MathWorkspacePresentation.split(kind,{legacy:entry}).view});added.push(keyOf(asset));if(!panel.definition.structureScene)open('complex-diagrams',keyOf(asset),'main');}
+          if(panel.definition.structureScene){panel.computation.refs.nodes=[...new Set([...panel.computation.refs.nodes,...added])];refreshPanel(panel);}
+          return added;
         },
+        onEditDiagramAsset:key=>{const asset=get(key);if(asset)open(asset.kind+'-input',key,'side');},
+        onEditDiagramTerm:(key,part,index)=>{
+          const asset=get(key),term=asset?.data[part]?.[index];if(!term)return;
+          if(term.ref&&get(term.ref)){api.edit(refOf(get(term.ref)));return;}
+          const input=open(asset.kind+'-input',key,'side');input.structureRows?.find(row=>row.kind===part&&row.i===index)?.symbol.focus();
+        },
+        onRemoveDiagramAssets:keys=>{panel.computation.refs.nodes=panel.computation.refs.nodes.filter(key=>!keys.includes(key));refreshPanel(panel);},
         onOverviewAction: action => overviewAction(panel,action),
         onRemoveOverviewAsset: key => removeOverviewAsset(panel,key),
         onExportOverview: format => exportCategoryOverview(panel,format),
@@ -475,7 +496,7 @@
     function setRendererVisible(renderer, visible, property = false) {
       if (renderer.operation==='dynkin-cartan') {renderer.editor.setCanvasActive(false);renderer.editor.setInspectorActive(false);renderer.host.hidden=true;renderer.inspectorHost.hidden=true;return;}
       const mosaicCanvas=mosaic.propertyPanels.some(panel=>panel.id===renderer.operation&&panel.canvas);
-      const view=['complex-operations','filtration-operations','filtration-view'].includes(renderer.operation)||renderer.operation.startsWith('field-extension-')||mosaicCanvas||['complex-view','field-extension-view','mosaic-view','young-view','dynkin-view','lie-view','strands-view','sheaf-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
+      const view=['complex-diagrams','complex-operations','filtration-operations','filtration-view'].includes(renderer.operation)||renderer.operation.startsWith('field-extension-')||mosaicCanvas||['complex-view','field-extension-view','mosaic-view','young-view','dynkin-view','lie-view','strands-view','sheaf-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
       const canvas = !property || view;
       const inspector = mosaicCanvas || property && !view || renderer.role === 'input' && ['mosaic','matrix', 'category', 'strand','slice'].includes(renderer.engine);
       // Slicing inputs edit Assets; the dedicated slicing scene owns the canvas.
@@ -986,6 +1007,14 @@
       mode.addEventListener('change',()=>{panel.computation.settings.mode=mode.value;if(mode.value!=='advanced')bindPower(panel);refreshPanel(panel);});
       listen(degree,()=>{const n=Number(degree.value);if(!Number.isInteger(n)||n<0||n>12)return;panel.computation.settings.degree=n;bindPower(panel);refreshPanel(panel);});
     }
+    function refreshDiagramMembers(panel){
+      if(!panel.diagramMembers){panel.diagramMembers=element('details');const title=element('summary','','Assets in this display');panel.diagramChoices=element('div','workspace-form-fields');panel.diagramMembers.append(title,panel.diagramChoices);panel.references.append(panel.diagramMembers);}
+      const candidates=snapshot.assets.filter(a=>['complex','filtration'].includes(a.kind)),nodes=panel.computation.refs.nodes||[];
+      const signature=JSON.stringify([nodes,candidates.map(a=>[keyOf(a),a.name])]);if(signature===panel.memberSignature)return;panel.memberSignature=signature;
+      panel.diagramChoices.replaceChildren();
+      for(const a of candidates){const check=element('input');check.type='checkbox';check.checked=nodes.includes(keyOf(a));check.dataset.diagramMember=keyOf(a);const row=element('label');row.append(check,document.createTextNode(' '+a.name+' · '+kindLabels[a.kind]));check.addEventListener('change',()=>{panel.computation.refs.nodes=check.checked?[...new Set([...panel.computation.refs.nodes,keyOf(a)])]:panel.computation.refs.nodes.filter(key=>key!==keyOf(a));refreshPanel(panel);});panel.diagramChoices.append(row);}
+      if(!candidates.length)panel.diagramChoices.append(element('p','','Create a Complex or Filtration asset, or save a preview from this panel.'));
+    }
     function refreshPanel(panel) {
       if (panel.refreshing) return;
       panel.refreshing = true;
@@ -1053,6 +1082,7 @@
           if (!asset) feedback(panel, panel.assetKey ? 'The referenced asset was deleted. Choose another asset.' : 'Choose or create an asset to edit.');
         } else if (panel.definition.objectView) { refreshObjectView(panel); }
         else if (panel.definition.display) { refreshDisplayPanel(panel); } else {
+          if(panel.definition.structureScene)refreshDiagramMembers(panel);
           if (panel.definition.slicingScene || panel.definition.scene&&!panel.definition.assetView&&!panel.definition.overview) refreshSceneChoices(panel);
           const computation = panel.computation, context = contextFor(computation, snapshot.assets,snapshot.diagnostics);
           if (panel.definition.overview && computation.refs.active && !Object.values(context.objects).some(asset=>keyOf(asset)===computation.refs.active)) computation.refs.active = '';
@@ -1125,6 +1155,7 @@
       if(definition.mosaicOwner==='mosaic-space')assetKey=keyOf(mosaic.propertyAsset(type,get(assetKey),snapshot.assets))||assetKey;
       let refs = JSON.parse(JSON.stringify(options.refs || {}));
       if (!definition.input) {
+        if(definition.structureScene&&!refs.nodes)refs.nodes=get(assetKey)&&['complex','filtration'].includes(get(assetKey).kind)?[assetKey]:[];
         const firstSlot = definition.slots?.find(spec => compatible(get(assetKey), spec, definition));
         if (firstSlot && !options.id) refs[firstSlot.id] = assetKey;
         else if (!options.id && !definition.slicing && definition.fromKinds?.includes(get(assetKey)?.kind)) refs.lie = get(assetKey).data.lie;
@@ -1152,7 +1183,7 @@
       head.setAttribute('role', 'button'); head.tabIndex = 0; head.setAttribute('aria-expanded', 'true');
       const body = element('div', 'card-body workspace-card-form'), references = element('div', 'workspace-object-references'), controls = element('div', 'workspace-form-fields'), message = element('p', 'workspace-status'), renderArea = element('div', 'workspace-object-render-area'); message.setAttribute('role', 'status');
       if (type==='category-diagram') references.hidden=true;
-      const panel = { id, definition, node, head, title, body, references, controls, message, renderArea, selectors: [], renderers: new Map(), assetKey:definition.overview?'':assetKey, location: 'hidden', closed: false, collapsed: false, refreshing: false, comparison:!!(options.newInstance||options.comparison),comparisonIndex:options.comparisonIndex };
+      const panel = { id, definition, node, head, title, body, references, controls, message, renderArea, selectors: [], renderers: new Map(), assetKey:definition.overview||definition.structureScene?'':assetKey, location: 'hidden', closed: false, collapsed: false, refreshing: false, comparison:!!(options.newInstance||options.comparison),comparisonIndex:options.comparisonIndex };
       node.dataset.panelRole=definition.input?'modify':definition.assetView||definition.scene||definition.slicingScene||['matrix-view','slice'].includes(type)?'view':'property';
       panels.set(id, panel); head.append(title, element('em', 'toggle-icon', '▾')); body.append(references, controls, message, renderArea); node.append(head, body);
       if(definition.slicingScene) body.append(references,controls,message);
@@ -1212,7 +1243,7 @@
       const clone=open(panel.definition.id,'',panel.location==='hidden'?'side':panel.location,{newInstance:true,refs:panel.computation?.refs,rule:panel.computation?.rule,settings:panel.computation?.settings});
       for(const [source,target] of [[panel.propertyRenderer,clone.propertyRenderer],...[...panel.renderers].map(([role,renderer])=>[renderer,clone.renderers.get(role)])]){
         if(!source||!target)continue;target.applying=true;
-        try{target.editor.restore(source.editor.capture());if(panel.definition.structure)target.editor.objectIO('presentation',source.editor.captureAssetProperties()?.presentation);}finally{target.applying=false;}
+        try{target.editor.restore(source.editor.capture());if(panel.definition.structure||panel.definition.structureScene)target.editor.objectIO('presentation',source.editor.captureAssetProperties()?.presentation);}finally{target.applying=false;}
       }
       if(clone.computation&&panel.computation){clone.computation.options=JSON.parse(JSON.stringify(panel.computation.options||{}));clone.computation.status=panel.computation.status;clone.computation.result=clone.propertyRenderer?.editor.readObjectResult()||clone.computation.result;}
       refreshPanel(clone);return clone;
@@ -1299,6 +1330,7 @@
     function listCards() {
       return definitions.filter(definition => !definition.input).flatMap(definition => {
         const instances = [...panels.values()].filter(panel => panel.definition === definition);
+        if(definition.legacy&&!instances.length)return [];
         if (!instances.length) return [{ key: 'new:' + definition.id, label: definition.label, visible: false }];
         return instances.map((panel, index) => ({
           key: panel.id, label: definition.label + (definition.input && get(panel.assetKey) ? ' · ' + (get(panel.assetKey).plainName || get(panel.assetKey).name) : '') + (instances.length > 1 ? ' · ' + (index + 1) : ''),
@@ -1369,7 +1401,8 @@
             if (selected) renderer.editor.objectIO('select',refOf(selected));
           } finally { renderer.applying = false; }
         }
-        if(panel.definition.structure)panel.propertyRenderer?.editor.objectIO('presentation',item.computation?.options?.presentation);
+        if(panel.definition.structure||panel.definition.structureScene)panel.propertyRenderer?.editor.objectIO('presentation',item.computation?.options?.presentation);
+        if(panel.definition.structureScene){panel.computation.signature='';refreshPanel(panel);}
         if (panel.computation) { panel.computation.options = item.computation.options;if(!['missing','invalid'].includes(panel.computation.status)){panel.computation.status = item.computation.status; panel.computation.result = panel.propertyRenderer?.editor.readObjectResult() || panel.computation.result || null;} }
         const collapsed=panel.location!=='main'&&!!item.presentation.collapsed;
         panel.node.classList.toggle('collapsed', collapsed); panel.node.classList.toggle('is-pinned', !!item.presentation.pinned); panel.node.dataset.cardWideState = item.presentation.displayMode;
