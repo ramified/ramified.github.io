@@ -18,6 +18,25 @@ const __captureControls = () => __panelCard ? [...__panelCard.querySelectorAll('
 
 export const matrixObjectPanel = chrome + String.raw`
 let __matrixConstructed = false, __matrixDisplay = null, __matrixField = '';
+const __workspaceRenderOperation = renderOperationResult;
+renderOperationResult = function(payload) {
+  const operation = refs.operation.value;
+  if (currentDataType() === 'integer' && ['transpose','inverse','power','bruhat','rcf'].includes(operation)) {
+    const data = readMatrix(false);
+    if (!data.errors.length) {
+      payload = computeSymbolicOperation(data, operation);
+      const fractions = payload.blocks.some(block => block.matrix.some(row => row.some(value => !/^-?\d+$/.test(exactScalarSource(value, 'text')))));
+      payload.inputRing = 'integer'; payload.resultRing = fractions ? 'rational' : 'integer';
+      payload.computationRing = fractions || ['bruhat','rcf'].includes(operation) ? 'rational' : 'integer';
+      payload.field = {kind:payload.resultRing};
+      let note = 'Input coefficient ring: ℤ. Result entries lie in ' + (fractions ? 'ℚ, the fraction field of ℤ.' : 'ℤ.');
+      if (operation === 'inverse') note += fractions ? ' This is an inverse over ℚ; the matrix is not invertible over ℤ.' : ' The matrix is invertible over ℤ.';
+      if (['bruhat','rcf'].includes(operation)) note += ' This decomposition is computed over ℚ.';
+      payload.note = [payload.note, note].filter(Boolean).join(' ');
+    }
+  }
+  return __workspaceRenderOperation(payload);
+};
 function __matrixData() {
   return { rows: state.rows, cols: state.cols, entries: state.entries.map(row => row.slice()), dataType: currentDataType(), finiteFieldPrime: state.finiteFieldPrime, rationalFunctionVariables: state.rationalFunctionVariables.slice(), numberFieldSymbol: state.numberFieldSymbol, numberFieldPolynomial: state.numberFieldPolynomial, ...(__matrixField ? {field:__matrixField} : {}) };
 }
@@ -112,8 +131,8 @@ __editor.setAssetAdapter({
       const parsed=parseEntryForField(raw,field);let scalar=parsed.scalar;
       if(!scalar) {
         scalar=exactScalarFromDetail(parsed);
-        if(kind!=='complex'&&!scalar.im.isZero())throw new Error('This field requires a real value.');
-        if(kind==='integer'&&scalar.re.den!==1n)throw new Error('This field requires an integer.');
+        if(kind!=='complex'&&!scalar.im.isZero())throw new Error('This coefficient ring requires a real value.');
+        if(kind==='integer'&&scalar.re.den!==1n)throw new Error('This coefficient ring requires an integer.');
         if(kind==='finite-field') {
           const p=BigInt(field.p),numerator=Number(scalar.re.num%p),denominator=Number(scalar.re.den%p);
           scalar=new ModScalar(numerator,field.p).div(new ModScalar(denominator,field.p));

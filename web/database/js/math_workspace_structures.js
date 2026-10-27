@@ -1,5 +1,7 @@
 (function(root){
   'use strict';
+  const rings=root.MathWorkspaceRings||(typeof require==='function'?require('./math_workspace_rings.js'):null);
+  const presentation=root.MathWorkspacePresentation||(typeof require==='function'?require('./math_workspace_presentation.js'):null);
   const kinds=['complex','filtration','field-extension'];
   const labels={complex:'Complex',filtration:'Filtration','field-extension':'Field extension'};
   const clone=value=>JSON.parse(JSON.stringify(value));
@@ -10,6 +12,7 @@
     return {symbol:String(value.symbol??''),ref:String(value.ref??'')};
   }
   function normalize(kind,source={}){
+    source=presentation.split(kind,source).data;
     if(kind==='filtration'){
       const objects=(source.objects??['F_0','F_1','F_2']).map(term),quotients=(source.quotients??Array.from({length:Math.max(0,objects.length-1)},(_,i)=>'G_'+i)).map(term);
       const startDegree=Number(source.startDegree??0),direction=source.direction||'increasing';
@@ -37,7 +40,7 @@
   function issues(asset,assets){
     const d=asset.data,get=ref=>assets.find(a=>key(a)===ref),out=[];
     if(asset.kind==='field'){
-      if(d.dataType==='function-field'&&(!get(d.constantField)||get(d.constantField).kind!=='field'||get(d.constantField).data.dataType==='integer'))out.push('Choose an existing constant Field (not the integer ring).');
+      out.push(...rings.issues(asset,assets));
     }else if(['complex','filtration'].includes(asset.kind)){
       [...d.objects,...(d.quotients||[])].forEach(t=>{if(t.ref&&!['sheaf','variety','matrix'].includes(get(t.ref)?.kind))out.push('A term references a missing or incompatible object: '+t.ref);});
       (d.maps||[]).forEach((t,i)=>{
@@ -46,20 +49,19 @@
         for(const [field,index]of [['domain',i],['codomain',i+1]])if(d.objects[index].ref&&map.data[field]!==d.objects[index].ref)out.push('Differential '+(i+1)+' does not match its '+field+' term.');
       });
     }else{
-      if(get(d.base)?.kind!=='field')out.push('Choose an existing base field.');
-      if(d.target&&get(d.target)?.kind!=='field')out.push('The target must reference an existing field.');
-      if(d.target&&d.base===d.target)out.push('An extension needs distinct base and target field assets.');
+      out.push(...rings.issues(asset,assets));
     }
     return out;
   }
-  function complexEntry(asset,assets){
+  function complexEntry(asset,assets,view={}){
+    const legacy=presentation.split(asset.kind,asset.data).data.legacy||{};
     const name=t=>t.ref?(assets.find(a=>key(a)===t.ref)?.name||t.symbol||t.ref):t.symbol;
     if(asset.kind==='filtration'){
       const objects=asset.data.objects.map(name),quotients=asset.data.quotients.map(name);
       if(asset.data.direction==='decreasing'){objects.reverse();quotients.reverse();}
-      return {...(asset.data.legacy||{}),id:asset.id,kind:'filtration',length:objects.length,objects,maps:[],quotients,selected:true};
+      return {...legacy,...view,id:asset.id,kind:'filtration',length:objects.length,objects,maps:[],quotients,selected:true};
     }
-    return {...(asset.data.legacy||{}),id:asset.id,kind:'chain-complex',length:asset.data.objects.length,objects:asset.data.objects.map(name),maps:asset.data.maps.map(name),selected:true};
+    return {...legacy,...view,id:asset.id,kind:'chain-complex',length:asset.data.objects.length,objects:asset.data.objects.map(name),maps:asset.data.maps.map(name),selected:true};
   }
   function fromComplexEntry(entry){
     if(entry.kind==='filtration')return normalize('filtration',{objects:entry.objects,quotients:entry.quotients,legacy:entry});

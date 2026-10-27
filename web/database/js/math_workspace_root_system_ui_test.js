@@ -61,7 +61,7 @@ async function run() {
       window.calc = panels.open('strands-calculation','strands:' + w.id,'side');
       window.basis = panels.open('strands-basis','lie:' + lie.id,'side');
       window.relations = panels.open('strands-relations','','side');
-      window.sv=panels.open('strands-view','strands:'+w.id,'main');window.sv2=panels.open('strands-view','strands:'+w.id,'side');window.display = panels.open('strands-display','','side');
+      window.sv=panels.open('strands-view','strands:'+w.id,'main');window.sv2=panels.open('strands-view','strands:'+w.id,'side',{newInstance:true});window.display = panels.open('strands-display','','side');
       display.viewSelect.value = sv.id; display.viewSelect.dispatchEvent(new Event('change',{ bubbles: true }));
     });
     assert.deepEqual(errors, []);

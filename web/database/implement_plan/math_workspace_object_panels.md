@@ -1,9 +1,134 @@
 # Mathematical object panels
 
+## Mathematical definitions and presentation
+
+Asset `data` contains mathematical definitions. Viewport, layer visibility,
+styles, label placement and diagram layout belong to an individual renderer.
+Geometric Modify panels hide the old source-management, style, visibility and
+projection-status rows before moving the form body; they do not rely on the
+old card ancestor surviving the move. Real input diagnostics remain in the
+workspace panel. Slice Viewport / Layers edits the selected actual display,
+and comparison views keep independent presentation settings.
+
+`MathWorkspacePresentation` extracts known presentation fields from legacy
+Complex/Filtration entries and Varieties/Sheaves/Maps drawing payloads. Unknown
+mathematical metadata and source IDs remain intact. `workspace.viewDefaults`
+holds imported display defaults separately from assets, including for an asset
+whose display has not been opened yet. Each renderer uses these defaults once
+and persists subsequent local settings with its own panel. Existing saved view
+layouts take precedence over defaults. Complex displays expose a local Layout
+selector; comparisons and portable backups retain their independent choices.
+
+Workspace migration also cleans input drafts and their conflict baselines, is
+idempotent, and runs before graph validation or replacement. Native collection
+and restoration do not reintroduce drawing fields into mathematical payloads.
+Radius, geometric metric and stored quiver orientation remain mathematical data.
+Run `math_workspace_presentation_test.js`,
+`math_workspace_presentation_ui_test.js`, structure, slicing, backup, comparison
+and editable-draft regressions, plus the native bundle build/freshness check.
+
+## Panel instance registry
+
+`MathWorkspacePanelInstances` tracks live panel instances separately from the
+existing `MathWorkspacePanelRegistry` catalog of available properties. Ordinary
+Open/Modify requests reveal an existing matching panel instead of creating a
+new instance. Editors use the asset ID and editor type; views/calculations use
+the panel type and input bindings, including operand order and branching rule.
+Overview node sets ignore ordering and active selection. Names, canvas/side
+placement and presentation settings do not define a panel's identity.
+
+Revealing a visible panel preserves its position, controls, drafts and settings.
+It expands a collapsed panel and focuses its heading without disturbing an
+already-focused control. Hidden/closed instances reopen with their saved state.
+Retargeting updates the registry; deleted asset targets are unregistered; clearing
+a workspace clears the registry. Partially specified calculation requests retain
+the existing panel's other input choices.
+
+Display/calculation headings provide New comparison view (the duplicate-view
+icon). This explicitly creates an independent view with the same references and
+native configuration, labelled Comparison 2, 3, etc. Mathematical asset data is
+shared. Modify requests remain unique during ordinary opening. Old backups can
+retain duplicate editors as Saved copies, including their independent drafts;
+old duplicate displays are labelled as comparisons. Saved IDs and layout stay
+intact, and default opening prefers the original primary panel.
+
+Comparison flags and numbering persist in workspace backups. Number drafts
+retain invalid raw values across background refreshes and restored copies.
+Run `math_workspace_panel_registry_test.js` and
+`math_workspace_panel_reuse_ui_test.js`, plus the existing Open/Display,
+object-input, picker, panel-drag and backup regressions.
+
+## Coefficient rings
+
+The shared coefficient asset is called Ring, with default symbol R. Its
+coefficient type determines whether it is a field: Z is an integral domain
+but not a field, whereas Q, R, C and the supported field presentations are
+fields. `MathWorkspaceRings` owns this classification and validates field-only
+references. Matrix and Number references accept coefficient rings; field
+extensions and function-field constants require fields. A shared ring can be
+changed independently of its consumers. Consumers whose definitions no longer
+work retain their values and references, show a warning, and cannot supply a
+current calculation result until repaired.
+
+The historical `field` kind/type, `field:` reference prefix, data.field links,
+and field-input/field-view panel IDs remain the serialization contract.
+This avoids rewriting asset identities, names, saved drafts or panel bindings
+in older backups. All visible asset/category labels use Ring; mathematical
+field names and Field extension retain their specific meaning.
+
+Integer matrix transpose, inverse, powers and supported decompositions use
+exact arithmetic in the workspace adapter. Results state the input ring and
+whether their entries lie in Z or Q. Inverses over Q explicitly distinguish
+matrices invertible over Z. Bruhat and rational canonical decompositions are
+labelled as computations over Q even when their displayed entries are integral.
+The source matrix keeps its original coefficient-ring reference.
+
+Run `math_workspace_rings_test.js` and `math_workspace_rings_ui_test.js`, the
+Number and matrix input regressions, function-field/extension regressions,
+backup and input-draft suites. Rebuild and check the native bundle.
+
+## Dependency diagnostics
+
+`MathWorkspaceDiagnostics` derives validation from the current dependency
+graph. Ring changes never validate or reject all downstream definitions as a
+single transaction. Direct edits still validate the edited asset, and live
+text controls retain incomplete drafts without publishing them.
+
+Diagnostics are separate from saved definitions. Number membership, matrix
+entries, genus/rank requirements and field-only uses are checked at their
+owners; failures propagate to consumers with the original source and reason.
+The Assets explorer and object-panel headings show accessible warning badges.
+Invalid results are cleared, hidden and unavailable for calculation export.
+Raw definitions and whole-workspace backups remain exportable and restorable.
+Diagnostics are recomputed on restore, and saved native renderers cannot revive
+invalid results. Independent valid calculations continue normally.
+
+Native property slots show a repair message and clear their projection while
+invalid. Valid slots and sheaf projections exclude unrelated invalid assets.
+Repairing a source removes warnings and updates dependent displays; manual
+calculations become ready for recomputation under their usual controls.
+
+Run `math_workspace_diagnostics_test.js` and
+`math_workspace_diagnostics_ui_test.js` for upstream edits, transitive genus
+failures, unrelated valid calculations, native Hodge guards, invalid backup
+roundtrips, repair, warning visibility, and focused draft preservation.
+
+Input drafts compare their saved base definition with the edited asset's
+name, kind, subtype and data. Unrelated workspace revisions and derived
+property updates do not create conflicts. A real concurrent edit of that same
+definition preserves the draft and offers Save my version / Load saved version.
+Backups retain the draft's base definition. Invalid referenced scalars remain
+visible when reopening an editor and can be replaced by a blank literal draft;
+no invalid fraction or missing value is coerced into an invented integer.
+Unsaved invalid Genus/Rank drafts also display an asset warning while keeping
+the last valid committed value. Run `math_workspace_repair_inputs_ui_test.js`
+for keyboard repairs, upstream updates during editing, real conflict recovery,
+backup baselines and warning badges on affected varieties and sheaves.
+
 ## Numbers and shared scalar parameters
 
 New… includes Number, with its own Modify and Display panels. A Number owns
-a Field reference (a shared rational field by default), a symbolic or valued
+a coefficient Ring reference (a shared rational field by default), a symbolic or valued
 mode, its value draft, and the choice to substitute that value in calculations.
 The existing coefficient engine handles exact fractions, decimals, complex
 values, prime fields, rational functions, and number-field elements. The
@@ -20,7 +145,8 @@ source until a valid value is entered. These are
 ID-based dependencies, so renaming a Number preserves its uses, edits refresh
 the native properties, and deletion previews include dependent objects.
 Genus and rank require characteristic zero and, when valued, integers at
-least zero and one respectively. Incompatible edits leave the model intact.
+least zero and one respectively. Incompatible direct drafts leave the model
+intact; upstream edits instead mark the consuming genus/rank definition invalid.
 The ppav genus remains the existing numerical dimension parameter.
 Old backups with genus/genusNumber or rank/rankNumber pairs are migrated,
 with the old active reference taking precedence over its unused literal.

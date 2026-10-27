@@ -30,8 +30,10 @@ const document = {
   querySelector() { return null; }
 };
 const window = {
+  MathWorkspacePresentation: require('./math_workspace_presentation.js'),
   MathWorkspaceMosaic: require('./math_workspace_mosaic.js'),
   MathWorkspaceNumbers: require('./math_workspace_numbers.js'),
+  MathWorkspaceRings: require('./math_workspace_rings.js'),
   addEventListener(type, handler) { windowListeners[type] = handler; }
 };
 vm.runInNewContext(source, {
@@ -410,12 +412,36 @@ const makeAutosaveFixture = () => {
   const fixture = makeAutosaveFixture(), a = fixture.bind({ kind: 'variety', id: 'X1' });
   fixture.edit(a, { name: 'A_{conflict}' }, { schedule: false });
   const command = api.createAssetInputCommitCommand(a), preserved = a.draft.name;
+  fixture.assets[1].name='B_{changed}';
   api.state.snapshot.revision += 1;
   const result = api.commitAssetInputCommand(command, { coordinator: fixture.coordinator, refresh: fixture.refresh });
-  assert.strictEqual(result.conflict, true, 'revision mismatch rejects the whole autosave command');
+  assert.strictEqual(result.committed, true, 'an unrelated asset edit does not conflict with this draft');
+  assert.strictEqual(a.draft.name, preserved);
+  assert.strictEqual(fixture.assets[1].name,'B_{changed}');
+}
+
+{
+  const fixture = makeAutosaveFixture(), a = fixture.bind({ kind: 'variety', id: 'X1' });
+  fixture.edit(a, { name: 'A_{mine}' }, { schedule: false });
+  const command = api.createAssetInputCommitCommand(a), preserved = a.draft.name;
+  fixture.assets[0].name='A_{elsewhere}';api.state.snapshot.revision+=1;
+  const result=api.commitAssetInputCommand(command,{coordinator:fixture.coordinator,refresh:fixture.refresh});
+  assert.strictEqual(result.conflict,true,'editing the same saved asset still detects a real conflict');
   assert.strictEqual(a.autosaveStatus, 'Conflict');
   assert.strictEqual(a.draft.name, preserved, 'revision conflict preserves the original Input Instance draft');
-  assert.strictEqual(fixture.assets[0].name, 'A');
+  assert.strictEqual(fixture.assets[0].name, 'A_{elsewhere}');
+  api.resolveAssetInputConflict(a,'draft',{coordinator:fixture.coordinator,refresh:fixture.refresh});
+  assert.strictEqual(fixture.assets[0].name,'A_{mine}','explicitly saving the local version resolves the conflict');
+  assert.strictEqual(a.conflictState,null);
+}
+
+{
+  const fixture=makeAutosaveFixture(),a=fixture.bind({kind:'variety',id:'X1'});
+  fixture.edit(a,{name:'A_{pending}'},{schedule:false});
+  fixture.assets[0].name='A_{latest}';api.state.snapshot.revision+=1;
+  api.commitAssetInputCommand(api.createAssetInputCommitCommand(a),{coordinator:fixture.coordinator,refresh:fixture.refresh});
+  api.resolveAssetInputConflict(a,'saved',{coordinator:fixture.coordinator,refresh:fixture.refresh});
+  assert.strictEqual(a.draft.name,'A_{latest}');assert.strictEqual(a.dirty,false);assert.strictEqual(a.conflictState,null);
 }
 
 {
@@ -586,8 +612,8 @@ assert(nativeBundle.includes(Buffer.from(':host{display:block;min-width:0;height
 assert(nativeBundle.includes(Buffer.from('[id$="-wide-host"]:not(:has(.card)){display:none!important}')), 'empty wide-card hosts must not reserve native canvas space');
 assert(nativeBundle.includes(Buffer.from('.workspace-editor-layout .workspace-view-card{min-width:0;width:100%;height:100%')), 'nested calculator canvas panels must fill their allocated workspace height');
 assert(/math_workspace_native_editors_v8\.js\?v=[a-f0-9]{16}/.test(html), 'native editor cache query must be derived from the reproducible bundle hash');
-assert(html.includes('css/math_workspace.css?v=20261027-ui-cleanup-1'), 'workspace stylesheet changes need a cache-query bump');
-assert(html.includes('js/math_workspace.js?v=20261027-filtration-fields-1'), 'workspace controller changes need a cache-query bump');
+assert(html.includes('css/math_workspace.css?v=20261027-repair-input-1'), 'workspace stylesheet changes need a cache-query bump');
+assert(html.includes('js/math_workspace.js?v=20261027-presentation-1'), 'workspace controller changes need a cache-query bump');
 assert(html.includes('js/calculator_cards.js?v=20260903-1'), 'workspace-owned Assets cards must reuse the shared calculator card chrome');
 assert(nativeBuilder.includes('math_workspace_native_editors_v8.js') && nativeBuilder.includes('Stale live native editor bundle'), 'the source builder must publish and verify the live runtime');
 assert(!source.includes("closeCardPicker(); const picker = assetState.referencePicker"), 'native source selection must not be closed by the global outside-pointer handler');

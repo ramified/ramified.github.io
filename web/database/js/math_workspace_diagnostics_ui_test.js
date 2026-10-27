@@ -1,0 +1,85 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {startServer,launchBrowser,stopBrowser,waitFor,evaluate}=require('./math_workspace_drag_regression_test.js');
+async function run(){
+  const server=await startServer();let session;
+  try{
+    session=await launchBrowser('http://127.0.0.1:'+server.address().port+'/math_workspace.html');const {client}=session,errors=[];
+    const read=(fn,...args)=>evaluate(client,'('+fn.toString()+')(...'+JSON.stringify(args)+')');
+    await client.send('Runtime.enable');client.socket.addEventListener('message',event=>{const msg=JSON.parse(String(event.data));if(msg.method==='Runtime.exceptionThrown')errors.push(msg.params.exceptionDetails.exception?.description||msg.params.exceptionDetails.text);});
+    const press=async(key,code,modifiers=0)=>{for(const type of ['keyDown','keyUp'])await client.send('Input.dispatchKeyEvent',{type,key,code,modifiers,windowsVirtualKeyCode:key==='a'?65:0});};
+    await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
+    await read(()=>{
+      window.api=MathWorkspaceAssetsTest;window.panels=MathWorkspaceObjectPanels;window.key=a=>a.kind+':'+a.id;window.get=a=>api.localAssetSnapshot().assets.find(item=>key(item)===key(a));window.valid=a=>api.localAssetSnapshot().diagnostics[key(a)].valid;
+      window.ring=api.createObjectAsset('field',{name:'R',data:{dataType:'rational'}});
+      window.fraction=api.createObjectAsset('number',{name:'a',data:{field:key(ring),hasValue:true,value:'1/2'}});
+      window.genus=api.createObjectAsset('number',{name:'g',data:{field:key(ring),hasValue:true,value:'2'}});
+      window.matrix=api.createObjectAsset('matrix',{data:{rows:1,cols:1,field:key(ring),entries:[['1/2']]}});
+      window.curve=api.createObjectAsset('variety',{type:'curve',name:'C',data:{genus:{kind:'reference',ref:key(genus)}}});
+      window.numberView=panels.open('number-view',key(fraction),'side');window.numberInput=panels.open('number-input',key(fraction),'side');
+      window.curveView=panels.open('sheaf-view',key(curve),'side');window.calculation=panels.open('matrix-computation','','main',{refs:{matrix:key(matrix)}});
+      api.bindAssetPropertySlot('hodge',curve,{focus:false,promote:false});
+      window.hodge=()=>api.assetsCardState.slots.get('hodge').rendererSession;
+      const shadow=calculation.propertyRenderer.editor.inspectorShadow;shadow.querySelector('#operation-select').value='inverse';shadow.querySelector('#compute-operation').click();
+      api.openCanvas('assets');window.ringInput=panels.open('field-input',key(ring),'side');ringInput.coefficientType.value='integer';ringInput.coefficientType.dispatchEvent(new Event('change'));
+    });
+    assert.equal(await read(()=>get(ring).data.dataType),'integer');
+    assert.equal(await read(()=>get(fraction).data.value),'1/2');assert.equal(await read(()=>get(fraction).data.field),await read(()=>key(ring)));
+    assert.equal(await read(()=>valid(ring)),true);assert.equal(await read(()=>valid(fraction)),false);assert.equal(await read(()=>valid(matrix)),false);assert.equal(await read(()=>valid(genus)),true);
+    assert.equal(await read(()=>numberView.computation.status),'invalid');assert.equal(await read(()=>numberView.computation.result),null);
+    assert.equal(await read(()=>calculation.computation.status),'invalid');assert.equal(await read(()=>calculation.computation.result),null);
+    assert.equal(await read(()=>calculation.propertyRenderer.inspectorHost.hidden),true);
+    assert.match(await read(()=>{try{panels.exportText('property:'+calculation.computation.id,'rows');return '';}catch(error){return error.message;}}),/Update/);
+    assert.equal(await read(()=>JSON.parse(panels.exportText('property:'+calculation.computation.id)).result),null);
+    assert.equal(await read(()=>curveView.computation.status),'current','valid calculations are independent of invalid neighbors');
+    assert.equal(await read(()=>!!hodge().dependencyInvalid),false);
+    assert.match(await read(()=>document.querySelector('[data-asset-key="'+key(fraction)+'"] .workspace-asset-warning').getAttribute('aria-label')),/1\/2.*integer/);
+    assert.equal(await read(()=>document.querySelector('[data-asset-key="'+key(genus)+'"] .workspace-asset-warning')),null);
+    await read(()=>{
+      window.extension=api.createObjectAsset('field-extension');window.base=api.localAssetSnapshot().assets.find(item=>key(item)===extension.data.base);
+      window.functionField=api.createObjectAsset('field',{data:{dataType:'function-field',constantField:key(base)}});window.extensionInput=panels.open('field-extension-input',key(extension),'side');
+      api.updateObjectAsset(base,{data:{...get(base).data,dataType:'integer'}});
+    });
+    assert.equal(await read(()=>valid(extension)),false);assert.equal(await read(()=>valid(functionField)),false);assert.equal(await read(()=>valid(base)),true);
+    assert.match(await read(()=>extensionInput.message.textContent),/Needs repair/);
+    await read(()=>{window.saved=panels.exportText('workspace');panels.importText('workspace',saved);});
+    assert.equal(await read(()=>valid(fraction)),false,'invalid definitions survive backup');
+    assert.equal(await read(()=>get(fraction).data.value),'1/2');assert.equal(await read(()=>valid(extension)),false);
+    assert.equal(await read(()=>[...panels.panels.values()].find(panel=>panel.definition.id==='matrix-computation').computation.status),'invalid');
+    await read(()=>{
+      api.updateObjectAsset(base,{data:{...get(base).data,dataType:'rational'}});
+      api.updateObjectAsset(ring,{data:{...get(ring).data,dataType:'rational'}});
+      api.updateObjectAsset(genus,{data:{...get(genus).data,value:'3/2'}});
+      window.curvePanel=[...panels.panels.values()].find(panel=>panel.definition.id==='sheaf-view');
+    });
+    assert.equal(await read(()=>valid(genus)),true);assert.equal(await read(()=>valid(curve)),false);
+    assert.equal(await read(()=>curvePanel.computation.status),'invalid');assert.equal(await read(()=>curvePanel.computation.result),null);
+    assert.equal(await read(()=>hodge().dependencyInvalid),true);
+    assert.match(await read(()=>hodge().dependencyWarning.textContent),/Needs repair.*Genus.*integer/);
+    assert.equal(await read(()=>hodge().dependencyWarning.hidden),false);
+    await read(()=>{api.openCanvas('sheaf-complexes');window.canvas=api.sessions.get('sheaf-complexes');canvas.editor.shadow.querySelector('[data-workspace-collect-assets]').click();});
+    assert.match(await read(()=>canvas.projectionWarning.textContent),/need repair.*Genus.*integer/);
+    assert.equal(await read(()=>canvas.editor.captureAssetLayout().some(entry=>entry.key===key(curve))),false);
+    await read(()=>{panels.importText('workspace',panels.exportText('workspace'));});
+    assert.equal(await read(()=>hodge().dependencyInvalid),true,'saved native properties cannot revive an invalid result');
+    assert.equal(await read(()=>hodge().editor.listCards().some(card=>card.available!==false&&card.visible)),false,JSON.stringify(await read(()=>hodge().editor.listCards().filter(card=>card.visible))));
+    assert.equal(await read(()=>hodge().editor.getCardNode('hodge-card').getClientRects().length),0);
+    assert(await read(()=>hodge().dependencyWarning.getClientRects().length>0));
+    await read(()=>{api.openCanvas('assets');});
+    fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-diagnostics-invalid.png'),Buffer.from((await client.send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await read(()=>api.updateObjectAsset(genus,{data:{...get(genus).data,value:'3'}}));
+    assert.equal(await read(()=>valid(curve)),true);assert.equal(await read(()=>hodge().dependencyInvalid),false);assert.equal(await read(()=>hodge().dependencyWarning.hidden),true);assert.equal(await read(()=>hodge().dependencyWarning.getClientRects().length),0);
+    assert.equal(await read(()=>[...panels.panels.values()].find(panel=>panel.definition.id==='sheaf-view').computation.status),'current');
+    assert.equal(await read(()=>api.sessions.get('sheaf-complexes').projectionWarning.hidden),true);
+    assert.equal(await read(()=>document.querySelectorAll('.workspace-asset-warning').length),0,'repair clears all warnings');
+    await read(()=>{api.updateObjectAsset(ring,{data:{...get(ring).data,dataType:'integer'}});window.editor=panels.open('number-input',key(fraction),'side');editor.numberControls.value.focus();});
+    await press('a','KeyA',2);await client.send('Input.insertText',{text:'+'});
+    await read(()=>api.updateObjectAsset(ring,{data:{...get(ring).data,dataType:'rational'}}));
+    assert.equal(await read(()=>editor.numberControls.value.value),'+','diagnostic refresh preserves a focused raw draft');
+    assert.equal(await read(()=>get(fraction).data.value),'1/2');
+    await read(()=>{editor.name.focus();api.openCanvas('assets');});
+    fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-diagnostics.png'),Buffer.from((await client.send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    assert.deepEqual(errors,[]);console.log('Dependency diagnostics UI: upstream edits, warning badges, isolated calculations, propagation, invalid backups, native guards and repair passed');
+  }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}
+}
+run().catch(error=>{console.error(error);process.exitCode=1;});

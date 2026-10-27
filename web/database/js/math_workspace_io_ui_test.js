@@ -18,7 +18,8 @@ async function run() {
       window.e=api.createObjectAsset('sheaf',{data:{base:key(v),rank:'2'}});
       window.yp=panels.open('young-input',key(y),'main');
       window.mi=panels.open('matrix-input',key(m),'side');
-      window.hiddenInput=panels.open('young-input',key(y),'side');panels.move(hiddenInput,'hidden');
+      // Preserve a legacy saved duplicate independently of ordinary editor reuse.
+      window.hiddenInput=panels.open('young-input',key(y),'side',{id:'object-panel-9000'});panels.move(hiddenInput,'hidden');
       window.c=api.createObjectAsset('category');window.functor=api.createObjectAsset('functor',{data:{domain:key(c),codomain:key(c)}});
       window.diagram=panels.open('category-diagram',key(functor),'side');
       diagram.propertyRenderer.editor.objectIO('layout',[{id:key(c),x:.3,y:.7}]);

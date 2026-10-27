@@ -266,7 +266,9 @@ __editor.setAssetAdapter({
       else if(config.assetKind==='cone') card=$('slice-toric-cone-card');
       else if(config.assetKind==='fan') card=$('slice-toric-fan-card');
       else if(config.assetKind!=='variety') card=$('object-params').closest('.card');
-      __panelStyle('.workspace-object-content .slice-row:has(#object-color),.workspace-object-content .slice-row:has(#object-visible-projection){display:none!important}');
+      // These rows belong to a view. Hide them before the mathematical body
+      // moves out of its old card, so visibility never depends on that ancestor.
+      for(const id of ['source-mode-controls','source-add-object','object-name','object-select','object-color','object-visible-projection','source-status']){const row=$(id)?.closest('.slice-row');if(row){row.hidden=true;row.style.setProperty('display','none','important');}}
       __panelStyle('[aria-label="Lattice basis mode"],.slice-control-line:has([aria-label="Matrix object basis source"]),.slice-control-line:has([aria-label="Voronoi lattice source"]),#toric-fan-source-mode,#toric-fan-cone-list-panel,.slice-row:has(#toric-fan-character-lattice){display:none!important}#object-params .slice-inline-check,[aria-label="Weyl label mode"],[aria-label="Weyl label density"],[aria-label="Tropical district label density"],.slice-row:has([aria-label="Lattice point bound shape"]){display:none!important}');
     } else if(config.mode==='property') {
       card=$(config.marker)?.closest('.card');

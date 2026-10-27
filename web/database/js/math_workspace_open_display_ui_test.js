@@ -139,7 +139,7 @@ async function run(){
     await read(()=>view.propertyRenderer.editor.shadow.querySelector('#show-canvas').click());
     await waitFor(()=>read(()=>!view.propertyRenderer.editor.captureAssetLayout().some(item=>item.point.hidden)));
     await read(()=>{api.state.snapshot.assets=api.state.snapshot.assets.filter(asset=>key(asset)!==key(x));api.applyAssetSnapshot(api.localAssetSnapshot());});
-    assert.equal(await read(()=>view.computation.status),'missing','deleted bases stay explicit missing references');
+    assert.equal(await read(()=>view.computation.status),'invalid','deleted bases stay explicit diagnostic failures');
     assert.equal(await read(()=>view.renderArea.hidden),true);
     assert.deepEqual(errors,[]);
     console.log('PASS Shared overviews: accumulating Open, deduplication, two-way pointer/keyboard selection, drag targets, closed reuse, split/sidebar placement, backups and narrow screens');

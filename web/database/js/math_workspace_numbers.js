@@ -1,6 +1,7 @@
 (function (root) {
   'use strict';
   const keyOf = asset => asset.kind + ':' + asset.id;
+  const rings = root.MathWorkspaceRings || (typeof require === 'function' ? require('./math_workspace_rings.js') : null);
   let kernel;
   function normalize(source = {}) {
     const value = String(source.value ?? '0').trim();
@@ -11,14 +12,14 @@
   }
   function evaluate(asset, assets) {
     const field = assets.find(item => keyOf(item) === asset.data.field && item.kind === 'field');
-    if (!field) throw new Error('Choose an existing Field for this Number.');
+    if (!rings.isRing(field)) throw new Error('Choose an existing coefficient Ring for this Number.');
     if (!asset.data.hasValue) return { field, text: asset.name, latex: asset.name, integer: null };
     if (['function-field','finite-extension'].includes(field.data.dataType)) throw new Error('Valued Number arithmetic over this field is not yet supported. A symbolic Number can retain the field reference.');
     if (!kernel) throw new Error('Number mathematics is not ready.');
     return { field, ...kernel(asset.data.value, field.data) };
   }
   function references(kind, type) {
-    if (kind === 'number') return [{ field: 'field', label: 'Field', expectedKind: 'field' }];
+    if (kind === 'number') return [{ field: 'field', label: 'Coefficient ring', expectedKind: 'field' }];
     if (kind === 'variety' && ['curve', 'symmetric-product-curve'].includes(type)) return [{ field: 'genus', legacyField: 'genusNumber', label: 'Genus', expectedKind: 'number', scalar: true, min: 0, defaultValue: '2' }];
     if (kind === 'sheaf' && ['abstract', 'locally-free'].includes(type)) return [{ field: 'rank', legacyField: 'rankNumber', label: 'Rank', expectedKind: 'number', scalar: true, min: 1, defaultValue: '1' }];
     return [];
@@ -66,8 +67,10 @@
     if (parameter.kind === 'literal') return parameter.value;
     const number = assets.find(item => keyOf(item) === parameter.ref && item.kind === 'number');
     if (!number?.data.hasValue) return '';
-    scalar(asset, spec, assets);
-    return evaluate(number, assets).integer;
+    try {
+      scalar(asset, spec, assets);
+      return evaluate(number, assets).integer;
+    } catch (_) { return ''; } // An invalid reference can always be replaced with a fresh literal draft.
   }
   function scalar(asset, spec, assets) {
     const parameter = normalizeInput(input(asset.data, spec), spec);
@@ -76,7 +79,7 @@
     const number = assets.find(item => keyOf(item) === key && item.kind === 'number');
     if (!number) throw new Error(spec.label + ' must reference an existing Number.');
     const result = evaluate(number, assets);
-    if (['finite-field','finite-extension','function-field'].includes(result.field.data.dataType)) throw new Error(spec.label + ' requires a supported characteristic-zero field.');
+    if (['finite-field','finite-extension','function-field'].includes(result.field.data.dataType)) throw new Error(spec.label + ' requires a supported characteristic-zero coefficient ring.');
     if (number.data.hasValue && (result.integer == null || BigInt(result.integer) < BigInt(spec.min))) throw new Error(spec.label + ' must be an integer at least ' + spec.min + '.');
     return number.data.hasValue && number.data.replaceWithValue ? result.integer : symbol(number);
   }
@@ -87,6 +90,7 @@
     return 'w'+hash.toString(36);
   }
   function validateGraph(assets) {
+    rings.validateGraph(assets);
     for (const asset of assets) {
       if (asset.kind === 'number') evaluate(asset, assets);
       for (const spec of references(asset.kind, asset.type)) if (spec.scalar) scalar(asset, spec, assets);
@@ -99,7 +103,7 @@
     for (const spec of specs) data[spec.field] = scalar(asset, spec, assets);
     return { ...asset, data };
   }
-  const api = { normalize, evaluate, references, input, referenceKey, normalizeInput, migrateInputs, normalizeInputs, literalValue, scalar, symbol, project, validateGraph, setKernel(value) { kernel = value; } };
+  const api = { normalize, evaluate, references, input, referenceKey, normalizeInput, migrateInputs, normalizeInputs, literalValue, scalar, symbol, project, validateGraph, isReady() { return typeof kernel === 'function'; }, setKernel(value) { kernel = value; } };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MathWorkspaceNumbers = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -82,8 +82,10 @@ async function run() {
     await read(()=>api.updateObjectAsset(n,{data:{...get(n).data,replaceWithValue:true}}));
     assert.deepEqual(await read(()=>get(curve).data.genus),{kind:'reference',ref:await read(()=>key(n))});
     assert.equal(await read(()=>Object.hasOwn(get(curve).data,'genusNumber')),false,'the legacy pair becomes a single source');
-    assert.match(await read(()=>{try{api.updateObjectAsset(n,{data:{...get(n).data,value:'3/2'}});return '';}catch(error){return error.message;}}),/integer/);
-    assert.equal(await read(()=>get(n).data.value),'3','invalid linked genus edits are atomic');
+    await read(()=>api.updateObjectAsset(n,{data:{...get(n).data,value:'3/2'}}));
+    assert.equal(await read(()=>get(n).data.value),'3/2','a Number update does not depend on the validity of its consumers');
+    assert.equal(await read(()=>api.localAssetSnapshot().diagnostics[key(curve)].valid),false);
+    await read(()=>api.updateObjectAsset(n,{data:{...get(n).data,value:'3'}}));
     await read(()=>api.updateObjectAsset(n,{name:'h_{2}',data:{...get(n).data,hasValue:false,value:'0'}}));
     assert.equal(await read(()=>overview.computation.status),'current');
     assert.match(await read(()=>hodge()),/h/,'the native symbolic result uses the editable Number name');

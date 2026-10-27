@@ -119,7 +119,7 @@
     const add=(field,kind,label,optional=false,many=false)=>result.push({field,kind,label,optional,many});
     if(['roots','weyl'].includes(asset.kind)||asset.kind==='lattice'&&d.basisMode==='dynkin') add('lie','lie','Lie type');
     if(asset.kind==='matrix'&&d.construction) result.push({field:'construction.lie',kind:'lie',label:'Lie type'});
-    if(asset.kind==='matrix') add('field','field','Field',true);
+    if(asset.kind==='matrix') add('field','field','Coefficient ring',true);
     if(asset.kind==='lattice'&&d.basisMode==='matrix-object') add('matrix','matrix','Basis matrix');
     if(asset.kind==='voronoi') {add('lattice','lattice','Lattice');add('point','point','Cell center');}
     if(asset.kind==='fan') { if(d.constructionMode==='cone-list') add('cones','cone','Maximal cones',false,true); add('characterLattice','lattice','Character lattice',true); }
@@ -188,8 +188,8 @@
     }
     if(asset.kind==='matrix'&&asset.data.field) {
       const field=assets.find(a=>keyOf(a)===asset.data.field&&a.kind==='field');
-      if(!field)throw new Error('Choose an existing Field asset for this matrix.');
-      if(['function-field','finite-extension'].includes(field.data.dataType))throw new Error('This coefficient field is preserved, but the matrix engine does not yet support its arithmetic.');
+      if(!field)throw new Error('Choose an existing coefficient Ring asset for this matrix.');
+      if(['function-field','finite-extension'].includes(field.data.dataType))throw new Error('This coefficient ring is preserved, but the matrix engine does not yet support its arithmetic.');
       return {...asset,data:{...asset.data,...field.data}};
     }
     if(asset.kind==='variety'&&asset.type==='toric') {

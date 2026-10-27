@@ -86,6 +86,7 @@
       if (!/^object-panel-[1-9]\d*$/.test(panel.id) || !types.has(panel.type) || !['main', 'side', 'hidden'].includes(panel.location) || !record(panel.presentation) || !Array.isArray(panel.renderers)) throw new Error('Invalid saved object panel.');
       const definition = definitions.find(d => d.id === panel.type);
       if(panel.canvasHeight!=null&&(!Number.isFinite(panel.canvasHeight)||panel.canvasHeight<240||panel.canvasHeight>1600))throw new Error('Invalid saved panel height.');
+      if(panel.comparison!=null&&typeof panel.comparison!=='boolean'||panel.comparisonIndex!=null&&(!Number.isSafeInteger(panel.comparisonIndex)||panel.comparisonIndex<2))throw new Error('Invalid saved comparison view.');
       if (definition.input ? typeof panel.assetKey !== 'string' : !record(panel.computation) || !record(panel.computation.refs)) throw new Error('Invalid panel inputs.');
       if (panel.computation?.settings != null) {
         const settings=panel.computation.settings;

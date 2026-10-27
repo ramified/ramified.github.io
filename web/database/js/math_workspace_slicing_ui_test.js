@@ -15,7 +15,7 @@ async function run(){
       add('frame',{ambientDimension:4,position:[1,2,3,4],basis:[[2,1,0,0],[0,3,0,0],[0,0,4,0],[0,0,0,5]]});
       add('sphere',{ambientDimension:4,center:[0,0,0,0],radius:10});
       window.fi=panels.open('frame-input',key(assets.frame),'main');window.fd=panels.open('frame-details',key(assets.frame),'side');
-      window.scene=panels.open('slicing-scene',key(assets.sphere),'side');window.scene2=panels.open('slicing-scene',key(assets.sphere),'side');
+      window.scene=panels.open('slicing-scene',key(assets.sphere),'side');window.scene2=panels.open('slicing-scene',key(assets.sphere),'side',{newInstance:true});
       for(const p of [scene,scene2])p.computation.refs.frame=key(assets.frame);panels.refresh();
     });
     assert.deepEqual(errors,[]);assert.equal(await read(()=>scene.computation.status),'current');

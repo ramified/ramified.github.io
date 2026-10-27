@@ -1,6 +1,8 @@
 (function () {
   'use strict';
   const slicing = window.MathWorkspaceSlicing;
+  const presentation = window.MathWorkspacePresentation, viewDefaults = new Map();
+  const viewDefaultsFor = ref => viewDefaults.get(assetKey(ref)) || {};
 
   const calculators = [
     ['sheaf-complexes', 'Sheaf complexes', 'complex'],
@@ -131,7 +133,8 @@
             const kind=entry.kind==='filtration'?'filtration':'complex';
             const data=window.MathWorkspaceStructures.fromComplexEntry(entry);
             const existing=assetState.snapshot.assets.find(a=>a.kind===kind&&a.data.legacy?.id===entry.id);
-            const asset=existing?updateObjectAsset(assetRef(existing),{data}):createObjectAsset(kind,{data});
+            const view=presentation.split(kind,{legacy:entry}).view;
+            const asset=existing?updateObjectAsset(assetRef(existing),{data,view}):createObjectAsset(kind,{data,view});
             if(asset)objectWorkspace.open(kind+'-view',assetKey(asset),'main');saved++;
           }
           status(`Saved ${saved} complex / filtration assets.${skipped?' Unsupported entries were retained in the original editor.':''}`,'success');
@@ -273,7 +276,7 @@
       const cardKey = ASSET_CARD_REGISTRY[cardType].nativeCardKey;
       const instance = assetsCardState.instances.get(slot.activeInstanceKey);
       const hasVisibleCard = session.editor?.listCards?.().some((card) => card.key === cardKey && card.available !== false && card.visible);
-      session.editor?.setInspectorActive?.(!!slot.visible && !!instance && !!hasVisibleCard);
+      session.editor?.setInspectorActive?.(!!slot.visible && !!instance && (!!hasVisibleCard || !!session.dependencyInvalid));
     });
     $('#workspace-io-card').hidden = !workspaceOwnedCardSlot('importExport').visible;
     if (assetState.editorCard) assetState.editorCard.hidden = !workspaceOwnedCardSlot('input').visible;
@@ -897,8 +900,14 @@
         <div class="workspace-form-fields" data-assets-fields></div>
         <div class="workspace-form-actions"><button class="btn" type="submit" data-assets-save>save now</button><button class="btn btn-ghost" type="button" data-assets-delete hidden>delete</button></div>
         <p class="workspace-status" data-assets-editor-status role="status" aria-live="polite"></p>
+        <div class="workspace-io-actions" data-assets-conflict-actions hidden><button type="button" class="btn btn-ghost" data-assets-resolve="draft">Save my version</button><button type="button" class="btn btn-ghost" data-assets-resolve="saved">Load saved version</button></div>
       </form>`;
     const form = card.querySelector('[data-assets-editor]');
+    form.querySelectorAll('[data-assets-resolve]').forEach(button=>button.addEventListener('click',()=>{
+      const instance=activeAssetInputInstance();if(!instance)return;
+      if(button.dataset.assetsResolve==='draft')captureAssetInputDraftFromForm(instance.key,instance.rendererEpoch,{schedule:false});
+      resolveAssetInputConflict(instance,button.dataset.assetsResolve);
+    }));
     form.querySelector('[data-assets-kind]').addEventListener('change', () => { if (!activeAssetInputInstance()) renderAssetsEditor(); });
     form.addEventListener('input', (event) => {
       if (!event.target.matches('[data-assets-name],[data-assets-field]') || event.target.matches('select,input[type="checkbox"],input[type="radio"]')) return;
@@ -933,7 +942,7 @@
     dynkin: [['dynkin', 'Marked Dynkin diagram']],
     strands: [['strands', 'Strands']],
     matrix: [['matrix', 'Matrix']],
-    field: [['field', 'Field']],
+    field: [['field', 'Ring']],
     number: [['number', 'Number']],
     category: [['category', 'Category']],
     functor: [['functor', 'Functor']],
@@ -972,7 +981,14 @@
     });
     return { sourceRef: sourceRef ? { kind: sourceRef.kind, id: sourceRef.id } : null, revision, changes, reason };
   }
-  const localAssetSnapshot = () => ({ revision: assetState.snapshot.revision, assets: assetState.snapshot.assets.map((asset) => ({ ...asset, dependencies: (asset.dependencies || []).map((ref) => ({ ...ref })), data: cloneAssetProperties(asset.data), properties: cloneAssetProperties(asset.properties) })), capabilities: { variety: true, young: true, lie: true, sheaf: true, map: true } });
+  let diagnosticCache = { revision: -1, assets: null, value: {} };
+  function assetDiagnostics() {
+    if(diagnosticCache.revision!==assetState.snapshot.revision||diagnosticCache.assets!==assetState.snapshot.assets){
+      diagnosticCache={revision:assetState.snapshot.revision,assets:assetState.snapshot.assets,value:window.MathWorkspaceDiagnostics?.analyze(assetState.snapshot.assets)||{}};
+    }
+    return diagnosticCache.value;
+  }
+  const localAssetSnapshot = () => ({ revision: assetState.snapshot.revision, diagnostics: assetDiagnostics(), assets: assetState.snapshot.assets.map((asset) => ({ ...asset, ...(asset.kind === 'matrix' && asset.data.field ? {definition:assetDefinitionFor(asset.kind,asset.type,asset.data)} : {}), dependencies: (asset.dependencies || []).map((ref) => ({ ...ref })), data: cloneAssetProperties(asset.data), properties: cloneAssetProperties(asset.properties) })), capabilities: { variety: true, young: true, lie: true, sheaf: true, map: true } });
   const assetMathSignature = (asset) => JSON.stringify({ kind: asset?.kind, type: asset?.type, data: asset?.data || {}, dependencies: asset?.dependencies || [] });
   function invalidateDerivedAssetProperties(record, next) {
     if (!record || assetMathSignature(record) === assetMathSignature(next)) return cloneAssetProperties(record?.properties);
@@ -1032,6 +1048,7 @@
     return nonnegativeInt(asset?.data?.dimension, 0);
   }
   function normalizedAssetData(kind, type, source = {}) {
+    source=presentation.split(kind,source).data;
     if (kind === 'variety' && type === 'toric') return slicing.normalize(kind,type,source);
     if (OBJECT_INPUT_KINDS.includes(kind)) return window.MathWorkspaceObjects.normalize(kind, type, source);
     const data = window.MathWorkspaceNumbers.normalizeInputs(kind, type, source);
@@ -1058,8 +1075,8 @@
   const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   function referenceFieldSpecs(kind, type) {
     if(kind==='complex'||kind==='filtration')return [];
-    if(kind==='field')return [{field:'constantField',label:'Constant field',expectedKind:'field',optional:true}];
-    if(kind==='field-extension')return [{field:'base',label:'Base field',expectedKind:'field'},{field:'target',label:'Target field',expectedKind:'field',optional:true}];
+    if(kind==='field')return [{field:'constantField',label:'Constant field',expectedKind:'field',optional:true,requiresField:true}];
+    if(kind==='field-extension')return [{field:'base',label:'Base field',expectedKind:'field',requiresField:true},{field:'target',label:'Target field',expectedKind:'field',optional:true,requiresField:true}];
     if(kind==='mosaic-space')return [];
     if(kind==='mosaic-diagram')return [{field:'space',label:'Mosaic space',expectedKind:'mosaic-space'}];
     if (kind === 'variety' && type === 'toric') return [{field:'fan',label:'Fan',expectedKind:'fan'},{field:'cone',label:'Affine cone',expectedKind:'cone'}];
@@ -1103,6 +1120,7 @@
   function referenceEligibility(spec, candidateKey, context) {
     const candidate = assetByKey(candidateKey);
     if (!candidate) return { allowed: false, reason: 'missing' };
+    if (spec.requiresField && !window.MathWorkspaceRings.isField(candidate)) return { allowed: false, reason: 'This operation requires a field.' };
     if (spec.scalar) { try { window.MathWorkspaceNumbers.scalar({kind:context.kind,type:context.type,data:dataWithReference(context.data,spec,candidateKey)},spec,assetState.snapshot.assets); } catch(error) { return {allowed:false,reason:error.message}; } }
     if (candidate.kind !== spec.expectedKind) return { allowed: false, reason: 'type' };
     if (candidateKey === context.currentKey) return { allowed: false, reason: 'self' };
@@ -1120,7 +1138,7 @@
     return { kind, type, currentKey: record ? assetKey(record) : '', data: { ...(instance?.draft?.data || {}), ...assetEditorData(instance) } };
   }
   function referenceFieldHtml(spec, context, controlOnly = false) {
-    const selected = referenceEligibility(spec, window.MathWorkspaceNumbers.referenceKey(context.data, spec), context).asset;
+    const selected = assetByKey(window.MathWorkspaceNumbers.referenceKey(context.data, spec),spec.expectedKind);
     const eligible = eligibleReferenceAssets(spec, context);
     const text = selected ? `\\(${escapeHtml(selected.name)}\\)` : `Choose ${spec.expectedKind}…`;
     const label = selected ? `${spec.label}: ${selected.plainName || selected.name}` : `${spec.label}: choose a ${spec.expectedKind}`;
@@ -1285,9 +1303,11 @@
     if(['complex','filtration','field-extension'].includes(kind)){
       const issues=window.MathWorkspaceStructures.issues({kind,data},assetState.snapshot.assets);if(issues.length)throw new Error(issues.join(' '));return;
     }
-    if(window.MathWorkspaceNumbers && (['number','field'].includes(kind)||window.MathWorkspaceNumbers.references(kind,type).some(spec=>spec.scalar&&data[spec.field]))) {
+    if(window.MathWorkspaceNumbers && (kind==='number'||window.MathWorkspaceNumbers.references(kind,type).some(spec=>spec.scalar&&data[spec.field]))) {
       const candidate={...(assetByKey(currentKey)||{kind,id:'draft',name:'a'}),type,data};
-      window.MathWorkspaceNumbers.validateGraph([...assetState.snapshot.assets.filter(asset=>assetKey(asset)!==currentKey),candidate]);
+      const assets=[...assetState.snapshot.assets.filter(asset=>assetKey(asset)!==currentKey),candidate];
+      if(kind==='number')window.MathWorkspaceNumbers.evaluate(candidate,assets);
+      else for(const spec of window.MathWorkspaceNumbers.references(kind,type))if(spec.scalar)window.MathWorkspaceNumbers.scalar(candidate,spec,assets);
     }
     if (slicing?.isAsset({kind,type}) || kind === 'matrix') {
       const candidate={kind,type,data,...assetRefFromKey(currentKey||kind+':draft')};
@@ -1331,12 +1351,13 @@
     name: String(draft?.name ?? ''), kind: draft?.kind || 'variety', type: draft?.type || 'abstract', data: window.MathWorkspaceNumbers.migrateInputs(draft?.kind, draft?.type, draft?.data || {})
   });
   const inputDraftFromRecord = (record) => cloneInputDraft({ name: record?.name || '', kind: record?.kind || 'variety', type: record?.type || 'abstract', data: record?.data || {} });
+  const assetInputDefinition = record => JSON.stringify(inputDraftFromRecord(record),(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.keys(value).sort().map(key=>[key,value[key]])):value);
   function createAssetInputInstance(targetRef, record = assetByKey(assetKey(targetRef)), revision = assetState.snapshot.revision) {
     if (!targetRef || !record || assetKey(targetRef) !== assetKey(record)) throw new Error('The Input target no longer exists.');
     const stableRef = Object.freeze(cloneAssetRef(targetRef));
     return {
       key: assetCardInstanceKey(stableRef, 'input'), targetRef: stableRef, cardType: 'input',
-      draft: inputDraftFromRecord(record), dirty: false, validation: { valid: true, message: '', field: '' },
+      draft: inputDraftFromRecord(record), baseDefinition: assetInputDefinition(record), dirty: false, validation: { valid: true, message: '', field: '' },
       autosaveStatus: 'Saved', taskGeneration: 0, rendererEpoch: 0, baseRevision: revision,
       conflictState: null, debounceTimer: null, maxWaitTimer: null, maxWaitStartedAt: null, deleted: false
     };
@@ -1386,6 +1407,7 @@
     if (!validation.valid) return null;
     return {
       instanceKey: instance.key, targetRef: cloneAssetRef(instance.targetRef), baseRevision: instance.baseRevision,
+      baseDefinition: instance.baseDefinition ?? assetInputDefinition(assetByKey(assetKey(instance.targetRef))),
       rendererEpoch: instance.rendererEpoch, taskGeneration: instance.taskGeneration,
       normalized: { ...validation.normalized, data: { ...validation.normalized.data }, dependencies: validation.normalized.dependencies.map(cloneAssetRef) }
     };
@@ -1396,21 +1418,24 @@
       && instance.rendererEpoch === command.rendererEpoch && instance.taskGeneration === command.taskGeneration;
   }
   function rebaseCleanAssetInputInstances(revision, coordinator = assetsCardState) {
-    for (const instance of coordinator.instances.values()) if (instance.cardType === 'input' && !instance.dirty && !instance.conflictState) instance.baseRevision = revision;
+    for (const instance of coordinator.instances.values()) if (instance.cardType === 'input' && !instance.dirty && !instance.conflictState) {
+      instance.baseRevision = revision;
+      const record=assetByKey(assetKey(instance.targetRef));if(record)instance.baseDefinition=assetInputDefinition(record);
+    }
   }
   function commitAssetInputCommand(command, options = {}) {
     const coordinator = options.coordinator || assetsCardState, refresh = options.refresh || ((snapshot, targetRef, affectedAssetKeys) => applyAssetSnapshot(snapshot, targetRef, { affectedAssetKeys }));
     if (!inputTaskMatches(command, coordinator)) return { committed: false, stale: true };
     const instance = coordinator.instances.get(command.instanceKey), record = assetByKey(assetKey(command.targetRef));
     if (!record) return { committed: false, stale: true };
-    if (command.baseRevision !== assetState.snapshot.revision) {
+    if (command.baseDefinition !== assetInputDefinition(record)) {
       instance.autosaveStatus = 'Conflict'; instance.conflictState = { expectedRevision: command.baseRevision, actualRevision: assetState.snapshot.revision };
-      instance.validation = { valid: true, message: 'Asset changed before this draft could be saved.', field: '' };
+      instance.validation = { valid: true, message: 'This asset was edited elsewhere. Keep your edits or use the saved version.', field: '' };
       return { committed: false, conflict: true };
     }
     const next = { ...record, ...command.normalized };
     if (inputSemanticValue(record) === inputSemanticValue(next)) {
-      instance.dirty = false; instance.autosaveStatus = 'Saved'; instance.conflictState = null; instance.baseRevision = assetState.snapshot.revision;
+      instance.dirty = false; instance.autosaveStatus = 'Saved'; instance.conflictState = null; instance.baseRevision = assetState.snapshot.revision;instance.baseDefinition=assetInputDefinition(record);
       return { committed: false, unchanged: true };
     }
     const staged = {
@@ -1423,11 +1448,21 @@
     Object.assign(record, staged);
     assetState.snapshot.revision += 1;
     assetState.snapshot.capabilities = localAssetSnapshot().capabilities;
-    instance.dirty = false; instance.autosaveStatus = 'Saved'; instance.conflictState = null; instance.baseRevision = assetState.snapshot.revision;
+    instance.dirty = false; instance.autosaveStatus = 'Saved'; instance.conflictState = null; instance.baseRevision = assetState.snapshot.revision;instance.baseDefinition=assetInputDefinition(record);
     rebaseCleanAssetInputInstances(assetState.snapshot.revision, coordinator);
     if (coordinator === assetsCardState && assetsCardState.slots.get('input').activeInstanceKey === instance.key) updateAssetsInputCardTitle(instance, staged.kind);
     refresh(localAssetSnapshot(), command.targetRef, new Set([assetKey(command.targetRef)]));
     return { committed: true, revision: assetState.snapshot.revision };
+  }
+  function resolveAssetInputConflict(instance,choice,options={}) {
+    const record=assetByKey(assetKey(instance?.targetRef));if(!record||!instance.conflictState||!['draft','saved'].includes(choice))return false;
+    cancelAssetInputAutosave(instance,options.coordinator||assetsCardState);
+    instance.conflictState=null;instance.baseRevision=assetState.snapshot.revision;instance.baseDefinition=assetInputDefinition(record);
+    if(choice==='saved'){
+      instance.draft=inputDraftFromRecord(record);instance.dirty=false;instance.validation={valid:true,message:'',field:''};instance.autosaveStatus='Saved';
+    }else{instance.autosaveStatus='Editing';flushAssetInputInstance(instance,options);}
+    if(!options.coordinator||options.coordinator===assetsCardState){renderAssetsEditor();renderAssets();}
+    return true;
   }
   function clearAssetInputTimers(instance, coordinator = assetsCardState) {
     if (instance?.debounceTimer != null) coordinator.clearTimer(instance.debounceTimer);
@@ -1439,11 +1474,15 @@
     clearAssetInputTimers(instance, coordinator); instance.taskGeneration += 1;
   }
   function renderAssetInputStatus(instance) {
+    const record=instance&&assetByKey(assetKey(instance.targetRef)),item=record&&document.querySelector(`[data-asset-key="${assetKey(record)}"]`);
+    if(item)syncAssetWarning(record,item);
     if (!instance || activeAssetInputInstance() !== instance) return;
     const card = assetState.editorCard, form = editorForm(); if (!card || !form) return;
     const compact = card.querySelector('[data-assets-autosave-status]'), message = form.querySelector('[data-assets-editor-status]');
+    const diagnosticMessages=record?window.MathWorkspaceDiagnostics?.messages(assetDiagnostics()[assetKey(record)],assetState.snapshot.assets)||[]:[];
     if (compact) compact.textContent = instance.autosaveStatus;
-    if (message) message.textContent = instance.validation?.message || '';
+    if (message) message.textContent = instance.validation?.message || (diagnosticMessages.length?'⚠ Needs repair: '+diagnosticMessages.join(' '):'');
+    form.querySelector('[data-assets-conflict-actions]').hidden=!instance.conflictState;
     form.dataset.autosaveState = instance.autosaveStatus.toLowerCase().replace(/[^a-z]+/g, '-');
     form.querySelectorAll('[data-assets-name],[data-assets-field],[data-scalar-value],[data-assets-reference]').forEach((field) => field.setAttribute('aria-invalid', String(!instance.validation?.valid && (!instance.validation.field || instance.validation.field === (field.dataset.assetsField || field.dataset.scalarValue || field.dataset.assetsReference || 'name')))));
   }
@@ -1603,12 +1642,12 @@
   function assetDefinitionFor(kind, type, data) {
     if(kind==='mosaic-space')return data.rows+' × '+data.cols+' · '+data.lattice+' · '+data.boundary;
     if(kind==='mosaic-diagram')return (data.diagramType==='dual'?'Dual graph':'Knot / link')+' on '+data.space;
-    if (kind === 'number') return (data.hasValue?data.value:'Symbolic number')+' · '+(assetByKey(data.field)?.plainName||'Field');
+    if (kind === 'number') return (data.hasValue?data.value:'Symbolic number')+' · '+(assetByKey(data.field)?.plainName||'Ring');
     if (kind === 'field') return window.MathWorkspaceObjects.fieldLabel(data);
     if (slicing?.isAsset({kind,type})) return kind === 'frame' ? 'Point and full basis in R^'+data.ambientDimension : kind === 'variety' ? 'Toric variety · '+(data.fan?'fan':'affine cone') : (slicing.labels[kind]||kind)+' in R^'+data.ambientDimension;
     if (kind === 'dynkin') return (data.lie || 'Choose Lie type') + ' · vertices ' + data.vertices.join(', ') + (data.quiver ? ' · quiver' : '');
     if (kind === 'strands') return (data.lie || 'Choose Lie type') + ' · ' + data.generators.length + ' generators';
-    if (kind === 'matrix') return data.construction ? data.construction.basis+' · '+(data.construction.lie||'Choose Lie type') : data.rows + ' × ' + data.cols + ' · ' + data.dataType;
+    if (kind === 'matrix') return data.construction ? data.construction.basis+' · '+(data.construction.lie||'Choose Lie type') : data.rows + ' × ' + data.cols + ' · ' + window.MathWorkspaceObjects.fieldLabel(assetByKey(data.field)?.data || data);
     if (kind === 'category') return data.opposite ? 'Opposite category' : 'Category · objects ' + data.objectSymbol;
     if (kind === 'functor') return data.variance + ': ' + (data.domain || '?') + ' → ' + (data.codomain || '?');
     if (kind === 'young') return `${type === 'generalized' ? 'Generalized rows' : 'Partition'} (${data.partition || '∅'})`;
@@ -1743,7 +1782,21 @@
     const card = ASSET_CARD_REGISTRY[slot.cardType], target = assetByKey(assetKey(instance.targetRef));
     if (!target || !cardSupportsAsset(slot.cardType, target.kind)) throw new Error('The Property Card target is no longer compatible.');
     session.editor?.setBindingToken?.(bindingToken);
-    const applied = session.editor?.applyAssets?.(snapshot, instance.targetRef, null, {
+    const messages=window.MathWorkspaceDiagnostics?.messages(snapshot.diagnostics?.[assetKey(target)],snapshot.assets)||[];
+    session.dependencyInvalid=!!messages.length;
+    const shadow=session.editor?.inspectorShadow;
+    if(shadow&&!session.dependencyWarning){
+      session.dependencyWarning=document.createElement('section');session.dependencyWarning.className='card workspace-dependency-warning';session.dependencyWarning.setAttribute('role','status');
+      (shadow.querySelector('.workspace-card-inspector')||shadow).prepend(session.dependencyWarning);
+    }
+    if(session.dependencyWarning){session.dependencyWarning.hidden=!messages.length;session.dependencyWarning.textContent='⚠ '+(target.plainName||target.name)+' · Needs repair: '+messages.join(' ');}
+    if(messages.length){
+      session.editor?.applyAssets?.({...snapshot,assets:[]},null,null);
+      session.editor?.listCards?.().forEach(card=>session.editor?.setCardVisible?.(card.key,false));
+      return;
+    }
+    const projected={...snapshot,assets:snapshot.assets.filter(asset=>snapshot.diagnostics?.[assetKey(asset)]?.valid!==false)};
+    const applied = session.editor?.applyAssets?.(projected, instance.targetRef, null, {
       cardType: slot.cardType,
       instanceKey: instance.key
     });
@@ -1852,7 +1905,7 @@
   }
 
   function handleAssetPropertySessionChange(session, emittedBindingToken, refresh = applyAssetSnapshot, coordinator = assetsCardState) {
-    if (!session || session.applyingAssets) return false;
+    if (!session || session.applyingAssets || session.dependencyInvalid) return false;
     const change = emittedBindingToken && typeof emittedBindingToken === 'object'
       ? emittedBindingToken
       : { bindingToken: emittedBindingToken };
@@ -2038,11 +2091,18 @@
     if (activeRef !== undefined) session.assetProjection.activeRef = activeRef ? { kind: activeRef.kind, id: activeRef.id } : null;
     const present = new Set(assetState.snapshot.assets.map(assetKey));
     session.assetProjection.keys = new Set([...assetDependencyClosure(session.assetProjection.keys)].filter((key) => present.has(key)));
-    const assets = assetState.snapshot.assets.filter((asset) => session.assetProjection.keys.has(assetKey(asset)));
-    const snapshot = { ...localAssetSnapshot(), assets: assets.map((asset) => ({ ...asset, viewPosition: session.assetProjection.layout.get(assetKey(asset)) || null })) };
+    const diagnostics=assetDiagnostics();
+    const assets = assetState.snapshot.assets.filter((asset) => session.assetProjection.keys.has(assetKey(asset))&&diagnostics[assetKey(asset)]?.valid!==false);
+    const messages=[...new Set([...session.assetProjection.keys].flatMap(key=>window.MathWorkspaceDiagnostics?.messages(diagnostics[key],assetState.snapshot.assets)||[]))];
+    if(!session.projectionWarning&&session.editor.shadow){
+      session.projectionWarning=document.createElement('p');session.projectionWarning.className='err';session.projectionWarning.setAttribute('role','status');session.projectionWarning.style.padding='8px';
+      (session.editor.shadow.querySelector('.editor-body')||session.editor.shadow).prepend(session.projectionWarning);
+    }
+    if(session.projectionWarning){session.projectionWarning.hidden=!messages.length;session.projectionWarning.textContent='⚠ Some inputs need repair: '+messages.join(' ');}
+    const snapshot = { ...localAssetSnapshot(), assets: assets.map((asset) => ({ ...asset, viewPosition: session.assetProjection.layout.get(assetKey(asset)) || presentation.layout(viewDefaultsFor(asset).sheaf) })) };
     session.applyingAssets = true;
     try {
-      session.editor.applyAssets?.(snapshot, projectedActiveRef, null);
+      session.editor.applyAssets?.(snapshot, projectedActiveRef&&diagnostics[assetKey(projectedActiveRef)]?.valid!==false?projectedActiveRef:null, null);
       if (activeRef !== undefined) session.editor.setCanvasAppearanceTarget?.(activeRef, { source: 'canvas' });
       // These cards are meaningful only with an Asset ref.  Leave their UI
       // session intact, but never display an unbound calculator copy.
@@ -2107,6 +2167,18 @@
   }
 
   const formatAssetTime = (value) => value ? new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+  function syncAssetWarning(asset,item) {
+    const key=assetKey(asset),diagnostic=assetDiagnostics()[key],instance=assetInputInstanceForRef(assetRef(asset));
+    const messages=window.MathWorkspaceDiagnostics?.messages(diagnostic,assetState.snapshot.assets)||[];
+    if(instance?.dirty&&instance.validation?.valid===false)messages.push('Unsaved draft: '+instance.validation.message);
+    if(instance?.conflictState)messages.push('Unsaved edits conflict with the saved version.');
+    item.querySelector('.workspace-asset-warning')?.remove();
+    item.setAttribute('aria-label',`${asset.plainName||asset.name}, ${asset.typeLabel}${asset.isDefault?', Default asset':''}`);
+    if(!messages.length){delete item.dataset.validation;return;}
+    const message='Needs repair: '+messages.join(' '),warning=Object.assign(document.createElement('span'),{className:'workspace-asset-warning',textContent:'⚠',title:message});
+    warning.setAttribute('role','img');warning.setAttribute('aria-label',message);item.dataset.validation='invalid';
+    item.setAttribute('aria-label',item.getAttribute('aria-label')+'. '+message);item.querySelector('.workspace-asset-icon')?.append(warning);
+  }
   function createAssetItem(asset) {
     const key = assetKey(asset), meta = assetState.metadata.get(key) || {}, item = document.createElement('div');
     item.className = `workspace-asset-item workspace-asset-${asset.kind}`; item.dataset.assetKey = key; item.dataset.assetKind = asset.kind; item.dataset.assetId = asset.id;
@@ -2124,6 +2196,7 @@
       input.addEventListener('click', (event) => event.stopPropagation()); input.addEventListener('keydown', handleRenameKeydown); input.addEventListener('blur', () => commitAssetRename(key, input.value)); name.replaceChildren(input);
     }
     item.append(icon, name, type, definition, modified);
+    syncAssetWarning(asset,item);
     item.addEventListener('click', handleAssetClick);
     item.addEventListener('dblclick', handleAssetDoubleClick);
     item.addEventListener('dragstart', (event) => {
@@ -2225,6 +2298,7 @@
     // Build the display first, then place it beside Assets. Sidebar Assets
     // already remains visible, so preserve that placement and the current split.
     const panel = objectWorkspace.openOverview(type,assetKey(asset));
+    if(panel.location==='side'&&!panel.closed){objectWorkspace.reveal(panel);return;}
     focusPaneBesideAssets();
     if (panel.location === 'main') selectCanvasTab(panel.id);
     else objectWorkspace.move(panel,'main');
@@ -2238,7 +2312,7 @@
   async function modifyAsset(asset) {
     if (!asset) return;
     const modifyType=window.MathWorkspaceObjects.capabilityFor(asset)?.modify;
-    if (modifyType) { focusPaneBesideAssets(); return objectWorkspace?.open(modifyType, assetKey(asset), 'main'); }
+    if (modifyType) { const existing=objectWorkspace?.find(modifyType,assetKey(asset));if(existing)return objectWorkspace.reveal(existing);focusPaneBesideAssets(); return objectWorkspace?.open(modifyType, assetKey(asset), 'main'); }
     revealAssetsEditor();
     try {
       await assetRequest('select-for-modify', { ref: assetRef(asset) });
@@ -2272,7 +2346,7 @@
 
   const reservedAssetNames = new Set();
   function uniqueDefaultAssetName(kind) {
-    const base = ({filtration:'F',complex:'C', 'field-extension':'L/K','mosaic-space':'S','mosaic-diagram':'D',number:'a',field:'K',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
+    const base = ({filtration:'F',complex:'C', 'field-extension':'L/K','mosaic-space':'S','mosaic-diagram':'D',number:'a',field:'R',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
     const numbered = (number) => kind === 'sheaf' ? `\\mathcal{E}_{${number}}` : `${base}_{${number}}`;
     let name = base, number = 2;
     const isTaken = (candidate) => reservedAssetNames.has(canonicalAssetName(candidate)) || assetState.snapshot.assets.some((asset) => canonicalAssetName(asset.name) === canonicalAssetName(candidate));
@@ -2287,8 +2361,9 @@
     const supplied = options.defaults === false ? source : window.MathWorkspaceDefaults.assetData(kind, type, source, ensureDefaultDependency);
     const data = normalizedAssetData(kind, type, supplied);
     if (options.defaults !== false) validateAssetData(kind, type, data, '');
-    const prefix = { dynkin: 'D', strands: 'W', matrix: 'A', category: 'C', functor: 'F', young: 'Y', lie: 'L', variety: 'X', sheaf: 'E', map: 'M' }[kind] || kind.charAt(0).toUpperCase();
+    const prefix = { field: 'R', dynkin: 'D', strands: 'W', matrix: 'A', category: 'C', functor: 'F', young: 'Y', lie: 'L', variety: 'X', sheaf: 'E', map: 'M' }[kind] || kind.charAt(0).toUpperCase();
     const record = { id: `${prefix}${++assetState.nextObjectId}`, kind, name: options.name || uniqueDefaultAssetName(kind), type, data, ...(options.isDefault ? { isDefault: true } : {}) };
+    const view=options.view||presentation.split(kind,supplied).view;if(Object.keys(view).length)viewDefaults.set(assetKey(record),JSON.parse(JSON.stringify(view)));
     record.plainName = plainAssetName(record.name);
     record.typeLabel = ASSET_SUBTYPES[kind].find(([value]) => value === type)?.[1] || kind;
     record.dependencies = assetDependencies(kind, type, data);
@@ -2329,6 +2404,7 @@
       if (!request) return [];
       const candidates = assetState.snapshot.assets.filter(asset => {
         if (asset.kind !== request.kind || asset.isDefault) return false;
+        if (specs.some(spec => spec.field === field && spec.requiresField) && !window.MathWorkspaceRings.isField(asset)) return false;
         if (['roots','weyl','voronoi'].includes(kind)) {
           const dimension = request.kind === 'lie' ? asset.data.rank : asset.data.ambientDimension;
           if (dimension !== normalized.ambientDimension) return false;
@@ -2360,7 +2436,8 @@
     if (!name || !balancedLatex(name)) throw new Error('Enter a complete asset name.');
     if (assetState.snapshot.assets.some(asset => asset.id !== record.id && canonicalAssetName(asset.name) === canonicalAssetName(name))) throw new Error('Another asset already has that name.');
     const data = normalizedAssetData(record.kind, type, patch.data || record.data);
-    validateAssetData(record.kind, type, data, assetKey(record));
+    if(patch.data||patch.type)validateAssetData(record.kind, type, data, assetKey(record));
+    const view=patch.view||presentation.split(record.kind,patch.data||{}).view;if(Object.keys(view).length)viewDefaults.set(assetKey(record),JSON.parse(JSON.stringify(view)));
     const next = { ...record, name, type, data, dependencies: assetDependencies(record.kind, type, data) };
     if (inputSemanticValue(next) === inputSemanticValue(record)) return record;
     Object.assign(record, next, {
@@ -2462,21 +2539,21 @@
     const record=assetByKey(assetKey(ref));if(!record)throw new Error('The Number was deleted.');
     const data=window.MathWorkspaceNumbers.normalize(value.data);
     if(!value.dependencies?.length)return updateObjectAsset(ref,{data});
-    if(!Array.isArray(value.dependencies)||value.dependencies.length!==1)throw new Error('A Number export must contain its Field dependency.');
+    if(!Array.isArray(value.dependencies)||value.dependencies.length!==1)throw new Error('A Number export must contain its coefficient Ring dependency.');
     const source=value.dependencies[0];
-    if(source.kind!=='field'||source.type!=='field'||assetKey(source)!==data.field)throw new Error('The Number export has an incompatible Field.');
+    if(source.kind!=='field'||source.type!=='field'||assetKey(source)!==data.field)throw new Error('The Number export has an incompatible coefficient Ring.');
     const fieldData=window.MathWorkspaceObjects.normalize('field','field',source.data);
     const existing=assetState.snapshot.assets.find(asset=>asset.kind==='field'&&JSON.stringify(asset.data)===JSON.stringify(fieldData));
-    const parent=existing||{kind:'field',id:'import-number-field',name:'K',type:'field',data:fieldData};
+    const parent=existing||{kind:'field',id:'import-number-field',name:'R',type:'field',data:fieldData};
     const candidate={...record,data:{...data,field:assetKey(parent)}};
-    window.MathWorkspaceNumbers.validateGraph([...assetState.snapshot.assets.filter(asset=>assetKey(asset)!==assetKey(ref)),...(!existing?[parent]:[]),candidate]);
+    window.MathWorkspaceNumbers.evaluate(candidate,[...assetState.snapshot.assets.filter(asset=>assetKey(asset)!==assetKey(ref)),...(!existing?[parent]:[]),candidate]);
     const target=existing||createDefaultAsset('field',{data:fieldData,select:false,bindInput:false});
     return updateObjectAsset(ref,{data:{...data,field:assetKey(target)}});
   }
   function initialiseObjectPanels() {
     if (!window.MathWorkspaceObjects) return;
     objectWorkspace = window.MathWorkspaceObjects.mount({
-      snapshot: localAssetSnapshot, create: createObjectAsset, update: updateObjectAsset, ensureDefault: ensureDefaultDependency, publishDefaults: () => applyAssetSnapshot(localAssetSnapshot()), importCategoryGraph, importRootObject, importSlicing, importNumberAsset, captureWorkspace, restoreWorkspace, importAsset: (ref, value) => {
+      snapshot: localAssetSnapshot, viewDefaults: viewDefaultsFor, create: createObjectAsset, update: updateObjectAsset, ensureDefault: ensureDefaultDependency, publishDefaults: () => applyAssetSnapshot(localAssetSnapshot()), importCategoryGraph, importRootObject, importSlicing, importNumberAsset, captureWorkspace, restoreWorkspace, importAsset: (ref, value) => {
         if (!ASSET_SUBTYPES[ref.kind]?.some(([type]) => type === value.type)) throw new Error('Unsupported object subtype.');
         return updateObjectAsset(ref, { type: value.type, data: value.data });
       }, status, closePicker: closeCardPicker, ioChanged: updateImportExport,
@@ -2492,7 +2569,7 @@
       installChrome: panel => {
         installWorkspaceOwnedCardChrome(panel.node, panel.id, {
           hide: () => objectWorkspace.move(panel, 'hidden'),
-          actions: [['move-area', 'Move to main area', '↗', () => objectWorkspace.move(panel, panel.location === 'main' ? 'side' : 'main')]]
+          actions: [['move-area', 'Move to main area', '↗', () => objectWorkspace.move(panel, panel.location === 'main' ? 'side' : 'main')],...(!panel.definition.input?[['compare','New comparison view','⧉',()=>objectWorkspace.compare(panel)]]:[])]
         });
         panel.moveButton = panel.head.querySelector('[data-workspace-card-action="move-area"]');
         panel.moveButton.textContent = panel.location === 'main' ? '↙' : '↗';
@@ -2719,7 +2796,7 @@
     }));
     const instances = [...assetsCardState.instances.values()].map(instance => ({
       targetRef: instance.targetRef, cardType: instance.cardType, localUiState: instance.localUiState || {},
-      ...(instance.cardType === 'input' ? { draft: instance.draft, dirty: instance.dirty, validation: instance.validation, autosaveStatus: instance.autosaveStatus } : {})
+      ...(instance.cardType === 'input' ? { draft: instance.draft, baseDefinition: instance.baseDefinition, dirty: instance.dirty, validation: instance.validation, autosaveStatus: instance.autosaveStatus } : {})
     }));
     const tabs = openedCanvasIds().filter(id => id !== DESIGN_LAB_ID);
     const panes = { ...paneCanvases };
@@ -2734,6 +2811,7 @@
       assetCards: { slots, instances, activeInputInstanceKey: assetState.activeInputInstanceKey, editorMode: assetState.editorMode,
         importExport: { visible: importExportSlot.visible, collapsed: importExportSlot.collapsed, pinned: importExportSlot.pinned, displayMode: importExportSlot.displayMode } },
       workspace: { tabs, panes, split: savedSplit, focusedPane: savedSplit ? focusedPane : 'primary', inspectorSourceId: inspectorSourceId === DESIGN_LAB_ID ? '' : inspectorSourceId,
+        viewDefaults:[...viewDefaults].filter(([key])=>assetByKey(key)),
         dockedPanels:[...dockedPanels.values()].filter(record => record.id !== DESIGN_LAB_ID).map(({id,source,key,sessionId,location,canvasHeight,canvasHeightMode})=>({id,source,key,sessionId,location,canvasHeight,canvasHeightMode})),
         inspectorOrder: [...$('#workspace-cards').children].filter(node => node.id !== 'workspace-design-lab').map(inspectorNodeKey),
         settings: window.MathWorkspaceSettings?.capture(),
@@ -2743,6 +2821,7 @@
   function prepareWorkspace(text) {
     const io = window.MathWorkspaceIO, raw = io.parse(text);
     io.migrateHomologyCards(raw);
+    presentation.migrateWorkspace(raw);
     window.MathWorkspaceSettings?.validate(raw.workspace.settings);
     for(const panel of raw.panels)if(panel.type==='asset-view'){
       const key=panel.computation?.refs?.asset,asset=raw.assets.find(a=>assetKey(a)===key),capability=window.MathWorkspaceObjects.capabilityFor(asset);
@@ -2761,8 +2840,7 @@
         ? slicing.references(asset).flatMap(spec => (spec.many ? slicing.readRef(asset.data,spec.field) || [] : [slicing.readRef(asset.data,spec.field)]).map(key => ({key,kind:spec.kind})))
         : referenceFieldSpecs(asset.kind,asset.type).map(spec => ({key:window.MathWorkspaceNumbers.referenceKey(asset.data,spec),kind:spec.expectedKind}))
     });
-    window.MathWorkspaceNumbers.validateGraph(prepared.assets);
-    for(const asset of prepared.assets)if(['complex','filtration','field-extension','field'].includes(asset.kind)){
+    for(const asset of prepared.assets)if(['complex','filtration'].includes(asset.kind)){
       const issues=window.MathWorkspaceStructures.issues(asset,prepared.assets);if(issues.length)throw new Error(issues.join(' '));
     }
     const types = new Set(Object.keys(ASSET_CARD_REGISTRY));
@@ -2796,6 +2874,7 @@
       return { ...io.clone(asset), plainName: plainAssetName(asset.name), typeLabel: ASSET_SUBTYPES[asset.kind].find(([type]) => type === asset.type)[1], dependencies,
         definition: assetDefinitionFor(asset.kind,asset.type,asset.data), fingerprint: JSON.stringify({name:asset.name,type:asset.type,data:asset.data,dependencies}) };
     });
+    viewDefaults.clear();for(const [key,view]of saved.workspace.viewDefaults||[])viewDefaults.set(key,io.clone(view));
     assetState.snapshot = { revision, assets, capabilities: {} }; assetState.snapshot = localAssetSnapshot();
     assetState.nextObjectId = Math.max(0, ...assets.map(a => Number(a.id.match(/\d+$/)?.[0]) || 0));
     const settings = saved.workspace.assets;
@@ -2807,7 +2886,7 @@
     for (const item of saved.assetCards.instances) {
       const instance = item.cardType === 'input' ? createAssetInputInstance(item.targetRef) : createAssetCardInstance(item.targetRef,item.cardType);
       instance.localUiState = io.clone(item.localUiState);
-      if (item.cardType === 'input') Object.assign(instance,{draft:io.clone(item.draft),dirty:!!item.dirty,validation:io.clone(item.validation),autosaveStatus:item.dirty ? 'Restored draft' : item.autosaveStatus,baseRevision:revision});
+      if (item.cardType === 'input') Object.assign(instance,{draft:io.clone(item.draft),baseDefinition:typeof item.baseDefinition==='string'?item.baseDefinition:instance.baseDefinition,dirty:!!item.dirty,validation:io.clone(item.validation),autosaveStatus:item.dirty ? 'Restored draft' : item.autosaveStatus,baseRevision:revision});
       assetsCardState.instances.set(instance.key,instance);
     }
     for (const item of saved.assetCards.slots) {
@@ -2817,11 +2896,12 @@
       if (instance && item.cardType !== 'input') {
         slot.activeInstanceKey = null; // This renderer is new; it has no previous presentation to capture.
         bindAssetPropertySlot(item.cardType,instance.targetRef,{render:false,focus:false,promote:false});
-        if (item.snapshot) { slot.rendererSession.applyingAssets = true; try { slot.rendererSession.editor.restore(item.snapshot); } finally { slot.rendererSession.applyingAssets = false; } }
+        if (item.snapshot&&!slot.rendererSession.dependencyInvalid) { slot.rendererSession.applyingAssets = true; try { slot.rendererSession.editor.restore(item.snapshot); } finally { slot.rendererSession.applyingAssets = false; } }
         Object.assign(slot,{visible:!!item.visible,recentInstanceKeys:item.recentInstanceKeys,collapsed:!!item.collapsed,pinned:!!item.pinned,displayMode:item.displayMode});
         const card=ASSET_CARD_REGISTRY[item.cardType];
         slot.rendererSession.editor.setCardPresentation(card.nativeCardKey,{collapsed:slot.collapsed,pinned:slot.pinned,displayMode:slot.displayMode});
-        slot.rendererSession.editor.setCardVisible(card.nativeCardKey,slot.visible);
+        slot.rendererSession.editor.setCardVisible(card.nativeCardKey,slot.visible&&!slot.rendererSession.dependencyInvalid);
+        if(slot.rendererSession.dependencyInvalid)slot.rendererSession.editor.listCards().forEach(card=>slot.rendererSession.editor.setCardVisible(card.key,false));
       }
     }
     assetState.activeInputInstanceKey = saved.assetCards.activeInputInstanceKey; assetState.editorMode = saved.assetCards.editorMode;
@@ -2942,7 +3022,7 @@
     });
   }
 
-  window.MathWorkspaceAssetsTest = { assetKey, layouts: ASSET_LAYOUTS.slice(), selectAssetKey, orderedAssets, state: assetState, assetRequest, renderAssetsEditor, canonicalAssetName, normalizedAssetData, validateAssetData, referenceFieldSpecs, referenceEligibility, referenceWouldCreateCycle, referenceDragKey, isDirectSheafType, inferredSheafBase, assetMathSignature, invalidateDerivedAssetProperties, createAssetPropertyCommand, commitAssetPropertyCommand, captureAndCommitAssetPropertyCommand, captureSheafComplexLayout, cardSupportsAsset, assetCardInstanceKey, ASSET_CARD_REGISTRY, NATIVE_ASSET_CARD_TYPES, assetsCardState, assetsUtilitySlots, assetInputCardTitleState, createAssetsCardCoordinator, planAssetPropertySlotBinding, bindAssetPropertySlot, handleAssetPropertySessionChange, createAssetInputInstance, bindAssetInputInstance, activeAssetInputInstance, assetInputInstanceForRef, validateAssetInputDraft, createAssetInputCommitCommand, commitAssetInputCommand, updateAssetInputDraft, scheduleAssetInputAutosave, flushAssetInputInstance, cancelAssetInputAutosave, queueAssetInputAutosave, drainAssetInputQueue, removeAssetInputInstances, acceptAssetInputAsyncResult, markAffectedAssetPropertyInstances, reprojectActiveAssetPropertySlots, INPUT_AUTOSAVE_DEBOUNCE_MS, INPUT_AUTOSAVE_MAX_WAIT_MS, DEFAULT_CANVAS_HEIGHT, MIN_CANVAS_HEIGHT, MAX_CANVAS_HEIGHT, canvasHeightFor, sessions };
+  window.MathWorkspaceAssetsTest = { assetKey, layouts: ASSET_LAYOUTS.slice(), selectAssetKey, orderedAssets, state: assetState, assetRequest, renderAssetsEditor, canonicalAssetName, normalizedAssetData, validateAssetData, referenceFieldSpecs, referenceEligibility, referenceWouldCreateCycle, referenceDragKey, isDirectSheafType, inferredSheafBase, assetMathSignature, invalidateDerivedAssetProperties, createAssetPropertyCommand, commitAssetPropertyCommand, captureAndCommitAssetPropertyCommand, captureSheafComplexLayout, cardSupportsAsset, assetCardInstanceKey, ASSET_CARD_REGISTRY, NATIVE_ASSET_CARD_TYPES, assetsCardState, assetsUtilitySlots, assetInputCardTitleState, createAssetsCardCoordinator, planAssetPropertySlotBinding, bindAssetPropertySlot, handleAssetPropertySessionChange, createAssetInputInstance, bindAssetInputInstance, activeAssetInputInstance, assetInputInstanceForRef, validateAssetInputDraft, createAssetInputCommitCommand, commitAssetInputCommand, resolveAssetInputConflict, updateAssetInputDraft, scheduleAssetInputAutosave, flushAssetInputInstance, cancelAssetInputAutosave, queueAssetInputAutosave, drainAssetInputQueue, removeAssetInputInstances, acceptAssetInputAsyncResult, markAffectedAssetPropertyInstances, reprojectActiveAssetPropertySlots, INPUT_AUTOSAVE_DEBOUNCE_MS, INPUT_AUTOSAVE_MAX_WAIT_MS, DEFAULT_CANVAS_HEIGHT, MIN_CANVAS_HEIGHT, MAX_CANVAS_HEIGHT, canvasHeightFor, sessions };
   Object.assign(window.MathWorkspaceAssetsTest, { createObjectAsset, updateObjectAsset, localAssetSnapshot, applyAssetSnapshot, openCanvas, closeCanvas, setSplitView, selectCanvasTab });
   document.addEventListener('DOMContentLoaded', initialise);
 }());

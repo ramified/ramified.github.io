@@ -139,7 +139,8 @@ async function run() {
     console.log('PASS full width, split and side reuse one panel and asset');
 
     await read(() => {
-      window.secondInput = MathWorkspaceObjectPanels.open('young-input', 'young:' + testAssets.a, 'main');
+      // Retain coverage for duplicate editors restored from an older workspace.
+      window.secondInput = MathWorkspaceObjectPanels.open('young-input', 'young:' + testAssets.a, 'main', {id:'object-panel-9000'});
       window.secondView = MathWorkspaceObjectPanels.open('young-view', 'young:' + testAssets.a, 'side');
       MathWorkspaceAssetsTest.updateObjectAsset({ kind: 'young', id: testAssets.a }, { data: { partition: '2,1' } });
     });

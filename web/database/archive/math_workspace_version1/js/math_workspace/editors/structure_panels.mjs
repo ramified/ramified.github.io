@@ -6,39 +6,52 @@ document.addEventListener('DOMContentLoaded',()=>{
   save.addEventListener('click',()=>options.onCollectComplexAssets());refs.complexChartExport?.parentElement?.append(save);
 });
 __editor.extendAssetAdapter(previous=>{
-  let enabled=false,display=null,current=null,operations=false,signature='',operationBody=null;
+  let enabled=false,display=null,current=null,operations=false,signature='',operationBody=null,layoutSelect=null,localView={},targetKey='';
+  const copy=value=>JSON.parse(JSON.stringify(value));
+  function renderDisplay(){
+    if(!current)return;
+    const raw=window.MathWorkspaceStructures.complexEntry(current,lastAssets,localView),entry=normalizeComplexChartEntry(raw);
+    if(layoutSelect)layoutSelect.value=entry.display==='snake-les'?'snake':'inline';
+    const unsupported=[...raw.objects,...raw.maps,...(raw.quotients||[])].some(text=>String(text).trim().replace(/\s+/g,' ')!==sanitizeComplexChartLatex(text));
+    if(operations){
+      operationBody.hidden=unsupported;display.hidden=!unsupported;
+      if(unsupported){display.textContent='These labels are outside the legacy operation engine’s supported notation. Definitions are preserved; edit their symbols before running operations.';ensureComplexChartState().entries=[];signature='';return;}
+      const next=JSON.stringify(entry);if(next!==signature){ensureComplexChartState().entries=[entry];signature=next;renderComplexChartList();}return;
+    }
+    display.innerHTML=complexChartEntryDisplayHtml(entry);
+    if(unsupported){
+      display.textContent=raw.objects.map((text,index)=>text+(raw.kind==='filtration'&&index<raw.quotients.length?' ⊂ ['+raw.quotients[index]+'] ':index<raw.maps.length?' —'+raw.maps[index]+'→ ':'')).join('');
+      const warning=document.createElement('p');warning.textContent='Plain-text preview: some labels are outside the legacy formula renderer’s supported notation.';display.append(warning);
+    }
+    const note=document.createElement('p');note.textContent=(current.kind==='filtration'?'Filtration index ':'Degrees ')+current.data.startDegree+' ('+current.data.direction+'). '+(current.data.condition==='declared'?'Condition declared by user; not verified.':'Symbolic diagram; condition not verified.');display.append(note);typeset(display);
+  }
+  let lastAssets=[];
   return {...previous,
     panel(config){
       if(!['complex-view','complex-operations','filtration-view','filtration-operations'].includes(config.operation))return previous.panel?.(config);
       operations=config.operation.endsWith('-operations');
       enabled=true;display=document.createElement('div');display.className='workspace-complex-display';
+      const toolbar=[];
+      if(config.operation.startsWith('complex-')){
+        const label=document.createElement('label');label.textContent='Layout ';layoutSelect=document.createElement('select');layoutSelect.setAttribute('aria-label','Complex display layout');layoutSelect.append(new Option('Inline','inline'),new Option('Snake','snake'));label.append(layoutSelect);toolbar.push(label);
+        layoutSelect.addEventListener('change',()=>{localView={...localView,display:layoutSelect.value==='snake'?'snake-les':''};renderDisplay();__editor.notifyChange({interaction:'object-preview'});});
+      }
       if(operations){
         const save=document.createElement('button');save.type='button';save.className='btn';save.textContent='Save operation results to Assets';save.dataset.saveComplexResults='';
         save.addEventListener('click',()=>options.onCollectComplexAssets?.(ensureComplexChartState().entries.filter(entry=>entry.selected!==false&&entry.id!==current?.id)));
         operationBody=refs.complexChartCard.querySelector('.card-body');display.hidden=true;
-        __editor.mountObjectSurfaces({content:[display,operationBody],toolbar:[save]}).content.style.overflow='auto';
-      }else __editor.mountObjectSurfaces({content:[display]}).content.style.overflow='auto';
+        __editor.mountObjectSurfaces({content:[display,operationBody],toolbar:[...toolbar,save]}).content.style.overflow='auto';
+      }else __editor.mountObjectSurfaces({content:[display],toolbar}).content.style.overflow='auto';
     },
     apply(snapshot,ref,properties,binding){
       if(!enabled)return previous.apply?.(snapshot,ref,properties,binding);
       current=snapshot.assets.find(a=>a.kind===ref?.kind&&a.id===ref?.id);if(!current)return false;
-      const raw=window.MathWorkspaceStructures.complexEntry(current,snapshot.assets),entry=normalizeComplexChartEntry(raw);
-      const unsupported=[...raw.objects,...raw.maps,...(raw.quotients||[])].some(text=>String(text).trim().replace(/\s+/g,' ')!==sanitizeComplexChartLatex(text));
-      if(operations){
-        operationBody.hidden=unsupported;display.hidden=!unsupported;
-        if(unsupported){display.textContent='These labels are outside the legacy operation engine’s supported notation. Definitions are preserved; edit their symbols before running operations.';ensureComplexChartState().entries=[];signature='';return true;}
-        const next=JSON.stringify(entry);if(next!==signature){ensureComplexChartState().entries=[entry];signature=next;renderComplexChartList();}return true;
-      }
-      display.innerHTML=complexChartEntryDisplayHtml(entry);
-      if(unsupported){
-        display.textContent=raw.objects.map((text,index)=>text+(raw.kind==='filtration'&&index<raw.quotients.length?' ⊂ ['+raw.quotients[index]+'] ':index<raw.maps.length?' —'+raw.maps[index]+'→ ':'')).join('');
-        const warning=document.createElement('p');warning.textContent='Plain-text preview: some labels are outside the legacy formula renderer’s supported notation.';display.append(warning);
-      }
-      const note=document.createElement('p');note.textContent=(current.kind==='filtration'?'Filtration index ':'Degrees ')+current.data.startDegree+' ('+current.data.direction+'). '+(current.data.condition==='declared'?'Condition declared by user; not verified.':'Symbolic diagram; condition not verified.');display.append(note);typeset(display);return true;
+      const key=current.kind+':'+current.id;if(key!==targetKey){targetKey=key;localView=copy(binding?.viewDefaults?.complex||{});signature='';}
+      lastAssets=snapshot.assets;renderDisplay();return true;
     },
-    capture(){return enabled?{}:previous.capture?.();},
+    capture(){return enabled?{presentation:copy(localView)}:previous.capture?.();},
     result(){return enabled?{text:operations?refs.complexChartSaved?.textContent||'':display?.textContent||'',hasResult:true}:previous.result?.();},
-    io(action,value){if(action==='complex-entries')return JSON.parse(JSON.stringify(ensureComplexChartState().entries));return previous.io?.(action,value);}
+    io(action,value){if(enabled&&action==='presentation'){if(value){localView=copy(value);renderDisplay();}return copy(localView);}if(action==='complex-entries')return JSON.parse(JSON.stringify(ensureComplexChartState().entries));return previous.io?.(action,value);}
   };
 });
 `;
