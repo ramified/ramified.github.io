@@ -54,8 +54,10 @@
 .workspace-object-panel { min-width: 0; margin: 0; }
 .workspace-settings-dialog > .workspace-control { flex: none; width: calc(100% - 44px); margin: 18px 22px 0; }
 .workspace-settings-body { flex: 1; min-height: 0; overflow: auto; padding: 18px 22px 22px; }
+.workspace-settings-help { margin: 16px 22px 0; color: var(--muted); font-size: .85rem; }
+.workspace-settings-dialog > select[hidden], .workspace-card-form > [hidden] { display: none !important; }
 .workspace-settings-engine { height: auto; min-height: 180px; }
-.workspace-settings-engine[hidden] { display: none; }
+.workspace-settings-body > [hidden] { display: none !important; }
 .workspace-object-panel > .card-body { align-content: start; }
 .workspace-object-panel .workspace-object-references:has(>div):not(:has(>div:not([hidden]))) { display: none; }
 .workspace-object-panel .workspace-form-fields:empty { display: none; }

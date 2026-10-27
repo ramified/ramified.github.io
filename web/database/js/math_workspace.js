@@ -18,7 +18,7 @@
   let activeCanvasId = '', focusedPane = 'primary', splitView = false, inspectorSourceId = '', suppressCanvasClickUntil = 0;
   const DEFAULT_CANVAS_HEIGHT = 680, MIN_CANVAS_HEIGHT = 240, MAX_CANVAS_HEIGHT = 1600;
   const ASSET_LAYOUTS = ['icons', 'list', 'details', 'tiles', 'content'];
-  const OBJECT_INPUT_KINDS = ['number', 'young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...(slicing?.kinds || []), ...window.MathWorkspaceMosaic.kinds];
+  const OBJECT_INPUT_KINDS = ['number', 'young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...(slicing?.kinds || []), ...window.MathWorkspaceMosaic.kinds, 'complex','filtration','field-extension'];
   const ASSET_KINDS = ['variety', 'sheaf', 'map', ...OBJECT_INPUT_KINDS];
   const INPUT_AUTOSAVE_DEBOUNCE_MS = 450, INPUT_AUTOSAVE_MAX_WAIT_MS = 1500;
   const assetState = {
@@ -106,6 +106,7 @@
       createAssetPropertyCommand: options.createAssetPropertyCommand,
       validateAssetCardBinding: options.validateAssetCardBinding,
       onCollectAssets: () => options.onCollectAssets?.(editor),
+      onCollectComplexAssets: options.onCollectComplexAssets,
       onError: (error) => status(error?.message || String(error), 'error')
     });
     $('#workspace-canvas-parking').appendChild(host); $('#workspace-cards').appendChild(inspectorHost);
@@ -122,6 +123,19 @@
     if (!session) {
       const options = definition.id === 'sheaf-complexes' ? {
         onCollectAssets: () => collectSheafComplexAssets(session),
+        onCollectComplexAssets: () => {
+          const entries=session.editor.objectIO('complex-entries')||[];
+          let saved=0,skipped=0;
+          for(const entry of entries.filter(item=>item.selected!==false)){
+            if(!['chain-complex','filtration'].includes(entry.kind)){skipped++;continue;}
+            const kind=entry.kind==='filtration'?'filtration':'complex';
+            const data=window.MathWorkspaceStructures.fromComplexEntry(entry);
+            const existing=assetState.snapshot.assets.find(a=>a.kind===kind&&a.data.legacy?.id===entry.id);
+            const asset=existing?updateObjectAsset(assetRef(existing),{data}):createObjectAsset(kind,{data});
+            if(asset)objectWorkspace.open(kind+'-view',assetKey(asset),'main');saved++;
+          }
+          status(`Saved ${saved} complex / filtration assets.${skipped?' Unsupported entries were retained in the original editor.':''}`,'success');
+        },
         onChange: (_editor, change) => {
           if (!session || session.applyingAssets) return;
           captureSheafComplexLayout(session);
@@ -877,7 +891,7 @@
     card.className = 'card workspace-live-card workspace-assets-input-card workspace-assets-inspector-card'; card.dataset.workspaceCard = identity; card.dataset.workspaceLabel = 'Assets · Input'; card.hidden = !visible;
     card.innerHTML = `<div class="card-head" role="button" tabindex="0" aria-expanded="true"><span class="drag-handle" aria-hidden="true">⋮⋮</span><span class="card-head-label">Assets · Input</span><span class="workspace-autosave-status" data-assets-autosave-status>Saved</span><em class="toggle-icon">▾</em></div>
       <form class="card-body workspace-card-form" data-assets-editor novalidate>
-        <div class="workspace-form-grid"><label class="workspace-field workspace-field-inline"><span class="input-label">Mode</span><select class="workspace-control" data-assets-mode><option value="create">Create</option><option value="modify">Modify</option></select></label><label class="workspace-field workspace-field-inline"><span class="input-label">Object</span><select class="workspace-control" data-assets-kind><option value="variety">Variety</option><option value="sheaf">Sheaf</option><option value="map">Map</option><option value="young">Young diagram</option><option value="lie">Lie type</option></select></label></div>
+        <label class="workspace-field workspace-field-inline" data-assets-kind-row><span class="input-label">Object</span><select class="workspace-control" data-assets-kind><option value="variety">Variety</option><option value="sheaf">Sheaf</option><option value="map">Map</option><option value="young">Young diagram</option><option value="lie">Lie type</option></select></label>
         <label class="workspace-field workspace-field-inline"><span class="input-label">Name</span><input class="workspace-control workspace-code-control" data-assets-name type="text" value="X" maxlength="80" spellcheck="false"></label>
         <label class="workspace-field workspace-field-inline"><span class="input-label">Type</span><select class="workspace-control" data-assets-subtype></select></label>
         <div class="workspace-form-fields" data-assets-fields></div>
@@ -885,14 +899,6 @@
         <p class="workspace-status" data-assets-editor-status role="status" aria-live="polite"></p>
       </form>`;
     const form = card.querySelector('[data-assets-editor]');
-    form.querySelector('[data-assets-mode]').addEventListener('change', (event) => {
-      assetState.editorMode = event.target.value;
-      if (event.target.value === 'create') {
-        flushAssetInputInstance(activeAssetInputInstance());
-        assetState.activeInputInstanceKey = null; assetsCardState.slots.get('input').activeInstanceKey = null;
-      }
-      renderAssetsEditor();
-    });
     form.querySelector('[data-assets-kind]').addEventListener('change', () => { if (!activeAssetInputInstance()) renderAssetsEditor(); });
     form.addEventListener('input', (event) => {
       if (!event.target.matches('[data-assets-name],[data-assets-field]') || event.target.matches('select,input[type="checkbox"],input[type="radio"]')) return;
@@ -921,6 +927,7 @@
   }
 
   const ASSET_SUBTYPES = {
+    filtration:[['filtration','Filtration']], complex:[['complex','Complex']], 'field-extension':[['field-extension','Field extension']],
     'mosaic-space':[['mosaic-space','Mosaic Space']], 'mosaic-diagram':[['mosaic-diagram','Mosaic Diagram']],
     ...(slicing?.subtypes || {}),
     dynkin: [['dynkin', 'Marked Dynkin diagram']],
@@ -1050,6 +1057,9 @@
   const ASSET_DRAG_TYPE = 'application/x-math-workspace-asset';
   const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   function referenceFieldSpecs(kind, type) {
+    if(kind==='complex'||kind==='filtration')return [];
+    if(kind==='field')return [{field:'constantField',label:'Constant field',expectedKind:'field',optional:true}];
+    if(kind==='field-extension')return [{field:'base',label:'Base field',expectedKind:'field'},{field:'target',label:'Target field',expectedKind:'field',optional:true}];
     if(kind==='mosaic-space')return [];
     if(kind==='mosaic-diagram')return [{field:'space',label:'Mosaic space',expectedKind:'mosaic-space'}];
     if (kind === 'variety' && type === 'toric') return [{field:'fan',label:'Fan',expectedKind:'fan'},{field:'cone',label:'Affine cone',expectedKind:'cone'}];
@@ -1070,6 +1080,7 @@
     return [{ field: 'domain', label: type === 'composition' ? 'First map' : 'Domain', expectedKind }, { field: 'codomain', label: type === 'composition' ? 'Second map' : 'Codomain', expectedKind }];
   }
   function referenceKeys(kind, type, data) {
+    if(['complex','filtration','field-extension'].includes(kind))return window.MathWorkspaceStructures.references(kind,data);
     if (slicing?.isAsset({kind,type}) || kind === 'matrix') return slicing.refKeys({kind,type,data});
     return [...new Set(referenceFieldSpecs(kind, type).map((spec) => window.MathWorkspaceNumbers.referenceKey(data, spec)).filter(Boolean))];
   }
@@ -1202,7 +1213,7 @@
     if (instance) instance.rendererEpoch += 1;
     form.dataset.inputInstanceKey = instance?.key || '';
     form.dataset.rendererEpoch = String(instance?.rendererEpoch || 0);
-    form.querySelector('[data-assets-mode]').value = assetState.editorMode;
+    form.querySelector('[data-assets-kind-row]').hidden = !!record;
     form.querySelector('[data-assets-kind]').value = kind; form.querySelector('[data-assets-kind]').disabled = !!record;
     updateAssetsInputCardTitle(instance, kind);
     form.querySelector('[data-assets-name]').value = instance ? draft.name : (kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
@@ -1270,6 +1281,10 @@
     return data;
   }
   function validateAssetData(kind, type, data, currentKey) {
+    if(kind==='field'){const problems=window.MathWorkspaceStructures.issues({kind,data},assetState.snapshot.assets);if(problems.length)throw new Error(problems.join(' '));}
+    if(['complex','filtration','field-extension'].includes(kind)){
+      const issues=window.MathWorkspaceStructures.issues({kind,data},assetState.snapshot.assets);if(issues.length)throw new Error(issues.join(' '));return;
+    }
     if(window.MathWorkspaceNumbers && (['number','field'].includes(kind)||window.MathWorkspaceNumbers.references(kind,type).some(spec=>spec.scalar&&data[spec.field]))) {
       const candidate={...(assetByKey(currentKey)||{kind,id:'draft',name:'a'}),type,data};
       window.MathWorkspaceNumbers.validateGraph([...assetState.snapshot.assets.filter(asset=>assetKey(asset)!==currentKey),candidate]);
@@ -1296,6 +1311,7 @@
     const context = { kind, type, data, currentKey };
     referenceFieldSpecs(kind, type).forEach((spec) => {
       const key = window.MathWorkspaceNumbers.referenceKey(data, spec);
+      if (spec.optional && !key) return;
       if (spec.scalar && !key) return;
       const result = referenceEligibility(spec, key, context);
       if (!result.allowed) throw new Error(`${spec.label} must reference an allowed ${spec.expectedKind}.`);
@@ -2256,7 +2272,7 @@
 
   const reservedAssetNames = new Set();
   function uniqueDefaultAssetName(kind) {
-    const base = ({'mosaic-space':'S','mosaic-diagram':'D',number:'a',field:'K',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
+    const base = ({filtration:'F',complex:'C', 'field-extension':'L/K','mosaic-space':'S','mosaic-diagram':'D',number:'a',field:'K',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
     const numbered = (number) => kind === 'sheaf' ? `\\mathcal{E}_{${number}}` : `${base}_{${number}}`;
     let name = base, number = 2;
     const isTaken = (candidate) => reservedAssetNames.has(canonicalAssetName(candidate)) || assetState.snapshot.assets.some((asset) => canonicalAssetName(asset.name) === canonicalAssetName(candidate));
@@ -2739,11 +2755,16 @@
       subtypes: ASSET_SUBTYPES, definitions: window.MathWorkspaceObjects.definitions, calculatorIds: calculators.map(c => c.id),
       nameKey: canonicalAssetName, validName: name => typeof name === 'string' && !!name.trim() && balancedLatex(name),
       normalize: (kind, type, data) => OBJECT_INPUT_KINDS.includes(kind) || slicing.isAsset({kind,type}) ? window.MathWorkspaceObjects.normalize(kind,type,data) : window.MathWorkspaceNumbers.normalizeInputs(kind,type,io.clone(data)),
-      references: asset => slicing.isAsset(asset) || asset.kind === 'matrix'
+      references: asset => ['complex','filtration','field-extension'].includes(asset.kind)
+        ? window.MathWorkspaceStructures.references(asset.kind,asset.data).map(key=>({key,kind:key.split(':')[0]}))
+        : slicing.isAsset(asset) || asset.kind === 'matrix'
         ? slicing.references(asset).flatMap(spec => (spec.many ? slicing.readRef(asset.data,spec.field) || [] : [slicing.readRef(asset.data,spec.field)]).map(key => ({key,kind:spec.kind})))
         : referenceFieldSpecs(asset.kind,asset.type).map(spec => ({key:window.MathWorkspaceNumbers.referenceKey(asset.data,spec),kind:spec.expectedKind}))
     });
     window.MathWorkspaceNumbers.validateGraph(prepared.assets);
+    for(const asset of prepared.assets)if(['complex','filtration','field-extension','field'].includes(asset.kind)){
+      const issues=window.MathWorkspaceStructures.issues(asset,prepared.assets);if(issues.length)throw new Error(issues.join(' '));
+    }
     const types = new Set(Object.keys(ASSET_CARD_REGISTRY));
     for (const slot of prepared.assetCards.slots) if (!types.has(slot.cardType) || !Array.isArray(slot.recentInstanceKeys)) throw new Error('Invalid saved Assets card.');
     for (const instance of prepared.assetCards.instances) {

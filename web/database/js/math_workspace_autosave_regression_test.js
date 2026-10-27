@@ -5,7 +5,7 @@ const vm = require('vm');
 
 const source = fs.readFileSync(path.join(__dirname, 'math_workspace.js'), 'utf8');
 const document = { addEventListener() {}, querySelector() { return null; } };
-const window = { addEventListener() {} };
+const window = { addEventListener() {}, MathWorkspaceMosaic: require('./math_workspace_mosaic.js'), MathWorkspaceNumbers: require('./math_workspace_numbers.js') };
 vm.runInNewContext(source, { console, document, window, location: { protocol: 'file:', origin: 'null' }, URLSearchParams, Intl, Date, Map, Set, Promise, setTimeout, clearTimeout });
 const api = window.MathWorkspaceAssetsTest;
 

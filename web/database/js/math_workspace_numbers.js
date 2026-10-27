@@ -13,6 +13,7 @@
     const field = assets.find(item => keyOf(item) === asset.data.field && item.kind === 'field');
     if (!field) throw new Error('Choose an existing Field for this Number.');
     if (!asset.data.hasValue) return { field, text: asset.name, latex: asset.name, integer: null };
+    if (['function-field','finite-extension'].includes(field.data.dataType)) throw new Error('Valued Number arithmetic over this field is not yet supported. A symbolic Number can retain the field reference.');
     if (!kernel) throw new Error('Number mathematics is not ready.');
     return { field, ...kernel(asset.data.value, field.data) };
   }
@@ -75,7 +76,7 @@
     const number = assets.find(item => keyOf(item) === key && item.kind === 'number');
     if (!number) throw new Error(spec.label + ' must reference an existing Number.');
     const result = evaluate(number, assets);
-    if (result.field.data.dataType === 'finite-field') throw new Error(spec.label + ' requires characteristic zero.');
+    if (['finite-field','finite-extension','function-field'].includes(result.field.data.dataType)) throw new Error(spec.label + ' requires a supported characteristic-zero field.');
     if (number.data.hasValue && (result.integer == null || BigInt(result.integer) < BigInt(spec.min))) throw new Error(spec.label + ' must be an integer at least ' + spec.min + '.');
     return number.data.hasValue && number.data.replaceWithValue ? result.integer : symbol(number);
   }

@@ -2,14 +2,17 @@
   'use strict';
   const slicing = root.MathWorkspaceSlicing || (typeof require === 'function' ? require('./math_workspace_slicing.js') : null);
   const mosaic = root.MathWorkspaceMosaic || (typeof require === 'function' ? require('./math_workspace_mosaic.js') : null);
+  const structures = root.MathWorkspaceStructures || (typeof require === 'function' ? require('./math_workspace_structures.js') : null);
   const keyOf = ref => ref ? `${ref.kind}:${ref.id}` : '';
   const types = ['A', 'B', 'C', 'D', 'E6', 'E7', 'E8', 'F4', 'G2'];
   const numbers = root.MathWorkspaceNumbers || (typeof require === 'function' ? require('./math_workspace_numbers.js') : null);
-  const inputKinds = ['number', 'young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...slicing.kinds, ...mosaic.kinds];
-  const kindLabels = { ...slicing.labels, variety: 'Variety', sheaf:'Sheaf', map:'Map', number:'Number', young: 'Young diagram', lie: 'Lie type', field: 'Field', matrix: 'Matrix', category: 'Category', functor: 'Functor', dynkin: 'Marked Dynkin diagram', strands: 'Strands' };
-  const coefficientTypes = [['complex','Complex numbers ℂ'],['real','Real numbers ℝ'],['rational','Rational numbers ℚ'],['integer','Integers ℤ'],['finite-field','Prime field'],['rational-function','Rational function field'],['number-field','Number field']];
+  const inputKinds = ['number', 'young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...slicing.kinds, ...mosaic.kinds, ...structures.kinds];
+  const kindLabels = { ...structures.labels, ...slicing.labels, variety: 'Variety', sheaf:'Sheaf', map:'Map', number:'Number', young: 'Young diagram', lie: 'Lie type', field: 'Field', matrix: 'Matrix', category: 'Category', functor: 'Functor', dynkin: 'Marked Dynkin diagram', strands: 'Strands' };
+  const coefficientTypes = [['complex','Complex numbers ℂ'],['real','Real numbers ℝ'],['rational','Rational numbers ℚ'],['integer','Integers ℤ'],['finite-field','Prime field'],['finite-extension','Finite field F_(p^n)'],['rational-function','Rational function field over ℚ'],['function-field','Function field over a constant field'],['number-field','Number field']];
   function fieldLabel(data) {
     if (data.dataType === 'finite-field') return 'GF(' + data.finiteFieldPrime + ')';
+    if (data.dataType === 'finite-extension') return 'GF(' + data.finiteFieldPrime + '^' + data.finiteFieldDegree + ')';
+    if (data.dataType === 'function-field') return 'k(' + data.rationalFunctionVariables.join(', ') + ')' + (data.functionFieldPolynomial?'['+data.functionFieldGenerator+'] / ('+data.functionFieldPolynomial+')':'');
     if (data.dataType === 'rational-function') return 'ℚ(' + data.rationalFunctionVariables.join(', ') + ')';
     if (data.dataType === 'number-field') return 'ℚ(' + data.numberFieldSymbol + ') / (' + data.numberFieldPolynomial + ')';
     return coefficientTypes.find(([type]) => type === data.dataType)?.[1] || data.dataType;
@@ -22,10 +25,21 @@
     ['gl-o-gl', 'GL(2n) → O(2n) → GL(n)'], ['gl-sp-gl', 'GL(2n) → Sp(2n) → GL(n)']
   ];
   function normalize(kind, type, source = {}) {
+    if(structures.kinds.includes(kind))return structures.normalize(kind,source);
     if(mosaic.kinds.includes(kind))return mosaic.normalize(kind,source);
     if (slicing.kinds.includes(kind) || kind === 'variety' && type === 'toric') return slicing.normalize(kind,type,source);
     if (kind === 'number') return numbers.normalize(source);
     if (kind === 'field') {
+      if(source.dataType==='finite-extension'){
+        const base=normalize('field','field',{...source,dataType:'finite-field'}),degree=Number(source.finiteFieldDegree??2);
+        if(!Number.isSafeInteger(degree)||degree<1||degree>64)throw new Error('Choose a finite-field degree from 1 to 64.');
+        return {...base,dataType:'finite-extension',finiteFieldDegree:degree};
+      }
+      if(source.dataType==='function-field'){
+        const base=normalize('field','field',{...source,dataType:'rational-function'}),variables=base.rationalFunctionVariables.map(v=>v.trim()),generator=String(source.functionFieldGenerator??'u').trim();
+        if(variables.some(v=>! /^[A-Za-z][A-Za-z0-9_]*$/.test(v))||new Set(variables).size!==variables.length||! /^[A-Za-z][A-Za-z0-9_]*$/.test(generator)||variables.includes(generator))throw new Error('Use distinct variable names and a separate algebraic generator.');
+        return {...base,dataType:'function-field',rationalFunctionVariables:variables,constantField:String(source.constantField??''),functionFieldGenerator:generator,functionFieldPolynomial:String(source.functionFieldPolynomial??'').trim()};
+      }
       const { dataType, finiteFieldPrime, rationalFunctionVariables, numberFieldSymbol, numberFieldPolynomial } = normalize('matrix','matrix',source);
       return { dataType, finiteFieldPrime, rationalFunctionVariables, numberFieldSymbol, numberFieldPolynomial };
     }
@@ -191,6 +205,13 @@
     return degree === 0 ? [] : mode === 'symmetric' ? [degree] : Array(degree).fill(1);
   }
   const definitions = [
+    ...structures.kinds.map(kind=>({id:kind+'-input',label:structures.labels[kind]+' Input',input:kind})),
+    {id:'complex-view',label:'Complex Display',engine:'complex',assetView:true,readOnly:true,viewRole:'asset',light:true,structure:true,slots:[slot('asset','Complex','complex')]},
+    {id:'field-extension-view',label:'Place Ramification',engine:'ramification',assetView:true,readOnly:true,viewRole:'asset',light:true,structure:true,slots:[slot('asset','Field extension','field-extension')]},
+    {id:'complex-operations',label:'Complex Operations',engine:'complex',structure:true,light:true,slots:[slot('asset','Complex','complex')]},
+    {id:'filtration-view',label:'Filtration Display',engine:'complex',assetView:true,readOnly:true,viewRole:'asset',light:true,structure:true,slots:[slot('asset','Filtration','filtration')]},
+    {id:'filtration-operations',label:'Filtration Operations',engine:'complex',structure:true,light:true,slots:[slot('asset','Filtration','filtration')]},
+    ...[['invariants','Field Invariants'],['decomposition','Place Decomposition'],['selected','Selected Place']].map(([part,label])=>({id:'field-extension-'+part,label,engine:'ramification',structure:true,light:true,slots:[slot('asset','Field extension','field-extension')]})),
     ...mosaic.kinds.map(kind=>({id:kind+'-input',label:(kind==='mosaic-space'?'Mosaic Space':'Mosaic Diagram')+' Input',input:kind,engine:'mosaic'})),
     {id:'mosaic-view',label:'Mosaic Canvas',engine:'mosaic',assetView:true,readOnly:true,viewRole:'asset',light:true,slots:[slot('asset','Mosaic object',null,{kinds:mosaic.kinds})]},
     ...mosaic.propertyPanels.map(({id,label,marker,owner,canvas})=>({id,label,marker,mosaicOwner:owner,mosaicCanvas:!!canvas,engine:'mosaic',viewRole:'asset',light:true,slots:[slot('asset',owner==='mosaic-space'?'Mosaic space':'Mosaic diagram',owner)]})),
@@ -251,6 +272,7 @@
   }]));
   function capabilityFor(asset){return asset?.kind==='variety'&&asset.type==='toric'?{...capabilities.variety,modify:'toric-variety-input'}:capabilities[asset?.kind];}
   for(const kind of mosaic.kinds){kindLabels[kind]=kind==='mosaic-space'?'Mosaic Space':'Mosaic Diagram';capabilities[kind].open='mosaic-view';}
+  for(const kind of structures.kinds)capabilities[kind].open=kind+'-view';
   const byType = new Map(definitions.map(definition => [definition.id, definition]));
   function compatible(asset, spec, definition) {
     return !!asset && (spec.kinds || [spec.kind]).includes(asset.kind) && (!spec.subtype || asset.type === spec.subtype)
@@ -291,6 +313,11 @@
     if (objects.asset?.kind === 'number') {
       const parent=assets.find(a=>keyOf(a)===objects.asset.data.field&&a.kind==='field');
       if(parent)objects.field=parent;else missing.push('Field');
+    }
+    if(definition.structure&&objects.asset){
+      missing.push(...structures.issues(objects.asset,assets));
+      const pending=structures.references(objects.asset.kind,objects.asset.data),visited=new Set();
+      while(pending.length){const ref=pending.pop();if(visited.has(ref))continue;visited.add(ref);const item=assets.find(a=>keyOf(a)===ref);if(item){objects[ref]=item;if(item.kind==='field'){missing.push(...structures.issues(item,assets));pending.push(...structures.references('field',item.data));}}}
     }
     if (definition.sheafView) {
       // Project the same authoritative records used by the sheaf calculator.
@@ -375,10 +402,13 @@
       host.dataset.objectEngine = engine;
       panel.renderArea.append(host, inspectorHost);
       const renderer = { host, inspectorHost, engine, role, editor: null, applying: true };
-      renderer.editor = window.MathWorkspaceNativeEditors.factories[engine].mount(host, {
+      renderer.editor = window.MathWorkspaceNativeEditors.factories[engine].mount(host, { workspaceObjectPanel:true,
         id: `${panel.id}-${role}`, inspectorHost,
         onChange: change => nativeChange(panel, renderer, change),
         onCollectAssets: () => overviewAction(panel,'collect'),
+        onCollectComplexAssets: entries => {
+          for(const entry of entries||[]){if(!['chain-complex','filtration'].includes(entry.kind))continue;const kind=entry.kind==='filtration'?'filtration':'complex',asset=api.create(kind,{data:structures.fromComplexEntry(entry)});open(kind+'-view',keyOf(asset),'main');}
+        },
         onOverviewAction: action => overviewAction(panel,action),
         onRemoveOverviewAsset: key => removeOverviewAsset(panel,key),
         onExportOverview: format => exportCategoryOverview(panel,format),
@@ -443,7 +473,7 @@
     function setRendererVisible(renderer, visible, property = false) {
       if (renderer.operation==='dynkin-cartan') {renderer.editor.setCanvasActive(false);renderer.editor.setInspectorActive(false);renderer.host.hidden=true;renderer.inspectorHost.hidden=true;return;}
       const mosaicCanvas=mosaic.propertyPanels.some(panel=>panel.id===renderer.operation&&panel.canvas);
-      const view=mosaicCanvas||['mosaic-view','young-view','dynkin-view','lie-view','strands-view','sheaf-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
+      const view=['complex-operations','filtration-operations','filtration-view'].includes(renderer.operation)||renderer.operation.startsWith('field-extension-')||mosaicCanvas||['complex-view','field-extension-view','mosaic-view','young-view','dynkin-view','lie-view','strands-view','sheaf-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
       const canvas = !property || view;
       const inspector = mosaicCanvas || property && !view || renderer.role === 'input' && ['mosaic','matrix', 'category', 'strand','slice'].includes(renderer.engine);
       // Slicing inputs edit Assets; the dedicated slicing scene owns the canvas.
@@ -549,6 +579,7 @@
         const asset = get(panel.assetKey); if (!asset) return;
         try { api.update(refOf(asset), { name: name.value }); feedback(panel); } catch (error) { feedback(panel, error.message, true); }
       });
+      if(structures.kinds.includes(definition.input)){structureInputFields(panel);return;}
       if (definition.slicing) { slicingInputFields(panel); return; }
       if(definition.input==='mosaic-diagram'){
         referenceControl(panel,slot('space','Mosaic space','mosaic-space'),definition,()=>get(panel.assetKey)?.data.space||'',value=>{const asset=get(panel.assetKey);if(asset)api.update(refOf(asset),{data:{...asset.data,space:value}});});
@@ -574,19 +605,29 @@
         const variables=element('input','workspace-control'); variables.type='text'; variables.setAttribute('aria-label','Variables');
         const symbol=element('input','workspace-control'); symbol.type='text'; symbol.setAttribute('aria-label','Generator');
         const polynomial=element('input','workspace-control workspace-code-control'); polynomial.type='text'; polynomial.setAttribute('aria-label','Defining polynomial');
-        panel.fieldControls={finiteFieldPrime:prime,rationalFunctionVariables:variables,numberFieldSymbol:symbol,numberFieldPolynomial:polynomial}; panel.fieldRows={};
+        const degree=element('input','workspace-control');degree.type='number';degree.min='1';degree.max='64';degree.step='1';degree.setAttribute('aria-label','Finite-field degree');
+        const functionGenerator=element('input','workspace-control');functionGenerator.type='text';functionGenerator.setAttribute('aria-label','Algebraic generator');
+        const functionPolynomial=element('input','workspace-control');functionPolynomial.type='text';functionPolynomial.setAttribute('aria-label','Algebraic relation (optional)');
+        panel.fieldControls={finiteFieldPrime:prime,finiteFieldDegree:degree,rationalFunctionVariables:variables,numberFieldSymbol:symbol,numberFieldPolynomial:polynomial,functionFieldGenerator:functionGenerator,functionFieldPolynomial:functionPolynomial}; panel.fieldRows={};
+        referenceControl(panel,slot('constantField','Constant field','field'),definition,()=>get(panel.assetKey)?.data.constantField||'',value=>{const asset=get(panel.assetKey);if(asset)try{api.update(refOf(asset),{data:{...asset.data,constantField:value}});feedback(panel);}catch(error){feedback(panel,error.message,true);}});
         const commit=()=>{
           const asset=get(panel.assetKey); if(!asset)return;
           try {
             const data={...asset.data,dataType:type.value};
-            if(type.value==='finite-field') { if(!prime.value.trim())return; data.finiteFieldPrime=Number(prime.value); }
-            if(type.value==='rational-function') { if(!variables.value.trim())return; data.rationalFunctionVariables=variables.value.split(',').map(v=>v.trim()); }
+            if(['finite-field','finite-extension'].includes(type.value)) { if(!prime.value.trim())return; data.finiteFieldPrime=Number(prime.value); }
+            if(type.value==='finite-extension')data.finiteFieldDegree=degree.value.trim()?Number(degree.value):asset.data.finiteFieldDegree??2;
+            if(['rational-function','function-field'].includes(type.value)) { if(!variables.value.trim())return; data.rationalFunctionVariables=variables.value.split(',').map(v=>v.trim()); }
+            if(type.value==='function-field'){
+              if(!data.constantField)data.constantField=keyOf(api.ensureDefault('field',{data:{dataType:'rational'}}));
+              data.functionFieldGenerator=functionGenerator.value||data.functionFieldGenerator||'u';data.functionFieldPolynomial=functionPolynomial.value;
+            }
             if(type.value==='number-field') { if(!symbol.value.trim()||!polynomial.value.trim())return; data.numberFieldSymbol=symbol.value;data.numberFieldPolynomial=polynomial.value; }
             api.update(refOf(asset),{data:normalize('field','field',data)}); feedback(panel);
           } catch(error) { feedback(panel,error.message,true); }
         };
         type.addEventListener('change',commit); panel.controls.append(field('Type',type));
-        for(const [key,control] of Object.entries(panel.fieldControls)) { listen(control,commit); const row=field(control.getAttribute('aria-label'),control);panel.fieldRows[key]=row;panel.controls.append(row); }
+        for(const [key,control] of Object.entries(panel.fieldControls)) { listen(control,commit); const row=field(control.getAttribute('aria-label'),control);if(key.endsWith('Polynomial'))row.classList.remove('workspace-field-inline');panel.fieldRows[key]=row;panel.controls.append(row); }
+        panel.functionFieldNote=element('p','workspace-card-context','Leave the algebraic relation empty for k(t₁,…,tₙ). Otherwise give a polynomial in the algebraic generator over this rational function field. This is a declared field presentation; irreducibility is not verified.');panel.controls.append(panel.functionFieldNote);
       } else if (definition.input === 'matrix') {
         const mode = element('select','workspace-control'); mode.setAttribute('aria-label','Matrix construction'); mode.append(new Option('Manual matrix','manual'),new Option('Simple roots from Lie type','simple-roots'),new Option('Fundamental weights from Lie type','fundamental-weights')); panel.matrixConstruction = mode;
         mode.addEventListener('change',()=>{ const asset=get(panel.assetKey); if(!asset) return; const data={...asset.data}; if(mode.value==='manual') { try { Object.assign(data,slicing.materialize(asset,snapshot.assets).data); } catch(_) {} delete data.construction;delete data.field; } else {delete data.field;data.construction={lie:asset.data.construction?.lie||'',basis:mode.value};} api.update(refOf(asset),{data});if(mode.value==='manual')ensureMatrixField(panel.assetKey); });
@@ -815,6 +856,46 @@
       if (asset.kind === 'matrix') ioRenderer({ ...asset, data }).objectIO('validate');
       api.update(refOf(asset), { type, data });
     }
+    function structureInputFields(panel){
+      const commit=patch=>{const asset=get(panel.assetKey);if(!asset)return;try{api.update(refOf(asset),{data:{...asset.data,...patch}});feedback(panel);}catch(error){feedback(panel,error.message,true);}};
+      panel.structureControls={};
+      const text=(key,label,type='text')=>{
+        const input=element('input','workspace-control');input.type=type;input.setAttribute('aria-label',label);panel.structureControls[key]=input;const row=field(label,input);if(key==='polynomial'||key==='embedding')row.classList.remove('workspace-field-inline');panel.controls.append(row);
+        listen(input,()=>{if(type==='number'&&(input.value.trim()===''||!Number.isFinite(Number(input.value))))return;commit({[key]:type==='number'?Number(input.value):input.value});});return input;
+      };
+      if(panel.definition.input==='field-extension'){
+        for(const [id,label,optional]of [['base','Base field',false],['target','Target field (optional)',true]])referenceControl(panel,slot(id,label,'field',{optional}),panel.definition,()=>get(panel.assetKey)?.data[id]||'',value=>commit({[id]:value}));
+        text('generator','Generator');text('polynomial','Defining polynomial over the base field');text('embedding','Base embedding (optional)');
+        panel.controls.append(element('p','workspace-card-context','The polynomial defines the extension over the selected base. A target field reference records a chosen presentation; it does not certify an isomorphism. Unsupported bases or embeddings are retained and reported by the display.'));
+      }else{
+        const filtration=panel.definition.input==='filtration';
+        text('startDegree',filtration?'Starting index':'Starting degree','number');
+        const direction=element('select','workspace-control');direction.append(...(filtration?[new Option('Increasing filtration','increasing'),new Option('Decreasing filtration','decreasing')]:[new Option('Cochain: degrees increase','cochain'),new Option('Chain: degrees decrease','chain')]));direction.setAttribute('aria-label','Degree direction');direction.addEventListener('change',()=>commit({direction:direction.value}));panel.structureControls.direction=direction;panel.controls.append(field('Direction',direction));
+        const condition=element('select','workspace-control');condition.append(new Option('Diagram only — not verified','diagram'),new Option(filtration?'Filtration condition declared by user':'Complex condition declared by user','declared'));condition.setAttribute('aria-label','Complex condition');condition.addEventListener('change',()=>commit({condition:condition.value}));panel.structureControls.condition=condition;panel.controls.append(field('Condition',condition));
+        panel.structureTerms=element('div','workspace-structure-terms');panel.controls.append(panel.structureTerms);
+        const relation=filtration?'quotients':'maps';
+        panel.controls.append(button('Add term',()=>{const a=get(panel.assetKey);commit({objects:[...a.data.objects,{symbol:(filtration?'F_':'A_')+a.data.objects.length,ref:''}],[relation]:[...a.data[relation],{symbol:(filtration?'G_':'d_')+a.data[relation].length,ref:''}]});}),button('Remove last term',()=>{const a=get(panel.assetKey);if(a.data.objects.length>1)commit({objects:a.data.objects.slice(0,-1),[relation]:a.data[relation].slice(0,-1)});}));
+        panel.controls.append(element('p','workspace-card-context',filtration?'Link terms and subquotients to existing objects or enter symbols. Inclusions and subquotient identifications are declared, not verified. Decreasing filtrations are displayed in reverse order to keep inclusion arrows correct.':'Use symbols directly or link existing assets. Linked labels follow their assets. Neither a diagram nor a declaration proves that consecutive differentials compose to zero.'));
+      }
+      panel.structureCommit=commit;
+    }
+    function refreshStructureInput(panel,asset){
+      for(const [key,control]of Object.entries(panel.structureControls))sync(control,asset.data[key]);
+      if(!['complex','filtration'].includes(asset.kind))return;
+      const d=asset.data,signature=JSON.stringify([panel.assetKey,d.objects.length,snapshot.assets.filter(a=>['sheaf','variety','matrix','map'].includes(a.kind)).map(a=>[keyOf(a),a.name])]);
+      if(panel.structureSignature!==signature){
+        panel.structureSignature=signature;panel.structureRows=[];panel.structureTerms.replaceChildren();
+        const relation=asset.kind==='filtration'?'quotients':'maps';
+        for(let i=0;i<d.objects.length;i++)for(const kind of (i<d[relation].length?['objects',relation]:['objects'])){
+          const row=element('div','workspace-object-reference'),symbol=element('input','workspace-control'),select=element('select','workspace-control'),label=(kind==='objects'?'Term ':kind==='quotients'?'Subquotient ':'Differential ')+(i+1);
+          symbol.type='text';symbol.setAttribute('aria-label',label+' symbol');select.setAttribute('aria-label',label+' asset');select.append(new Option('Symbol only',''));
+          snapshot.assets.filter(a=>kind==='maps'?a.kind==='map':['sheaf','variety','matrix'].includes(a.kind)).forEach(a=>select.append(new Option(a.plainName||a.name,keyOf(a))));
+          const update=()=>{const current=get(panel.assetKey);const list=current.data[kind].map((t,index)=>index===i?{symbol:symbol.value,ref:select.value}:t);panel.structureCommit({[kind]:list});};
+          listen(symbol,update);select.addEventListener('change',update);row.append(field(label,symbol),field('Link',select));panel.structureTerms.append(row);panel.structureRows.push({kind,i,symbol,select});
+        }
+      }
+      for(const row of panel.structureRows){sync(row.symbol,d[row.kind][row.i].symbol);row.select.value=d[row.kind][row.i].ref;}
+    }
     function refreshObjectView(panel) {
       const asset=get(panel.computation.refs.asset),computation=panel.computation;
       computation.status=asset?'current':'missing';panel.renderArea.hidden=!asset;
@@ -844,9 +925,26 @@
           if(value&&typeof value==='object') {const dl=element('dl','workspace-object-display-details');for(const [key,item] of Object.entries(value)){dl.append(element('dt','',key.replace(/([A-Z])/g,' $1')),valueNode(item));}return dl;}
           return element('span','',get(value)?.plainName||get(value)?.name||(value==null?'—':String(value)));
         };
-        const data=['field','lie'].includes(asset.kind)?{}:Object.fromEntries(Object.entries(asset.data).filter(([,value])=>value!==''&&value!=null));
+        const data=asset.kind==='field'&&asset.data.dataType==='function-field'?{constantField:asset.data.constantField,variables:asset.data.rationalFunctionVariables,...(asset.data.functionFieldPolynomial?{generator:asset.data.functionFieldGenerator,relation:asset.data.functionFieldPolynomial,verification:'Declared field presentation; irreducibility not verified.'}:{})}:['field','lie'].includes(asset.kind)?{}:Object.fromEntries(Object.entries(asset.data).filter(([,value])=>value!==''&&value!=null));
         for(const [key,value] of Object.entries(data)) {const term=key.replace(/([A-Z])/g,' $1');const description=element('dd');description.append(valueNode(value));details.append(element('dt','',term[0].toUpperCase()+term.slice(1)),description);}
         panel.renderArea.replaceChildren(title,...(Object.keys(data).length?[details]:[]));computation.result={text:panel.renderArea.textContent};
+        if(asset.kind==='field'&&asset.data.dataType==='number-field')panel.renderArea.append(button('Ramification over ℚ',()=>{
+          const base=api.ensureDefault('field',{data:{dataType:'rational'}});
+          const definition={base:keyOf(base),target:keyOf(asset),polynomial:asset.data.numberFieldPolynomial,generator:asset.data.numberFieldSymbol,embedding:''};
+          const existing=api.snapshot().assets.find(a=>a.kind==='field-extension'&&JSON.stringify(a.data)===JSON.stringify(structures.normalize('field-extension',definition)));
+          const extension=existing||api.create('field-extension',{data:definition});
+          open('field-extension-view',keyOf(extension),'main');
+        },'Open the explicit extension of this field over the rationals'));
+        if(asset.kind==='field'&&asset.data.dataType==='function-field'){
+          const algebraic=!!asset.data.functionFieldPolynomial;
+          panel.renderArea.append(button(algebraic?'Ramification of the defining extension':'New extension over this field',()=>{
+            const base=algebraic?api.ensureDefault('field',{data:{...asset.data,functionFieldPolynomial:''}}):asset;
+            const polynomial=algebraic?asset.data.functionFieldPolynomial.replace(/[A-Za-z][A-Za-z0-9_]*/g,token=>token===asset.data.functionFieldGenerator?'x':token):'x^2-t';
+            const definition={base:keyOf(base),target:algebraic?keyOf(asset):'',polynomial,generator:algebraic?asset.data.functionFieldGenerator:'a'};
+            const existing=algebraic&&api.snapshot().assets.find(a=>a.kind==='field-extension'&&JSON.stringify(a.data)===JSON.stringify(structures.normalize('field-extension',definition)));
+            const extension=existing||api.create('field-extension',{data:definition});open('field-extension-view',keyOf(extension),'main');if(!algebraic)open('field-extension-input',keyOf(extension),'side');
+          }));
+        }
       }
       feedback(panel);
     }
@@ -919,7 +1017,9 @@
               panel.numberValueRow.hidden=panel.numberReplaceRow.hidden=controls.mode.value!=='value';panel.numberPositiveRow.hidden=controls.mode.value==='value';
             } else if (asset.kind === 'field') {
               panel.coefficientType.value=asset.data.dataType;
-              for(const [key,control] of Object.entries(panel.fieldControls)) { sync(control,key==='rationalFunctionVariables'?asset.data[key].join(', '):asset.data[key]);panel.fieldRows[key].hidden=key==='finiteFieldPrime'?asset.data.dataType!=='finite-field':key==='rationalFunctionVariables'?asset.data.dataType!=='rational-function':asset.data.dataType!=='number-field'; }
+              const visible={finiteFieldPrime:['finite-field','finite-extension'],finiteFieldDegree:['finite-extension'],rationalFunctionVariables:['rational-function','function-field'],numberFieldSymbol:['number-field'],numberFieldPolynomial:['number-field'],functionFieldGenerator:['function-field'],functionFieldPolynomial:['function-field']};
+              for(const [key,control] of Object.entries(panel.fieldControls)) { sync(control,key==='rationalFunctionVariables'?asset.data[key].join(', '):asset.data[key]??(key==='finiteFieldDegree'?2:key==='functionFieldGenerator'?'u':''));panel.fieldRows[key].hidden=!visible[key].includes(asset.data.dataType); }
+              panel.selectors.filter(entry=>entry.spec.id==='constantField').forEach(entry=>entry.row.hidden=asset.data.dataType!=='function-field');panel.functionFieldNote.hidden=asset.data.dataType!=='function-field';
             } else if (asset.kind === 'matrix') {
               panel.matrixConstruction.value=asset.data.construction?.basis||'manual'; panel.inputIssues=[];
               panel.selectors.filter(entry=>entry.spec.id==='lie').forEach(entry=>{entry.row.hidden=!asset.data.construction;});
@@ -940,6 +1040,7 @@
               feedback(panel, panel.inputIssues.join(' '), !!panel.inputIssues.length);
             }
           }
+          if(asset&&structures.kinds.includes(asset.kind))refreshStructureInput(panel,asset);
           panel.title.textContent = `${asset?.plainName || asset?.name || 'Choose an asset'} · Modify`;
           updateDensity(panel); projectInput(panel);
           panel.renderArea.hidden = !asset || !!panel.inputIssues?.length || !panel.definition.engine;
@@ -969,7 +1070,7 @@
               const projectedAssets = Object.values(context.objects).map(asset => layout ? {...asset,viewPosition:layout.get(keyOf(asset)) || null} : asset);
               renderer.applying = true;
               const overviewActive = Object.hasOwn(computation.refs,'active') ? get(computation.refs.active) : bound;
-              const active = panel.definition.overview ? overviewActive : panel.definition.geometryView ? get(computation.refs.asset) : context.objects[panel.definition.viewRole||'lambda'];
+              const active = panel.definition.overview ? overviewActive : panel.definition.geometryView || panel.definition.structure ? get(computation.refs.asset) : context.objects[panel.definition.viewRole||'lambda'];
               try { renderer.editor.applyAssets({ assets: projectedAssets }, refOf(active), null, { mode: panel.definition.assetView?'view':'property', operation: panel.definition.id, rule: computation.rule, settings: computation.settings, light: panel.definition.light, references: computation.refs, refs: Object.fromEntries(Object.entries(context.objects).map(([role, asset]) => [role, refOf(asset)])) }); }
               finally { renderer.applying = false; }
               computation.options = renderer.editor.captureAssetProperties();

@@ -12,6 +12,8 @@ async function run(){
   await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
   await read(()=>document.getElementById('workspace-settings').click());
   assert(await read(()=>document.querySelector('.workspace-settings-dialog').open),'Settings opens with no asset selected');
+  assert(await read(()=>document.querySelector('.workspace-settings-dialog>select').hidden),'no unused calculator catalog in an empty workspace');
+  await read(()=>{document.querySelector('.workspace-settings-dialog').close();const asset=MathWorkspaceAssetsTest.createObjectAsset('young',{data:{partition:'2'}});window.settingsView=MathWorkspaceObjectPanels.open('young-view','young:'+asset.id,'main');MathWorkspaceSettings.open();});
   const settingsRect=await read(()=>{const d=document.querySelector('.workspace-settings-dialog'),r=d.getBoundingClientRect(),s=getComputedStyle(d);return {x:r.x,y:r.y,width:r.width,height:r.height,viewport:[document.documentElement.clientWidth,innerHeight],margin:s.margin,inset:s.inset,transform:s.transform};});
   assert(Math.abs(settingsRect.x+settingsRect.width/2-settingsRect.viewport[0]/2)<2&&Math.abs(settingsRect.y+settingsRect.height/2-settingsRect.viewport[1]/2)<2,'Settings is centered on desktop: '+JSON.stringify(settingsRect));
   await client.send('Emulation.setDeviceMetricsOverride',{width:375,height:812,deviceScaleFactor:1,mobile:false});
@@ -20,9 +22,21 @@ async function run(){
   await client.send('Emulation.clearDeviceMetricsOverride');
   assert(await read(()=>[...MathWorkspaceSettings.sessions.values()].some(record=>record.settingsOnly&&record.session.content.querySelector('[data-action-id]'))),'global Settings exposes the existing action definitions');
   const categories=await read(()=>{const select=document.querySelector('.workspace-settings-dialog>select'),result=[];for(const option of select.options){select.value=option.value;select.dispatchEvent(new Event('change'));const host=document.querySelector('.workspace-settings-engine:not([hidden])'),record=[...MathWorkspaceSettings.sessions.values()].find(record=>record.host===host);result.push({id:option.value,ready:!!record?.session.content?.querySelector('.calculator-input-section')});}select.value='young';select.dispatchEvent(new Event('change'));return result;});
-  assert(categories.length>=10,'settings cover workspace calculators and property engines');for(const category of categories)assert(category.ready,'missing global settings category '+category.id);
+  assert.deepEqual(categories.map(category=>category.id),['young'],'settings include only visible editors');for(const category of categories)assert(category.ready,'missing global settings category '+category.id);
+  assert(await read(()=>[...document.querySelectorAll('.workspace-settings-body > [hidden]')].every(node=>node.getClientRects().length===0)),'hidden backend inspectors never leak panels into Settings');
   const settingsShot=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-settings.png'),Buffer.from(settingsShot.data,'base64'));
   await read(()=>document.querySelector('.workspace-settings-dialog').close());
+  await read(()=>{MathWorkspaceObjectPanels.move(settingsView,'hidden');MathWorkspaceSettings.open();});
+  assert(await read(()=>document.querySelector('.workspace-settings-dialog>select').hidden),'settings drop closed/hidden editors and do not list their own cached backends');
+  await read(()=>document.querySelector('.workspace-settings-dialog').close());
+  const modifyForms=await read(async()=>{
+   const api=MathWorkspaceAssetsTest,base=api.createObjectAsset('variety',{name:'CleanupX'}),other=api.createObjectAsset('variety',{name:'CleanupY'});
+   const assets=[base,api.createObjectAsset('sheaf',{name:'CleanupE',data:{base:'variety:'+base.id}}),api.createObjectAsset('map',{name:'CleanupF',data:{domain:'variety:'+base.id,codomain:'variety:'+other.id}})];
+   const result=[];
+   for(const asset of assets){await api.assetRequest('select-for-modify',{ref:{kind:asset.kind,id:asset.id}});const form=document.querySelector('[data-assets-editor]');result.push({kind:asset.kind,mode:!!form.querySelector('[data-assets-mode]'),objectHidden:form.querySelector('[data-assets-kind-row]').hidden,name:form.querySelector('[data-assets-name]').value,expected:asset.name});}
+   return result;
+  });
+  for(const form of modifyForms){assert.equal(form.mode,false,form.kind+' has no legacy Mode selector');assert(form.objectHidden,form.kind+' does not repeat its fixed Object selector');assert.equal(form.name,form.expected);}
   await read(()=>{
    window.api=MathWorkspaceAssetsTest;window.panels=MathWorkspaceObjectPanels;window.key=a=>a.kind+':'+a.id;
    window.young=api.createObjectAsset('young',{data:{partition:'3,2'}});window.modify=panels.open('young-input',key(young),'side');window.view=panels.open('young-view',key(young),'main');

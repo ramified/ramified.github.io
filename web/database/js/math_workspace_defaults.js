@@ -10,6 +10,8 @@
     };
     const n = Number(data.ambientDimension ?? data.position?.length ?? data.basis?.length ?? 4);
     if(kind==='mosaic-diagram')put('space','mosaic-space');
+    if(kind==='field-extension')put('base','field',{data:{dataType:'rational'}});
+    if(kind==='field'&&data.dataType==='function-field')put('constantField','field',{data:{dataType:'rational'}});
     if(kind==='number')put('field','field',{data:{dataType:'rational'}});
     const lie = rank => ({ data: { family: 'A', rank } });
     const space = { type: 'projective', data: { dimension: '3' } };

@@ -189,6 +189,7 @@
     if(asset.kind==='matrix'&&asset.data.field) {
       const field=assets.find(a=>keyOf(a)===asset.data.field&&a.kind==='field');
       if(!field)throw new Error('Choose an existing Field asset for this matrix.');
+      if(['function-field','finite-extension'].includes(field.data.dataType))throw new Error('This coefficient field is preserved, but the matrix engine does not yet support its arithmetic.');
       return {...asset,data:{...asset.data,...field.data}};
     }
     if(asset.kind==='variety'&&asset.type==='toric') {

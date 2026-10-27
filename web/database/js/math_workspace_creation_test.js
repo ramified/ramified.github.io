@@ -22,6 +22,7 @@ assert.equal(creation.filter(catalog,'','algebraic','matrix').length,0);
 assert(creation.filter(catalog,'matrices').some(entry=>entry.kind==='matrix'));
 const assignments=creation.subjectAssignments(catalog),defaults=assignments.settings();let updates=0;
 assert.deepEqual(defaults,{version:1,subjectsByKind:{
+  filtration:['algebraic'],complex:['algebraic'],'field-extension':['linear'],
   'mosaic-space':['topology'],'mosaic-diagram':['topology'],frame:['linear','geometry'],
   polytope:['geometry'],sphere:['geometry'],point:['linear','geometry'],vector:['linear','geometry'],
   roots:['representation','geometry'],lattice:['linear','geometry'],voronoi:['geometry'],formula:['geometry'],

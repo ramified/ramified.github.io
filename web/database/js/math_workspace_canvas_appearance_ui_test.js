@@ -131,11 +131,9 @@ async function main() {
         node.dispatchEvent(new Event('change', { bubbles: true }));
       };
       const create = (kind, name, references = {}) => {
-        setSelect('[data-assets-mode]', 'create');
-        setSelect('[data-assets-kind]', kind);
-        document.querySelector('[data-assets-name]').value = name;
-        for (const [field, key] of Object.entries(references)) document.querySelector('[data-assets-reference="' + field + '"]').dataset.assetReferenceValue = key;
-        document.querySelector('[data-assets-save]').click();
+        const api = window.MathWorkspaceAssetsTest;
+        const asset = api.createObjectAsset(kind, { name, data: references });
+        api.assetRequest('select-for-modify', { ref: { kind: asset.kind, id: asset.id } });
       };
       create('variety', 'X_1');
       create('variety', 'Y');
