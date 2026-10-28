@@ -4,7 +4,7 @@
     "workspace:build": "node js/math_workspace/build.mjs",
     "workspace:watch": "node js/math_workspace/build.mjs --watch",
     "workspace:check": "node js/math_workspace/build.mjs --check",
-    "workspace:test": "node js/math_workspace/workspace_test.mjs"
+    "workspace:test": "node --import ./js/math_workspace/test_source_root.mjs js/math_workspace/workspace_test.mjs"
   },
   "devDependencies": {
     "acorn": "8.15.0",

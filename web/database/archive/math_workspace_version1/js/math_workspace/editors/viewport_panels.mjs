@@ -77,8 +77,28 @@ resize=function(){
 __editor.setAssetAdapter({viewport:()=>resize()});
 `,
   'js/dynkin_diagram_calculator.js':helpers+centered+String.raw`
+__viewportStyle('.workspace-native-surface[data-surface-role="view"] .dynkin-stage{position:relative}.workspace-native-surface[data-surface-role="view"] #dynkin-canvas{position:absolute;flex:none;border:0;background:transparent;box-shadow:none}');
 const __viewportOriginalDraw=drawDynkin;
-drawDynkin=function(){__viewportOriginalDraw();if(document.querySelector('.workspace-native-surface'))__viewportFit($('dynkin-canvas'),CANVAS_WIDTH,CANVAS_HEIGHT);};
+drawDynkin=function(){
+  const canvas=$('dynkin-canvas'),size=__editor.getViewport();
+  if(__panelConfig.mode!=='view'){
+    __viewportOriginalDraw();
+    if(document.querySelector('.workspace-native-surface'))__viewportFit(canvas,CANVAS_WIDTH,CANVAS_HEIGHT);
+    return;
+  }
+  if(size.width<1||size.height<1){__viewportOriginalDraw({background:false,showRank:false});return;}
+  // Fit the diagram's bounds, rather than the calculator's empty canvas margins.
+  // Keep canonical coordinates so vertex and edge hit testing stays unchanged.
+  const nodes=layoutNodes(state.type,state.rank,CANVAS_WIDTH,CANVAS_HEIGHT);
+  const minX=Math.min(...nodes.map(node=>node.x))-22,maxX=Math.max(...nodes.map(node=>node.x))+22;
+  const minY=Math.min(...nodes.map(node=>node.y))-22,maxY=Math.max(...nodes.map(node=>node.y))+22;
+  const padding=Math.min(16,size.width/10,size.height/10);
+  const scale=Math.min(2,(size.width-2*padding)/(maxX-minX),(size.height-2*padding)/(maxY-minY));
+  __viewportOriginalDraw({background:false,showRank:false,pixelRatio:size.dpr*Math.max(1,scale)});
+  __viewportCanvasSize(canvas,CANVAS_WIDTH*scale,CANVAS_HEIGHT*scale);
+  canvas.style.left=(size.width/2-(minX+maxX)/2*scale)+'px';
+  canvas.style.top=(size.height/2-(minY+maxY)/2*scale)+'px';
+};
 __editor.setAssetAdapter({viewport:()=>drawDynkin()});
 `,
   'js/strand_diagram_calculator.js':helpers+String.raw`

@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const root = path.resolve(__dirname, '..');
-const BUILD = '20261028-5';
+const BUILD = '20261028-6';
 const check = process.argv.includes('--check');
 function emit(filename, contents) {
   if (check) {
@@ -81,7 +81,7 @@ html = html.replace(/\s*<link rel="stylesheet"[^>]*>/g, '').replace(/<style>[\s\
 html = html.replace('</head>', `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:wght@400;600&family=Source+Sans+3:wght@400;600;700&display=swap">
 <link rel="stylesheet" href="css/ramified_minigames_study_base.css?v=${BUILD}">
 <link rel="stylesheet" href="css/ramified_minigames_study.css?v=${BUILD}">\n</head>`);
-html = html.replace('class="ramified-player player-menu-open"', 'class="ramified-player player-menu-open design-study"');
+html = html.replace('class="ramified-player player-menu-open"', 'class="ramified-player player-menu-open design-study" data-study-page="home"');
 html = html.replace('<main class="layout mosaic-layout">', `<main class="layout mosaic-layout" data-build="${BUILD}">`);
 html = html.replace('<section id="player-home" class="player-page">', `<section id="player-home" class="player-page">
             <div class="study-introduction"><h2 data-i18n="meta.heading">Ramified Minigames</h2><p data-i18n="study.intro">Games on boards whose edges are glued together.</p></div>`);
@@ -89,7 +89,7 @@ html = html.replace('<div id="player-language"></div>', `<div id="player-languag
 html = html.replace('<div id="player-toolbar">', `<div id="study-hud" role="status" aria-live="polite"></div><button id="study-mute" class="btn" type="button" aria-pressed="true" data-i18n="study.muted">Sound off</button>
 <div id="study-status" role="status" aria-live="polite"></div>
 <div id="study-notice" hidden><span data-i18n="study.soundQuestion">Sound on?</span><button class="btn" id="study-sound-yes" data-i18n="study.enableSound">Turn on</button><button class="btn" id="study-sound-no" data-i18n="study.notNow">Not now</button></div>
-<footer id="study-build" lang="en" data-i18n-ignore>Build 2026-10-28.5</footer>
+<footer id="study-build" lang="en" data-i18n-ignore>Build 2026-10-28.6</footer>
       <div id="player-toolbar">`);
 // Reuse existing locale keys with player-facing copy in the study catalog.
 html = html.replace('<div id="player-language"></div>', '<button class="btn" id="study-saves" type="button" data-i18n="study.saves">Saved games</button><div id="player-language"></div>');
@@ -103,6 +103,34 @@ html = html.replace(/(<script src="js\/i18n\/ramified_minigames_locales[^\n]+\n)
 html = html.replace('</body>', '<script src="js/ramified_minigames_study.js?v=20261028-1"></script>\n</body>');
 html = html.replace(/js\/ramified_minigames_setup\.js\?[^"\s]+/, `js/ramified_minigames_study_engine.js?v=${BUILD}`);
 html = html.replaceAll('20261028-1', BUILD);
+// The first rendered home must already use the study's copy and page state.
+// Read the English fallbacks from the same catalog used at runtime.
+const studyEnglish = {};
+require('vm').runInNewContext(fs.readFileSync(path.join(__dirname, 'ramified_minigames_study_locales.js'), 'utf8'), {
+  window: { SiteI18n: { register(_namespace, locale, messages) {
+    if (locale === 'en') Object.assign(studyEnglish, messages);
+  } } }
+});
+const escapeText = text => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+for (const id of ['player-new', 'player-online-open']) {
+  html = html.replace(new RegExp(`(<button\\b[^>]*\\bid="${id}"[^>]*data-i18n="([^"]+)"[^>]*>)[^<]*(</button>)`),
+    (_match, start, key, end) => {
+      if (!studyEnglish[key]) throw new Error('Missing study home fallback: ' + key);
+      return start + escapeText(studyEnglish[key]) + end;
+    });
+}
+// Resolve the language before body parsing/painting, using the shared resolver.
+// The normal DOMContentLoaded init then binds the language controls that did
+// not exist in the head and moves the observer from documentElement to body.
+const localeScripts = [];
+html = html.replace(/<script src="js\/(?:site_i18n|i18n\/ramified_minigames_legacy_sources|i18n\/ramified_minigames_locales|ramified_minigames_study_locales)\.js\?[^"\s]+"><\/script>\n/g,
+  script => { localeScripts.push(script.trim()); return ''; });
+if (localeScripts.length !== 4) throw new Error('Study locale script anchors missing.');
+html = html.replace('</head>', localeScripts.join('\n') + `
+<script>
+  window.SiteI18n.init({ namespace: 'ramified-minigames', defaultLocale: 'en', supportedLocales: ['en', 'zh-CN'] });
+</script>
+</head>`);
 emit(path.join(root, 'ramified_minigames_study.html'), html);
 emit(path.join(__dirname, 'ramified_minigames_study_player.js'), player);
 console.log(check ? 'Study build is current.' : 'Built independent player study with isolated save slots.');

@@ -22,6 +22,19 @@ async function run(){
     assert.equal(await read(()=>document.querySelector('[data-asset-key="'+key(lie)+'"] .workspace-asset-icon').dataset.iconName),'E_{6}');
     assert.equal(await read(()=>view.propertyRenderer.editor.objectIO('geometry').vertices.length),6);
     assert.deepEqual(await read(()=>view.propertyRenderer.editor.readObjectResult().vertices),[]);
+    const diagramLayout=()=>{
+      const editor=view.propertyRenderer.editor,canvas=editor.shadow.querySelector('#dynkin-canvas'),rect=canvas.getBoundingClientRect();
+      const area=editor.shadow.querySelector('.workspace-native-content').getBoundingClientRect(),style=getComputedStyle(canvas);
+      const nodes=editor.objectIO('geometry').vertices,scale=rect.width/900;
+      const left=rect.left+(Math.min(...nodes.map(v=>v.x))-22)*scale,right=rect.left+(Math.max(...nodes.map(v=>v.x))+22)*scale;
+      const top=rect.top+(Math.min(...nodes.map(v=>v.y))-22)*scale,bottom=rect.top+(Math.max(...nodes.map(v=>v.y))+22)*scale;
+      return {transparent:canvas.getContext('2d').getImageData(0,0,1,1).data[3]===0&&style.backgroundColor==='rgba(0, 0, 0, 0)',
+        borderless:style.borderTopWidth==='0px'&&style.boxShadow==='none',centered:Math.abs((left+right-area.left-area.right)/2)<1&&Math.abs((top+bottom-area.top-area.bottom)/2)<1,
+        fits:left>=area.left&&right<=area.right&&top>=area.top&&bottom<=area.bottom,
+        enlarged:scale>Math.min(area.width/900,area.height/360)};
+    };
+    await waitFor(async()=>Object.values(await read(diagramLayout)).every(Boolean));
+    assert.deepEqual(await read(diagramLayout),{transparent:true,borderless:true,centered:true,fits:true,enlarged:true});
     // Every vertex has the unmarked light fill, including after a real click.
     const unmarked=()=>{
       const editor=view.propertyRenderer.editor,canvas=editor.shadow.querySelector('#dynkin-canvas'),ctx=canvas.getContext('2d'),scale=canvas.width/900;
@@ -60,10 +73,13 @@ async function run(){
     assert.match(await read(()=>lr.propertyRenderer.editor.inspectorShadow.getElementById('schur-out').textContent),/Coefficient = 1/);
     assert.equal(await read(()=>api.localAssetSnapshot().assets.find(a=>a.id===lie.id&&a.kind==='lie').data.family),'D');
     // Other supported low ranks retain their own numbering and root lengths.
+    await read(()=>api.selectCanvasTab(view.id));
+    await waitFor(async()=>Object.values(await read(diagramLayout)).every(Boolean));
     for(const [family,rank] of [['A',1],['B',2],['C',2]]){
       await read((family,rank)=>api.updateObjectAsset({kind:'lie',id:lie.id},{data:{family,rank}}),family,rank);
       assert.equal(await read(()=>view.computation.status),'current');
       assert.equal(await read(()=>view.propertyRenderer.editor.objectIO('geometry').vertices.length),rank);
+      assert.deepEqual(await read(diagramLayout),{transparent:true,borderless:true,centered:true,fits:true,enlarged:true},family+rank+' display layout');
     }
     await read(()=>api.updateObjectAsset({kind:'lie',id:lie.id},{data:{family:'B',rank:4}}));
     assert.equal(await read(()=>view.propertyRenderer.editor.objectIO('geometry').vertices.length),4);

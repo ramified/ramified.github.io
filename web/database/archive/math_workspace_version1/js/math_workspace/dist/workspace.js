@@ -64674,18 +64674,20 @@ ${body}`;
       function layoutNodes(type, rank, width, height) {
         return window.DynkinDiagramGeometry.layoutNodes(type, rank, width, height);
       }
-      function drawDynkin() {
+      function drawDynkin({ background = true, showRank = true, pixelRatio = window.devicePixelRatio || 1 } = {}) {
         const canvas = $("dynkin-canvas");
         const ctx = canvas.getContext("2d");
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = pixelRatio;
         const W = CANVAS_WIDTH;
         const H = CANVAS_HEIGHT;
         canvas.width = W * dpr;
         canvas.height = H * dpr;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, W, H);
-        ctx.fillStyle = "#fffdf8";
-        ctx.fillRect(0, 0, W, H);
+        if (background) {
+          ctx.fillStyle = "#fffdf8";
+          ctx.fillRect(0, 0, W, H);
+        }
         const nodes = layoutNodes(state.type, state.rank, W, H);
         state.hitboxes = nodes.map((node, index) => ({ ...node, r: 20, index }));
         state.edgeHitboxes = [];
@@ -64729,11 +64731,13 @@ ${body}`;
           ctx.textBaseline = "middle";
           ctx.fillText(String(index + 1), node.x, node.y + 0.5);
         });
-        ctx.fillStyle = "#7a6f65";
-        ctx.font = "13px JetBrains Mono, monospace";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "top";
-        ctx.fillText(`rank ${state.rank}`, 22, 20);
+        if (showRank) {
+          ctx.fillStyle = "#7a6f65";
+          ctx.font = "13px JetBrains Mono, monospace";
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+          ctx.fillText(`rank ${state.rank}`, 22, 20);
+        }
       }
       function drawEdge(ctx, a, b, multiplicity, arrowTarget) {
         const dx = b.x - a.x;
@@ -66495,10 +66499,28 @@ ${body}`;
         if (scale > 0) __viewportCanvasSize(canvas, width * scale, height * scale);
       }
       __viewportStyle(".workspace-native-content>div{padding:0!important;display:flex;align-items:center;justify-content:center;overflow:hidden!important}");
+      __viewportStyle('.workspace-native-surface[data-surface-role="view"] .dynkin-stage{position:relative}.workspace-native-surface[data-surface-role="view"] #dynkin-canvas{position:absolute;flex:none;border:0;background:transparent;box-shadow:none}');
       const __viewportOriginalDraw = drawDynkin;
       drawDynkin = function() {
-        __viewportOriginalDraw();
-        if (document2.querySelector(".workspace-native-surface")) __viewportFit($("dynkin-canvas"), CANVAS_WIDTH, CANVAS_HEIGHT);
+        const canvas = $("dynkin-canvas"), size = __editor.getViewport();
+        if (__panelConfig.mode !== "view") {
+          __viewportOriginalDraw();
+          if (document2.querySelector(".workspace-native-surface")) __viewportFit(canvas, CANVAS_WIDTH, CANVAS_HEIGHT);
+          return;
+        }
+        if (size.width < 1 || size.height < 1) {
+          __viewportOriginalDraw({ background: false, showRank: false });
+          return;
+        }
+        const nodes = layoutNodes(state.type, state.rank, CANVAS_WIDTH, CANVAS_HEIGHT);
+        const minX = Math.min(...nodes.map((node) => node.x)) - 22, maxX = Math.max(...nodes.map((node) => node.x)) + 22;
+        const minY = Math.min(...nodes.map((node) => node.y)) - 22, maxY = Math.max(...nodes.map((node) => node.y)) + 22;
+        const padding = Math.min(16, size.width / 10, size.height / 10);
+        const scale = Math.min(2, (size.width - 2 * padding) / (maxX - minX), (size.height - 2 * padding) / (maxY - minY));
+        __viewportOriginalDraw({ background: false, showRank: false, pixelRatio: size.dpr * Math.max(1, scale) });
+        __viewportCanvasSize(canvas, CANVAS_WIDTH * scale, CANVAS_HEIGHT * scale);
+        canvas.style.left = size.width / 2 - (minX + maxX) / 2 * scale + "px";
+        canvas.style.top = size.height / 2 - (minY + maxY) / 2 * scale + "px";
       };
       __editor.setAssetAdapter({ viewport: () => drawDynkin() });
     })();

@@ -6,10 +6,17 @@
   <title data-i18n="meta.title">Ramified Minigames</title>
 
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:wght@400;600&family=Source+Sans+3:wght@400;600;700&display=swap">
-<link rel="stylesheet" href="css/ramified_minigames_study_base.css?v=20261028-5">
-<link rel="stylesheet" href="css/ramified_minigames_study.css?v=20261028-5">
+<link rel="stylesheet" href="css/ramified_minigames_study_base.css?v=20261028-6">
+<link rel="stylesheet" href="css/ramified_minigames_study.css?v=20261028-6">
+<script src="js/site_i18n.js?v=20260826-1"></script>
+<script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20261028-preview-time-1"></script>
+<script src="js/ramified_minigames_study_locales.js?v=20261028-6"></script>
+<script>
+  window.SiteI18n.init({ namespace: 'ramified-minigames', defaultLocale: 'en', supportedLocales: ['en', 'zh-CN'] });
+</script>
 </head>
-<body class="ramified-player player-menu-open design-study">
+<body class="ramified-player player-menu-open design-study" data-study-page="home">
 
 <header>
   <h1 data-i18n="meta.heading">Ramified Minigames</h1>
@@ -23,7 +30,7 @@
   </label>
 </header>
 
-<main class="layout mosaic-layout" data-build="20261028-5">
+<main class="layout mosaic-layout" data-build="20261028-6">
   <section class="canvas-panel" aria-label="Ramified minigame canvas panel">
     <header class="panel-title">
       <span class="panel-title-text" data-i18n="setup.canvas">Mosaic Canvas</span>
@@ -40,7 +47,7 @@
       <div id="study-hud" role="status" aria-live="polite"></div><button id="study-mute" class="btn" type="button" aria-pressed="true" data-i18n="study.muted">Sound off</button>
 <div id="study-status" role="status" aria-live="polite"></div>
 <div id="study-notice" hidden><span data-i18n="study.soundQuestion">Sound on?</span><button class="btn" id="study-sound-yes" data-i18n="study.enableSound">Turn on</button><button class="btn" id="study-sound-no" data-i18n="study.notNow">Not now</button></div>
-<footer id="study-build" lang="en" data-i18n-ignore>Build 2026-10-28.5</footer>
+<footer id="study-build" lang="en" data-i18n-ignore>Build 2026-10-28.6</footer>
       <div id="player-toolbar">
         <button class="btn" id="player-return-to-setup" type="button" data-i18n="player.returnToPreparation" hidden>Back to preparation</button>
       </div>
@@ -53,8 +60,8 @@
           <p id="player-message" role="status" hidden></p>
           <section id="player-home" class="player-page">
             <div class="study-introduction"><h2 data-i18n="meta.heading">Ramified Minigames</h2><p data-i18n="study.intro">Games on boards whose edges are glued together.</p></div>
-            <button class="btn" id="player-new" type="button" data-i18n="player.start" disabled>Start game</button>
-            <button class="btn" id="player-online-open" type="button" data-i18n="online.title">Online Play</button>
+            <button class="btn" id="player-new" type="button" data-i18n="player.start" disabled>Play</button>
+            <button class="btn" id="player-online-open" type="button" data-i18n="online.title">Online</button>
             <button class="btn" id="player-settings" type="button" data-i18n="fullscreen.settings">Settings</button>
           </section>
           <section id="player-games" class="player-page" hidden>
@@ -1206,23 +1213,19 @@
 
 <script src="presets/ramified_minigames/presets.js?v=20261008-3"></script>
 <script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
-<script src="js/site_i18n.js?v=20260826-1"></script>
-<script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20261028-preview-time-1"></script>
-<script src="js/ramified_minigames_study_locales.js?v=20261028-5"></script>
 <script src="js/import_export_panel.js?v=20260821-7"></script>
 <script>
   window.RAMIFIED_MINIGAMES_ONLINE_URL = 'https://ramified-chess.ramified.workers.dev';
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
 <script src="js/ramified_minigames_sfx.js?v=20260913-2"></script>
-<script src="js/ramified_minigames_study_engine.js?v=20261028-5"></script>
+<script src="js/ramified_minigames_study_engine.js?v=20261028-6"></script>
 <script src="js/ramified_minigames_sokoban_progress.js?v=20261008-3"></script>
 <script src="js/ramified_minigames_save_slots.js?v=20261010-1"></script>
 <script src="js/ramified_minigames_online.js?v=20261028-preview-time-1"></script>
-<script src="js/ramified_minigames_study_player.js?v=20261028-5"></script>
+<script src="js/ramified_minigames_study_player.js?v=20261028-6"></script>
 <script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
-<script src="js/ramified_minigames_study.js?v=20261028-5"></script>
+<script src="js/ramified_minigames_study.js?v=20261028-6"></script>
 </body>
 </html>

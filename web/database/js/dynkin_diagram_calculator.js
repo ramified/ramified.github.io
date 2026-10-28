@@ -425,18 +425,20 @@
 
   function layoutNodes(type, rank, width, height) { return window.DynkinDiagramGeometry.layoutNodes(type, rank, width, height); }
 
-  function drawDynkin() {
+  function drawDynkin({ background = true, showRank = true, pixelRatio = window.devicePixelRatio || 1 } = {}) {
     const canvas = $('dynkin-canvas');
     const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = pixelRatio;
     const W = CANVAS_WIDTH;
     const H = CANVAS_HEIGHT;
     canvas.width = W * dpr;
     canvas.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#fffdf8';
-    ctx.fillRect(0, 0, W, H);
+    if (background) {
+      ctx.fillStyle = '#fffdf8';
+      ctx.fillRect(0, 0, W, H);
+    }
 
     const nodes = layoutNodes(state.type, state.rank, W, H);
     state.hitboxes = nodes.map((node, index) => ({ ...node, r: 20, index }));
@@ -484,11 +486,13 @@
       ctx.fillText(String(index + 1), node.x, node.y + 0.5);
     });
 
-    ctx.fillStyle = '#7a6f65';
-    ctx.font = '13px JetBrains Mono, monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(`rank ${state.rank}`, 22, 20);
+    if (showRank) {
+      ctx.fillStyle = '#7a6f65';
+      ctx.font = '13px JetBrains Mono, monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`rank ${state.rank}`, 22, 20);
+    }
   }
 
   function drawEdge(ctx, a, b, multiplicity, arrowTarget) {
