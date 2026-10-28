@@ -270,6 +270,23 @@ experiment's state when switching. Removing a selected experiment moves to the
 next available one. `math_workspace_creation_defaults_ui_test.js` checks the
 approved picker and selector behavior.
 
+The approved object-type icons are Filtration = nested subspaces (`flag`),
+Complex = differential diagram (`differentials`), Field extension = L/K
+(`quotient`), Polytope = tetrahedron (`simplex`), and Voronoi cell = tessellation
+patch (`cell-patch`). The generic Sphere icon depicts an S² surface with a curved
+equator, a dashed rear arc, a meridian and light shading. The shared renderer
+supplies these generic representatives to New mathematical object and all five
+Assets layouts. Assets retains the deliberate precedence for supported
+single-letter mathematical names, including indices and exponents: F, C, P, V
+and S² render as names. Descriptive names use the type representative, as do
+named icons when MathJax is unavailable or fails. Existing data-driven diagrams
+retain their precedence. The generic icons are type examples, not computed
+diagrams or mathematical verification, and change no asset data. They need no
+backup settings or migration. The completed creation-icons Design Lab experiment
+has been removed. `math_workspace_object_type_icons_ui_test.js` checks name
+precedence, picker/generic Assets agreement, MathJax fallbacks, all layouts,
+backup isolation, reloads, Design Lab exit and narrow screens.
+
 LR has an optional `nu` target; its result is the multiplicity in the selected
 stable/fixed-rank decomposition. Incomplete dimension checks cannot certify a
 coefficient. Plethysm saves `{mode, degree}` in computation `settings`, separately

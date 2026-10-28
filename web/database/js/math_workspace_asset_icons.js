@@ -1,11 +1,17 @@
 (function (root) {
   'use strict';
-  const generic = { 'mosaic-space':'⬡','mosaic-diagram':'⋈', number: '𝑎', young: '▦', lie: '𝔤', field: '𝑅', dynkin: '●—●', strands: '⋈', matrix: '▦', category: '𝒞', functor: '⇒', variety: '𝕍', sheaf: 'ℱ', map: '→', frame:'⊞', point:'•', vector:'↗', polytope:'⬡', sphere:'◯', roots:'✳', lattice:'▦', voronoi:'⬡', formula:'ƒ', tropical:'⊕', weyl:'◈', cone:'△', fan:'⋔' };
+  const generic = { 'mosaic-space':'⬡','mosaic-diagram':'⋈', filtration:'⊏',complex:'•→•','field-extension':'L/K', number: '𝑎', young: '▦', lie: '𝔤', field: '𝑅', dynkin: '●—●', strands: '⋈', matrix: '▦', category: '𝒞', functor: '⇒', variety: '𝕍', sheaf: 'ℱ', map: '→', frame:'⊞', point:'•', vector:'↗', polytope:'⬡', sphere:'◯', roots:'✳', lattice:'▦', voronoi:'⬡', formula:'ƒ', tropical:'⊕', weyl:'◈', cone:'△', fan:'⋔' };
   const defaults = Object.freeze({ exactColor: '', genericColor: '#a8510b', stroke: 0.7, strandStroke:19, hatch: true,
     matrixStroke: 2.1, matrixEntryStroke: 0.7, matrixFontSize: 20, matrixFontFamily: '"Times New Roman", serif',
     matrixRowGap: 0, matrixColumnGap: 0, matrixBracketGap: 1, matrixBracketCurve: 3, matrixPadding: 0,
     fanNegativeLength:0.7,coneNegativeLength:0.7 });
   const representatives = {
+    filtration:{kind:'filtration',variant:'flag'},
+    complex:{kind:'complex',variant:'differentials'},
+    'field-extension':{kind:'field-extension',variant:'quotient'},
+    polytope:{kind:'polytope',variant:'simplex'},
+    voronoi:{kind:'voronoi',variant:'cell-patch'},
+    sphere:{kind:'sphere',variant:'sphere'},
     roots:{kind:'roots'},
     weyl:{kind:'weyl'},
     frame:{kind:'frame'},
@@ -230,10 +236,52 @@
       svg.append(svgNode('path',{'data-mosaic-piece':'',d,fill:'currentColor',stroke:'none'}));
     return svg;
   }
+  function objectTypeIcon(model) {
+    const svg=svgNode('svg',{viewBox:'0 0 40 40',fill:'none',stroke:'currentColor','stroke-width':1.5,'stroke-linecap':'round','stroke-linejoin':'round'});
+    const path=(d,attributes={})=>svg.append(svgNode('path',{d,...attributes}));
+    const dot=(x,y,r=1.5)=>svg.append(svgNode('circle',{cx:x,cy:y,r,fill:'currentColor',stroke:'none'}));
+    const text=(value,x,y,size,attributes={})=>{
+      const node=svgNode('text',{x,y,'font-size':size,'font-family':'Georgia, "Times New Roman", serif','font-style':'italic',fill:'currentColor',stroke:'none',...attributes});
+      node.textContent=value;svg.append(node);
+    };
+    if(model.kind==='filtration'){
+      for(const [x,y,width,height] of [[5,5,30,30],[5,15,20,20],[5,25,10,10]])svg.append(svgNode('rect',{x,y,width,height,fill:'currentColor','fill-opacity':.06}));
+    }else if(model.kind==='complex'){
+      [4,20,36].forEach(x=>dot(x,24,2));
+      for(const x of [8,24]){path(`M${x} 24h8m-3-3 3 3-3 3`);text('d',x+1,17,10);}
+    }else if(model.kind==='field-extension'){
+      text('L/K',20,28,20,{'text-anchor':'middle'});
+    }else if(model.kind==='polytope'){
+      path('M20 4 4 29 31 36 20 4 33 16 31 36');
+      path('M4 29 33 16',{'stroke-dasharray':'2 3','stroke-opacity':.55});
+    }else if(model.kind==='sphere'){
+      svg.append(svgNode('circle',{cx:20,cy:20,r:16,fill:'currentColor','fill-opacity':.06}));
+      path('M20 4A16 16 0 0 1 20 36C34 30 34 10 20 4Z',{fill:'currentColor','fill-opacity':.08,stroke:'none'});
+      path('M4 20C4 12 36 12 36 20',{'stroke-dasharray':'2 2','stroke-opacity':.5});
+      path('M4 20C4 28 36 28 36 20');
+      svg.append(svgNode('ellipse',{cx:20,cy:20,rx:6,ry:16,transform:'rotate(-20 20 20)','stroke-opacity':.65}));
+    }else if(model.kind==='voronoi'){
+      const hex=(cx,cy)=>Array.from({length:6},(_,i)=>{const a=i*Math.PI/3;return [cx+7*Math.cos(a),cy+7*Math.sin(a)];});
+      const outline=(cx,cy,attributes)=>path('M'+hex(cx,cy).map(point=>point.join(' ')).join('L')+'Z',attributes);
+      for(let i=0;i<6;i++){
+        const a=(i+.5)*Math.PI/3;
+        outline(20+Math.sqrt(3)*7*Math.cos(a),20+Math.sqrt(3)*7*Math.sin(a),{'stroke-opacity':.28,'stroke-width':1});
+      }
+      outline(20,20,{fill:'currentColor','fill-opacity':.12});dot(20,20,2);
+    }
+    return svg;
+  }
+  function genericFallback(host) {
+    const model=representatives[host.dataset.iconKind];
+    if(model?.variant){host.replaceChildren(objectTypeIcon(model));host.dataset.iconVariant=model.variant;}
+    else host.textContent=host.dataset.iconFallback;
+    host.dataset.iconSource='generic';delete host.dataset.iconName;
+  }
   function render(asset, resolve) {
     const description = describe(asset, resolve), model=description.representative || description, host = document.createElement('span');
-    host.className = 'workspace-asset-icon'; host.dataset.iconSource = description.source; host.setAttribute('aria-hidden', 'true');
-    if (model.kind === 'mosaic-space' || model.kind === 'mosaic-diagram') host.append(mosaicIcon(model.kind));
+    host.className = 'workspace-asset-icon'; host.dataset.iconSource = description.source; host.dataset.iconKind=asset.kind; host.setAttribute('aria-hidden', 'true');
+    if (model.variant) { host.dataset.iconVariant=model.variant;host.append(objectTypeIcon(model)); }
+    else if (model.kind === 'mosaic-space' || model.kind === 'mosaic-diagram') host.append(mosaicIcon(model.kind));
     else if (model.kind === 'matrix') host.append(matrixIcon(model));
     else if (model.kind === 'roots' || model.kind === 'weyl') host.append(a2Icon(model.kind==='weyl'));
     else if (model.kind === 'frame') host.append(frameIcon());
@@ -250,7 +298,7 @@
     else {
       const formula = document.createElement('span'); formula.className = 'workspace-icon-formula'; formula.textContent = '\\(' + model.name + '\\)'; host.append(formula);
       host.dataset.iconName = model.name; host.dataset.iconFallback = model.fallback || generic[asset.kind] || '◇';
-      if (!root.MathJax?.typesetPromise) { host.textContent=host.dataset.iconFallback;host.dataset.iconSource='generic';delete host.dataset.iconName; }
+      if (!root.MathJax?.typesetPromise) genericFallback(host);
     }
     return host;
   }
@@ -276,10 +324,10 @@
       await root.MathJax.typesetPromise(hosts);
       for (const host of hosts) {
         if (!host.isConnected) continue;
-        if (host.querySelector('mjx-merror,[data-mjx-error]') || !host.querySelector('mjx-container')) { host.textContent = host.dataset.iconFallback; host.dataset.iconSource = 'generic'; continue; }
+        if (host.querySelector('mjx-merror,[data-mjx-error]') || !host.querySelector('mjx-container')) { genericFallback(host); continue; }
         watch(host);
       }
-    } catch (_) { hosts.forEach(host => { host.textContent = host.dataset.iconFallback; host.dataset.iconSource = 'generic'; }); }
+    } catch (_) { hosts.forEach(genericFallback); }
   }
   function configure(next = {}) {
     settings = Object.fromEntries(Object.keys(defaults).map(key=>[key,next[key]??defaults[key]])); cache.clear();
