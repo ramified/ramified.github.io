@@ -22,9 +22,9 @@
       ui.sync();
     }
     function timeSummary(config = {}) {
-      if (config.mode === 'total') return tk('lobby.totalSummary', '{{seconds}} seconds per side', { seconds: config.totalSeconds });
+      if (config.mode === 'total') return tk('lobby.totalMinutesSummary', '{{minutes}} minutes per side', { minutes: Number((config.totalSeconds / 60).toFixed(2)) });
       if (config.mode === 'move') return tk('lobby.moveSummary', '{{seconds}} seconds per action', { seconds: config.moveSeconds });
-      if (config.mode === 'byoyomi') return tk('lobby.byoSummary', '{{total}} seconds + 3 × {{period}} seconds', { total: config.totalSeconds, period: config.periodSeconds });
+      if (config.mode === 'byoyomi') return tk('lobby.byoMinutesSummary', '{{minutes}} minutes + 3 × {{period}} seconds', { minutes: Number((config.totalSeconds / 60).toFixed(2)), period: config.periodSeconds });
       return tk('lobby.unlimited', 'Unlimited');
     }
     function modeFields() {
@@ -50,12 +50,15 @@
     function readTime() {
       const mode = el('player-time-mode').value;
       const config = { mode };
-      const number = id => {
-        const n = Number(el(id).value);
+      const number = (id, scale = 1) => {
+        const raw = el(id).value.trim();
+        const value = Number(raw);
+        const n = scale === 60 ? Math.round(value * scale) : value;
+        if (!raw || !Number.isFinite(value)) throw new Error('time');
         if (!Number.isInteger(n) || n < 1 || n > 86400) throw new Error('time');
         return n;
       };
-      if (['total', 'byoyomi'].includes(mode)) config.totalSeconds = number('player-time-main');
+      if (['total', 'byoyomi'].includes(mode)) config.totalSeconds = number('player-time-main', 60);
       if (mode === 'move') config.moveSeconds = number('player-time-action');
       if (mode === 'byoyomi') config.periodSeconds = number('player-time-action');
       return config;
@@ -135,8 +138,8 @@
       ++serial; creationId = crypto.randomUUID(); creationFingerprint = '';
       const config = change ? engine.onlineInfo().timeControl || {} : {};
       el('player-time-mode').value = config.mode || 'unlimited';
-      el('player-time-main').value = config.totalSeconds || '';
-      el('player-time-action').value = config.moveSeconds || config.periodSeconds || '';
+      el('player-time-main').value = config.totalSeconds ? config.totalSeconds / 60 : 10;
+      el('player-time-action').value = config.moveSeconds || config.periodSeconds || 30;
       modeFields(); setFlow(change ? 'change' : 'create'); ui.games();
     }
     async function join(code) {
@@ -156,7 +159,7 @@
     async function submit() {
       if (!flow || requestBusy) return;
       let config;
-      try { config = readTime(); } catch (_) { ui.show('board-options', 'setup'); ui.message(tk('lobby.timeError', 'Enter whole numbers from 1 to 86400 seconds for this time control.')); return; }
+      try { config = readTime(); } catch (_) { ui.show('board-options', 'setup'); ui.message(tk('lobby.timeUnitsError', 'Enter a total time up to 1440 minutes (at least 1 second), and whole seconds from 1 to 86400 per action or period.')); return; }
       const ticket = serial; requestBusy = true; ui.sync();
       try {
         const snapshot = engine.onlinePreparedSnapshot();

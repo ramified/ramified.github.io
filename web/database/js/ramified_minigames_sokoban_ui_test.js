@@ -55,6 +55,10 @@ async function run() {
     };
     await ready(); await click('#player-new'); await click('#player-slot-1'); await click('#player-games-next'); await chooseGame('[data-game-mode="sokoban"]');
     assert.strictEqual(await read('document.querySelectorAll("#player-level-list > button").length'),19);
+    await waitFor(() => read('document.querySelectorAll("#player-level-list > button[data-preview=" + "ready" + "]").length === 19'), 20000, 'all level previews');
+    assert.strictEqual(await read('[...document.querySelectorAll(".player-level-name")].every(n => n.textContent.trim().length > 1)'), true);
+    assert.strictEqual(await read('new Set([...document.querySelectorAll(".player-level-preview")].map(c => c.toDataURL())).size > 10'), true, 'previews depict distinct initial boards');
+
     assert.deepStrictEqual(await read('[...document.querySelectorAll("#player-level-list > button:not(:disabled)")].map(n=>n.dataset.levelId)'), ['classic-fans','pedestrian','classic-fans-glue']);
     assert.strictEqual(await read('localStorage.getItem(RamifiedSaveSlots.SAVE_KEY)'),null, 'browsing does not create a save');
     for (const locale of ['en','zh-CN']) {

@@ -17357,10 +17357,10 @@ function render() {
     ctx.restore();
   }
 
-  function drawSokobanGame(ctx, geom, state) {
+  function drawSokobanGame(ctx, geom, state, { preview = false } = {}) {
     if (!isSokobanGame(state)) return;
     const objectScale = selectedSokobanObjectScale();
-    const animation = activeSokobanAnimationEvent();
+    const animation = preview ? null : activeSokobanAnimationEvent();
     const displayState = sokobanAnimationStaticState(state, animation);
     drawSokobanIndexSet(ctx, geom, state.sea, 'sea', 1);
     drawSokobanIndexSet(ctx, geom, state.targets, 'target');
@@ -34784,6 +34784,23 @@ const api = {
     },
     games() { return orderedCatalogGameModes().map((mode) => ({ mode, label: localizedGameName(mode) })); },
     sokobanLevels() { return presetRegistry.filter(entry => entry.gameTypes.includes('Sokoban')).map(entry => ({ id: entry.id })); },
+    async paintSokobanLevelPreview(id, canvas) {
+      if (!canvas || !api.player.sokobanLevels().some(level => level.id === id)) return false;
+      const preset = await ensurePresetLoaded(id);
+      if (!preset) return false;
+      // A fresh state and separate canvas never replace the live game or its history.
+      const state = createSokobanState(preset);
+      const geom = buildGeometry(preset, 360, 24, 1);
+      canvas.width = geom.width; canvas.height = geom.height;
+      const context = canvas.getContext('2d');
+      geom.cells.forEach((cell, index) => {
+        if (cell) drawTile(context, geom, cell.row, cell.col, state.removed.has(index), false, 'center', { markRemoved: state.removed.has(index) });
+      });
+      drawBackgroundBoundaries(context, geom, preset, state.removed);
+      drawGlueEdges(context, geom, preset, null);
+      drawSokobanGame(context, geom, state, { preview: true });
+      return true;
+    },
     setSokobanProgress(completed) {
       playerSokobanCompleted = new Set(completed);
       if (canvasPromptAction.startsWith('sokoban-')) showLocalReplayPrompt();

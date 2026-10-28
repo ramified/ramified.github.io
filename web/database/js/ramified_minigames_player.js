@@ -189,6 +189,30 @@
       }
     }
 
+    function levelName(id) {
+      return {
+        'classic-fans': tk('presets.fans', 'Classic fans'),
+        'pedestrian': tk('presets.pedestrian', 'Pedestrian'),
+        'classic-fans-glue': tk('presets.fansGlue', 'Glued fans'),
+        'ice-test': tk('presets.ice', 'Ice test'),
+        'curling-on-cube': tk('presets.curlCube', 'Curling on cube'),
+        'easy-energy-bridge': tk('presets.easyEnergy', 'Easy energy bridge'),
+        'energy-test': tk('presets.energy', 'Energy test'),
+        'cross': tk('presets.cross', 'Cross'),
+        'expand': tk('presets.expand', 'Expand'),
+        'orbox-b': tk('presets.orbox', 'Orbox B'),
+        'orbox-b-glued': tk('presets.orboxGlue', 'Orbox B glued'),
+        'loop': tk('presets.loop', 'Loop'),
+        'curling': tk('presets.curling', 'Curling'),
+        'remote-rotate': tk('presets.remoteRotate', 'Remote rotate'),
+        'remote-control': tk('presets.remoteControl', 'Remote control'),
+        'islands': tk('presets.islands', 'Islands'),
+        'expand2': tk('presets.expand2', 'Expand 2'),
+        'expand3': tk('presets.expand3', 'Expand 3'),
+        'bridges-blocking': tk('presets.bridges', 'Blocking bridges'),
+      }[id] || id;
+    }
+
     function syncLevels(state) {
       const progress = slots.progress(selectedSlot);
       levelIds.forEach((id, index) => {
@@ -204,7 +228,23 @@
           number.textContent = String(index + 1);
           const status = document.createElement('span');
           status.className = 'player-level-state';
-          button.append(number, status);
+          const preview = document.createElement('canvas');
+          preview.className = 'player-level-preview';
+          preview.setAttribute('aria-hidden', 'true');
+          const name = document.createElement('span');
+          name.className = 'player-level-name';
+          button.append(number, preview, name, status);
+          engine.paintSokobanLevelPreview(id, preview).then(ok => {
+            if (!ok) throw new Error('preview');
+            button.dataset.preview = 'ready';
+          }).catch(() => {
+            preview.hidden = true;
+            button.dataset.preview = 'error';
+            const note = document.createElement('span');
+            note.dataset.i18n = 'player.levelPreviewError';
+            note.textContent = tk('player.levelPreviewError', 'Preview unavailable');
+            button.append(note);
+          });
           button.addEventListener('click', () => chooseLevel(id));
           byId('player-level-list').append(button);
         }
@@ -212,7 +252,8 @@
         const label = completed ? tk('player.levelCompleted', 'Completed') : unlocked ? tk('player.levelAvailable', 'Available') : tk('player.levelLocked', 'Locked');
         button.dataset.completed = String(completed);
         button.querySelector('.player-level-state').textContent = label;
-        button.setAttribute('aria-label', tk('player.levelLabel', 'Level {{number}} — {{status}}', { number: index + 1, status: label }));
+        button.querySelector('.player-level-name').textContent = levelName(id);
+        button.setAttribute('aria-label', tk('player.levelNamedLabel', 'Level {{number}}: {{name}} — {{status}}', { number: index + 1, name: levelName(id), status: label }));
         button.disabled = !unlocked || setupBusy || !state.canPrepare || state.online;
       });
     }
