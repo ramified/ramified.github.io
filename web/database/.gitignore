@@ -1,0 +1,4 @@
+# Optional local browser-test artifacts. These are not reference fixtures.
+/.test-artifacts/
+/analysis/homepage_i18n/
+/analysis/minigames_design/

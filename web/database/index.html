@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ramified: Math Workspace and tools</title>
-<meta name="description" content="A browser-based math workspace for Young diagrams, sheaves, matrices and Dynkin diagrams, plus a theorem graph editor and games on glued surfaces.">
+<title data-i18n="index.title">Ramified: Math Workspace and tools</title>
+<meta name="description" data-i18n-content="index.description" content="A browser-based math workspace for Young diagrams, sheaves, matrices and Dynkin diagrams, plus a theorem graph editor and games on glued surfaces.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
@@ -22,7 +22,7 @@
   --accent-ink: #FFFFFF;
   --accent-tint: #D3E8E3;
   --serif: "STIX Two Text", "Noto Serif SC", "Songti SC", Georgia, serif;
-  --sans: "Source Sans 3", "Noto Sans SC", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sans: "Source Sans 3", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -62,6 +62,9 @@ a:hover { text-decoration-thickness: 2px; }
 .site-nav { display: flex; flex-wrap: wrap; gap: 0.25rem 1.5rem; }
 .site-nav a { color: var(--ink); text-decoration: none; padding: 0.25rem 0; border-bottom: 2px solid transparent; }
 .site-nav a:hover { border-bottom-color: var(--accent); }
+.header-controls { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.75rem 1.5rem; }
+.language-control select { min-height: 40px; max-width: 100%; padding: 0.3rem 0.5rem; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel); color: var(--ink); font: inherit; font-size: 0.95rem; }
+html[lang="zh-CN"] h1 { line-height: 1.25; }
 
 /* hero */
 .hero { position: relative; padding: 4rem 0 4.5rem; }
@@ -151,6 +154,10 @@ dd { margin: 0; max-width: 60ch; overflow-wrap: anywhere; }
   dd { margin-bottom: 0.75rem; }
 }
 @media (max-width: 600px) {
+  .site-head .wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.75rem; }
+  .header-controls { display: contents; }
+  .language-control { grid-column: 2; grid-row: 1; justify-self: end; }
+  .site-nav { grid-column: 1 / -1; grid-row: 2; }
   .mock-wide { display: none; }
   .mock-compact { display: block; max-width: 400px; }
   .mock-compact .sub { font-size: 12.5px; }
@@ -172,12 +179,15 @@ dd { margin: 0; max-width: 60ch; overflow-wrap: anywhere; }
 
 <header class="site-head">
   <div class="wrap">
-    <a class="wordmark" href="index.html">ramified</a>
-    <nav class="site-nav" aria-label="Main">
-      <a href="math_workspace.html">Math Workspace</a>
-      <a href="theorem_graph_calculator.html">Theorem Graph</a>
-      <a href="ramified_minigames.html">Minigames</a>
+    <a class="wordmark" href="index.html" lang="en" data-i18n-ignore>ramified</a>
+    <div class="header-controls">
+    <nav class="site-nav" aria-label="Main" data-i18n-aria-label="index.navigation">
+      <a href="math_workspace.html" data-i18n="index.workspace">Math Workspace</a>
+      <a href="theorem_graph_calculator.html" data-i18n="index.graphShort">Theorem Graph</a>
+      <a href="ramified_minigames.html" data-i18n="index.gamesShort">Minigames</a>
     </nav>
+    <label class="language-control"><select data-language-switch aria-label="Language" data-i18n-aria-label="index.language"><option value="en" lang="en" data-i18n-ignore>English</option><option value="zh-CN" lang="zh-CN" data-i18n-ignore>简体中文</option></select></label>
+    </div>
   </div>
 </header>
 
@@ -185,52 +195,52 @@ dd { margin: 0; max-width: 60ch; overflow-wrap: anywhere; }
   <section class="hero" aria-labelledby="ws-title">
     <div class="wrap hero-inner">
       <div>
-        <h1 id="ws-title">Math Workspace</h1>
-        <p class="lead">Young diagrams, sheaves, matrices and Dynkin diagrams in one window, with a shared list of your varieties, sheaves and maps.</p>
+        <h1 id="ws-title" data-i18n="index.workspace">Math Workspace</h1>
+        <p class="lead" data-i18n="index.lead">Young diagrams, sheaves, matrices and Dynkin diagrams in one window, with a shared list of your varieties, sheaves and maps.</p>
         <div class="actions">
-          <a class="btn" href="math_workspace.html">Open the workspace</a>
-          <span class="pending">Tutorial: in preparation</span>
+          <a class="btn" href="math_workspace.html" data-i18n="index.openWorkspace">Open the workspace</a>
+          <span class="pending" data-i18n="index.tutorial">Tutorial: in preparation</span>
         </div>
-        <p class="note">Some parts are still being fixed. The classic index at the bottom of this page has the same calculators as separate pages.</p>
+        <p class="note" data-i18n="index.note">Some parts are still being fixed. The classic index at the bottom of this page has the same calculators as separate pages.</p>
       </div>
 
-      <svg class="mock mock-wide" viewBox="0 0 612 412" role="img" focusable="false" aria-label="Sketch of the workspace: an Assets list on the left, and panels for a Young diagram, a sheaf, a matrix and a Dynkin diagram on the right.">
+      <svg class="mock mock-wide" data-i18n-aria-label="index.diagram.label" viewBox="0 0 612 412" role="img" focusable="false" aria-label="Sketch of the workspace: an Assets list on the left, and panels for a Young diagram, a sheaf, a matrix and a Dynkin diagram on the right.">
         <rect class="shadow" x="10" y="10" width="600" height="400" rx="6"/>
         <rect class="frame" x="1" y="1" width="598" height="398" rx="6"/>
         <line class="line" x1="1" y1="34" x2="599" y2="34"/>
-        <text class="ui" x="14" y="22">untitled session</text>
+        <text class="ui" x="14" y="22" data-i18n="index.diagram.session">untitled session</text>
         <line class="line" x1="160" y1="34" x2="160" y2="399"/>
 
-        <text class="cap" x="16" y="58">Assets</text>
+        <text class="cap" x="16" y="58" data-i18n="index.diagram.assets">Assets</text>
         <rect class="sel" x="1" y="108" width="159" height="40"/>
         <rect class="selbar" x="1" y="108" width="3" height="40"/>
         <text class="m" x="16" y="84" font-style="italic">X</text>
-        <text class="sub" x="38" y="84">variety, P²</text>
+        <text class="sub" x="38" y="84" data-i18n="index.diagram.variety">variety, P²</text>
         <text class="m" x="16" y="132" font-style="italic">F</text>
-        <text class="sub" x="38" y="132">O(1) on <tspan font-family="var(--serif)" font-style="italic">X</tspan></text>
+        <text class="sub" x="38" y="132"><tspan data-i18n="index.diagram.sheafSpace">O(1) on </tspan><tspan font-family="var(--serif)" font-style="italic">X</tspan></text>
         <text class="m" x="16" y="172" font-style="italic">i</text>
         <text class="sub" x="38" y="172">P¹ → <tspan font-family="var(--serif)" font-style="italic">X</tspan></text>
 
         <!-- Young diagram -->
         <rect class="panel" x="182" y="54" width="210" height="208" rx="4"/>
-        <text class="cap" x="196" y="76">Young diagram</text>
+        <text class="cap" x="196" y="76" data-i18n="index.diagram.young">Young diagram</text>
         <line class="line" x1="182" y1="88" x2="392" y2="88"/>
         <rect class="cell" x="198" y="104" width="26" height="26"/><rect class="cell" x="224" y="104" width="26" height="26"/><rect class="cell" x="250" y="104" width="26" height="26"/><rect class="cell" x="276" y="104" width="26" height="26"/>
         <rect class="cell" x="198" y="130" width="26" height="26"/><rect class="cell" x="224" y="130" width="26" height="26"/>
         <rect class="cell" x="198" y="156" width="26" height="26"/>
         <text class="m" x="198" y="210"><tspan font-style="italic">λ</tspan> = (4, 2, 1)</text>
-        <text class="sub" x="198" y="232">35 standard tableaux</text>
+        <text class="sub" x="198" y="232" data-i18n="index.diagram.tableaux">35 standard tableaux</text>
 
         <!-- Sheaf -->
         <rect class="panel" x="410" y="54" width="176" height="84" rx="4"/>
-        <text class="cap" x="424" y="76">Sheaf</text>
+        <text class="cap" x="424" y="76" data-i18n="index.diagram.sheaf">Sheaf</text>
         <line class="line" x1="410" y1="88" x2="586" y2="88"/>
-        <text class="m" x="424" y="108">O(1) on P²</text>
+        <text class="m" x="424" y="108" data-i18n="index.diagram.sheafP2">O(1) on P²</text>
         <text class="mb" x="424" y="127"><tspan font-style="italic">χ</tspan> = 3</text>
 
         <!-- Matrix -->
         <rect class="panel" x="410" y="150" width="176" height="112" rx="4"/>
-        <text class="cap" x="424" y="172">Matrix</text>
+        <text class="cap" x="424" y="172" data-i18n="index.diagram.matrix">Matrix</text>
         <line class="line" x1="410" y1="184" x2="586" y2="184"/>
         <path class="bracket" d="M426 196 H420 V240 H426"/>
         <path class="bracket" d="M474 196 H480 V240 H474"/>
@@ -240,62 +250,62 @@ dd { margin: 0; max-width: 60ch; overflow-wrap: anywhere; }
 
         <!-- Dynkin -->
         <rect class="panel" x="182" y="276" width="404" height="104" rx="4"/>
-        <text class="cap" x="196" y="298">Dynkin diagram</text>
+        <text class="cap" x="196" y="298" data-i18n="index.diagram.dynkin">Dynkin diagram</text>
         <line class="line" x1="182" y1="310" x2="586" y2="310"/>
         <line class="edge" x1="214" y1="344" x2="364" y2="344"/>
         <circle class="node" cx="214" cy="344" r="9"/><circle class="node" cx="264" cy="344" r="9"/><circle class="node" cx="314" cy="344" r="9"/><circle class="node" cx="364" cy="344" r="9"/>
-        <text class="m" x="410" y="338">A₄, rank 4</text>
-        <text class="sub" x="410" y="358">10 positive roots</text>
+        <text class="m" x="410" y="338" data-i18n="index.diagram.rank">A₄, rank 4</text>
+        <text class="sub" x="410" y="358" data-i18n="index.diagram.roots">10 positive roots</text>
       </svg>
       <!-- Reflow the same examples on phones; do not shrink 612 units into 312px. -->
       <svg class="mock mock-compact" viewBox="0 0 320 450" role="img" focusable="false" aria-labelledby="compact-title compact-description">
-        <title id="compact-title">Math Workspace sketch</title>
-        <desc id="compact-description">An Assets list beside four calculators. The partition (4, 2, 1) has 35 standard tableaux. O(1) on the projective plane has Euler characteristic 3. The matrix with rows (1, 2) and (3, 4) has determinant minus 2. The A4 Dynkin diagram has rank 4 and 10 positive roots.</desc>
+        <title id="compact-title" data-i18n="index.diagram.title">Math Workspace sketch</title>
+        <desc id="compact-description" data-i18n="index.diagram.description">An Assets list beside four calculators. The partition (4, 2, 1) has 35 standard tableaux. O(1) on the projective plane has Euler characteristic 3. The matrix with rows (1, 2) and (3, 4) has determinant minus 2. The A4 Dynkin diagram has rank 4 and 10 positive roots.</desc>
         <rect class="shadow" x="8" y="8" width="310" height="440" rx="6"/>
         <rect class="frame" x="1" y="1" width="310" height="440" rx="6"/>
-        <text class="ui" x="13" y="24">untitled session</text>
+        <text class="ui" x="13" y="24" data-i18n="index.diagram.session">untitled session</text>
         <path class="line" d="M1 36H311M95 36V441"/>
-        <text class="cap" x="12" y="61">Assets</text>
+        <text class="cap" x="12" y="61" data-i18n="index.diagram.assets">Assets</text>
         <text class="m" x="12" y="89" font-style="italic">X</text>
-        <text class="sub" x="12" y="109">variety, P²</text>
+        <text class="sub" x="12" y="109" data-i18n="index.diagram.variety">variety, P²</text>
         <rect class="sel" x="2" y="123" width="92" height="59"/>
         <rect class="selbar" x="2" y="123" width="3" height="59"/>
         <text class="m" x="12" y="145" font-style="italic">F</text>
-        <text class="sub" x="12" y="167">O(1) on <tspan font-family="var(--serif)" font-style="italic">X</tspan></text>
+        <text class="sub" x="12" y="167"><tspan data-i18n="index.diagram.sheafSpace">O(1) on </tspan><tspan font-family="var(--serif)" font-style="italic">X</tspan></text>
         <text class="m" x="12" y="205" font-style="italic">i</text>
         <text class="sub" x="12" y="225">P¹ → <tspan font-family="var(--serif)" font-style="italic">X</tspan></text>
         <rect class="panel" x="105" y="47" width="196" height="153" rx="4"/>
-        <text class="cap" x="115" y="67">Young diagram</text>
+        <text class="cap" x="115" y="67" data-i18n="index.diagram.young">Young diagram</text>
         <path class="line" d="M105 77H301"/>
         <path class="cell" d="M116 88h22v22h-22zM138 88h22v22h-22zM160 88h22v22h-22zM182 88h22v22h-22zM116 110h22v22h-22zM138 110h22v22h-22zM116 132h22v22h-22z"/>
         <text class="m" x="115" y="173"><tspan font-style="italic">λ</tspan> = (4, 2, 1)</text>
-        <text class="sub" x="115" y="190">35 standard tableaux</text>
+        <text class="sub" x="115" y="190" data-i18n="index.diagram.tableaux">35 standard tableaux</text>
         <rect class="panel" x="105" y="210" width="196" height="62" rx="4"/>
-        <text class="cap" x="115" y="230">Sheaf</text>
+        <text class="cap" x="115" y="230" data-i18n="index.diagram.sheaf">Sheaf</text>
         <path class="line" d="M105 239H301"/>
-        <text class="m" x="115" y="260">O(1) on P²</text>
+        <text class="m" x="115" y="260" data-i18n="index.diagram.sheafP2">O(1) on P²</text>
         <text class="mb" x="244" y="260"><tspan font-style="italic">χ</tspan> = 3</text>
         <rect class="panel" x="105" y="282" width="196" height="69" rx="4"/>
-        <text class="cap" x="115" y="302">Matrix</text>
+        <text class="cap" x="115" y="302" data-i18n="index.diagram.matrix">Matrix</text>
         <path class="line" d="M105 310H301"/>
         <path class="bracket" d="M119 316h-4v29h4M164 316h4v29h-4"/>
         <text class="m" x="123" y="327">1</text><text class="m" x="147" y="327">2</text>
         <text class="m" x="123" y="343">3</text><text class="m" x="147" y="343">4</text>
         <text class="m" x="204" y="336">det = −2</text>
         <rect class="panel" x="105" y="361" width="196" height="70" rx="4"/>
-        <text class="cap" x="115" y="381">Dynkin diagram</text>
+        <text class="cap" x="115" y="381" data-i18n="index.diagram.dynkin">Dynkin diagram</text>
         <path class="line" d="M105 390H301"/>
         <path class="edge" d="M120 405H180"/>
         <circle class="node" cx="120" cy="405" r="4"/><circle class="node" cx="140" cy="405" r="4"/><circle class="node" cx="160" cy="405" r="4"/><circle class="node" cx="180" cy="405" r="4"/>
-        <text class="m" x="208" y="410">A₄, rank 4</text>
-        <text class="sub" x="115" y="424">10 positive roots</text>
+        <text class="m" x="208" y="410" data-i18n="index.diagram.rank">A₄, rank 4</text>
+        <text class="sub" x="115" y="424" data-i18n="index.diagram.roots">10 positive roots</text>
       </svg>
     </div>
   </section>
 
   <section class="section" aria-labelledby="more-title">
     <div class="wrap">
-      <h2 id="more-title">Also on this site</h2>
+      <h2 id="more-title" data-i18n="index.more">Also on this site</h2>
 
       <article class="tool">
         <svg class="art" viewBox="0 0 220 130" aria-hidden="true" focusable="false">
@@ -305,20 +315,20 @@ dd { margin: 0; max-width: 60ch; overflow-wrap: anywhere; }
           <path class="e" d="M122 99 L140 66" marker-end="url(#ah-grey)"/>
           <path class="e dash" d="M122 103 L140 103" marker-end="url(#ah-grey)"/>
           <rect class="small" x="6" y="50" width="42" height="22"/>
-          <text x="27" y="61">Ref</text>
+          <text x="27" y="61" data-i18n="index.diagram.reference">Ref</text>
           <rect class="box" x="70" y="14" width="52" height="22" rx="8"/>
-          <text x="96" y="25">Lemma 1</text>
+          <text x="96" y="25" data-i18n="index.diagram.lemma1">Lemma 1</text>
           <rect class="box" x="70" y="88" width="52" height="22" rx="8"/>
-          <text x="96" y="99">Lemma 2</text>
+          <text x="96" y="99" data-i18n="index.diagram.lemma2">Lemma 2</text>
           <rect class="box" x="140" y="34" width="68" height="30"/>
-          <text x="174" y="49">Theorem</text>
+          <text x="174" y="49" data-i18n="index.diagram.theorem">Theorem</text>
           <rect class="box dash" x="140" y="90" width="68" height="26"/>
-          <text x="174" y="103">Conjecture</text>
+          <text x="174" y="103" data-i18n="index.diagram.conjecture">Conjecture</text>
         </svg>
         <div>
-          <h3>Theorem Graph Calculator</h3>
-          <p>Build a dependency graph of theorem, lemma, conjecture and reference nodes, and see what rests on what.</p>
-          <a href="theorem_graph_calculator.html">Open Theorem Graph Calculator</a>
+          <h3 data-i18n="index.graph">Theorem Graph Calculator</h3>
+          <p data-i18n="index.graphDescription">Build a dependency graph of theorem, lemma, conjecture and reference nodes, and see what rests on what.</p>
+          <a href="theorem_graph_calculator.html" data-i18n="index.openGraph">Open Theorem Graph Calculator</a>
         </div>
       </article>
 
@@ -334,9 +344,9 @@ dd { margin: 0; max-width: 60ch; overflow-wrap: anywhere; }
           <path class="sa" d="M7 51 H25" marker-end="url(#ah-acc)"/>
         </svg>
         <div>
-          <h3>Ramified Minigames</h3>
-          <p>Small games played on surfaces with glued edges, beginning with a 2048 variant whose boundary wraps around.</p>
-          <a href="ramified_minigames.html">Play Ramified Minigames</a>
+          <h3 data-i18n="index.games">Ramified Minigames</h3>
+          <p data-i18n="index.gamesDescription">Play 2048, Connect Four, Gomoku, Go, Reversi, Sokoban, Hex, chess, Chinese Checkers, billiards and tile matching on boards with glued edges.</p>
+          <a href="ramified_minigames.html" data-i18n="index.playGames">Play Ramified Minigames</a>
         </div>
       </article>
     </div>
@@ -345,8 +355,8 @@ dd { margin: 0; max-width: 60ch; overflow-wrap: anywhere; }
   <section class="section" aria-labelledby="classic-title">
     <div class="wrap">
       <div class="classic">
-        <p><strong id="classic-title">Classic index</strong>The separate calculators and earlier prototypes, laid out the way they used to be.</p>
-        <a href="index_classic.html">Open the classic index</a>
+        <p><strong id="classic-title" data-i18n="index.classic">Classic index</strong><span data-i18n="index.classicDescription">The separate calculators and earlier prototypes, laid out the way they used to be.</span></p>
+        <a href="index_classic.html" data-i18n="index.openClassic">Open the classic index</a>
       </div>
     </div>
   </section>
@@ -355,42 +365,44 @@ dd { margin: 0; max-width: 60ch; overflow-wrap: anywhere; }
 <footer class="site-foot">
   <div class="wrap">
     <p class="foot-links">
-      <a href="https://ramified.github.io/web/database/citations.html">Bibliography</a>
-      <a href="https://ramified.github.io/web/main/recommend.html">Databases and atlases worth knowing</a>
-      <a href="https://forms.gle/3ZkJTzpavcFqFws26">Send feedback</a>
+      <a href="https://ramified.github.io/web/database/citations.html" data-i18n="index.bibliography">Bibliography</a>
+      <a href="https://ramified.github.io/web/main/recommend.html" data-i18n="index.resources">Databases and atlases worth knowing</a>
+      <a href="https://forms.gle/3ZkJTzpavcFqFws26" data-i18n="index.feedback">Send feedback</a>
     </p>
 
     <details>
-      <summary>Acknowledgements</summary>
+      <summary data-i18n="index.acknowledgements">Acknowledgements</summary>
       <dl>
-        <dt>Young Diagram Calculator</dt>
-        <dd><a href="https://web.archive.org/web/20250513072803/https://www.integral-domain.org/lwilliams/Applets/combinatorics/youngdiagrams.php">Lauren Williams’ Young Diagram Applet</a>, the original combinatorics applet it follows most directly.</dd>
-        <dt>Young Diagram2, slices, Dynkin diagrams</dt>
-        <dd><a href="https://www.jgibson.id.au/lievis/">Lievis</a> guided the two-dimensional slice view and influenced the Dynkin diagram calculator.</dd>
-        <dt>Slices, minigames, mosaics</dt>
+        <dt data-i18n="index.ack.youngTitle">Young Diagram Calculator</dt>
+        <dd><a href="https://web.archive.org/web/20250513072803/https://www.integral-domain.org/lwilliams/Applets/combinatorics/youngdiagrams.php" lang="en" data-i18n-ignore>Lauren Williams’ Young Diagram Applet</a><span data-i18n="index.ack.young">, the original combinatorics applet it follows most directly.</span></dd>
+        <dt data-i18n="index.ack.lieTitle">Young Diagram², slices, Dynkin diagrams</dt>
+        <dd><a href="https://www.jgibson.id.au/lievis/" lang="en" data-i18n-ignore>Lievis</a><span data-i18n="index.ack.lie"> guided the two-dimensional slice view and influenced the Dynkin diagram calculator.</span></dd>
+        <dt data-i18n="index.ack.gamesTitle">Slices, minigames, mosaics</dt>
         <dd>
-          Interaction, puzzle and explainer ideas from
-          <a href="https://sketchpad.keycurriculum.com/">The Geometer’s Sketchpad</a>,
-          <a href="https://ntiggemann.github.io/coding.html">PlotTropCurve</a>,
-          <a href="https://math.berkeley.edu/~weilacher/Projex/">Projective Hex</a>,
-          <a href="https://www.kongregate.com/en/games/3dleigh/isoball-x1">Isoball 4 / X1</a>,
-          <a href="https://store.steampowered.com/app/353540/Stephens_Sausage_Roll/">Stephen’s Sausage Roll</a>,
-          <a href="https://www.dimensions-math.org/Dim_E.htm">Dimensions</a> and
-          <a href="https://4dtoys.com/">4D Toys</a>.
+          <span data-i18n="index.ack.games">Interaction, puzzle and explainer ideas from </span>
+          <a href="https://sketchpad.keycurriculum.com/" lang="en" data-i18n-ignore>The Geometer’s Sketchpad</a>,
+          <a href="https://ntiggemann.github.io/coding.html" lang="en" data-i18n-ignore>PlotTropCurve</a>,
+          <a href="https://math.berkeley.edu/~weilacher/Projex/" lang="en" data-i18n-ignore>Projective Hex</a>,
+          <a href="https://www.kongregate.com/en/games/3dleigh/isoball-x1" lang="en" data-i18n-ignore>Isoball 4 / X1</a>,
+          <a href="https://store.steampowered.com/app/353540/Stephens_Sausage_Roll/" lang="en" data-i18n-ignore>Stephen’s Sausage Roll</a>,
+          <a href="https://www.dimensions-math.org/Dim_E.htm" lang="en" data-i18n-ignore>Dimensions</a><span data-i18n="index.ack.and"> and </span>
+          <a href="https://4dtoys.com/" lang="en" data-i18n-ignore>4D Toys</a>.
         </dd>
-        <dt>Mosaic Calculator</dt>
-        <dd><a href="https://hexapipes.vercel.app/">Hexapipes</a> for the canvas interaction, <a href="https://knotfol.io/">KnotFolio</a> for identifying drawn knots, and <a href="https://knotinfo.org/">KnotInfo</a> for naming conventions and database context.</dd>
-        <dt>Sheaf Calculator</dt>
-        <dd>Pieter Belmans’ <a href="https://pbelmans.ncag.info/cohomology-tables/">cohomology tables</a>.</dd>
-        <dt>Theorem Graph Calculator</dt>
-        <dd><a href="https://q.uiver.app/">q.uiver</a>, for arrow type controls and endpoint vocabulary.</dd>
-        <dt>Place Ramification Calculator</dt>
-        <dd><a href="https://beta.lmfdb.org/">LMFDB Beta</a>, for database style and number-theory organization.</dd>
+        <dt data-i18n="index.ack.mosaicTitle">Mosaic Calculator</dt>
+        <dd><a href="https://hexapipes.vercel.app/" lang="en" data-i18n-ignore>Hexapipes</a><span data-i18n="index.ack.hexapipes"> for the canvas interaction, </span><a href="https://knotfol.io/" lang="en" data-i18n-ignore>KnotFolio</a><span data-i18n="index.ack.knotfolio"> for identifying drawn knots, and </span><a href="https://knotinfo.org/" lang="en" data-i18n-ignore>KnotInfo</a><span data-i18n="index.ack.knotinfo"> for naming conventions and database context.</span></dd>
+        <dt data-i18n="index.ack.sheafTitle">Sheaf Calculator</dt>
+        <dd><span lang="en" data-i18n-ignore>Pieter Belmans’ </span><a href="https://pbelmans.ncag.info/cohomology-tables/" data-i18n="index.ack.cohomology">cohomology tables</a>.</dd>
+        <dt data-i18n="index.graph">Theorem Graph Calculator</dt>
+        <dd><a href="https://q.uiver.app/" lang="en" data-i18n-ignore>q.uiver</a><span data-i18n="index.ack.quiver">, for arrow type controls and endpoint vocabulary.</span></dd>
+        <dt data-i18n="index.ack.placeTitle">Place Ramification Calculator</dt>
+        <dd><a href="https://beta.lmfdb.org/" lang="en" data-i18n-ignore>LMFDB Beta</a><span data-i18n="index.ack.lmfdb">, for database style and number-theory organization.</span></dd>
       </dl>
     </details>
 
   </div>
 </footer>
 
+<script src="js/site_i18n.js?v=20260826-1" defer></script>
+<script src="js/i18n/index_locales.js?v=20261028-1" defer></script>
 </body>
 </html>

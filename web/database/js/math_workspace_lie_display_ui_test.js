@@ -72,6 +72,13 @@ async function run(){
     await read(()=>{window.backup=panels.exportText('workspace');panels.importText('workspace',backup);window.view=[...panels.panels.values()].find(p=>p.definition.id==='lie-view');});
     assert.equal(await read(()=>view.propertyRenderer.editor.objectIO('geometry').vertices.length),4);
     assert(await read(unmarked));
+    await read(()=>api.updateObjectAsset({kind:'lie',id:lie.id},{data:{family:'A',rank:2}}));
+    await read(()=>{window.repairView=panels.open('dynkin-view',key(marked),'main');window.invalidBeforeRepair=JSON.stringify(api.localAssetSnapshot().assets.find(asset=>asset.id===marked.id).data);});
+    assert.equal(await read(()=>repairView.dynkinRepair.hidden),false,'invalid legacy markings/directions have a recovery action in the display');
+    assert.equal(await read(()=>JSON.stringify(api.localAssetSnapshot().assets.find(asset=>asset.id===marked.id).data)),await read(()=>invalidBeforeRepair),'invalid data stays intact until explicit repair');
+    await read(()=>repairView.dynkinRepair.click());
+    assert.deepEqual(await read(()=>api.localAssetSnapshot().assets.find(asset=>asset.id===marked.id).data),{lie:await read(()=>key(lie)),vertices:[1],quiver:null});
+    assert.equal(await read(()=>repairView.computation.status),'current');assert.equal(await read(()=>repairView.dynkinRepair.hidden),true);
     await read(()=>api.updateObjectAsset({kind:'lie',id:lie.id},{data:{family:'A',rank:13}}));
     assert.equal(await read(()=>view.computation.status),'missing','unsupported ranks preserve the asset and report the renderer limit');
     assert.deepEqual(errors,[]);

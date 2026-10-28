@@ -11,14 +11,17 @@ const setup = fs.readFileSync(path.join(__dirname, 'ramified_minigames_setup.js'
 const archive = fs.readFileSync(path.join(root, 'archive/ramified_minigames/index.html'), 'utf8');
 const player = fs.readFileSync(path.join(__dirname, 'ramified_minigames_player.js'), 'utf8') + fs.readFileSync(path.join(__dirname, 'ramified_minigames_online.js'), 'utf8');
 const localeSource = fs.readFileSync(path.join(__dirname, 'i18n', 'ramified_minigames_locales.js'), 'utf8');
+const studyHtml = fs.readFileSync(path.join(root, 'ramified_minigames_study.html'), 'utf8');
+const studyUi = fs.readFileSync(path.join(__dirname, 'ramified_minigames_study.js'), 'utf8');
+const studyLocales = fs.readFileSync(path.join(__dirname, 'ramified_minigames_study_locales.js'), 'utf8');
 const catalogs = {};
 
-vm.runInNewContext(localeSource, {
+vm.runInNewContext(localeSource + '\n' + studyLocales, {
   window: {
     RAMIFIED_MINIGAMES_I18N_LEGACY_SOURCES: {},
     SiteI18n: {
       register(namespace, locale, messages) {
-        if (namespace === 'ramified-minigames') catalogs[locale] = messages;
+        if (namespace === 'ramified-minigames') catalogs[locale] = { ...catalogs[locale], ...messages };
       }
     }
   },
@@ -52,6 +55,8 @@ function placeholders(value) {
 
 const usedKeys = Array.from(new Set([
   ...explicitHtmlKeys(html),
+  ...explicitHtmlKeys(studyHtml),
+  ...literalTkKeys(studyUi),
   ...explicitHtmlKeys(archive),
   ...literalTkKeys(player),
   ...literalTkKeys(setup)

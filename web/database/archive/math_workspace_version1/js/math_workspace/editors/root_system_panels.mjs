@@ -14,43 +14,68 @@ function __textResult(format) {
 `;
 
 export const dynkinObjectPanel = chrome + resultText + String.raw`
-let __dynkinAsset = null, __hasQuiver = false, __vertexFocus = null;
+let __dynkinAsset = null, __hasQuiver = false, __focusedVertex = null;
+const __oldRenderVertexData = renderVertexData;
+renderVertexData = function() { return __oldRenderVertexData(__panelConfig.operation === 'dynkin-vertex'); };
 const __oldSyncQuiver = syncQuiverControls, __oldSelectVertex = selectDynkinVertex;
 const __oldToggleEdge = toggleQuiverEdge, __oldCanUseAR = canUseStartingFunctionAR;
+const __oldSetMultiSelect = setMultiSelect;
+setMultiSelect = function(enabled) {
+  __oldSetMultiSelect(enabled);
+  if (__panelConfig.operation === 'dynkin-view') {
+    __focusedVertex = state.selected + 1;
+    __editor.notifyChange({interaction:'dynkin-vertex-focus'});
+  }
+};
+const __oldSetQuiverMode = setQuiverMode;
+setQuiverMode = function(enabled) {
+  if (!['dynkin-view','dynkin-starting'].includes(__panelConfig.operation)) return __oldSetQuiverMode(enabled);
+  const next = !!enabled && !!__dynkinAsset && supportsQuiverOrientation(state.type);
+  if (next && !__hasQuiver) state.quiverOrientations[quiverLayoutKey(state.type,state.rank)] = defaultQuiverOrientations(state.cartan);
+  __hasQuiver = next;
+  return __oldSetQuiverMode(next);
+};
 syncQuiverControls = function() {
   __oldSyncQuiver();
   if (!__panelConfig.mode) return;
   const control = $('dynkin-quiver-mode');
+  if (__panelConfig.operation === 'dynkin-view') {
+    control.disabled = !__dynkinAsset || !supportsQuiverOrientation(state.type);
+    if (!control.disabled) control.closest('label').title = 'Add or remove quiver directions; click an edge to reverse it';
+    return;
+  }
   control.disabled = !__hasQuiver;
-  control.closest('label').title = __hasQuiver ? 'Show stored quiver arrows; click an edge to reverse it' : 'Add optional quiver directions in the Input first';
+  control.closest('label').title = __hasQuiver ? 'Show stored quiver arrows; click an edge to reverse it' : 'Add quiver directions in the diagram display first';
 };
-canUseStartingFunctionAR = function(available) { return __oldCanUseAR(available) && (!__panelConfig.mode || __hasQuiver); };
+canUseStartingFunctionAR = function(available) { return __oldCanUseAR(available) && (!__panelConfig.mode || __hasQuiver || !!__dynkinAsset && __panelConfig.operation === 'dynkin-starting'); };
 const __oldSetAR = setStartingFunctionARMode;
 setStartingFunctionARMode = function(enabled) {
   if (!__panelConfig.mode) return __oldSetAR(enabled);
+  if (enabled && !__hasQuiver && __panelConfig.operation === 'dynkin-starting') setQuiverMode(true);
   state.startingFunctionARMode = !!enabled && __hasQuiver && supportsQuiverOrientation(state.type);
   state.quiverMode = __hasQuiver;
   renderStartingFunction(); queueMathTypeset();
 };
 selectDynkinVertex = function(index) {
   if (__panelConfig.operation === 'lie-view') return;
-  if (__panelConfig.mode !== 'property') return __oldSelectVertex(index);
-  if (!selectedIndices().includes(index)) return;
-  state.selected = index; renderVertexData(); renderStartingFunction(); queueMathTypeset();
-  if (__vertexFocus) __vertexFocus.value = String(index);
-};
-toggleQuiverEdge = function(i,j) { if (['input','view'].includes(__panelConfig.mode) && __hasQuiver) return __oldToggleEdge(i,j); };
-function __dynkinFocusControl() {
-  if (!['dynkin-vertex','dynkin-starting'].includes(__panelConfig.operation)) return;
-  if (!__vertexFocus) {
-    const label = document.createElement('label'); label.className = 'dynkin-check-label'; label.textContent = 'Vertex ';
-    __vertexFocus = document.createElement('select'); __vertexFocus.setAttribute('aria-label', 'Property vertex');
-    __vertexFocus.addEventListener('change', () => selectDynkinVertex(Number(__vertexFocus.value)));
-    label.append(__vertexFocus); __panelCard.querySelector('.card-body').prepend(label);
+  if (__panelConfig.mode !== 'property') {
+    if (__panelConfig.operation !== 'dynkin-view') return __oldSelectVertex(index);
+    if (!Number.isInteger(index) || index < 0 || index >= state.rank) return;
+    __focusedVertex = index + 1;
+    __oldSelectVertex(index);
+    __editor.notifyChange({interaction:'dynkin-vertex-focus'});
+    return;
   }
-  __vertexFocus.replaceChildren(...selectedIndices().map(index => new Option(String(index+1), String(index))));
-  __vertexFocus.value = String(state.selected);
-}
+  if (!Number.isInteger(index) || index < 0 || index >= state.rank) return;
+  __focusedVertex = index + 1;
+  if (__panelConfig.operation === 'dynkin-starting') {
+    __oldSelectVertex(index);
+    __editor.notifyChange({interaction:'dynkin-vertex-focus'});
+    return;
+  }
+  state.selected = index; renderVertexData(); renderStartingFunction(); queueMathTypeset();
+};
+toggleQuiverEdge = function(i,j) { if ((['input','view'].includes(__panelConfig.mode) || __panelConfig.operation === 'dynkin-starting') && __hasQuiver) return __oldToggleEdge(i,j); };
 __editor.setAssetAdapter({
   panel(config) {
     __panelConfig = config;
@@ -59,7 +84,7 @@ __editor.setAssetAdapter({
     __panelStyle('#dynkin-type,label[for="dynkin-type"],#dynkin-rank-wrap,#dynkin-starting-wide{display:none!important}.canvas-toolbar{flex-wrap:wrap!important}');
     $('dynkin-type').disabled = true; $('dynkin-rank').disabled = true;
     $('dynkin-starting-card').removeAttribute('data-card-wide');
-    $('dynkin-starting-ar-mode').closest('label').title = 'Show the AR quiver from the asset’s stored directions';
+    $('dynkin-starting-ar-mode').closest('label').title = 'Show the AR quiver; add quiver directions if needed';
     if (config.mode === 'property') __showCard($(config.marker).closest('.card'));
     if(config.mode==='view') {
       const toolbar=document.querySelector('.canvas-toolbar');
@@ -73,27 +98,46 @@ __editor.setAssetAdapter({
     const parent = snapshot.assets.find(item => item.kind === 'lie'); if (!parent) return false;
     const model = window.MathWorkspaceObjects, issues = [...model.lieEngineIssues(parent.data, 'dynkin'), ...(asset ? model.rootObjectIssues(asset, parent) : [])];
     if (issues.length) throw new Error(issues.join(' '));
-    const wasQuiver = __hasQuiver;
+    const sameAsset = __dynkinAsset && asset && __key(__dynkinAsset) === __key(asset);
     __dynkinAsset = asset ? JSON.parse(JSON.stringify(asset)) : null;
     __hasQuiver = asset?.data.quiver != null;
     state.type = parent.data.family; state.rank = parent.data.rank;
     const indices = asset ? asset.data.vertices.map(v => v - 1) : [0];
     state.selectedSet = indices;
     if (!indices.includes(state.selected)) state.selected = indices[0];
-    state.multiSelect = indices.length > 1 || (['input','view'].includes(__panelConfig.mode) && state.multiSelect);
-    if (__panelConfig.mode === 'property') state.multiSelect = true;
+    state.multiSelect = indices.length > 1 || (typeof binding?.multiSelect === 'boolean' ? binding.multiSelect : sameAsset && state.multiSelect);
+    if (__panelConfig.mode === 'property' && __panelConfig.operation !== 'dynkin-starting') state.multiSelect = true;
     if (__hasQuiver) state.quiverOrientations[quiverLayoutKey(state.type, state.rank)] = { ...asset.data.quiver };
-    state.quiverMode = __hasQuiver && (__panelConfig.mode === 'property' || !wasQuiver || state.quiverMode);
+    state.quiverMode = __hasQuiver;
     if (!__hasQuiver) state.startingFunctionARMode = false;
-    render(); __dynkinFocusControl(); return true;
+    render();
+    const focus = binding?.vertexFocus ?? (sameAsset ? __focusedVertex : null);
+    __focusedVertex = Number.isInteger(focus) && focus >= 1 && focus <= state.rank ? focus : state.selected + 1;
+    if (__panelConfig.operation === 'dynkin-vertex' || __panelConfig.operation === 'dynkin-starting' && state.multiSelect) { state.selected = __focusedVertex - 1; renderVertexData(); renderStartingFunction(); }
+    return true;
   },
   collect() {
     if (!__dynkinAsset) return null;
     return { type: 'dynkin', data: { lie: __dynkinAsset.data.lie, vertices: selectedIndices().map(i => i + 1), quiver: __hasQuiver ? { ...state.quiverOrientations[quiverLayoutKey(state.type,state.rank)] } : null } };
   },
-  capture: () => ({ vertex: state.selected + 1, arMode: state.startingFunctionARMode, transpose: state.startingFunctionTransposed }),
+  capture: () => ({ vertex: ['dynkin-view','dynkin-starting'].includes(__panelConfig.operation) ? __focusedVertex : state.selected + 1, multiSelect:state.multiSelect, arMode: state.startingFunctionARMode, transpose: state.startingFunctionTransposed }),
   result: () => ({ text: __textResult('plain'), hasResult: true, vertex: __panelConfig.operation === 'lie-view' ? null : state.selected + 1, vertices: __panelConfig.operation === 'lie-view' ? [] : selectedIndices().map(i => i + 1), cartan: state.cartan.map(row => row.slice()) }),
   io(action, format) {
+    if (action === 'selection-mode') {
+      if (typeof format === 'boolean' && state.multiSelect !== format && ['dynkin-view','dynkin-starting'].includes(__panelConfig.operation)) {
+        state.multiSelect = format;
+        if (!format) state.selected = state.selectedSet[0] ?? state.selected;
+        syncControls(); drawDynkin(); renderStartingFunction(); queueMathTypeset();
+      }
+      return state.multiSelect;
+    }
+    if (action === 'vertex-focus') {
+      if (Number.isInteger(format) && format >= 1 && format <= state.rank) {
+        __focusedVertex = format;
+        if (__panelConfig.operation === 'dynkin-vertex' || __panelConfig.operation === 'dynkin-starting' && state.multiSelect) { state.selected = format - 1; renderVertexData(); renderStartingFunction(); queueMathTypeset(); }
+      }
+      return __focusedVertex;
+    }
     if (action === 'geometry') return { vertices: state.hitboxes, edges: state.edgeHitboxes };
     if (action === 'export') {
       if (__panelConfig.mode === 'property') return __textResult(format);

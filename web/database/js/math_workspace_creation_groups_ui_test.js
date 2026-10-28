@@ -1,0 +1,138 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {startServer,launchBrowser,stopBrowser,waitFor,evaluate}=require('./math_workspace_drag_regression_test.js');
+async function run(){
+  const server=await startServer();let session;
+  try{
+    const url='http://127.0.0.1:'+server.address().port+'/math_workspace.html';
+    session=await launchBrowser(url);const {client}=session,errors=[];
+    const read=(fn,...args)=>evaluate(client,'('+fn.toString()+')(...'+JSON.stringify(args)+')');
+    const press=async key=>{for(const type of ['keyDown','keyUp'])await client.send('Input.dispatchKeyEvent',{type,key,code:key,windowsVirtualKeyCode:({ArrowDown:40,ArrowUp:38,Escape:27,Enter:13,Tab:9})[key],...(type==='keyDown'&&key==='Enter'?{text:'\r',unmodifiedText:'\r'}:{})});};
+    await client.send('Runtime.enable');client.socket.addEventListener('message',event=>{const message=JSON.parse(String(event.data));if(message.method==='Runtime.exceptionThrown')errors.push(message.params.exceptionDetails.exception?.description||message.params.exceptionDetails.text);});
+    async function setup(){
+      await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
+      await read(()=>{
+        window.openPicker=()=>{MathWorkspaceAssetsTest.openCanvas('assets');document.querySelector('[data-assets-content]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:100,clientY:150}));[...document.querySelectorAll('#workspace-assets-context-menu button')].find(button=>button.textContent==='New…').click();};
+        window.prefs=()=>JSON.parse(localStorage.getItem('math-workspace-create-preferences-v1'));
+        openPicker();
+      });
+    }
+    await setup();
+    assert.equal(await read(()=>document.querySelector('.workspace-create-filter-details').open),false,'filters start tucked away');
+    assert(await read(()=>document.querySelector('[data-create-search]').closest('.workspace-create-filter-details')&&!document.querySelector('[data-create-search]').checkVisibility()),'search is inside the collapsed filter section');
+    assert(await read(()=>document.activeElement.matches('.workspace-create-filter-details > summary')),'opening focuses the visible filter toggle');
+    await press('Enter');assert.equal(await read(()=>document.querySelector('.workspace-create-filter-details').open),true,'Enter opens search and filters');
+    await press('Tab');assert(await read(()=>document.activeElement.matches('[data-create-search]')),'search is reachable with the next Tab');
+    await read(()=>{document.querySelector('.workspace-create-filter-details > summary').click();document.querySelector('.workspace-create-filter-details > summary').focus();});
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-group] h3,[data-create-group-toggle]').length),0,'display groups have no visible headings or collapse controls');
+    assert(await read(()=>{const list=document.querySelector('.workspace-create-results'),r=list.getBoundingClientRect();return [...list.querySelectorAll('[data-create-kind]')].filter(button=>{const b=button.getBoundingClientRect();return b.top>=r.top&&b.bottom<=r.bottom;}).length>=24;}),'the compact layout gives most of the dialog to choices');
+    const star=await read(()=>{const button=document.querySelector('[data-create-favorite="matrix"]'),style=getComputedStyle(button),r=button.getBoundingClientRect();return {background:style.backgroundColor,opacity:Number(style.opacity),x:r.x+r.width/2,y:r.y+r.height/2};});
+    assert.equal(star.background,'rgba(0, 0, 0, 0)','stars have a truly transparent background');assert(star.opacity<=.3,'stars are pale by default');
+    const moveToMatrixCard=async()=>{
+      const point=await read(()=>{const r=document.querySelector('[data-create-group="matrix"] [data-create-kind]').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};});
+      await client.send('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
+    };
+    const clickMatrixStar=async()=>{
+      const point=await read(()=>{const r=document.querySelector('[data-create-favorite="matrix"]').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};});
+      await client.send('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
+      for(const type of ['mousePressed','mouseReleased'])await client.send('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1});
+    };
+    await moveToMatrixCard();
+    assert((await read(()=>Number(getComputedStyle(document.querySelector('[data-create-favorite="matrix"]')).opacity)))<=.3,'hovering the card alone does not emphasize its star');
+    await read(()=>document.querySelector('[data-create-group="matrix"] [data-create-kind]').focus());
+    assert((await read(()=>Number(getComputedStyle(document.querySelector('[data-create-favorite="matrix"]')).opacity)))<=.3,'focusing the create button does not emphasize its sibling star');
+    await client.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:star.x,y:star.y});
+    await waitFor(()=>read(()=>Number(getComputedStyle(document.querySelector('[data-create-favorite="matrix"]')).opacity)>.9));
+    assert.equal(await read(()=>getComputedStyle(document.querySelector('[data-create-group="matrix"] [data-create-kind]')).outlineStyle),'solid','hovering the star keeps the object highlight visible');
+    await client.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:0,y:0});
+    await waitFor(()=>read(()=>Number(getComputedStyle(document.querySelector('[data-create-favorite="matrix"]')).opacity)<.3));
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-shortcuts]').length),0,'empty shortcut sections take no space');
+    await read(()=>{window.originalMatrixStar=document.querySelector('[data-create-favorite="matrix"]');window.originalMatrixChoice=document.querySelector('[data-create-group="matrix"] [data-create-kind]');});
+    await clickMatrixStar();
+    assert.equal(await read(()=>document.querySelector('[data-create-favorite="matrix"]').getAttribute('aria-pressed')),'true');
+    assert(await read(()=>originalMatrixStar===document.querySelector('[data-create-favorite="matrix"]')&&originalMatrixChoice===document.querySelector('[data-create-group="matrix"] [data-create-kind]')),'pinning preserves the original catalog controls');
+    await clickMatrixStar();await moveToMatrixCard();
+    await waitFor(()=>read(()=>Number(getComputedStyle(originalMatrixStar).opacity)<.3));
+    assert.deepEqual(await read(()=>[originalMatrixStar.textContent,originalMatrixStar.getAttribute('aria-pressed'),originalMatrixStar.title]),['☆','false','Add to favorites: Matrix'],'unpinning resets the glyph, pressed state and action label');
+    assert(await read(()=>originalMatrixStar===document.querySelector('[data-create-favorite="matrix"]')&&!originalMatrixStar.matches(':focus-visible')),'pointer unpinning does not force keyboard focus emphasis');
+    await client.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:0,y:0});
+    await read(()=>originalMatrixStar.focus());await press('Enter');
+    assert.deepEqual(await read(()=>prefs().favorites),['matrix']);
+    assert.equal(await read(()=>document.activeElement.dataset.createFavorite),'matrix','pinning retains keyboard focus');
+    assert.equal(await read(()=>document.querySelector('[data-create-favorite="matrix"]').getAttribute('aria-pressed')),'true');
+    await press('Enter');
+    assert.equal(await read(()=>originalMatrixStar.getAttribute('aria-pressed')),'false');
+    assert(await read(()=>document.activeElement===originalMatrixStar&&originalMatrixStar.matches(':focus-visible')),'keyboard unpinning keeps its visible focus indicator');
+    await press('Enter');
+    assert(await read(()=>!!document.querySelector('[data-create-shortcuts="favorites"] [data-create-kind="matrix"]')));
+    assert(await read(()=>!!document.querySelector('[data-create-group="matrix"] [data-create-kind="matrix"]')),'favorites retain a fixed catalog location');
+    assert(await read(()=>[...document.querySelectorAll('.workspace-create-shortcut-heading')].every(heading=>{const title=heading.querySelector('h3').getBoundingClientRect(),close=heading.querySelector('button').getBoundingClientRect();return close.left-title.right>=0&&close.left-title.right<=8;})),'row close controls sit beside their titles');
+    assert.equal(await read(()=>document.querySelector('[data-create-kind="variety"] .workspace-asset-icon').textContent),'X','the generic variety choice uses X');
+    // Create through both shortcut and catalog paths. Recent records successful user choices.
+    await read(()=>document.querySelector('[data-create-shortcuts="favorites"] [data-create-kind="matrix"]').click());
+    await waitFor(()=>read(()=>prefs().recent[0]==='matrix'));
+    await read(()=>openPicker());
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-shortcuts="recent"]').length),0,'favorite types are not repeated in Recent');
+    await read(()=>document.querySelector('[data-create-kind="number"]').click());
+    await waitFor(()=>read(()=>prefs().recent[0]==='number'));
+    await read(()=>openPicker());
+    assert.deepEqual(await read(()=>[...document.querySelectorAll('[data-create-shortcuts="recent"] [data-create-kind]')].map(button=>button.dataset.createKind)),['number']);
+    for(const kind of ['field','point','vector','young','lie','number']){
+      await read(kind=>{document.querySelector('[data-create-dependency-mode]').value='automatic';document.querySelector('[data-create-kind="'+kind+'"]').click();},kind);
+      await waitFor(()=>read(kind=>prefs().recent[0]===kind,kind));await read(()=>openPicker());
+    }
+    assert.deepEqual(await read(()=>prefs().recent),['number','lie','young','vector','point','field'],'recency is unique and limited to six types');
+    const collapsedHeight=await read(()=>document.querySelector('.workspace-create-results').clientHeight);
+    await read(()=>{document.querySelector('.workspace-create-filter-details').open=true;document.querySelector('[data-create-search]').focus();});
+    assert((await read(()=>document.querySelector('.workspace-create-results').clientHeight))<collapsedHeight,'expanding filters borrows space only while needed');
+    for(const text of 'point ')await client.send('Input.insertText',{text});
+    assert.equal(await read(()=>document.querySelector('[data-create-search]').value),'point ','sequential search retains trailing space');
+    assert(await read(()=>!!document.querySelector('[data-create-group="geometry"] [data-create-kind="point"]')),'search keeps matching objects in their display group');
+    assert(await read(()=>{const groups=[...document.querySelectorAll('[data-create-group]')];return groups.length<MathWorkspaceCreation.displays.length&&groups.every(group=>group.querySelector('[data-create-kind]'));}),'search removes empty display groups');
+    await press('ArrowDown');assert.equal(await read(()=>document.activeElement.dataset.createKind),'point');
+    await read(()=>document.querySelector('[data-create-clear]').click());
+    await read(()=>{document.querySelector('.workspace-create-filter-details > summary').click();});
+    assert((await read(()=>document.querySelector('.workspace-create-results').clientHeight))===collapsedHeight,'closing filters returns space to object choices');
+    const screenshot=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-create-groups.png'),Buffer.from(screenshot.data,'base64'));
+    await client.send('Page.navigate',{url:'about:blank'});await client.send('Page.navigate',{url});await setup();
+    assert.deepEqual(await read(()=>prefs().favorites),['matrix']);
+    assert(await read(()=>!!document.querySelector('[data-create-shortcuts="favorites"] [data-create-kind="matrix"]')),'favorites survive reload');
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-shortcuts="recent"] [data-create-kind]').length),6,'Recent survives reload');
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-group-toggle]').length),0);
+    assert(await read(()=>[...document.querySelectorAll('[data-create-hide-shortcuts]')].every(button=>button.textContent==='×'&&button.getAttribute('aria-label').startsWith('Close '))),'row close controls use an icon with accessible action labels');
+    const assetsBefore=await read(()=>JSON.stringify(MathWorkspaceAssetsTest.localAssetSnapshot().assets));
+    await read(()=>document.querySelector('[data-create-remove-shortcut="recent"][data-create-shortcut-kind="number"]').focus());await press('Enter');
+    assert.deepEqual(await read(()=>prefs().recent),['lie','young','vector','point','field'],'Recent entries can be removed independently');
+    assert.equal(await read(()=>document.activeElement.dataset.createRemoveShortcut),'recent','removal retains keyboard access to the remaining row');
+    await read(()=>document.querySelector('[data-create-hide-shortcuts="recent"]').focus());await press('Enter');
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-shortcuts="recent"]').length),0,'Hide removes the entire row');
+    assert.equal(await read(()=>document.activeElement.matches('.workspace-create-filter-details > summary')),true,'hiding a row moves keyboard focus to Filters');
+    assert.deepEqual(await read(()=>prefs().recent),['lie','young','vector','point','field'],'hiding retains history');
+    await read(()=>document.querySelector('[data-create-hide-shortcuts="favorites"]').click());
+    assert.deepEqual(await read(()=>prefs().favorites),['matrix'],'hiding retains favorites');
+    await client.send('Page.navigate',{url:'about:blank'});await client.send('Page.navigate',{url});await setup();
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-shortcuts]').length),0,'hidden-row choices survive reload');
+    await read(()=>{document.querySelector('.workspace-create-filter-details').open=true;document.querySelector('[data-create-show-shortcuts="favorites"]').click();document.querySelector('[data-create-show-shortcuts="recent"]').click();});
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-shortcuts]').length),2,'Filters restores both rows');
+    assert.deepEqual(await read(()=>prefs().recent),['lie','young','vector','point','field'],'removed Recent entries stay removed after reload');
+    await read(()=>document.querySelector('[data-create-remove-shortcut="favorites"][data-create-shortcut-kind="matrix"]').focus());await press('Enter');
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-shortcuts="favorites"]').length),0,'unpinning the last favorite removes its section');
+    assert.equal(await read(()=>document.querySelector('[data-create-favorite="matrix"]').getAttribute('aria-pressed')),'false','removing a favorite shortcut also updates its catalog star');
+    assert.equal(await read(()=>document.activeElement.matches('.workspace-create-filter-details > summary')),true,'removing the last shortcut keeps a visible keyboard focus');
+    assert.equal(await read(()=>JSON.stringify(MathWorkspaceAssetsTest.localAssetSnapshot().assets)),assetsBefore,'shortcut removal and hiding never delete or change workspace assets');
+    await read(()=>document.querySelector('.workspace-create-filter-details > summary').click());
+    await client.send('Emulation.setDeviceMetricsOverride',{width:320,height:812,deviceScaleFactor:1,mobile:false});
+    assert(await read(()=>[...document.querySelectorAll('.workspace-create-shortcut-heading')].every(heading=>heading.querySelector('button').getBoundingClientRect().left-heading.querySelector('h3').getBoundingClientRect().right<=8)),'row close controls remain beside their titles on narrow screens');
+    assert(await read(()=>{const list=document.querySelector('.workspace-create-results');return list.scrollWidth<=list.clientWidth+1&&[...list.querySelectorAll('[data-create-group] [data-create-kind]')].every(button=>button.getBoundingClientRect().right<=list.getBoundingClientRect().right+1);}), 'groups and shortcut strips fit a narrow viewport');
+    const mobile=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-create-groups-mobile.png'),Buffer.from(mobile.data,'base64'));
+    // Corrupt preferences must not prevent opening or introduce unknown object types.
+    await read(()=>localStorage.setItem('math-workspace-create-preferences-v1','{"favorites":["unknown","matrix","matrix"],"recent":null,"collapsed":["geometry"]}'));
+    await client.send('Page.navigate',{url:'about:blank'});await client.send('Page.navigate',{url});await setup();
+    assert.deepEqual(await read(()=>[...document.querySelectorAll('[data-create-shortcuts="favorites"] [data-create-kind]')].map(button=>button.dataset.createKind)),['matrix']);
+    assert.equal(await read(()=>document.querySelectorAll('[data-create-shortcuts="recent"]').length),0);
+    assert(await read(()=>document.querySelector('[data-create-group="geometry"] [data-create-kind="point"]').getClientRects().length>0),'obsolete collapse preferences cannot hide objects');
+    assert.deepEqual(errors,[]);
+    console.log('PASS compact creation: no group headings, collapsed search, transparent subtle stars/hover highlight, favorites/recent persistence, sequential typing, keyboard, narrow layout and legacy preferences');
+  }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}
+}
+if(require.main===module)run().catch(error=>{console.error(error.stack||error);process.exitCode=1;});

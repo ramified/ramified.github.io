@@ -49,24 +49,87 @@
   }
   function init({entries,create,dependencies=()=>[],capabilities,returnFocus}) {
     const assignments=subjectAssignments(entries);
-    let dialog,search,list,count,filters,displaySelect,subjectSelect,opener,stayOpen,dependencyMode,addedStatus,statusTimer,lastCreatedFocus,subject='',display='',creating=false,busy=false,resultsSignature='';
+    const preferenceKey='math-workspace-create-preferences-v1',known=new Set(entries.map(entry=>entry.kind));
+    let preferences={favorites:[],recent:[],hiddenRows:[]};
+    try{
+      const saved=JSON.parse(root.localStorage.getItem(preferenceKey));
+      if(saved&&typeof saved==='object')for(const key of Object.keys(preferences)){
+        const allowed=key==='hiddenRows'?new Set(['favorites','recent']):known;
+        preferences[key]=Array.isArray(saved[key])?[...new Set(saved[key].filter(id=>allowed.has(id)))]:[];
+      }
+      preferences.recent=preferences.recent.slice(0,6);
+    }catch(_){} // Storage may be unavailable; the picker still works for this visit.
+    const savePreferences=()=>{try{root.localStorage.setItem(preferenceKey,JSON.stringify(preferences));}catch(_){}};
+    const shortcutVisibility=new Map();
+    let dialog,search,list,count,filters,filterDetails,filterSummary,displaySelect,subjectSelect,opener,stayOpen,dependencyMode,addedStatus,statusTimer,lastCreatedFocus,subject='',display='',creating=false,busy=false,resultsSignature='';
     const element=(tag,text,className)=>Object.assign(document.createElement(tag),{textContent:text||'',className:className||''});
-    function results(){
+    function results(preserveCatalog=false,force=false){
       const items=filter(entries,search.value,subject,display);
-      const signature=JSON.stringify([subject,display,root.MathWorkspaceAssetIcons.settings(),items.map(item=>[item.kind,item.subjects,capabilities()?.[item.kind]===false])]);
+      // Recent shortcuts refresh on the next visit/filter change; adding an
+      // object in Stay open mode must keep its existing result button and focus.
+      const signature=JSON.stringify([subject,display,preferences.favorites,preferences.hiddenRows,root.MathWorkspaceAssetIcons.settings(),items.map(item=>[item.kind,item.subjects,capabilities()?.[item.kind]===false])]);
       // The editable helper commits on blur. An unchanged filter must keep the
       // result button that ArrowDown just focused, rather than replacing it.
-      if(signature===resultsSignature)return;
-      resultsSignature=signature;list.replaceChildren();
+      if(signature===resultsSignature&&!force)return;
+      resultsSignature=signature;
+      if(preserveCatalog===true)list.querySelectorAll('[data-create-shortcuts]').forEach(section=>section.remove());
+      else list.replaceChildren();
       displaySelect.value=display;subjectSelect.value=subject;
       [displaySelect,subjectSelect].forEach(select=>{select.title=select.selectedOptions[0].textContent;});count.textContent=items.length+' object types';
+      shortcutVisibility.forEach((control,id)=>{control.checked=!preferences.hiddenRows.includes(id);});
       if(!items.length)list.append(element('p','No objects match. Clear filters or try another search.','workspace-card-context'));
-      for(const item of items){
+      function updateFavorite(favorite,item){
+        const selected=preferences.favorites.includes(item.kind);
+        favorite.textContent=selected?'★':'☆';favorite.setAttribute('aria-pressed',String(selected));
+        favorite.title=(selected?'Remove from favorites: ':'Add to favorites: ')+item.label;favorite.setAttribute('aria-label',favorite.title);
+      }
+      if(preserveCatalog===true)list.querySelectorAll('[data-create-favorite]').forEach(control=>updateFavorite(control,entries.find(item=>item.kind===control.dataset.createFavorite)));
+      function choice(item,shortcut=false){
+        const tile=element('div','','workspace-create-tile');
         const button=element('button','','workspace-create-result');button.type='button';button.dataset.createKind=item.kind;button.disabled=capabilities()?.[item.kind]===false;
         const description=item.description+' Display: '+displays.find(d=>d.id===item.display).label+'. Subjects: '+(item.subjects.map(id=>subjects.find(s=>s.id===id).label).join(', ')||'Unassigned')+'.';
         button.title=description;button.setAttribute('aria-description',description);
         const icon=root.MathWorkspaceAssetIcons.renderType(item.kind);icon.classList.add('workspace-create-icon');button.append(icon,element('strong',item.label));
-        button.addEventListener('click',()=>activate(item,button));list.append(button);
+        button.addEventListener('click',()=>activate(item,button));tile.append(button);
+        if(!shortcut){
+          const favorite=element('button','','workspace-create-favorite');favorite.type='button';favorite.dataset.createFavorite=item.kind;updateFavorite(favorite,item);
+          favorite.addEventListener('click',()=>{
+            const scroll=list.scrollTop;
+            preferences.favorites=preferences.favorites.includes(item.kind)?preferences.favorites.filter(kind=>kind!==item.kind):[...preferences.favorites,item.kind];
+            // Keep the clicked control and its native pointer/keyboard focus state.
+            // Replacing it and forcing focus left unpinned stars emphasized.
+            updateFavorite(favorite,item);savePreferences();results(true);list.scrollTop=scroll;
+          });tile.append(favorite);
+        }
+        return tile;
+      }
+      for(const [id,label,kinds] of [['favorites','Favorites',preferences.favorites],['recent','Recent',preferences.recent.filter(kind=>!preferences.favorites.includes(kind))]]){
+        if(preferences.hiddenRows.includes(id))continue;
+        const shortcuts=kinds.map(kind=>items.find(item=>item.kind===kind)).filter(Boolean);
+        if(!shortcuts.length)continue;
+        const section=element('section','','workspace-create-shortcuts');section.dataset.createShortcuts=id;section.setAttribute('aria-label',label);
+        const heading=element('div','','workspace-create-shortcut-heading'),hide=element('button','×','workspace-create-shortcut-hide'),row=element('div','','workspace-create-shortcut-row');
+        hide.type='button';hide.dataset.createHideShortcuts=id;hide.setAttribute('aria-label','Close '+label+' row');hide.title='Close '+label+' row; show it again in Filters';
+        hide.addEventListener('click',()=>{
+          const keyboard=hide.matches(':focus-visible'),scroll=list.scrollTop;
+          preferences.hiddenRows=[...preferences.hiddenRows,id];savePreferences();results(true);
+          if(keyboard)filterSummary.focus({preventScroll:true});list.scrollTop=scroll;
+        });
+        shortcuts.forEach((item,index)=>{
+          const tile=choice(item,true),remove=element('button','×','workspace-create-shortcut-remove');remove.type='button';remove.dataset.createRemoveShortcut=id;remove.dataset.createShortcutKind=item.kind;
+          remove.title='Remove from '+label.toLowerCase()+': '+item.label;remove.setAttribute('aria-label',remove.title);
+          remove.addEventListener('click',()=>{
+            const keyboard=remove.matches(':focus-visible'),scroll=list.scrollTop;
+            preferences[id]=preferences[id].filter(kind=>kind!==item.kind);savePreferences();results(true,true);
+            if(keyboard){const buttons=[...list.querySelectorAll('[data-create-remove-shortcut="'+id+'"]')];(buttons[Math.min(index,buttons.length-1)]||filterSummary).focus({preventScroll:true});}list.scrollTop=scroll;
+          });tile.append(remove);row.append(tile);
+        });
+        heading.append(element('h3',label),hide);section.append(heading,row);list.insertBefore(section,list.querySelector('[data-create-group]'));
+      }
+      if(preserveCatalog!==true)for(const group of displays){
+        const members=items.filter(item=>item.display===group.id);if(!members.length)continue;
+        const section=element('div','','workspace-create-group');section.dataset.createGroup=group.id;section.setAttribute('role','group');section.setAttribute('aria-label',group.label);
+        members.forEach(item=>section.append(choice(item)));list.append(section);
       }
       root.MathWorkspaceAssetIcons.typeset(list);
     }
@@ -106,6 +169,7 @@
         if(!keepOpen){creating=true;dialog.close();}
         const focus=await create(item.kind,options);
         if(focus===null){showStatus('The object could not be added.');return;}
+        preferences.recent=[item.kind,...preferences.recent.filter(kind=>kind!==item.kind)].slice(0,6);savePreferences();
         if(typeof focus==='function')lastCreatedFocus=focus;
         showStatus('Added '+item.label+'.');
       }catch(error){showStatus(error.message||'The object could not be added.');}
@@ -129,9 +193,16 @@
       for(const option of [{id:'',label:'All subjects'},...subjects])subjectSelect.append(new Option(option.label,option.id));
       subjectSelect.addEventListener('change',()=>{subject=subjectSelect.value;results();});subjectLabel.append(subjectSelect);
       filters.append(displayLabel,subjectLabel);
-      const clear=element('button','Clear filters','btn btn-ghost');clear.type='button';clear.dataset.createClear='';clear.addEventListener('click',()=>{subject='';display='';root.CalculatorInputSettings.syncEditableValue(search,'',{force:true});results();search.focus();});
-      count=element('p','','workspace-card-context');count.setAttribute('role','status');list=element('div','','workspace-create-results');list.setAttribute('aria-label','Matching object types');
-      const searchArea=element('div','','workspace-create-search-area'),toolbar=element('div','','workspace-create-toolbar');toolbar.append(count,clear);searchArea.append(search,filters,toolbar);
+      const clear=element('button','Clear filters','btn btn-ghost');clear.type='button';clear.dataset.createClear='';clear.addEventListener('click',()=>{subject='';display='';root.CalculatorInputSettings.syncEditableValue(search,'',{force:true});results();filterDetails.open=true;search.focus();});
+      count=element('span','','workspace-card-context');count.setAttribute('role','status');list=element('div','','workspace-create-results');list.setAttribute('aria-label','Matching object types');
+      const searchArea=element('div','','workspace-create-search-area'),toolbar=element('div','','workspace-create-toolbar'),filterBody=element('div','','workspace-create-filter-body');
+      filterDetails=element('details','','workspace-create-filter-details');filterSummary=element('summary','Filters');
+      const shortcutSettings=element('div','','workspace-create-shortcut-settings');shortcutSettings.append(element('span','Show:'));
+      for(const [id,label] of [['favorites','Favorites'],['recent','Recent']]){
+        const option=element('label','','workspace-check'),control=element('input');control.type='checkbox';control.dataset.createShowShortcuts=id;control.checked=!preferences.hiddenRows.includes(id);shortcutVisibility.set(id,control);
+        control.addEventListener('change',()=>{preferences.hiddenRows=preferences.hiddenRows.filter(row=>row!==id);if(!control.checked)preferences.hiddenRows.push(id);savePreferences();results(true);});option.append(control,element('span',label));shortcutSettings.append(option);
+      }
+      filterSummary.append(count);toolbar.append(clear);filterBody.append(search,filters,shortcutSettings,toolbar);filterDetails.append(filterSummary,filterBody);searchArea.append(filterDetails);
       const footer=element('footer','','workspace-create-footer'),actions=element('div','','workspace-create-toolbar'),stayLabel=element('label','','workspace-check');
       stayOpen=element('input');stayOpen.type='checkbox';stayOpen.dataset.createStayOpen='';stayLabel.append(stayOpen,element('span','Stay open'));
       const dependencyLabel=element('label','','workspace-dependency-mode');dependencyMode=element('select','','workspace-control');dependencyMode.dataset.createDependencyMode='';
@@ -145,18 +216,30 @@
       dialog.addEventListener('keydown',event=>{
         if(event.isComposing||event.keyCode===229)return;
         if(event.key==='Escape'){event.preventDefault();event.stopPropagation();dialog.close();return;}
-        const buttons=[...list.querySelectorAll('button')],index=buttons.indexOf(document.activeElement),enabled=buttons.filter(button=>!button.disabled);
-        if(['ArrowDown','ArrowUp','ArrowLeft','ArrowRight','Home','End'].includes(event.key)&&(index>=0||event.target===search&&['ArrowDown','ArrowUp'].includes(event.key))){
+        if(event.target===filterSummary&&(event.key==='Enter'||event.key===' ')){
+          event.preventDefault();event.stopPropagation();filterDetails.open=!filterDetails.open;return;
+        }
+        const buttons=[...list.querySelectorAll('[data-create-kind]')].filter(button=>!button.closest('[hidden]')),index=buttons.indexOf(document.activeElement),enabled=buttons.filter(button=>!button.disabled);
+        if(['ArrowDown','ArrowUp','ArrowLeft','ArrowRight','Home','End'].includes(event.key)&&(index>=0||(event.target===search||event.target===filterSummary)&&['ArrowDown','ArrowUp'].includes(event.key))){
           event.preventDefault();
           if(index<0){(event.key==='ArrowUp'?enabled.at(-1):enabled[0])?.focus();return;}
           if(event.key==='Home'||event.key==='End'){(event.key==='Home'?enabled[0]:enabled.at(-1))?.focus();return;}
-          const columns=getComputedStyle(list).gridTemplateColumns.split(' ').length,step=({ArrowDown:columns,ArrowUp:-columns,ArrowLeft:-1,ArrowRight:1})[event.key];
-          for(let next=index+step;next>=0&&next<buttons.length;next+=step)if(!buttons[next].disabled){buttons[next].focus();break;}
+          if(event.key==='ArrowLeft'||event.key==='ArrowRight'){
+            const step=event.key==='ArrowLeft'?-1:1;
+            for(let next=index+step;next>=0&&next<buttons.length;next+=step)if(!buttons[next].disabled){buttons[next].focus();break;}
+          }else{
+            const current=buttons[index].getBoundingClientRect(),direction=event.key==='ArrowUp'?-1:1;
+            const candidates=enabled.filter(button=>direction*(button.getBoundingClientRect().top-current.top)>2);
+            candidates.sort((a,b)=>{
+              const score=button=>{const rect=button.getBoundingClientRect();return Math.abs(rect.top-current.top)*1000+Math.abs((rect.left+rect.right-current.left-current.right)/2);};
+              return score(a)-score(b);
+            });candidates[0]?.focus();
+          }
         }else if(event.key==='Enter'&&(event.target===search||index>=0)){event.preventDefault();event.stopPropagation();(index>=0?buttons[index]:enabled[0])?.click();}
       });
     }
     assignments.subscribe(()=>{if(dialog){const scroll=list.scrollTop,kind=document.activeElement?.dataset.createKind;results();if(kind)list.querySelector('[data-create-kind="'+kind+'"]')?.focus({preventScroll:true});list.scrollTop=scroll;}});
-    return {assignments,open(){opener=document.activeElement;creating=false;lastCreatedFocus=null;subject='';display='';if(!dialog)build();stayOpen.checked=false;addedStatus.textContent='';root.CalculatorInputSettings.syncEditableValue(search,'',{force:true});results();dialog.showModal();list.scrollTop=0;search.focus();}};
+    return {assignments,open(){opener=document.activeElement;creating=false;lastCreatedFocus=null;subject='';display='';resultsSignature='';if(!dialog)build();stayOpen.checked=false;addedStatus.textContent='';root.CalculatorInputSettings.syncEditableValue(search,'',{force:true});results();dialog.showModal();list.scrollTop=0;(filterDetails.open?search:filterSummary).focus();}};
   }
   const api={subjects,displays,catalog,filter,subjectAssignments,init};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.MathWorkspaceCreation=api;
 })(typeof window!=='undefined'?window:globalThis);

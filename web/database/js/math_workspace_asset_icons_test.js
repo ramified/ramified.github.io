@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 global.MathWorkspaceObjects = require('./math_workspace_objects.js');
 global.StrandDrawing = require('./strand_drawing.js');
 const icons = require('./math_workspace_asset_icons.js');
+assert.deepEqual(icons.describe({kind:'variety',name:'Variety',data:{}}),{source:'generic',symbol:'X'});
+assert.deepEqual(icons.describe({kind:'variety',name:'Y_2',data:{}}),{source:'name',name:'Y_2'},'variety names retain precedence over the default X');
 assert.deepEqual(icons.settings(),{exactColor:'',genericColor:'#a8510b',stroke:0.7,strandStroke:19,hatch:true,matrixStroke:2.1,matrixEntryStroke:0.7,matrixFontSize:20,matrixFontFamily:'"Times New Roman", serif',matrixRowGap:0,matrixColumnGap:0,matrixBracketGap:1,matrixBracketCurve:3,matrixPadding:0,fanNegativeLength:0.7,coneNegativeLength:0.7});
 assert.equal(icons.describe({kind:'mosaic-space',name:'S',data:{}}).kind,'mosaic-space');
 assert.equal(icons.describe({kind:'mosaic-diagram',name:'D',data:{}}).kind,'mosaic-diagram');
@@ -43,6 +45,7 @@ const lie={kind:'lie',data:{family:'A',rank:3}}, strand={kind:'strands',data:{li
 const marked={kind:'dynkin',name:'\\Delta',data:{lie:'lie:a',vertices:[2],quiver:null}};
 assert.equal(icons.describe(marked,()=>lie).source,'diagram');
 assert.equal(icons.describe(marked,()=>lie).family,'A');
+for(const quiver of [null,{'0-1':1,'1-2':-1},{'0-1':-1,'1-2':1},{'0-1':1}])assert.deepEqual(icons.describe({...marked,data:{...marked.data,quiver}},()=>lie),icons.describe(marked,()=>lie),'thumbnails ignore optional directions even when they need repair');
 assert.equal(icons.describe(marked,()=>({...lie,data:{family:'D',rank:5}})).family,'D','parent changes invalidate icon geometry');
 assert.equal(icons.describe(marked,()=>({...lie,data:{family:'A',rank:13}})).source,'generic');
 assert.equal(icons.describe({...marked,data:{...marked.data,vertices:[4]}},()=>lie).source,'generic','invalid markings never produce an exact icon');

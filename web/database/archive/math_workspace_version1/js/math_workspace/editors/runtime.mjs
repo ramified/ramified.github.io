@@ -102,10 +102,26 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
   const local={};
   const workspaceSettings=realWindow.MathWorkspaceSettings;
   const settingsSessions=new Set();
+  function syncMathStyles(){
+    // MathJax emits shared CSS into the page, outside the editor shadow roots.
+    // CHTML also adds glyph rules after subsequent typesetting operations.
+    for(const id of ['MJX-CHTML-styles','MJX-SVG-styles']){
+      const source=realDocument.getElementById(id);if(!source)continue;
+      // CHTML inserts matrix layout and glyph rules with CSSStyleSheet.insertRule;
+      // cloneNode/textContent alone silently omit those rules.
+      let css=source.textContent;
+      if(source.sheet)css=[...source.sheet.cssRules].map(rule=>rule.cssText).join('\n');
+      for(const root of roots()){
+        let style=root.getElementById(id);
+        if(!style){style=realDocument.createElement('style');style.id=id;style.textContent=css;(root.querySelector('.editor-head')||root).append(style);}
+        else if(style.textContent!==css)style.textContent=css;
+      }
+    }
+  }
   const mathApi=realWindow.MathJax?.typesetPromise?new Proxy(realWindow.MathJax,{get(target,key){
     if(key==='typesetPromise')return (elements=[body])=>{
-      const run=mathQueue.then(()=>{if(!disposed)return target.typesetPromise(elements);}).then(()=>{
-        const css=realDocument.getElementById('MJX-SVG-styles');if(css){if(!shadow.getElementById('MJX-SVG-styles'))head.append(css.cloneNode(true));if(inspectorShadow&&!inspectorShadow.getElementById('MJX-SVG-styles'))inspectorHead.append(css.cloneNode(true));for(const surface of detachedCards.values())if(!surface.shadow.getElementById('MJX-SVG-styles'))surface.shadow.prepend(css.cloneNode(true));}
+      const run=mathQueue.then(()=>{if(!disposed){syncMathStyles();return target.typesetPromise(elements);}}).then(()=>{
+        syncMathStyles();
       });mathQueue=run.catch(()=>{});return run;
     };
     if(key==='typesetClear')return (elements=[body])=>target.typesetClear(elements);
@@ -214,7 +230,7 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
     for(const css of (inspectorShadow||shadow).querySelectorAll('style'))root.append(css.cloneNode(true));
     side.append(card);layout.append(side);surfaceBody.append(layout);documentRoot.append(surfaceBody);root.append(documentRoot);
     target.tabIndex=-1;surfaceBody.addEventListener('pointerdown',e=>{if(!e.target.closest('input,textarea,select,button,a,[contenteditable]'))target.focus({preventScroll:true});});
-    detachedCards.set(key,{host:target,shadow:root,card,marker,active:true});bindSurfaceEvents(surfaceBody);inlineObserver.observe(surfaceBody,{subtree:true,childList:true});syncSurfacePlacement();syncActivity();return true;
+    detachedCards.set(key,{host:target,shadow:root,card,marker,active:true});syncMathStyles();bindSurfaceEvents(surfaceBody);inlineObserver.observe(surfaceBody,{subtree:true,childList:true});syncSurfacePlacement();syncActivity();return true;
   }
   function returnCardSurface(key){const surface=detachedCards.get(key);if(!surface)return;surface.marker.before(surface.card);surface.marker.remove();surface.host.remove();detachedCards.delete(key);syncActivity();}
   function mountObjectSurfaces({content=[],toolbar=[],modify=[]}={}){

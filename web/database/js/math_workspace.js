@@ -2572,7 +2572,7 @@
       installChrome: panel => {
         installWorkspaceOwnedCardChrome(panel.node, panel.id, {
           hide: () => objectWorkspace.move(panel, 'hidden'),
-          actions: [['move-area', 'Move to main area', '↗', () => objectWorkspace.move(panel, panel.location === 'main' ? 'side' : 'main')],...(!panel.definition.input?[['compare','New comparison view','⧉',()=>objectWorkspace.compare(panel)]]:[])]
+          actions: [['move-area', 'Move to main area', '↗', () => objectWorkspace.move(panel, panel.location === 'main' ? 'side' : 'main')]]
         });
         panel.moveButton = panel.head.querySelector('[data-workspace-card-action="move-area"]');
         panel.moveButton.textContent = panel.location === 'main' ? '↙' : '↗';

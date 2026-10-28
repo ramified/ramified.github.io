@@ -571,7 +571,7 @@
     ]);
   }
 
-  function renderVertexData() {
+  function renderVertexData(compact = false) {
     const i = state.selected;
     const indices = selectedIndices();
     const C = state.cartan;
@@ -586,11 +586,13 @@
     $('dynkin-selected-label').innerHTML = `${state.multiSelect ? 'selected vertices' : 'selected vertex'}: ${inlineMath(selectedNodesLatex(indices))}`;
     $('dynkin-vertex-data').innerHTML = htmlRows([
       ['simple root', inlineMath(`\\alpha_{${i + 1}}`)],
-      ['crossed nodes', inlineMath(selectedNodesLatex(indices))],
+      ...(!compact ? [['crossed nodes', inlineMath(selectedNodesLatex(indices))]] : []),
       [inlineMath('(\\alpha,\\alpha)'), inlineMath(fractionLatex(normalizedLength))],
-      ['neighbors', inlineMath(rootsLatex(neighbors))],
-      ['Cartan row', inlineMath(vectorLatex(C[i]))],
-      ['Cartan column', inlineMath(vectorLatex(C.map((row) => row[i])))],
+      ...(!compact ? [
+        ['neighbors', inlineMath(rootsLatex(neighbors))],
+        ['Cartan row', inlineMath(vectorLatex(C[i]))],
+        ['Cartan column', inlineMath(vectorLatex(C.map((row) => row[i])))]
+      ] : []),
       ['highest-root mark', inlineMath(String(highest[i]))],
       ['highest root', inlineMath(vectorLatex(highest))],
       [inlineMath('\\omega_i'), inlineMath(vectorLatex(omega))]

@@ -23,11 +23,16 @@ async function run(){
       assert.equal(await read(()=>icon(d).dataset.iconSource),'diagram');assert.equal(await read(()=>icon(fallback).dataset.iconSource),'generic');
       assert.deepEqual(await read(()=>shape(d)),await read(()=>shape(fallback)),layout+' fallback uses D5 with vertex 2 marked');
       assert.deepEqual(await read(()=>shape(d).nodes.map(n=>n.marked)),[false,true,false,false,false]);
-      assert.deepEqual(await read(()=>shape(q).arrows),[2,2]);assert.deepEqual(await read(()=>shape(q).nodes.map(n=>n.marked)),[true,false,true]);
+      assert.deepEqual(await read(()=>shape(q).arrows),[]);assert.deepEqual(await read(()=>shape(q).nodes.map(n=>n.marked)),[true,false,true]);
       assert(await read(()=>examples.every(asset=>icon(asset).dataset.iconSource==='diagram')));
       assert.notEqual(await read(()=>getComputedStyle(icon(d)).color),await read(()=>getComputedStyle(icon(fallback)).color));
     }
     assert.equal(await read(()=>JSON.stringify(api.localAssetSnapshot().assets)),await read(()=>before),'read-only rendering leaves Assets untouched');
+    const unorientedIcon=await read(()=>icon(q).querySelector('svg').outerHTML);
+    for(const quiver of [null,{'0-1':-1,'1-2':1},{'0-1':1}]){
+      await read(quiver=>api.updateObjectAsset({kind:'dynkin',id:q.id},{data:{...api.localAssetSnapshot().assets.find(asset=>asset.id===q.id).data,quiver}}),quiver);
+      assert.equal(await read(()=>icon(q).querySelector('svg').outerHTML),unorientedIcon,'quiver changes, including directions needing repair, leave the icon stable');
+    }
     await read(()=>{api.state.layout='icons';api.applyAssetSnapshot(api.localAssetSnapshot());window.native=panels.open('dynkin-view',key(d),'side');});
     assert.deepEqual(await read(()=>shape(d).nodes.map(n=>[n.x,n.y])),await read(()=>native.propertyRenderer.editor.objectIO('geometry').vertices.map(n=>[n.x,n.y])),'icon uses the native display geometry');
     await read(()=>api.updateObjectAsset({kind:'dynkin',id:d.id},{data:{lie:key(g),vertices:[1,4],quiver:null}}));
@@ -40,7 +45,7 @@ async function run(){
     assert.deepEqual(await read(()=>[...document.querySelector('[data-create-kind="dynkin"] svg').querySelectorAll('circle')].map(n=>n.dataset.marked==='true')),[false,true,false,false,false],'creation uses the same generic D5 thumbnail');
     const shot=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-dynkin-icons.png'),Buffer.from(shot.data,'base64'));
     assert.deepEqual(errors,[]);
-    console.log('PASS actual Dynkin icons, D5 vertex-2 fallback, all layouts/families, quiver arrows, native geometry, parent/marking updates and creation previews');
+    console.log('PASS actual Dynkin icons, D5 vertex-2 fallback, all layouts/families, stable thumbnails without quiver arrows, native geometry, parent/marking updates and creation previews');
   }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}
 }
 if(require.main===module)run().catch(error=>{console.error(error.stack||error);process.exitCode=1;});

@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const generic = { 'mosaic-space':'⬡','mosaic-diagram':'⋈', filtration:'⊏',complex:'•→•','field-extension':'L/K', number: '𝑎', young: '▦', lie: '𝔤', field: '𝑅', dynkin: '●—●', strands: '⋈', matrix: '▦', category: '𝒞', functor: '⇒', variety: '𝕍', sheaf: 'ℱ', map: '→', frame:'⊞', point:'•', vector:'↗', polytope:'⬡', sphere:'◯', roots:'✳', lattice:'▦', voronoi:'⬡', formula:'ƒ', tropical:'⊕', weyl:'◈', cone:'△', fan:'⋔' };
+  const generic = { 'mosaic-space':'⬡','mosaic-diagram':'⋈', filtration:'⊏',complex:'•→•','field-extension':'L/K', number: '𝑎', young: '▦', lie: '𝔤', field: '𝑅', dynkin: '●—●', strands: '⋈', matrix: '▦', category: '𝒞', functor: '⇒', variety: 'X', sheaf: 'ℱ', map: '→', frame:'⊞', point:'•', vector:'↗', polytope:'⬡', sphere:'◯', roots:'✳', lattice:'▦', voronoi:'⬡', formula:'ƒ', tropical:'⊕', weyl:'◈', cone:'△', fan:'⋔' };
   const defaults = Object.freeze({ exactColor: '', genericColor: '#a8510b', stroke: 0.7, strandStroke:19, hatch: true,
     matrixStroke: 2.1, matrixEntryStroke: 0.7, matrixFontSize: 20, matrixFontFamily: '"Times New Roman", serif',
     matrixRowGap: 0, matrixColumnGap: 0, matrixBracketGap: 1, matrixBracketCurve: 3, matrixPadding: 0,
@@ -75,7 +75,9 @@
       if (rows.some(Boolean) && rows.length <= 5 && (asset.type === 'generalized' ? positive + negative <= 6 : positive <= 5)) return { source: 'diagram', kind: 'young', rows, positive, negative };
     } else if (asset.kind === 'dynkin') {
       const lie = resolve(asset.data?.lie), model = root.MathWorkspaceObjects;
-      if (dynkinGeometry && lie && model && !model.rootObjectIssues(asset,lie).length && !model.lieEngineIssues(lie.data,'dynkin').length) return {source:'diagram',kind:'dynkin',...lie.data,vertices:asset.data.vertices,quiver:asset.data.quiver};
+      // Quiver directions belong to the editable display; thumbnails show the
+      // underlying Dynkin type and markings, even if stored directions need repair.
+      if (dynkinGeometry && lie && model && !model.rootObjectIssues({...asset,data:{...asset.data,quiver:null}},lie).length && !model.lieEngineIssues(lie.data,'dynkin').length) return {source:'diagram',kind:'dynkin',...lie.data,vertices:asset.data.vertices,quiver:null};
     } else if (asset.kind === 'strands') {
       const lie = resolve(asset.data.lie), model = root.MathWorkspaceObjects;
       if (lie && model && !model.rootObjectIssues(asset, lie).length && !model.lieEngineIssues(lie.data, 'strand').length) {

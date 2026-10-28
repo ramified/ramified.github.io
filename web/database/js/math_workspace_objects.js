@@ -373,7 +373,7 @@
   }
   function mount(api) {
     const registry=panelRegistry.create(key=>!!get(key));
-    const panels = new Map(), computations = new Map(), ioRenderers = new Map(), legacyViews=new Map();
+    const panels = new Map(), computations = new Map(), ioRenderers = new Map(), legacyViews=new Map(), dynkinFocus=new Map(),dynkinSelectionModes=new Map();
     let nextId = 0, snapshot = api.snapshot();
     const get = key => snapshot.assets.find(asset => keyOf(asset) === key);
     const element = (tag, className, text) => Object.assign(document.createElement(tag), { className: className || '', ...(text == null ? {} : { textContent: text }) });
@@ -450,6 +450,25 @@
     }
     function nativeChange(panel, renderer, change) {
       if (renderer.applying || panel.refreshing || !renderer.editor) return;
+      const dynkinKey=['dynkin-view','dynkin-starting'].includes(panel.definition.id)?panel.computation.refs.dynkin:null;
+      const selectionMode=dynkinKey?renderer.editor.objectIO('selection-mode'):null;
+      if(dynkinKey&&change?.interaction==='dynkin-vertex-focus'){
+        const key=dynkinKey,vertex=renderer.editor.objectIO('vertex-focus');
+        if(Number.isInteger(vertex)){
+          dynkinFocus.set(key,vertex);dynkinSelectionModes.set(key,selectionMode);
+          for(const target of panels.values())if(['dynkin-vertex','dynkin-view','dynkin-starting'].includes(target.definition.id)&&target.computation.refs.dynkin===key&&target.propertyRenderer&&!['missing','invalid'].includes(target.computation.status)){
+            const native=target.propertyRenderer;native.applying=true;
+            try{native.editor.objectIO('selection-mode',selectionMode);native.editor.objectIO('vertex-focus',vertex);target.computation.options=native.editor.captureAssetProperties();target.computation.result=native.editor.readObjectResult();}finally{native.applying=false;}
+          }
+        }
+      }
+      if(panel.definition.id==='dynkin-starting'&&!['missing','invalid'].includes(panel.computation.status)){
+        const asset=get(panel.computation.refs.dynkin),value=renderer.editor.collectAssets();
+        if(asset&&value&&(JSON.stringify(asset.data.quiver)!==JSON.stringify(value.data.quiver)||JSON.stringify(asset.data.vertices)!==JSON.stringify(value.data.vertices))){
+          // AR header clicks use the same selection rules as the main diagram.
+          try{api.update(refOf(asset),{data:{...asset.data,vertices:value.data.vertices,quiver:value.data.quiver}});}catch(error){feedback(panel,error.message,true);return;}
+        }
+      }
       if (['mosaic-metric','mosaic-poincare'].includes(panel.definition.id)) {
         const asset=get(panel.computation.refs.asset);
         const backgroundMetric=renderer.editor.objectIO('mosaic-payload')?.backgroundMetric;
@@ -687,23 +706,7 @@
         referenceControl(panel, definition.input === 'strands' ? classicalLie() : lie(), definition,
           () => get(panel.assetKey)?.data.lie || '', value => { const asset = get(panel.assetKey); if (asset) api.update(refOf(asset), { data: { ...asset.data, lie: value } }); });
         panel.derivedLabel = element('p', 'workspace-status'); panel.controls.append(panel.derivedLabel);
-        if (definition.input === 'dynkin') {
-          const vertices = element('input', 'workspace-control'); vertices.type = 'text'; vertices.setAttribute('aria-label', 'Selected vertices'); panel.vertices = vertices;
-          listen(vertices, () => {
-            const asset = get(panel.assetKey); if (!asset) return;
-            try {
-              if (!/^\d+(?:(?:\s*,\s*|\s+)\d+)*\s*$/.test(vertices.value)) throw new Error('Enter complete vertex numbers, for example 1, 3.');
-              api.update(refOf(asset), { data: { ...asset.data, vertices: vertices.value.trim().split(/[,\s]+/).map(Number) } });
-            } catch (error) { feedback(panel, error.message, true); }
-          });
-          const quiver = element('input'); quiver.type = 'checkbox'; panel.quiver = quiver;
-          quiver.addEventListener('change', () => {
-            const asset = get(panel.assetKey), parent = get(asset?.data.lie); if (!asset) return;
-            const data = quiver.checked && parent ? Object.fromEntries(dynkinEdges(parent.data).map(edge => [edge, 1])) : null;
-            api.update(refOf(asset), { data: { ...asset.data, quiver: data } });
-          });
-          panel.controls.append(field('Vertices', vertices), field('Store quiver directions', quiver));
-        } else {
+        if (definition.input === 'strands') {
           panel.repairWord = button('Clear generator word', () => { const asset = get(panel.assetKey); if (asset) api.update(refOf(asset), { data: { ...asset.data, generators: [] } }); });
           panel.controls.append(panel.repairWord);
         }
@@ -1067,10 +1070,6 @@
               const parent = get(asset.data.lie);
               panel.inputIssues = [...rootObjectIssues(asset, parent), ...(parent ? lieEngineIssues(parent.data, panel.definition.engine) : [])];
               panel.derivedLabel.textContent = parent ? (parent.plainName || parent.name) + ' · ' + parent.data.family + parent.data.rank + (asset.kind === 'strands' && ['A','B','C','D'].includes(parent.data.family) ? ' · ' + (parent.data.family === 'A' ? 'S' + (parent.data.rank + 1) : parent.data.family + parent.data.rank) : '') : 'Choose a Lie type for this object.';
-              if (panel.vertices) {
-                sync(panel.vertices, asset.data.vertices.join(', ')); panel.quiver.checked = asset.data.quiver != null;
-                panel.quiver.disabled = !asset.data.quiver && (!parent || (!['A','D','E6','E7','E8'].includes(parent.data.family) && parent.data.rank !== 1) || lieEngineIssues(parent.data, 'dynkin').length > 0);
-              }
               if (panel.repairWord) panel.repairWord.hidden = !panel.inputIssues.length || !asset.data.generators.length;
               feedback(panel, panel.inputIssues.join(' '), !!panel.inputIssues.length);
             }
@@ -1087,6 +1086,7 @@
           const computation = panel.computation, context = contextFor(computation, snapshot.assets,snapshot.diagnostics);
           if (panel.definition.overview && computation.refs.active && !Object.values(context.objects).some(asset=>keyOf(asset)===computation.refs.active)) computation.refs.active = '';
           const bound=get(computation.refs[panel.definition.viewRole||'asset']);
+          if(panel.dynkinRepair){const parent=get(bound?.data.lie);panel.dynkinRepair.hidden=!bound||!parent||!!lieEngineIssues(parent.data,'dynkin').length||!rootObjectIssues(bound,parent).length;}
           panel.title.textContent = panel.definition.assetView&&!panel.definition.overview&&bound?(bound.plainName||bound.name)+' · '+panel.definition.label:panel.definition.label;
           if (context.missing.length) {
             computation.status = context.invalid ? 'invalid' : 'missing'; computation.signature = ''; computation.result = null; panel.renderArea.hidden = true;
@@ -1107,8 +1107,9 @@
               renderer.applying = true;
               const overviewActive = Object.hasOwn(computation.refs,'active') ? get(computation.refs.active) : bound;
               const active = panel.definition.overview ? overviewActive : panel.definition.geometryView || panel.definition.structure ? get(computation.refs.asset) : context.objects[panel.definition.viewRole||'lambda'];
-              try { renderer.editor.applyAssets({ assets: projectedAssets }, refOf(active), null, { mode: panel.definition.assetView?'view':'property', operation: panel.definition.id, rule: computation.rule, settings: computation.settings, light: panel.definition.light, viewDefaults:api.viewDefaults?.(active), references: computation.refs, refs: Object.fromEntries(Object.entries(context.objects).map(([role, asset]) => [role, refOf(asset)])) }); }
+              try { renderer.editor.applyAssets({ assets: projectedAssets }, refOf(active), null, { mode: panel.definition.assetView?'view':'property', operation: panel.definition.id, vertexFocus:dynkinFocus.get(computation.refs.dynkin), multiSelect:dynkinSelectionModes.get(computation.refs.dynkin), rule: computation.rule, settings: computation.settings, light: panel.definition.light, viewDefaults:api.viewDefaults?.(active), references: computation.refs, refs: Object.fromEntries(Object.entries(context.objects).map(([role, asset]) => [role, refOf(asset)])) }); }
               finally { renderer.applying = false; }
+              if(['dynkin-view','dynkin-starting'].includes(panel.definition.id)&&!dynkinSelectionModes.has(computation.refs.dynkin))dynkinSelectionModes.set(computation.refs.dynkin,renderer.editor.objectIO('selection-mode'));
               computation.options = renderer.editor.captureAssetProperties();
               if (panel.definition.light) computation.result = renderer.editor.readObjectResult();
               if(panel.definition.slicing&&computation.result?.hasResult===false){computation.result=null;computation.status='pending';}
@@ -1186,6 +1187,10 @@
       const panel = { id, definition, node, head, title, body, references, controls, message, renderArea, selectors: [], renderers: new Map(), assetKey:definition.overview||definition.structureScene?'':assetKey, location: 'hidden', closed: false, collapsed: false, refreshing: false, comparison:!!(options.newInstance||options.comparison),comparisonIndex:options.comparisonIndex };
       node.dataset.panelRole=definition.input?'modify':definition.assetView||definition.scene||definition.slicingScene||['matrix-view','slice'].includes(type)?'view':'property';
       panels.set(id, panel); head.append(title, element('em', 'toggle-icon', '▾')); body.append(references, controls, message, renderArea); node.append(head, body);
+      if(type==='dynkin-view'){
+        panel.dynkinRepair=button('Reset markings and directions',()=>{const asset=get(panel.computation.refs.dynkin);if(asset)api.update(refOf(asset),{data:{...asset.data,vertices:[1],quiver:null}});},'Reset invalid diagram data to vertex 1 without quiver directions');
+        panel.dynkinRepair.hidden=true;body.insertBefore(panel.dynkinRepair,renderArea);
+      }
       if(definition.slicingScene) body.append(references,controls,message);
       if (definition.input) {
         referenceControl(panel, slot('asset', kindLabels[definition.input], definition.input, {subtype:definition.subtype}), definition, () => panel.assetKey, value => { panel.assetKey = value; if(definition.input==='matrix')ensureMatrixField(value); });
@@ -1365,10 +1370,14 @@
         for (const renderer of new Set([...panel.renderers.values(), panel.propertyRenderer].filter(Boolean))) renderer.editor.dispose();
         panel.node.remove();
       }
-      panels.clear(); computations.clear(); legacyViews.clear(); registry.clear(); nextId = 0;
+      panels.clear(); computations.clear(); legacyViews.clear(); dynkinFocus.clear();dynkinSelectionModes.clear(); registry.clear(); nextId = 0;
     }
     function restorePanels(saved) {
       snapshot = api.snapshot();
+      for(const item of saved)if(['dynkin-view','dynkin-starting'].includes(item.type)){
+        if(Number.isInteger(item.computation?.options?.vertex))dynkinFocus.set(item.computation.refs.dynkin,item.computation.options.vertex);
+        if(typeof item.computation?.options?.multiSelect==='boolean')dynkinSelectionModes.set(item.computation.refs.dynkin,item.computation.options.multiSelect);
+      }
       for(const item of saved){const definition=byType.get(item.type),kind=definition?.input,view=capabilities[kind]?.open,role=byType.get(view)?.viewRole;
         if(item.legacyView)legacyViews.set(item.assetKey,item.legacyView);
         else if(['young','dynkin','strands'].includes(kind)&&!saved.some(other=>other.type===view&&other.computation?.refs[role]===item.assetKey)){
@@ -1410,6 +1419,21 @@
         for(const draft of item.drafts||[]){const control=[...panel.controls.querySelectorAll('input:not([type="checkbox"]),textarea')][draft.index];if(control)window.CalculatorInputSettings.syncEditableValue(control,draft.value,{force:true});}
         if(panel.numberControls&&panel.numberControls.value.value!==get(panel.assetKey)?.data.value){const controls=panel.numberControls;panel.numberDraftMode={key:panel.assetKey,mode:controls.mode.value,value:controls.value.value,replace:controls.replace.checked,positive:controls.positive.checked};}
         updateDensity(panel);
+      }
+      // Older AR snapshots always enabled multi-select. Restore the main
+      // diagram's actual mode before reconciling those historical snapshots.
+      const restoredModes=new Set();
+      for(const panel of panels.values())if(panel.definition.id==='dynkin-view'&&panel.propertyRenderer&&!['missing','invalid'].includes(panel.computation.status)){
+        const key=panel.computation.refs.dynkin;
+        if(!restoredModes.has(key)){dynkinSelectionModes.set(key,panel.propertyRenderer.editor.objectIO('selection-mode'));restoredModes.add(key);}
+      }
+      for(const panel of panels.values())if(['dynkin-vertex','dynkin-view','dynkin-starting'].includes(panel.definition.id)&&panel.propertyRenderer&&!['missing','invalid'].includes(panel.computation.status)){
+        const key=panel.computation.refs.dynkin,renderer=panel.propertyRenderer;renderer.applying=true;
+        try{
+          renderer.editor.objectIO('selection-mode',dynkinSelectionModes.get(key));
+          const focus=dynkinFocus.get(key);if(focus)renderer.editor.objectIO('vertex-focus',focus);
+          panel.computation.options=renderer.editor.captureAssetProperties();panel.computation.result=renderer.editor.readObjectResult();
+        }finally{renderer.applying=false;}
       }
     }
     numbers.setKernel((value,field)=>{

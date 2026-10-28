@@ -8,6 +8,7 @@ async function run(){
     session=await launchBrowser('http://127.0.0.1:'+server.address().port+'/math_workspace.html');const{client}=session,errors=[];
     const read=(fn,...args)=>evaluate(client,'('+fn.toString()+')(...'+JSON.stringify(args)+')');
     const checkFilterRow=async()=>{
+      await read(()=>{document.querySelector('.workspace-create-filter-details').open=true;});
       const layout=await read(()=>{const row=document.querySelector('.workspace-create-filters'),rect=row.getBoundingClientRect(),selects=[...row.querySelectorAll('select')].map(select=>{const r=select.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right,width:r.width};});return {height:rect.height,left:rect.left,right:rect.right,client:row.clientWidth,scroll:row.scrollWidth,selects};});
       assert.equal(layout.selects.length,2);
       assert(Math.abs(layout.selects[0].top-layout.selects[1].top)<1&&layout.height<=36,'both filters occupy one compact row: '+JSON.stringify(layout));
@@ -22,8 +23,9 @@ async function run(){
       window.userCount=kind=>api.localAssetSnapshot().assets.filter(asset=>asset.kind===kind&&!asset.isDefault).length;
       openPicker();
     });
-    const grid=await read(()=>{const list=document.querySelector('.workspace-create-results'),r=list.getBoundingClientRect(),buttons=[...list.querySelectorAll('button')];return{count:buttons.length,columns:getComputedStyle(list).gridTemplateColumns.split(' ').length,visible:buttons.filter(b=>{const q=b.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length,icons:buttons.every(b=>{const icon=b.querySelector('.workspace-create-icon');return !!icon&&(!!icon.textContent||!!icon.querySelector('svg,canvas'));})};});
-    assert(grid.columns>=4&&grid.visible>=12,'desktop exposes many compact choices: '+JSON.stringify(grid));assert(grid.icons);assert.equal(grid.count,27);
+    const grid=await read(()=>{const list=document.querySelector('.workspace-create-results'),r=list.getBoundingClientRect(),buttons=[...list.querySelectorAll('[data-create-kind]')];return{count:buttons.length,columns:getComputedStyle(list).gridTemplateColumns.split(' ').length,visible:buttons.filter(b=>{const q=b.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length,icons:buttons.every(b=>{const icon=b.querySelector('.workspace-create-icon');return !!icon&&(!!icon.textContent||!!icon.querySelector('svg,canvas'));})};});
+    assert(grid.columns>=4&&grid.visible>=12,'desktop exposes many compact choices: '+JSON.stringify(grid));assert(grid.icons);assert.equal(grid.count,await read(()=>Object.keys(MathWorkspaceObjects.kindLabels).length));
+    assert(await read(()=>[...document.querySelectorAll('[data-create-group]')].every(group=>[...group.querySelectorAll('[data-create-kind]')].every(button=>MathWorkspaceCreation.displays.find(display=>display.views.includes(MathWorkspaceObjects.capabilities[button.dataset.createKind].open)).id===group.dataset.createGroup))),'objects are grouped by their actual display');
     assert.equal(await read(()=>document.querySelector('[data-create-stay-open]').checked),false);
     await checkFilterRow();
     const desktop=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-create-grid.png'),Buffer.from(desktop.data,'base64'));
@@ -53,8 +55,8 @@ async function run(){
     const allKinds=await read(()=>[...document.querySelectorAll('[data-create-kind]')].map(b=>b.dataset.createKind));
     await press('ArrowDown');assert.equal(await read(()=>document.activeElement.dataset.createKind),allKinds[0]);
     await press('ArrowRight');assert.equal(await read(()=>document.activeElement.dataset.createKind),allKinds[1]);
-    const columns=await read(()=>getComputedStyle(document.querySelector('.workspace-create-results')).gridTemplateColumns.split(' ').length);
-    await press('ArrowDown');assert.equal(await read(()=>[...document.querySelectorAll('[data-create-kind]')].indexOf(document.activeElement)),columns+1,'Down moves one grid row');
+    const beforeDown=await read(()=>document.activeElement.getBoundingClientRect().top);
+    await press('ArrowDown');assert((await read(()=>document.activeElement.getBoundingClientRect().top))>beforeDown,'Down moves to a visually lower row across groups');
     await press('Home');assert.equal(await read(()=>document.activeElement.dataset.createKind),allKinds[0]);
     await press('End');assert.equal(await read(()=>document.activeElement.dataset.createKind),allKinds.at(-1));
     await client.send('Emulation.setDeviceMetricsOverride',{width:1100,height:620,deviceScaleFactor:1,mobile:false});await delay(50);

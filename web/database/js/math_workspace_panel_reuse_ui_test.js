@@ -35,7 +35,9 @@ async function run(){
     });
     assert.equal(await read(()=>panels.open('matrix-computation','','main',{refs:{matrix:key(matrix)}}).id),await read(()=>calculation.id));
     assert.equal(await read(()=>native(calculation).querySelector('#operation-select').value),'power');
-    await read(()=>{calculation.head.querySelector('[data-workspace-card-action="compare"]').click();window.comparison=[...panels.panels.values()].find(panel=>panel.definition.id==='matrix-computation'&&panel!==calculation);});
+    assert.equal(await read(()=>document.querySelector('[data-workspace-card-action="compare"]')),null,'object panels no longer expose the generic comparison entry');
+    // Compatibility: old saved comparisons can still be represented and restored.
+    await read(()=>{window.comparison=panels.compare(calculation);});
     assert(await read(()=>!!comparison&&comparison.comparison));
     assert.equal(await read(()=>native(comparison).querySelector('#operation-select').value),'power');assert.equal(await read(()=>native(comparison).querySelector('#power-exponent').value),'3');
     assert.match(await read(()=>comparison.propertyRenderer.editor.objectIO('export','rows')),/8/);

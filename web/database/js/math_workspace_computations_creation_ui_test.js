@@ -32,7 +32,9 @@ async function run(){
     await read(()=>{api.selectCanvasTab('assets');window.scrollTo(0,0);document.querySelector('[data-assets-content]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:100,clientY:150}));});
     await read(()=>[...document.querySelectorAll('#workspace-assets-context-menu button')].find(button=>button.textContent==='New…').click());
     const before=await read(()=>api.localAssetSnapshot().assets.filter(a=>a.kind==='sheaf').length);
-    await client.send('Input.insertText',{text:'sheaf'});
+    // Use an object-specific alias: "sheaf" also matches every object in its display group.
+    await read(()=>{document.querySelector('.workspace-create-filter-details').open=true;document.querySelector('[data-create-search]').focus();});
+    await client.send('Input.insertText',{text:'coherent'});
     await client.send('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});await client.send('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});
     assert.equal(await read(()=>document.activeElement.dataset.createKind),'sheaf');
     await client.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});await client.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
@@ -40,7 +42,7 @@ async function run(){
     await delay(100);assert.equal(await read(()=>api.localAssetSnapshot().assets.filter(a=>a.kind==='sheaf').length),before+1);
     assert.equal(await read(()=>document.querySelector('#workspace-create-dialog').open),false);
     assert.equal(await read(()=>document.activeElement.matches('[data-assets-name]')),true,'creation should keep focus on the new sheaf name');
-    await read(()=>{api.selectCanvasTab('assets');document.querySelector('[data-assets-content]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:100,clientY:150}));[...document.querySelectorAll('#workspace-assets-context-menu button')].find(button=>button.textContent==='New…').click();api.state.snapshot.capabilities.sheaf=false;const search=document.querySelector('[data-create-search]');search.value='sheaf';search.dispatchEvent(new Event('input'));});
+    await read(()=>{api.selectCanvasTab('assets');document.querySelector('[data-assets-content]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:100,clientY:150}));[...document.querySelectorAll('#workspace-assets-context-menu button')].find(button=>button.textContent==='New…').click();api.state.snapshot.capabilities.sheaf=false;const search=document.querySelector('[data-create-search]');search.value='coherent';search.dispatchEvent(new Event('input'));});
     assert.equal(await read(()=>document.querySelector('[data-create-kind="sheaf"]').disabled),true);
     await client.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});await client.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
     assert.equal(await read(()=>document.querySelector('#workspace-create-dialog').open),true,'Enter must not activate an unavailable object');
