@@ -1,0 +1,101 @@
+body.ramified-theme {
+  --bg: #F1F3EF;
+  --surface: #FFFFFF;
+  --border: #C3CBC5;
+  --text: #18212B;
+  --muted: #4F5A64;
+  --accent: #0E6B63;
+  --accent2: #8B3A2A;
+}
+
+body.ramified-theme > header {
+  background: var(--bg);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding-top: 14px;
+  padding-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+body.ramified-theme > header h1 {
+  font-size: 1.4rem;
+  font-family: inherit;
+}
+
+body.ramified-theme > header .wordmark {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+body.ramified-theme > header span {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+body.ramified-theme > header span a,
+body.ramified-theme > header span a:visited {
+  color: inherit;
+}
+
+body.ramified-theme > header span a:hover,
+body.ramified-theme > header span a:focus-visible {
+  color: var(--accent);
+}
+
+body.ramified-theme > header span:empty {
+  display: none;
+}
+
+body.ramified-theme .workspace-panel-title .panel-title-text,
+body.ramified-theme #workspace-canvas-name,
+body.ramified-theme .workspace-inspector-head h2,
+body.ramified-theme .card-head-label,
+body.ramified-theme .input-label,
+body.ramified-theme .workspace-assets-content .workspace-asset-type {
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+body.ramified-theme button:not(:has(.workspace-asset-icon)) {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+
+body.ramified-theme .btn-ghost {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+body.ramified-theme .btn-ghost:hover {
+  background: var(--accent);
+  color: #FFFFFF;
+}
+
+body.ramified-theme .btn:not(.btn-ghost):not(.workspace-assets-delete-confirm) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #FFFFFF;
+}
+
+body.ramified-theme .workspace-canvas-tab-close,
+body.ramified-theme .card-head [data-workspace-card-action="hide"] {
+  color: var(--muted);
+}
+
+body.ramified-theme .workspace-canvas-tab-close:hover,
+body.ramified-theme .workspace-canvas-tab-close:focus-visible,
+body.ramified-theme .card-head [data-workspace-card-action="hide"]:hover,
+body.ramified-theme .card-head [data-workspace-card-action="hide"]:focus-visible {
+  color: var(--text);
+}
+
+body.ramified-theme .workspace-canvas-tab-close:hover,
+body.ramified-theme .workspace-canvas-tab-close:focus-visible {
+  background: color-mix(in srgb, var(--text) 8%, var(--surface));
+}

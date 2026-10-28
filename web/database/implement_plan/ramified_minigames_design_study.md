@@ -1,5 +1,11 @@
 # Ramified Minigames 独立界面对照页
 
+> Build 2026-10-28.5：Game actions 与撤销/重做/重开/设置图标工具栏恢复原版布局；修复首轮点击跳棋 AI 棋子导致回合卡住的问题，原版页和实验页均通过三款本地 AI 游戏的连续人机回归。最新状态见 `analysis/ramified_minigames_study_redesign_review_2026-10-28.md`。
+
+> Build 2026-10-28.4：选关与开局准备界面也恢复原版布局和原版预览，移除新增的随机棋盘/预设列表及双栏排版。详情见下述审查记录顶部的最新状态。
+
+> 2026-10-28 更新：当前为 Build 2026-10-28.3。保留新标题，按用户反馈恢复原棋盘/棋子/粘合/动画与原 PNG 缩略图，游戏列表恢复六款分页。舞台、菜单和 DPR 修复继续保留。最新实施状态及验证见 `analysis/ramified_minigames_study_redesign_review_2026-10-28.md`；下文是此前实验记录。
+
 日期：2026-10-28。实验入口：`ramified_minigames_study.html`。
 
 ## 范围与判断

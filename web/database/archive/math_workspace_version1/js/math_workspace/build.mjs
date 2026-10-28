@@ -24,7 +24,9 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const sourceRoot=process.env.MATH_WORKSPACE_SOURCE_ROOT?path.resolve(process.env.MATH_WORKSPACE_SOURCE_ROOT):root;
 const outputs=new Map(), inputs=new Map();
 const workspaceFile=p=>p.startsWith('js/math_workspace/')||p.startsWith('node_modules/')||['package.json','package-lock.json','math_workspace.html','math_workspace_browser_test.html'].includes(p);
-const read=async p=>{const text=await fs.readFile(path.resolve(workspaceFile(p)?root:sourceRoot,p),'utf8');inputs.set(p,text);return text;};
+const normalizeText=text=>typeof text==='string'?text.replace(/\r\n?/g,'\n'):text;
+const sameText=(left,right)=>normalizeText(left)===normalizeText(right);
+const read=async p=>{const text=normalizeText(await fs.readFile(path.resolve(workspaceFile(p)?root:sourceRoot,p),'utf8'));inputs.set(p,text);return text;};
 const clean=s=>s.split(/[?#]/)[0];
 const attr=(n,k)=>n.attrs?.find(a=>a.name===k)?.value;
 const nodes=n=>[n,...(n.childNodes||[]).flatMap(nodes)];
@@ -203,7 +205,7 @@ async function compileEditor(e){
   return source.replace('const globalThis=window,self=window;', 'const globalThis=window,self=window,module=undefined,require=undefined;');
 }
 async function expandWorker(file, seen=new Set()){
-  file=clean(file);if(seen.has(file))return '';seen.add(file);let source=await read(file);
+  file=clean(file);if(seen.has(file))return '';seen.add(file);let source=normalizeText(await read(file));
   const matches=[...source.matchAll(/importScripts\(([^;]+)\);?/g)];
   for(const m of matches){let inline='';for(const s of m[1].matchAll(/["']([^"']+)["']/g))inline+=await expandWorker(path.posix.join(path.posix.dirname(file),clean(s[1])),seen)+'\n';source=source.replace(m[0],inline);}
   return source;
@@ -245,7 +247,7 @@ async function build(){
   }
   for(const p of Object.keys(result.metafile.inputs))if(!p.startsWith('calculator:')){try{await read(path.relative(root,path.resolve(p)).replaceAll('\\','/'));}catch{}}
   outputs.set('js/math_workspace/dist/build.json',JSON.stringify({bundler:'esbuild@0.25.12',sha256:revision,editors:editors.map(e=>({id:e.id,source:e.page,status:'parity-pending'}))},null,2)+'\n');
-  for(const [p,contents] of outputs){const previous=await fs.readFile(path.join(root,p),'utf8').catch(()=>null);if(process.argv.includes('--check')){if(previous!==contents)throw new Error(`Stale build: ${p}; run npm run workspace:build`);}else if(previous!==contents){await fs.mkdir(path.dirname(path.join(root,p)),{recursive:true});await fs.writeFile(path.join(root,p),contents);}}
+  for(const [p,contents] of outputs){const previous=await fs.readFile(path.join(root,p),'utf8').catch(()=>null);if(process.argv.includes('--check')){if(!sameText(previous,contents))throw new Error(`Stale build: ${p}; run npm run workspace:build`);}else if(!sameText(previous,contents)){await fs.mkdir(path.dirname(path.join(root,p)),{recursive:true});await fs.writeFile(path.join(root,p),contents);}}
   // The live workspace consumes this self-contained bundle.  Publishing it
   // here keeps the generated runtime, its hash, and the live HTML in one
   // reproducible build instead of relying on a manual copy of dist/workspace.
@@ -256,11 +258,11 @@ async function build(){
   const previousHtml=await fs.readFile(liveHtml,'utf8').catch(()=>null);
   const nextHtml=previousHtml?.replace(/js\/math_workspace_native_editors_v8\.js(?:\?[^" ]*)?/g,liveScript);
   if(process.argv.includes('--check')){
-    if(previousBundle!==result.outputFiles[0].text)throw new Error('Stale live native editor bundle; run npm run workspace:build');
-    if(previousHtml!==nextHtml)throw new Error('Stale live workspace cache query; run npm run workspace:build');
+    if(!sameText(previousBundle,result.outputFiles[0].text))throw new Error('Stale live native editor bundle; run npm run workspace:build');
+    if(!sameText(previousHtml,nextHtml))throw new Error('Stale live workspace cache query; run npm run workspace:build');
   }else{
-    if(previousBundle!==result.outputFiles[0].text)await fs.writeFile(liveBundle,result.outputFiles[0].text);
-    if(previousHtml!==nextHtml)await fs.writeFile(liveHtml,nextHtml);
+    if(!sameText(previousBundle,result.outputFiles[0].text))await fs.writeFile(liveBundle,result.outputFiles[0].text);
+    if(!sameText(previousHtml,nextHtml))await fs.writeFile(liveHtml,nextHtml);
   }
   console.log(`Workspace: ${editors.length} native editor factories, ${(result.outputFiles[0].contents.length/1024/1024).toFixed(1)} MB classic bundle`);
 }

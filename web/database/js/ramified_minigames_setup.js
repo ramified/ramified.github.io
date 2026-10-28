@@ -11526,6 +11526,9 @@ function handleChineseCheckersCanvasClick(event) {
   if (localAiThinking || localAiOwnsCurrentTurn()) return;
   const target = tileFromCanvasEvent(event);
   const marble = target ? chineseCheckerMarbleAt(game, target.index) : null;
+  // The opening round permits choosing another human color, but selecting an
+  // AI color would change the turn without going through the AI move lifecycle.
+  if (!onlineIsInRoom() && marble && isLocalAiControllerValue(localAiControllerForColor(game, marble.color))) return;
   if (onlineIsInRoom() && isChineseCheckersGame(game)) {
     if (!onlineSocketOpen()) {
       syncStatus('online Chinese Checkers blocked', 'online room is disconnected', 'warn');
