@@ -3,6 +3,10 @@ const assert = require('node:assert/strict');
 global.MathWorkspaceObjects = require('./math_workspace_objects.js');
 global.StrandDrawing = require('./strand_drawing.js');
 const icons = require('./math_workspace_asset_icons.js');
+assert.deepEqual(icons.topologyPreview(),{knot:'trefoil-rounded','dual-graph':'weighted-loop-label'});
+for(const kind of ['knot','dual-graph']){assert.equal(icons.topologyRefinements[kind].length,4);assert(icons.topologyRefinements[kind].every(id=>icons.topologyOptions[kind].some(([choice])=>choice===id)));}
+icons.previewTopology({knot:'trefoil','dual-graph':'theta'});assert.deepEqual(icons.topologyPreview(),{knot:'trefoil','dual-graph':'theta'});
+assert.throws(()=>icons.previewTopology({knot:'missing'}),/Unknown/);assert.equal(icons.topologyPreview().knot,'trefoil');icons.previewTopology(icons.topologyDefaults);
 assert.deepEqual(icons.describe({kind:'variety',name:'Variety',data:{}}),{source:'generic',symbol:'X'});
 assert.deepEqual(icons.describe({kind:'variety',name:'Y_2',data:{}}),{source:'name',name:'Y_2'},'variety names retain precedence over the default X');
 assert.deepEqual(icons.settings(),{exactColor:'',genericColor:'#a8510b',stroke:0.7,strandStroke:19,hatch:true,matrixStroke:2.1,matrixEntryStroke:0.7,matrixFontSize:20,matrixFontFamily:'"Times New Roman", serif',matrixRowGap:0,matrixColumnGap:0,matrixBracketGap:1,matrixBracketCurve:3,matrixPadding:0,fanNegativeLength:0.7,coneNegativeLength:0.7});

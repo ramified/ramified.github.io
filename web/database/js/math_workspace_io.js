@@ -74,6 +74,7 @@
       for (const spec of references(asset)) {
         if (!spec.key) continue; // Incomplete new objects are legitimate workspace state.
         const target = byKey.get(spec.key);
+        if(!target&&spec.allowMissing)continue; // Preserve a topology asset's broken optional source for repair/detach.
         if (!target || target.kind !== spec.kind) throw new Error('The backup contains a missing or incompatible asset reference: ' + spec.key);
         visit(target);
       }

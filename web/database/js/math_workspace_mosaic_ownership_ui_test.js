@@ -73,7 +73,7 @@ async function run(){
     assert(await read(()=>diagram.inputIssues.length>0),'occupied removed tiles suspend the piece-only diagram');
     assert.equal(await read(()=>JSON.stringify(get(first).data)),await read(()=>savedFirst));
     assert.equal(await read(()=>JSON.stringify(get(second).data)),await read(()=>originalSecond));
-    assert.equal(await read(()=>diagramStats.computation.status),'missing');
+    assert.equal(await read(()=>diagramStats.computation.status),'invalid');
     assert.equal(await read(()=>stats.computation.status),'current','background properties remain usable when decorations are incompatible');
     await clickTile('background',12);
     await waitFor(()=>read(()=>get(space).data.removedTiles.length===0));

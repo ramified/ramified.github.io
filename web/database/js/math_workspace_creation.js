@@ -1,7 +1,7 @@
 (function(root){
   'use strict';
   const subjects = [
-    {id:'topology',label:'Topology and Mosaic',kinds:['mosaic-space','mosaic-diagram']},
+    {id:'topology',label:'Topology and Mosaic',kinds:['mosaic-space','mosaic-diagram','knot','dual-graph']},
     {id:'linear',label:'Linear algebra',kinds:['number','field','field-extension','matrix','point','vector','frame','lattice']},
     {id:'representation',label:'Representation theory',kinds:['young','lie','dynkin','strands','roots','weyl','fan']},
     {id:'categories',label:'Categories',kinds:['category','functor']},
@@ -11,6 +11,8 @@
   const descriptions={filtration:'An indexed sequence of subobjects with symbolic or linked subquotients.',complex:'A graded sequence of symbolic or linked objects and differentials.','field-extension':'An extension with an explicit base field and defining polynomial.',number:'A symbolic or valued element of a shared coefficient ring; usable as genus or rank.','mosaic-space':'A tiled space with cuts and edge identifications.','mosaic-diagram':'A knot, link or graph on a Mosaic space.',young:'Ordinary or generalized rows of a Young diagram.',lie:'A Lie family and rank.',field:'A commutative ring with identity, including integer rings and fields.',matrix:'A matrix with an explicit coefficient ring.',category:'Objects and morphisms of a category.',functor:'A covariant or contravariant functor.',dynkin:'A Lie type with marked vertices and optional quiver directions.',strands:'An ordered word of crossings or generators.',variety:'A variety, including Grassmannian and toric models.',sheaf:'A sheaf or vector bundle on a variety.',map:'A map of varieties, sheaves, or other maps.',frame:'A position and coordinate basis.',point:'A coordinate point.',vector:'A vector in an ambient space.',polytope:'A regular polytope or simplex.',sphere:'A sphere in an ambient space.',roots:'A Lie root system.',lattice:'A lattice specified by a basis or another object.',voronoi:'A Voronoi cell of a lattice.',formula:'Equations or inequalities defining a set.',tropical:'A tropical polynomial.',weyl:'Weyl chambers of a root system.',cone:'A rational cone.',fan:'A collection of rational cones.'};
   const aliases={field:'ring field coefficient integer rational real complex algebra commutative',number:'scalar rational integer genus rank parameter',dynkin:'marked pointed decorated vertex quiver',young:'partition tableau symmetric exterior',lie:'lie algebra root system',strands:'braid coxeter temperley lieb kazhdan lusztig',matrix:'linear transformation coefficients',sheaf:'bundle coherent locally free',map:'morphism arrow',cone:'toric convex',fan:'toric',point:'coordinates',formula:'formula set equation inequality constraint implicit zero locus',weyl:'reflection chamber',voronoi:'dirichlet cell'};
   const displays = [
+    {id:'knots',label:'Knots and links',views:['knot-view']},
+    {id:'graphs',label:'Dual graphs',views:['dual-graph-view']},
     {id:'complex',label:'Complexes',views:['complex-diagrams','complex-view','filtration-view']},
     {id:'extensions',label:'Field extensions',views:['field-extension-view']},
     {id:'geometry',label:'Geometry',views:['geometry-view']},
@@ -25,6 +27,10 @@
     {id:'sheaf',label:'Variety & sheaf diagrams',views:['sheaf-view']},
     {id:'other',label:'Other displays',views:['asset-view']}
   ];
+  descriptions.knot='A planar knot or link, independently editable or following a Mosaic Diagram.';
+  descriptions['dual-graph']='A weighted graph with marked legs, independently editable or following a Mosaic Diagram.';
+  aliases.knot='knot link planar crossing PD DT braid trefoil unknot';
+  aliases['dual-graph']='dual graph weighted stable genus half edge marking';
   function catalog(subtypes,labels={},capabilities=root.MathWorkspaceObjects?.capabilities||{}) {
     return Object.entries(subtypes).map(([kind,types])=>({kind,label:({variety:'Variety',sheaf:'Sheaf',map:'Map',dynkin:'Dynkin',young:'Young',point:'Point'}[kind])||labels[kind]||types[0][1],description:descriptions[kind]||'',display:displays.find(d=>d.views.includes(capabilities[kind]?.open))?.id||'other',subjects:subjects.filter(s=>s.kinds.includes(kind)).map(s=>s.id),search:[kind,labels[kind]||'',...types.map(t=>t[1]),aliases[kind]||'',descriptions[kind]||''].join(' ').toLowerCase()}));
   }
@@ -63,11 +69,16 @@
     const shortcutVisibility=new Map();
     let dialog,search,list,count,filters,filterDetails,filterSummary,displaySelect,subjectSelect,opener,stayOpen,dependencyMode,addedStatus,statusTimer,lastCreatedFocus,subject='',display='',creating=false,busy=false,resultsSignature='';
     const element=(tag,text,className)=>Object.assign(document.createElement(tag),{textContent:text||'',className:className||''});
+    function closeIcon(){
+      const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg'),path=document.createElementNS(ns,'path');
+      svg.setAttribute('viewBox','0 0 12 12');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
+      path.setAttribute('d','M3 3L9 9M9 3L3 9');path.setAttribute('fill','none');path.setAttribute('stroke','currentColor');path.setAttribute('stroke-width','1.5');path.setAttribute('stroke-linecap','round');svg.append(path);return svg;
+    }
     function results(preserveCatalog=false,force=false){
       const items=filter(entries,search.value,subject,display);
       // Recent shortcuts refresh on the next visit/filter change; adding an
       // object in Stay open mode must keep its existing result button and focus.
-      const signature=JSON.stringify([subject,display,preferences.favorites,preferences.hiddenRows,root.MathWorkspaceAssetIcons.settings(),items.map(item=>[item.kind,item.subjects,capabilities()?.[item.kind]===false])]);
+      const signature=JSON.stringify([subject,display,preferences.favorites,preferences.hiddenRows,root.MathWorkspaceAssetIcons.settings(),root.MathWorkspaceAssetIcons.topologyPreview?.(),items.map(item=>[item.kind,item.subjects,capabilities()?.[item.kind]===false])]);
       // The editable helper commits on blur. An unchanged filter must keep the
       // result button that ArrowDown just focused, rather than replacing it.
       if(signature===resultsSignature&&!force)return;
@@ -108,7 +119,7 @@
         const shortcuts=kinds.map(kind=>items.find(item=>item.kind===kind)).filter(Boolean);
         if(!shortcuts.length)continue;
         const section=element('section','','workspace-create-shortcuts');section.dataset.createShortcuts=id;section.setAttribute('aria-label',label);
-        const heading=element('div','','workspace-create-shortcut-heading'),hide=element('button','×','workspace-create-shortcut-hide'),row=element('div','','workspace-create-shortcut-row');
+        const heading=element('div','','workspace-create-shortcut-heading'),hide=element('button','','workspace-create-shortcut-hide'),row=element('div','','workspace-create-shortcut-row');hide.append(closeIcon());
         hide.type='button';hide.dataset.createHideShortcuts=id;hide.setAttribute('aria-label','Close '+label+' row');hide.title='Close '+label+' row; show it again in Filters';
         hide.addEventListener('click',()=>{
           const keyboard=hide.matches(':focus-visible'),scroll=list.scrollTop;
@@ -116,7 +127,7 @@
           if(keyboard)filterSummary.focus({preventScroll:true});list.scrollTop=scroll;
         });
         shortcuts.forEach((item,index)=>{
-          const tile=choice(item,true),remove=element('button','×','workspace-create-shortcut-remove');remove.type='button';remove.dataset.createRemoveShortcut=id;remove.dataset.createShortcutKind=item.kind;
+          const tile=choice(item,true),remove=element('button','','workspace-create-shortcut-remove');remove.append(closeIcon());remove.type='button';remove.dataset.createRemoveShortcut=id;remove.dataset.createShortcutKind=item.kind;
           remove.title='Remove from '+label.toLowerCase()+': '+item.label;remove.setAttribute('aria-label',remove.title);
           remove.addEventListener('click',()=>{
             const keyboard=remove.matches(':focus-visible'),scroll=list.scrollTop;

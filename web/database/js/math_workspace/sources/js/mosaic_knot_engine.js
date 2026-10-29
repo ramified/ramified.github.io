@@ -1419,6 +1419,16 @@
   global.MosaicKnotEngine = {
     identify,
     buildDiagram,
+    // Workspace assets provide an already validated planar rotation system.
+    identifyPlanar(pdEntries, components, circles) {
+      const componentCount=components.length+circles,occurrences=components.flatMap(c=>c.occurrences);
+      const code=componentCount===1?canonicalDtFromOccurrences(occurrences,false):null;
+      const mirror=componentCount===1?canonicalDtFromOccurrences(occurrences,true):null;
+      const diagram={pdEntries,occurrences,componentCount,crossingCount:pdEntries.length,dtKey:code?keyOf(code):'',mirrorDtKey:mirror?keyOf(mirror):''};
+      const result=!pdEntries.length?{status:'crossing-free diagram',name:componentCount===1?'0_1':componentCount+' component unlink'}:circles?null:identifyDiagram(diagram,'invariants');
+      return {pd:pdEntries.length?formatPd(pdEntries):EMPTY_PD,dt:code?formatDt(code):'',...(result||{status:'code generated',name:pdEntries.length?'Not identified':componentCount+' component unlink'}),
+        componentCount,crossingCount:pdEntries.length};
+    },
     normalizeMethod
   };
 })(typeof window !== 'undefined' ? window : globalThis);

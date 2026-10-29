@@ -26,6 +26,12 @@
     matrix:{kind:'matrix',entries:[['*','*'],['*','*']]}
   };
   let settings = { ...defaults }, patternId = 0;
+  const topologyOptions={knot:[['current','Current symbol'],['trefoil','Previous trefoil'],['crossing','Over / under crossing'],['linked-rings','Linked rings'],['trefoil-smooth','Smooth classic'],['trefoil-rounded','Rounder lobes'],['trefoil-open','More open center']],
+    'dual-graph':[['current','Current symbol'],['weighted-loop','Previous weighted vertex'],['marked-cycle','Cycle + marked leg'],['theta','Two vertices, three edges'],['weighted-loop-label','Vertex + loop'],['weighted-loop-disc','Open vertex with numeral'],['weighted-loop-cutout','Solid vertex with cutout genus']]};
+  const topologyRefinements={knot:['trefoil','trefoil-smooth','trefoil-rounded','trefoil-open'],
+    'dual-graph':['weighted-loop','weighted-loop-label','weighted-loop-disc','weighted-loop-cutout']};
+  const topologyDefaults=Object.freeze({knot:'trefoil-rounded','dual-graph':'weighted-loop-label'});
+  let topologyChoices={...topologyDefaults};
   const cache = new Map();
   const fittedHosts = new Set();
   let fitObserver = null;
@@ -57,6 +63,7 @@
     return true;
   }
   function describeValue(asset, resolve = () => null) {
+    if(asset.kind==='knot'||asset.kind==='dual-graph')return {source:'generic',kind:asset.kind,symbol:asset.kind==='knot'?'⋈':'●—●'};
     if (asset.kind === 'mosaic-space' || asset.kind === 'mosaic-diagram') return { source: 'generic', kind: asset.kind, symbol: generic[asset.kind] };
     if (asset.kind === 'matrix') {
       let data = asset.data || {};
@@ -282,7 +289,8 @@
   function render(asset, resolve) {
     const description = describe(asset, resolve), model=description.representative || description, host = document.createElement('span');
     host.className = 'workspace-asset-icon'; host.dataset.iconSource = description.source; host.dataset.iconKind=asset.kind; host.setAttribute('aria-hidden', 'true');
-    if (model.variant) { host.dataset.iconVariant=model.variant;host.append(objectTypeIcon(model)); }
+    if(topologyOptions[asset.kind]&&topologyChoices[asset.kind]!=='current'){host.dataset.iconVariant=topologyChoices[asset.kind];host.append(topologyIcon(asset.kind,topologyChoices[asset.kind]));}
+    else if (model.variant) { host.dataset.iconVariant=model.variant;host.append(objectTypeIcon(model)); }
     else if (model.kind === 'mosaic-space' || model.kind === 'mosaic-diagram') host.append(mosaicIcon(model.kind));
     else if (model.kind === 'matrix') host.append(matrixIcon(model));
     else if (model.kind === 'roots' || model.kind === 'weyl') host.append(a2Icon(model.kind==='weyl'));
@@ -340,7 +348,70 @@
     }
     return { ...settings };
   }
-  const api = { defaults, describe, letterName, render, renderType:kind=>render({kind,name:'',data:{}}), typeset, configure, settings: () => ({ ...settings }) };
+  function topologyIcon(kind,choice){
+    const svg=svgNode('svg',{viewBox:'0 0 40 40',fill:'none',stroke:'currentColor','stroke-width':1.8,'stroke-linecap':'round','stroke-linejoin':'round','data-topology-shape':choice});
+    const path=d=>svg.append(svgNode('path',{d})),dot=(x,y,r=2.5)=>svg.append(svgNode('circle',{cx:x,cy:y,r,fill:'currentColor',stroke:'none'}));
+    function sampled(point,gaps=[]){let d='',drawing=false;for(let i=0;i<=360;i++){const t=2*Math.PI*i/360,skip=gaps.some(g=>Math.abs(Math.atan2(Math.sin(t-g),Math.cos(t-g)))<.09);if(skip){drawing=false;continue;}const p=point(t);d+=(drawing?'L':'M')+p[0].toFixed(2)+','+p[1].toFixed(2);drawing=true;}path(d);}
+    function smoothTrefoil(coefficient){
+      // The harmonic projection has threefold symmetry and no zero tangents.
+      // Hermite-to-Bezier segments share the exact analytic derivative at joins.
+      const b=coefficient,u=(-1+Math.sqrt(1+32*b*b))/(8*b),xMax=Math.sqrt(1-u*u)*(1+2*b*u),yMin=-1-b,yMax=b+1/(8*b);
+      const scale=Math.min(30/(2*xMax),30/(yMax-yMin)),yCenter=(yMin+yMax)/2;
+      const point=t=>[20+scale*(Math.sin(t)+b*Math.sin(2*t)),20+scale*(Math.cos(t)-b*Math.cos(2*t)-yCenter)];
+      const tangent=t=>[scale*(Math.cos(t)+2*b*Math.cos(2*t)),scale*(-Math.sin(t)+2*b*Math.sin(2*t))];
+      const first=Math.acos(-1/(2*b)),crossings=[first,first+2*Math.PI/3,first+4*Math.PI/3];
+      const cuts=crossings.map(t=>{const v=tangent(t);return 3.2/Math.hypot(v[0],v[1]);});
+      const pair=p=>p.map(n=>n.toFixed(4)).join(',');
+      for(let i=0;i<3;i++){
+        const start=crossings[i]+cuts[i],end=crossings[(i+1)%3]+(i===2?2*Math.PI:0)-cuts[(i+1)%3],steps=Math.ceil((end-start)/.15),dt=(end-start)/steps;
+        let d='M'+pair(point(start));
+        for(let j=0;j<steps;j++){const t=start+j*dt,p=point(t),q=point(t+dt),a=tangent(t),z=tangent(t+dt);d+='C'+pair([p[0]+a[0]*dt/3,p[1]+a[1]*dt/3])+' '+pair([q[0]-z[0]*dt/3,q[1]-z[1]*dt/3])+' '+pair(q);}
+        path(d);
+      }
+      svg.dataset.trefoilCurve='cubic';
+    }
+    function refinedWeightedVertex(style){
+      const radius=style==='label'?3:5;
+      path('M'+(20-.6*radius)+' '+(21-.8*radius)+'C1 1 39 1 '+(20+.6*radius)+' '+(21-.8*radius));
+      path('M'+(20-radius/Math.sqrt(5))+' '+(21+2*radius/Math.sqrt(5))+'L12 34M'+(20+2*radius/Math.sqrt(5))+' '+(21+radius/Math.sqrt(5))+'L34 28');
+      const text=(value,x,y,fill='currentColor',size=9)=>{const label=svgNode('text',{x,y,fill,stroke:'none','font-family':'Georgia, Times New Roman, serif','font-size':size,'text-anchor':'middle','dominant-baseline':'central'});label.textContent=value;return label;};
+      if(style==='label'){dot(20,21,radius);}
+      else if(style==='disc'){svg.append(svgNode('circle',{cx:20,cy:21,r:radius,'stroke-width':1.5}));svg.append(text('1',20,21,'currentColor',9));}
+      else{
+        const id='workspace-weight-cutout-'+(++patternId),defs=svgNode('defs'),mask=svgNode('mask',{id,maskUnits:'userSpaceOnUse',x:14,y:15,width:12,height:12});
+        mask.append(svgNode('rect',{x:14,y:15,width:12,height:12,fill:'white',stroke:'none'}),text('g',20,20.4,'black',8.5));defs.append(mask);svg.append(defs,svgNode('circle',{cx:20,cy:21,r:radius,fill:'currentColor',stroke:'none',mask:'url(#'+id+')'}));
+      }
+      dot(12,34,1.4);dot(34,28,1.4);svg.dataset.weightStyle=style;
+    }
+    if(kind==='knot'){
+      if(choice==='trefoil-smooth')smoothTrefoil(2);
+      else if(choice==='trefoil-rounded')smoothTrefoil(1.6);
+      else if(choice==='trefoil-open')smoothTrefoil(2.5);
+      else if(choice==='trefoil')sampled(t=>[20+5.4*(2+Math.cos(3*t))*Math.cos(2*t),20+5.4*(2+Math.cos(3*t))*Math.sin(2*t)],[Math.PI/2,7*Math.PI/6,11*Math.PI/6]);
+      else if(choice==='crossing'){path('M7 9C15 9 25 31 33 31M7 31C11 31 14 27 17 23M23 17C26 13 29 9 33 9');}
+      else if(choice==='linked-rings'){const angle=Math.acos(5/9);sampled(t=>[15+9*Math.cos(t),20+9*Math.sin(t)],[angle]);sampled(t=>[25+9*Math.cos(t),20+9*Math.sin(t)],[Math.PI+angle]);}
+    }else if(choice==='weighted-loop-label'||choice==='weighted-loop-disc'||choice==='weighted-loop-cutout'){
+      refinedWeightedVertex(choice.slice('weighted-loop-'.length));
+    }else if(choice==='weighted-loop'){
+      path('M18 19C-1 2 37 0 21 19M19 23L12 34M23 22L34 28');dot(20,21,4.2);svg.append(svgNode('circle',{cx:20,cy:21,r:1.6,stroke:'var(--surface, white)','stroke-width':1}));dot(12,34,1.4);dot(34,28,1.4);
+    }else if(choice==='marked-cycle'){
+      path('M10 28L20 9L30 28ZM30 28L37 33');[ [10,28],[20,9],[30,28] ].forEach(([x,y])=>dot(x,y));svg.append(svgNode('circle',{cx:37,cy:33,r:1.7}));
+    }else if(choice==='theta'){
+      path('M8 20H32M8 20C11 1 29 1 32 20M8 20C11 39 29 39 32 20');dot(8,20,3);dot(32,20,3);
+    }
+    return svg;
+  }
+  function renderTopologyChoice(kind,choice){
+    if(!topologyOptions[kind]?.some(([id])=>id===choice))throw new Error('Unknown topology icon choice.');
+    const host=document.createElement('span');host.className='workspace-asset-icon';host.dataset.iconKind=kind;host.dataset.iconSource='generic';host.dataset.iconVariant=choice;host.setAttribute('aria-hidden','true');
+    if(choice==='current')host.textContent=kind==='knot'?'⋈':'●—●';else host.append(topologyIcon(kind,choice));return host;
+  }
+  function previewTopology(next){
+    for(const [kind,choice]of Object.entries(next))if(!topologyOptions[kind]?.some(([id])=>id===choice))throw new Error('Unknown topology icon choice.');
+    topologyChoices={...topologyChoices,...next};return {...topologyChoices};
+  }
+  const api = { defaults, describe, letterName, render, renderType:kind=>render({kind,name:'',data:{}}), typeset, configure, settings: () => ({ ...settings }),
+    topologyDefaults,topologyOptions,topologyRefinements,renderTopologyChoice,previewTopology,topologyPreview:()=>({...topologyChoices}) };
   if (typeof document !== 'undefined') configure();
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MathWorkspaceAssetIcons = api;

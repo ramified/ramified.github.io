@@ -54,8 +54,9 @@ async function run(){
     const screenshot=await client.send('Page.captureScreenshot',{format:'png'});const image=path.join(os.tmpdir(),'math-workspace-mosaic-space.png');fs.writeFileSync(image,Buffer.from(screenshot.data,'base64'));console.log('Screenshot: '+image);
     const snapshots=await read(()=>panels.capturePanels());
     assert(snapshots.length>=5);
-    const extra=await read(()=>['mosaic-knot','mosaic-dual','mosaic-seifert','mosaic-poincare'].map(type=>{const p=panels.open(type,key(first),'side');const mounted=!!p.propertyRenderer;panels.move(p,'hidden');return mounted;}));
-    assert(extra.every(Boolean),'derived Mosaic panels mount independently');
+    const extra=await read(()=>['mosaic-seifert','mosaic-poincare'].map(type=>{const p=panels.open(type,key(first),'side');const mounted=!!p.propertyRenderer;panels.move(p,'hidden');return mounted;}));
+    assert(extra.every(Boolean),'Mosaic surface display and background properties remain available');
+    assert(await read(()=>!MathWorkspaceObjects.capabilities['mosaic-diagram'].properties.some(id=>['mosaic-knot','mosaic-dual','mosaic-seifert'].includes(id))),'knot / graph properties move to independent assets; the surface is a view');
     await read(()=>{window.backup=panels.exportText('workspace');window.beforeRestore=JSON.stringify(api.localAssetSnapshot().assets);panels.importText('workspace',backup);});
     assert.equal(await read(()=>JSON.stringify(api.localAssetSnapshot().assets.map(a=>[key(a),a.data]))),await read(()=>JSON.stringify(JSON.parse(beforeRestore).map(a=>[key(a),a.data]))),'workspace backup roundtrip preserves Mosaic assets');
     await read(()=>{window.beforeImport=api.localAssetSnapshot().assets.length;api.openCanvas('mosaic');api.sessions.get('mosaic').editor.environment.document.querySelector('[data-mosaic-save-assets]').click();});
