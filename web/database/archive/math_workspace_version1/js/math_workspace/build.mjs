@@ -228,7 +228,10 @@ async function build(){
   outputs.set('js/math_workspace/dist/mathjax/LICENSE',await read('node_modules/mathjax/LICENSE'));
   const virtual=new Map();for(const e of editors)virtual.set(`editor:${e.id}`,await compileEditor(e));
   const sourceImports={name:'workspace-source-imports',setup(builder){builder.onResolve({filter:/^\.\.\//},args=>{
-    if(args.importer.includes(`${path.sep}js${path.sep}math_workspace${path.sep}`))return {path:path.resolve(sourceRoot,'js',args.path.slice(3))};
+    // Keep esbuild's logical filenames stable when the physical sources move.
+    if(args.importer.includes(`${path.sep}js${path.sep}math_workspace${path.sep}`))return {path:path.resolve(root,'../..','js',args.path.slice(3)),pluginData:{sourceFile:'js/'+args.path.slice(3)}};
+  });builder.onLoad({filter:/./},async args=>{
+    if(args.pluginData?.sourceFile)return {contents:await read(args.pluginData.sourceFile),loader:'js',resolveDir:path.dirname(path.resolve(sourceRoot,args.pluginData.sourceFile))};
   });}};
   const workerResult=await esbuild.build({absWorkingDir:root,entryPoints:[path.join(root,'js/math_workspace/worker.mjs')],bundle:true,write:false,format:'iife',target:'es2022',plugins:[sourceImports]});
   const workers={workspace:workerResult.outputFiles[0].text};

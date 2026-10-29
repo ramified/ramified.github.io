@@ -4,5 +4,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-process.env.MATH_WORKSPACE_SOURCE_ROOT = root;
+process.env.MATH_WORKSPACE_SOURCE_ROOT = path.join(root, 'js/math_workspace/sources');
+process.env.MATH_WORKSPACE_OUTPUT_ROOT = root;
 await import('../archive/math_workspace_version1/js/math_workspace/build.mjs');
