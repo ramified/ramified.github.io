@@ -22,6 +22,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 // pages remain at the live repository root.  This keeps the generated bundle
 // self-contained without ever adding a runtime dependency to those pages.
 const sourceRoot=process.env.MATH_WORKSPACE_SOURCE_ROOT?path.resolve(process.env.MATH_WORKSPACE_SOURCE_ROOT):root;
+const outputRoot=process.env.MATH_WORKSPACE_OUTPUT_ROOT?path.resolve(process.env.MATH_WORKSPACE_OUTPUT_ROOT):sourceRoot;
 const outputs=new Map(), inputs=new Map();
 const workspaceFile=p=>p.startsWith('js/math_workspace/')||p.startsWith('node_modules/')||['package.json','package-lock.json','math_workspace.html','math_workspace_browser_test.html'].includes(p);
 const normalizeText=text=>typeof text==='string'?text.replace(/\r\n?/g,'\n'):text;
@@ -251,8 +252,8 @@ async function build(){
   // The live workspace consumes this self-contained bundle.  Publishing it
   // here keeps the generated runtime, its hash, and the live HTML in one
   // reproducible build instead of relying on a manual copy of dist/workspace.
-  const liveBundle=path.join(sourceRoot,'js','math_workspace_native_editors_v8.js');
-  const liveHtml=path.join(sourceRoot,'math_workspace.html');
+  const liveBundle=path.join(outputRoot,'js','math_workspace_native_editors_v8.js');
+  const liveHtml=path.join(outputRoot,'math_workspace.html');
   const liveScript=`js/math_workspace_native_editors_v8.js?v=${revision.slice(0,16)}`;
   const previousBundle=await fs.readFile(liveBundle,'utf8').catch(()=>null);
   const previousHtml=await fs.readFile(liveHtml,'utf8').catch(()=>null);
