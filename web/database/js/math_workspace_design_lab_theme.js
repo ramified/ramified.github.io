@@ -2,43 +2,19 @@
   'use strict';
 
   const styleId = 'design-lab-interface-theme';
-  const colorVariables = {
-    bg: ['--bg'],
-    surface: ['--surface', '--ws-surface', '--ws-surface-strong'],
-    border: ['--border'],
-    text: ['--text'],
-    muted: ['--muted'],
-    accent: ['--accent'],
-    danger: ['--accent2', '--ws-danger']
-  };
-  const labels = { bg: '页面底色', surface: '面板底色', border: '边框', text: '文字', muted: '次要文字', accent: '强调色', danger: '危险色' };
-  const presets = {
-    A: { bg: '#F7F7F4', surface: '#FFFFFF', border: '#CDD3CE', header: 'light' },
-    B: { bg: '#F1F3EF', surface: '#FFFFFF', border: '#BAC3BC', header: 'light' },
-    C: { bg: '#F1F3EF', surface: '#FFFFFF', border: '#BAC3BC', header: 'dark' }
-  };
+  const backgrounds = { low: '#F1F3EF', medium: '#EDF0EB', high: '#E7EBE6' };
+  const defaults = { bg: backgrounds.medium, border: '#C3CBC5', accent: '#0E6B63', danger: '#8B3A2A' };
+  const labels = { bg: '页面底色', border: '边框', accent: '强调色', danger: '危险色' };
 
   root.MathWorkspaceDesignLab.register({
     id: 'interface-theme',
     title: 'Interface theme',
-    description: '临时试用界面色板和外壳样式，退出后恢复。Shadow DOM 内的阴影只跟随颜色，不跟随几何。',
+    description: '临时试用 Layered 界面色板和外壳样式，退出后恢复。Shadow DOM 内的阴影只跟随颜色，不跟随几何。',
     mount(host) {
       const body = document.body, events = new AbortController();
       const previous = new Map(), overrides = new Map(), inputs = new Map(), hexLabels = new Map();
       const hadStyleAttribute = body.hasAttribute('style');
-      let style = null, preset = 'current', headerStyle = 'light', controlStyle = 'white';
-      let headerChanged = false, controlsChanged = false;
-
-      function hex(value) {
-        const text = value.trim();
-        if (/^#[\da-f]{6}$/i.test(text)) return text.toUpperCase();
-        const short = /^#([\da-f])([\da-f])([\da-f])$/i.exec(text);
-        if (short) return ('#' + short.slice(1).map(part => part + part).join('')).toUpperCase();
-        throw new Error('Interface theme expects a hexadecimal base color.');
-      }
-      const computed = getComputedStyle(body);
-      const initialColors = Object.fromEntries(Object.entries(colorVariables).map(([name, variables]) => [name, hex(computed.getPropertyValue(variables[0]))]));
-      let colors = { ...initialColors };
+      let style = null, applied = false, depth = 'medium', controlStyle = 'tinted', colors = { ...defaults };
 
       function element(tag, text, className) {
         const node = document.createElement(tag);
@@ -49,69 +25,82 @@
       function selectField(label, key, options) {
         const row = element('label', '', 'workspace-field');
         const select = element('select', '', 'workspace-control');
-        select.dataset.interfaceTheme = key;
-        select.setAttribute('aria-label', label);
+        select.dataset.interfaceTheme = key; select.setAttribute('aria-label', label);
         for (const [value, title] of options) select.append(new Option(title, value));
-        row.append(element('span', label, 'input-label'), select);
-        host.append(row);
+        row.append(element('span', label, 'input-label'), select); host.append(row);
         return select;
       }
-      const presetInput = selectField('预设', 'preset', [['current', 'Current'], ['A', 'A 纸白'], ['B', 'B 首页同款'], ['C', 'C 深色头部']]);
+      const presetInput = selectField('预设', 'preset', [['layered', 'Layered']]);
+      const depthInput = selectField('层次强度', 'depth', [['low', '低'], ['medium', '中'], ['high', '高']]);
+      const headerInput = selectField('头部样式', 'header', [['white', '白色']]);
+      const controlInput = selectField('控件样式', 'controls', [['tinted', '微灰底加边框'], ['white', '白底加边框']]);
       const colorFields = element('div', '', 'workspace-form-fields');
-      for (const name of Object.keys(colorVariables)) {
-        const row = element('label', '', 'workspace-field');
-        const input = element('input', '', 'workspace-control');
+      for (const name of Object.keys(defaults)) {
+        const row = element('label', '', 'workspace-field'), input = element('input', '', 'workspace-control');
         input.type = 'color'; input.dataset.interfaceThemeColor = name; input.setAttribute('aria-label', labels[name]);
         const output = element('output'); output.dataset.interfaceThemeHex = name;
         row.append(element('span', labels[name], 'input-label'), input, output); colorFields.append(row);
         inputs.set(name, input); hexLabels.set(name, output);
-        input.addEventListener('input', () => {
-          colors[name] = input.value.toUpperCase();
-          for (const variable of colorVariables[name]) setVariable(variable, colors[name]);
-          syncControls();
-        }, { signal: events.signal });
+        input.addEventListener('input', () => { colors[name] = input.value.toUpperCase(); apply(); }, { signal: events.signal });
       }
       host.append(colorFields);
-      const headerInput = selectField('头部样式', 'header', [['light', '浅色'], ['dark', '深色']]);
-      const controlInput = selectField('控件样式', 'controls', [['outline', '线框（透明加 1px 边框）'], ['white', '白底加边框']]);
+      const applyButton = element('button', '应用 Layered', 'btn btn-ghost');
+      applyButton.type = 'button'; applyButton.dataset.interfaceThemeApply = '';
+      const status = element('output', '', 'workspace-card-context'); status.setAttribute('role', 'status');
+      host.append(applyButton, status);
 
       function setVariable(name, value) {
         if (!previous.has(name)) previous.set(name, { value: body.style.getPropertyValue(name), priority: body.style.getPropertyPriority(name) });
         overrides.set(name, value); body.style.setProperty(name, value);
       }
       function syncControls() {
-        presetInput.value = preset; headerInput.value = headerStyle; controlInput.value = controlStyle;
+        presetInput.value = 'layered'; depthInput.value = depth; headerInput.value = 'white'; controlInput.value = controlStyle;
         for (const name of inputs.keys()) { inputs.get(name).value = colors[name]; hexLabels.get(name).textContent = colors[name]; }
+        status.textContent = applied ? 'Layered 预览已应用。' : '页面已还原；调整选项或点击“应用 Layered”重新预览。';
       }
-      function updateRules() {
-        const rules = [];
-        if (headerChanged) {
-          const dark = headerStyle === 'dark';
-          rules.push(`body.ramified-theme > header { background: ${dark ? '#18212B' : '#FFFFFF'}; color: ${dark ? '#F1F3EF' : 'var(--text)'}; border-bottom: ${dark ? '0' : '1px solid var(--border)'}; }`);
-          rules.push('body.ramified-theme > header :is(h1,.wordmark) { color: inherit; }');
-          rules.push(`body.ramified-theme > header span { color: ${dark ? '#A9B3AE' : 'var(--muted)'}; }`);
-        }
-        if (controlsChanged) {
-          const background = controlStyle === 'white' ? '#FFFFFF' : 'transparent';
-          const controls = 'body.ramified-theme :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]),select,textarea)';
-          rules.push(`${controls} { background: ${background}; color: var(--text); border: 1px solid var(--border); }`);
-          rules.push(`${controls}:focus { border-color: var(--accent); ${preset === 'A' ? 'border-width: 2px; outline: none;' : ''} }`);
-          rules.push(`body.ramified-theme .workspace-canvas-tab-group { background: ${background}; border: 1px solid var(--border); }`);
-          rules.push(`body.ramified-theme .workspace-canvas-tab { background: ${background}; }`);
-          rules.push(`body.ramified-theme .btn-ghost { background: ${background}; }`);
-        }
-        if (preset !== 'current') {
-          rules.push('body.ramified-theme :is(.card,.canvas-panel) { background: var(--surface); border-color: var(--border); }');
-          rules.push('body.ramified-theme :is(.workspace-create-dialog,.workspace-settings-dialog,.workspace-assets-delete-dialog) { background: var(--surface); color: var(--text); border-color: var(--border); }');
-          rules.push('body.ramified-theme #dnd-ghost { box-shadow: 0 6px 18px var(--ws-shadow) !important; }');
-          if (preset === 'B') {
-            rules.push('body.ramified-theme .workspace-canvas-tab.active { box-shadow: inset 0 -2px 0 var(--accent); }');
-            rules.push('body.ramified-theme :is(.card-head-label,.workspace-panel-title .panel-title-text) { color: var(--text); }');
-          }
-        }
-        if (!rules.length) { style?.remove(); style = null; return; }
+      function apply() {
+        const variables = {
+          '--bg': colors.bg, '--surface': '#FFFFFF', '--border': colors.border,
+          '--text': '#18212B', '--muted': '#4F5A64', '--accent': colors.accent, '--accent2': colors.danger,
+          '--ws-surface': '#FFFFFF', '--ws-surface-strong': '#FFFFFF', '--ws-danger': colors.danger,
+          '--ws-danger-tint': '#FBEFEA', '--ws-accent-tint': '#D3E8E3', '--ws-shadow': 'rgba(24,33,43,0.14)'
+        };
+        for (const [name, value] of Object.entries(variables)) setVariable(name, value);
+        const inner = controlStyle === 'white' ? '#FFFFFF' : '#F6F8F5';
+        const controls = 'body.ramified-theme :where(.workspace-control,input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]),select,textarea)';
+        const secondary = 'body.ramified-theme :is(.btn-ghost,.workspace-card-tool:not([data-workspace-card-action="hide"]),.import-export-tab)';
+        const close = 'body.ramified-theme :is(.workspace-canvas-tab-close,.card-head [data-workspace-card-action="hide"])';
+        const rules = [
+          'body.ramified-theme :is(.card,.canvas-panel) { background: #FFFFFF; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(24,33,43,0.06); }',
+          'body.ramified-theme > header { background: #FFFFFF; color: var(--text); border: 0; border-bottom: 1px solid var(--border); box-shadow: 0 1px 2px rgba(24,33,43,0.06); }',
+          'body.ramified-theme > header span { color: var(--muted); }',
+          'body.ramified-theme .card-head { background: #FFFFFF; border-color: var(--border); }',
+          'body.ramified-theme :is(.workspace-create-dialog,.workspace-settings-dialog,.workspace-assets-delete-dialog,.workspace-card-picker) { background: #FFFFFF; color: var(--text); border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(24,33,43,0.18); }',
+          `${controls} { background: ${inner}; color: var(--text); border: 1px solid var(--border); }`,
+          `${controls}:focus { border: 2px solid var(--accent); outline: none; }`,
+          `body.ramified-theme .workspace-canvas-tab-group { background: ${inner}; border: 1px solid var(--border); }`,
+          `body.ramified-theme .workspace-canvas-tab { background: ${inner}; color: var(--text); }`,
+          'body.ramified-theme .workspace-canvas-tab.active { background: #FFFFFF; color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }',
+          `body.ramified-theme tbody tr:nth-child(even) { background: ${inner}; }`,
+          'body.ramified-theme .workspace-asset-item:hover { background: #F6F8F5; }',
+          'body.ramified-theme .workspace-asset-item[aria-selected="true"] { background: #D3E8E3; border: 1px solid var(--accent); }',
+          'body.ramified-theme .btn:not(.btn-ghost):not(.workspace-assets-delete-confirm) { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }',
+          `${secondary} { color: var(--text); border: 1px solid var(--border); background: transparent; }`,
+          `${secondary}:hover { color: var(--accent); border-color: var(--accent); background: transparent; }`,
+          `${close} { color: var(--muted); background: transparent; }`,
+          `${close}:is(:hover,:focus-visible) { color: var(--text); background: transparent; }`,
+          'body.ramified-theme .workspace-assets-delete-confirm { background: var(--accent2); border-color: var(--accent2); color: #FFFFFF; }',
+          'body.ramified-theme :is(h1,.card-head-label,.panel-title-text,#workspace-canvas-name,.workspace-inspector-head h2) { color: var(--text); font-weight: 600; }',
+          'body.ramified-theme .input-label { color: var(--muted); font-weight: 400; }',
+          'body.ramified-theme :is(td,dd,.workspace-object-display-details) { color: var(--text); }',
+          'body.ramified-theme :is(a,a:visited), body.ramified-theme > header span :is(a,a:visited) { color: var(--accent); }',
+          'body.ramified-theme .workspace-canvas-pane { border: 1px solid var(--border); outline: none; }',
+          'body.ramified-theme .workspace-canvas-pane.focused { outline: none; }',
+          'body.ramified-theme .workspace-canvas-pane:focus-within { border-color: var(--accent); }',
+          'body.ramified-theme #dnd-ghost { box-shadow: 0 6px 18px var(--ws-shadow) !important; }'
+        ];
         if (!style) { style = document.createElement('style'); style.id = styleId; document.head.append(style); }
-        style.textContent = rules.join('\n');
+        style.textContent = rules.join('\n'); applied = true; syncControls();
       }
       function reset() {
         style?.remove(); style = null;
@@ -120,34 +109,21 @@
           else body.style.removeProperty(name);
         }
         previous.clear(); overrides.clear();
-        preset = 'current'; colors = { ...initialColors }; headerStyle = 'light'; controlStyle = 'white';
-        headerChanged = false; controlsChanged = false; syncControls();
+        applied = false; depth = 'medium'; controlStyle = 'tinted'; colors = { ...defaults }; syncControls();
         const removeEmptyStyle = () => {
           if (!hadStyleAttribute && body.getAttribute('style') === '') body.removeAttribute('style');
         };
-        removeEmptyStyle();
-        // The lab renders once more after reset/destroy; remove only an empty
-        // attribute, without touching properties added by another experiment.
-        queueMicrotask(removeEmptyStyle);
+        removeEmptyStyle(); queueMicrotask(removeEmptyStyle);
       }
-      presetInput.addEventListener('change', () => {
-        if (presetInput.value === 'current') { reset(); return; }
-        preset = presetInput.value;
-        const selected = presets[preset];
-        colors = { ...initialColors, ...Object.fromEntries(Object.keys(colorVariables).filter(name => name in selected).map(name => [name, selected[name]])), danger: '#8B3A2A' };
-        for (const name of Object.keys(colorVariables)) for (const variable of colorVariables[name]) setVariable(variable, colors[name]);
-        setVariable('--ws-danger-tint', '#FBEFEA'); setVariable('--ws-accent-tint', '#D3E8E3');
-        // This variable occupies only the color part of native editors' shadows.
-        setVariable('--ws-shadow', 'rgba(24,33,43,0.14)');
-        headerStyle = selected.header; controlStyle = 'white'; headerChanged = true; controlsChanged = true;
-        syncControls(); updateRules();
-      }, { signal: events.signal });
-      headerInput.addEventListener('change', () => { headerStyle = headerInput.value; headerChanged = true; updateRules(); }, { signal: events.signal });
-      controlInput.addEventListener('change', () => { controlStyle = controlInput.value; controlsChanged = true; updateRules(); }, { signal: events.signal });
-      syncControls();
+      presetInput.addEventListener('change', apply, { signal: events.signal });
+      depthInput.addEventListener('change', () => { depth = depthInput.value; colors.bg = backgrounds[depth]; apply(); }, { signal: events.signal });
+      headerInput.addEventListener('change', apply, { signal: events.signal });
+      controlInput.addEventListener('change', () => { controlStyle = controlInput.value; apply(); }, { signal: events.signal });
+      applyButton.addEventListener('click', apply, { signal: events.signal });
+      apply();
       return {
         reset,
-        settings: () => ({ preset, colors: { ...colors }, headerStyle, controlStyle, overriddenVariables: [...overrides.keys()], variables: Object.fromEntries(overrides), shadowDOM: 'color only; native shadow geometry is unchanged' }),
+        settings: () => ({ preset: 'layered', applied, depth, colors: { ...colors }, headerStyle: 'white', controlStyle, overriddenVariables: [...overrides.keys()], variables: Object.fromEntries(overrides), shadowDOM: 'color only; native shadow geometry is unchanged' }),
         destroy() { reset(); events.abort(); }
       };
     }
