@@ -66,3 +66,22 @@ by this migration. No push or deployment was performed.
 - workspace:check passed while the originals were still unavailable.
 - Restored all 140 temporary originals and verified their raw bytes.
 - Real repository originals were never renamed, moved or modified.
+
+## C6: browser calculations and screenshots
+
+- Loaded math_workspace.html in isolated headless Edge before and after.
+- All 99 panels opened: 28 input panels and 71 current computed/display results.
+  Primary calculation actions were clicked where present; ids/statuses/actions
+  match between runs. See SOURCE_BROWSER_VALIDATION.json.
+- Captured each panel at 1280x800 and 390x844: 198 pairs.
+- Normal clock: 192/198 pairs pixel-identical. Six raw pairs differ only in
+  initial asset-letter font layout (373 pixels each in four images), the
+  polynomial duration (98 pixels), and slicing-debug clock (27 pixels).
+- Rechecked all four affected panels with actual original/copy output bytes
+  served separately. A browser-only preload fixed Date/performance.now/random
+  seed; every screenshot awaited fonts, icon MathJax and two rendering frames.
+  All 8 resulting image pairs are byte-identical.
+- Both ordinary-clock functional runs and all raw screenshots were retained.
+  The raw 198 pairs are not described as universally identical.
+- Screenshots are evidence, not a test of every possible calculator input.
+  No remote-service availability or other browser versions were assessed.

@@ -1,0 +1,820 @@
+{
+  "date": "2026-10-29",
+  "browser": "isolated headless Edge",
+  "viewports": [
+    [
+      1280,
+      800
+    ],
+    [
+      390,
+      844
+    ]
+  ],
+  "opened": 99,
+  "inputPanels": 28,
+  "currentResults": 71,
+  "normalScreenshots": {
+    "total": 198,
+    "pixelIdentical": 192,
+    "differences": [
+      {
+        "file": "complex-diagrams-1280.png",
+        "identical": false,
+        "differentPixels": 373,
+        "bbox": [
+          88,
+          221,
+          123,
+          255
+        ]
+      },
+      {
+        "file": "complex-diagrams-390.png",
+        "identical": false,
+        "differentPixels": 373,
+        "bbox": [
+          89,
+          297,
+          124,
+          331
+        ]
+      },
+      {
+        "file": "complex-input-1280.png",
+        "identical": false,
+        "differentPixels": 373,
+        "bbox": [
+          88,
+          221,
+          123,
+          255
+        ]
+      },
+      {
+        "file": "complex-input-390.png",
+        "identical": false,
+        "differentPixels": 373,
+        "bbox": [
+          89,
+          297,
+          124,
+          331
+        ]
+      },
+      {
+        "file": "polynomials-1280.png",
+        "identical": false,
+        "differentPixels": 98,
+        "bbox": [
+          976,
+          499,
+          1000,
+          506
+        ]
+      },
+      {
+        "file": "slicing-debug-1280.png",
+        "identical": false,
+        "differentPixels": 27,
+        "bbox": [
+          1099,
+          594,
+          1106,
+          601
+        ]
+      }
+    ]
+  },
+  "stableRecheck": {
+    "panels": [
+      "complex-diagrams",
+      "complex-input",
+      "slicing-debug",
+      "polynomials"
+    ],
+    "total": 8,
+    "byteIdentical": 8,
+    "conditions": "Page-enabled preload; fixed Date/performance.now and random seed; await asset-icon MathJax, fonts and two animation frames. Browser-only fixture, no repository changes."
+  },
+  "cases": [
+    {
+      "id": "complex-diagrams",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "complex-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "filtration-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "field-extension-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "field-extension-view",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "field-extension-invariants",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "field-extension-decomposition",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "field-extension-selected",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-space-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-diagram-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-view",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-statistics",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-diagram-statistics",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-homology",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-poincare",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-metric",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-local-geometry",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-homology-cords",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-wander",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-knot",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-dual",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "mosaic-seifert",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "frame-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "polytope-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "sphere-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "point-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "vector-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "roots-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "lattice-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "voronoi-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "formula-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "tropical-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "weyl-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "cone-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "fan-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "toric-variety-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "slicing-scene",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "frame-details",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "cone-faces",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "cone-variety",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "fan-orbits",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "fan-divisors",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "lattice-character",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "slicing-display",
+      "role": "view",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "slicing-debug",
+      "role": "view",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "young-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "young-view",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "dynkin-view",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "lie-view",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "strands-view",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "sheaf-view",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "geometry-view",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "lie-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "number-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "number-view",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "field-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "field-view",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "asset-view",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "matrix-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "matrix-view",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "category-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "functor-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "dynkin-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "strands-input",
+      "role": "input",
+      "opened": true,
+      "status": "input",
+      "clicked": []
+    },
+    {
+      "id": "dynkin-invariants",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "dynkin-cartan",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "dynkin-vertex",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "dynkin-parabolic",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "dynkin-starting",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "strands-info",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "strands-calculation",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": [
+        "strand-calculate"
+      ]
+    },
+    {
+      "id": "strands-relations",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "strands-basis",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "strands-display",
+      "role": "view",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "matrix-invariants",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "matrix-computation",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": [
+        "compute-operation"
+      ]
+    },
+    {
+      "id": "matrix-polynomial",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": [
+        "compute-polynomial-action"
+      ]
+    },
+    {
+      "id": "category-diagram",
+      "role": "display",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "statistics",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "weight",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": [
+        "compute",
+        "compute"
+      ]
+    },
+    {
+      "id": "branching",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": [
+        "compute"
+      ]
+    },
+    {
+      "id": "symmetric",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "pair-statistics",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "lr",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": [
+        "compute-schur"
+      ]
+    },
+    {
+      "id": "invariants",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "kostka",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": [
+        "compute-kostka"
+      ]
+    },
+    {
+      "id": "kronecker",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": [
+        "compute-kronecker"
+      ]
+    },
+    {
+      "id": "plethysm",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": [
+        "compute-plethysm"
+      ]
+    },
+    {
+      "id": "schur",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": [
+        "compute-schur-functor"
+      ]
+    },
+    {
+      "id": "grassmannian",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": [
+        "compute-grassmannian"
+      ]
+    },
+    {
+      "id": "polynomials",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": [
+        "compute-sympoly"
+      ]
+    },
+    {
+      "id": "slice",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "asset:hodge",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "asset:betti",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "asset:homology-variety",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "asset:homology-sheaf",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "asset:homology-map",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "asset:characteristic-classes",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    },
+    {
+      "id": "asset:sheaf-cohomology",
+      "role": "property",
+      "opened": true,
+      "status": "current",
+      "clicked": []
+    }
+  ]
+}
