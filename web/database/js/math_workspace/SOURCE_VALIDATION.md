@@ -55,3 +55,14 @@ Current build.mjs references (one-based lines):
 No calculator source, test case/assertion, color, style, function name, runtime
 logic, published bundle, live HTML, core.autocrlf, or .gitattributes was changed
 by this migration. No push or deployment was performed.
+
+## C5: originals unavailable in a disposable checkout
+
+- Copied the archive/toolchain, live wrapper/HTML, original files and sources/
+  into a new disposable checkout outside the repository.
+- Renamed all 140 originals before building; all original paths were absent.
+- The build still produced the identical 6a87938e…87f2b1f output bytes.
+- Tests explicitly read sources/: 40/40 passed, with all C0 names unchanged.
+- workspace:check passed while the originals were still unavailable.
+- Restored all 140 temporary originals and verified their raw bytes.
+- Real repository originals were never renamed, moved or modified.
