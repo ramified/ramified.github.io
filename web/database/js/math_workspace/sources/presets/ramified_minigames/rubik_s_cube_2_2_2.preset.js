@@ -1,0 +1,178 @@
+// Save this file as presets/ramified_minigames/rubik_s_cube_2_2_2.preset.js
+// Add this entry to presets/ramified_minigames/presets.js:
+// {
+//   "gameTypes": [
+//     "2048",
+//     "Tile Matching",
+//     "Billiard",
+//     "Reversi"
+//   ],
+//   "id": "rubik-s-cube-2-2-2",
+//   "label": "Rubik's Cube 2*2*2",
+//   "labelZh": "2阶魔方",
+//   "key": "rubik_s_cube_2_2_2",
+//   "file": "rubik_s_cube_2_2_2.preset.js"
+// },
+// Store gameTypes in presets.js only; do not repeat them in this preset file.
+(function(root, factory) {
+  const preset = factory();
+  if (typeof module !== 'undefined' && module.exports) module.exports = preset;
+  if (root) {
+    root.RAMIFIED_MINIGAME_PRESET_DATA = root.RAMIFIED_MINIGAME_PRESET_DATA || {};
+    root.RAMIFIED_MINIGAME_PRESET_DATA["rubik_s_cube_2_2_2"] = preset;
+  }
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
+  return {
+    "id": "rubik-s-cube-2-2-2",
+    "label": "Rubik's Cube 2*2*2",
+    "labelZh": "2阶魔方",
+    "lattice": "square",
+    "size": "6x8",
+    "surface": "M_0,8",
+    "removed": "1,1; 1,2; 1,5; 1,6; 1,7; 1,8; 2,1; 2,2; 2,5; 2,6; 2,7; 2,8; 5,1; 5,2; 5,5; 5,6; 5,7; 5,8; 6,1; 6,2; 6,5; 6,6; 6,7; 6,8",
+    "glue": "g0:1..2,4,E=3,6..5,N; g3:3,2..1,N=2..1,3,W; g4:1,3..4,N=3,8..7,N; g5:4..3,1,W=4..3,8,E; g6:6,3..4,S=4,8..7,S; g7:4,6..5,S=6..5,4,E; g8:5..6,3,W=4,2..1,S",
+    "pieceSets": {
+      "starts": {
+        "black": [
+          {
+            "row": 3,
+            "col": 4
+          },
+          {
+            "row": 4,
+            "col": 3
+          }
+        ],
+        "white": [
+          {
+            "row": 3,
+            "col": 3
+          },
+          {
+            "row": 4,
+            "col": 4
+          }
+        ]
+      },
+      "targets": {}
+    },
+    "billiards": {
+      "rack": {
+        "count": 6,
+        "center": {
+          "row": 3,
+          "col": 3,
+          "corner": "SE"
+        },
+        "angle": 180
+      },
+      "balls": [
+        {
+          "id": "cue",
+          "kind": "cue",
+          "at": {
+            "row": 3,
+            "col": 7,
+            "corner": "SE"
+          }
+        }
+      ],
+      "pockets": [
+        {
+          "id": "p1",
+          "vertex": {
+            "row": 4,
+            "col": 6,
+            "corner": "SE"
+          }
+        },
+        {
+          "id": "p2",
+          "vertex": {
+            "row": 4,
+            "col": 4,
+            "corner": "SE"
+          }
+        },
+        {
+          "id": "p3",
+          "vertex": {
+            "row": 4,
+            "col": 1,
+            "corner": "SW"
+          }
+        },
+        {
+          "id": "p4",
+          "vertex": {
+            "row": 1,
+            "col": 3,
+            "corner": "NW"
+          }
+        },
+        {
+          "id": "p5",
+          "vertex": {
+            "row": 2,
+            "col": 4,
+            "corner": "SE"
+          }
+        },
+        {
+          "id": "p6",
+          "vertex": {
+            "row": 1,
+            "col": 4,
+            "corner": "NE"
+          }
+        },
+        {
+          "id": "p7",
+          "vertex": {
+            "row": 2,
+            "col": 3,
+            "corner": "SW"
+          }
+        },
+        {
+          "id": "p8",
+          "vertex": {
+            "row": 4,
+            "col": 2,
+            "corner": "SE"
+          }
+        }
+      ]
+    },
+    "pieces": [
+      {
+        "row": 3,
+        "col": 4,
+        "role": "start",
+        "color": "black",
+        "side": "black"
+      },
+      {
+        "row": 4,
+        "col": 3,
+        "role": "start",
+        "color": "black",
+        "side": "black"
+      },
+      {
+        "row": 3,
+        "col": 3,
+        "role": "start",
+        "color": "white",
+        "side": "white"
+      },
+      {
+        "row": 4,
+        "col": 4,
+        "role": "start",
+        "color": "white",
+        "side": "white"
+      }
+    ]
+  };
+});

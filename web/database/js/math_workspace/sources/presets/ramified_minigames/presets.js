@@ -1,0 +1,750 @@
+(function(root, factory) {
+  const presets = factory();
+  if (typeof module !== 'undefined' && module.exports) module.exports = presets;
+  if (root) root.RAMIFIED_MINIGAME_PRESETS = presets;
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null), function() {
+  const featuredDefaultEntries = [
+    ["hex", "classic-hex", "center"],
+    ["gomoku", "wormhole", "vertex"],
+    ["go", "gomoku-big-hole", "vertex"],
+    ["connect-four", "connect-four-exchange", "vertex"],
+    ["2048", "ramified-cover", "center"],
+    ["reversi", "focus-frame", "center"],
+    ["chinese-checkers", "octahedron-with-square-holes", "center"],
+    ["sokoban", "classic-fans", "center"],
+    ["fide-chess", "fide-chess-8x8", "chessboard"],
+    ["billiards", "half-glued", "billiards-table"],
+    ["lianliankan", "rubiks-cube-3x3x3", "center"]
+  ];
+  return {
+    gameOrder: ['hex', 'gomoku', 'go', 'connect-four', '2048', 'reversi', 'chinese-checkers', 'sokoban', 'fide-chess', 'billiards', 'lianliankan'],
+    // Player defaults are independent from the topology-focused archive defaults.
+    playerDefaults: {
+      hex: { presetId: 'classic-hex', controls: { hexPieRule: false } },
+      gomoku: { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 15, boundaryGlueRows: 15, boundaryGlueCols: 15, gomokuBlackController: 'human', gomokuWhiteController: 'local-ai-challenging' } },
+      go: { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 19, boundaryGlueRows: 19, boundaryGlueCols: 19, goKomi: 6.5 } },
+      'connect-four': { presetId: 'connect-four-6x7', controls: { connectFourFall: 'S', connectFourRedController: 'human', connectFourYellowController: 'local-ai-challenging' } },
+      '2048': { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 4, boundaryGlueRows: 4, boundaryGlueCols: 4 } },
+      reversi: { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 8, boundaryGlueRows: 8, boundaryGlueCols: 8 } },
+      'chinese-checkers': { presetId: 'small-classic', humanColor: 'black', controls: { chineseCheckersJumpRule: 'unlimited' } },
+      'fide-chess': { presetId: 'fide-chess-8x8', categories: { game: 'fide-chess-8x8', 'kingless-puzzle': 'n-queens-puzzle' } },
+      billiards: { presetId: 'half-glued', controls: { billiardsRules: 'solo' } },
+      lianliankan: { presetId: 'boundary-glue-board', controls: { boundaryGlueMode: 'open', boundaryGlueShape: 'square', gomokuSize: 6, boundaryGlueRows: 6, boundaryGlueCols: 6, lianliankanTileSet: 'chinese' } }
+    },
+    featuredDefaultFor: Object.fromEntries(featuredDefaultEntries.map(([mode, presetId]) => [mode, presetId])),
+    defaultFor: Object.fromEntries(featuredDefaultEntries.map(([mode, presetId]) => [mode, presetId])),
+    defaultDisplayFor: Object.fromEntries(featuredDefaultEntries.map(([mode, _presetId, display]) => [mode, display])),
+    presets: [
+    {
+      "gameTypes": [
+        "Hex",
+        "2048",
+        "Gomoku",
+        "Go",
+        "Reversi",
+        "FIDE Chess",
+        "Tile Matching",
+        "Billiard"
+      ],
+      "id": "boundary-glue-board",
+      "fideChessVariant": "game",
+      "label": "boundary glue board",
+      "key": "boundary_glue_board",
+      "file": "boundary_glue_board.preset.js"
+    },
+    {
+      "gameTypes": [
+        "FIDE Chess"
+      ],
+      "id": "fide-chess-8x8",
+      "fideChessVariant": "game",
+      "label": "FIDE chess 8x8",
+      "key": "fide_chess_8x8",
+      "file": "fide_chess_8x8.preset.js"
+    },
+    {
+      "gameTypes": [
+        "FIDE Chess"
+        ],
+      "id": "between-two-fires",
+      "fideChessVariant": "game",
+      "label": "between two fires",
+      "key": "between_two_fires",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
+      "file": "between_two_fires.preset.js"
+    },
+    {
+      "gameTypes": [
+        "FIDE Chess"
+      ],
+      "id": "n-queens-puzzle",
+      "fideChessVariant": "kingless-puzzle",
+      "label": "N queens puzzle",
+      "key": "n_queens_puzzle",
+      "file": "n_queens_puzzle.preset.js"
+    },
+    {
+      "gameTypes": [
+        "FIDE Chess"
+      ],
+      "id": "n-queens-torus-puzzle",
+      "fideChessVariant": "kingless-puzzle",
+      "label": "N queens puzzle on torus",
+      "key": "n_queens_torus_puzzle",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
+      "file": "n_queens_torus_puzzle.preset.js"
+    },
+    {
+      "gameTypes": [
+        "2048",
+        "Billiard"
+        ],
+      "id": "twisted-torus",
+      "label": "twisted torus",
+      "labelZh": "扭曲环面",
+      "key": "twisted_torus",
+      "file": "twisted_torus.preset.js"
+    },
+    {
+      "gameTypes": [
+        "2048",
+        "Billiard"
+        ],
+      "id": "genus-2",
+      "label": "genus 2",
+      "labelZh": "亏格 2",
+      "key": "genus_2",
+      "file": "genus_2.preset.js"
+    },
+    {
+      "gameTypes": [
+        "2048",
+        "Billiard"
+        ],
+      "id": "half-glued",
+      "label": "half-glued",
+      "labelZh": "半粘合",
+      "key": "half_glued",
+      "wrappedView": {
+        "x": "repeat",
+        "y": "repeat"
+      },
+      "wrappedCoverFit": "glued",
+      "file": "half_glued.preset.js"
+    },
+    {
+      "gameTypes": [
+        "2048",
+        "Tile Matching"
+        ],
+      "id": "ramified-cover",
+      "label": "ramified cover",
+      "key": "ramified_cover",
+      "file": "ramified_cover.preset.js"
+    },
+    {
+      "gameTypes": [
+        "2048",
+        "Tile Matching",
+        "Billiard",
+        "Reversi"
+        ],
+      "id": "rubik-s-cube-2-2-2",
+      "label": "Rubik's Cube 2*2*2",
+      "labelZh": "2阶魔方",
+      "key": "rubik_s_cube_2_2_2",
+      "file": "rubik_s_cube_2_2_2.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Tile Matching",
+        "Gomoku",
+        "Go"
+        ],
+      "id": "rubiks-cube-3x3x3",
+      "label": "Rubik's Cube 3*3*3",
+      "key": "rubiks_cube_3x3x3",
+      "file": "rubiks_cube_3x3x3.preset.js"
+    },
+    {
+      "gameTypes": [
+        "2048",
+        "Tile Matching",
+        "Billiard"
+        ],
+      "id": "usual-strip",
+      "label": "usual strip",
+      "key": "usual_strip",
+      "wrappedView": { "x": "repeat" },
+      "file": "usual_strip.preset.js"
+    },
+    {
+      "gameTypes": [
+        "2048"
+        ],
+      "id": "mobius-strip",
+      "label": "Mobius strip",
+      "key": "mobius_strip",
+      "wrappedView": { "x": "reflect-y" },
+      "file": "mobius_strip.preset.js"
+    },
+    {
+      "gameTypes": [
+        "2048"
+      ],
+      "id": "hex-classic-4x4",
+      "label": "hex classic 4*4",
+      "key": "hex_classic_4x4",
+      "file": "hex_classic_4x4.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku"
+      ],
+      "id": "gomoku-tic-tac-toe",
+      "label": "Tic-tac-toe",
+      "key": "gomoku_tic_tac_toe",
+      "file": "gomoku_tic_tac_toe.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku", "Go"
+      ],
+      "id": "gomoku-strange-corner",
+      "label": "strange corner",
+      "key": "gomoku_strange_corner",
+      "file": "gomoku_strange_corner.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku", "Go"
+      ],
+      "id": "gomoku-small-holes",
+      "label": "small holes",
+      "key": "gomoku_small_holes",
+      "file": "gomoku_small_holes.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku", "Go"
+      ],
+      "id": "gomoku-big-hole",
+      "label": "big hole",
+      "key": "gomoku_big_hole",
+      "file": "gomoku_big_hole.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Go"
+        ],
+      "id": "reflex-angle",
+      "label": "reflex angle",
+      "key": "reflex_angle",
+      "file": "reflex_angle.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku",
+        "Go"
+        ],
+      "id": "wormhole",
+      "label": "wormhole",
+      "key": "wormhole",
+      "file": "wormhole.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku"
+      ],
+      "id": "gomoku-m4-15x15",
+      "label": "genus 4",
+      "key": "gomoku_m4_15x15",
+      "file": "gomoku_m4_15x15.preset.js"
+    },
+    {"gameTypes":["Gomoku", "Go"],"id":"trefoil","label":"trefoil","key":"trefoil","file":"trefoil.preset.js"},
+    {
+      "gameTypes": [
+        "Connect Four"
+      ],
+      "id": "connect-four-6x7",
+      "label": "Connect Four 6*7",
+      "key": "connect_four_6x7",
+      "file": "connect_four_6x7.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Connect Four"
+      ],
+      "id": "connect-four-high-hit",
+      "label": "high hit",
+      "key": "connect_four_high_hit",
+      "file": "connect_four_high_hit.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Connect Four"
+      ],
+      "id": "connect-four-high-hit-2",
+      "label": "high hit2",
+      "key": "connect_four_high_hit_2",
+      "file": "connect_four_high_hit_2.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Connect Four"
+      ],
+      "id": "connect-four-all-horizontal",
+      "label": "all horizontal",
+      "key": "connect_four_all_horizontal",
+      "file": "connect_four_all_horizontal.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Connect Four"
+      ],
+      "id": "connect-four-top-fight",
+      "label": "top fight",
+      "key": "connect_four_top_fight",
+      "file": "connect_four_top_fight.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Connect Four"
+      ],
+      "id": "connect-four-exchange",
+      "label": "exchange",
+      "key": "connect_four_exchange",
+      "file": "connect_four_exchange.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Connect Four"
+      ],
+      "id": "connect-four-across",
+      "label": "across",
+      "key": "connect_four_across",
+      "file": "connect_four_across.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Connect Four"
+      ],
+      "id": "connect-four-usual-strip",
+      "label": "usual strip",
+      "key": "connect_four_usual_strip",
+      "wrappedView": { "x": "repeat" },
+      "file": "connect_four_usual_strip.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Connect Four"
+      ],
+      "id": "connect-four-mobius-strip",
+      "label": "M\u00f6bius strip",
+      "key": "connect_four_mobius_strip",
+      "wrappedView": { "x": "reflect-y" },
+      "file": "connect_four_mobius_strip.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Connect Four"
+      ],
+      "id": "connect-four-hex-usual-strip",
+      "label": "hex usual strip",
+      "key": "connect_four_hex_usual_strip",
+      "wrappedView": { "x": "repeat" },
+      "file": "connect_four_hex_usual_strip.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Connect Four"
+      ],
+      "id": "falling-in-two-ways",
+      "label": "falling in two ways",
+      "key": "falling_in_two_ways",
+      "file": "falling_in_two_ways.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Connect Four"
+      ],
+      "id": "connect-four-hex-bad-mobius-strip",
+      "label": "hex bad M\u00f6bius strip",
+      "key": "connect_four_hex_bad_mobius_strip",
+      "file": "connect_four_hex_bad_mobius_strip.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Connect Four"
+      ],
+      "id": "connect-four-hex-good-mobius-strip",
+      "label": "hex good M\u00f6bius strip",
+      "key": "connect_four_hex_good_mobius_strip",
+      "wrappedView": { "x": "reflect-y" },
+      "file": "connect_four_hex_good_mobius_strip.preset.js"
+    },
+    {"gameTypes":["Connect Four"],"id":"r","label":"R","key":"r","file":"r.preset.js"},
+    {
+      "gameTypes": [
+        "Connect Four",
+        "Gomoku"
+      ],
+      "id": "xi",
+      "label": "\u56cd",
+      "key": "xi",
+      "file": "xi.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Go"
+        ],
+      "id": "three-slits",
+      "label": "three_slits",
+      "key": "three_slits",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
+      "file": "three_slits.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Chinese Checkers"
+        ],
+      "id": "hex-rhombus",
+      "label": "hex rhombus",
+      "key": "hex_rhombus",
+      "file": "hex_rhombus.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Chinese Checkers"
+        ],
+      "id": "hex-strip-9-9",
+      "label": "hex strip 9*9",
+      "key": "hex_strip_9_9",
+      "wrappedView": { "x": "repeat" },
+      "file": "hex_strip_9_9.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku",
+        "Connect Four",
+        "Go"
+        ],
+      "id": "tunnels",
+      "label": "tunnels",
+      "key": "tunnels",
+      "file": "tunnels.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Chinese Checkers"
+        ],
+      "id": "classic-chinese-checkers",
+      "label": "classic chinese checkers",
+      "key": "classic_chinese_checkers",
+      "file": "classic_chinese_checkers.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Chinese Checkers"
+        ],
+      "id": "small-classic",
+      "label": "small classic",
+      "labelZh": "小型经典",
+      "key": "small_classic",
+      "file": "small_classic.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku",
+        "Go",
+        "Chinese Checkers"
+        ],
+      "id": "octahedron-with-square-holes",
+      "label": "octahedron with square holes",
+      "key": "octahedron_with_square_holes",
+      "file": "octahedron_with_square_holes.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku",
+        "Go",
+        "Chinese Checkers"
+        ],
+      "id": "octahedron-with-square-glues",
+      "label": "octahedron with square glues",
+      "key": "octahedron_with_square_glues",
+      "file": "octahedron_with_square_glues.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Gomoku",
+        "Go",
+        "Chinese Checkers"
+        ],
+      "id": "dodecahedron-with-pentagon-holes",
+      "label": "dodecahedron with pentagon holes",
+      "key": "dodecahedron_with_pentagon_holes",
+      "file": "dodecahedron_with_pentagon_holes.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Reversi"
+        ],
+      "id": "focus-frame",
+      "label": "focus frame",
+      "key": "focus_frame",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
+      "file": "focus_frame.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "classic-fans",
+      "label": "classic_fans",
+      "key": "classic_fans",
+      "file": "sokoban/classic_fans.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "pedestrian",
+      "label": "Pedestrian",
+      "key": "pedestrian",
+      "file": "sokoban/pedestrian.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "classic-fans-glue",
+      "label": "classic_fans_glue",
+      "key": "classic_fans_glue",
+      "file": "sokoban/classic_fans_glue.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "ice-test",
+      "label": "ice_test",
+      "key": "ice_test",
+      "file": "sokoban/ice_test.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "curling-on-cube",
+      "label": "curling on Cube",
+      "key": "curling_on_cube",
+      "file": "sokoban/curling_on_cube.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "easy-energy-bridge",
+      "label": "easy energy bridge",
+      "key": "easy_energy_bridge",
+      "file": "sokoban/easy_energy_bridge.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "energy-test",
+      "label": "energy_test",
+      "key": "energy_test",
+      "file": "sokoban/energy_test.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "cross",
+      "label": "cross",
+      "key": "cross",
+      "file": "sokoban/cross.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "expand",
+      "label": "expand",
+      "key": "expand",
+      "file": "sokoban/expand.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "orbox-b",
+      "label": "Orbox B",
+      "key": "orbox_b",
+      "file": "sokoban/orbox_b.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "orbox-b-glued",
+      "label": "Orbox B glued",
+      "key": "orbox_b_glued",
+      "file": "sokoban/orbox_b_glued.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "loop",
+      "label": "loop",
+      "key": "loop",
+      "file": "sokoban/loop.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "curling",
+      "label": "curling",
+      "key": "curling",
+      "file": "sokoban/curling.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "remote-rotate",
+      "label": "remote rotate",
+      "key": "remote_rotate",
+      "file": "sokoban/remote_rotate.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "remote-control",
+      "label": "remote control",
+      "key": "remote_control",
+      "file": "sokoban/remote_control.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "islands",
+      "label": "islands",
+      "key": "islands",
+      "file": "sokoban/islands.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "expand2",
+      "label": "expand2",
+      "key": "expand2",
+      "file": "sokoban/expand2.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "expand3",
+      "label": "expand3",
+      "key": "expand3",
+      "file": "sokoban/expand3.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Sokoban"
+        ],
+      "id": "bridges-blocking",
+      "label": "bridges_blocking",
+      "key": "bridges_blocking",
+      "file": "sokoban/bridges_blocking.preset.js"
+    },
+    {
+      "gameTypes": [
+        "FIDE Chess"
+        ],
+      "id": "knights-on-rubik-s-cube",
+      "fideChessVariant": "kingless-puzzle",
+      "label": "knights on Rubik's Cube",
+      "key": "knights_on_rubik_s_cube",
+      "file": "knights_on_rubik_s_cube.preset.js"
+    },
+    {
+      "gameTypes": [
+        "FIDE Chess"
+        ],
+      "id": "queens-on-double-cover",
+      "fideChessVariant": "kingless-puzzle",
+      "label": "queens on double cover",
+      "key": "queens_on_double_cover",
+      "file": "queens_on_double_cover.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Hex"
+        ],
+      "id": "classic-hex",
+      "label": "classic hex",
+      "key": "classic_hex",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
+      "file": "classic_hex.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Hex"
+        ],
+      "id": "hex-torus-5-5",
+      "label": "hex torus 5*5",
+      "key": "hex_torus_5_5",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
+      "file": "hex_torus_5_5.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Hex"
+        ],
+      "id": "hex-klein-bottle-5-5",
+      "label": "hex Klein bottle 5*5",
+      "key": "hex_klein_bottle_5_5",
+      "wrappedView": { "x": "repeat", "y": "reflect-x" },
+      "file": "hex_klein_bottle_5_5.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Hex"
+        ],
+      "id": "symmetric-rp2",
+      "label": "symmetric RP2",
+      "key": "symmetric_rp2",
+      "file": "symmetric_rp2.preset.js"
+    },
+    {
+      "gameTypes": [
+        "Hex"
+        ],
+      "id": "hex-rp2-5-5",
+      "label": "hex RP2 5*5",
+      "key": "hex_rp2_5_5",
+      "file": "hex_rp2_5_5.preset.js"
+    },  
+    {
+      "gameTypes": [
+        "Hex"
+        ],
+      "id": "hex-with-three-slits",
+      "label": "hex with three slits",
+      "key": "hex_with_three_slits",
+      "wrappedView": { "x": "repeat", "y": "repeat" },
+      "file": "hex_with_three_slits.preset.js"
+    }, 
+    ]
+  };
+});

@@ -1,0 +1,1401 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Strand Diagram Calculator</title>
+  <link rel="stylesheet" href="css/site.css?v=20260903-1">
+  <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
+  <style>
+    .strand-layout {
+      max-width: 1240px;
+      grid-template-columns: minmax(0, 1fr) 390px;
+      align-items: start;
+    }
+
+    .strand-main-column {
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+      align-content: start;
+    }
+
+    .strand-workspace {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+      padding: 16px;
+    }
+
+    .strand-stage {
+      min-height: 420px;
+      max-height: min(64vh, 620px);
+      position: relative;
+      overflow: hidden;
+      scrollbar-gutter: auto;
+    }
+
+    .strand-stage.is-scroll-y {
+      overflow-x: hidden;
+      overflow-y: auto;
+      scrollbar-gutter: stable;
+    }
+
+    .strand-stage.is-scroll-x {
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    .strand-stage.is-scroll-x.is-scroll-y {
+      overflow: auto;
+      scrollbar-gutter: stable;
+    }
+
+    #strand-canvas {
+      width: 100%;
+      height: min(64vh, 620px);
+      min-height: 420px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fffdf8;
+      cursor: default;
+      display: block;
+      touch-action: none;
+    }
+
+    .strand-toolbar-group,
+    .strand-action-row,
+    .strand-export-actions,
+    .strand-import-actions,
+    .strand-input-chart {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .strand-toolbar-group {
+      justify-content: flex-end;
+    }
+
+    .strand-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 1px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0;
+      text-transform: none;
+      white-space: nowrap;
+    }
+
+    .strand-field-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      white-space: nowrap;
+    }
+
+    .strand-field-inline input,
+    .strand-field-inline select,
+    .strand-field-row input,
+    .strand-field-row select,
+    .strand-textarea {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.76rem;
+    }
+
+    .strand-field-row input[type="range"] {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      accent-color: var(--accent);
+      touch-action: none;
+    }
+
+    .strand-field-inline input {
+      width: 70px;
+      padding: 2px 6px;
+      text-align: center;
+    }
+
+    .strand-field-inline select {
+      padding: 3px 7px;
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.92rem;
+    }
+
+    .strand-field-inline input:focus,
+    .strand-field-inline select:focus,
+    .strand-field-row input:focus,
+    .strand-field-row select:focus,
+    .strand-textarea:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .strand-underbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 16px 12px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      overflow-wrap: anywhere;
+    }
+
+    .strand-generator-panel {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      min-width: 0;
+      padding-top: 2px;
+    }
+
+    .strand-generator-input {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.86rem;
+      white-space: nowrap;
+    }
+
+    .strand-generator-input input {
+      width: 82px;
+      padding: 4px 7px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.78rem;
+      text-align: center;
+    }
+
+    .strand-generator-input input:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .strand-small-button {
+      padding: 4px 10px;
+      font-size: 0.74rem;
+    }
+
+    .strand-small-button:disabled,
+    .strand-generator-input input:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    .strand-field-row {
+      display: grid;
+      grid-template-columns: 104px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+      min-width: 0;
+    }
+
+    .strand-field-row .input-label {
+      margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .strand-field-row select {
+      width: 100%;
+      padding: 5px 8px;
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.94rem;
+    }
+
+    .strand-textarea {
+      width: 100%;
+      min-height: 150px;
+      padding: 8px;
+      resize: vertical;
+      line-height: 1.35;
+    }
+
+    #strand-import-input {
+      min-height: 92px;
+      margin-top: 8px;
+    }
+
+    .strand-import-mode {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .strand-message {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .strand-message.is-error {
+      color: var(--accent2);
+    }
+
+    .strand-info-stack {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .strand-basic-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 8px 12px;
+      min-width: 0;
+    }
+
+    .strand-basic-format-control {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .strand-basic-format-control .input-label {
+      margin: 0;
+    }
+
+    .strand-basic-format-control select {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.94rem;
+    }
+
+    .strand-basic-format-control select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .strand-basic-reduced-toggle {
+      margin: 0;
+      min-height: 31px;
+      white-space: nowrap;
+    }
+
+    .strand-basic-reduced-toggle.is-disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+    }
+
+    .strand-basic-reduced-toggle input:disabled {
+      cursor: not-allowed;
+    }
+
+    .strand-display-controls {
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .strand-slider-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .strand-slider-row input[type="range"] {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .strand-slider-value {
+      min-width: 42px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .strand-spacing-control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .strand-display-toggle {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .strand-field-row.is-disabled {
+      opacity: 0.5;
+    }
+
+    .strand-field-row.is-disabled input {
+      cursor: not-allowed;
+    }
+
+    .strand-input-chart {
+      display: grid;
+      align-items: stretch;
+      gap: 10px;
+    }
+
+    .strand-generator-family {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .strand-generator-family-title {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0;
+    }
+
+    .strand-generator-family-chips {
+      display: flex;
+      align-items: stretch;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .strand-generator-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 54px;
+      min-height: 34px;
+      padding: 5px 9px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.78rem;
+      line-height: 1.1;
+      text-align: center;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .strand-generator-chip:hover,
+    .strand-generator-chip:focus {
+      border-color: var(--accent);
+      color: var(--accent);
+      outline: none;
+    }
+
+    .strand-generator-chip:active {
+      cursor: grabbing;
+      transform: translateY(1px);
+    }
+
+    .strand-generator-chip.is-braid {
+      border-color: rgba(139, 58, 42, 0.38);
+    }
+
+    .strand-generator-chip.is-kl {
+      border-color: rgba(31, 28, 24, 0.36);
+      font-weight: 700;
+    }
+
+    .strand-generator-chip.is-tl {
+      border-color: rgba(123, 71, 126, 0.4);
+    }
+
+    .strand-generator-drag-ghost {
+      position: fixed;
+      z-index: 10000;
+      pointer-events: none;
+      min-width: 54px;
+      min-height: 34px;
+      padding: 5px 9px;
+      border: 1px solid var(--accent);
+      border-radius: 3px;
+      background: var(--surface);
+      color: var(--accent);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.78rem;
+      line-height: 1.1;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+      opacity: 0.92;
+    }
+
+    body.strand-generator-dragging #strand-canvas {
+      cursor: copy;
+    }
+
+    .strand-stat-grid {
+      display: grid;
+      gap: 0;
+      min-width: 0;
+    }
+
+    .strand-stat-row {
+      display: grid;
+      grid-template-columns: minmax(92px, 0.42fr) minmax(0, 1fr);
+      gap: 10px;
+      align-items: baseline;
+      padding: 6px 0;
+      border-bottom: 1px dotted var(--border);
+      min-width: 0;
+    }
+
+    .strand-stat-row:last-child {
+      border-bottom: 0;
+    }
+
+    .strand-stat-label {
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .strand-stat-value {
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.76rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+      text-align: right;
+    }
+
+    .strand-stat-value mjx-container {
+      margin: 0 !important;
+      overflow: visible;
+    }
+
+    .strand-matrix-wrap {
+      width: 100%;
+      inline-size: 100%;
+      max-width: 100%;
+      max-inline-size: 100%;
+      min-width: 0;
+      min-inline-size: 0;
+      overflow: auto;
+      padding: 2px 0 6px;
+      scrollbar-gutter: stable;
+      box-sizing: border-box;
+      contain: inline-size layout paint;
+      text-align: left;
+    }
+
+    .strand-matrix-wrap mjx-container[jax="CHTML"][display="true"] {
+      margin: 0.35em 0 !important;
+      min-width: max-content;
+    }
+
+    .strand-note {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-style: italic;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .strand-calculation-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .strand-calculation-controls [hidden] {
+      display: none !important;
+    }
+
+    .strand-calculation-source {
+      display: grid;
+      grid-template-columns: 104px minmax(0, 1fr);
+      gap: 10px;
+      align-items: baseline;
+      min-width: 0;
+      padding-bottom: 8px;
+      border-bottom: 1px dotted var(--border);
+    }
+
+    .strand-calculation-source-output {
+      min-width: 0;
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.74rem;
+      overflow-wrap: anywhere;
+      text-align: right;
+    }
+
+    .strand-calculation-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 2px;
+    }
+
+    .strand-calculation-presentation {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .strand-calculation-presentation.is-reference {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .strand-segmented-control {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      min-width: 0;
+      padding: 2px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+    }
+
+    .strand-segmented-button {
+      min-width: 0;
+      min-height: 29px;
+      padding: 4px 7px;
+      overflow: hidden;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 0.76rem;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .strand-segmented-button[aria-pressed="true"] {
+      background: var(--surface);
+      color: var(--accent);
+      box-shadow: 0 1px 4px rgba(45, 34, 22, 0.14);
+    }
+
+    .strand-segmented-button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .strand-segmented-control.is-disabled {
+      opacity: 0.5;
+    }
+
+    .strand-segmented-button:disabled {
+      cursor: not-allowed;
+    }
+
+    #strand-calculation-wide-host {
+      padding: 0 16px 16px;
+    }
+
+    #strand-calculation-wide-host[hidden] {
+      display: none !important;
+    }
+
+    #strand-calculation-card.wide {
+      margin-top: 16px;
+    }
+
+    #strand-calculation-card.wide .strand-calculation-equation,
+    #strand-calculation-card.wide .strand-calculation-matrix {
+      max-height: min(70vh, 720px);
+      padding-right: 8px;
+    }
+
+    .strand-calculation-wide-toggle {
+      display: none;
+      margin-left: auto;
+    }
+
+    @media (min-width: 960px) {
+      .strand-calculation-wide-toggle {
+        display: inline-flex;
+      }
+    }
+
+    @media (max-width: 959px) {
+      .strand-calculation-actions.is-reference {
+        display: none;
+      }
+    }
+
+    .strand-calculation-message {
+      min-height: 1.25em;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .strand-calculation-message.is-error {
+      color: var(--accent2);
+    }
+
+    .strand-calculation-message.is-stale {
+      color: var(--accent);
+    }
+
+    .strand-calculation-render-warning {
+      padding: 6px 8px;
+      border-left: 2px solid var(--accent);
+      background: rgba(196, 127, 23, 0.07);
+      color: var(--text);
+      font-size: 0.76rem;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .strand-calculation-render-warning[hidden] {
+      display: none !important;
+    }
+
+    .strand-calculation-surface {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+
+    .strand-calculation-relations {
+      display: grid;
+      margin: 8px 0 0;
+      padding: 0;
+      color: var(--text);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.7rem;
+      overflow-wrap: anywhere;
+    }
+
+    .strand-basis-summary {
+      display: grid;
+      gap: 6px;
+      margin-top: 8px;
+      min-width: 0;
+    }
+
+    .strand-basis-count,
+    .strand-basis-definition,
+    .strand-basis-result-form {
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 2px 0;
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 1rem;
+      white-space: nowrap;
+    }
+
+    .strand-basis-count {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .strand-basis-explanation,
+    .strand-basis-algorithm {
+      margin: 0;
+      color: var(--text);
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+    .strand-basis-algorithm {
+      color: var(--muted);
+    }
+
+    .strand-basis-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 6px;
+      margin-top: 10px;
+      min-width: 0;
+    }
+
+    .strand-basis-item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      min-height: 52px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 7px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.42);
+      box-sizing: border-box;
+    }
+
+    .strand-basis-item.is-diagrammatic {
+      min-height: 86px;
+    }
+
+    .strand-basis-item .strand-diagram-linear {
+      flex-wrap: nowrap;
+    }
+
+    .strand-basis-pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 9px;
+    }
+
+    .strand-basis-page-button {
+      width: 34px;
+      min-width: 34px;
+      padding: 5px;
+      font-size: 1rem;
+    }
+
+    .strand-basis-page-input {
+      width: 76px;
+      min-width: 0;
+      padding: 5px 7px;
+      text-align: center;
+    }
+
+    .strand-basis-page-status {
+      min-width: 76px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.68rem;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .strand-diagram-relation-sheet {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .strand-diagram-relation-group {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .strand-diagram-relation-group-title {
+      color: var(--muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .strand-diagram-relation-list {
+      display: grid;
+      gap: 4px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .strand-diagram-relation-item {
+      width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 3px 0 7px;
+      border-bottom: 1px dotted rgba(216, 208, 196, 0.72);
+      scrollbar-gutter: stable;
+    }
+
+    .strand-diagram-relation-item:last-child {
+      border-bottom: 0;
+    }
+
+    .strand-diagram-relation-equations {
+      display: grid;
+      gap: 7px;
+      width: max-content;
+      min-width: 100%;
+    }
+
+    .strand-diagram-relation-equations.has-hint {
+      cursor: help;
+    }
+
+    .strand-diagram-relation-equations.has-hint:focus-visible {
+      outline: 1px dotted var(--accent);
+      outline-offset: 2px;
+    }
+
+    .strand-diagram-relation-equation {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: max-content;
+      min-height: 66px;
+    }
+
+    .strand-diagram-relation-operator {
+      min-width: 18px;
+      color: var(--text);
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 1.08rem;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .strand-diagram-relation-sheet.is-symbolic {
+      gap: 7px;
+    }
+
+    .strand-diagram-relation-sheet.is-symbolic .strand-diagram-relation-group {
+      gap: 2px;
+    }
+
+    .strand-diagram-relation-sheet.is-symbolic .strand-diagram-relation-list,
+    .strand-diagram-relation-sheet.is-symbolic .strand-diagram-relation-equations {
+      gap: 0;
+    }
+
+    .strand-diagram-relation-sheet.is-symbolic .strand-diagram-relation-item {
+      padding: 1px 0 3px;
+    }
+
+    .strand-diagram-relation-sheet.is-symbolic .strand-diagram-relation-equation {
+      gap: 4px;
+      min-height: 0;
+      padding: 2px 0;
+    }
+
+    .strand-calculation-equation,
+    .strand-calculation-matrix {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 4px 0 7px;
+      scrollbar-gutter: stable;
+      text-align: left;
+    }
+
+    .strand-calculation-equation mjx-container[jax="CHTML"][display="true"],
+    .strand-calculation-matrix mjx-container[jax="CHTML"][display="true"] {
+      margin: 0.45em 0 !important;
+      min-width: max-content;
+    }
+
+    .strand-calculation-matrix-label {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 0.76rem;
+    }
+
+    .strand-diagram-trace {
+      display: grid;
+      grid-template-columns: max-content 18px max-content max-content;
+      column-gap: 8px;
+      row-gap: 12px;
+      align-items: center;
+      width: max-content;
+      min-width: 100%;
+      padding: 4px 0;
+    }
+
+    .strand-diagram-trace-row {
+      display: contents;
+    }
+
+    .strand-diagram-trace-equals {
+      color: var(--text);
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 1.1rem;
+      text-align: center;
+    }
+
+    .strand-diagram-trace-annotation {
+      color: var(--muted);
+      font-size: 0.74rem;
+      white-space: nowrap;
+    }
+
+    .strand-diagram-operand,
+    .strand-diagram-linear,
+    .strand-diagram-factor-product,
+    .strand-diagram-factor,
+    .strand-diagram-term,
+    .strand-diagram-representation,
+    .strand-diagram-vector-lhs {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      width: max-content;
+      min-width: 0;
+    }
+
+    .strand-diagram-linear,
+    .strand-diagram-factor-product {
+      gap: 8px;
+    }
+
+    .strand-diagram-factor {
+      gap: 4px;
+    }
+
+    .strand-diagram-parenthesis {
+      color: var(--muted);
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 2.2rem;
+      line-height: 1;
+    }
+
+    .strand-diagram-term-prefix,
+    .strand-diagram-coefficient,
+    .strand-diagram-representation-badge {
+      color: var(--text);
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 1rem;
+      white-space: nowrap;
+    }
+
+    .strand-inline-diagram {
+      display: block;
+      flex: 0 0 auto;
+      max-width: none;
+      overflow: visible;
+      border: 1px solid rgba(216, 208, 196, 0.72);
+      border-radius: 3px;
+      background: #fffdf8;
+    }
+
+    .strand-inline-diagram .strand-diagram-path {
+      fill: none;
+      stroke: #27231f;
+      stroke-width: 1.65;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .strand-inline-diagram .strand-diagram-path.is-tl {
+      stroke: #7b477e;
+    }
+
+    .strand-inline-diagram .strand-diagram-path.is-hecke {
+      stroke: #286775;
+    }
+
+    .strand-inline-diagram .strand-diagram-path.is-link-state {
+      stroke: #286775;
+    }
+
+    .strand-inline-diagram .strand-diagram-platform {
+      fill: #d9d6cf;
+      stroke: #4f4b45;
+      stroke-width: 1.15;
+      stroke-linejoin: round;
+    }
+
+    .strand-inline-diagram .strand-diagram-over-gap {
+      stroke: #fffdf8;
+      stroke-width: 5;
+      stroke-linecap: round;
+    }
+
+    .strand-inline-diagram .strand-diagram-over {
+      stroke: #27231f;
+      stroke-width: 1.9;
+      stroke-linecap: round;
+    }
+
+    .strand-inline-diagram .strand-diagram-endpoint {
+      fill: #27231f;
+    }
+
+    .strand-inline-diagram .strand-diagram-grid-cell {
+      fill: transparent;
+      stroke: #817b72;
+      stroke-width: 0.7;
+    }
+
+    .strand-inline-diagram .strand-diagram-grid-cell.is-selected {
+      fill: rgba(40, 112, 123, 0.28);
+      stroke: #286775;
+      stroke-width: 1.25;
+    }
+
+    .strand-diagram-vector-system {
+      display: grid;
+      gap: 7px;
+      width: max-content;
+    }
+
+    .strand-diagram-vector-row {
+      display: grid;
+      grid-template-columns: max-content 18px max-content;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .strand-generator-chip mjx-container,
+    .strand-generator-drag-ghost mjx-container {
+      margin: 0 !important;
+      pointer-events: none;
+    }
+
+    .strand-generator-chip mjx-container *,
+    .strand-generator-drag-ghost mjx-container * {
+      pointer-events: none;
+    }
+
+    @media (max-width: 780px) {
+      .strand-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .strand-workspace {
+        padding: 12px;
+      }
+
+      .strand-stage,
+      #strand-canvas {
+        min-height: 330px;
+      }
+
+      .strand-stage {
+        max-height: 380px;
+      }
+
+      #strand-canvas {
+        height: 380px;
+      }
+
+      .strand-toolbar-group,
+      .strand-generator-panel,
+      .strand-underbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .strand-field-row,
+      .strand-stat-row,
+      .strand-calculation-source {
+        grid-template-columns: 1fr;
+        gap: 3px;
+      }
+
+      .strand-spacing-control {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .strand-basic-controls {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
+      .strand-basic-format-control {
+        min-width: 0;
+      }
+
+      .strand-stat-value {
+        text-align: left;
+      }
+
+      .strand-calculation-source-output {
+        text-align: left;
+      }
+
+      .strand-calculation-presentation {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Strand Diagram Calculator</h1>
+  <span><a href="index.html">Pure Math Toolkit</a> &middot; symmetric and signed Weyl groups &middot; strand diagrams</span>
+</header>
+
+<main class="layout strand-layout">
+  <div class="strand-main-column">
+    <section class="canvas-panel" aria-label="Strand diagram canvas panel">
+      <header class="panel-title">
+        <span class="panel-title-text">Strand Diagram</span>
+        <div class="canvas-toolbar strand-toolbar-group" aria-label="Strand diagram controls">
+          <span class="strand-badge" id="strand-status-badge">\(S_{5}\)</span>
+          <label class="strand-field-inline" for="strand-group-type">
+            <span>group</span>
+            <select id="strand-group-type">
+              <option value="symmetric" selected>S_n</option>
+              <option value="B">B_n</option>
+              <option value="C">C_n</option>
+              <option value="D">D_n</option>
+            </select>
+          </label>
+          <label class="strand-field-inline" for="strand-count">
+            <span id="strand-count-label">strands</span>
+            <input id="strand-count" type="number" min="1" step="1" value="5" inputmode="numeric">
+          </label>
+        </div>
+      </header>
+
+      <div class="strand-workspace">
+        <div class="strand-stage">
+          <canvas id="strand-canvas" width="900" height="560" aria-label="Strand diagram"></canvas>
+        </div>
+        <div class="strand-generator-panel">
+          <button class="btn btn-ghost strand-small-button" id="strand-clear" type="button">clear</button>
+        </div>
+      </div>
+
+      <div class="strand-underbar">
+        <span id="strand-status">ready</span>
+        <span id="strand-summary">identity in \(S_{5}\)</span>
+      </div>
+      <section id="strand-calculation-wide-host" hidden></section>
+    </section>
+  </div>
+
+  <aside class="side" id="cards">
+    <section class="card" id="strand-input-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="strand-input-chart" id="strand-input-chart" aria-label="Adjacent generator input chart"></div>
+      </div>
+    </section>
+
+    <section class="card" id="strand-display-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Display</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="strand-display-controls">
+          <div class="strand-field-row">
+            <label class="input-label" for="strand-direction">direction</label>
+            <select id="strand-direction">
+              <option value="up-down" selected>up to down</option>
+              <option value="down-up">down to up</option>
+              <option value="left-right">left to right</option>
+              <option value="right-left">right to left</option>
+            </select>
+          </div>
+          <div class="strand-field-row">
+            <label class="input-label" for="strand-display-style">style</label>
+            <select id="strand-display-style">
+              <option value="straight">Straight</option>
+              <option value="soft" selected>Soft</option>
+            </select>
+          </div>
+          <div class="strand-field-row">
+            <label class="input-label" for="strand-generator-spacing">spacing</label>
+            <div class="strand-spacing-control">
+              <div class="strand-slider-row">
+                <input id="strand-generator-spacing" type="range" min="0" max="2" step="0.1" value="0">
+                <span class="strand-slider-value" id="strand-generator-spacing-value">0.0</span>
+              </div>
+              <label class="opt-row strand-display-toggle" for="strand-generator-gap-enabled">
+                <input id="strand-generator-gap-enabled" type="checkbox">
+                <span>gap</span>
+              </label>
+            </div>
+          </div>
+          <div class="strand-field-row">
+            <label class="input-label" for="strand-size-mode">size mode</label>
+            <select id="strand-size-mode">
+              <option value="fit" selected>Fit canvas</option>
+              <option value="fixed">Fixed generator size</option>
+            </select>
+          </div>
+          <div class="strand-field-row" id="strand-fixed-generator-size-row">
+            <label class="input-label" for="strand-fixed-generator-size">generator size</label>
+            <div class="strand-slider-row">
+              <input id="strand-fixed-generator-size" type="range" min="36" max="180" step="4" value="88">
+              <span class="strand-slider-value" id="strand-fixed-generator-size-value">88px</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="strand-basic-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Basic Info</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="strand-info-stack" id="strand-basic-info"></div>
+      </div>
+    </section>
+
+    <span id="strand-calculation-side-anchor" hidden></span>
+    <section class="card" id="strand-calculation-card" draggable="true" data-card-wide="true" data-card-wide-host="#strand-calculation-wide-host" data-card-side-anchor="#strand-calculation-side-anchor" data-card-wide-button="#strand-calculation-wide">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Calculation</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="strand-calculation-controls">
+          <div class="strand-field-row" id="strand-calculation-task-row">
+            <label class="input-label" for="strand-calculation-task">compute</label>
+            <select id="strand-calculation-task" aria-label="What to compute">
+              <option value="strand" selected>Current strand</option>
+              <option value="relations">Relations</option>
+              <option value="basis">Check basis</option>
+            </select>
+          </div>
+          <div class="strand-calculation-source" id="strand-calculation-source-row">
+            <span class="input-label">source</span>
+            <output class="strand-calculation-source-output" id="strand-calculation-source">identity</output>
+          </div>
+          <div class="strand-field-row" id="strand-calculation-target-row">
+            <label class="input-label" for="strand-calculation-target">target</label>
+            <select id="strand-calculation-target">
+              <option value="symmetric">Symmetric group</option>
+              <option value="braid">Braid group</option>
+              <option value="hecke">Hecke algebra</option>
+              <option value="tl" selected>Temperley-Lieb algebra</option>
+              <option value="burau">Burau representation</option>
+            </select>
+          </div>
+          <div class="strand-field-row" id="strand-calculation-basis-row">
+            <label class="input-label" for="strand-calculation-basis">basis</label>
+            <select id="strand-calculation-basis">
+              <option value="diagram" selected>Diagram basis</option>
+            </select>
+          </div>
+          <div class="strand-calculation-presentation" id="strand-calculation-presentation">
+            <div class="strand-segmented-control" id="strand-calculation-mode-control" role="group" aria-label="Calculation presentation">
+              <button class="strand-segmented-button" id="strand-calculation-mode-symbolic" type="button" data-calculation-mode="symbolic" aria-pressed="true">Symbolic</button>
+              <button class="strand-segmented-button" id="strand-calculation-mode-diagrammatic" type="button" data-calculation-mode="diagrammatic" aria-pressed="false">Diagrammatic</button>
+            </div>
+            <div class="strand-segmented-control is-disabled" id="strand-calculation-scope-control" role="group" aria-label="Diagrammatic scope">
+              <button class="strand-segmented-button" id="strand-calculation-scope-all" type="button" data-calculation-scope="all" aria-pressed="true" disabled>All symbols</button>
+              <button class="strand-segmented-button" id="strand-calculation-scope-basis" type="button" data-calculation-scope="basis" aria-pressed="false" disabled>Basis terms</button>
+            </div>
+          </div>
+          <div class="strand-calculation-actions" id="strand-calculation-actions">
+            <button class="btn" id="strand-calculate" type="button" data-shortcut-primary>calculate</button>
+            <button class="btn btn-ghost strand-small-button" id="strand-copy-calculation-latex" type="button" disabled>copy LaTeX</button>
+            <button class="btn btn-ghost strand-small-button" id="strand-copy-calculation-result" type="button" disabled>copy result</button>
+            <button class="btn btn-ghost strand-small-button strand-calculation-wide-toggle" id="strand-calculation-wide" type="button" aria-pressed="false">wide</button>
+          </div>
+          <div class="strand-calculation-message" id="strand-calculation-message" aria-live="polite">Choose a target and calculate.</div>
+          <div class="strand-calculation-render-warning" id="strand-calculation-render-warning" role="status" hidden></div>
+          <div class="strand-calculation-surface" id="strand-calculation-relations-surface" hidden>
+            <div class="strand-calculation-relations" id="strand-calculation-relations"></div>
+          </div>
+          <div class="strand-calculation-surface" id="strand-calculation-basis-surface" hidden>
+            <div class="strand-basis-summary" id="strand-calculation-basis-summary"></div>
+            <div class="strand-basis-list" id="strand-calculation-basis-list" role="list"></div>
+            <div class="strand-basis-pagination" id="strand-calculation-basis-pagination" hidden>
+              <button class="btn btn-ghost strand-basis-page-button" id="strand-calculation-basis-previous" type="button" title="previous basis page" aria-label="Previous basis page">&#8249;</button>
+              <input class="strand-basis-page-input" id="strand-calculation-basis-page" type="text" inputmode="numeric" aria-label="Basis page number">
+              <button class="btn btn-ghost strand-small-button" id="strand-calculation-basis-go" type="button">go</button>
+              <span class="strand-basis-page-status" id="strand-calculation-basis-page-status"></span>
+              <button class="btn btn-ghost strand-basis-page-button" id="strand-calculation-basis-next" type="button" title="next basis page" aria-label="Next basis page">&#8250;</button>
+            </div>
+          </div>
+          <div class="strand-calculation-surface" id="strand-calculation-surface">
+            <div class="strand-calculation-equation" id="strand-calculation-equation"></div>
+            <div id="strand-calculation-matrix-section" hidden>
+              <div class="strand-calculation-matrix-label" id="strand-calculation-matrix-label">matrix</div>
+              <div class="strand-calculation-matrix" id="strand-calculation-matrix"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="strand-export-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Import / Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="strand-field-row">
+          <label class="input-label" for="strand-export-format">format</label>
+          <select id="strand-export-format">
+            <option value="latex" selected>LaTeX</option>
+            <option value="plain">Plain text</option>
+            <option value="json">JSON preset</option>
+          </select>
+        </div>
+        <textarea id="strand-export-out" class="strand-textarea" readonly spellcheck="false"></textarea>
+        <div class="strand-export-actions">
+          <button class="btn" id="strand-refresh-export" type="button">refresh</button>
+          <button class="btn btn-ghost" id="strand-copy-export" type="button">copy</button>
+        </div>
+        <div class="strand-import-mode">
+          <label class="input-label" for="strand-import-input">import JSON</label>
+          <textarea id="strand-import-input" class="strand-textarea" spellcheck="false" autocomplete="off" placeholder="Paste exported JSON"></textarea>
+          <div class="strand-import-actions">
+            <button class="btn btn-ghost strand-small-button" id="strand-load-import" type="button">load</button>
+            <button class="btn btn-ghost strand-small-button" id="strand-clear-import" type="button">clear</button>
+          </div>
+          <div class="strand-message" id="strand-export-message"></div>
+        </div>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  Browser-side strand diagram prototype styled with the shared calculator UI.
+  <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
+</footer>
+
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    }
+  };
+</script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<script src="js/calculator_cards.js?v=20260903-1"></script>
+<script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
+  <script src="js/strand_math/core.js"></script>
+  <script src="js/strand_math/permutation.js"></script>
+  <script src="js/strand_math/hecke.js"></script>
+  <script src="js/strand_math/kl.js"></script>
+  <script src="js/strand_math/temperley_lieb.js"></script>
+  <script src="js/strand_math/burau.js"></script>
+  <script src="js/strand_math/calculate.js?v=20260831-1"></script>
+  <script src="js/strand_math/diagrammatics.js?v=20260831-1"></script>
+  <script src="js/strand_math/basis_catalog.js?v=20260831-2"></script>
+<script src="js/strand_drawing.js?v=20261021-icon-braids-1"></script>
+<script src="js/strand_diagram_calculator.js?v=20261021-low-rank-2"></script>
+<script src="js/calculator_input_profiles.js?v=20260903-1"></script>
+  <script src="js/import_export_panel.js?v=20260821-7"></script>
+  <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
+</body>
+</html>

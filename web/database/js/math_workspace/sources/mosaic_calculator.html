@@ -1,0 +1,2273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mosaic Calculator</title>
+  <link rel="stylesheet" href="css/site.css?v=20260903-1">
+  <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
+  <style>
+        .mosaic-layout {
+            max-width: 1220px;
+            grid-template-columns: minmax(0, 1fr) 340px;
+        }
+
+        .homology-generator-list {
+            margin: 8px 0 0;
+            padding: 0;
+            list-style: none;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 12px;
+        }
+
+        .homology-generator-list li {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 0;
+            border-bottom: 1px dotted var(--border);
+        }
+
+        .homology-generator-list li:last-child { border-bottom: none; }
+
+        .homology-generator-list .btn {
+            margin-left: auto;
+            padding: 4px 8px;
+            font-size: 0.72rem;
+        }
+
+        .homology-actions,
+        .homology-options { margin-top: 8px; }
+
+        .homology-math { word-break: normal; }
+
+        .homology-status {
+            min-height: 18px;
+            margin-top: 8px;
+            color: #435467;
+            font-size: 12px;
+        }
+
+    #mosaic-canvas {
+      cursor: pointer;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .mosaic-toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding-left: 12px;
+      border-left: 1px solid var(--border);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .mosaic-toolbar-group label,
+    .mosaic-toolbar-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .mosaic-toolbar-select {
+      min-width: 92px;
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.82rem;
+    }
+
+    .mosaic-toolbar-toggle {
+      padding-left: 12px;
+      border-left: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .mosaic-toolbar-toggle input {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .mosaic-underbar-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .mosaic-status-good { color: var(--accent); }
+    .mosaic-status-bad { color: var(--accent2); }
+
+    .mosaic-number-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .mosaic-number-row label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .mosaic-number-row input[type=number],
+    .mosaic-editor-input {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+
+    .mosaic-editor-input {
+      margin-top: 4px;
+    }
+
+    .mosaic-import-input {
+      min-height: 78px;
+      line-height: 1.35;
+      resize: vertical;
+    }
+
+    .mosaic-import-button {
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .mosaic-import-presets {
+      margin-top: 4px;
+    }
+
+    .mosaic-import-preset-controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .mosaic-preset-field {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .mosaic-preset-field .input-label {
+      display: inline;
+      flex: 0 0 auto;
+      margin: 0;
+      text-transform: none;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .mosaic-preset-field .mosaic-editor-input {
+      margin-top: 0;
+    }
+
+    .mosaic-import-preset-controls[hidden] {
+      display: none !important;
+    }
+
+    .mosaic-knot-code {
+      min-height: 46px;
+      line-height: 1.35;
+      resize: vertical;
+    }
+
+    .mosaic-knot-links {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      align-items: flex-end;
+    }
+
+    .mosaic-opt-pair {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      column-gap: 12px;
+      align-items: center;
+    }
+
+    .mosaic-mode-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      gap: 10px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .mosaic-mode-row select {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .mosaic-mode-row select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .mosaic-wrap-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 0.86rem;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .mosaic-wrap-toggle input {
+      accent-color: var(--accent);
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+    }
+
+    .mosaic-view-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .mosaic-inline-row {
+      display: grid;
+      grid-template-columns: 116px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .mosaic-inline-row .input-label {
+      margin-bottom: 0 !important;
+      white-space: nowrap;
+    }
+
+    .glue-flap-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .glue-flap-controls .opt-row {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    .input-mode-panel[hidden],
+    .mosaic-inline-row[hidden],
+    .mosaic-view-row[hidden] {
+      display: none !important;
+    }
+
+    .mosaic-view-row select {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .mosaic-view-row select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .mosaic-inline-row select {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .mosaic-inline-row select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .boundary-chain-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .boundary-chain-length {
+      width: 64px;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+
+    .boundary-chain-length:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .mosaic-inline-row input[type="text"] {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+
+    .mosaic-inline-row input[type="text"]:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .background-preset-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .export-meta-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .export-meta-field {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .export-meta-field[hidden] {
+      display: none !important;
+    }
+
+    .export-meta-field-label {
+      color: var(--muted);
+      font-size: 0.72rem;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .export-advanced-panel {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+      padding-top: 2px;
+    }
+
+    .export-advanced-panel[hidden] {
+      display: none !important;
+    }
+
+    .export-group-checks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      min-width: 0;
+    }
+
+    .export-test-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.86rem;
+      white-space: nowrap;
+    }
+
+    .export-test-link:hover {
+      text-decoration: underline;
+    }
+
+    .background-preset-controls .btn {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+      white-space: nowrap;
+    }
+
+    .stat-action-value {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .stat-compute-btn {
+      padding: 2px 7px;
+      font-size: 0.72rem;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .billiard-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .billiard-controls .btn {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    #poincare-canvas { display: block; width: 100%; height: 420px; min-height: 280px; touch-action: none; cursor: grab; }
+    #poincare-canvas:active { cursor: grabbing; }
+    .poincare-canvas-wrap { resize: vertical; overflow: hidden; min-height: 280px; height: 420px; border: 1px solid var(--border); border-radius: 4px; }
+    .poincare-canvas-wrap #poincare-canvas { height: 100%; }
+    #poincare-card.wide .poincare-canvas-wrap { height: 620px; }
+    #poincare-wide-host[hidden], #poincare-side-host:empty { display: none; }
+    #poincare-status { display: block; margin: 8px 0; font-size: 12px; color: var(--muted); }
+
+    .metric-toggle[aria-pressed="true"] {
+      color: #fff;
+      border-color: #8a4b20;
+      background: #a85d2d;
+    }
+
+    .metric-toggle[data-state="computing"] { cursor: progress; }
+    .metric-toggle[data-state="warning"] { box-shadow: 0 0 0 2px rgba(191, 126, 0, 0.24); }
+    .metric-toggle[data-state="error"] { box-shadow: 0 0 0 2px rgba(177, 39, 39, 0.22); }
+
+    .hyperbolic-debug-readout {
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(255, 253, 248, 0.72);
+      font-size: 0.76rem;
+      line-height: 1.45;
+      white-space: pre-line;
+    }
+
+    .hyperbolic-heatmap-legend {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 0.72rem;
+    }
+
+    .hyperbolic-heatmap-gradient {
+      height: 9px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #2468b4, #f5f0df, #c53d32);
+    }
+
+    .background-slider-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .background-slider-controls input[type=range] {
+      flex: 1 1 auto;
+      min-width: 64px;
+      accent-color: var(--accent);
+    }
+
+    .background-slider-controls output {
+      min-width: 34px;
+      text-align: right;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+    }
+
+    .background-decoration-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(76px, 0.72fr);
+      gap: 6px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .background-decoration-controls select[hidden] {
+      display: none !important;
+    }
+
+    .mosaic-color-row {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .mosaic-color-input {
+      width: 42px;
+      height: 28px;
+      padding: 2px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      cursor: pointer;
+    }
+
+    .mosaic-color-input[disabled] {
+      opacity: 0.58;
+      cursor: not-allowed;
+    }
+
+    .mosaic-color-swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .mosaic-color-swatch {
+      width: 22px;
+      height: 22px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--swatch-color);
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .mosaic-color-swatch:hover,
+    .mosaic-color-swatch:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .mosaic-boundary-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 8px;
+    }
+
+    .mosaic-boundary-chip {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--boundary-color);
+    }
+
+    .slice-info-row {
+      display: grid;
+      grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
+      align-items: start;
+      column-gap: 10px;
+      font-size: 0.82rem;
+      line-height: 1.6;
+    }
+
+    .slice-info-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      min-width: 80px;
+    }
+
+    .slice-info-value {
+      font-family: 'EB Garamond', serif;
+      font-size: 0.88rem;
+      min-width: 0;
+    }
+
+    .slice-invariant-head {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .slice-invariant-toggle {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1;
+      padding: 1px 3px;
+    }
+
+    .slice-invariant-toggle:hover {
+      color: var(--accent);
+    }
+
+    #dual-graph-invariant-panel {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    #dual-graph-invariant-panel[hidden] {
+      display: none;
+    }
+
+    .slice-invariant-list {
+      display: grid;
+      grid-template-columns: minmax(58px, max-content) minmax(0, 1fr);
+      column-gap: 10px;
+      row-gap: 2px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.45;
+      margin: 0;
+    }
+
+    .dual-graph-control-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+      gap: 8px 12px;
+      margin-top: 8px;
+    }
+
+    .dual-graph-control-row .opt-row {
+      margin: 0;
+    }
+
+    #dual-graph-layout-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    #dual-graph-layout-controls[hidden] {
+      display: none !important;
+    }
+
+    .dual-graph-layout-picker {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .dual-graph-layout-picker select {
+      min-width: 128px;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .dual-graph-layout-picker select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .dual-graph-layout-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      overflow-wrap: anywhere;
+    }
+
+    .slice-mode-row {
+      display: inline-flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .slice-mode-btn {
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--muted);
+      padding: 2px 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      cursor: pointer;
+    }
+
+    .slice-mode-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(61,107,79,0.08);
+    }
+
+    .dual-graph-view-inputs {
+      display: none;
+    }
+
+    .dual-graph-degeneration-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .dual-graph-degeneration-options-row,
+    .dual-graph-degeneration-emphasis-row {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .dual-graph-degeneration-options-row {
+      grid-template-columns: minmax(0, 1fr) max-content;
+    }
+
+    .dual-graph-degeneration-option-toggle,
+    .dual-graph-degeneration-emphasis-toggle {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .dual-graph-degeneration-select-field,
+    .dual-graph-degeneration-style-field {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .dual-graph-degeneration-options-row .input-label,
+    .dual-graph-degeneration-emphasis-row .input-label {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .dual-graph-degeneration-options-row select,
+    .dual-graph-degeneration-emphasis-row select {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+
+    .dual-graph-degeneration-options-row select:focus,
+    .dual-graph-degeneration-emphasis-row select:focus {
+      outline: 2px solid var(--accent);
+      border-color: var(--accent);
+    }
+
+    .dual-graph-degeneration-scroll {
+      max-height: 420px;
+      overflow-y: auto;
+      padding-right: 3px;
+    }
+
+    .dual-graph-degeneration-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .dual-graph-degeneration-tile {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fffdf8;
+      padding: 5px;
+      cursor: pointer;
+    }
+
+    .dual-graph-degeneration-tile:hover,
+    .dual-graph-degeneration-tile:focus-visible {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(61,107,79,0.12);
+      outline: none;
+    }
+
+    .dual-graph-degeneration-tile canvas {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      display: block;
+      background: #fffdf8;
+    }
+
+    .dual-graph-degeneration-caption {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.64rem;
+      color: var(--muted);
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    #dual-graph-degenerations-card.wide {
+      margin-top: 16px;
+    }
+
+    #dual-graph-degenerations-card.wide .dual-graph-degeneration-grid {
+      grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    }
+
+    #dual-graph-degenerations-card.wide .dual-graph-degeneration-scroll {
+      max-height: min(70vh, 720px);
+    }
+
+    .dual-graph-degeneration-wide-toggle {
+      display: none;
+    }
+
+    @media (min-width: 960px) {
+      .dual-graph-degeneration-wide-toggle {
+        display: inline-flex;
+      }
+    }
+
+    .wander-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .wander-actions .btn {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    .wander-status {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .wander-canvas-wrap {
+      margin-top: 8px;
+    }
+
+    #wander-canvas {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fffdf8;
+      cursor: pointer;
+      touch-action: none;
+      display: block;
+      max-height: none !important;
+    }
+
+    .wander-neighbor-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+    .wander-neighbor-controls .btn { width: auto; min-width: 32px; }
+
+    #wander-card.wide {
+      margin-top: 16px;
+    }
+
+    .wander-open-row[hidden],
+    #wander-side-host[hidden],
+    #wander-wide-host[hidden] {
+      display: none !important;
+    }
+
+    #homology-local-chart-card.wide {
+      margin-top: 16px;
+    }
+
+    #homology-local-chart-side-host[hidden],
+    #homology-local-chart-wide-host[hidden] {
+      display: none !important;
+    }
+
+    #homology-local-chart-side-host:not(:has(> #homology-local-chart-card:not([hidden]))) {
+      display: none !important;
+    }
+
+    .homology-local-chart-toolbar,
+    .homology-local-chart-layers {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .homology-local-chart-toolbar {
+      justify-content: space-between;
+    }
+
+    .homology-local-chart-physics-row {
+      align-items: center;
+      gap: 8px;
+    }
+
+    .homology-local-chart-physics-row .slice-mode-row {
+      flex-wrap: wrap;
+    }
+
+    .homology-local-chart-radius-controls {
+      display: grid !important;
+      gap: 0;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+
+    .homology-local-chart-wide-toggle {
+      display: none;
+      margin-left: auto;
+    }
+
+    @media (min-width: 960px) {
+      .homology-local-chart-wide-toggle {
+        display: inline-flex;
+      }
+    }
+
+    .homology-local-chart-toolbar .opt-row,
+    .homology-local-chart-layers .opt-row {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .homology-local-chart-layers {
+      margin-top: 8px;
+      gap: 5px 12px;
+    }
+
+    .homology-local-chart-layers .opt-row {
+      font-size: 0.76rem;
+    }
+
+    .homology-local-chart-canvas-wrap {
+      width: 100%;
+      margin-top: 8px;
+      aspect-ratio: 4 / 3;
+      min-height: 220px;
+      max-height: 540px;
+    }
+
+    #homology-local-chart-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fffdf8;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    #homology-local-chart-card.wide .homology-local-chart-canvas-wrap {
+      aspect-ratio: 16 / 7;
+      min-height: 320px;
+      max-height: min(70vh, 720px);
+    }
+
+    .homology-local-chart-status,
+    .homology-local-chart-detail {
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .homology-local-chart-detail {
+      min-height: 2.8em;
+      color: var(--text);
+    }
+
+    .mosaic-decoration-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .mosaic-decoration-actions .btn {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    .mosaic-decoration-actions .opt-row {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .algebraic-energy-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+
+    .algebraic-energy-row .opt-row {
+      margin: 0;
+    }
+
+    .slice-invariant-list dt {
+      color: var(--muted);
+    }
+
+    .slice-invariant-list dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .rs-node-radius-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
+      gap: 6px 8px;
+      margin-top: 8px;
+    }
+
+    .rs-node-radius-control {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) 32px;
+      align-items: center;
+      column-gap: 5px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--muted);
+    }
+
+    .rs-node-radius-control input {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .rs-node-radius-control output {
+      text-align: right;
+      color: var(--text);
+    }
+
+    .rs-node-auto {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      align-self: center;
+    }
+
+    .tile-palette-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(46px, 1fr));
+      align-items: start;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .tile-swatch {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      height: auto;
+      min-height: 46px;
+      aspect-ratio: 1 / 1;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fffdf8;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      padding: 3px;
+      transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+    }
+
+    .tile-swatch[data-lattice-shape="square"] {
+      aspect-ratio: 1 / 1;
+    }
+
+    .tile-swatch[data-lattice-shape="hex"] {
+      aspect-ratio: 1.7320508076 / 2;
+    }
+
+    .tile-swatch:hover,
+    .tile-swatch.active {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
+    .tile-swatch.dragging {
+      opacity: 0.42;
+      box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
+    .tile-swatch:active {
+      cursor: grabbing;
+      transform: scale(0.98);
+    }
+
+    .tile-swatch canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      background: transparent;
+      cursor: inherit;
+    }
+
+    .tessellated-palette-grid {
+      position: relative;
+      display: block;
+      margin-top: 6px;
+      padding: 2px 0;
+      min-height: 52px;
+    }
+
+    .tessellated-palette-grid .tile-swatch {
+      position: absolute;
+      width: 44px;
+      height: 50px;
+      min-height: 0;
+      aspect-ratio: auto !important;
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      padding: 1px;
+      background: var(--border);
+      clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+      box-shadow: none;
+    }
+
+    .tessellated-palette-grid .tile-swatch:hover,
+    .tessellated-palette-grid .tile-swatch.active {
+      background: var(--accent);
+      box-shadow: none;
+    }
+
+    .tessellated-palette-grid .tile-swatch.dragging {
+      opacity: 0.42;
+      background: var(--accent);
+      box-shadow: none;
+    }
+
+    .tessellated-palette-grid .tile-swatch:active {
+      transform: scale(0.98);
+    }
+
+    .tessellated-palette-grid .tile-swatch canvas {
+      background: #fffdf8;
+      clip-path: inherit;
+    }
+
+    .tessellated-palette-grid[data-lattice-shape="square"] .tile-swatch {
+      width: 44px;
+      height: 44px;
+      clip-path: inset(0);
+    }
+
+    .decoration-palette-row[hidden] {
+      display: none !important;
+    }
+
+    .tile-drag-ghost {
+      position: fixed;
+      width: 58px;
+      height: 58px;
+      border: 1px solid var(--accent);
+      border-radius: 3px;
+      background: #fffdf8;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+      opacity: 0.86;
+      padding: 4px;
+      pointer-events: none;
+      z-index: 9999;
+      box-sizing: border-box;
+      transform: translate(-50%, -50%);
+    }
+
+    .tile-drag-ghost canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    .mosaic-underbar-clear {
+      padding: 4px 12px;
+      font-size: 0.72rem;
+    }
+
+    body.tile-dragging * {
+      cursor: grabbing !important;
+    }
+
+    @media (max-width: 980px) {
+      .mosaic-layout { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 520px) {
+      .mosaic-number-row,
+      .mosaic-mode-row,
+      .mosaic-view-row,
+      .mosaic-inline-row {
+        grid-template-columns: 1fr;
+      }
+
+      .mosaic-toolbar-group,
+      .mosaic-toolbar-toggle {
+        padding-left: 0;
+        border-left: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Mosaic Calculator</h1>
+  <span><a href="index.html">Pure Math Toolkit</a> &middot; <a href="ramified_minigames.html">Ramified Minigames</a> &middot; hexagonal and square mosaic editor</span>
+</header>
+
+<main class="layout mosaic-layout">
+  <section class="canvas-panel" aria-label="Mosaic canvas panel">
+    <header class="panel-title">
+      <span class="panel-title-text">Mosaic Canvas</span>
+      <div class="canvas-toolbar" aria-label="Mosaic canvas controls">
+        <span class="shape-indicator" title="Editor status"><span id="status-badge" class="mosaic-chip calculator-badge">empty</span></span>
+        <span class="mosaic-toolbar-group" aria-label="Mosaic lattice">
+          <label title="Mosaic lattice">
+            <span>lattice</span>
+            <select id="lattice-select" class="mosaic-toolbar-select calculator-control">
+              <option value="hexagonal">Hexagonal</option>
+              <option value="square">Square</option>
+            </select>
+          </label>
+        </span>
+        <span class="mosaic-toolbar-group" aria-label="Canvas boundary">
+          <label title="Canvas boundary">
+            <span>boundary</span>
+            <select id="boundary-mode" class="mosaic-toolbar-select calculator-control">
+              <option value="grid">Grid</option>
+              <option value="wrapped">Wrapped</option>
+              <option value="glued">Glued</option>
+            </select>
+          </label>
+        </span>
+        <span class="canvas-size-inline" aria-label="Board size">
+          <label title="Mosaic rows">
+            <span>rows</span>
+            <input type="number" id="grid-rows" min="2" max="20" value="5">
+          </label>
+          <span class="dimension-times">&times;</span>
+          <label title="Mosaic columns">
+            <span>cols</span>
+            <input type="number" id="grid-cols" min="2" max="20" value="5">
+          </label>
+        </span>
+      </div>
+    </header>
+    <div id="canvas-wrap">
+      <canvas id="mosaic-canvas" tabindex="0" aria-label="Pipe mosaic"></canvas>
+    </div>
+    <div class="mosaic-underbar calculator-underbar">
+      <span class="mosaic-underbar-left">
+        <button class="btn btn-ghost mosaic-underbar-clear" id="clear-board" type="button">clear</button>
+        <span id="status-line">ready</span>
+      </span>
+      <span id="info-line">hexagonal, open</span>
+    </div>
+    <section id="dual-graph-degenerations-wide-host" hidden></section>
+    <section id="wander-wide-host" hidden></section>
+    <section id="poincare-wide-host" hidden></section>
+    <section id="homology-local-chart-wide-host" hidden></section>
+  </section>
+
+  <aside class="side">
+    <div id="wander-side-host" hidden>
+      <section class="card collapsed" id="wander-card" hidden data-card-wide="true" data-card-wide-host="#wander-wide-host" data-card-side-host="#wander-side-host" data-card-wide-button="#wander-toggle-wide">
+        <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Wandering In The Universal Cover</span><em class="toggle-icon">&#9662;</em></div>
+        <div class="card-body">
+          <div class="wander-actions">
+            <button class="btn" id="wander-choose-start" type="button">select</button>
+            <button class="btn btn-ghost" id="wander-reset" type="button">reset</button>
+            <button class="btn btn-ghost" id="wander-toggle-wide" type="button">side</button>
+          </div>
+          <div class="mosaic-inline-row"><label for="wander-view-mode">View</label><select id="wander-view-mode"><option value="tiles">Tile exploration</option><option value="complete-interior">Complete interior</option></select></div>
+          <div id="wander-disk-controls" hidden>
+            <label><input id="wander-follow" type="checkbox" checked> Follow ball</label>
+            <label><input id="wander-mesh" type="checkbox"> Triangle mesh</label>
+            <button class="btn" id="wander-interior-play" type="button">Play</button>
+            <button class="btn btn-ghost" id="wander-restart" type="button">Restart ball</button>
+            <button class="btn btn-ghost" id="wander-recenter" type="button">Recenter</button>
+            <button class="btn" id="wander-use-discrete" type="button">Use discrete solver</button>
+            <div class="wander-neighbor-controls">Explore adjacent triangle:
+              <button class="btn btn-ghost" id="wander-neighbor-0" type="button">1</button>
+              <button class="btn btn-ghost" id="wander-neighbor-1" type="button">2</button>
+              <button class="btn btn-ghost" id="wander-neighbor-2" type="button">3</button>
+            </div>
+            <p class="hint" id="wander-explanation">Click a visible lift to explore. Drag or use arrow keys to pan; this disables Follow ball. Reset changes only this camera.</p>
+          </div>
+          <div id="wander-tile-controls">
+          <div class="mosaic-inline-row">
+            <span class="input-label">Radius</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-marker-radius" min="0.55" max="2.5" step="0.05" value="2.00">
+              <output id="wander-marker-radius-value">2.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Smoke</span>
+            <select id="wander-smoke-color">
+              <option value="blue" selected>blue</option>
+              <option value="yellow">yellow</option>
+              <option value="white">white</option>
+              <option value="gray">gray</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Brightness</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-brightness" min="0.25" max="1.8" step="0.05" value="1.00">
+              <output id="wander-smoke-brightness-value">1.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Shape</span>
+            <select id="wander-smoke-shape">
+              <option value="tile">tile</option>
+              <option value="puff">puff</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Thickness</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-thickness" min="0.35" max="2.5" step="0.05" value="2.00">
+              <output id="wander-smoke-thickness-value">2.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Opacity</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-opacity" min="0.15" max="1" step="0.05" value="1.00">
+              <output id="wander-smoke-opacity-value">1.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Inner</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-gradient-inner" min="0" max="0.45" step="0.01" value="0.00">
+              <output id="wander-smoke-gradient-inner-value">0.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Middle</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-gradient-mid" min="0.2" max="0.9" step="0.01" value="0.50">
+              <output id="wander-smoke-gradient-mid-value">0.50</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Edge</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-gradient-edge" min="0.55" max="1" step="0.01" value="1.00">
+              <output id="wander-smoke-gradient-edge-value">1.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Inner alpha</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-alpha-inner" min="0" max="1" step="0.01" value="1.00">
+              <output id="wander-smoke-alpha-inner-value">1.00</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Middle alpha</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-alpha-mid" min="0" max="1" step="0.01" value="0.50">
+              <output id="wander-smoke-alpha-mid-value">0.50</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Edge alpha</span>
+            <span class="background-slider-controls">
+              <input type="range" id="wander-smoke-alpha-edge" min="0" max="1" step="0.01" value="0.00">
+              <output id="wander-smoke-alpha-edge-value">0.00</output>
+            </span>
+          </div>
+          </div>
+          <span class="wander-status" id="wander-status">select a start tile on the main canvas</span>
+          <div class="wander-canvas-wrap">
+            <canvas id="wander-canvas" width="420" height="320" tabindex="0" aria-label="Wandering in the universal cover"></canvas>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="mosaic-inline-row" id="diagram-type-row">
+          <span class="input-label">Diagram</span>
+          <select id="diagram-type">
+            <option value="link">Knot / link</option>
+            <option value="dual">Dual graph</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="input-mode-row">
+          <span class="input-label">Mode</span>
+          <select id="input-mode">
+            <option value="draw">Draw</option>
+            <option value="tiling">Tiling</option>
+            <option value="background" hidden disabled>Background space</option>
+            <option value="decoration" hidden disabled>Decoration</option>
+            <option value="pick">Pick</option>
+            <option value="import">Import</option>
+          </select>
+        </div>
+        <div class="input-mode-panel" data-input-panel="draw">
+          <div class="mosaic-inline-row">
+            <span class="input-label">Click action</span>
+            <select id="draw-action">
+              <option value="edge">Draw edge</option>
+              <option value="vertex" hidden disabled>Add junctions</option>
+              <option value="rotate">Rotate</option>
+              <option value="reorder">Reorder pairs</option>
+              <option value="randomize">Randomize</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">New pair layer</span>
+            <select id="draw-layer">
+              <option value="above">Above</option>
+              <option value="below">Below</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row">
+            <span class="input-label">Draw preview</span>
+            <select id="draw-style">
+              <option value="none">None</option>
+              <option value="debug">Debug</option>
+              <option value="shade" selected>Shade</option>
+            </select>
+          </div>
+        </div>
+        <div class="input-mode-panel" data-input-panel="tiling">
+          <div class="mosaic-inline-row">
+            <span class="input-label">Click action</span>
+            <select id="edit-mode">
+              <option value="rotate">Rotate</option>
+              <option value="reorder">Reorder pairs</option>
+              <option value="randomize">Randomize</option>
+            </select>
+          </div>
+          <div class="input-method">
+            <span class="input-label">Tiling preferences</span>
+            <div id="tile-palette" class="tile-palette-grid tessellated-palette-grid" aria-label="Tiling preferences"></div>
+          </div>
+        </div>
+        <div class="input-mode-panel" data-input-panel="background">
+          <div class="mosaic-inline-row">
+            <span class="input-label">Click action</span>
+            <select id="background-action">
+              <option value="occupied" hidden disabled>Occupied</option>
+              <option value="tile">Remove / recover tiles</option>
+              <option value="decoration">Add / remove decorations</option>
+              <option value="boundary">Add / remove boundary</option>
+              <option value="glue-boundary">Glue boundary</option>
+              <option value="reverse-glue" hidden disabled>Reverse arrows</option>
+              <option value="billiard">Billiard / geodesic</option>
+              <option value="homology-circle">Trace a background loop</option>
+              <option value="homology-representative" hidden disabled>Choose homology side</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row" id="background-decoration-row" hidden>
+            <span class="input-label">Piece color</span>
+            <span class="background-decoration-controls">
+              <select id="background-decoration-kind" aria-label="Decoration kind" hidden>
+                <option value="input-hole">Input hole</option>
+                <option value="lianliankan-empty">Tile Matching empty cell</option>
+                <option value="hex-red-seed">Hex Red seed</option>
+                <option value="hex-blue-seed">Hex Blue seed</option>
+                <option value="billiards-cue">Billiards cue ball</option>
+                <option value="billiards-pocket">Billiards pocket</option>
+                <option value="billiards-rack-6">Billiards 6-ball rack</option>
+                <option value="billiards-rack-10">Billiards 10-ball rack</option>
+                <option value="billiards-rack-15">Billiards 15-ball rack</option>
+                <option value="billiards-ball-1">Billiards ball 1</option>
+                <option value="billiards-ball-2">Billiards ball 2</option>
+                <option value="billiards-ball-3">Billiards ball 3</option>
+                <option value="billiards-ball-4">Billiards ball 4</option>
+                <option value="billiards-ball-5">Billiards ball 5</option>
+                <option value="billiards-ball-6">Billiards ball 6</option>
+                <option value="billiards-ball-7">Billiards ball 7</option>
+                <option value="billiards-ball-8">Billiards ball 8</option>
+                <option value="billiards-ball-9">Billiards ball 9</option>
+                <option value="billiards-ball-10">Billiards ball 10</option>
+                <option value="billiards-ball-11">Billiards ball 11</option>
+                <option value="billiards-ball-12">Billiards ball 12</option>
+                <option value="billiards-ball-13">Billiards ball 13</option>
+                <option value="billiards-ball-14">Billiards ball 14</option>
+                <option value="billiards-ball-15">Billiards ball 15</option>
+                <option value="start">Start piece</option>
+                <option value="target">Goal</option>
+                <option value="sokoban-player">Sokoban player</option>
+                <option value="sokoban-box">Sokoban box</option>
+                <option value="sokoban-target">Sokoban target</option>
+                <option value="sokoban-sea">Sea</option>
+                <option value="sokoban-wall">Sokoban wall</option>
+                <option value="sokoban-ice">Icy ground</option>
+                <option value="sokoban-energy-bridge">Energy Bridge</option>
+                <option value="chess-white-king-vector-c">White king</option>
+                <option value="chess-white-queen-vector-c">White queen</option>
+                <option value="chess-white-rook">White rook</option>
+                <option value="chess-white-bishop">White bishop</option>
+                <option value="chess-white-knight">White knight</option>
+                <option value="chess-white-pawn">White pawn</option>
+                <option value="chess-black-king-vector-c">Black king</option>
+                <option value="chess-black-queen-vector-c">Black queen</option>
+                <option value="chess-black-rook">Black rook</option>
+                <option value="chess-black-bishop">Black bishop</option>
+                <option value="chess-black-knight">Black knight</option>
+                <option value="chess-black-pawn">Black pawn</option>
+                <option value="clear">Clear</option>
+              </select>
+              <select id="background-decoration-color" aria-label="Decoration color">
+                <option value="black">black</option>
+                <option value="white">white</option>
+                <option value="red">red</option>
+                <option value="yellow">yellow</option>
+                <option value="blue">blue</option>
+                <option value="green">green</option>
+              </select>
+            </span>
+          </div>
+          <div class="input-method decoration-palette-row" id="background-decoration-palette-row" hidden>
+            <span class="input-label">Decoration palette</span>
+            <div id="background-decoration-palette" class="tile-palette-grid tessellated-palette-grid decoration-palette-grid" aria-label="Decoration palette"></div>
+          </div>
+          <div class="mosaic-inline-row" id="background-chess-pawn-direction-row" hidden>
+            <span class="input-label">Pawn dir</span>
+            <select id="background-chess-pawn-direction">
+              <option value="auto">auto</option>
+              <option value="N">N</option>
+              <option value="E">E</option>
+              <option value="S">S</option>
+              <option value="W">W</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row" id="background-billiard-row">
+            <span class="input-label">Geodesic</span>
+            <span class="billiard-controls">
+              <label for="background-metric-toggle">Motion</label><select class="metric-toggle" id="background-metric-toggle" data-state="flat"><option value="flat">Flat</option><option value="hyperbolic">Hyperbolic — reflecting boundary</option><option value="complete-interior">Complete interior (approximation)</option></select>
+              <button class="btn btn-ghost" id="poincare-open" type="button">Poincaré disk</button>
+              <button class="btn" id="background-billiard-play" type="button">add point</button>
+              <button class="btn btn-ghost" id="background-billiard-restart" type="button" disabled>restart</button>
+              <button class="btn btn-ghost" id="background-billiard-clear" type="button">clear</button>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="background-billiard-speed-row">
+            <span class="input-label">Speed</span>
+            <span class="background-slider-controls">
+              <input type="range" id="background-billiard-speed" min="0.02" max="0.38" step="0.02" value="0.20">
+              <output id="background-billiard-speed-value">0.20</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="background-billiard-trail-row">
+            <span class="input-label">Trail</span>
+            <span class="background-slider-controls">
+              <input type="range" id="background-billiard-trail" min="0" max="400" step="10" value="200">
+              <output id="background-billiard-trail-value">200</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="background-billiard-arrow-row">
+            <span class="input-label">Arrow</span>
+            <span class="background-slider-controls">
+              <input type="range" id="background-billiard-arrow" min="0" max="40" step="2" value="20">
+              <output id="background-billiard-arrow-value">20</output>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="background-billiard-hit-row">
+            <span class="input-label">Hit dots</span>
+            <select id="background-billiard-hit-markers">
+              <option value="boundary" selected>Boundary / glued</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+          <div class="mosaic-inline-row" id="background-multi-edge-row">
+            <span class="input-label">Multi-edges</span>
+            <span class="boundary-chain-controls">
+              <label class="opt-row"><input type="checkbox" id="background-multi-edges" checked> on</label>
+              <button class="btn btn-ghost" id="background-begin-second-chain" type="button" disabled>begin second</button>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="background-chain-settings-row">
+            <span class="input-label">Chain</span>
+            <span class="boundary-chain-controls">
+              <label class="opt-row">length <input class="boundary-chain-length" type="number" id="background-chain-length" min="1" max="96" value="1"></label>
+              <label class="opt-row"><input type="checkbox" id="background-chain-reversed"> reversed</label>
+            </span>
+          </div>
+          <div class="mosaic-inline-row" id="background-cusp-marker-row">
+            <span class="input-label">Cusp dot</span>
+            <span class="background-slider-controls">
+              <input type="range" id="background-cusp-marker-scale" min="0.35" max="1.4" step="0.05" value="0.7">
+              <output id="background-cusp-marker-scale-value">0.70</output>
+            </span>
+          </div>
+        </div>
+        <div class="input-mode-panel" data-input-panel="decoration">
+          <div class="mosaic-inline-row">
+            <span class="input-label">Half-edge labels</span>
+            <select id="half-edge-label-style">
+              <option value="number">Number</option>
+              <option value="letter">Letter</option>
+              <option value="point">Point</option>
+              <option value="roman">Roman</option>
+            </select>
+          </div>
+          <div class="mosaic-decoration-actions">
+            <button class="btn btn-ghost" id="random-half-edge-labels" type="button">random</button>
+            <button class="btn btn-ghost" id="clear-decorations" type="button">clear</button>
+            <label class="opt-row"><input type="checkbox" id="clear-vertex-decorations" checked> vertex</label>
+            <label class="opt-row"><input type="checkbox" id="clear-half-edge-decorations" checked> half-edge</label>
+          </div>
+        </div>
+        <div class="input-mode-panel" data-input-panel="pick">
+          <button class="btn mosaic-import-button" id="apply-pick" type="button" disabled>pick</button>
+        </div>
+        <div class="input-method input-mode-panel" data-input-panel="import">
+          <span class="input-label">Mosaic Data</span>
+          <div class="mosaic-import-presets" id="mosaic-import-catalog-controls">
+            <div class="mosaic-inline-row">
+              <span class="input-label">Catalog</span>
+              <select id="import-catalog" aria-label="Import catalog">
+                <option value="knot-link">knot/link</option>
+                <option value="stable-curve">stable curve</option>
+                <option value="minigames">minigames</option>
+              </select>
+            </div>
+            <div class="mosaic-inline-row" id="import-minigame-type-row" hidden>
+              <span class="input-label">Type</span>
+              <select id="import-minigame-type" aria-label="Minigame type"></select>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label">Level</span>
+              <select id="import-preset-select"></select>
+            </div>
+            <div class="mosaic-import-preset-controls" id="dual-graph-preset-controls" hidden>
+              <label class="mosaic-preset-field">
+                <span class="input-label">g:</span>
+                <input type="number" id="dual-graph-preset-genus" class="mosaic-editor-input calculator-control" min="0" max="12" value="2">
+              </label>
+              <label class="mosaic-preset-field">
+                <span class="input-label">n:</span>
+                <input type="number" id="dual-graph-preset-markings" class="mosaic-editor-input calculator-control" min="0" max="6" value="5">
+              </label>
+            </div>
+            <div class="mosaic-import-preset-controls" id="minigame-rect-size-controls" hidden>
+              <label class="mosaic-preset-field">
+                <span class="input-label">Rows</span>
+                <input type="number" id="minigame-rows" class="mosaic-editor-input calculator-control" min="2" max="25" value="4">
+              </label>
+              <label class="mosaic-preset-field">
+                <span class="input-label">Cols</span>
+                <input type="number" id="minigame-cols" class="mosaic-editor-input calculator-control" min="2" max="25" value="4">
+              </label>
+            </div>
+            <div class="mosaic-inline-row" id="minigame-square-size-row" hidden>
+              <span class="input-label">Board n</span>
+              <input type="number" id="minigame-board-size" class="mosaic-editor-input calculator-control" min="2" max="25" value="8">
+            </div>
+            <button class="btn btn-ghost mosaic-import-button" id="load-import-preset" type="button">load preset</button>
+          </div>
+          <textarea id="import-input" class="mosaic-editor-input calculator-control mosaic-import-input" spellcheck="false" autocomplete="off" placeholder="{ ... }"></textarea>
+          <button class="btn mosaic-import-button" id="generate-import">generate</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="statistics-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label" id="statistics-card-label">Statistics</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="stat-row" id="out-tiles-row"><span class="stat-label" id="out-tiles-label">Filled tiles</span><span class="stat-value" id="out-tiles">0</span></div>
+        <div class="stat-row" id="out-open-ends-row"><span class="stat-label" id="out-open-ends-label">Open ends</span><span class="stat-value" id="out-open-ends">0</span></div>
+        <div class="stat-row" id="out-boundary-components-row" hidden><span class="stat-label" id="out-boundary-components-label">Boundary components</span><span class="stat-value" id="out-boundary-components">0</span></div>
+        <div class="stat-row" id="out-orientable-row" hidden><span class="stat-label" id="out-orientable-label">Orientable</span><span class="stat-value" id="out-orientable">-</span></div>
+        <div class="stat-row" id="out-components-row"><span class="stat-label" id="out-components-label">Components</span><span class="stat-value" id="out-components">0</span></div>
+        <div class="stat-row" id="out-surface-type-row" hidden><span class="stat-label">Type</span><span class="stat-value" id="out-surface-type">-</span></div>
+        <div class="stat-row" id="out-genus-row" hidden><span class="stat-label" id="out-genus-label">(genus, &chi;)</span><span class="stat-value" id="out-genus">-</span></div>
+        <div class="stat-row" id="out-cusps-row" hidden><span class="stat-label">Cusps</span><span class="stat-value" id="out-cusps">-</span></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="homology-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Cellular homology</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="stat-row"><span class="stat-label homology-math">\(\operatorname{H}_{1}(X;\mathbb{Z})\)</span><span class="stat-value homology-math" id="homology-group">\(\text{not computed}\)</span></div>
+        <div class="action-row homology-actions">
+              <button class="btn btn-ghost" id="compute-homology" type="button" data-shortcut-primary>compute integral H&#8321;</button>
+          <button class="btn btn-ghost" id="trace-homology-circle" type="button" title="Click a quotient corner and then incident tile edges to make a closed background loop." disabled>trace a background loop</button>
+          <button class="btn btn-ghost" id="homology-trace-undo" type="button" disabled>undo</button>
+          <button class="btn btn-ghost" id="homology-trace-clear" type="button" disabled>clear</button>
+          <button class="btn btn-ghost" id="identify-homology-circle" type="button" disabled>identify closed circle</button>
+        </div>
+        <div class="mosaic-opt-pair homology-options">
+          <label class="opt-row"><input type="checkbox" id="show-homology" disabled> show basis</label>
+          <label class="opt-row"><input type="checkbox" id="pick-homology-knot" disabled> pick knot</label>
+          <label class="opt-row"><input type="checkbox" id="homology-trace-reverse"> next edge reversed</label>
+          <label class="opt-row"><input type="checkbox" id="relax-homology-cords" disabled> relax basis cords</label>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Cords</span>
+          <button class="btn btn-ghost" id="reset-homology-cords" type="button" disabled>reset cords</button>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Label</span>
+          <select id="homology-label-position" disabled><option value="side">Selected side</option><option value="middle">Shared-edge middle</option></select>
+        </div>
+        <ul class="homology-generator-list" id="homology-generator-list" aria-label="Homology basis generators"></ul>
+        <div class="homology-status homology-math" id="homology-knot-result"></div>
+        <div class="homology-status" id="homology-trace-result"></div>
+        <div class="homology-status" id="homology-status"></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="homology-cord-debug-card" hidden>
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Homology cord debug</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="mosaic-inline-row">
+          <span class="input-label">Contraction multiplier</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-relax-speed" min="0.1" max="10" step="0.1" value="10"><output id="homology-cord-relax-speed-value">10</output></span>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Point spacing / R</span>
+          <span class="background-slider-controls"><input type="range" id="homology-cord-point-spacing" min="0.05" max="0.3" step="0.01" value="0.12"><output id="homology-cord-point-spacing-value">0.12</output></span>
+        </div>
+        <label class="opt-row"><input type="checkbox" id="show-homology-cord-particles"> show material particles</label>
+        <label class="opt-row"><input type="checkbox" id="inspect-homology-cord-optimization"> inspect optimization direction</label>
+        <div class="hint" id="homology-cord-optimization-readout">Enable inspection, then click a particle.</div>
+      </div>
+    </section>
+
+    <div id="poincare-side-host" data-card-drag-item="true">
+      <section class="card collapsed" id="poincare-card" data-card-settings-id="poincare-disk" data-card-wide="true" data-card-wide-host="#poincare-wide-host" data-card-side-host="#poincare-side-host" data-card-wide-button="#poincare-wide">
+        <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Poincaré disk</span><em class="toggle-icon">&#9662;</em></div>
+        <div class="card-body">
+          <div class="mosaic-inline-row">
+            <button class="btn btn-ghost" id="poincare-wide" type="button" aria-pressed="false">wide</button>
+            <button class="btn btn-ghost" id="poincare-recenter" type="button">recenter</button>
+            <button class="btn btn-ghost" id="poincare-close" type="button">close</button>
+          </div>
+          <div class="mosaic-inline-row">
+            <label><input id="poincare-follow" type="checkbox"> Follow ball</label>
+            <label><input id="poincare-mesh" type="checkbox"> Triangle mesh</label>
+          </div>
+          <div class="mosaic-inline-row">
+            <label for="poincare-model">Shared motion</label>
+            <select id="poincare-model"><option value="flat">Flat</option><option value="hyperbolic">Hyperbolic — reflecting boundary</option><option value="complete-interior">Complete interior (approximation)</option></select>
+            <button class="btn" id="poincare-interior-play" type="button" hidden disabled>Play</button><button class="btn btn-ghost" id="poincare-restart" type="button" hidden>Restart</button>
+          </div>
+          <button class="btn" id="poincare-use-discrete" type="button">Use discrete solver</button>
+          <output id="poincare-status" aria-live="polite">Select the hyperbolic metric to develop this surface.</output>
+          <div class="poincare-canvas-wrap"><canvas id="poincare-canvas" tabindex="0" aria-label="Poincaré disk universal cover; drag or use arrow keys to move the camera"></canvas></div>
+          <p class="hint" id="poincare-explanation">Complete interior uses one fixed intrinsic metric and a shared trajectory. Each camera has an independent finite preview; missing artwork or display precision never stops motion.</p>
+          <p class="hint">Drag or use arrow keys to move; recenter returns to the initial lift. The current starting solver requires χ &lt; 0. Disk and annulus interiors also have complete Poincaré metrics, but need a different starting solver and are not yet supported here. Boundary sampling and the finite neighborhood limit the interior preview's accuracy.</p>
+        </div>
+      </section>
+    </div>
+
+    <section class="card collapsed" id="hyperbolic-metric-debug-card" data-card-settings-id="hyperbolic-metric-debug" data-card-advanced="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Hyperbolic metric debug</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="mosaic-inline-row">
+          <span class="input-label">Solver</span>
+          <select id="hyperbolic-metric-solver">
+            <option value="discrete">Discrete curvature flow</option>
+            <option value="fem">FEM Liouville (experimental)</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Refinement</span>
+          <select id="hyperbolic-metric-refinement">
+            <option value="auto">Automatic</option>
+            <option value="1">Level 1</option>
+            <option value="2">Level 2</option>
+            <option value="3">Level 3</option>
+            <option value="4">Level 4</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row">
+          <span class="input-label">Heatmap</span>
+          <select id="hyperbolic-metric-heatmap">
+            <option value="off">Off</option>
+            <option value="scale">Conformal scale</option>
+            <option value="residual">Curvature residual</option>
+          </select>
+        </div>
+        <div class="hyperbolic-heatmap-legend" id="hyperbolic-heatmap-legend" hidden>
+          <span id="hyperbolic-heatmap-legend-label">low → high</span>
+          <span class="hyperbolic-heatmap-gradient" aria-hidden="true"></span>
+        </div>
+        <output class="hyperbolic-debug-readout" id="hyperbolic-metric-debug-readout" aria-live="polite">Flat metric selected.</output>
+      </div>
+    </section>
+
+    <div id="homology-local-chart-side-host" data-card-drag-item="true">
+      <section class="card collapsed" id="homology-local-chart-card" hidden data-card-wide="true" data-card-wide-host="#homology-local-chart-wide-host" data-card-side-host="#homology-local-chart-side-host" data-card-wide-button="#homology-local-chart-wide">
+        <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Local geometry debug</span><em class="toggle-icon">&#9662;</em></div>
+        <div class="card-body">
+          <div class="homology-local-chart-toolbar">
+            <label class="opt-row"><input type="checkbox" id="show-homology-local-vertex-selection"> Show selected vertex</label>
+            <span class="slice-mode-row" aria-label="Local chart mapping">
+              <button class="slice-mode-btn active" id="homology-local-chart-radial" data-homology-local-chart-mode="radial" type="button" aria-pressed="true">Radial</button>
+              <button class="slice-mode-btn" id="homology-local-chart-conformal" data-homology-local-chart-mode="conformal" type="button" aria-pressed="false">Conformal</button>
+            </span>
+            <button class="btn btn-ghost homology-local-chart-wide-toggle" id="homology-local-chart-wide" type="button" aria-pressed="false">wide</button>
+          </div>
+          <div class="mosaic-inline-row homology-local-chart-canvas-action-row">
+            <span class="input-label">Canvas action</span>
+            <span class="slice-mode-row" aria-label="Local chart canvas action">
+              <button class="slice-mode-btn" data-homology-local-canvas-action="pick" type="button" aria-pressed="false">Pick vertex</button>
+              <button class="slice-mode-btn active" data-homology-local-canvas-action="drag" type="button" aria-pressed="true">Drag cords</button>
+            </span>
+          </div>
+          <div class="homology-local-chart-drag-controls">
+            <div class="mosaic-inline-row">
+              <span class="input-label">Drag drive</span>
+              <span class="background-slider-controls"><input type="range" id="homology-cord-drag-drive" min="0.25" max="2.5" step="0.05" value="1"><output id="homology-cord-drag-drive-value">1.00</output></span>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label">Glide damping / s⁻¹</span>
+              <span class="background-slider-controls"><input type="range" id="homology-cord-glide-damping" min="2" max="20" step="0.5" value="8"><output id="homology-cord-glide-damping-value">8.0</output></span>
+            </div>
+          </div>
+          <div class="homology-local-chart-radius-controls" id="homology-local-chart-radius-controls">
+            <div class="mosaic-inline-row">
+              <span class="input-label">Local radius / R</span>
+              <span class="background-slider-controls"><input type="range" id="homology-local-chart-radius" min="0.25" max="2" step="0.05" value="1"><output id="homology-local-chart-radius-value">1.00</output></span>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label">Core radius / R</span>
+              <span class="background-slider-controls"><input type="range" id="homology-local-physics-core-radius" min="0.05" max="0.40" step="0.01" value="0.20"><output id="homology-local-physics-core-radius-value">0.20</output></span>
+            </div>
+            <div class="mosaic-inline-row">
+              <span class="input-label">Outer radius / R</span>
+              <span class="background-slider-controls"><input type="range" id="homology-local-physics-outer-radius" min="0.10" max="0.49" step="0.01" value="0.45"><output id="homology-local-physics-outer-radius-value">0.45</output></span>
+            </div>
+          </div>
+          <div class="mosaic-inline-row homology-local-chart-physics-row">
+            <span class="input-label">Physics</span>
+            <span class="slice-mode-row" aria-label="Local chart physics">
+              <button class="slice-mode-btn" data-homology-local-physics-mode="intrinsic" type="button" aria-pressed="false">Intrinsic</button>
+              <button class="slice-mode-btn active" data-homology-local-physics-mode="radial" type="button" aria-pressed="true">Radial</button>
+              <button class="slice-mode-btn" data-homology-local-physics-mode="conformal" type="button" aria-pressed="false">Conformal</button>
+            </span>
+          </div>
+          <label class="opt-row"><input type="checkbox" id="homology-local-straighten-vertex-bridges" checked> straighten same-tile vertex bridges</label>
+          <div class="homology-local-chart-layers" aria-label="Local chart layers">
+            <label class="opt-row"><input type="checkbox" data-homology-local-chart-layer="geometry" checked> geometry / IDs</label>
+            <label class="opt-row"><input type="checkbox" data-homology-local-chart-layer="cords" checked> cords / particles</label>
+            <label class="opt-row"><input type="checkbox" data-homology-local-chart-layer="vectors" checked> optimization vectors</label>
+            <label class="opt-row"><input type="checkbox" data-homology-local-chart-layer="failures" checked> failures</label>
+            <label class="opt-row"><input type="checkbox" data-homology-local-chart-layer="metadata" checked> metadata</label>
+          </div>
+          <div class="homology-local-chart-canvas-wrap">
+            <canvas id="homology-local-chart-canvas" width="640" height="480" tabindex="0" aria-label="Selected quotient vertex local geometry"></canvas>
+          </div>
+          <output class="homology-local-chart-status" id="homology-local-chart-status">No vertex selected.</output>
+          <output class="homology-local-chart-detail" id="homology-local-chart-detail">-</output>
+        </div>
+      </section>
+    </div>
+
+    <section class="card collapsed" id="dual-graph-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Dual Graph Visualization</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="stat-row">
+          <span class="stat-label">Status</span>
+          <span class="stat-value" id="dual-graph-status">
+            <span id="dual-graph-status-text">-</span>
+            <button class="btn btn-ghost" id="export-dual-graph" type="button" data-import-export-trigger="dual-graph" data-export-filename="mosaic-dual-graph.json" hidden>Export graph</button>
+          </span>
+        </div>
+        <div class="slice-info-row" id="dual-graph-invariants-row" hidden>
+          <span class="slice-info-label">invariants</span>
+          <span class="slice-info-value">
+            <div class="slice-invariant-head"><button class="slice-invariant-toggle" id="dual-graph-invariant-toggle" type="button" title="hide invariants" aria-label="hide invariants" aria-expanded="true">&#9662;</button></div>
+            <div id="dual-graph-invariant-panel"><span id="dual-graph-invariants"><span class="hint">-</span></span></div>
+          </span>
+        </div>
+        <div id="dual-graph-canvas-wrap" style="margin-top: 12px; display: none;">
+          <div class="slice-info-row">
+            <span class="slice-info-label">view</span>
+            <span class="slice-info-value">
+              <span class="slice-mode-row" aria-label="Dual graph visualization views">
+                <button class="slice-mode-btn" data-dual-graph-view="dual" type="button">graph</button>
+                <button class="slice-mode-btn" data-dual-graph-view="rs" type="button">RS</button>
+                <button class="slice-mode-btn" data-dual-graph-view="algebraic" type="button">alg curve</button>
+              </span>
+            </span>
+          </div>
+          <div class="dual-graph-view-inputs">
+            <input type="checkbox" id="show-dual-graph-canvas" aria-label="Dual graph">
+            <input type="checkbox" id="show-riemann-surface-canvas" aria-label="RS">
+            <input type="checkbox" id="show-algebraic-curve-canvas" aria-label="Algebraic curve">
+          </div>
+          <div id="dual-graph-layout-controls" style="margin-top: 8px;">
+            <label class="dual-graph-layout-picker" for="dual-graph-layout-method">
+              <span>layout</span>
+              <select id="dual-graph-layout-method">
+                <option value="force">Force</option>
+                <option value="shell">Shell</option>
+                <option value="spectral">Spectral</option>
+                <option value="kamada-kawai">Kamada-Kawai</option>
+              </select>
+            </label>
+              <button class="btn" id="compute-layout" type="button" data-shortcut-primary>Compute layout</button>
+            <button class="btn btn-ghost" id="reset-layout" type="button">Reset</button>
+            <span class="hint dual-graph-layout-time" id="dual-graph-layout-time">-</span>
+          </div>
+          <div id="dual-graph-view-wrap">
+            <canvas id="dual-graph-canvas" width="300" height="300" style="width: 100%; margin-top: 8px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: default; touch-action: none;"></canvas>
+          </div>
+          <div id="riemann-surface-view-wrap">
+            <canvas id="riemann-surface-canvas" width="300" height="280" aria-label="Corresponding Riemann surface" style="width: 100%; margin-top: 12px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: pointer; touch-action: none;"></canvas>
+            <div class="dual-graph-control-row">
+              <label class="opt-row"><input type="checkbox" id="show-riemann-debug-circles"> Blue circles</label>
+              <label class="opt-row"><input type="checkbox" id="show-riemann-bezier-curve"> Bézier curve</label>
+            </div>
+          </div>
+          <div id="algebraic-curve-view-wrap">
+            <div style="margin-top: 8px;">
+              <button class="btn btn-ghost" id="optimize-algebraic-curve" type="button">Timed optimization</button>
+            </div>
+            <canvas id="algebraic-curve-canvas" width="300" height="280" aria-label="Algebraic curve visualization" style="width: 100%; margin-top: 12px; border: 1px solid var(--border); border-radius: 3px; background: #fffdf8; cursor: default; touch-action: none;"></canvas>
+            <div class="algebraic-energy-row">
+              <label class="opt-row"><input type="checkbox" id="show-algebraic-tangent-handles"> toggles</label>
+              <span class="hint" id="algebraic-energy-status"></span>
+            </div>
+            <div class="algebraic-energy-row" aria-label="Algebraic curve energy terms">
+              <label class="opt-row"><input type="checkbox" data-algebraic-energy-term="bend" checked> bend</label>
+              <label class="opt-row"><input type="checkbox" data-algebraic-energy-term="length" checked> length</label>
+              <label class="opt-row"><input type="checkbox" data-algebraic-energy-term="crossing" checked> crossings</label>
+              <label class="opt-row"><input type="checkbox" data-algebraic-energy-term="spacing" checked> spacing</label>
+              <label class="opt-row"><input type="checkbox" data-algebraic-energy-term="boundary" checked> boundary</label>
+            </div>
+          </div>
+        </div>
+        <div id="dual-graph-placeholder" style="margin-top: 8px; color: var(--muted); font-size: 0.86rem;">
+          Requires exactly one component with at least one vertex
+        </div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="seifert-surface-card" hidden>
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Seifert Surface</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="dual-graph-control-row">
+          <label class="opt-row" id="show-seifert-background-row"><input type="checkbox" id="show-seifert-background"> Show knots / vertices</label>
+        </div>
+        <div class="mosaic-inline-row" id="seifert-surface-color-row">
+          <span class="input-label">Color</span>
+          <div class="mosaic-color-row">
+            <input id="seifert-surface-color" class="mosaic-color-input" type="color" value="#d8b071" aria-label="Seifert surface color">
+            <div class="mosaic-color-swatches" aria-label="Seifert surface color swatches">
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#d8b071" style="--swatch-color: #d8b071" aria-label="warm brown"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#c7875c" style="--swatch-color: #c7875c" aria-label="sienna"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#a9b96a" style="--swatch-color: #a9b96a" aria-label="olive"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#70b39f" style="--swatch-color: #70b39f" aria-label="teal"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#7fa6d3" style="--swatch-color: #7fa6d3" aria-label="blue"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#aa8ac5" style="--swatch-color: #aa8ac5" aria-label="purple"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#d28484" style="--swatch-color: #d28484" aria-label="red"></button>
+              <button class="mosaic-color-swatch" type="button" data-color-target="seifert-surface-color" data-color-value="#c4a45c" style="--swatch-color: #c4a45c" aria-label="ochre"></button>
+            </div>
+          </div>
+        </div>
+        <div class="mosaic-inline-row" id="seifert-band-width-row">
+          <span class="input-label">Band width</span>
+          <span class="background-slider-controls">
+            <input type="range" id="seifert-band-width" min="0.24" max="0.78" step="0.02" value="0.42">
+            <output id="seifert-band-width-value">0.42</output>
+          </span>
+        </div>
+        <div class="dual-graph-control-row">
+          <label class="opt-row" id="color-seifert-boundaries-row"><input type="checkbox" id="color-seifert-boundaries"> Color boundary components</label>
+        </div>
+        <div class="stat-row"><span class="stat-label">Pieces</span><span class="stat-value" id="seifert-piece-count">-</span></div>
+        <div class="stat-row"><span class="stat-label">Components</span><span class="stat-value" id="seifert-component-count">-</span></div>
+        <div class="stat-row"><span class="stat-label">Connected</span><span class="stat-value" id="seifert-connected">-</span></div>
+        <div class="stat-row"><span class="stat-label">Boundary</span><span class="stat-value" id="seifert-boundary-count">-</span></div>
+        <div class="stat-row"><span class="stat-label">Open ends</span><span class="stat-value" id="seifert-open-ends">-</span></div>
+        <div class="stat-row"><span class="stat-label">(g, chi)</span><span class="stat-value" id="seifert-genus-euler">-</span></div>
+        <div class="mosaic-boundary-chips" id="seifert-boundary-colors" hidden></div>
+      </div>
+    </section>
+
+    <div id="dual-graph-degenerations-side-host">
+      <section class="card" id="dual-graph-degenerations-card" data-card-wide="true" data-card-wide-host="#dual-graph-degenerations-wide-host" data-card-side-host="#dual-graph-degenerations-side-host" data-card-wide-button="#toggle-degenerations-wide">
+        <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Boundary Divisors</span><em class="toggle-icon">&#9662;</em></div>
+        <div class="card-body">
+          <div class="dual-graph-degeneration-actions">
+              <button class="btn btn-ghost" id="compute-degenerations" type="button" data-shortcut-primary>Compute divisors</button>
+            <button class="btn btn-ghost" id="export-degenerations" type="button" data-import-export-trigger="degenerations" data-export-filename="dual-graph-degenerations.json">Export</button>
+            <button class="btn btn-ghost dual-graph-degeneration-wide-toggle" id="toggle-degenerations-wide" type="button">wide</button>
+            <span class="hint" id="dual-graph-degenerations-status">stable graph required</span>
+          </div>
+          <div class="dual-graph-degeneration-options-row">
+            <label class="dual-graph-degeneration-select-field" for="dual-graph-degeneration-initial-layout">
+              <span class="input-label">init</span>
+              <select id="dual-graph-degeneration-initial-layout">
+                <option value="shell">shell</option>
+                <option value="spectral">spectral</option>
+                <option value="kamada-kawai">Kamada-Kawai</option>
+              </select>
+            </label>
+            <label class="opt-row dual-graph-degeneration-option-toggle"><input type="checkbox" id="dual-graph-degeneration-force" checked> force</label>
+          </div>
+          <div class="dual-graph-degeneration-emphasis-row">
+            <label class="opt-row dual-graph-degeneration-emphasis-toggle"><input type="checkbox" id="emphasize-degenerations"> emph</label>
+            <label class="dual-graph-degeneration-style-field" for="dual-graph-degeneration-emphasis-style">
+              <span class="input-label">style</span>
+              <select id="dual-graph-degeneration-emphasis-style">
+                <option value="none" disabled>none</option>
+                <option value="orange">orange</option>
+                <option value="black">black</option>
+              </select>
+            </label>
+          </div>
+          <div class="dual-graph-degeneration-scroll">
+            <div class="dual-graph-degeneration-grid" id="dual-graph-degenerations-grid"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card collapsed">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Display Options</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <label class="opt-row"><input type="checkbox" id="show-errors" checked> Show open ends</label>
+        <label class="opt-row"><input type="checkbox" id="show-coords"> Show coordinates</label>
+        <div class="mosaic-inline-row" id="glue-flaps-row" hidden>
+          <span class="input-label">Glued boundary</span>
+          <span class="glue-flap-controls">
+            <label class="opt-row"><input type="checkbox" id="show-glue-flaps"> Glue flaps</label>
+            <label class="opt-row"><input type="checkbox" id="glue-flap-target-on-hover" checked> On hover</label>
+          </span>
+        </div>
+        <div class="mosaic-opt-pair">
+          <label class="opt-row"><input type="checkbox" id="color-components" checked> Color components</label>
+          <label class="opt-row"><input type="checkbox" id="display-pick"> Pick</label>
+          <label class="opt-row" id="show-cusps-row" hidden><input type="checkbox" id="show-cusps"> cusps</label>
+        </div>
+        <div class="mosaic-inline-row" id="show-seifert-surface-row" hidden>
+          <span class="input-label">Seifert</span>
+          <button class="btn btn-ghost" id="show-seifert-surface" type="button" aria-pressed="false">Open surface</button>
+        </div>
+        <div class="mosaic-inline-row" id="wrapped-view-row" hidden>
+          <span class="input-label">Wrapped view</span>
+          <select id="wrapped-view-mode">
+            <option value="periodic">Periodic copies</option>
+            <option value="single">Single board</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row wander-open-row" id="wander-open-row" hidden>
+          <span class="input-label">Universal cover</span>
+          <button class="btn btn-ghost" id="open-wander" type="button">open wander</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="knot-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Knot/link</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value" id="knot-status">not checked</span></div>
+        <div class="stat-row" id="knot-name-row"><span class="stat-label">Name</span><span class="stat-value" id="knot-name">-</span></div>
+        <div class="input-method" id="knot-code-row">
+          <div class="mosaic-inline-row">
+            <span class="input-label">Code</span>
+            <select id="knot-code-kind">
+              <option value="pd">PD</option>
+              <option value="dt">DT</option>
+              <option value="braid">Braid</option>
+            </select>
+          </div>
+          <textarea id="knot-code" class="mosaic-editor-input calculator-control mosaic-knot-code" readonly spellcheck="false">-</textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="card collapsed" id="export-card">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Import / Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="mosaic-inline-row">
+          <span class="input-label">Export type</span>
+          <select id="export-type">
+            <option value="all">All info</option>
+            <option value="minigame">For minigames</option>
+            <option value="background">Background only</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="export-format-row">
+          <span class="input-label">Format</span>
+          <select id="export-format">
+            <option value="dsl" selected>DSL-style</option>
+            <option value="verbose">Verbose JSON</option>
+          </select>
+        </div>
+        <div class="mosaic-inline-row" id="export-preset-meta-row">
+          <span class="input-label">Preset</span>
+          <span class="export-meta-grid">
+            <label class="export-meta-field">
+              <span class="export-meta-field-label">Display name</span>
+              <input type="text" id="export-preset-label" spellcheck="false" aria-label="Minigame preset display name" placeholder="display name">
+            </label>
+            <label class="export-meta-field" id="export-preset-group-row">
+              <span class="export-meta-field-label">Game type</span>
+              <select id="export-preset-group" aria-label="Minigame preset game type">
+                <option value="2048" selected>2048</option>
+                <option value="Gomoku">Gomoku</option>
+                <option value="Connect Four">Connect Four</option>
+                <option value="Sokoban">Sokoban</option>
+              </select>
+            </label>
+            <label class="opt-row"><input type="checkbox" id="export-preset-advanced"> advanced</label>
+            <span class="export-advanced-panel" id="export-preset-advanced-row" hidden>
+              <label class="export-meta-field" id="export-preset-key-row" hidden>
+                <span class="export-meta-field-label">File key</span>
+                <input type="text" id="export-preset-id" spellcheck="false" aria-label="Minigame preset file key" placeholder="file key">
+              </label>
+              <label class="export-meta-field">
+                <span class="export-meta-field-label">Chinese display name</span>
+                <input type="text" id="export-preset-label-zh" spellcheck="false" aria-label="Minigame preset Chinese display name" placeholder="中文名称">
+              </label>
+              <label class="export-meta-field">
+                <span class="export-meta-field-label">Game types</span>
+                <span class="export-group-checks" id="export-preset-groups" aria-label="Minigame preset game types"></span>
+              </label>
+              <label class="export-meta-field">
+                <span class="export-meta-field-label">Horizontal Board view</span>
+                <select id="export-preset-wrapped-view-x" aria-label="Minigame preset horizontal Board view">
+                  <option value="">none</option>
+                  <option value="repeat">repeat</option>
+                  <option value="reflect-y">reflection</option>
+                </select>
+              </label>
+              <label class="export-meta-field">
+                <span class="export-meta-field-label">Vertical Board view</span>
+                <select id="export-preset-wrapped-view-y" aria-label="Minigame preset vertical Board view">
+                  <option value="">none</option>
+                  <option value="repeat">repeat</option>
+                  <option value="reflect-x">reflection</option>
+                </select>
+              </label>
+            </span>
+          </span>
+        </div>
+        <div class="mosaic-inline-row" id="export-precomputed-game-data-row">
+          <span class="input-label">Stored data</span>
+          <label class="opt-row" for="export-precomputed-game-data" title="Store reusable game-specific computations in this export. Currently this includes Hex homology generators and edge signatures.">
+            <input type="checkbox" id="export-precomputed-game-data"> store precomputed game data
+          </label>
+        </div>
+        <div class="mosaic-inline-row" id="export-test-link-row" hidden>
+          <span class="input-label">Test</span>
+          <a class="export-test-link" id="export-test-link" href="ramified_minigames.html" target="_blank" rel="noopener">Test in Minigames</a>
+        </div>
+        <div class="action-row">
+          <button class="btn" id="import-export" type="button">import</button>
+          <button class="btn" id="refresh-export">refresh</button>
+          <button class="btn btn-ghost" id="copy-export">copy</button>
+        </div>
+        <textarea id="export-out" spellcheck="false" autocomplete="off" aria-label="Import or export chart"></textarea>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  Browser-side mosaic editor styled with the shared Young diagram UI.
+  <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
+</footer>
+
+<script src="js/mosaic_knot_data.js"></script>
+<script src="js/mosaic_link_data.js"></script>
+<script src="js/mosaic_knot_engine.js"></script>
+<script src="presets/ramified_minigames/presets.js?v=20261008-3"></script>
+<script src="js/calculator_cards.js?v=20260903-1"></script>
+<script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
+<script src="js/background_homology.js?v=20260827-1"></script>
+<script src="js/hex_homology_game.js?v=20260827-1"></script>
+<script src="js/billiards/topological_billiards_math.js?v=20260823-1"></script>
+<script src="js/billiards/topological_billiards_physics.js?v=20260823-1"></script>
+<script src="js/billiards/topological_billiards_native.js?v=20261023-r13-rack-1"></script>
+<script src="js/mosaic_hyperbolic_metric.js?v=20260909-1"></script>
+<script src="js/mosaic_poincare.js?v=20260911-1"></script>
+<script src="js/mosaic_poincare_uniformization.js?v=20260911-2"></script>
+<script src="js/mosaic_intrinsic_metric.js?v=20260913-1"></script>
+<script src="js/mosaic_complete_interior.js?v=20260913-1"></script>
+<script src="js/mosaic_poincare_view.js?v=20260913-1"></script>
+<script src="js/mosaic_calculator.js?v=20261022-rack-direction-1"></script>
+<script src="js/import_export_panel.js?v=20260821-7"></script>
+<script src="js/import_export_page_adapters.js?v=20260826-1"></script>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']]
+    },
+    options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</body>
+</html>

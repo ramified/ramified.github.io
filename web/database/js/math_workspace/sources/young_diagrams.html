@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Young Diagram Calculator</title>
+<link rel="stylesheet" href="css/site.css?v=20260903-1">
+<link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
+</head>
+<body>
+
+<header>
+  <h1>Young Diagram Calculator</h1>
+  <span><a href="index.html">Pure Math Toolkit</a> &middot; <a href="double_young_diagram.html">Young Diagram<sup>2</sup> Calculator</a> &middot; click cells to draw &middot; click again to erase</span>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT: canvas -->
+  <div class="canvas-panel">
+    <header class="panel-title">
+      <span class="panel-title-text">Young Diagram</span>
+      <div class="canvas-toolbar" aria-label="Canvas diagram controls">
+        <span class="generalized-canvas-inline" id="generalized-canvas-controls" hidden>
+          <span class="generalized-canvas-badge">generalized</span>
+          <span class="canvas-view-row" aria-label="Generalized diagram views">
+            <button class="canvas-view-btn active" data-canvas-view="paper" onclick="setGeneralizedCanvasMode('paper')" type="button" aria-pressed="true">paper</button>
+            <button class="canvas-view-btn" data-canvas-view="shifted" onclick="setGeneralizedCanvasMode('shifted')" type="button" aria-pressed="false">shifted</button>
+            <button class="canvas-view-btn" id="young-boundary-edit-btn" onclick="enterYoungBoundaryEditIfPossible()" type="button" disabled title="Available when shifted rows are non-increasing">Young boundary edit</button>
+          </span>
+        </span>
+        <span class="shape-indicator" title="Shape λ"><span id="shape-badge">( )</span></span>
+        <span class="canvas-size-inline" aria-label="Canvas size, rows by columns">
+          <label title="Canvas rows">
+            <span>rows</span>
+            <input type="number" id="grid-rows" min="1" max="15" onchange="applyGridSizeFromInputs()">
+          </label>
+          <span class="dimension-times">×</span>
+          <label title="Canvas columns">
+            <span>cols</span>
+            <input type="number" id="grid-cols" min="1" max="25" onchange="applyGridSizeFromInputs()">
+          </label>
+        </span>
+      </div>
+    </header>
+    <div id="canvas-wrap">
+      <canvas id="yd-canvas"></canvas>
+    </div>
+  </div>
+
+  <!-- RIGHT: controls -->
+  <div class="side">
+
+        <!-- Statistics -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Statistics</span><em class="toggle-icon">▾</em></div>
+          <div class="card-body">
+            <div class="stat-row">
+              <span class="stat-label">Size |λ|</span>
+              <span class="stat-value" id="out-size">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Shape λ</span>
+              <span class="stat-value" id="out-shape">( )</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Conjugate λ′</span>
+              <span class="stat-value" id="out-conj">( )</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">∏ hook lengths</span>
+              <span class="stat-value" id="out-hprod">1</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label"># standard SYT</span>
+              <span class="stat-value" id="out-nstand">1</span>
+            </div>
+            <div class="ssrow">
+              <label>Max entry <em>m</em> for SSYT</label>
+              <input type="number" id="maxentry" value="5" min="1" max="99" onchange="refreshStats()">
+            </div>
+            <div class="stat-row">
+              <span class="stat-label"># semistandard SSYT</span>
+              <span class="stat-value" id="out-sstand">1</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lie Algebra Weight -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Lie Algebra Weight</span><em class="toggle-icon">&#9662;</em></div>
+          <div class="card-body">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
+              <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Type:</label>
+              <select id="lie-type" onchange="onTypeChange()" style="padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
+                <optgroup label="Classical">
+                  <option value="A" selected>A&#8345; &nbsp;&#x1D4C8;&#x1D4C1;(n+1) / &#x1D4C8;&#x1D4CA;(n+1)</option>
+                  <option value="B">B&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n+1)</option>
+                  <option value="C">C&#8345; &nbsp;&#x1D4C8;&#x1D4C5;(2n)</option>
+                  <option value="D">D&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n)</option>
+                </optgroup>
+                <optgroup label="Exceptional">
+                  <option value="E6">E&#8326;</option>
+                  <option value="E7">E&#8327;</option>
+                  <option value="E8">E&#8328;</option>
+                  <option value="F4">F&#8324;</option>
+                  <option value="G2">G&#8322;</option>
+                </optgroup>
+              </select>
+              <span id="lie-rank-wrap" style="display:flex;align-items:center;gap:6px;">
+                <label class="stat-label" style="white-space:nowrap;">rank&nbsp;<em>n</em>:</label>
+                <input type="number" id="lie-rank" value="6" min="1" max="12"
+                  onchange="onAlgebraChange()"
+                  style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;
+                         font-family:'JetBrains Mono',monospace;font-size:0.82rem;
+                         background:var(--bg);color:var(--text);text-align:center;">
+              </span>
+              <label class="lie-gl-toggle" id="lie-gl-wrap" hidden title="For generalized Type A_n weights, use gl_{n+1}: the Weyl group permutes the n+1 matrix-coordinate weights.">
+                <input type="checkbox" id="lie-gl-toggle" onchange="onAlgebraChange()"> <span id="lie-gl-label">gl<sub>n+1</sub></span>
+              </label>
+              <label class="lie-gl-toggle tooltip-label" id="lie-conformal-wrap" hidden data-tooltip="">
+                <input type="checkbox" id="lie-conformal-toggle" onchange="onAlgebraChange()"> <span id="lie-conformal-label">csp</span>
+              </label>
+              <span id="lie-algebra-desc" style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--muted);"></span>
+            </div>
+            <div id="lie-warning" class="err" style="margin-bottom:4px;"></div>
+            <!-- Stats -->
+            <div class="stat-row"><span class="stat-label tooltip-label" id="lie-weight-label" tabindex="0" data-tooltip="Displays the row vector λ = (a₁,...,aₙ) used by the diagram convention.">Weight &#955;</span><span class="stat-value" id="lie-weight">—</span></div>
+            <div class="stat-row"><span class="stat-label tooltip-label" id="lie-dynkin-label" tabindex="0" data-tooltip="Uses row vector λ = (a₁,...,aₙ) and Dynkin labels [a₁−a₂, ..., aₙ₋₁−aₙ, aₙ].">Dynkin labels</span><span class="stat-value" id="lie-dynkin">—</span></div>
+            <div class="stat-row"><span class="stat-label">dim V<sup>&#955;</sup></span><span class="stat-value" id="lie-dim">—</span></div>
+            <div class="stat-row"><span class="stat-label">|Weyl orbit|</span><span class="stat-value" id="lie-orbit-size">—</span></div>
+            <div class="dominant-rep" id="lie-dominant-rep" hidden>
+              <span class="dominant-rep-label">Dominant representative</span>
+              <span class="dominant-rep-diagram" id="lie-dominant-diagram"></span>
+              <span class="dominant-rep-text" id="lie-dominant-text"></span>
+              <button class="btn dominant-rep-btn" id="lie-dominant-canvas-btn" onclick="showDominantRepresentativeOnCanvas()" type="button">Show on canvas</button>
+            </div>
+            <!-- Orbit display controls -->
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn" onclick="toggleOrbitTable()" id="lie-orbit-btn">Show Weyl orbit</button>
+              <label class="lie-gl-toggle tooltip-label" id="lie-dot-action-wrap" data-tooltip="Use w dot lambda = w(lambda + rho) - rho for the Weyl orbit and dominant representative.">
+                <input type="checkbox" id="lie-dot-action-toggle" onchange="onLieDotActionChange()"> dot action
+              </label>
+              <span class="orbit-view-row" aria-label="Weyl orbit views">
+                <button class="orbit-view-btn active" data-orbit-view="paper" onclick="setOrbitViewMode('paper')" type="button" aria-pressed="true">paper</button>
+                <button class="orbit-view-btn" data-orbit-view="shifted" onclick="setOrbitViewMode('shifted')" type="button" aria-pressed="false">shifted</button>
+                <button class="orbit-view-btn" data-orbit-view="table" onclick="setOrbitViewMode('table')" type="button" aria-pressed="false">table</button>
+              </span>
+              <button class="btn" onclick="exportOrbit(event)" data-import-export-trigger="weyl-orbit" data-export-filename="weyl-orbit.txt" style="background:transparent;color:var(--accent);border-color:var(--accent);">Export orbit</button>
+            </div>
+            <div id="lie-orbit-table" style="display:none;margin-top:10px;overflow-x:auto;"></div>
+
+            <div class="lie-subsection" aria-label="Weight space decomposition controls">
+              <div class="lie-subsection-title tooltip-label" tabindex="0" data-tooltip="Computes the nonzero weight spaces of V^λ, grouped by dominant Weyl-orbit representative γ. Candidate representatives are enumerated only when dominant and satisfying ‖γ‖ ≤ ‖λ‖.">Weight space decomposition</div>
+              <div class="action-row">
+            <button class="btn" onclick="computeWeightSpaceDecomposition()" data-shortcut-primary>compute</button>
+                <button class="btn" onclick="exportWeightSpaceDecomposition(event)" data-import-export-trigger="weight-spaces" data-export-filename="weight-space-decomposition.txt" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
+              </div>
+              <div id="lie-ws-warning" class="err" style="margin-bottom:4px;"></div>
+              <div id="lie-ws-summary" class="hint">Draw a Young diagram, then compute.</div>
+              <div id="lie-ws-output" class="decomp-scroll"><span class="hint">No decomposition computed yet.</span></div>
+            </div>
+
+            <div class="lie-subsection" aria-label="Borel-Weil-Bott controls">
+              <div class="lie-subsection-title tooltip-label" tabindex="0" data-tooltip="Computes the cohomology of L_lambda on G/B using the dot action w(lambda+rho)-rho.">Borel-Weil-Bott</div>
+              <div class="action-row">
+            <button class="btn" onclick="computeBorelWeilBott()" data-shortcut-primary>compute</button>
+                <button class="btn" onclick="exportBorelWeilBott(event)" data-import-export-trigger="borel-weil-bott" data-export-filename="borel-weil-bott.txt" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
+              </div>
+              <div id="lie-bwb-warning" class="err" style="margin-bottom:4px;"></div>
+              <div id="lie-bwb-summary" class="hint">Draw a weight, then compute.</div>
+              <div id="lie-bwb-output" class="decomp-scroll lie-bwb-output"><span class="hint">No Borel-Weil-Bott result computed yet.</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Branching Rules -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Branching Rules</span><em class="toggle-icon">&#9662;</em></div>
+          <div class="card-body">
+            <div class="branching-rule-row" style="display:flex;align-items:center;gap:8px;">
+              <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Rule:</label>
+              <select id="br-rule" onchange="onBranchingRuleChange()" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
+                <optgroup label="Diagonal">
+                  <option value="diag-gl">GL(n) x GL(n) &#8594; GL(n)</option>
+                  <option value="diag-o">O(n) x O(n) &#8594; O(n)</option>
+                  <option value="diag-sp">Sp(2n) x Sp(2n) &#8594; Sp(2n)</option>
+                </optgroup>
+                <optgroup label="Direct sum">
+                  <option value="sum-gl">GL(n+m) &#8594; GL(n) x GL(m)</option>
+                  <option value="sum-o">O(n+m) &#8594; O(n) x O(m)</option>
+                  <option value="sum-sp">Sp(2n+2m) &#8594; Sp(2n) x Sp(2m)</option>
+                </optgroup>
+                <optgroup label="Polarization">
+                  <option value="pol-o-gl">O(2n) &#8594; GL(n)</option>
+                  <option value="pol-sp-gl">Sp(2n) &#8594; GL(n)</option>
+                </optgroup>
+                <optgroup label="Bilinear form">
+                  <option value="gl-o">GL(n) &#8594; O(n)  (Littlewood)</option>
+                  <option value="gl-sp">GL(2n) &#8594; Sp(2n)  (Littlewood)</option>
+                </optgroup>
+                <optgroup label="Composed">
+                  <option value="gl-o-gl">GL(2n) &#8594; O(2n) &#8594; GL(n)</option>
+                  <option value="gl-sp-gl">GL(2n) &#8594; Sp(2n) &#8594; GL(n)</option>
+                </optgroup>
+              </select>
+            </div>
+            <div id="br-source-b-wrap" class="branching-rule-row" hidden>
+              <label class="stat-label" for="br-source-b" style="white-space:nowrap;display:block;margin-bottom:4px;">Source B:</label>
+              <input type="text" id="br-source-b" placeholder="e.g. 1 or 2,1 or 2,-1" oninput="markBranchingStale()" style="width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--text);">
+            </div>
+            <div id="br-ranks-wrap" class="branching-rule-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <label class="stat-label" style="white-space:nowrap;">rank n:</label>
+              <input type="number" id="br-rank-n" min="1" step="1" placeholder="stable" oninput="markBranchingStale()" style="width:74px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--text);text-align:center;">
+              <span id="br-rank-m-wrap" style="display:inline-flex;align-items:center;gap:6px;">
+                <label class="stat-label" style="white-space:nowrap;">rank m:</label>
+                <input type="number" id="br-rank-m" min="1" step="1" placeholder="stable" oninput="markBranchingStale()" style="width:74px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--text);text-align:center;">
+              </span>
+              <span class="hint" style="margin:0;">blank = stable formula only</span>
+            </div>
+            <div id="br-gl-view-wrap" class="branching-rule-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span class="stat-label" style="white-space:nowrap;">GL view:</span>
+              <span class="orbit-view-row" aria-label="Branching generalized GL output views">
+                <button class="orbit-view-btn active" data-branching-view="paper" onclick="setBranchingViewMode('paper')" type="button" aria-pressed="true">paper</button>
+                <button class="orbit-view-btn" data-branching-view="shifted" onclick="setBranchingViewMode('shifted')" type="button" aria-pressed="false">shifted</button>
+              </span>
+            </div>
+            <div class="action-row branching-action-row">
+            <button class="btn" onclick="computeBranching()" data-shortcut-primary>compute</button>
+              <button class="btn" onclick="exportBranching(event)" data-import-export-trigger="branching" data-export-filename="branching-decomposition.txt" style="background:transparent;color:var(--accent);border-color:var(--accent);">export</button>
+            </div>
+            <div class="hint" id="br-rule-hint" style="margin:4px 0 8px;">
+              Stable branching formula. Draw source A on the canvas, then compute.
+            </div>
+            <div id="br-warning" class="err" style="margin-bottom:6px;"></div>
+            <div id="br-output" class="decomp-scroll branching-scroll"><span class="hint">Draw a Young diagram, then compute.</span></div>
+          </div>
+        </div>
+
+        <!-- Symmetric Functions -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Symmetric Functions</span><em class="toggle-icon">&#9662;</em></div>
+          <div class="card-body">
+            <div class="symfun-control-row symfun-n-row">
+              <label class="symfun-control-label tooltip-label" tabindex="0" data-tooltip="N is the number of variables x_1,...,x_N." for="symfun-variable-count">N</label>
+              <span class="symfun-variable-controls">
+                <input type="number" id="symfun-variable-count" min="0" step="1" inputmode="numeric" oninput="handleSymfunVariableInput()">
+                <label class="symfun-infinite-toggle tooltip-label" tabindex="0" data-tooltip="Use infinitely many variables. The rows are then displayed as linear combinations in the selected symmetric-function basis.">infinite <input type="checkbox" id="symfun-infinite" onchange="toggleSymfunInfinite()"></label>
+              </span>
+            </div>
+            <div class="symfun-control-row symfun-basis-row">
+              <span class="symfun-control-label">basis</span>
+              <span class="symfun-variable-controls symfun-basis-controls">
+                <select id="symfun-infinite-basis" class="symfun-basis-select" onchange="renderSymmetricFunctionChart()" title="basis for infinite-variable expansions" disabled>
+                  <option value="m">m_&#955;</option>
+                  <option value="p">p_&#955;</option>
+                  <option value="e">e_&#955;</option>
+                  <option value="h">h_&#955;</option>
+                  <option value="s">s_&#955;</option>
+                </select>
+                <select id="symfun-infinite-mode" class="symfun-basis-select" onchange="renderSymmetricFunctionChart()" title="linear or polynomial expansion" disabled>
+                  <option value="linear">linear</option>
+                  <option value="polynomial">poly</option>
+                </select>
+                <button class="symfun-export-btn" type="button" onclick="exportSymmetricFunctions(event)" data-import-export-trigger="symmetric-functions" data-export-filename="symmetric-functions.txt">export</button>
+              </span>
+            </div>
+            <div id="symfun-output" class="symfun-expansions"><span class="hint">Draw a Young diagram to expand.</span></div>
+          </div>
+        </div>
+
+        <!-- Display Options -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Display Options</span><em class="toggle-icon">▾</em></div>
+          <div class="card-body">
+            <label class="opt-row"><input type="checkbox" id="showhooks" checked onchange="redraw()"> Show hook lengths</label>
+            <label class="opt-row"><input type="checkbox" id="shadehooks" checked onchange="redraw()"> Shade by hook length</label>
+            <label class="opt-row"><input type="checkbox" id="showcoords" onchange="redraw()"> Show cell coordinates (r,c)</label>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Actions</span><em class="toggle-icon">▾</em></div>
+          <div class="card-body">
+            <div class="action-row">
+              <button class="btn" onclick="conjugate()">Conjugate λ′</button>
+              <button class="btn" onclick="complement()">Complement (in box)</button>
+              <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+            </div>
+            <div class="hint" style="margin-top:8px;" id="box-hint">Complement uses a bounding box. Draw diagram first.</div>
+          </div>
+        </div>
+
+        <!-- Input -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Input</span><em class="toggle-icon">▾</em></div>
+          <div class="card-body">
+            <div class="input-method">
+              <label class="input-label" for="partition-input">Partition rows</label>
+              <div class="input-row">
+                <input type="text" id="partition-input" placeholder="e.g. 4,3,1" oninput="clearErr()">
+                <button class="btn" onclick="setPartition()">Draw</button>
+              </div>
+              <div class="hint">Enter row lengths in any order. Non-partition, zero, or negative rows open generalized view.</div>
+            </div>
+            <div class="input-method">
+              <label class="input-label" for="dynkin-input">Dynkin labels</label>
+              <div class="input-row">
+                <input type="text" id="dynkin-input" placeholder="e.g. 1,0,2,0" oninput="clearErr()">
+                <button class="btn" onclick="setDynkinLabels()">Draw</button>
+              </div>
+              <div class="hint">Uses [a<sub>1</sub>&minus;a<sub>2</sub>, ..., a<sub>n&minus;1</sub>&minus;a<sub>n</sub>, a<sub>n</sub>].</div>
+            </div>
+            <div class="err" id="part-err"></div>
+          </div>
+        </div>
+
+        <!-- Export -->
+        <div class="card collapsed">
+          <div class="card-head" onclick="toggleCard(event, this)"><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">▾</em></div>
+          <div class="card-body">
+            <div class="action-row">
+              <button class="btn" onclick="exportLaTeX()" data-import-export-trigger="latex" data-export-filename="young-diagram.tex">LaTeX</button>
+              <button class="btn" onclick="exportSVG()" data-import-export-trigger="svg" data-export-filename="young-diagram.svg">SVG</button>
+              <button class="btn" onclick="copyShape()" data-import-export-trigger="shape" data-export-filename="young-diagram-shape.txt">Copy shape</button>
+            </div>
+            <textarea id="export-out" readonly>@misc{zhou2026youngdiagramcalculator,
+  author = {Xiaoxiang Zhou},
+  title = {Young Diagram Calculator},
+  year = {2026},
+  note = {Interactive web application}
+}</textarea>
+          </div>
+        </div>
+
+  </div><!-- /side -->
+</div>
+
+<footer>
+  Original applet by <a href="https://web.archive.org/web/20250513072803/https://www.integral-domain.org/lwilliams/Applets/combinatorics/youngdiagrams.php" target="_blank">Dr. Lauren K. Williams</a> (Mercyhurst University), built with p5.js.
+  With help from <a href="https://claude.ai/share/98270095-0477-4096-8018-b1f670224a79" target="_blank">Claude</a> and <a href="https://chatgpt.com/share/69fa2f46-4b6c-838f-8394-009912e2682f" target="_blank">ChatGPT</a>, this archive adds additional functions. I’m grateful for how these tools helped produce such a polished webpage, and I may add more functions as needed.
+  <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
+</footer>
+
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    }
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<!-- p5.js and BigInteger inline-free: we implement bigint ourselves -->
+<script src="js/calculator_cards.js?v=20260903-1"></script>
+<script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
+<script src="js/young_diagrams.js?v=20261021-low-rank-2"></script>
+<script src="js/calculator_input_profiles.js?v=20260903-1"></script>
+<script src="js/import_export_panel.js?v=20260821-7"></script>
+<script src="js/import_export_page_adapters.js?v=20260821-9"></script>
+</body>
+</html>

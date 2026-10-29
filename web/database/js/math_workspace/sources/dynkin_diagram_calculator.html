@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dynkin Diagram Calculator</title>
+  <link rel="stylesheet" href="css/site.css?v=20260903-1">
+  <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
+  <style>
+    .dynkin-layout {
+      max-width: 1240px;
+      grid-template-columns: minmax(0, 1fr) 370px;
+    }
+
+    .dynkin-stage {
+      padding: 16px;
+      min-width: 0;
+    }
+
+    .dynkin-layout > .side,
+    .dynkin-layout .card {
+      min-width: 0;
+    }
+
+    .dynkin-canvas {
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--border);
+      background: #fffdf8;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
+    }
+
+    .dynkin-toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .dynkin-toolbar-group select,
+    .dynkin-toolbar-group input {
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+    }
+
+    .dynkin-toolbar-group select {
+      padding: 4px 7px;
+      min-width: 154px;
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.94rem;
+    }
+
+    .dynkin-toolbar-group input {
+      width: 58px;
+      padding: 4px 7px;
+      text-align: center;
+    }
+
+    .dynkin-check-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .dynkin-check-label[hidden] {
+      display: none !important;
+    }
+
+    .dynkin-check-label input {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .dynkin-action-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .dynkin-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+    }
+
+    .dynkin-table th,
+    .dynkin-table td {
+      border-bottom: 1px dotted var(--border);
+      padding: 5px 4px;
+      text-align: right;
+      vertical-align: top;
+    }
+
+    .dynkin-table th:first-child,
+    .dynkin-table td:first-child {
+      text-align: left;
+      color: var(--muted);
+    }
+
+    .dynkin-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .dynkin-scroll {
+      max-height: min(340px, 48vh);
+      overflow: auto;
+      padding-right: 6px;
+      scrollbar-gutter: stable;
+    }
+
+    .parabolic-card-body {
+      display: grid;
+      gap: 10px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+    }
+
+    .parabolic-summary {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.45;
+      color: var(--muted);
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-gutter: stable;
+    }
+
+    .parabolic-matrix-wrap {
+      overflow: auto;
+      padding: 2px 0 6px;
+      scrollbar-gutter: stable;
+      width: 100%;
+      inline-size: 100%;
+      max-width: 100%;
+      max-inline-size: 100%;
+      min-width: 0;
+      min-inline-size: 0;
+      box-sizing: border-box;
+      contain: layout paint;
+      contain: inline-size layout paint;
+    }
+
+    .parabolic-detail-group {
+      display: grid;
+      gap: 8px;
+      width: 100%;
+      inline-size: 100%;
+      min-width: 0;
+      min-inline-size: 0;
+      max-width: 100%;
+      max-inline-size: 100%;
+      overflow: hidden;
+      box-sizing: border-box;
+      contain: layout paint;
+      contain: inline-size layout paint;
+    }
+
+    .parabolic-matrix-wrap mjx-container[jax="CHTML"][display="true"] {
+      margin: 0.35em 0;
+      min-width: max-content;
+    }
+
+    .parabolic-definition {
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 1rem;
+      line-height: 1.35;
+      color: var(--text);
+      width: 100%;
+      inline-size: 100%;
+      max-width: 100%;
+      max-inline-size: 100%;
+      min-width: 0;
+      min-inline-size: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-gutter: stable;
+      box-sizing: border-box;
+      contain: layout paint;
+      contain: inline-size layout paint;
+    }
+
+    .parabolic-definition mjx-container[jax="CHTML"][display="true"] {
+      min-width: max-content;
+    }
+
+    .parabolic-tex-lines {
+      display: grid;
+      gap: 5px;
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.95rem;
+      color: var(--muted);
+      line-height: 1.35;
+      width: 100%;
+      inline-size: 100%;
+      max-width: 100%;
+      max-inline-size: 100%;
+      min-width: 0;
+      min-inline-size: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-gutter: stable;
+      box-sizing: border-box;
+      contain: layout paint;
+      contain: inline-size layout paint;
+    }
+
+    .parabolic-tex-lines > div {
+      width: max-content;
+      min-width: 100%;
+    }
+
+    .parabolic-stats {
+      width: 100%;
+      inline-size: 100%;
+      max-width: 100%;
+      max-inline-size: 100%;
+      min-width: 0;
+      min-inline-size: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-gutter: stable;
+      box-sizing: border-box;
+      contain: layout paint;
+      contain: inline-size layout paint;
+    }
+
+    .starting-card-body {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    #dynkin-starting-wide-host {
+      padding: 0 16px 16px;
+    }
+
+    #dynkin-starting-wide-host[hidden] {
+      display: none !important;
+    }
+
+    #dynkin-starting-card.wide {
+      margin-top: 16px;
+    }
+
+    #dynkin-starting-card.wide .starting-chart-wrap,
+    #dynkin-starting-card.wide .ar-chart-wrap {
+      max-height: min(70vh, 720px);
+      padding-right: 8px;
+    }
+
+    .starting-card-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 2px;
+      padding-bottom: 7px;
+      border-bottom: 1px dotted var(--border);
+    }
+
+    .starting-card-actions .btn {
+      padding: 4px 10px;
+      font-size: 0.76rem;
+    }
+
+    .starting-wide-toggle {
+      display: none;
+    }
+
+    @media (min-width: 960px) {
+      .starting-wide-toggle {
+        display: inline-flex;
+      }
+    }
+
+    .starting-output {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .starting-summary,
+    .starting-note {
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.96rem;
+      line-height: 1.35;
+      color: var(--muted);
+      min-width: 0;
+    }
+
+    .starting-chart-wrap {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow: auto;
+      padding: 4px 0 8px;
+      scrollbar-gutter: stable;
+      contain: inline-size layout paint;
+    }
+
+    .starting-chart-stack {
+      --starting-cell: 24px;
+      width: max-content;
+      min-width: max-content;
+      margin: 0 auto;
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 1.08rem;
+      line-height: 1;
+      color: var(--text);
+    }
+
+    .starting-vertex-grid,
+    .starting-chart-grid,
+    .starting-transpose-grid {
+      display: grid;
+      gap: 0;
+      align-items: center;
+      justify-items: center;
+    }
+
+    .starting-vertex-grid,
+    .starting-chart-grid {
+      grid-template-columns: repeat(var(--starting-cols), var(--starting-cell));
+    }
+
+    .starting-vertex-grid {
+      grid-template-rows: repeat(2, var(--starting-cell));
+      margin-bottom: 4px;
+      touch-action: none;
+      user-select: none;
+      position: relative;
+    }
+
+    .starting-chart-grid {
+      grid-auto-rows: var(--starting-cell);
+    }
+
+    .starting-transpose-grid {
+      grid-template-columns: repeat(var(--starting-transpose-cols), var(--starting-cell));
+      grid-template-rows: repeat(var(--starting-transpose-rows), var(--starting-cell));
+      position: relative;
+      touch-action: none;
+      user-select: none;
+    }
+
+    .starting-vertex-lines {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: visible;
+      z-index: 0;
+    }
+
+    .starting-vertex-lines.is-interactive {
+      pointer-events: auto;
+    }
+
+    .starting-vertex-lines line,
+    .starting-vertex-lines path {
+      stroke: #1a1612;
+      stroke-width: 1.25px;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0.78;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .starting-vertex-lines path {
+      fill: none;
+    }
+
+    .starting-vertex-label {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border: 1.4px solid #1a1612;
+      border-radius: 50%;
+      background: #fffdf8;
+      color: #1a1612;
+      font: 700 0.76rem 'JetBrains Mono', monospace;
+      line-height: 1;
+      cursor: grab;
+      position: relative;
+      z-index: 1;
+    }
+
+    .starting-vertex-label.is-selected {
+      background: #3d6b4f;
+      border-color: #263f31;
+      color: #fffdf8;
+    }
+
+    .starting-vertex-label.is-dragging {
+      cursor: grabbing;
+      z-index: 4;
+      box-shadow: 0 4px 12px rgba(26,22,18,0.18);
+    }
+
+    .starting-vertex-label:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .starting-chart-cell {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: var(--starting-cell);
+      min-height: var(--starting-cell);
+      text-align: center;
+    }
+
+    .starting-chart-cell.is-empty {
+      color: transparent;
+      user-select: none;
+    }
+
+    .ar-summary,
+    .ar-note {
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.96rem;
+      line-height: 1.35;
+      color: var(--muted);
+      min-width: 0;
+    }
+
+    .ar-scroll-shell {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .ar-chart-wrap {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      max-height: min(70vh, 720px);
+      overflow: auto;
+      padding: 4px 0 8px;
+      scrollbar-gutter: stable;
+      contain: inline-size layout paint;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-inline: contain;
+    }
+
+    .ar-scroll-slider {
+      width: 100%;
+      min-width: 0;
+      height: 24px;
+      accent-color: var(--accent);
+      background: transparent;
+      touch-action: pan-y;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .ar-scroll-slider[hidden] {
+      display: none !important;
+    }
+
+    .ar-scroll-slider::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--border) 72%, var(--accent));
+    }
+
+    .ar-scroll-slider::-webkit-slider-thumb {
+      width: 18px;
+      height: 18px;
+      margin-top: -7px;
+      border: 1px solid #263f31;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 1px 4px rgba(26,22,18,0.2);
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .ar-scroll-slider::-moz-range-track {
+      height: 4px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--border) 72%, var(--accent));
+    }
+
+    .ar-scroll-slider::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border: 1px solid #263f31;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 1px 4px rgba(26,22,18,0.2);
+    }
+
+    .ar-chart-stack {
+      --starting-cell: 68px;
+      width: max-content;
+      min-width: max-content;
+      margin: 0 auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1;
+      color: var(--text);
+    }
+
+    .ar-vector-cell {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: var(--starting-cell);
+      min-height: var(--starting-cell);
+      text-align: center;
+      line-height: 1;
+      white-space: nowrap;
+      position: relative;
+      z-index: 1;
+    }
+
+    .ar-vector-label {
+      display: inline-grid;
+      gap: 2px;
+      place-items: center;
+      padding: 2px 5px;
+      background: transparent;
+      color: #1a1612;
+      line-height: 1.05;
+    }
+
+    .ar-vector-label.is-diagram {
+      gap: 0;
+      grid-template-columns: repeat(var(--ar-vector-cols), 1ch);
+      grid-template-rows: repeat(var(--ar-vector-rows), 1em);
+    }
+
+    .ar-vector-label.is-single {
+      font-size: 0.74rem;
+    }
+
+    .ar-vector-label span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0.8em;
+    }
+
+    .ar-vector-label span.is-hidden-coordinate {
+      color: transparent;
+      user-select: none;
+    }
+
+    .ar-arrow-lines {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: visible;
+      z-index: 0;
+    }
+
+    .ar-arrow-lines path {
+      fill: none;
+      stroke: #7a6f65;
+      stroke-width: 1.15px;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .ar-arrow-lines path.is-dashed {
+      stroke-dasharray: 3 3;
+      opacity: 0.72;
+    }
+
+    .math-stat-value {
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.96rem;
+      word-break: normal;
+      line-height: 1.3;
+    }
+
+    .math-stat-value mjx-container {
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    #dynkin-export-out {
+      width: 100%;
+      min-height: 76px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      padding: 7px 8px;
+      resize: vertical;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 780px) {
+      .dynkin-layout {
+        grid-template-columns: 1fr;
+      }
+      .dynkin-toolbar-group {
+        width: 100%;
+      }
+      .dynkin-toolbar-group select {
+        flex: 1 1 180px;
+      }
+      .dynkin-underbar {
+        padding: 0 12px 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Dynkin Diagram Calculator</h1>
+  <span><a href="index.html">Pure Math Toolkit</a></span>
+</header>
+
+<main class="layout dynkin-layout">
+  <section class="canvas-panel" aria-label="Dynkin diagram canvas panel">
+    <header class="panel-title">
+      <span class="panel-title-text">Dynkin Diagram</span>
+      <div class="canvas-toolbar" aria-label="Dynkin diagram controls">
+        <span class="shape-indicator"><span id="dynkin-status" class="dynkin-badge calculator-badge">\(E_{6}\)</span></span>
+        <span class="dynkin-toolbar-group">
+          <label class="stat-label" for="dynkin-type">Type</label>
+          <select id="dynkin-type" class="calculator-control">
+            <optgroup label="Classical">
+              <option value="A">A series</option>
+              <option value="B">B series</option>
+              <option value="C">C series</option>
+              <option value="D">D series</option>
+            </optgroup>
+            <optgroup label="Exceptional">
+              <option value="E6" selected>E6</option>
+              <option value="E7">E7</option>
+              <option value="E8">E8</option>
+              <option value="F4">F4</option>
+              <option value="G2">G2</option>
+            </optgroup>
+          </select>
+          <span id="dynkin-rank-wrap" class="dynkin-toolbar-group">
+            <label class="stat-label" for="dynkin-rank">rank</label>
+            <input id="dynkin-rank" class="calculator-control" type="number" min="1" max="12" value="6">
+          </span>
+          <label class="dynkin-check-label" for="dynkin-multi-select">
+            <input id="dynkin-multi-select" class="calculator-control" type="checkbox">
+            <span>select multi-vertices</span>
+          </label>
+          <label class="dynkin-check-label" for="dynkin-quiver-mode" title="Orient every edge for ADE types">
+            <input id="dynkin-quiver-mode" class="calculator-control" type="checkbox">
+            <span>quiver arrows</span>
+          </label>
+        </span>
+      </div>
+    </header>
+    <div class="dynkin-stage">
+      <canvas id="dynkin-canvas" class="dynkin-canvas" width="900" height="360"></canvas>
+    </div>
+    <div class="dynkin-underbar calculator-underbar">
+      <span id="dynkin-selected-label">selected vertex: \(\alpha_{1}\)</span>
+      <span id="dynkin-root-count-label">positive roots: \(21\)</span>
+    </div>
+    <section id="dynkin-starting-wide-host" hidden></section>
+  </section>
+
+  <aside class="side" id="cards">
+    <section class="card collapsed" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Basic Invariants</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body" id="dynkin-invariants"></div>
+    </section>
+
+    <section class="card collapsed" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Vertex Data</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body" id="dynkin-vertex-data"></div>
+    </section>
+
+    <section class="card collapsed" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Parabolic Subalgebra</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body parabolic-card-body" id="dynkin-parabolic"></div>
+    </section>
+
+    <span id="dynkin-starting-side-anchor" hidden></span>
+    <section class="card collapsed" id="dynkin-starting-card" draggable="true" data-card-wide="true" data-card-wide-host="#dynkin-starting-wide-host" data-card-side-anchor="#dynkin-starting-side-anchor" data-card-wide-button="#dynkin-starting-wide">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Starting Function</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body starting-card-body">
+        <div class="starting-card-actions" id="dynkin-starting-actions">
+          <button class="btn btn-ghost" id="dynkin-starting-toggle-header" type="button" aria-pressed="true">hide header</button>
+          <button class="btn btn-ghost" id="dynkin-starting-transpose" type="button" aria-pressed="false">transpose</button>
+          <label class="dynkin-check-label" for="dynkin-starting-ar-mode" title="Show the Auslander-Reiten quiver; enables random quiver arrows if needed">
+            <input id="dynkin-starting-ar-mode" type="checkbox">
+            <span>AR quiver</span>
+          </label>
+          <label class="dynkin-check-label" for="dynkin-ar-hide-unselected" title="Show only selected coordinates in AR dimension vectors" hidden>
+            <input id="dynkin-ar-hide-unselected" type="checkbox" disabled>
+            <span>hide non-selected vertices</span>
+          </label>
+          <button class="btn btn-ghost starting-wide-toggle" id="dynkin-starting-wide" type="button" aria-pressed="false">wide</button>
+        </div>
+        <div class="starting-output" id="dynkin-starting-function"></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Cartan Matrix</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="dynkin-scroll" id="dynkin-cartan"></div>
+      </div>
+    </section>
+
+    <section class="card collapsed" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="dynkin-action-row">
+          <button id="dynkin-refresh-export" class="btn" type="button">refresh</button>
+          <button id="dynkin-select-export" class="btn btn-ghost" type="button">select</button>
+        </div>
+        <textarea id="dynkin-export-out" spellcheck="false"></textarea>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  Browser-side Dynkin diagram calculator styled with the shared Young diagram UI.
+  <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
+</footer>
+
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    }
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<script src="js/calculator_cards.js?v=20260903-1"></script>
+<script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
+<script src="js/dynkin_diagram_geometry.js?v=20261021-dynkin-icons-1"></script>
+<script src="js/dynkin_diagram_calculator.js?v=20261028-diagram-display-3"></script>
+<script src="js/calculator_input_profiles.js?v=20260903-1"></script>
+<script src="js/import_export_panel.js?v=20260821-7"></script>
+<script src="js/import_export_page_adapters.js?v=20260821-9"></script>
+</body>
+</html>

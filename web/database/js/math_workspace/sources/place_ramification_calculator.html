@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Place Ramification Calculator</title>
+  <link rel="stylesheet" href="css/site.css?v=20260903-1">
+  <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
+  <style>
+    .ramification-layout {
+      max-width: 1240px;
+      grid-template-columns: minmax(0, 1fr) 380px;
+    }
+
+    .ramification-stage {
+      padding: 16px;
+      min-width: 0;
+      overflow-x: auto;
+    }
+
+    .ramification-diagram-wrap {
+      position: relative;
+      min-width: 760px;
+      height: 340px;
+    }
+
+    .ramification-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 1px solid var(--border);
+      background: #fffdf8;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
+    }
+
+    .ramification-labels {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      color: var(--text);
+    }
+
+    .ramification-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      white-space: nowrap;
+      color: #3b342d;
+      font-size: 0.98rem;
+      line-height: 1;
+      padding: 2px 5px;
+      border-radius: 3px;
+      background: rgba(255,253,248,0.84);
+    }
+
+    .ramification-label.is-top {
+      font-size: 0.92rem;
+    }
+
+    .ramification-label.is-bottom {
+      font-size: 1rem;
+    }
+
+    .ramification-label.is-selected {
+      color: var(--accent);
+    }
+
+    .ramification-label mjx-container {
+      margin: 0 !important;
+      overflow: visible;
+    }
+
+    .ramification-toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .ramification-toolbar-group input[type=range] {
+      width: 150px;
+      accent-color: var(--accent);
+    }
+
+    .ramification-select,
+    .ramification-input,
+    .ramification-toolbar-group select,
+    .ramification-toolbar-group input[type=number] {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+    }
+
+    .ramification-select {
+      font-family: 'EB Garamond', Georgia, serif;
+      font-size: 0.94rem;
+    }
+
+    .ramification-input[type=number] {
+      text-align: center;
+    }
+
+    .ramification-inline-row {
+      display: grid;
+      grid-template-columns: 104px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+      min-width: 0;
+    }
+
+    .ramification-inline-row .input-label {
+      margin-bottom: 0;
+      white-space: nowrap;
+    }
+
+    .ramification-search-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .ramification-search-row .btn {
+      min-width: 74px;
+      padding: 5px 10px;
+    }
+
+    .ramification-search-row .btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.56;
+    }
+
+    .ramification-field-selector {
+      margin-top: 8px;
+      padding: 8px 0 2px 16px;
+      border-left: 2px solid var(--border);
+    }
+
+    .ramification-field-selector[hidden],
+    .ramification-polynomial-editor[hidden],
+    .ramification-prime-bound[hidden] {
+      display: none;
+    }
+
+    .ramification-extension-divider {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .ramification-query-shortcuts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .ramification-query-shortcuts .btn {
+      min-width: 54px;
+      padding: 3px 9px;
+    }
+
+    .ramification-query-shortcuts .btn[aria-expanded="true"] {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(61,107,79,0.08);
+    }
+
+    .ramification-shortcut-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      align-items: end;
+      gap: 7px;
+      margin-top: 7px;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: rgba(255,255,255,0.42);
+    }
+
+    .ramification-shortcut-panel[hidden] {
+      display: none;
+    }
+
+    .ramification-shortcut-fields {
+      display: flex;
+      align-items: end;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .ramification-shortcut-fields[hidden] {
+      display: none;
+    }
+
+    .ramification-shortcut-parameter {
+      display: grid;
+      grid-template-columns: auto minmax(62px, 88px);
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .ramification-shortcut-parameter .ramification-input {
+      width: 100%;
+    }
+
+    .ramification-shortcut-panel .btn {
+      min-height: 28px;
+      padding: 4px 9px;
+    }
+
+    .ramification-shortcut-close {
+      width: 28px;
+      min-width: 28px !important;
+      padding: 3px !important;
+      font-family: Arial, sans-serif;
+      font-size: 1rem;
+      line-height: 1;
+    }
+
+    .ramification-shortcut-error {
+      grid-column: 1 / -1;
+      color: var(--accent2);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+    }
+
+    .ramification-shortcut-error:empty {
+      display: none;
+    }
+
+    .ramification-base-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .ramification-q-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .ramification-q-control[hidden] {
+      display: none;
+    }
+
+    .ramification-q-control .ramification-input {
+      width: 58px;
+    }
+
+    .ramification-status-line {
+      min-height: 20px;
+      margin-top: 7px;
+    }
+
+    .ramification-status-line.is-error {
+      color: var(--accent2);
+    }
+
+    .ramification-status-line.is-ok {
+      color: var(--accent);
+    }
+
+    .ramification-field-description {
+      min-height: 0;
+      margin-top: 2px;
+      color: var(--text);
+    }
+
+    .ramification-field-description:empty {
+      display: none;
+    }
+
+    .ramification-details {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .ramification-details summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      list-style-position: inside;
+    }
+
+    .ramification-preset-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .ramification-preset-row .btn {
+      min-width: 54px;
+      padding: 4px 9px;
+    }
+
+    .ramification-update-row {
+      justify-content: flex-end;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .ramification-place-editor {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dotted var(--border);
+    }
+
+    .ramification-place-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .ramification-place-heading .opt-row {
+      flex: 0 0 auto;
+      gap: 6px;
+      padding: 0;
+      font-size: 0.82rem;
+    }
+
+    .ramification-place-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .ramification-chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .ramification-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: rgba(255,255,255,0.55);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--text);
+    }
+
+    .ramification-chip button {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 0 1px;
+      font: inherit;
+      line-height: 1;
+    }
+
+    .ramification-chip button:hover {
+      color: var(--accent2);
+    }
+
+    .ramification-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+    }
+
+    .ramification-table th,
+    .ramification-table td {
+      border-bottom: 1px dotted var(--border);
+      padding: 5px 4px;
+      text-align: right;
+      vertical-align: top;
+    }
+
+    .ramification-table th:first-child,
+    .ramification-table td:first-child {
+      text-align: left;
+      color: var(--muted);
+    }
+
+    .ramification-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .ramification-table .left {
+      text-align: left;
+    }
+
+    .ramification-table .nowrap {
+      white-space: nowrap;
+    }
+
+    .ramification-scroll {
+      max-height: min(410px, 54vh);
+      overflow: auto;
+      padding-right: 6px;
+      scrollbar-gutter: stable;
+    }
+
+    #ramification-export-out {
+      width: 100%;
+      min-height: 76px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      padding: 7px 8px;
+      resize: vertical;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 780px) {
+      .ramification-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .ramification-shortcut-panel {
+        grid-template-columns: minmax(0, 1fr) auto auto;
+      }
+
+      .ramification-shortcut-fields {
+        flex-wrap: wrap;
+      }
+      .ramification-toolbar-group {
+        width: 100%;
+      }
+      .ramification-toolbar-group input[type=range] {
+        flex: 1 1 160px;
+      }
+      .ramification-underbar {
+        padding: 0 12px 12px;
+      }
+      .ramification-base-controls {
+        grid-template-columns: 1fr;
+      }
+
+      .ramification-field-selector {
+        padding-left: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Place Ramification Calculator</h1>
+  <span><a href="index.html">Pure Math Toolkit</a></span>
+</header>
+
+<main class="layout ramification-layout">
+  <section class="canvas-panel" aria-label="Place ramification canvas panel">
+    <header class="panel-title">
+      <span id="ramification-relation-title" class="panel-title-text">Places of \(E\) above places of \(F\)</span>
+      <div class="canvas-toolbar" aria-label="Ramification controls">
+        <span class="shape-indicator"><span id="ramification-status" class="ramification-badge calculator-badge">loading LMFDB...</span></span>
+        <span id="prime-bound-control" class="ramification-toolbar-group ramification-prime-bound">
+          <label id="place-bound-label" class="stat-label" for="prime-bound">\(p \le B\)</label>
+          <input id="prime-bound" type="range" min="2" max="31" value="11">
+          <output id="prime-bound-output" class="ramification-badge calculator-badge">11</output>
+        </span>
+      </div>
+    </header>
+    <div class="ramification-stage">
+      <div id="ramification-diagram-wrap" class="ramification-diagram-wrap">
+        <canvas id="ramification-canvas" class="ramification-canvas" width="920" height="340"></canvas>
+        <div id="ramification-labels" class="ramification-labels" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div class="ramification-underbar calculator-underbar">
+      <span id="ramification-selected-label">selected place: none</span>
+      <span id="ramification-count-label">finite places shown: 0</span>
+    </div>
+  </section>
+
+  <aside class="side" id="cards">
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Extension \(E/F\)</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="ramification-inline-row">
+          <label class="input-label" for="base-field-kind">Base \(F\)</label>
+          <div class="ramification-base-controls">
+          <select id="base-field-kind" class="ramification-select calculator-control">
+            <option value="Q" selected>\(\mathbb{Q}\)</option>
+            <option value="lmfdb">LMFDB number field</option>
+            <option value="Fqt">\(\mathbb{F}_q(t)\)</option>
+          </select>
+          <label id="generic-q-control" class="ramification-q-control" hidden>
+            <span>\(q\)</span>
+            <input id="generic-q" class="ramification-input calculator-control" type="text" inputmode="numeric" value="3" aria-label="Constant field size q">
+          </label>
+          </div>
+        </div>
+
+        <div id="base-lmfdb-selector" class="ramification-field-selector" hidden>
+          <div class="input-label">LMFDB field \(F\)</div>
+          <div class="ramification-search-row">
+            <input id="base-lmfdb-query" class="ramification-input calculator-control" type="text" value="2.2.5.1" placeholder="2.2.5.1, Qsqrt(5), Qroot(3,2), Qzeta(5)" spellcheck="false" autocomplete="off">
+            <button id="base-lmfdb-search" class="btn" type="button">search</button>
+          </div>
+          <div id="base-lmfdb-shortcut-editor">
+            <div class="ramification-query-shortcuts" aria-label="Base-field LMFDB query shortcuts">
+              <button id="base-lmfdb-quadratic-shortcut" class="btn btn-ghost" type="button" title="Enter a quadratic field." aria-label="Enter a quadratic field." aria-expanded="false" aria-controls="base-lmfdb-shortcut-panel">\(\sqrt{d}\)</button>
+              <button id="base-lmfdb-root-shortcut" class="btn btn-ghost" type="button" title="Enter an n-th root field." aria-label="Enter an n-th root field." aria-expanded="false" aria-controls="base-lmfdb-shortcut-panel">\(\sqrt[n]{d}\)</button>
+              <button id="base-lmfdb-zeta-shortcut" class="btn btn-ghost" type="button" title="Enter a cyclotomic field." aria-label="Enter a cyclotomic field." aria-expanded="false" aria-controls="base-lmfdb-shortcut-panel">\(\zeta_n\)</button>
+            </div>
+            <form id="base-lmfdb-shortcut-panel" class="ramification-shortcut-panel" aria-label="Base-field shortcut parameters" hidden>
+              <div id="base-lmfdb-square-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="base-lmfdb-square-d" class="ramification-input calculator-control" type="number" step="1" value="2" inputmode="numeric" aria-label="Base-field square root radicand d"></label></div>
+              <div id="base-lmfdb-root-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="base-lmfdb-root-n" class="ramification-input calculator-control" type="number" step="1" value="3" inputmode="numeric" aria-label="Base-field root index n"></label><label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="base-lmfdb-root-d" class="ramification-input calculator-control" type="number" step="1" value="2" inputmode="numeric" aria-label="Base-field root radicand d"></label></div>
+              <div id="base-lmfdb-zeta-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="base-lmfdb-zeta-n" class="ramification-input calculator-control" type="number" step="1" value="5" inputmode="numeric" aria-label="Base-field cyclotomic index n"></label></div>
+              <button class="btn" type="submit">insert</button>
+              <button id="base-lmfdb-shortcut-close" class="btn btn-ghost ramification-shortcut-close" type="button" title="Close field shortcut" aria-label="Close field shortcut">&#215;</button>
+              <div id="base-lmfdb-shortcut-error" class="ramification-shortcut-error" role="alert"></div>
+            </form>
+          </div>
+          <div class="result-meta ramification-status-line" id="base-lmfdb-status"></div>
+          <div class="result-meta ramification-field-description" id="base-lmfdb-description"></div>
+        </div>
+
+        <div class="ramification-inline-row ramification-extension-divider">
+          <label class="input-label" for="extension-input-kind">Extension \(E\)</label>
+          <select id="extension-input-kind" class="ramification-select calculator-control">
+            <option value="lmfdb" selected>LMFDB field</option>
+            <option value="polynomial">Irreducible polynomial over \(F\)</option>
+          </select>
+        </div>
+
+        <div id="extension-lmfdb-selector" class="ramification-field-selector">
+          <div class="input-label">LMFDB field \(E\)</div>
+          <div class="ramification-search-row">
+            <input id="lmfdb-query" class="ramification-input calculator-control" type="text" value="2.2.5.1" placeholder="2.2.5.1, Qsqrt(5), Qroot(3,2), Qzeta(5)" spellcheck="false" autocomplete="off">
+            <button id="lmfdb-search" class="btn" type="button">search</button>
+          </div>
+          <div id="lmfdb-shortcut-editor">
+            <div class="ramification-query-shortcuts" aria-label="Extension-field LMFDB query shortcuts">
+              <button id="lmfdb-quadratic-shortcut" class="btn btn-ghost" type="button" title="Enter a quadratic field." aria-label="Enter a quadratic field." aria-expanded="false" aria-controls="lmfdb-shortcut-panel">\(\sqrt{d}\)</button>
+              <button id="lmfdb-root-shortcut" class="btn btn-ghost" type="button" title="Enter an n-th root field." aria-label="Enter an n-th root field." aria-expanded="false" aria-controls="lmfdb-shortcut-panel">\(\sqrt[n]{d}\)</button>
+              <button id="lmfdb-zeta-shortcut" class="btn btn-ghost" type="button" title="Enter a cyclotomic field." aria-label="Enter a cyclotomic field." aria-expanded="false" aria-controls="lmfdb-shortcut-panel">\(\zeta_n\)</button>
+            </div>
+            <form id="lmfdb-shortcut-panel" class="ramification-shortcut-panel" aria-label="Extension-field shortcut parameters" hidden>
+              <div id="lmfdb-square-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="lmfdb-square-d" class="ramification-input calculator-control" type="number" step="1" value="2" inputmode="numeric" aria-label="Square root radicand d"></label></div>
+              <div id="lmfdb-root-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="lmfdb-root-n" class="ramification-input calculator-control" type="number" step="1" value="3" inputmode="numeric" aria-label="Root index n"></label><label class="ramification-shortcut-parameter"><span>\(d\)</span><input id="lmfdb-root-d" class="ramification-input calculator-control" type="number" step="1" value="2" inputmode="numeric" aria-label="Root radicand d"></label></div>
+              <div id="lmfdb-zeta-fields" class="ramification-shortcut-fields" hidden><label class="ramification-shortcut-parameter"><span>\(n\)</span><input id="lmfdb-zeta-n" class="ramification-input calculator-control" type="number" step="1" value="5" inputmode="numeric" aria-label="Cyclotomic index n"></label></div>
+              <button class="btn" type="submit">insert</button>
+              <button id="lmfdb-shortcut-close" class="btn btn-ghost ramification-shortcut-close" type="button" title="Close field shortcut" aria-label="Close field shortcut">&#215;</button>
+              <div id="lmfdb-shortcut-error" class="ramification-shortcut-error" role="alert"></div>
+            </form>
+          </div>
+          <div class="result-meta ramification-status-line" id="lmfdb-search-status"></div>
+          <div class="result-meta ramification-field-description" id="lmfdb-description"></div>
+        </div>
+
+        <div id="polynomial-extension" class="ramification-field-selector ramification-polynomial-editor" hidden>
+          <p class="hint">Certified locally. Places outside the current certificates are shown as unresolved without inferred \((e_i,f_i)\).</p>
+          <div class="ramification-inline-row">
+            <span class="input-label">Generator</span>
+            <input id="generic-generator" class="ramification-input calculator-control" type="text" value="alpha" maxlength="32" spellcheck="false">
+          </div>
+          <div class="ramification-inline-row">
+            <span class="input-label">\(f(x)\)</span>
+            <input id="generic-polynomial" class="ramification-input calculator-control" type="text" value="x^2-2" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="ramification-preset-row">
+              <button id="generic-compute" class="btn" type="button" data-shortcut-primary>compute</button>
+            <button class="btn btn-ghost" type="button" data-generic-example="number">\(x^3-x-1\)</button>
+            <button class="btn btn-ghost" type="button" data-generic-example="relative">\(x^2-a\)</button>
+            <button class="btn btn-ghost" type="button" data-generic-example="function">\(x^2-t\)</button>
+          </div>
+          <div class="result-meta ramification-status-line" id="generic-status"></div>
+        </div>
+
+        <div class="ramification-place-editor">
+          <div class="ramification-place-heading">
+            <div id="finite-places-label" class="input-label">Finite places</div>
+            <label class="opt-row">
+              <input id="show-infinite" type="checkbox" checked>
+              <span>show \(\infty\)</span>
+            </label>
+          </div>
+          <div class="ramification-place-row">
+            <input id="extra-prime-input" class="ramification-input calculator-control" type="text" placeholder="prime p" spellcheck="false">
+            <button id="add-extra-prime" class="btn btn-ghost" type="button">add place</button>
+          </div>
+          <div id="place-chip-list" class="ramification-chip-list"></div>
+        </div>
+        <div class="result-meta" id="ramification-input-note">Loading \(E/\mathbb{Q}\) from LMFDB...</div>
+        <div class="ramification-preset-row ramification-update-row">
+              <button id="extension-update" class="btn" type="button" data-shortcut-primary>update</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Field Invariants</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body" id="field-invariants"></div>
+    </section>
+
+    <section class="card" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Decomposition Chart</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body" id="decomposition-table"></div>
+    </section>
+
+    <section class="card collapsed" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Selected Place</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body" id="selected-place-data"></div>
+    </section>
+
+    <section class="card collapsed" draggable="true">
+      <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label">Export</span><em class="toggle-icon">&#9662;</em></div>
+      <div class="card-body">
+        <div class="ramification-preset-row">
+          <button id="ramification-refresh-export" class="btn" type="button">refresh</button>
+          <button id="ramification-select-export" class="btn btn-ghost" type="button">select</button>
+        </div>
+        <textarea id="ramification-export-out" spellcheck="false"></textarea>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  Place decomposition for extensions \(E/F\), using LMFDB field data and certified browser-local arithmetic.
+  <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
+</footer>
+
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    }
+  };
+</script>
+<script>
+  window.RAMIFICATION_LMFDB_PROXY_URL = 'https://lmfdb-proxy.ramified.workers.dev';
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<script src="js/calculator_cards.js?v=20260903-1"></script>
+<script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
+<script src="js/place_ramification_engine.js?v=20260830-2"></script>
+<script src="js/place_ramification_calculator.js?v=20260831-3"></script>
+<script src="js/calculator_input_profiles.js?v=20260903-1"></script>
+<script src="js/import_export_panel.js?v=20260821-7"></script>
+<script src="js/import_export_page_adapters.js?v=20260821-9"></script>
+</body>
+</html>

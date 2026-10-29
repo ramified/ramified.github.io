@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Young Diagram² Calculator</title>
+  <link rel="stylesheet" href="css/site.css?v=20260903-1" />
+  <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7" />
+  <style>
+    .double-layout {
+      max-width: 1280px;
+      grid-template-columns: minmax(0, 1fr) 370px;
+    }
+    .canvas-stack {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 18px;
+      align-content: start;
+      min-width: 0;
+    }
+    .double-canvas-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 10px;
+      padding: 16px;
+      align-items: start;
+      min-width: 0;
+    }
+    .canvas-panel.slice-focus:not(.show-diagrams) .double-canvas-grid {
+      display: none;
+    }
+    .slice-diagram-toggle {
+      display: none;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      border-radius: 3px;
+      padding: 2px 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      line-height: 1.2;
+      cursor: pointer;
+    }
+    .canvas-panel.slice-focus .slice-diagram-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .slice-diagram-toggle:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    .diagram-slot { min-width: 0; }
+    .diagram-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: lowercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .diagram-canvas {
+      width: 100%;
+      height: auto;
+      background: #fbfaf7;
+      border: 1px solid var(--border);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
+    }
+    .lie-inline-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+    .lie-inline-controls select,
+    .lie-inline-controls input[type=number] {
+      padding: 3px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'EB Garamond', serif;
+      font-size: 0.9rem;
+    }
+    .lie-inline-controls input[type=number] {
+      width: 52px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem;
+      text-align: center;
+    }
+    #lie-algebra-desc {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .control-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .lr-card:not(.collapsed) .card-body {
+      display: flex;
+      flex-direction: column;
+      max-height: min(78vh, 760px);
+      overflow: hidden;
+      min-height: 0;
+    }
+    .lr-card.collapsed .card-body {
+      max-height: 0;
+      opacity: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+    .decomposition-output {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
+      max-height: none;
+      min-height: 150px;
+      overflow: auto;
+      padding: 0 10px 12px 0;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable both-edges;
+      box-sizing: border-box;
+      min-width: 0;
+    }
+    .ssyt-summary {
+      font-size: 0.82rem;
+      line-height: 1.7;
+      padding: 6px 0 4px;
+      border-bottom: 1px dotted var(--border);
+    }
+    .ssyt-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
+      gap: 10px;
+      align-items: start;
+    }
+    .ssyt-item {
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+      min-width: 0;
+    }
+    .ssyt-index {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--muted);
+      line-height: 1.2;
+      padding-top: 2px;
+      min-width: 22px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .ssyt-table {
+      border-collapse: collapse;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1;
+      background: var(--surface);
+    }
+    .ssyt-table td {
+      width: 22px;
+      height: 22px;
+      text-align: center;
+      vertical-align: middle;
+      border: 1px solid rgba(30,24,18,0.72);
+      background: #fbfaf7;
+      color: var(--text);
+      padding: 0;
+    }
+    .lr-action-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 8px 0 4px;
+    }
+    .decomp-formula {
+      font-size: 0.82rem;
+      line-height: 1.7;
+      word-break: break-word;
+      padding: 6px 0 4px;
+      border-bottom: 1px dotted var(--border);
+    }
+    .decomp-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 3px 0;
+      border-bottom: 1px dotted var(--border);
+    }
+    .decomp-mult {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--accent);
+      min-width: 24px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .decomp-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      word-break: break-word;
+    }
+    .decomp-diagram {
+      display: inline-flex;
+      min-width: 20px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .warning-text {
+      color: var(--accent2);
+      font-size: 0.78rem;
+      font-style: italic;
+      margin-top: 6px;
+    }
+    .mode-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin: 0 0 8px;
+      font-size: 0.88rem;
+    }
+    .mode-row input { margin-top: 5px; accent-color: var(--accent); }
+    .code-inline {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    #export-out { height: 116px; }
+    .sympoly-product-row {
+      grid-template-columns: minmax(104px, max-content) minmax(0, 1fr);
+    }
+    .sympoly-product-label {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    #compute-sympoly + #export-sympoly {
+      margin-left: 0;
+    }
+    #diagram-input-card .drag-handle { display: none; }
+    @media (max-width: 980px) {
+      .double-layout { grid-template-columns: 1fr; }
+      #diagram-input-card .drag-handle { display: inline-block; }
+    }
+    @media (max-width: 720px) {
+      .double-canvas-grid {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 8px;
+        padding: 12px;
+      }
+      .diagram-label { font-size: 0.68rem; }
+      .control-grid { grid-template-columns: 1fr; }
+      .canvas-panel header.panel-title { gap: 10px; }
+      .canvas-toolbar { width: 100%; justify-content: flex-start; }
+      .lie-inline-controls { width: 100%; }
+      #lie-algebra-desc { white-space: normal; }
+    }
+
+    /* ── 2-D weight slice ── */
+    #slice-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    #slice-panel .panel-title {
+      background: var(--surface2, #f0ede6);
+      border-bottom: 1px solid var(--border);
+      padding: 9px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #slice-canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fbfaf7;
+      cursor: default;
+      touch-action: none;
+      overscroll-behavior: contain;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    /* info box beneath slice-related card */
+    .slice-info-row {
+      display: grid;
+      grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
+      align-items: start;
+      column-gap: 10px;
+      font-size: 0.82rem;
+      line-height: 1.6;
+    }
+    .slice-info-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      min-width: 80px;
+    }
+    .slice-info-value {
+      font-family: 'EB Garamond', serif;
+      font-size: 0.88rem;
+      min-width: 0;
+    }
+    .slice-info-value code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      color: var(--text);
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .slice-basis-line {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      column-gap: 6px;
+      align-items: baseline;
+    }
+    .slice-basis-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+    .slice-mode-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .slice-dimension-subrow {
+      margin-top: 4px;
+    }
+    .slice-mode-btn {
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      border-radius: 3px;
+      padding: 2px 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      cursor: pointer;
+    }
+    .slice-mode-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(61,107,79,0.08);
+    }
+    .slice-gamma-control {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+    .slice-gamma-entry {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+    .slice-gamma-entry input {
+      flex: 1 1 150px;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      padding: 4px 6px;
+    }
+    .slice-layer-note {
+      display: inline-block;
+      margin-top: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--muted);
+    }
+    .slice-invariant-head {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .slice-invariant-toggle {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1;
+      padding: 1px 3px;
+    }
+    .slice-invariant-toggle:hover {
+      color: var(--accent);
+    }
+    .slice-invariant-list {
+      display: grid;
+      grid-template-columns: minmax(58px, max-content) minmax(0, 1fr);
+      column-gap: 10px;
+      row-gap: 2px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.45;
+    }
+    .slice-invariant-list dt {
+      color: var(--muted);
+    }
+    .slice-invariant-list dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    #open-slice-btn {
+      margin-top: 10px;
+    }
+    #open-slice-btn:disabled, #open-slice-btn[disabled] {
+      opacity: 0.38;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+    .slice-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+      font-size: 0.72rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--muted);
+    }
+    .slice-legend-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 3px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Young Diagram<sup>2</sup> Calculator</h1>
+    <span><a href="index.html">Pure Math Toolkit</a> &middot; <a href="young_diagrams.html">Young Diagram Calculator</a> &middot; double diagrams &middot; double interactions</span>
+  </header>
+
+  <main class="layout double-layout">
+    <section class="canvas-stack" id="canvas-stack">
+      <section class="canvas-panel" aria-labelledby="double-title">
+        <header class="panel-title">
+          <span id="double-title" class="panel-title-text">Young diagrams</span>
+          <button id="slice-diagram-toggle" class="slice-diagram-toggle" type="button" title="show or hide diagram canvases">show diagrams</button>
+          <div class="canvas-toolbar" aria-label="Lie algebra and shared grid controls">
+            <span class="lie-inline-controls">
+              <label class="stat-label" for="lie-type" style="white-space:nowrap;flex-shrink:0;">Type:</label>
+              <select id="lie-type" onchange="onTypeChange()">
+                <optgroup label="Classical">
+                  <option value="A" selected>A&#8345; &nbsp;&#x1D4C8;&#x1D4C1;(n+1) / &#x1D4C8;&#x1D4CA;(n+1)</option>
+                  <option value="B">B&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n+1)</option>
+                  <option value="C">C&#8345; &nbsp;&#x1D4C8;&#x1D4C5;(2n)</option>
+                  <option value="D">D&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n)</option>
+                </optgroup>
+                <optgroup label="Exceptional">
+                  <option value="E6">E&#8326;</option>
+                  <option value="E7">E&#8327;</option>
+                  <option value="E8">E&#8328;</option>
+                  <option value="F4">F&#8324;</option>
+                  <option value="G2">G&#8322;</option>
+                </optgroup>
+              </select>
+              <span id="lie-rank-wrap" style="display:flex;align-items:center;gap:6px;">
+                <label class="stat-label" for="lie-rank" style="white-space:nowrap;">rank&nbsp;<em>n</em>:</label>
+                <input type="number" id="lie-rank" value="6" min="1" max="12" onchange="onAlgebraChange()">
+              </span>
+              <span id="lie-algebra-desc"></span>
+            </span>
+            <span class="canvas-size-inline" aria-label="Shared canvas size, rows by columns">
+              <label title="Shared rows"><span>rows</span><input id="grid-rows" type="number" min="1" max="18" value="5" /></label>
+              <span class="dimension-times">×</span>
+              <label title="Shared columns"><span>cols</span><input id="grid-cols" type="number" min="1" max="18" value="5" /></label>
+            </span>
+          </div>
+        </header>
+        <div class="double-canvas-grid">
+          <div class="diagram-slot">
+            <div class="diagram-label"><span>diagram λ</span></div>
+            <canvas id="lambda-canvas" class="diagram-canvas" width="520" height="340"></canvas>
+          </div>
+          <div class="diagram-slot">
+            <div class="diagram-label"><span>diagram μ</span></div>
+            <canvas id="mu-canvas" class="diagram-canvas" width="520" height="340"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2-D weight slice canvas (hidden until activated) -->
+      <section id="slice-panel" style="display:none;">
+        <header class="panel-title">
+          <span>2-dimensional weight slice &nbsp;·&nbsp; <span id="slice-plane-label" style="font-style:italic;"></span></span>
+        </header>
+        <canvas id="slice-canvas" width="640" height="480"></canvas>
+        <div class="slice-legend" id="slice-legend" style="padding:8px 14px 10px;"></div>
+      </section>
+
+      <div id="diagram-input-anchor"></div>
+      <section id="diagram-input-card" class="card collapsed" draggable="true">
+        <div class="card-head">
+          <span class="drag-handle" title="drag card">⋮⋮</span>
+          <span class="card-head-label">diagram input</span>
+          <i class="toggle-icon">▾</i>
+        </div>
+        <div class="card-body">
+          <div class="control-grid">
+            <div>
+              <div class="stat-label">Set λ by partition</div>
+              <div class="input-row"><input id="lambda-partition" type="text" placeholder="4,2,1" /><button id="set-lambda" class="btn">set</button></div>
+            </div>
+            <div>
+              <div class="stat-label">Set μ by partition</div>
+              <div class="input-row"><input id="mu-partition" type="text" placeholder="3,1" /><button id="set-mu" class="btn">set</button></div>
+            </div>
+          </div>
+          <div class="action-row" style="margin-top:10px;">
+            <button id="swap-diagrams" class="btn btn-ghost">swap λ μ</button>
+            <button id="clear-lambda" class="btn btn-ghost">clear λ</button>
+            <button id="clear-mu" class="btn btn-ghost">clear μ</button>
+          </div>
+          <p class="hint">Click a square to set that row length. The page enforces non-increasing row lengths automatically.</p>
+        </div>
+      </section>
+    </section>
+
+    <aside id="cards" class="side">
+      <section class="card collapsed" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">basic statistics</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body"><div id="stats-out"></div></div>
+      </section>
+
+      <section class="card collapsed lr-card" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">littlewood–richardson decomposition</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body">
+          <label class="mode-row">
+            <input type="checkbox" id="fixed-rank-mode" />
+            <span><strong>Lie algebra rank fixed</strong><br><span class="hint" id="lr-mode-hint">Unchecked: stable n ≫ 0. Checked: tensor product in the fixed-rank Weyl representation ring.</span></span>
+          </label>
+          <div class="lr-action-row">
+            <button id="compute-schur" class="btn" data-shortcut-primary>compute</button>
+            <button id="export-schur" class="btn btn-ghost" data-import-export-trigger="schur" data-export-filename="lr-decomposition.txt">export</button>
+          </div>
+          <div id="schur-out" class="decomposition-output"><span class="hint">Draw λ and μ, choose stable or fixed-rank mode, then compute.</span></div>
+          <p class="hint">Fixed-rank mode enumerates dominant candidate highest weights inside the invariant norm bound ‖γ‖ ≤ ‖λ‖ + ‖μ‖, then computes coefficients by Freudenthal characters plus Brauer–Klimyk straightening; the dimension check reports completeness.</p>
+        </div>
+      </section>
+
+      <section class="card collapsed" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">lie algebra invariants</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body">
+          <div id="invariants-out"><span class="hint">Open this card to compute invariants of V<sup>λ</sup> at the weight μ.</span></div>
+          <p class="hint">Uses the selected Dynkin type/rank. The weight μ is interpreted by the same Young-diagram → Dynkin-label convention as the canvas heading.</p>
+        </div>
+      </section>
+
+      <section class="card collapsed" id="slice-card" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">2d weight slice</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body" id="slice-card-body">
+          <div id="slice-stats-out">
+            <span class="hint">Draw λ and μ; this card shows their relative geometry as Lie algebra weights.</span>
+          </div>
+          <button id="open-slice-btn" class="btn" style="margin-top:10px;" disabled>show 2d slice canvas</button>
+          <p class="hint" id="slice-card-hint" style="margin-top:8px;">λ and μ must generate a 2-dimensional subspace of the weight lattice (i.e. they must be linearly independent) to enable the slice canvas.</p>
+        </div>
+      </section>
+
+      <section class="card collapsed" id="slice-layer-card" draggable="true" style="display:none;">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">slice weights and roots</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body" id="slice-layer-card-body">
+          <div id="slice-layer-controls"><span class="hint">Show the 2d slice canvas to choose overlay layers.</span></div>
+        </div>
+      </section>
+
+      <section class="card collapsed" id="slice-weight-info-card" draggable="true" style="display:none;">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">weight info in 2d slice</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body">
+          <div id="slice-weight-info-out"><span class="hint">Click a lattice point in the 2d slice canvas.</span></div>
+        </div>
+      </section>
+
+      <section class="card collapsed lr-card" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">kostka tableaux</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body">
+          <div class="lr-action-row">
+            <button id="compute-kostka" class="btn" data-shortcut-primary>compute</button>
+            <button id="export-kostka" class="btn btn-ghost" data-import-export-trigger="kostka" data-export-filename="kostka-tableaux.txt">export</button>
+          </div>
+          <div id="kostka-out" class="decomposition-output"><span class="hint">Compute all semistandard Young tableaux of shape λ and weight μ. This card is independent of the selected Lie type.</span></div>
+          <p class="hint">Rows are weakly increasing and columns are strictly increasing; the weight μ = (μ₁, μ₂, …) means entry i appears μᵢ times.</p>
+        </div>
+      </section>
+
+      <section class="card collapsed lr-card" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">kronecker decomposition</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body">
+          <div class="lr-action-row">
+            <button id="compute-kronecker" class="btn" data-shortcut-primary>compute</button>
+            <button id="export-kronecker" class="btn btn-ghost" data-import-export-trigger="kronecker" data-export-filename="kronecker-decomposition.txt">export</button>
+          </div>
+          <div id="kronecker-out" class="decomposition-output"><span class="hint">Compute all nonzero Kronecker coefficients g<sup>ν</sup><sub>λ,μ</sub> for |λ| = |μ|.</span></div>
+          <p class="hint">The output lists every nonzero target ν under the current browser cap; no third diagram is required.</p>
+        </div>
+      </section>
+
+      <section class="card collapsed lr-card" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">plethysm decomposition</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body">
+          <div class="lr-action-row">
+            <button id="compute-plethysm" class="btn" data-shortcut-primary>compute</button>
+            <button id="export-plethysm" class="btn btn-ghost" data-import-export-trigger="plethysm" data-export-filename="plethysm-decomposition.txt">export</button>
+          </div>
+          <div id="plethysm-out" class="decomposition-output"><span class="hint">Compute all nonzero coefficients in the Schur plethysm s<sub>λ</sub>∘s<sub>μ</sub>.</span></div>
+          <p class="hint">The output lists every nonzero target ν under the current browser cap; no third diagram is required.</p>
+        </div>
+      </section>
+
+      <section class="card collapsed lr-card" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">schur functor</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body">
+          <div class="lr-action-row">
+            <button id="compute-schur-functor" class="btn" data-shortcut-primary>compute</button>
+            <button id="export-schur-functor" class="btn btn-ghost" data-import-export-trigger="schur-functor" data-export-filename="schur-functor-decomposition.txt">export</button>
+          </div>
+          <div id="schur-functor-out" class="decomposition-output"><span class="hint">Compute 𝕊<sup>μ</sup>(V<sup>λ</sup>) for the selected Dynkin type/rank and decompose it as a sum of V<sup>γ</sup>.</span></div>
+          <p class="hint">This card interprets λ as the highest weight of V<sup>λ</sup> for the selected Lie algebra, applies the Schur functor with shape μ, then decomposes the resulting character into irreducible representations V<sup>γ</sup>.</p>
+        </div>
+      </section>
+
+      <section class="card collapsed lr-card" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">grassmannian cup product</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body">
+          <div class="mode-row">
+            <label class="stat-label" for="grassmannian-presentation" style="white-space:nowrap;margin-top:3px;">Presentation:</label>
+            <select id="grassmannian-presentation" style="padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
+              <option value="diagrams" selected>Young diagrams</option>
+              <option value="chern">Chern class polynomial</option>
+            </select>
+          </div>
+          <div class="lr-action-row">
+            <button id="compute-grassmannian" class="btn" data-shortcut-primary>compute</button>
+            <button id="export-grassmannian" class="btn btn-ghost" data-import-export-trigger="grassmannian" data-export-filename="grassmannian-cup-product.txt">export</button>
+          </div>
+          <div id="grassmannian-out" class="decomposition-output"><span class="hint">Compute σ<sub>λ</sub> ∪ σ<sub>μ</sub> in H*(Gr(r,n)), where r is the number of grid rows and n−r is the number of grid columns.</span></div>
+          <p class="hint">The Young-diagram presentation uses Littlewood–Richardson coefficients inside the current r × (n−r) rectangle. The Chern presentation uses the Giambelli determinant in Chern classes c<sub>i</sub>.</p>
+        </div>
+      </section>
+
+      <section class="card collapsed" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">symmetric polynomials</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body">
+          <div class="symfun-control-row symfun-n-row">
+            <label class="symfun-control-label tooltip-label" tabindex="0" data-tooltip="N is the number of variables x_1,...,x_N." for="sympoly-variable-count">N</label>
+            <span class="symfun-variable-controls">
+              <input type="number" id="sympoly-variable-count" min="0" step="1" inputmode="numeric" value="3">
+              <label class="symfun-infinite-toggle tooltip-label" tabindex="0" data-tooltip="Use infinitely many variables. The result is then collected in the selected basis and mode.">infinite <input type="checkbox" id="sympoly-infinite" checked></label>
+            </span>
+          </div>
+          <div class="symfun-control-row symfun-n-row">
+            <span class="symfun-control-label">terms</span>
+            <span class="symfun-variable-controls symfun-basis-controls">
+              <select id="sympoly-left-kind" class="symfun-basis-select" title="type of the λ factor">
+                <option value="m">m_&lambda;</option>
+                <option value="p">p_&lambda;</option>
+                <option value="e">e_&lambda;</option>
+                <option value="h">h_&lambda;</option>
+                <option value="s">s_&lambda;</option>
+              </select>
+              <select id="sympoly-operation" class="symfun-basis-select" title="operation">
+                <option value="product">&times;</option>
+                <option value="plethysm">&#8728;</option>
+              </select>
+              <select id="sympoly-right-kind" class="symfun-basis-select" title="type of the μ factor">
+                <option value="m">m_&mu;</option>
+                <option value="p">p_&mu;</option>
+                <option value="e">e_&mu;</option>
+                <option value="h">h_&mu;</option>
+                <option value="s">s_&mu;</option>
+              </select>
+            </span>
+          </div>
+          <div class="symfun-control-row symfun-basis-row">
+            <span class="symfun-control-label">basis</span>
+            <span class="symfun-variable-controls symfun-basis-controls">
+              <select id="sympoly-basis" class="symfun-basis-select" title="basis for infinite-variable result expansions" disabled>
+                <option value="m">m_&lambda;</option>
+                <option value="p">p_&lambda;</option>
+                <option value="e">e_&lambda;</option>
+                <option value="h">h_&lambda;</option>
+                <option value="s">s_&lambda;</option>
+              </select>
+              <select id="sympoly-mode" class="symfun-basis-select" title="linear or polynomial expansion" disabled>
+                <option value="linear">linear</option>
+                <option value="polynomial">poly</option>
+              </select>
+              <button id="compute-sympoly" class="symfun-export-btn" type="button" data-shortcut-primary>compute</button>
+              <button id="export-sympoly" class="symfun-export-btn" type="button" data-import-export-trigger="symmetric-polynomials" data-export-filename="symmetric-polynomial-product.txt">export</button>
+            </span>
+          </div>
+          <div id="sympoly-output" class="symfun-expansions"><span class="hint">Draw &lambda; and &mu; to combine their symmetric polynomials.</span></div>
+        </div>
+      </section>
+
+      <section class="card collapsed" draggable="true">
+        <div class="card-head"><span class="drag-handle" title="drag card">⋮⋮</span><span class="card-head-label">export</span><i class="toggle-icon">▾</i></div>
+        <div class="card-body">
+          <div class="action-row">
+            <button id="refresh-export" class="btn">refresh</button>
+            <button id="copy-export" class="btn btn-ghost">copy</button>
+            <button id="download-export" class="btn btn-ghost">download</button>
+          </div>
+          <textarea id="export-out" readonly>@misc{young_diagram2_calculator,
+  title        = {Young Diagram² Calculator},
+  author       = {Xiaoxiang Zhou},
+  year         = {2026},
+  url          = {https://ramified.github.io/web/database/double_young_diagram.html},
+  note         = {Browser-side applet for computations with pairs of Young diagrams.}
+}</textarea>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <footer>
+    One applet built with p5.js, with help from <a href="https://ramified.github.io/web/database/double_young_diagram_production_process.html">ChatGPT</a>. The single Young diagram calculator is <a href="https://ramified.github.io/web/database/young_diagrams.html">here</a>.
+    <a href="https://forms.gle/3ZkJTzpavcFqFws26" target="_blank" rel="noopener">Send feedback</a>
+  </footer>
+
+<script src="js/calculator_cards.js?v=20260903-1"></script>
+<script src="js/calculator_input_settings.js?v=20261014-input-drafts-1"></script>
+<script src="js/double_young_diagram.js?v=20261021-low-rank-2"></script>
+<script src="js/calculator_input_profiles.js?v=20260903-1"></script>
+  <script src="js/import_export_panel.js?v=20260821-7"></script>
+  <script src="js/import_export_page_adapters.js?v=20260821-9"></script>
+</body>
+</html>
