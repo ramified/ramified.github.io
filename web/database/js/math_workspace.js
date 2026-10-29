@@ -20,7 +20,7 @@
   let activeCanvasId = '', focusedPane = 'primary', splitView = false, inspectorSourceId = '', suppressCanvasClickUntil = 0;
   const DEFAULT_CANVAS_HEIGHT = 680, MIN_CANVAS_HEIGHT = 240, MAX_CANVAS_HEIGHT = 1600;
   const ASSET_LAYOUTS = ['icons', 'list', 'details', 'tiles', 'content'];
-  const OBJECT_INPUT_KINDS = ['number', 'young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...(slicing?.kinds || []), ...window.MathWorkspaceMosaic.kinds, 'complex','filtration','field-extension'];
+  const OBJECT_INPUT_KINDS = ['number', 'young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...(slicing?.kinds || []), ...(window.MathWorkspaceMosaic?.kinds||[]), ...(window.MathWorkspaceTopology?.kinds||[]), 'complex','filtration','field-extension'];
   const ASSET_KINDS = ['variety', 'sheaf', 'map', ...OBJECT_INPUT_KINDS];
   const INPUT_AUTOSAVE_DEBOUNCE_MS = 450, INPUT_AUTOSAVE_MAX_WAIT_MS = 1500;
   const assetState = {
@@ -938,6 +938,7 @@
   const ASSET_SUBTYPES = {
     filtration:[['filtration','Filtration']], complex:[['complex','Complex']], 'field-extension':[['field-extension','Field extension']],
     'mosaic-space':[['mosaic-space','Mosaic Space']], 'mosaic-diagram':[['mosaic-diagram','Mosaic Diagram']],
+    knot:[['knot','Knot / Link']], 'dual-graph':[['dual-graph','Dual Graph']],
     ...(slicing?.subtypes || {}),
     dynkin: [['dynkin', 'Marked Dynkin diagram']],
     strands: [['strands', 'Strands']],
@@ -983,12 +984,17 @@
   }
   let diagnosticCache = { revision: -1, assets: null, value: {} };
   function assetDiagnostics() {
+    synchronizeTopologyAssets();
     if(diagnosticCache.revision!==assetState.snapshot.revision||diagnosticCache.assets!==assetState.snapshot.assets){
       diagnosticCache={revision:assetState.snapshot.revision,assets:assetState.snapshot.assets,value:window.MathWorkspaceDiagnostics?.analyze(assetState.snapshot.assets)||{}};
     }
     return diagnosticCache.value;
   }
-  const localAssetSnapshot = () => ({ revision: assetState.snapshot.revision, diagnostics: assetDiagnostics(), assets: assetState.snapshot.assets.map((asset) => ({ ...asset, ...(asset.kind === 'matrix' && asset.data.field ? {definition:assetDefinitionFor(asset.kind,asset.type,asset.data)} : {}), dependencies: (asset.dependencies || []).map((ref) => ({ ...ref })), data: cloneAssetProperties(asset.data), properties: cloneAssetProperties(asset.properties) })), capabilities: { variety: true, young: true, lie: true, sheaf: true, map: true } });
+  function synchronizeTopologyAssets(){
+    const changed=window.MathWorkspaceTopology?.synchronize(assetState.snapshot.assets)||[];
+    if(changed.length){for(const asset of changed){asset.dependencies=assetDependencies(asset.kind,asset.type,asset.data);asset.definition=assetDefinitionFor(asset.kind,asset.type,asset.data);asset.properties={};asset.fingerprint=JSON.stringify({name:asset.name,type:asset.type,data:asset.data,dependencies:asset.dependencies});}assetState.snapshot.revision++;}
+  }
+  const localAssetSnapshot = () => {synchronizeTopologyAssets();return { revision: assetState.snapshot.revision, diagnostics: assetDiagnostics(), assets: assetState.snapshot.assets.map((asset) => ({ ...asset, ...(asset.kind === 'matrix' && asset.data.field ? {definition:assetDefinitionFor(asset.kind,asset.type,asset.data)} : {}), dependencies: (asset.dependencies || []).map((ref) => ({ ...ref })), data: cloneAssetProperties(asset.data), properties: cloneAssetProperties(asset.properties) })), capabilities: { variety: true, young: true, lie: true, sheaf: true, map: true } };};
   const assetMathSignature = (asset) => JSON.stringify({ kind: asset?.kind, type: asset?.type, data: asset?.data || {}, dependencies: asset?.dependencies || [] });
   function invalidateDerivedAssetProperties(record, next) {
     if (!record || assetMathSignature(record) === assetMathSignature(next)) return cloneAssetProperties(record?.properties);
@@ -1079,6 +1085,7 @@
     if(kind==='field-extension')return [{field:'base',label:'Base field',expectedKind:'field',requiresField:true},{field:'target',label:'Target field',expectedKind:'field',optional:true,requiresField:true}];
     if(kind==='mosaic-space')return [];
     if(kind==='mosaic-diagram')return [{field:'space',label:'Mosaic space',expectedKind:'mosaic-space'}];
+    if(window.MathWorkspaceTopology?.kinds.includes(kind))return [{field:'source',label:'Mosaic Diagram source',expectedKind:'mosaic-diagram',optional:true}];
     if (kind === 'variety' && type === 'toric') return [{field:'fan',label:'Fan',expectedKind:'fan'},{field:'cone',label:'Affine cone',expectedKind:'cone'}];
     if (['dynkin','strands'].includes(kind)) return [{ field: 'lie', label: 'Lie type', expectedKind: 'lie' }];
     if (kind === 'functor') return ['domain', 'codomain'].map(field => ({ field, label: field === 'domain' ? 'Domain' : 'Codomain', expectedKind: 'category' }));
@@ -1299,6 +1306,11 @@
     return data;
   }
   function validateAssetData(kind, type, data, currentKey) {
+    if(window.MathWorkspaceTopology?.kinds.includes(kind)){
+      const original=assetByKey(currentKey);
+      if(data.source&&data.source!==original?.data.source)window.MathWorkspaceTopology.resolve({kind,data},assetState.snapshot.assets);
+      return;
+    }
     if(kind==='field'){const problems=window.MathWorkspaceStructures.issues({kind,data},assetState.snapshot.assets);if(problems.length)throw new Error(problems.join(' '));}
     if(['complex','filtration','field-extension'].includes(kind)){
       const issues=window.MathWorkspaceStructures.issues({kind,data},assetState.snapshot.assets);if(issues.length)throw new Error(issues.join(' '));return;
@@ -1645,6 +1657,8 @@
     if(kind==='field-extension')return (assetByKey(data.target)?.plainName||data.generator)+' / '+(assetByKey(data.base)?.plainName||'Choose base field')+' · '+data.polynomial;
     if(kind==='mosaic-space')return data.rows+' × '+data.cols+' · '+data.lattice+' · '+data.boundary;
     if(kind==='mosaic-diagram')return (data.diagramType==='dual'?'Dual graph':'Knot / link')+' on '+data.space;
+    if(kind==='knot')return data.pd.length+' crossings · '+data.circles+' crossing-free circles'+(data.source?' · follows '+data.source:' · independent');
+    if(kind==='dual-graph')return data.genera.length+' vertices · '+data.edges.length+' edges'+(data.source?' · follows '+data.source:' · independent');
     if (kind === 'number') return (data.hasValue?data.value:'Symbolic number')+' · '+(assetByKey(data.field)?.plainName||'Ring');
     if (kind === 'field') return window.MathWorkspaceObjects.fieldLabel(data);
     if (slicing?.isAsset({kind,type})) return kind === 'frame' ? 'Point and full basis in R^'+data.ambientDimension : kind === 'variety' ? 'Toric variety · '+(data.fan?'fan':'affine cone') : (slicing.labels[kind]||kind)+' in R^'+data.ambientDimension;
@@ -2349,7 +2363,7 @@
 
   const reservedAssetNames = new Set();
   function uniqueDefaultAssetName(kind) {
-    const base = ({filtration:'F',complex:'C', 'field-extension':'L/K','mosaic-space':'S','mosaic-diagram':'D',number:'a',field:'R',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
+    const base = ({knot:'K','dual-graph':'G',filtration:'F',complex:'C', 'field-extension':'L/K','mosaic-space':'S','mosaic-diagram':'D',number:'a',field:'R',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
     const numbered = (number) => kind === 'sheaf' ? `\\mathcal{E}_{${number}}` : `${base}_{${number}}`;
     let name = base, number = 2;
     const isTaken = (candidate) => reservedAssetNames.has(canonicalAssetName(candidate)) || assetState.snapshot.assets.some((asset) => canonicalAssetName(asset.name) === canonicalAssetName(candidate));
@@ -2823,6 +2837,7 @@
   }
   function prepareWorkspace(text) {
     const io = window.MathWorkspaceIO, raw = io.parse(text);
+    window.MathWorkspaceTopology.migrateWorkspace(raw);
     io.migrateHomologyCards(raw);
     presentation.migrateWorkspace(raw);
     window.MathWorkspaceSettings?.validate(raw.workspace.settings);
@@ -2841,7 +2856,7 @@
         ? window.MathWorkspaceStructures.references(asset.kind,asset.data).map(key=>({key,kind:key.split(':')[0]}))
         : slicing.isAsset(asset) || asset.kind === 'matrix'
         ? slicing.references(asset).flatMap(spec => (spec.many ? slicing.readRef(asset.data,spec.field) || [] : [slicing.readRef(asset.data,spec.field)]).map(key => ({key,kind:spec.kind})))
-        : referenceFieldSpecs(asset.kind,asset.type).map(spec => ({key:window.MathWorkspaceNumbers.referenceKey(asset.data,spec),kind:spec.expectedKind}))
+        : referenceFieldSpecs(asset.kind,asset.type).map(spec => ({key:window.MathWorkspaceNumbers.referenceKey(asset.data,spec),kind:spec.expectedKind,...(window.MathWorkspaceTopology.kinds.includes(asset.kind)&&spec.field==='source'?{allowMissing:true}:{})}))
     });
     for(const asset of prepared.assets)if(['complex','filtration'].includes(asset.kind)){
       const issues=window.MathWorkspaceStructures.issues(asset,prepared.assets);if(issues.length)throw new Error(issues.join(' '));

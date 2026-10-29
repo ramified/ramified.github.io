@@ -7,7 +7,7 @@ assert(catalog.every(x=>x.subjects.length&&x.description));
 const representation=creation.filter(catalog,'','representation'), linear=creation.filter(catalog,'','linear');
 assert.equal(representation.filter(x=>x.kind==='matrix').length,0);assert(representation.some(x=>x.kind==='young'));assert(!representation.some(x=>x.kind==='field'));
 assert(linear.some(x=>x.kind==='matrix'));assert(linear.some(x=>x.kind==='field'));assert(!linear.some(x=>x.kind==='young'));
-assert.deepEqual(creation.filter(catalog,'braid').map(x=>x.kind),['strands']);
+assert.deepEqual(creation.filter(catalog,'braid').map(x=>x.kind).sort(),['knot','strands']);
 assert.equal(creation.filter(catalog,'braid','linear').length,0);
 assert(creation.filter(catalog,'representation theory').some(x=>x.kind==='fan'));
 assert.equal(creation.filter(catalog,'zzzz').length,0);
@@ -23,7 +23,7 @@ assert(creation.filter(catalog,'matrices').some(entry=>entry.kind==='matrix'));
 const assignments=creation.subjectAssignments(catalog),defaults=assignments.settings();let updates=0;
 assert.deepEqual(defaults,{version:1,subjectsByKind:{
   filtration:['algebraic'],complex:['algebraic'],'field-extension':['linear'],
-  'mosaic-space':['topology'],'mosaic-diagram':['topology'],frame:['linear','geometry'],
+  'mosaic-space':['topology'],'mosaic-diagram':['topology'],knot:['topology'],'dual-graph':['topology'],frame:['linear','geometry'],
   polytope:['geometry'],sphere:['geometry'],point:['linear','geometry'],vector:['linear','geometry'],
   roots:['representation','geometry'],lattice:['linear','geometry'],voronoi:['geometry'],formula:['geometry'],
   tropical:['geometry'],weyl:['representation','geometry'],cone:['geometry'],fan:['representation','algebraic','geometry'],

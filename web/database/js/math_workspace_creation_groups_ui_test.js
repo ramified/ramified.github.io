@@ -27,7 +27,7 @@ async function run(){
     assert.equal(await read(()=>document.querySelectorAll('[data-create-group] h3,[data-create-group-toggle]').length),0,'display groups have no visible headings or collapse controls');
     assert(await read(()=>{const list=document.querySelector('.workspace-create-results'),r=list.getBoundingClientRect();return [...list.querySelectorAll('[data-create-kind]')].filter(button=>{const b=button.getBoundingClientRect();return b.top>=r.top&&b.bottom<=r.bottom;}).length>=24;}),'the compact layout gives most of the dialog to choices');
     const star=await read(()=>{const button=document.querySelector('[data-create-favorite="matrix"]'),style=getComputedStyle(button),r=button.getBoundingClientRect();return {background:style.backgroundColor,opacity:Number(style.opacity),x:r.x+r.width/2,y:r.y+r.height/2};});
-    assert.equal(star.background,'rgba(0, 0, 0, 0)','stars have a truly transparent background');assert(star.opacity<=.3,'stars are pale by default');
+    assert.equal(star.background,'rgba(0, 0, 0, 0)','stars have a truly transparent background');assert.equal(star.opacity,.05,'unselected stars start at 5 percent');
     const moveToMatrixCard=async()=>{
       const point=await read(()=>{const r=document.querySelector('[data-create-group="matrix"] [data-create-kind]').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};});
       await client.send('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
@@ -38,9 +38,12 @@ async function run(){
       for(const type of ['mousePressed','mouseReleased'])await client.send('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1});
     };
     await moveToMatrixCard();
-    assert((await read(()=>Number(getComputedStyle(document.querySelector('[data-create-favorite="matrix"]')).opacity)))<=.3,'hovering the card alone does not emphasize its star');
+    await waitFor(()=>read(()=>Number(getComputedStyle(document.querySelector('[data-create-favorite="matrix"]')).opacity)===.2));
+    assert.equal(await read(()=>Number(getComputedStyle(document.querySelector('[data-create-favorite="vector"]')).opacity)),.05,'hover only highlights the corresponding star');
+    await client.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:0,y:0});
+    await waitFor(()=>read(()=>Number(getComputedStyle(document.querySelector('[data-create-favorite="matrix"]')).opacity)===.05));
     await read(()=>document.querySelector('[data-create-group="matrix"] [data-create-kind]').focus());
-    assert((await read(()=>Number(getComputedStyle(document.querySelector('[data-create-favorite="matrix"]')).opacity)))<=.3,'focusing the create button does not emphasize its sibling star');
+    assert.equal(await read(()=>Number(getComputedStyle(document.querySelector('[data-create-favorite="matrix"]')).opacity)),.05,'focusing the create button retains idle opacity');
     await client.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:star.x,y:star.y});
     await waitFor(()=>read(()=>Number(getComputedStyle(document.querySelector('[data-create-favorite="matrix"]')).opacity)>.9));
     assert.equal(await read(()=>getComputedStyle(document.querySelector('[data-create-group="matrix"] [data-create-kind]')).outlineStyle),'solid','hovering the star keeps the object highlight visible');
@@ -50,6 +53,8 @@ async function run(){
     await read(()=>{window.originalMatrixStar=document.querySelector('[data-create-favorite="matrix"]');window.originalMatrixChoice=document.querySelector('[data-create-group="matrix"] [data-create-kind]');});
     await clickMatrixStar();
     assert.equal(await read(()=>document.querySelector('[data-create-favorite="matrix"]').getAttribute('aria-pressed')),'true');
+    await moveToMatrixCard();
+    await waitFor(()=>read(()=>Number(getComputedStyle(document.querySelector('[data-create-favorite="matrix"]')).opacity)===.75));
     assert(await read(()=>originalMatrixStar===document.querySelector('[data-create-favorite="matrix"]')&&originalMatrixChoice===document.querySelector('[data-create-group="matrix"] [data-create-kind]')),'pinning preserves the original catalog controls');
     await clickMatrixStar();await moveToMatrixCard();
     await waitFor(()=>read(()=>Number(getComputedStyle(originalMatrixStar).opacity)<.3));
@@ -99,7 +104,8 @@ async function run(){
     assert(await read(()=>!!document.querySelector('[data-create-shortcuts="favorites"] [data-create-kind="matrix"]')),'favorites survive reload');
     assert.equal(await read(()=>document.querySelectorAll('[data-create-shortcuts="recent"] [data-create-kind]').length),6,'Recent survives reload');
     assert.equal(await read(()=>document.querySelectorAll('[data-create-group-toggle]').length),0);
-    assert(await read(()=>[...document.querySelectorAll('[data-create-hide-shortcuts]')].every(button=>button.textContent==='×'&&button.getAttribute('aria-label').startsWith('Close '))),'row close controls use an icon with accessible action labels');
+    assert(await read(()=>[...document.querySelectorAll('[data-create-hide-shortcuts]')].every(button=>button.querySelector('svg[aria-hidden="true"]')&&button.getAttribute('aria-label').startsWith('Close '))),'row close controls use a decorative icon with accessible action labels');
+    assert(await read(()=>[...document.querySelectorAll('.workspace-create-shortcut-hide,.workspace-create-shortcut-remove')].every(button=>{const b=button.getBoundingClientRect(),s=button.querySelector('svg').getBoundingClientRect();return Math.abs(s.x+s.width/2-b.x-b.width/2)<.1&&Math.abs(s.y+s.height/2-b.y-b.height/2)<.1;})),'close icons are geometrically centered without font baseline offsets');
     const assetsBefore=await read(()=>JSON.stringify(MathWorkspaceAssetsTest.localAssetSnapshot().assets));
     await read(()=>document.querySelector('[data-create-remove-shortcut="recent"][data-create-shortcut-kind="number"]').focus());await press('Enter');
     assert.deepEqual(await read(()=>prefs().recent),['lie','young','vector','point','field'],'Recent entries can be removed independently');

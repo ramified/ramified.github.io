@@ -32,7 +32,10 @@ resizeCanvas=function(){
   __viewportOriginalResize();
 };
 document.addEventListener('DOMContentLoaded',()=>__editor.setViewportElement(refs.canvasWrap));
-__editor.setAssetAdapter({viewport:()=>{resizeCanvas();draw(poincareReport);}});
+__editor.setAssetAdapter({viewport:()=>{
+  if(__mosaicConfig.operation==='dual-graph-view'){__mosaicGraphViewport();if(state.dualGraphData)renderVisibleDualGraphVisualizations(state.dualGraphData);return;}
+  resizeCanvas();draw(poincareReport);
+}});
 `,
   'js/place_ramification_calculator.js':legacy+String.raw`
 const __viewportOriginalDraw=drawCanvas;

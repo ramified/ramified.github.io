@@ -1,0 +1,40 @@
+'use strict';
+const assert=require('node:assert/strict'),model=require('./math_workspace_topology.js'),mosaic=require('./math_workspace_mosaic.js'),objects=require('./math_workspace_objects.js'),diagnostics=require('./math_workspace_diagnostics.js');
+const space={kind:'mosaic-space',id:'S',data:mosaic.normalize('mosaic-space',{lattice:'square',boundary:'grid'})},key=a=>a.kind+':'+a.id;
+const loop=(row=1,col=1)=>[{row,col,tile:[[0,1]]},{row,col:col+1,tile:[[1,2]]},{row:row+1,col,tile:[[0,3]]},{row:row+1,col:col+1,tile:[[2,3]]}];
+const diagram={kind:'mosaic-diagram',id:'D',data:mosaic.fromPayload('mosaic-diagram',{...space.data,diagramType:'link',tiles:loop()},key(space))},assets=[space,diagram];
+const knot={kind:'knot',id:'K',data:model.normalize('knot',{source:key(diagram)})};assets.push(knot);
+assert.deepEqual(model.fromMosaic('knot',diagram,assets),{source:'',pd:[],circles:1});
+model.synchronize(assets);assert.equal(knot.data.circles,1);assert.equal(knot.data.hasSnapshot,true);
+diagram.data.tiles.push(...loop(4,4));model.synchronize(assets);assert.equal(knot.data.circles,2,'linked snapshots follow changes');
+const independent={kind:'knot',id:'I',data:model.detach(knot,assets)};assert.equal(independent.data.source,'');assert.equal(independent.data.circles,2);
+diagram.data.tiles.pop();assert(model.issues(knot,assets).length);model.synchronize(assets);assert.equal(knot.data.circles,2,'invalid source retains last valid definition');assert.equal(model.detach(knot,assets).circles,2);
+assert.equal(model.issues(independent,assets).length,0,'independent object ignores broken source');
+const unresolved={kind:'knot',data:model.normalize('knot',{source:key(diagram)})};assert.throws(()=>model.detach(unresolved,assets));
+diagram.data.tiles=loop();space.data.boundary='wrapped';assert.throws(()=>model.fromMosaic('knot',diagram,assets),/planar/);space.data.boundary='grid';
+const t=model.normalize('knot',model.presets.knot[1].data),info=model.knotInfo(t);assert.equal(info.crossingCount,3);assert.equal(info.componentCount,1);
+require('./mosaic_knot_data.js');require('./mosaic_link_data.js');assert.match(global.MosaicKnotEngine.identifyPlanar(t.pd,info.components,0).name,/3_1/);
+assert.throws(()=>model.normalize('knot',{pd:[[1,2,1,2]],circles:0}),/not a planar/);
+assert.throws(()=>model.normalize('knot',{pd:[[1,2,3,4]],circles:0}),/exactly twice/);
+assert.throws(()=>model.normalize('dual-graph',{genera:[0],legs:[[1,2]],edges:[[1,1]]}),/distinct/);
+assert.throws(()=>model.normalize('dual-graph',{genera:[-1],legs:[[]]}),/nonnegative/);
+assert.throws(()=>model.normalize('dual-graph',{genera:[0],legs:[[1,1]]}),/unique/);
+const graphDiagram={...diagram,id:'G',data:mosaic.fromPayload('mosaic-diagram',{...space.data,diagramType:'dual',tiles:[{row:2,col:2,tile:{type:'vertex',edges:[0,2,3]},decoration:1},{row:2,col:3,tile:[[0,2]]},{row:2,col:4,tile:{type:'vertex',edges:[2]}}],halfEdgeDecorations:{'6:2':'a','6:3':'b'}},key(space))};
+const extracted=model.fromMosaic('dual-graph',graphDiagram,[space,graphDiagram]);assert.deepEqual(extracted.genera,[1,0]);assert.deepEqual(extracted.legs,[[1,3,4],[2]]);assert.deepEqual(extracted.edges,[[1,2]]);assert.deepEqual(extracted.decorations,{3:'a',4:'b'});
+const selfLoop={...graphDiagram,data:{...graphDiagram.data,tiles:[{row:1,col:1,tile:{type:'vertex',edges:[0]}},{row:1,col:5,tile:{type:'vertex',edges:[2]}}]}},wrapped={...space,data:{...space.data,boundary:'wrapped'}};
+// Left/right boundary spokes connect across the periodic background.
+selfLoop.data.tiles=[{row:1,col:1,tile:{type:'vertex',edges:[2]}},{row:1,col:5,tile:{type:'vertex',edges:[0]}}];assert.equal(model.fromMosaic('dual-graph',selfLoop,[wrapped,selfLoop]).edges.length,1);
+const glued={...space,data:{...space.data,boundary:'glued',gluedEdges:[{first:{index:0,row:1,col:1,dir:2},second:{index:4,row:1,col:5,dir:0}}]}};assert.equal(model.fromMosaic('dual-graph',selfLoop,[glued,selfLoop]).edges.length,1,'graph extraction respects glued ports');
+const cut={...space,data:{...space.data,cutEdges:[{left:{index:6,row:2,col:2},right:{index:7,row:2,col:3}}]}},adjacent={...graphDiagram,data:{...graphDiagram.data,tiles:[{row:2,col:2,tile:{type:'vertex',edges:[0]}},{row:2,col:3,tile:{type:'vertex',edges:[2]}}]}};
+assert.equal(model.fromMosaic('dual-graph',adjacent,[cut,adjacent]).edges.length,0,'a cut turns the two spokes into external legs');
+const hexSpace={...space,data:{...space.data,lattice:'hexagonal'}},hexDiagram={...graphDiagram,data:mosaic.fromPayload('mosaic-diagram',{...hexSpace.data,diagramType:'dual',tiles:[{row:2,col:2,tile:{type:'vertex',edges:[1]}},{row:3,col:3,tile:{type:'vertex',edges:[4]}}]},key(hexSpace))};assert.equal(model.fromMosaic('dual-graph',hexDiagram,[hexSpace,hexDiagram]).edges.length,1,'hexagonal offset-row neighbors match');
+assert.deepEqual(model.normalize('dual-graph',{genera:[0],legs:[[0,-1]],edges:[[0,-1]]}).edges,[[0,-1]],'standard graphs retain arbitrary integer half-edge labels');
+for(const preset of model.presets.knot){const data=model.normalize('knot',preset.data);assert(data.pd.length||data.circles);assert.equal(data.tiles,undefined);}
+assert.deepEqual(model.moduliPreset(2,5).legs,[[1,2,3,4,5]]);assert(model.graphInfo(model.moduliPreset(0,3)).stable);assert.throws(()=>model.moduliPreset(0,2),/2g - 2/);assert.throws(()=>model.moduliPreset(2.5,3),/integer/);
+for(const kind of model.kinds){const d=model.normalize(kind,{rows:99,tiles:[1],boundary:'wrapped',view:{zoom:5}});assert.equal(d.rows,undefined);assert.equal(d.tiles,undefined);assert.equal(d.view,undefined);assert.equal(objects.capabilities[kind].open,kind+'-view');}
+assert(!objects.capabilities['mosaic-diagram'].properties.includes('mosaic-knot'));assert(!objects.capabilities.knot.properties.includes('mosaic-seifert'));assert(objects.definitions.find(d=>d.id==='mosaic-seifert').assetView);
+assert.equal(diagnostics.analyze([space,diagram,knot])[key(knot)].valid,true);assert.equal(diagnostics.analyze([diagram,knot])[key(knot)].valid,false);
+const backup={assets:JSON.parse(JSON.stringify(assets)),panels:[{type:'mosaic-knot',computation:{refs:{asset:key(diagram)}},renderers:[]},{type:'mosaic-dual',computation:{refs:{asset:key(diagram)}},renderers:[]},{type:'mosaic-seifert',computation:{refs:{asset:key(diagram)}},renderers:[]}]};model.migrateWorkspace(backup);const count=backup.assets.length;model.migrateWorkspace(backup);assert.equal(backup.assets.length,count);assert.deepEqual(backup.panels.map(p=>p.type),['knot-info','dual-graph-view','mosaic-seifert']);assert.equal(backup.panels[2].computation.refs.asset,key(diagram));
+const surfaceOnly={assets:JSON.parse(JSON.stringify([space,diagram])),panels:[{type:'mosaic-seifert',computation:{refs:{asset:key(diagram)}}}]};model.migrateWorkspace(surfaceOnly);assert.equal(surfaceOnly.assets.length,2,'surface display does not create topology assets');
+console.log('PASS independent topology: planar PD, links, weighted graphs, source snapshots/detach/repair, property ownership and idempotent migration');
+module.exports={loop};

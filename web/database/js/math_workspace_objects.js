@@ -5,12 +5,13 @@
   const panelRegistry = root.MathWorkspacePanelInstances || (typeof require === 'function' ? require('./math_workspace_panel_registry.js') : null);
   const slicing = root.MathWorkspaceSlicing || (typeof require === 'function' ? require('./math_workspace_slicing.js') : null);
   const mosaic = root.MathWorkspaceMosaic || (typeof require === 'function' ? require('./math_workspace_mosaic.js') : null);
+  const topology = root.MathWorkspaceTopology || (typeof require === 'function' ? require('./math_workspace_topology.js') : null);
   const structures = root.MathWorkspaceStructures || (typeof require === 'function' ? require('./math_workspace_structures.js') : null);
   const keyOf = ref => ref ? `${ref.kind}:${ref.id}` : '';
   const types = ['A', 'B', 'C', 'D', 'E6', 'E7', 'E8', 'F4', 'G2'];
   const numbers = root.MathWorkspaceNumbers || (typeof require === 'function' ? require('./math_workspace_numbers.js') : null);
-  const inputKinds = ['number', 'young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...slicing.kinds, ...mosaic.kinds, ...structures.kinds];
-  const kindLabels = { ...structures.labels, ...slicing.labels, variety: 'Variety', sheaf:'Sheaf', map:'Map', number:'Number', young: 'Young diagram', lie: 'Lie type', field: 'Ring', matrix: 'Matrix', category: 'Category', functor: 'Functor', dynkin: 'Marked Dynkin diagram', strands: 'Strands' };
+  const inputKinds = ['number', 'young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...slicing.kinds, ...mosaic.kinds, ...topology.kinds, ...structures.kinds];
+  const kindLabels = { ...topology.labels, ...structures.labels, ...slicing.labels, variety: 'Variety', sheaf:'Sheaf', map:'Map', number:'Number', young: 'Young diagram', lie: 'Lie type', field: 'Ring', matrix: 'Matrix', category: 'Category', functor: 'Functor', dynkin: 'Marked Dynkin diagram', strands: 'Strands' };
   const coefficientTypes = [['complex','Complex numbers ℂ'],['real','Real numbers ℝ'],['rational','Rational numbers ℚ'],['integer','Integer ring ℤ'],['finite-field','Prime field'],['finite-extension','Finite field F_(p^n)'],['rational-function','Rational function field over ℚ'],['function-field','Function field over a constant field'],['number-field','Number field']];
   function fieldLabel(data) {
     if (data.dataType === 'finite-field') return 'GF(' + data.finiteFieldPrime + ')';
@@ -28,6 +29,7 @@
     ['gl-o-gl', 'GL(2n) → O(2n) → GL(n)'], ['gl-sp-gl', 'GL(2n) → Sp(2n) → GL(n)']
   ];
   function normalize(kind, type, source = {}) {
+    if(topology.kinds.includes(kind))return topology.normalize(kind,source);
     if(structures.kinds.includes(kind))return structures.normalize(kind,source);
     if(mosaic.kinds.includes(kind))return mosaic.normalize(kind,source);
     if (slicing.kinds.includes(kind) || kind === 'variety' && type === 'toric') return slicing.normalize(kind,type,source);
@@ -218,7 +220,13 @@
     ...[['invariants','Field Invariants'],['decomposition','Place Decomposition'],['selected','Selected Place']].map(([part,label])=>({id:'field-extension-'+part,label,engine:'ramification',structure:true,light:true,slots:[slot('asset','Field extension','field-extension')]})),
     ...mosaic.kinds.map(kind=>({id:kind+'-input',label:(kind==='mosaic-space'?'Mosaic Space':'Mosaic Diagram')+' Input',input:kind,engine:'mosaic'})),
     {id:'mosaic-view',label:'Mosaic Canvas',engine:'mosaic',assetView:true,readOnly:true,viewRole:'asset',light:true,slots:[slot('asset','Mosaic object',null,{kinds:mosaic.kinds})]},
-    ...mosaic.propertyPanels.map(({id,label,marker,owner,canvas})=>({id,label,marker,mosaicOwner:owner,mosaicCanvas:!!canvas,engine:'mosaic',viewRole:'asset',light:true,slots:[slot('asset',owner==='mosaic-space'?'Mosaic space':'Mosaic diagram',owner)]})),
+    ...mosaic.propertyPanels.map(({id,label,marker,owner,canvas})=>({id,label,marker,mosaicOwner:owner,mosaicCanvas:!!canvas,...(id==='mosaic-seifert'?{assetView:true,readOnly:true}:{}),engine:'mosaic',viewRole:'asset',light:true,slots:[slot('asset',owner==='mosaic-space'?'Mosaic space':'Mosaic diagram',owner)]})),
+    ...topology.kinds.map(kind=>({id:kind+'-input',label:topology.labels[kind]+' Input',input:kind})),
+    {id:'knot-view',label:'Knot / Link Diagram',topologyView:true,assetView:true,readOnly:true,viewRole:'asset',light:true,slots:[slot('asset','Knot / Link','knot')]},
+    {id:'knot-info',label:'Knot / Link Information',topologyView:true,viewRole:'asset',light:true,slots:[slot('asset','Knot / Link','knot')]},
+    {id:'dual-graph-view',label:'Dual Graph Display',engine:'mosaic',topology:true,marker:'dual-graph-card',assetView:true,readOnly:true,viewRole:'asset',light:true,slots:[slot('asset','Dual Graph','dual-graph')]},
+    {id:'dual-graph-info',label:'Dual Graph Invariants',topologyView:true,viewRole:'asset',light:true,slots:[slot('asset','Dual Graph','dual-graph')]},
+    {id:'dual-graph-divisors',label:'Boundary Divisors',engine:'mosaic',topology:true,marker:'dual-graph-degenerations-card',viewRole:'asset',light:true,slots:[slot('asset','Dual Graph','dual-graph')]},
     ...slicing.definitions,
     { id: 'young-input', label: 'Young diagram Input', input: 'young' },
     { id: 'young-view', label: 'Young diagram', engine:'young', assetView:true, viewRole:'lambda', light:true, slots:[slot('lambda','Young diagram','young')] },
@@ -276,6 +284,7 @@
   }]));
   function capabilityFor(asset){return asset?.kind==='variety'&&asset.type==='toric'?{...capabilities.variety,modify:'toric-variety-input'}:capabilities[asset?.kind];}
   for(const kind of mosaic.kinds){kindLabels[kind]=kind==='mosaic-space'?'Mosaic Space':'Mosaic Diagram';capabilities[kind].open='mosaic-view';}
+  for(const kind of topology.kinds)capabilities[kind].open=kind+'-view';
   for(const kind of structures.kinds)capabilities[kind].open=kind+'-view';
   for(const kind of ['complex','filtration']){capabilities[kind].open='complex-diagrams';capabilities[kind].properties=capabilities[kind].properties.filter(id=>!id.endsWith('-operations'));}
   for(const definition of definitions)if(['complex-view','filtration-view','complex-operations','filtration-operations'].includes(definition.id))definition.legacy=true;
@@ -368,7 +377,8 @@
       for (const id of ['lambda', 'mu']) if (objects[id] && (objects[id].data.rows.length > Number(r) || Math.max(0, ...objects[id].data.rows) > Number(n) - Number(r))) missing.push(`${id === 'lambda' ? 'λ' : 'μ'} must fit inside Gr(${r}, ${n})`);
     }
     if (computation.type === 'plethysm' && !objects.lambda) missing.push('Outer diagram λ');
-    if(definition.engine==='mosaic'&&objects.asset){missing.push(...mosaic.issues(objects.asset,assets));const space=assets.find(a=>keyOf(a)===objects.asset.data.space);if(space)objects.mosaicSpace=space;}
+    if(objects.asset&&topology.kinds.includes(objects.asset.kind)){try{objects.asset={...objects.asset,data:topology.resolve(objects.asset,assets)};}catch(error){missing.push(error.message);}}
+    if(definition.engine==='mosaic'&&objects.asset&&!definition.topology){missing.push(...mosaic.issues(objects.asset,assets));const space=assets.find(a=>keyOf(a)===objects.asset.data.space);if(space)objects.mosaicSpace=space;}
     return { objects, missing:[...new Set([...missing,...invalidMessages])], invalid:!!invalidMessages.length, signature: JSON.stringify([computation.rule, computation.settings, Object.entries(objects).map(([role, asset]) => [role, keyOf(asset), asset.type, asset.data, definition.scene || definition.assetView || definition.objectView || definition.id==='matrix-view' ? asset.name : null])]) };
   }
   function mount(api) {
@@ -515,7 +525,7 @@
     function setRendererVisible(renderer, visible, property = false) {
       if (renderer.operation==='dynkin-cartan') {renderer.editor.setCanvasActive(false);renderer.editor.setInspectorActive(false);renderer.host.hidden=true;renderer.inspectorHost.hidden=true;return;}
       const mosaicCanvas=mosaic.propertyPanels.some(panel=>panel.id===renderer.operation&&panel.canvas);
-      const view=['complex-diagrams','complex-operations','filtration-operations','filtration-view'].includes(renderer.operation)||renderer.operation.startsWith('field-extension-')||mosaicCanvas||['complex-view','field-extension-view','mosaic-view','young-view','dynkin-view','lie-view','strands-view','sheaf-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
+      const view=['dual-graph-view','complex-diagrams','complex-operations','filtration-operations','filtration-view'].includes(renderer.operation)||renderer.operation.startsWith('field-extension-')||mosaicCanvas||['complex-view','field-extension-view','mosaic-view','young-view','dynkin-view','lie-view','strands-view','sheaf-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
       const canvas = !property || view;
       const inspector = mosaicCanvas || property && !view || renderer.role === 'input' && ['mosaic','matrix', 'category', 'strand','slice'].includes(renderer.engine);
       // Slicing inputs edit Assets; the dedicated slicing scene owns the canvas.
@@ -622,10 +632,19 @@
         try { api.update(refOf(asset), { name: name.value }); feedback(panel); } catch (error) { feedback(panel, error.message, true); }
       });
       if(structures.kinds.includes(definition.input)){structureInputFields(panel);return;}
+      if(topology.kinds.includes(definition.input)){
+        panel.topologyInput=root.MathWorkspaceTopologyUI.mountInput(panel.controls,{read:()=>get(panel.assetKey),assets:()=>snapshot.assets,update:data=>{const a=get(panel.assetKey);if(a)api.update(refOf(a),{data});},feedback:(text,error)=>feedback(panel,text,error),open,generatePreset});return;
+      }
       if (definition.slicing) { slicingInputFields(panel); return; }
       if(definition.input==='mosaic-diagram'){
         referenceControl(panel,slot('space','Mosaic space','mosaic-space'),definition,()=>get(panel.assetKey)?.data.space||'',value=>{const asset=get(panel.assetKey);if(asset)api.update(refOf(asset),{data:{...asset.data,space:value}});});
         panel.controls.append(element('p','workspace-card-context','Decorations belong to this diagram. Use Edit Mosaic space to change its shared background.'));
+        const generate=kind=>{const diagram=get(panel.assetKey);if(!diagram)return;try{
+          const data={...topology.fromMosaic(kind,diagram,snapshot.assets),source:keyOf(diagram),hasSnapshot:true};
+          const existing=snapshot.assets.find(a=>a.kind===kind&&a.data.source===keyOf(diagram));
+          const asset=existing||api.create(kind,{data});open(kind+'-input',keyOf(asset),'side');open(kind+'-view',keyOf(asset),'main');feedback(panel,'Created / opened '+(asset.plainName||asset.name)+'.');
+        }catch(error){feedback(panel,error.message,true);}};
+        for(const kind of topology.kinds){const action=button('Generate '+topology.labels[kind],()=>generate(kind));action.dataset.mosaicGenerate=kind;panel.controls.append(action);}
         return;
       }
       if(definition.input==='mosaic-space'){panel.controls.append(element('p','workspace-card-context','Changes to this background affect every diagram that references it. Diagram decorations are preserved.'));return;}
@@ -1048,7 +1067,8 @@
           panel.controls.querySelectorAll('input,select,button').forEach(node => { node.disabled = !asset; });
           if (asset) {
             sync(panel.name, asset.name);
-            if (panel.definition.slicing) refreshSlicingInput(panel,asset);
+            if(panel.topologyInput)panel.topologyInput.refresh();
+            else if (panel.definition.slicing) refreshSlicingInput(panel,asset);
             else if (asset.kind === 'number') {
               const controls=panel.numberControls,pending=panel.numberDraftMode?.key===panel.assetKey?panel.numberDraftMode:null;controls.mode.value=pending?.mode||(asset.data.hasValue?'value':'symbolic');sync(controls.value,pending?.value??asset.data.value);controls.replace.checked=pending?pending.replace:asset.data.replaceWithValue;controls.positive.checked=pending?pending.positive:asset.data.positive;
               panel.numberValueRow.hidden=panel.numberReplaceRow.hidden=controls.mode.value!=='value';panel.numberPositiveRow.hidden=controls.mode.value==='value';
@@ -1079,6 +1099,12 @@
           updateDensity(panel); projectInput(panel);
           panel.renderArea.hidden = !asset || !!panel.inputIssues?.length || !panel.definition.engine;
           if (!asset) feedback(panel, panel.assetKey ? 'The referenced asset was deleted. Choose another asset.' : 'Choose or create an asset to edit.');
+        } else if(panel.definition.topologyView){
+          const context=contextFor(panel.computation,snapshot.assets,snapshot.diagnostics),asset=context.objects.asset;
+          panel.computation.status=context.missing.length?'invalid':'current';panel.renderArea.hidden=!!context.missing.length;
+          panel.title.textContent=(asset?(asset.plainName||asset.name)+' · ':'')+panel.definition.label;
+          if(context.missing.length){panel.renderArea.replaceChildren();panel.computation.result=null;panel.computation.signature='';feedback(panel,context.missing.join(' '),true);}
+          else{const signature=context.signature+(panel.definition.id==='knot-view'?'|'+JSON.stringify(root.MathWorkspaceKnotDrawing.settings())+'|'+root.MathWorkspaceKnotEditing.signature(asset):'');if(panel.computation.signature!==signature){panel.computation.signature=signature;panel.computation.result=root.MathWorkspaceTopologyUI.render(panel.renderArea,asset,panel.definition.id,{read:()=>get(keyOf(asset)),assets:()=>snapshot.assets,update:api.update,refresh});feedback(panel);}}
         } else if (panel.definition.objectView) { refreshObjectView(panel); }
         else if (panel.definition.display) { refreshDisplayPanel(panel); } else {
           if(panel.definition.structureScene)refreshDiagramMembers(panel);
@@ -1365,6 +1391,7 @@
       }));
     }
     function clearPanels() {
+      root.MathWorkspaceKnotEditing?.clear();
       for (const panel of panels.values()) {
         panel.observer?.disconnect();
         for (const renderer of new Set([...panel.renderers.values(), panel.propertyRenderer].filter(Boolean))) renderer.editor.dispose();
@@ -1411,12 +1438,14 @@
           } finally { renderer.applying = false; }
         }
         if(panel.definition.structure||panel.definition.structureScene)panel.propertyRenderer?.editor.objectIO('presentation',item.computation?.options?.presentation);
+        if(panel.definition.topology){panel.propertyRenderer?.editor.objectIO('invalidate-projection');panel.computation.signature='';refreshPanel(panel);}
         if(panel.definition.structureScene){panel.computation.signature='';refreshPanel(panel);}
         if (panel.computation) { panel.computation.options = item.computation.options;if(!['missing','invalid'].includes(panel.computation.status)){panel.computation.status = item.computation.status; panel.computation.result = panel.propertyRenderer?.editor.readObjectResult() || panel.computation.result || null;} }
         const collapsed=panel.location!=='main'&&!!item.presentation.collapsed;
         panel.node.classList.toggle('collapsed', collapsed); panel.node.classList.toggle('is-pinned', !!item.presentation.pinned); panel.node.dataset.cardWideState = item.presentation.displayMode;
         panel.head.setAttribute('aria-expanded', String(!collapsed)); panel.collapsed = collapsed;
         for(const draft of item.drafts||[]){const control=[...panel.controls.querySelectorAll('input:not([type="checkbox"]),textarea')][draft.index];if(control)window.CalculatorInputSettings.syncEditableValue(control,draft.value,{force:true});}
+        panel.topologyInput?.restoreDraft();
         if(panel.numberControls&&panel.numberControls.value.value!==get(panel.assetKey)?.data.value){const controls=panel.numberControls;panel.numberDraftMode={key:panel.assetKey,mode:controls.mode.value,value:controls.value.value,replace:controls.replace.checked,positive:controls.positive.checked};}
         updateDensity(panel);
       }
@@ -1435,6 +1464,13 @@
           panel.computation.options=renderer.editor.captureAssetProperties();panel.computation.result=renderer.editor.readObjectResult();
         }finally{renderer.applying=false;}
       }
+    }
+    function generatePreset(id){
+      if(id!=='random-stable-curve')throw new Error('Unknown topology preset generator.');
+      let editor=ioRenderers.get('topology-preset-kernel');
+      if(!editor){const host=element('section'),inspectorHost=element('section');api.parking.append(host,inspectorHost);editor=window.MathWorkspaceNativeEditors.factories.mosaic.mount(host,{id:'topology-preset-kernel',inspectorHost});editor.listCards().forEach(card=>editor.setCardVisible(card.key,false));editor.configureObjectPanel({mode:'topology-preset-kernel'});editor.setCanvasActive(false);editor.setInspectorActive(false);ioRenderers.set('topology-preset-kernel',editor);}
+      const payload=editor.objectIO('random-stable-curve'),space={kind:'mosaic-space',id:'preset-space',data:mosaic.fromPayload('mosaic-space',payload)},diagram={kind:'mosaic-diagram',id:'preset-diagram',data:mosaic.fromPayload('mosaic-diagram',payload,keyOf(space))};
+      return topology.fromMosaic('dual-graph',diagram,[space,diagram]);
     }
     numbers.setKernel((value,field)=>{
       let editor=ioRenderers.get('number-kernel');

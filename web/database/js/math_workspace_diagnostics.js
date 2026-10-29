@@ -3,8 +3,11 @@
   const getModule=(global,file)=>root[global]||(typeof require==='function'?require(file):null);
   const numbers=getModule('MathWorkspaceNumbers','./math_workspace_numbers.js'),rings=getModule('MathWorkspaceRings','./math_workspace_rings.js'),structures=getModule('MathWorkspaceStructures','./math_workspace_structures.js'),slicing=getModule('MathWorkspaceSlicing','./math_workspace_slicing.js');
   const keyOf=asset=>asset.kind+':'+asset.id;
+  const topology=getModule('MathWorkspaceTopology','./math_workspace_topology.js'),mosaic=getModule('MathWorkspaceMosaic','./math_workspace_mosaic.js');
   function dependencies(asset){
     const refs=(asset.dependencies||[]).map(keyOf),data=asset.data;
+    if(topology.kinds.includes(asset.kind))refs.push(data.source);
+    if(asset.kind==='mosaic-diagram')refs.push(data.space);
     if(asset.kind==='number'||asset.kind==='matrix')refs.push(data.field);
     if(asset.kind==='field'&&data.dataType==='function-field')refs.push(data.constantField);
     if(asset.kind==='field-extension')refs.push(data.base,data.target);
@@ -14,6 +17,8 @@
   }
   function localIssues(asset,assets){
     try{
+      if(topology.kinds.includes(asset.kind))return topology.issues(asset,assets);
+      if(asset.kind==='mosaic-diagram')return mosaic.issues(asset,assets);
       const issues=rings.issues(asset,assets);
       if(issues.length)return issues;
       if(asset.kind==='number'){

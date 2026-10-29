@@ -14,8 +14,6 @@
     {id:'mosaic-local-geometry',label:'Local Geometry (experimental)',marker:'homology-local-chart-card',owner:'mosaic-space',canvas:true},
     {id:'mosaic-homology-cords',label:'Homology Cords (experimental)',marker:'homology-cord-debug-card',owner:'mosaic-space',canvas:true},
     {id:'mosaic-wander',label:'Universal Cover (experimental)',marker:'wander-card',owner:'mosaic-space',canvas:true},
-    {id:'mosaic-knot',label:'Knot / Link',marker:'knot-card',owner:'mosaic-diagram'},
-    {id:'mosaic-dual',label:'Dual Graph',marker:'dual-graph-card',owner:'mosaic-diagram'},
     {id:'mosaic-seifert',label:'Seifert Surface',marker:'seifert-surface-card',owner:'mosaic-diagram',canvas:true}
   ];
   const editTools={

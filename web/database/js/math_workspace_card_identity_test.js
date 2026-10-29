@@ -8,7 +8,7 @@ const document = {
   addEventListener() {},
   querySelector() { return null; }
 };
-const window = { addEventListener() {} };
+const window = { addEventListener() {},MathWorkspaceNumbers:require('./math_workspace_numbers.js') };
 
 vm.runInNewContext(source, {
   console,

@@ -4,6 +4,25 @@ let __mosaicConfig={},__mosaicAsset=null,__mosaicAssets=[],__mosaicProjected='',
 const __mosaicKey=a=>a?a.kind+':'+a.id:'';
 const __mosaicProperty=()=>window.MathWorkspaceMosaic.propertyPanels.find(panel=>panel.id===__mosaicConfig.operation);
 const __mosaicTools=()=>__mosaicConfig.mode==='input'?window.MathWorkspaceMosaic.editTools[__mosaicConfig.assetKind]:null;
+function __mosaicGraphViewport(){
+  if(__mosaicConfig.operation!=='dual-graph-view')return;
+  const size=__editor.getViewport();if(size.width<1||size.height<1)return;
+  const count=[state.showDualGraphCanvas,state.showRiemannSurfaceCanvas,state.showAlgebraicCurveCanvas].filter(Boolean).length||1;
+  const height=Math.max(90,(size.height-170)/count),width=Math.max(100,size.width-20);
+  for(const canvas of [refs.dualGraphCanvas,refs.riemannSurfaceCanvas,refs.algebraicCurveCanvas])if(canvas){canvas.style.setProperty('width',width+'px','important');canvas.style.setProperty('height',height+'px','important');canvas.style.setProperty('min-height','0','important');}
+}
+const __mosaicGraphRender=renderDualGraphVisualization;
+renderDualGraphVisualization=function(data){
+  if(__mosaicConfig.operation?.startsWith('dual-graph-')){
+    __mosaicGraphViewport();const rect=refs.dualGraphCanvas.getBoundingClientRect();if(rect.width<1||rect.height<1)return;
+    if(state.dualGraphLayout&&(!state.dualGraphLayout.width||!state.dualGraphLayout.height||state.dualGraphLayout.nodes.some(n=>!Number.isFinite(n.x)||!Number.isFinite(n.y))))state.dualGraphLayout=null;
+  }
+  return __mosaicGraphRender(data);
+};
+for(const entry of [['rs',renderRiemannSurfaceVisualization],['curve',renderAlgebraicCurveVisualization]]){
+  const wrapped=function(data){if(__mosaicConfig.operation?.startsWith('dual-graph-')){__mosaicGraphViewport();const canvas=entry[0]==='rs'?refs.riemannSurfaceCanvas:refs.algebraicCurveCanvas,rect=canvas.getBoundingClientRect();if(rect.width<1||rect.height<1)return;}return entry[1](data);};
+  if(entry[0]==='rs')renderRiemannSurfaceVisualization=wrapped;else renderAlgebraicCurveVisualization=wrapped;
+}
 // Reuse native handlers, but constrain their modes to the bound object's owner.
 const __mosaicNormalizeMode=normalizeInputMode;
 normalizeInputMode=function(mode){
@@ -57,10 +76,27 @@ function __mosaicPayload(){
 __editor.setAssetAdapter({
   panel(config){
     __mosaicConfig=config;
+    if(config.mode==='topology-preset-kernel')return true;
     document.querySelector('[data-mosaic-save-assets]')?.remove();
     const style=document.createElement('style');
     style.textContent='.workspace-native-content #canvas-wrap{height:100%;min-height:0;display:flex;align-items:center;justify-content:center}.workspace-native-content>.card-body{padding:8px}.workspace-native-content .input-mode-panel{max-width:100%}';document.head.append(style);
     const property=__mosaicProperty();
+    if(config.operation?.startsWith('dual-graph-')){
+      __mosaicCard=document.getElementById(config.marker);
+      __mosaicCard.hidden=false;__mosaicCard.classList.remove('collapsed','workspace-card-hidden','calculator-card-user-hidden');
+      const body=__mosaicCard.querySelector('.card-body');
+      if(config.operation==='dual-graph-view'){
+        refs.dualGraphInvariantsRow?.remove();
+        body.classList.add('workspace-dual-graph-display');
+        style.textContent+='.workspace-native-content>.workspace-dual-graph-display{height:100%;min-height:0;overflow:auto;box-sizing:border-box}';
+        __editor.mountObjectSurfaces({content:[body]});
+        __editor.setViewportElement(body);
+      }else{
+        document.getElementById('toggle-degenerations-wide')?.remove();
+        __editor.mountObjectSurfaces({modify:[body]});
+      }
+      return true;
+    }
     if(config.mode==='input'||config.operation==='mosaic-view'||property?.canvas){
       const toolbar=document.querySelector('.canvas-toolbar');
       __editor.mountObjectSurfaces({content:[refs.canvasWrap],toolbar:config.mode==='input'?[toolbar]:[]});
@@ -111,6 +147,15 @@ __editor.setAssetAdapter({
   apply(snapshot,ref,properties,binding){
     const key=__mosaicKey(ref||binding?.refs?.asset);__mosaicAssets=snapshot.assets;
     __mosaicAsset=snapshot.assets.find(a=>__mosaicKey(a)===key);if(!__mosaicAsset)return false;
+    if(__mosaicAsset.kind==='dual-graph'){
+      const graph=__mosaicAsset.data,signature=JSON.stringify(graph);
+      if(signature!==__mosaicProjected){applyImportedStandardDualGraph(graph);__mosaicProjected=signature;}
+      if(__mosaicConfig.operation==='dual-graph-view'){
+        if(!state.showDualGraphCanvas&&!state.showRiemannSurfaceCanvas&&!state.showAlgebraicCurveCanvas)state.showDualGraphCanvas=true;
+        syncDualGraphCanvasVisibility();if(state.dualGraphData)renderVisibleDualGraphVisualizations(state.dualGraphData);
+      }
+      return true;
+    }
     const payload=window.MathWorkspaceMosaic.payload(__mosaicAsset,snapshot.assets),signature=JSON.stringify(payload);
     if(signature!==__mosaicProjected){
       const localWanderMetric=__mosaicConfig.operation==='mosaic-wander'&&wanderViewMode==='complete-interior';
@@ -147,6 +192,9 @@ __editor.setAssetAdapter({
   },
   capture:()=>({}),
   result:()=>({text:__mosaicCard?.textContent||refs.statusLine?.textContent||'',hasResult:true}),
-  io(action){if(action==='validate')return __mosaicAsset?.data;if(action==='mosaic-payload')return __mosaicPayload();}
+  io(action){if(action==='random-stable-curve'){
+    const generated=randomStableCurvePresetData('hexagonal');
+    return {rows:5,cols:5,lattice:'hexagonal',boundary:'grid',diagramType:'dual',removedTiles:[],cutEdges:[],gluedEdges:[],tiles:generated.tiles.map((tile,index)=>({row:Math.floor(index/5)+1,col:index%5+1,tile:tile||[],decoration:generated.vertexDecorations[index]||0}))};
+  }if(action==='validate')return __mosaicAsset?.data;if(action==='mosaic-payload')return __mosaicPayload();if(action==='invalidate-projection')__mosaicProjected='';if(action==='standard-graph'){const data=collectDualGraphData(analyze(),{requireSingleComponent:false});return data.isValid?{...data.standardGraph,decorations:data.standardDecorations}:null;}}
 });
 `;

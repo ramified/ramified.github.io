@@ -1,0 +1,60 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+const {startServer,launchBrowser,stopBrowser,waitFor,evaluate}=require('./math_workspace_drag_regression_test.js');
+async function run(){const server=await startServer();let session;
+  try{
+    session=await launchBrowser('http://127.0.0.1:'+server.address().port+'/math_workspace.html');const {client}=session;
+    const read=(fn,...args)=>evaluate(client,'('+fn.toString()+')(...'+JSON.stringify(args)+')');
+    await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
+    await read(()=>{
+      window.api=MathWorkspaceAssetsTest;window.panels=MathWorkspaceObjectPanels;window.key=a=>a.kind+':'+a.id;window.get=a=>api.localAssetSnapshot().assets.find(b=>key(a)===key(b));
+      window.loop=(row=1,col=1)=>[{row,col,tile:[[0,1]]},{row,col:col+1,tile:[[1,2]]},{row:row+1,col,tile:[[0,3]]},{row:row+1,col:col+1,tile:[[2,3]]}];
+      window.space=api.createObjectAsset('mosaic-space',{data:{lattice:'square',boundary:'grid'}});
+      window.diagram=api.createObjectAsset('mosaic-diagram',{data:MathWorkspaceMosaic.fromPayload('mosaic-diagram',{...space.data,tiles:loop()},key(space))});
+      window.knot=api.createObjectAsset('knot',{data:{source:key(diagram)}});window.input=panels.open('knot-input',key(knot),'side');window.view=panels.open('knot-view',key(knot),'main');window.info=panels.open('knot-info',key(knot),'side');
+    });
+    assert.equal(await read(()=>get(knot).data.circles),1);assert.equal(await read(()=>view.computation.status),'current');assert.equal(await read(()=>info.computation.status),'current');assert(await read(()=>!!view.renderArea.querySelector('[data-knot-drawing]')));
+    await read(()=>api.updateObjectAsset(diagram,{data:{...get(diagram).data,tiles:[...loop(),...loop(4,4)]}}));assert.equal(await read(()=>get(knot).data.circles),2);assert.equal(await read(()=>view.renderArea.querySelectorAll('ellipse').length),2);
+    await read(()=>input.controls.querySelector('[data-topology-detach]').click());assert.equal(await read(()=>get(knot).data.source),'');assert.deepEqual(await read(()=>get(knot).dependencies),[]);
+    await read(()=>api.updateObjectAsset(diagram,{data:{...get(diagram).data,tiles:loop()}}));assert.equal(await read(()=>get(knot).data.circles),2);
+    // Real sequential editing: invalid drafts survive source updates and backup.
+    await read(()=>{const code=input.controls.querySelector('textarea');code.focus();code.select();});
+    const press=async(key,code,virtual,modifiers=0)=>{for(const type of ['keyDown','keyUp'])await client.send('Input.dispatchKeyEvent',{type,key,code,windowsVirtualKeyCode:virtual,modifiers});};
+    await press('Backspace','Backspace',8);assert.equal(await read(()=>input.controls.querySelector('textarea').value),'');assert.equal(await read(()=>get(knot).data.circles),2);
+    await client.send('Input.insertText',{text:'{'});await read(()=>api.updateObjectAsset(diagram,{name:'D_{changed}'}));assert.equal(await read(()=>input.controls.querySelector('textarea').value),'{');
+    await read(()=>input.controls.querySelector('[data-topology-apply]').click());assert.equal(await read(()=>get(knot).data.circles),2);assert(await read(()=>input.message.textContent.length>0));
+    await read(()=>{window.backup=panels.exportText('workspace');panels.importText('workspace',backup);window.input=[...panels.panels.values()].find(p=>p.definition.id==='knot-input');});assert.equal(await read(()=>input.controls.querySelector('textarea').value),'{');await read(()=>api.updateObjectAsset(diagram,{name:'D_{again}'}));assert.equal(await read(()=>input.controls.querySelector('textarea').value),'{');
+    await read(()=>{input.controls.querySelector('[data-topology-reset]').click();const p=input.controls.querySelector('[data-topology-preset]');p.value='1';p.dispatchEvent(new Event('change',{bubbles:true}));window.view=panels.open('knot-view',key(knot),'main');window.info=panels.open('knot-info',key(knot),'side');});assert.equal(await read(()=>get(knot).data.pd.length),3);assert.match(await read(()=>info.computation.result.text),/3_1/);
+    const knotShot=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-knot.png'),Buffer.from(knotShot.data,'base64'));
+    await read(()=>{const s=input.controls.querySelector('[data-topology-source]');s.value=key(diagram);s.dispatchEvent(new Event('change',{bubbles:true}));});assert.equal(await read(()=>get(knot).data.circles),1);
+    await read(()=>api.updateObjectAsset(diagram,{data:{...get(diagram).data,tiles:loop().slice(0,3)}}));assert.equal(await read(()=>info.computation.status),'invalid');assert.equal(await read(()=>info.computation.result),null);assert.equal(await read(()=>get(knot).data.circles),1);assert.match(await read(()=>input.controls.querySelector('[data-topology-detach]').textContent),/last valid/);
+    await read(()=>api.updateObjectAsset(diagram,{data:{...get(diagram).data,tiles:loop()}}));assert.equal(await read(()=>info.computation.status),'current');
+    await read(()=>{
+      window.gDiagram=api.createObjectAsset('mosaic-diagram',{data:MathWorkspaceMosaic.fromPayload('mosaic-diagram',{...get(space).data,diagramType:'dual',tiles:[{row:2,col:2,tile:{type:'vertex',edges:[0,2,3]},decoration:1},{row:2,col:3,tile:{type:'vertex',edges:[2]}}],halfEdgeDecorations:{'6:2':'a','6:3':'b'}},key(space))});
+      window.gInput=panels.open('mosaic-diagram-input',key(gDiagram),'side');window.linkedGraph=api.createObjectAsset('dual-graph',{data:{source:key(gDiagram)}});
+    });
+    assert.deepEqual(await read(()=>MathWorkspaceTopology.definition('dual-graph',get(linkedGraph).data)),await read(()=>gInput.activeRenderer.editor.objectIO('standard-graph')),'pure converter matches native: '+JSON.stringify(await read(()=>{const p=gInput.activeRenderer.editor.objectIO('mosaic-payload');return {lattice:p.lattice,tiles:p.tiles.filter(t=>t.tile?.length||t.tile?.type==='vertex'),cut:p.cutEdges};})));
+    await read(()=>{const tile=get(gDiagram).data.tiles.map(t=>t.row===2&&t.col===2?{...t,decoration:2}:t);api.updateObjectAsset(gDiagram,{data:{...get(gDiagram).data,tiles:tile}});});assert.equal(await read(()=>get(linkedGraph).data.genera[0]),2);
+    await read(()=>{window.count=api.localAssetSnapshot().assets.length;gInput.controls.querySelector('[data-mosaic-generate="dual-graph"]').click();});assert.equal(await read(()=>api.localAssetSnapshot().assets.length),await read(()=>count),'generation reuses an existing linked result');
+    await read(()=>{
+      window.g=api.createObjectAsset('dual-graph',{data:{genera:[1],legs:[[1]],edges:[],decorations:{1:'1'}}});window.gview=panels.open('dual-graph-view',key(g),'main');window.ginfo=panels.open('dual-graph-info',key(g),'side');window.divisors=panels.open('dual-graph-divisors',key(g),'side');
+    });
+    assert.equal(await read(()=>gview.computation.status),'current');assert(await read(()=>!!gview.propertyRenderer));assert.match(await read(()=>ginfo.computation.result.text),/Total genus1/);assert(await read(()=>!!divisors.propertyRenderer));
+    await waitFor(()=>read(()=>{const canvas=gview.propertyRenderer.editor.environment.document.getElementById('dual-graph-canvas');return canvas.width>0&&canvas.height>0&&canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some((v,i)=>i%4===3&&v>0);}),5000,'visible graph pixels');
+    for(const mode of ['rs','algebraic']){await read(mode=>gview.propertyRenderer.editor.environment.document.querySelector('[data-dual-graph-view="'+mode+'"]').click(),mode);await waitFor(()=>read(mode=>{const id=mode==='rs'?'riemann-surface-canvas':'algebraic-curve-canvas',canvas=gview.propertyRenderer.editor.environment.document.getElementById(id);return canvas.width>0&&canvas.height>0&&canvas.getBoundingClientRect().height>0;},mode),5000,'graph visualization '+mode);}
+    await read(()=>{const doc=gview.propertyRenderer.editor.environment.document;for(const mode of ['rs','algebraic'])doc.querySelector('[data-dual-graph-view="'+mode+'"]').click();});
+    await read(()=>divisors.propertyRenderer.editor.environment.document.getElementById('compute-degenerations').click());assert(await read(()=>divisors.propertyRenderer.editor.environment.document.getElementById('dual-graph-degenerations-grid').children.length>0),await read(()=>divisors.propertyRenderer.editor.environment.document.getElementById('dual-graph-degenerations-status').textContent));
+    const screenshot=await client.send('Page.captureScreenshot',{format:'png'});const filename=path.join(os.tmpdir(),'math-workspace-topology.png');fs.writeFileSync(filename,Buffer.from(screenshot.data,'base64'));console.log('Screenshot: '+filename);
+    await read(()=>{window.before=JSON.stringify(api.localAssetSnapshot().assets.map(a=>[key(a),a.data]));window.saved=panels.exportText('workspace');panels.importText('workspace',saved);});assert.equal(await read(()=>JSON.stringify(api.localAssetSnapshot().assets.map(a=>[key(a),a.data]))),await read(()=>before));
+    await read(()=>{
+      const backup=JSON.parse(panels.exportText('workspace')),k=backup.panels.find(p=>p.type==='knot-info'),g=backup.panels.find(p=>p.type==='dual-graph-view'&&p.computation.refs.asset===key(linkedGraph));
+      k.type='mosaic-knot';k.computation.refs.asset=key(diagram);g.type='mosaic-dual';g.computation.refs.asset=key(gDiagram);
+      window.migrationCount=backup.assets.length;panels.importText('workspace',JSON.stringify(backup));
+    });assert.equal(await read(()=>api.localAssetSnapshot().assets.length),await read(()=>migrationCount),'legacy panels reuse source-linked assets');assert(await read(()=>[...panels.panels.values()].some(p=>p.definition.id==='knot-info'&&p.computation.refs.asset===key(knot))));
+    await read(()=>{const old=JSON.parse(panels.exportText('workspace'));old.panels.find(p=>p.type==='knot-info').type='mosaic-knot';old.panels.find(p=>p.type==='mosaic-knot').computation.refs.asset=key(diagram);old.assets=old.assets.filter(a=>a.kind!=='knot');old.panels=old.panels.filter(p=>!p.type.startsWith('knot-'));old.assetCards.instances=old.assetCards.instances.filter(i=>i.targetRef.kind!=='knot');for(const slot of old.assetCards.slots){if(slot.activeInstanceKey?.includes(':knot:'))slot.activeInstanceKey=null;slot.recentInstanceKeys=slot.recentInstanceKeys.filter(k=>!k.includes(':knot:'));}old.workspace.tabs=['assets'];old.workspace.panes={primary:'assets',secondary:''};old.workspace.split=false;old.workspace.inspectorSourceId='';panels.importText('workspace',JSON.stringify(old));});assert.equal(await read(()=>api.localAssetSnapshot().assets.filter(a=>a.kind==='knot'&&a.data.source===key(diagram)).length),1,'old backups create the required linked asset');
+    assert.equal(await read(()=>[...panels.panels.values()].find(p=>p.definition.id==='knot-info').computation.status),'current');
+    await read(()=>{const backup=JSON.parse(panels.exportText('workspace')),a=backup.assets.find(a=>a.kind==='knot');a.data.source='mosaic-diagram:missing';panels.importText('workspace',JSON.stringify(backup));window.recovered=api.localAssetSnapshot().assets.find(a=>a.kind==='knot');window.input=panels.open('knot-input',key(recovered),'side');});assert.equal(await read(()=>api.localAssetSnapshot().diagnostics[key(recovered)].valid),false,'missing optional source survives restore for repair');await read(()=>input.controls.querySelector('[data-topology-detach]').click());assert.equal(await read(()=>get(recovered).data.source),'');assert.equal(await read(()=>get(recovered).data.circles),1,'last valid result survives missing-source restore and detach');
+    console.log('PASS topology UI: independent/linked assets, drafts, recognition, displays, divisors and backup');
+  }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}
+}
+if(require.main===module)run().catch(error=>{console.error(error.stack||error);process.exitCode=1;});
