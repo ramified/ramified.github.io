@@ -1,0 +1,172 @@
+{
+  "sourceCommit": "e52c35cc6e6b8fc7843f704cece92fe491808465",
+  "date": "2026-10-29",
+  "node": "24.15.0",
+  "baseline": "C0: all 40 names retained",
+  "total": 40,
+  "passed": 40,
+  "failed": 0,
+  "skipped": 0,
+  "cases": [
+    {
+      "name": "unavailable or blocked local storage rejects without leaving startup pending",
+      "status": "passed"
+    },
+    {
+      "name": "v1 migration preserves exact assets, view references and computation history",
+      "status": "passed"
+    },
+    {
+      "name": "mixed projects preserve editor layouts through recipes, merge, close and undo",
+      "status": "passed"
+    },
+    {
+      "name": "session codec restores mathematical classes and collection types without saving runtime resources",
+      "status": "passed"
+    },
+    {
+      "name": "malformed calculator imports fail before changing a mixed project",
+      "status": "passed"
+    },
+    {
+      "name": "recipe roundtrip, comments, quoted exact numbers, nested references",
+      "status": "passed"
+    },
+    {
+      "name": "appendStatement creates one object without rerunning existing recipe",
+      "status": "passed"
+    },
+    {
+      "name": "constructor names use an explicit validation path instead of silent browser blocking",
+      "status": "passed"
+    },
+    {
+      "name": "recipe rejects executable code, unsafe numbers, duplicate names and records",
+      "status": "passed"
+    },
+    {
+      "name": "example: exampleSlice completes and roundtrips",
+      "status": "passed"
+    },
+    {
+      "name": "example: exampleSymmetric completes and roundtrips",
+      "status": "passed"
+    },
+    {
+      "name": "example: exampleSheaf completes and roundtrips",
+      "status": "passed"
+    },
+    {
+      "name": "example: examplePartitions completes and roundtrips",
+      "status": "passed"
+    },
+    {
+      "name": "example: exampleMatrix completes and roundtrips",
+      "status": "passed"
+    },
+    {
+      "name": "example: exampleRoots completes and roundtrips",
+      "status": "passed"
+    },
+    {
+      "name": "example: exampleToric completes and roundtrips",
+      "status": "passed"
+    },
+    {
+      "name": "example: exampleStrand completes and roundtrips",
+      "status": "passed"
+    },
+    {
+      "name": "example: exampleSurface completes and roundtrips",
+      "status": "passed"
+    },
+    {
+      "name": "example: exampleFields completes and roundtrips",
+      "status": "passed"
+    },
+    {
+      "name": "example: exampleCategory completes and roundtrips",
+      "status": "passed"
+    },
+    {
+      "name": "hook formula and LR decomposition agree with mathematical fixtures",
+      "status": "passed"
+    },
+    {
+      "name": "representation kernel preserves legacy decomposition coefficients",
+      "status": "passed"
+    },
+    {
+      "name": "matrix arithmetic is exact, preserves large integers and rejects singular inverse",
+      "status": "passed"
+    },
+    {
+      "name": "numerical factors reconstruct matrices and require explicit approximate inputs",
+      "status": "passed"
+    },
+    {
+      "name": "every registered operation has a passing representative execution (remote lookup uses a fixture)",
+      "status": "passed"
+    },
+    {
+      "name": "exact cube slicing, empty and tangent sphere sections, and nonorthonormal frames",
+      "status": "passed"
+    },
+    {
+      "name": "symmetric functions preserve exact coefficients across bases and finite specialisation",
+      "status": "passed"
+    },
+    {
+      "name": "source edit retains old values and invalidates transitive outputs",
+      "status": "passed"
+    },
+    {
+      "name": "failed edits and recipes are atomic and preserve previous results",
+      "status": "passed"
+    },
+    {
+      "name": "cancellation and concurrent mutation cannot publish a partial result",
+      "status": "passed"
+    },
+    {
+      "name": "undo and redo restore mathematics, views and stale flags",
+      "status": "passed"
+    },
+    {
+      "name": "deletion is blocked by dependencies; selection exports their closure",
+      "status": "passed"
+    },
+    {
+      "name": "merge remaps colliding names, IDs, dependencies, recipes, computations and views",
+      "status": "passed"
+    },
+    {
+      "name": "project import rejects broken references, future versions, malformed matrices and prototypes",
+      "status": "passed"
+    },
+    {
+      "name": "legacy imports are explicit and CAS exports retain exact coefficient context",
+      "status": "passed"
+    },
+    {
+      "name": "legacy symbolic categories and functors preserve conditions and variance",
+      "status": "passed"
+    },
+    {
+      "name": "legacy strand chronological clicks are reversed into calculation word order",
+      "status": "passed"
+    },
+    {
+      "name": "field records convert to reproducible local inputs; snapshots retain provenance",
+      "status": "passed"
+    },
+    {
+      "name": "new interface has matching English and Chinese keys and an isolated stylesheet",
+      "status": "passed"
+    },
+    {
+      "name": "catalog explicitly separates inventory from completed migration",
+      "status": "passed"
+    }
+  ]
+}

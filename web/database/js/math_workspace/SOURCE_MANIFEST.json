@@ -1,0 +1,1369 @@
+{
+  "sourceCommit": "e52c35cc6e6b8fc7843f704cece92fe491808465",
+  "copyBuildCommit": "4b02b9fae7fbba557303452af6cc3b91d0336b63",
+  "copyDate": "2026-10-29",
+  "directories": [
+    "presets/category",
+    "presets/ramified_minigames",
+    "presets/ramified_minigames/sokoban"
+  ],
+  "counts": {
+    "read": 139,
+    "workerMetafile": 12,
+    "mainMetafile": 0,
+    "readdir": 79,
+    "total": 140
+  },
+  "files": [
+    {
+      "file": "category_calculator.html",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 23269,
+      "sha256": "635daefb9766ae25a6c3c0cfa92065eae94503f9e052367174f621c456b8bf06",
+      "gitHash": "82fe6db53350e7a1cf3d036dc33f7223464d1de0"
+    },
+    {
+      "file": "css/import_export_panel.css",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 6015,
+      "sha256": "7e6a03719398cb1fd6e6185f930811fc6dc2a0ed0a55373ce4d4afc20e138303",
+      "gitHash": "3b6f6b5de2f335e9b38be08a8732fca8131887a2"
+    },
+    {
+      "file": "css/site.css",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 35385,
+      "sha256": "85497e8ef3fb8e2959f7f46e2d615cd733cfaedd79071c072e3031ecaadb0eac",
+      "gitHash": "581d67dee00ac262e26cb3489a55b5bd15dc917c"
+    },
+    {
+      "file": "double_young_diagram_production_process.html",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 25897,
+      "sha256": "f34b3a9807005e309d1eaef2f67abfc305ccfadc05de1e7c5d06ea0b45dcf1fd",
+      "gitHash": "96f39bcccaaedfb6b73135c6803b2d46a6ef3928"
+    },
+    {
+      "file": "double_young_diagram.html",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 32799,
+      "sha256": "86c46c32bd5fa00ea8591d83eb3e62c20abea39d5d910476e161a663df123973",
+      "gitHash": "d1f5cecb375cff82b3cc483d1ccd4f58a6dc6e27"
+    },
+    {
+      "file": "dynkin_diagram_calculator.html",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 22452,
+      "sha256": "7fa5334de9d3d6d5d5686dc59e46041c56f97905108c8861c51805f4732f5049",
+      "gitHash": "2427ec2677a76d178d89250095eaba41fe651a04"
+    },
+    {
+      "file": "higher_dimensional_slice_calculator.html",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 59164,
+      "sha256": "ca4eaa0a5f97246e00e80a3ec9846553ff482e3da00cd2d608a3057700e76d52",
+      "gitHash": "7fb8abb2fec820ce737192b828fb747f2cdc1714"
+    },
+    {
+      "file": "js/background_homology_worker.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 505,
+      "sha256": "405b776a9bd24f9051fcc3390efee20b85d319cbcbcf3f2a6037265858e541aa",
+      "gitHash": "7370b66f893d283f7b4b14503445b161a7ce6449"
+    },
+    {
+      "file": "js/background_homology.js",
+      "reasons": [
+        "read() inputs",
+        "worker metafile"
+      ],
+      "bytes": 38487,
+      "sha256": "f227ff9fc2cc8e845cc025f0910c8243b84b14c1e657302caa2bc65a13f12e61",
+      "gitHash": "79baffa3bc2458953b6188a883a7a7d319751e58"
+    },
+    {
+      "file": "js/billiards/topological_billiards_math.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 7670,
+      "sha256": "21a628545d0cd1296f158d80e3547752d79c6aad968f085dcd31fe310ee66505",
+      "gitHash": "88ec92f2a9b4c2b5a09f338d87f401a57f185995"
+    },
+    {
+      "file": "js/billiards/topological_billiards_native.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 163895,
+      "sha256": "a679679c11880ae8909a5e78c2e1b690c332553e17edc930de297cadff4080c3",
+      "gitHash": "55688000a9760abf8db6827d86fdd1b9ed12de54"
+    },
+    {
+      "file": "js/billiards/topological_billiards_physics.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 24502,
+      "sha256": "c5119321a025838787307b774ed998253ae44a60d3adcca6fd54b03f62c8bbeb",
+      "gitHash": "d67d3c6644f7a8e2d2b1e35c4a02b92dca4e42ad"
+    },
+    {
+      "file": "js/calculator_cards.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 27130,
+      "sha256": "10a41b607ed3889df38feb0df7c016e24b47dca0d0f6c4d9f1c87ba21e35931a",
+      "gitHash": "d6143074cd5175340ad8757bce5f8d13b77d6234"
+    },
+    {
+      "file": "js/calculator_input_profiles.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 12125,
+      "sha256": "141af581857696eeb2b0deadcd374b241ef3da33dcaae4469625595a73f01337",
+      "gitHash": "4dc775ea96f6103bf28df0fd9b52063b9585ea52"
+    },
+    {
+      "file": "js/calculator_input_settings.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 45595,
+      "sha256": "040eb41fe27cef2d6d22482f011c8847c3050440990e28ad165d9f510de2f985",
+      "gitHash": "0c218a758861d14cf6b22d8823985c965a875728"
+    },
+    {
+      "file": "js/category_calculator.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 62706,
+      "sha256": "af67739795027188802fc6dffa9585dba3dc6637ccce74b0d8983603a4561a7c",
+      "gitHash": "1f5b3843931a32d5dff5f025667e877caa6b62b6"
+    },
+    {
+      "file": "js/double_young_diagram.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 319348,
+      "sha256": "8bf3c0b0cd6b241330ec2936104ef5c7af860af93d1496c65f66866497303362",
+      "gitHash": "1691a3ae6c21488b1e375d17e34bd883bfad8337"
+    },
+    {
+      "file": "js/dynkin_diagram_calculator.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 94658,
+      "sha256": "66aef7a196873deb52442840d711fa904e4aea30b5e7aa2038c79ee9d840e34d",
+      "gitHash": "712c4da1b068a70c6cb31baf0b95dd743b7991b0"
+    },
+    {
+      "file": "js/dynkin_diagram_geometry.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 4139,
+      "sha256": "21cbdfdea5d7ffe7d8426afebe6a2281f2f73ccbf7656b001d218aff1796f29d",
+      "gitHash": "b7ebd719613451c35e3069de5a9e31b28060a11e"
+    },
+    {
+      "file": "js/hex_homology_game.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 33059,
+      "sha256": "6ae0d3a1265eea8addf90f4542f9b3a0b6308f1905105c0f3b4f1fd606591971",
+      "gitHash": "92ac202aca58c637638ce6ffd4b1b1f30178fdb7"
+    },
+    {
+      "file": "js/higher_dimensional_slice_explorer.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 664739,
+      "sha256": "879ecce1207e507c8a4f64840848d58dd7f763dda42c3f9efca83a0f43e1d292",
+      "gitHash": "d22a1c427b877962f604cfaa5de743148234dc37"
+    },
+    {
+      "file": "js/higher_dimensional_slice_touch.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 3204,
+      "sha256": "fa66dfea58f2affb12de886772a1a3a5e21ba79db9749c2a7eabb2ab5fbf9d3f",
+      "gitHash": "c82cd07414f01a1096f2f0042018f147df1be8d2"
+    },
+    {
+      "file": "js/import_export_page_adapters.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 37304,
+      "sha256": "145c26730eadf9477e2dcebf5b4bcdddb045dfaed7f9d128602370c885181b3e",
+      "gitHash": "ff90fc94176a31b2900b99bcbf01468803680609"
+    },
+    {
+      "file": "js/import_export_panel.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 43134,
+      "sha256": "d684f8c6e6b97b0f7a4628241b129e0b5baa1d8e70051cccade33d6a44275c21",
+      "gitHash": "f679ab02af08044441bd115df48eba3f819f7de2"
+    },
+    {
+      "file": "js/matrix_calculator.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 259526,
+      "sha256": "bcd545ec860202fee5e1f20e8d6d4bef3696b0f7cb526033beb9ceb4faba4f3a",
+      "gitHash": "3cebff06e9d9718ff9768e5e0faa3a2cdb1e2e0d"
+    },
+    {
+      "file": "js/mosaic_calculator.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 1435719,
+      "sha256": "afdc8575773a157381b4df8184f2f27605488f8292ea3882fb0d5fb5a036e9a2",
+      "gitHash": "6a79b389c0b071045ec22965175382bb86a34cb6"
+    },
+    {
+      "file": "js/mosaic_complete_interior.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 35324,
+      "sha256": "9469143108f6c11d03394c174fbb6159d2630426b1b5b51eaccfa94ddebc05b4",
+      "gitHash": "705f8e7ee49a89cd49a027ccc4725b6301e31802"
+    },
+    {
+      "file": "js/mosaic_hyperbolic_metric_worker.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 680,
+      "sha256": "b39843664a4f5ec3db01907c19d0ecbf6cd6ca2e931dcebe42efe2cdbc986e4c",
+      "gitHash": "21f57dc7fcdf790d1d91c30bd18aafba7ea9e2ab"
+    },
+    {
+      "file": "js/mosaic_hyperbolic_metric.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 31242,
+      "sha256": "962233e537159223553c42dc2e78faad8fad6c01e80ac81fb115df87be0de32f",
+      "gitHash": "f6438e68932440ab31bc197c447a13860ca48f27"
+    },
+    {
+      "file": "js/mosaic_intrinsic_metric.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 14836,
+      "sha256": "f39f04b0dd9fa2b95047d7b46416adc766cc839b2a33d7e8f40fa0d4f65cd6a9",
+      "gitHash": "4eeb57b67c8e9a385cc459b07f5ae526eadc50f7"
+    },
+    {
+      "file": "js/mosaic_knot_data.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 1434954,
+      "sha256": "f80e72a7bf7fc5a2173f7dd4e464fb6577437a80faad1c6ba25b326281ae3faa",
+      "gitHash": "71253f76e80fefa32b43c4edd66c44a7460251e1"
+    },
+    {
+      "file": "js/mosaic_knot_engine.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 46290,
+      "sha256": "18873a766c755b0eb64741adcbe9b173bc98ca9bbfafe34bd4191def8b113fcd",
+      "gitHash": "d1c8724c7001ece3d12c055edf6967f85d5ce5b9"
+    },
+    {
+      "file": "js/mosaic_link_data.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 992632,
+      "sha256": "ee05521d112ff170e11eff3d454d97b104fdb0c00ba989c4cf8901a2c30d0b9a",
+      "gitHash": "ea4fc31de5f5125aa08953f371517c87f7dd8783"
+    },
+    {
+      "file": "js/mosaic_poincare_uniformization.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 13102,
+      "sha256": "ca57275613c404bcd9a68fb1d00fd42907a50daf00928c3450c606b136d1f522",
+      "gitHash": "0e56aaf2fe5f1c392bf45dda3c112cbfe5da40d4"
+    },
+    {
+      "file": "js/mosaic_poincare_view.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 32719,
+      "sha256": "608ea7b52567b278118b80e08671a11f832ff3f38584049e5387428e61c716fe",
+      "gitHash": "e394335480f7e92dffa86636953352bab38609ed"
+    },
+    {
+      "file": "js/mosaic_poincare.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 15501,
+      "sha256": "351107d6c80c203ba74e20d70200f0e994967a4941f6ed0f0e0afe0afb37b762",
+      "gitHash": "d89a35bb5eff0d8ea0bcdd65837545baccefee43"
+    },
+    {
+      "file": "js/place_ramification_calculator.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 80438,
+      "sha256": "eb92339cc13784dcd374c7d821ef8fa3f8bf3d3b187c4ff71d1dfe888222b432",
+      "gitHash": "a2fc95c86ffaa1ff4309265bc2ab782e90c05f03"
+    },
+    {
+      "file": "js/place_ramification_engine.js",
+      "reasons": [
+        "read() inputs",
+        "worker metafile"
+      ],
+      "bytes": 53992,
+      "sha256": "52395f0702ed0b70e27e90b533058ce537c80b173d7eae2905f68eecbb3f6cb9",
+      "gitHash": "37a09233c4e2d991765537a7c5cf5730c392139c"
+    },
+    {
+      "file": "js/sheaf_calculator.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 1973308,
+      "sha256": "36f68ed6fe5c98f9816ab9123180acea02222d93bb093bc8057a4bea85ada807",
+      "gitHash": "0fb2f7b36427b3daaf881e170d1adde8bece6673"
+    },
+    {
+      "file": "js/sheaf_complex_calculator.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 2128281,
+      "sha256": "ed0df28332951035d60d224e34195364c537bfd080320b9812fc3e78b94bb082",
+      "gitHash": "083eddf540598d9266e14186dfa4caf43ba1646d"
+    },
+    {
+      "file": "js/strand_diagram_calculator.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 142521,
+      "sha256": "68acbbe17c6a97c68175c444376d76e68dae6c4f0519f312ceedfa24b6c75097",
+      "gitHash": "59af06339d900f29e159319146ac5e9121e2fe9b"
+    },
+    {
+      "file": "js/strand_drawing.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 25543,
+      "sha256": "3ad19b304590da0441c621e99bd0597c27131999fca04b0e79b16ed772abfd5f",
+      "gitHash": "80edf3732bf142ec652877dc631885daf9118bff"
+    },
+    {
+      "file": "js/strand_math/basis_catalog.js",
+      "reasons": [
+        "read() inputs",
+        "worker metafile"
+      ],
+      "bytes": 15421,
+      "sha256": "fbeb0d2d406e142d96601841ff5c872e4c1e4da8eaa672c404ee4ff03aff2698",
+      "gitHash": "d13b26ed213bd2c7715a62822cd9f6a7e1a1aa90"
+    },
+    {
+      "file": "js/strand_math/burau.js",
+      "reasons": [
+        "read() inputs",
+        "worker metafile"
+      ],
+      "bytes": 7648,
+      "sha256": "ea588e887bf61a8ba68df7a6f6623cbeb22ea0d0bd92eb6ce12732fbc980cd4a",
+      "gitHash": "99917fb92d74f018748b56c2b1009b6c56f45865"
+    },
+    {
+      "file": "js/strand_math/calculate.js",
+      "reasons": [
+        "read() inputs",
+        "worker metafile"
+      ],
+      "bytes": 29602,
+      "sha256": "4187b14040e0e2e020892f1d5cf676adea75610d5d14f5a57b59bf4e0e4e2ee9",
+      "gitHash": "6119b0ce9d6fa520dde3e57ac4b95e85fa063f24"
+    },
+    {
+      "file": "js/strand_math/core.js",
+      "reasons": [
+        "read() inputs",
+        "worker metafile"
+      ],
+      "bytes": 10811,
+      "sha256": "1e147964df4855e0a7ebe2dc43c49c955cf0cf579b1f70e15e4e392a4ad003a5",
+      "gitHash": "01bb2968f4762172a6f85a6068873d9d29461f83"
+    },
+    {
+      "file": "js/strand_math/diagrammatics.js",
+      "reasons": [
+        "read() inputs",
+        "worker metafile"
+      ],
+      "bytes": 92119,
+      "sha256": "19f8d7e392cae7afe6adef12a0c6912c08320f4937da0a34a17f9a0614ce22d1",
+      "gitHash": "13fc140857872aedbf72ce06ce89563ffc0d62b3"
+    },
+    {
+      "file": "js/strand_math/hecke.js",
+      "reasons": [
+        "read() inputs",
+        "worker metafile"
+      ],
+      "bytes": 4178,
+      "sha256": "11ea48edf9f253401d7e800f579ba84fe2df2ad6fc445c074c0fb0422960adc9",
+      "gitHash": "12e13e406bab01cbe9992dfa6db3fdc9ff80fdd2"
+    },
+    {
+      "file": "js/strand_math/kl.js",
+      "reasons": [
+        "read() inputs",
+        "worker metafile"
+      ],
+      "bytes": 4034,
+      "sha256": "ac1282d9ee5d2aa5ac670c4a7b298d2b60265dbaaa24952b1e5ca5689057371f",
+      "gitHash": "b2e93cb4a65c73eee81ef9f6f8718a869bbacf0e"
+    },
+    {
+      "file": "js/strand_math/permutation.js",
+      "reasons": [
+        "read() inputs",
+        "worker metafile"
+      ],
+      "bytes": 4075,
+      "sha256": "ed091c5ab1cd161741ed773ae7a6f1ed43fed4dd8bd1c6df4f06764086012d48",
+      "gitHash": "66073ca84b0e34a88133d5bee2735dd8f8625c59"
+    },
+    {
+      "file": "js/strand_math/temperley_lieb.js",
+      "reasons": [
+        "read() inputs",
+        "worker metafile"
+      ],
+      "bytes": 7629,
+      "sha256": "563a1e2564572a638283ec5c5422cd29c88a8c9b68b34bbc65e11b01889ebb74",
+      "gitHash": "3afcf3907edfeb6fb378ccfde0d13f3ed4706b49"
+    },
+    {
+      "file": "js/toric_cone_math.js",
+      "reasons": [
+        "read() inputs",
+        "worker metafile"
+      ],
+      "bytes": 57580,
+      "sha256": "aa70834baa8f70d8a97b5a177460ddcdde9886d944f1933399b8ad6f777a004c",
+      "gitHash": "2f44099d6f5a99badf8e76652f66022f64b6e968"
+    },
+    {
+      "file": "js/toric_cone_worker.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 711,
+      "sha256": "74166c6d3ba3d786fbeac08cf42a64f693f256d9be5fed9ab1c6dc7c39dc2e24",
+      "gitHash": "e2954a8699d1fd37c8f7a291401067bd477a65c5"
+    },
+    {
+      "file": "js/young_diagrams.js",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 277061,
+      "sha256": "203c3b324a7ee1758f765cb23ba77078824db81bd412152db091a3ca5e7464ec",
+      "gitHash": "7f82a67f665c95cef3f42d152801d8c523888e4c"
+    },
+    {
+      "file": "matrix_calculator.html",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 23196,
+      "sha256": "4a3c45491b28d10082aa79a2515e31831e412116d56378387f633d20fd2d34c4",
+      "gitHash": "fb16f0aac42901dafcff365f56c17a978b9490ec"
+    },
+    {
+      "file": "mosaic_calculator.html",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 96319,
+      "sha256": "e53091d5cfc90d9e61299b8e6c9466f14898b9cb7b97ff8f728680cbc850632f",
+      "gitHash": "ef52eed328bd07a12ead87ea4c40a09517699b02"
+    },
+    {
+      "file": "place_ramification_calculator.html",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 25958,
+      "sha256": "be90aeab0f527e69aff6f73f1facd0ccc987dd63cc96d4dbeafe216db05a4b1b",
+      "gitHash": "27a1b38088acb838aab508e30b2808022d8140fb"
+    },
+    {
+      "file": "presets/category/presets.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 6197,
+      "sha256": "77db3f650f4fe7893a12d084eca74678361c0cbbc8d15173a5ef464fda82f55b",
+      "gitHash": "ba4939bc6fbb1fff78a1d692bcc20b2535214db7"
+    },
+    {
+      "file": "presets/ramified_minigames/between_two_fires.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 13633,
+      "sha256": "ec52e12192f139c958824d38d3414425eba23767d72347019eb4eac84fdfa7d2",
+      "gitHash": "c8fadad713fbfb49b78b61e4759b88790dd2c097"
+    },
+    {
+      "file": "presets/ramified_minigames/boundary_glue_board.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 755,
+      "sha256": "99840d134740366f5e7e4007b8053947f86365e3f7715c698ea9783c2abb63be",
+      "gitHash": "14daf296a8be8d10d61dbb0c81e2c9461bceb71d"
+    },
+    {
+      "file": "presets/ramified_minigames/classic_chinese_checkers.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 10885,
+      "sha256": "eda7bc16d22fc932c93644e71b1692f55a3f6ebe08fdd9279d2ad83ac905d012",
+      "gitHash": "641aaa0b32a353bff75c46424cd1a318cf77029b"
+    },
+    {
+      "file": "presets/ramified_minigames/classic_hex.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 5689,
+      "sha256": "09d90b30097545b3cd1654a1d08b2b32af8be15ea2ba6471e82a6b918835a55d",
+      "gitHash": "5668c624ad10837a2514e9e1a34ebf9f48f4f6f4"
+    },
+    {
+      "file": "presets/ramified_minigames/connect_four_6x7.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 609,
+      "sha256": "28aeea5e5955fcbf17d36683b3f61ce0380b35867621eed290323e40d8fb9a5d",
+      "gitHash": "52cbd580b23a18c2574b074d6fc2b56a1267ce96"
+    },
+    {
+      "file": "presets/ramified_minigames/connect_four_across.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 657,
+      "sha256": "d5bf2cce07e503a23f59ce4a304bbf246fa3e0567813c4b00be554f40ff899bf",
+      "gitHash": "ec5ff06a969fefd1cee0d4a15d1ce86dad1f2418"
+    },
+    {
+      "file": "presets/ramified_minigames/connect_four_all_horizontal.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 722,
+      "sha256": "5f88f6f04ca7e3377901ed0a02b4be49634cd271acf4949f3138397c99cc6cab",
+      "gitHash": "fe972afc5de737239579d2278ca2d52d476db902"
+    },
+    {
+      "file": "presets/ramified_minigames/connect_four_exchange.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 705,
+      "sha256": "ad4ba3c061c81c86f09bc2b3519da67c3e0a0ef59dc94301939bfa95bb785dff",
+      "gitHash": "6187b81b3c520f2a103332f0b4ddea87962067f7"
+    },
+    {
+      "file": "presets/ramified_minigames/connect_four_hex_bad_mobius_strip.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 848,
+      "sha256": "bea9685d39d45f08591ce1e9b49272fd76a168859effa7d5f7e15fa6c6bb9f41",
+      "gitHash": "70b3a5c9a77877837f4b7ba96b39ef2f8c4aa347"
+    },
+    {
+      "file": "presets/ramified_minigames/connect_four_hex_good_mobius_strip.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 910,
+      "sha256": "3a1d3cdfb8bed435bf79a15a80e4861d644776a477665b05659de33ce0886c76",
+      "gitHash": "45f6d94a57c93f73989b754680020940ba48e386"
+    },
+    {
+      "file": "presets/ramified_minigames/connect_four_hex_usual_strip.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 818,
+      "sha256": "f786756dc1b626024e9093647ac64b4f7196770a6cb089a7a646ee735e0b7df2",
+      "gitHash": "9f4c4ff2331d33eace0583e2dc689d3b86297226"
+    },
+    {
+      "file": "presets/ramified_minigames/connect_four_high_hit_2.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 645,
+      "sha256": "43e9f713e803f96c363435ea8af02ccb7a4bb0f92987f07d089f99108ba9b19f",
+      "gitHash": "04a287b48cd63bcb654a146236ca7d716b3d2930"
+    },
+    {
+      "file": "presets/ramified_minigames/connect_four_high_hit.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 640,
+      "sha256": "8a44637b276ccc293268ad9986bdcfaa6048bbb33bdc67ddc1558002e3cd96e9",
+      "gitHash": "8a5f94175bf6f161ea2021611e0570558a707c1b"
+    },
+    {
+      "file": "presets/ramified_minigames/connect_four_mobius_strip.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 644,
+      "sha256": "370836b0aeb39a1a7781579e1de905ab32d9b4d92569bc9b79c509eb4af7a633",
+      "gitHash": "837b4e47f4dc9152f83d33b8baedc7b0849406b8"
+    },
+    {
+      "file": "presets/ramified_minigames/connect_four_top_fight.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 707,
+      "sha256": "96f420470572a82935edfd9c6904ccd867ea645d714000e0b396df48df83d83e",
+      "gitHash": "f008276bb67894620ba1b270d839493fca2fee6e"
+    },
+    {
+      "file": "presets/ramified_minigames/connect_four_usual_strip.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 639,
+      "sha256": "c22f124c84680e6dcff3e7472f3aefd8d4fa8aa854bd83a61dc4b0e17f3541a5",
+      "gitHash": "3484dd371ac15920a8700a809a6380e3e5f09c12"
+    },
+    {
+      "file": "presets/ramified_minigames/dodecahedron_with_pentagon_holes.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 5084,
+      "sha256": "ef5136f393ffc0d64ec08c6ad3f81eab1464d63c05192037aecc72c2ed5c5ff8",
+      "gitHash": "8829a708bbb46e1affff748d0adfe22554d64164"
+    },
+    {
+      "file": "presets/ramified_minigames/falling_in_two_ways.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1419,
+      "sha256": "022140cec6327af8e73f2e31b4711370caac3e99842d2186d269d3611ec914bc",
+      "gitHash": "2cbad28e12821041ab49c126e3ab9253c7d350a1"
+    },
+    {
+      "file": "presets/ramified_minigames/fide_chess_8x8.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 589,
+      "sha256": "9de7d36456ec140ed5487fbd0284913866094c1275e08ecc0ea9fd17fa11a8d1",
+      "gitHash": "2e156b72351879716f8159293615e617ce825f78"
+    },
+    {
+      "file": "presets/ramified_minigames/focus_frame.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1548,
+      "sha256": "301d7029a3ce6ad47b82221404ea709394051fa8d2a712ec3d3544509445f619",
+      "gitHash": "f5b2aabae0168cb3f86f5a5984aca5d2e7990278"
+    },
+    {
+      "file": "presets/ramified_minigames/genus_2.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 3100,
+      "sha256": "a7659b1c904192297b13a7ec469969d34c28e2efc11ea8b860cfa4e42bc5d562",
+      "gitHash": "eba3445613cb75bd14f862fa2efd87669c902365"
+    },
+    {
+      "file": "presets/ramified_minigames/gomoku_big_hole.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 666,
+      "sha256": "064b33062e3746f2670737930f77b60544292580e371d2ec0e6046de343712ed",
+      "gitHash": "d38cb611bd9726e19a72b1698d2c559a392e16b0"
+    },
+    {
+      "file": "presets/ramified_minigames/gomoku_m4_15x15.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 809,
+      "sha256": "a0c5b69f759bca456f872ed099f81733deb182ec35ba3733d0e31cbc7a40455c",
+      "gitHash": "94dbdad5d6bea3cea549139d5454ddb9517dbe8e"
+    },
+    {
+      "file": "presets/ramified_minigames/gomoku_small_holes.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 977,
+      "sha256": "ecfb028c36670569e89f8c9a9da36ba7edf49508581d98c0f16a5c359423c170",
+      "gitHash": "7f349243e3a253dc79dd3d5d322a8f07141ab8e4"
+    },
+    {
+      "file": "presets/ramified_minigames/gomoku_strange_corner.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 699,
+      "sha256": "0ac2c59fc6866262e17b06be3c69acc356e66e4aa28abe4d91413cf1f8cf4dc8",
+      "gitHash": "c556a2be6a1cfb6f8a439ccacf6fdff1e3ba900c"
+    },
+    {
+      "file": "presets/ramified_minigames/gomoku_tic_tac_toe.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 624,
+      "sha256": "c81711e27f0e5942787eae5c35ba1ff52948212cbb9dd6f90539612ae85b89be",
+      "gitHash": "1130472002405a2d1564b7cef4df004a8b0bf7b7"
+    },
+    {
+      "file": "presets/ramified_minigames/half_glued.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 3192,
+      "sha256": "12633f9ca1ad6eb435669fcb2ef1835e92eb1cfa620c9d93facc10992f93f355",
+      "gitHash": "74dd7dd37316235d4d54065248e59b077a8caf71"
+    },
+    {
+      "file": "presets/ramified_minigames/hex_classic_4x4.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 579,
+      "sha256": "911458bab448c5fae11a39c433268c9baea6a97be350480b752d0c592271a0bf",
+      "gitHash": "c4b859f6f79aa568a2b34e5e128944b785187169"
+    },
+    {
+      "file": "presets/ramified_minigames/hex_klein_bottle_5_5.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 3331,
+      "sha256": "a281e3942ab38a20e6bbbf420319ed1fb87b798df0a646ba4770dc8ff7859eed",
+      "gitHash": "84c4bd3065cdb330346f48800290201cdebbdb6d"
+    },
+    {
+      "file": "presets/ramified_minigames/hex_rhombus.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 4188,
+      "sha256": "ae52e6647e1d33b555df503ecaedd8358dfe94d0050be686e84c18e4fe4883fe",
+      "gitHash": "95a3d2643b482c8dbac4515a4f08eba13273b58c"
+    },
+    {
+      "file": "presets/ramified_minigames/hex_rp2_5_5.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 2331,
+      "sha256": "70e8731fcf5ddd875cc4a9d45837e11d9ce1f25b9682af732b3dfc5292abd713",
+      "gitHash": "1b1a22a0acf16e9ebfa0c517b047d648e0c7fec3"
+    },
+    {
+      "file": "presets/ramified_minigames/hex_strip_9_9.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 3233,
+      "sha256": "483aa5a5d79e20fe8895dc566c378e52d11ba2cfbb19f63c7895e8abeb9c9f03",
+      "gitHash": "930e117dd63464e9e6392915eefba3253b89b578"
+    },
+    {
+      "file": "presets/ramified_minigames/hex_torus_5_5.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 3252,
+      "sha256": "7cf4592eea534f5760e297f9ca6eac00d896afeb4cb36fb2172f11f4dfaa3abf",
+      "gitHash": "6bde220a53efcc4ba75de2363153bea71aa40de0"
+    },
+    {
+      "file": "presets/ramified_minigames/hex_with_three_slits.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 12356,
+      "sha256": "710fe2c2403c55db2811d0bd07d51e51e98ae40658d709affb34f61cce0a5eaf",
+      "gitHash": "0d4078fe62d360da711ea0a96ef994eecfacff05"
+    },
+    {
+      "file": "presets/ramified_minigames/knights_on_rubik_s_cube.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 3563,
+      "sha256": "3b2f0f9b79be59e95be67bfe21ee19d6fdd5941519b3d8c263ac034329835b32",
+      "gitHash": "8755e4d12241ae5c28804d33b2d693d9698cc8f8"
+    },
+    {
+      "file": "presets/ramified_minigames/last_supper_on_rubik_s_cube.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gitHash": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+    },
+    {
+      "file": "presets/ramified_minigames/mobius_strip.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1166,
+      "sha256": "7e9d33ebed5a72590ddfb3a70fe35136c122ba7b57c4d840b203183cd5e8dc23",
+      "gitHash": "24da48f09c2437dd5f061361631fd27671cff857"
+    },
+    {
+      "file": "presets/ramified_minigames/n_queens_puzzle.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 819,
+      "sha256": "43312950e4550bf58c4a3fe152fee35987e016f20a3fd3ea5f15fdad4bf2a889",
+      "gitHash": "f24f34ae57bac4aeec7d8b6def622862cd6c6dde"
+    },
+    {
+      "file": "presets/ramified_minigames/n_queens_torus_puzzle.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 918,
+      "sha256": "5afff98a6547aa7184bc25b47c179d6ef8bf50b513ab40f8b37833868498328b",
+      "gitHash": "c150eae3b9cb1b9c596ce66abb3cc2edf64ad5c6"
+    },
+    {
+      "file": "presets/ramified_minigames/octahedron_with_square_glues.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 5746,
+      "sha256": "09d2ca1b977e2e997693803d8323267d74a1b05ecf2e30b5d95e67bf3d91f722",
+      "gitHash": "8555e7f6260cdcc3eabcf35691d9bdacea4b5bd9"
+    },
+    {
+      "file": "presets/ramified_minigames/octahedron_with_square_holes.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 5522,
+      "sha256": "6520588241446be3168bee584593dbe7590ec9b1a325b0b8bb4dce3e1ba6b2bb",
+      "gitHash": "e6cf9d64f5016df973c0c9209b6763efa84a42c3"
+    },
+    {
+      "file": "presets/ramified_minigames/presets.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 20682,
+      "sha256": "22c71be22839af420b3260624a1e9f87b27715076a5c53fac7f4d73723843998",
+      "gitHash": "dabc71d4d91e24c02292c166bcb0b7c95fe784e2"
+    },
+    {
+      "file": "presets/ramified_minigames/queens_on_double_cover.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 5962,
+      "sha256": "53f91219eb3f4d85c45c29238c953bae574ed826fc5a5ba37f0ed7ed1c602451",
+      "gitHash": "49fa46556e42b0398bc4ef0f021bea927bb19d8a"
+    },
+    {
+      "file": "presets/ramified_minigames/r.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 897,
+      "sha256": "b4a3a3ed6c6d1bcc327c133229e050a6e5e4278a46a29c7135cba65b6cdbb475",
+      "gitHash": "17df28256183804e024226b49c9181b76d0e5947"
+    },
+    {
+      "file": "presets/ramified_minigames/ramified_cover.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1735,
+      "sha256": "e43a40a68adef1dd074ce33f199c2f233dce7d39b07769a9d009dbb2f95fe5a6",
+      "gitHash": "ea03cc69e8314b308f6c0ae14e3f8cb8fa02a638"
+    },
+    {
+      "file": "presets/ramified_minigames/README.md",
+      "reasons": [
+        "readdir contents"
+      ],
+      "bytes": 1765,
+      "sha256": "dbee38c7e2ff751bcf6ff8ce801eb65d418e83299415289bc850bbb27ebc1172",
+      "gitHash": "bfb174859b7cc177c93d9480458b13961e768960"
+    },
+    {
+      "file": "presets/ramified_minigames/reflex_angle.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1127,
+      "sha256": "c7c104052c620343fb4d08c41192e8e3a661a6c04190045cad1419a6257c7cae",
+      "gitHash": "ffe675243b4670adf88429554090a4a6f7dfaf4c"
+    },
+    {
+      "file": "presets/ramified_minigames/rubik_s_cube_2_2_2.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 4121,
+      "sha256": "3fece2fc0cb7631b8df4490897089ea096a56cf5bbaab370768839c182ff1109",
+      "gitHash": "9896c4fd0232cf2c4ca0eac048ebe32047a70304"
+    },
+    {
+      "file": "presets/ramified_minigames/rubiks_cube_3x3x3.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1983,
+      "sha256": "2ffa85f25dcbf396bc765f303c67f66b7cbe1e853301307c5d4b7895e43d45f5",
+      "gitHash": "21401b86ab42a1d2d9645f0412d2f26c9f7252f7"
+    },
+    {
+      "file": "presets/ramified_minigames/small_classic.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 8532,
+      "sha256": "f72fa753a291cf4a97bf84cb1d21e14dbb9dadc7377564e296eefe92bdd95013",
+      "gitHash": "c38778ebceac382c4efe015da43fac8a5d7b87b8"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/bridges_blocking.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1200,
+      "sha256": "fa1a26de13e3997345a005ad3ae1a7acb4bcf21649417317e923fb14730f6102",
+      "gitHash": "621a6c16de960950cab427cc7b13ce74cb3b32b0"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/classic_fans_glue.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1858,
+      "sha256": "4d5e0b118300a91eabc80a1b6e08abac66469c9125d4454956c3a244d477e540",
+      "gitHash": "418f813eecc836aec5fbd1002a3bdffd3da441e3"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/classic_fans.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1257,
+      "sha256": "33e88038cc03267bcb4a7715cda340a53edf699cdfdc5ef63c2462b55af4ee60",
+      "gitHash": "bcd67ada4a64c3eaf8cafa3a7fb58191dcbe176e"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/cross.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1095,
+      "sha256": "1d10967eef1ae2c741bc4f44667c3caaa56218b399ba90553c64f8d057cbe798",
+      "gitHash": "fd50e8eb97339889d3a89374299edce0c5563a55"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/curling_on_cube.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1764,
+      "sha256": "039dde6066fcff6850d5df184ad880d7097da5efa8f85e7ab2c230f02619d6ee",
+      "gitHash": "a991e6f8e3d05eaed748b2f1658b69d15109435e"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/curling.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1344,
+      "sha256": "cc8624d2d4ac33af823c933bb4484bc499af896a65967a16275780f0f95f5372",
+      "gitHash": "f8cad058188ac76f8a0220182277a66564d4dfca"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/easy_energy_bridge.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1243,
+      "sha256": "a5ba3c8c4f99d6ceb198de4b5a248460e25dc8c445ca4db57157c0152f609de8",
+      "gitHash": "e3a3844732cbeb150e629e9981461e81253075a4"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/energy_test.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1157,
+      "sha256": "58270b60ef5ca89cdd55d468cd04e0d0592188ec964a052887f69897ef3a4032",
+      "gitHash": "e65433a64f65ff46db9c0d3acd51de7b33bb9333"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/expand.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1090,
+      "sha256": "f45fe03c1593b85f236c329ee8bfb5d796930858b24c90dcae8b7c27cfa7d9b2",
+      "gitHash": "61cc9d20f146439053221e963b54131a4645452e"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/expand2.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1138,
+      "sha256": "11862c06a18ba59f62406e5b28c22f9f50ef08f9cc5d82173d1eeb7a0421abcf",
+      "gitHash": "5722e96c15c896cc14db73f2f52959eb33fcb0fe"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/expand3.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1189,
+      "sha256": "ff63299063404577fb12b0dc59fcc2663b4bbca1c79a212b1b949c4122d6bf6e",
+      "gitHash": "da45a8cb31543653637f871a76d89e168dab4f51"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/ice_test.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1123,
+      "sha256": "d160262516245e787c2ba6dd1e02ccfb908af7d510e4be8f8bf99ee55e1e9400",
+      "gitHash": "d65fa322715bfd5a11e9bae4343ed2af59a220bf"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/islands.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1371,
+      "sha256": "4193ab9b427e076c6227e72ca87b188be90f80a6f63a0f8bc1a04fbf385ae888",
+      "gitHash": "183500d3785bea7e66c2cb28c50610bdb60a38d7"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/loop.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1129,
+      "sha256": "168e967aab04fcb98ae464e046e732be94e324bdbf7c3a05406c9174d515063b",
+      "gitHash": "3da369c34d195f09247533c053cc880ece6ad702"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/orbox_b_glued.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 2773,
+      "sha256": "64dec835718f3bef3d408cda6a0a649dc9e4d252964d112604390469a65f2c16",
+      "gitHash": "d218b86ac80e0659e5ff9832e489bb7580dd97eb"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/orbox_b.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1941,
+      "sha256": "bc18421c2bb02d4797f62dfa9d15576e76cba3c33a6f41585b8470995b572021",
+      "gitHash": "f9326715db5a85704ac53e72dcbfb976b0d36a2e"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/pedestrian.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1437,
+      "sha256": "8bc7b074bb9a52d6ce259cc48cf10bba2d247debef7ef68cfdcf90f98965bffb",
+      "gitHash": "232329f1f08c16e507fdae63796fe0d0be527ae6"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/remote_control.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1581,
+      "sha256": "7ba0f59675f171a3422a1949d4e9d312cc540bcfa85712f4c246365160ac5f19",
+      "gitHash": "d10880bcbfb1f4feaa40db6751c09771d6c2ea04"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/remote_rotate.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1498,
+      "sha256": "3204d1cc412292b6d66742495ecd4da2e8e3f82aa0322fb1521c2aec22f6ef61",
+      "gitHash": "c371b4fa5881b5f36f52a99e8e9ba7a50bb4ac6b"
+    },
+    {
+      "file": "presets/ramified_minigames/sokoban/sokoban_square.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1212,
+      "sha256": "895506dbe9470fa0470c6d09151262e22dc924505c03795ec75323cdab03a907",
+      "gitHash": "6a3e6cbbd860f983a57aebc279d195087f36f036"
+    },
+    {
+      "file": "presets/ramified_minigames/symmetric_rp2.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 2625,
+      "sha256": "eafd651508dfd7e2ef7b5ea6382e34025949028a92a8927ef9068d94ceb8e5c0",
+      "gitHash": "68d4a301821e4d8011c0f0946cd1677ea185cdfa"
+    },
+    {
+      "file": "presets/ramified_minigames/three_slits.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1354,
+      "sha256": "a5ebea98a3315b2b939afeaf57d1abed63ee9896cc57166d15bce3592764df93",
+      "gitHash": "0617e0851d33aab8ce9f7f9df322f98b1ba602d9"
+    },
+    {
+      "file": "presets/ramified_minigames/trefoil.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1154,
+      "sha256": "9df030cc413c0b3e8f7ec5c9a9d9acbc3b99567a43afe435569e51a57fd75b69",
+      "gitHash": "2c77b05ad51452cebb4cb3bec0977a115d89495e"
+    },
+    {
+      "file": "presets/ramified_minigames/tunnels.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1832,
+      "sha256": "6d51d8a1e9b21b32c035d822dfc58e21bd0fd4f215f1e5c6d5e4e005776bdb17",
+      "gitHash": "6cc09dd06f27ebf99e5037920fe224090a7eb561"
+    },
+    {
+      "file": "presets/ramified_minigames/twisted_torus.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 3143,
+      "sha256": "2c85b199b06ccfad4c656712033be92875ce331d4cc4a2d6943563c95c81f736",
+      "gitHash": "dd36e88dc008f2de3184fba5afcfc7a3a85aeac3"
+    },
+    {
+      "file": "presets/ramified_minigames/usual_strip.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 3598,
+      "sha256": "81c619ed021980706763dbb2668215b73ac31954bfc9b248e49433069482ff9c",
+      "gitHash": "1c35d4c9fec399f579e6221ae35ca23a96563b48"
+    },
+    {
+      "file": "presets/ramified_minigames/wormhole.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1162,
+      "sha256": "133f570b7df87327c0082daf953d8eef7890f1149ed55009a792517c297f39d4",
+      "gitHash": "e3fa0683022656385a13c5fc98d87e7684a98aec"
+    },
+    {
+      "file": "presets/ramified_minigames/xi.preset.js",
+      "reasons": [
+        "read() inputs",
+        "readdir contents"
+      ],
+      "bytes": 1642,
+      "sha256": "39e7fac2fbadc0563ebd4223bdc0cf601f9dc51006976b90f58ec51d5cdc7e6c",
+      "gitHash": "b544f837b99a9b29d67491d4cd32770f1dc4e454"
+    },
+    {
+      "file": "sheaf_calculator.html",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 131703,
+      "sha256": "950807e313df8cdc96102d3845860974ec5aebb3a1db53dbafb8987d0f4f0a2d",
+      "gitHash": "2d3f21a43aa5ef144d6346d1df31ff8db437a335"
+    },
+    {
+      "file": "sheaf_complex_calculator.html",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 149650,
+      "sha256": "b03c8ad26ebdc06a2702716c718e139c7ddb60b5a28ca444f4bcbb02bc5410c2",
+      "gitHash": "058d0aef3b881be45b1b440acc60507d545e35f7"
+    },
+    {
+      "file": "strand_diagram_calculator.html",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 41552,
+      "sha256": "aa0880939285f653a226ca29e6fa11b331e65cc90bcfac224b0e2d4a8b937ddd",
+      "gitHash": "0f4803bce20cd1307844cb17317240ecda792e49"
+    },
+    {
+      "file": "young_diagrams.html",
+      "reasons": [
+        "read() inputs"
+      ],
+      "bytes": 26179,
+      "sha256": "8195bc8e20504d8c49515dd22ee1afb1fbff3b3d74035945dc4705f152c2cb83",
+      "gitHash": "b50062eacc54dbb14f5f148c1060ad31d51da949"
+    }
+  ]
+}
