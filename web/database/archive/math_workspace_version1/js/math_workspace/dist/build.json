@@ -1,6 +1,6 @@
 {
   "bundler": "esbuild@0.25.12",
-  "sha256": "e44ecaf2e363141f159ed030859590878ae2235b5de6a875b7b21fc46378a045",
+  "sha256": "02428c47ab9cc89125c1f24f328a2f1d091a4927684ea0a6a75505887b9ad681",
   "editors": [
     {
       "id": "slice",

@@ -32,11 +32,22 @@ and all standalone stylesheets remain unchanged.
 | A | `#fff7f3` | `--ws-danger-tint` | 1 |
 | A | `#fffdf8` | `--ws-surface` | 3 |
 | A | `#ffffff` | `--ws-surface-strong` | 3 |
+| B | `rgba(0,0,0,0.22)` | `--ws-shadow` | 9 |
+| B | `rgba(61,107,79,0.06)` | `--ws-accent-tint` | 9 |
 
 Files (paths relative to sources/):
 
 - `double_young_diagram_production_process.html`: `#ffffff` × 2.
 - `higher_dimensional_slice_calculator.html`: `#fffdf8` × 1, `#8b3a2a` × 1.
+- `js/calculator_cards.js`: `rgba(61,107,79,0.06)` × 1, `rgba(0,0,0,0.22)` × 1.
+- `js/dynkin_diagram_calculator.js`: `rgba(61,107,79,0.06)` × 1, `rgba(0,0,0,0.22)` × 1.
+- `js/matrix_calculator.js`: `rgba(61,107,79,0.06)` × 1, `rgba(0,0,0,0.22)` × 1.
+- `js/mosaic_calculator.js`: `rgba(61,107,79,0.06)` × 1, `rgba(0,0,0,0.22)` × 1.
+- `js/place_ramification_calculator.js`: `rgba(61,107,79,0.06)` × 1, `rgba(0,0,0,0.22)` × 1.
+- `js/sheaf_calculator.js`: `rgba(61,107,79,0.06)` × 1, `rgba(0,0,0,0.22)` × 1.
+- `js/sheaf_complex_calculator.js`: `rgba(61,107,79,0.06)` × 1, `rgba(0,0,0,0.22)` × 1.
+- `js/strand_diagram_calculator.js`: `rgba(61,107,79,0.06)` × 1, `rgba(0,0,0,0.22)` × 1.
+- `js/young_diagrams.js`: `rgba(61,107,79,0.06)` × 1, `rgba(0,0,0,0.22)` × 1.
 - `matrix_calculator.html`: `#fffdf8` × 2, `#ffffff` × 1, `#fff7f3` × 1.
 
 The historical inventory/hash/test records describe the unchanged initial

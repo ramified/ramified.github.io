@@ -16211,7 +16211,7 @@
         function createPlaceholder(height) {
           const el = document2.createElement("div");
           el.id = "dnd-placeholder";
-          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
           return el;
         }
         function getCardAfterPointer(container, y, dragItem, placeholder) {
@@ -16292,7 +16292,7 @@
                 zIndex: 9999,
                 pointerEvents: "none",
                 opacity: "0.88",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+                boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
                 borderRadius: "4px",
                 transition: "none",
                 touchAction: "none"
@@ -37686,7 +37686,7 @@ ${body}`;
         function createPlaceholder(height) {
           const el = document2.createElement("div");
           el.id = "dnd-placeholder";
-          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
           return el;
         }
         function getCardAfterPointer(container, y, dragItem, placeholder) {
@@ -37767,7 +37767,7 @@ ${body}`;
                 zIndex: 9999,
                 pointerEvents: "none",
                 opacity: "0.88",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+                boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
                 borderRadius: "4px",
                 transition: "none",
                 touchAction: "none"
@@ -43072,7 +43072,7 @@ ${body}`;
       function createPlaceholder(height) {
         const el = document2.createElement("div");
         el.id = "dnd-placeholder";
-        el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+        el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
         return el;
       }
       function removePlaceholder() {
@@ -43157,7 +43157,7 @@ ${body}`;
             zIndex: 9999,
             pointerEvents: "none",
             opacity: "0.88",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+            boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
             borderRadius: "4px",
             transition: "none",
             touchAction: "none"
@@ -50188,7 +50188,7 @@ ${body}`;
         function createPlaceholder(height) {
           const el = document2.createElement("div");
           el.id = "dnd-placeholder";
-          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
           return el;
         }
         function getCardAfterPointer(container, y, dragItem, placeholder) {
@@ -50269,7 +50269,7 @@ ${body}`;
                 zIndex: 9999,
                 pointerEvents: "none",
                 opacity: "0.88",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+                boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
                 borderRadius: "4px",
                 transition: "none",
                 touchAction: "none"
@@ -62967,7 +62967,7 @@ ${body}`;
         function createPlaceholder(height) {
           const el = document2.createElement("div");
           el.id = "dnd-placeholder";
-          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
           return el;
         }
         function getCardAfterPointer(container, y, dragItem, placeholder) {
@@ -63048,7 +63048,7 @@ ${body}`;
                 zIndex: 9999,
                 pointerEvents: "none",
                 opacity: "0.88",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+                boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
                 borderRadius: "4px",
                 transition: "none",
                 touchAction: "none"
@@ -66195,7 +66195,7 @@ ${body}`;
             document2.body.classList.add("card-dragging");
             dragCard.classList.add("dragging");
             placeholder = document2.createElement("div");
-            placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;`;
+            placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;`;
             dragCard.parentElement.insertBefore(placeholder, dragCard);
             ghost = dragCard.cloneNode(true);
             Object.assign(ghost.style, {
@@ -66206,7 +66206,7 @@ ${body}`;
               zIndex: 9999,
               pointerEvents: "none",
               opacity: "0.88",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+              boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
               borderRadius: "4px"
             });
             document2.body.appendChild(ghost);
@@ -71535,7 +71535,7 @@ ${body}`;
         function createPlaceholder(height) {
           const el = document2.createElement("div");
           el.id = "dnd-placeholder";
-          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
           return el;
         }
         function getCardAfterPointer(container, y, dragItem, placeholder) {
@@ -71616,7 +71616,7 @@ ${body}`;
                 zIndex: 9999,
                 pointerEvents: "none",
                 opacity: "0.88",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+                boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
                 borderRadius: "4px",
                 transition: "none",
                 touchAction: "none"
@@ -77721,7 +77721,7 @@ ${rows.join("\\\\\n")}
             document2.body.classList.add("card-dragging");
             dragCard.classList.add("dragging");
             placeholder = document2.createElement("div");
-            placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;`;
+            placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;`;
             dragCard.parentElement.insertBefore(placeholder, dragCard);
             ghost = dragCard.cloneNode(true);
             Object.assign(ghost.style, {
@@ -77732,7 +77732,7 @@ ${rows.join("\\\\\n")}
               zIndex: 9999,
               pointerEvents: "none",
               opacity: "0.88",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+              boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
               borderRadius: "4px"
             });
             document2.body.appendChild(ghost);
@@ -84541,7 +84541,7 @@ ${rows.join("\\\\\n")}
         function createPlaceholder(height) {
           const el = document2.createElement("div");
           el.id = "dnd-placeholder";
-          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
           return el;
         }
         function getCardAfterPointer(container, y, dragItem, placeholder) {
@@ -84622,7 +84622,7 @@ ${rows.join("\\\\\n")}
                 zIndex: 9999,
                 pointerEvents: "none",
                 opacity: "0.88",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+                boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
                 borderRadius: "4px",
                 transition: "none",
                 touchAction: "none"
@@ -86795,7 +86795,7 @@ ${rows.join("\\\\\n")}
             document2.body.classList.add("card-dragging");
             dragCard.classList.add("dragging");
             placeholder = document2.createElement("div");
-            placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;`;
+            placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;`;
             dragCard.parentElement.insertBefore(placeholder, dragCard);
             ghost = dragCard.cloneNode(true);
             ghost.id = "dnd-ghost";
@@ -86807,7 +86807,7 @@ ${rows.join("\\\\\n")}
               zIndex: 9999,
               pointerEvents: "none",
               opacity: "0.88",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+              boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
               borderRadius: "4px"
             });
             document2.body.appendChild(ghost);
@@ -99638,7 +99638,7 @@ ${rows}
         function createPlaceholder(height) {
           const el = document2.createElement("div");
           el.id = "dnd-placeholder";
-          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
           return el;
         }
         function getCardAfterPointer(container, y, dragItem, placeholder) {
@@ -99719,7 +99719,7 @@ ${rows}
                 zIndex: 9999,
                 pointerEvents: "none",
                 opacity: "0.88",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+                boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
                 borderRadius: "4px",
                 transition: "none",
                 touchAction: "none"
@@ -139688,7 +139688,7 @@ ${arrows.join("\n")}` : "";
             document2.body.classList.add("card-dragging");
             dragCard.classList.add("dragging");
             placeholder = document2.createElement("div");
-            placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;`;
+            placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;`;
             dragCard.parentElement.insertBefore(placeholder, dragCard);
             ghost = dragCard.cloneNode(true);
             Object.assign(ghost.style, {
@@ -139699,7 +139699,7 @@ ${arrows.join("\n")}` : "";
               zIndex: 9999,
               pointerEvents: "none",
               opacity: "0.88",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+              boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
               borderRadius: "4px"
             });
             document2.body.appendChild(ghost);
@@ -148425,7 +148425,7 @@ ${arrows.join("\n")}` : "";
         function createPlaceholder(height) {
           const el = document2.createElement("div");
           el.id = "dnd-placeholder";
-          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
           return el;
         }
         function getCardAfterPointer(container, y, dragItem, placeholder) {
@@ -148506,7 +148506,7 @@ ${arrows.join("\n")}` : "";
                 zIndex: 9999,
                 pointerEvents: "none",
                 opacity: "0.88",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+                boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
                 borderRadius: "4px",
                 transition: "none",
                 touchAction: "none"
@@ -191024,7 +191024,7 @@ ${arrows.join("\n")}` : "";
             document2.body.classList.add("card-dragging");
             dragCard.classList.add("dragging");
             placeholder = document2.createElement("div");
-            placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;`;
+            placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;`;
             dragCard.parentElement.insertBefore(placeholder, dragCard);
             ghost = dragCard.cloneNode(true);
             Object.assign(ghost.style, {
@@ -191035,7 +191035,7 @@ ${arrows.join("\n")}` : "";
               zIndex: 9999,
               pointerEvents: "none",
               opacity: "0.88",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+              boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
               borderRadius: "4px"
             });
             document2.body.appendChild(ghost);
@@ -201455,7 +201455,7 @@ ${arrows.join("\n")}` : "";
         function createPlaceholder(height) {
           const el = document2.createElement("div");
           el.id = "dnd-placeholder";
-          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
           return el;
         }
         function getCardAfterPointer(container, y, dragItem, placeholder) {
@@ -201536,7 +201536,7 @@ ${arrows.join("\n")}` : "";
                 zIndex: 9999,
                 pointerEvents: "none",
                 opacity: "0.88",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+                boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
                 borderRadius: "4px",
                 transition: "none",
                 touchAction: "none"
@@ -214467,7 +214467,7 @@ ${arrows.join("\n")}` : "";
             dragCard.classList.add("dragging");
             placeholder = document2.createElement("div");
             placeholder.id = "dnd-placeholder";
-            placeholder.style.cssText = `height:${cardHeight}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+            placeholder.style.cssText = `height:${cardHeight}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
             dragCard.parentElement.insertBefore(placeholder, dragCard);
             ghost = dragCard.cloneNode(true);
             ghost.id = "dnd-ghost";
@@ -214479,7 +214479,7 @@ ${arrows.join("\n")}` : "";
               zIndex: 9999,
               pointerEvents: "none",
               opacity: "0.88",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+              boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
               borderRadius: "4px",
               transition: "none",
               touchAction: "none"
@@ -246871,7 +246871,7 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         function createPlaceholder(height) {
           const el = document2.createElement("div");
           el.id = "dnd-placeholder";
-          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
           return el;
         }
         function getCardAfterPointer(container, y, dragItem, placeholder) {
@@ -246952,7 +246952,7 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
                 zIndex: 9999,
                 pointerEvents: "none",
                 opacity: "0.88",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+                boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
                 borderRadius: "4px",
                 transition: "none",
                 touchAction: "none"
@@ -253989,7 +253989,7 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
         function createPlaceholder(height) {
           const el = document2.createElement("div");
           el.id = "dnd-placeholder";
-          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+          el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
           return el;
         }
         function getCardAfterPointer(container, y, dragItem, placeholder) {
@@ -254070,7 +254070,7 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
                 zIndex: 9999,
                 pointerEvents: "none",
                 opacity: "0.88",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+                boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
                 borderRadius: "4px",
                 transition: "none",
                 touchAction: "none"
@@ -258084,7 +258084,7 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
             document2.body.classList.add("card-dragging");
             dragCard.classList.add("dragging");
             placeholder = document2.createElement("div");
-            placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;`;
+            placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;`;
             dragCard.parentElement.insertBefore(placeholder, dragCard);
             ghost = dragCard.cloneNode(true);
             Object.assign(ghost.style, {
@@ -258095,7 +258095,7 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
               zIndex: 9999,
               pointerEvents: "none",
               opacity: "0.88",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+              boxShadow: "0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))",
               borderRadius: "4px"
             });
             document2.body.appendChild(ghost);

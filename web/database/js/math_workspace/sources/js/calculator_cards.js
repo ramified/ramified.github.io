@@ -354,7 +354,7 @@ try {
   function createPlaceholder(height) {
     const el = document.createElement('div');
     el.id = 'dnd-placeholder';
-    el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;transition:height 0.15s;`;
+    el.style.cssText = `height:${height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;transition:height 0.15s;`;
     return el;
   }
 
@@ -437,7 +437,7 @@ try {
           zIndex: 9999,
           pointerEvents: 'none',
           opacity: '0.88',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.22)',
+          boxShadow: '0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))',
           borderRadius: '4px',
           transition: 'none',
           touchAction: 'none'

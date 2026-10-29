@@ -878,7 +878,7 @@
         document.body.classList.add('card-dragging');
         dragCard.classList.add('dragging');
         placeholder = document.createElement('div');
-        placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:rgba(61,107,79,0.06);box-sizing:border-box;`;
+        placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--accent);border-radius:4px;background:var(--ws-accent-tint, rgba(61,107,79,0.06));box-sizing:border-box;`;
         dragCard.parentElement.insertBefore(placeholder, dragCard);
         ghost = dragCard.cloneNode(true);
         ghost.id = 'dnd-ghost';
@@ -890,7 +890,7 @@
           zIndex: 9999,
           pointerEvents: 'none',
           opacity: '0.88',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.22)',
+          boxShadow: '0 8px 32px var(--ws-shadow, rgba(0,0,0,0.22))',
           borderRadius: '4px'
         });
         document.body.appendChild(ghost);
