@@ -21,6 +21,7 @@
   --accent: #0E6B63;
   --accent-ink: #FFFFFF;
   --accent-tint: #D3E8E3;
+  --warm: #A8581A;
   --serif: "STIX Two Text", "Noto Serif SC", "Songti SC", Georgia, serif;
   --sans: "Source Sans 3", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -36,6 +37,7 @@
     --accent: #54B9AC;
     --accent-ink: #0B1513;
     --accent-tint: #1F3A38;
+    --warm: #D99A5B;
   }
 }
 
@@ -110,6 +112,33 @@ h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(2.5rem, 5vw, 
 .mock .m { font-family: var(--serif); font-size: 15px; }
 .mock .mb { font-family: var(--serif); font-size: 15px; font-weight: 600; }
 
+.mock .sm { font-family: var(--sans); font-size: 11px; fill: var(--muted); }
+.mock .sx { font-family: var(--sans); font-size: 9px; fill: var(--muted); }
+.mock .sx2 { font-family: var(--sans); font-size: 10.5px; }
+.mock .ct { font-family: var(--serif); font-size: 12.5px; }
+.mock .ttl { font-family: var(--serif); font-size: 18px; }
+.mock .mid { text-anchor: middle; }
+.mock .ctl { fill: var(--paper); stroke: var(--rule); stroke-width: 1; }
+.mock .bo { fill: none; stroke: var(--rule); stroke-width: 1.2; }
+.mock .ba { fill: none; stroke: var(--accent); stroke-width: 1.2; }
+.mock .acc { fill: var(--accent); }
+.mock .chev { fill: none; stroke: var(--ink); stroke-width: 1.4; }
+.mock .tab { fill: var(--panel); stroke: var(--rule); stroke-width: 1; }
+.mock .atsel { fill: var(--accent-tint); stroke: var(--accent); stroke-width: 1.2; }
+.mock .nm { font-family: var(--serif); font-style: italic; font-size: 14px; }
+.mock .nm2 { font-family: var(--serif); font-style: italic; font-size: 12px; }
+.mock .letter { font-family: var(--serif); font-style: italic; font-size: 38px; fill: var(--accent); }
+.mock .letter2 { font-family: var(--serif); font-style: italic; font-size: 26px; fill: var(--accent); }
+.mock .dig { font-family: var(--serif); font-size: 15px; fill: var(--accent); text-anchor: middle; }
+.mock .dig2 { font-family: var(--serif); font-size: 12px; fill: var(--accent); text-anchor: middle; }
+.mock .gen { fill: none; stroke: var(--warm); stroke-width: 1.6; stroke-linejoin: round; }
+.mock .gc { fill: var(--warm); }
+.mock .grip { fill: var(--muted); }
+.mock .lab { font-family: var(--serif); font-size: 12.5px; fill: var(--muted); }
+.mock .val { font-family: var(--sans); font-size: 12px; fill: var(--ink); text-anchor: end; font-variant-numeric: tabular-nums; }
+.mock .val.mid { text-anchor: middle; }
+.mock .dash { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 2 3; }
+
 /* other tools */
 .section { padding: 3.5rem 0; border-top: 1px solid var(--rule); }
 h2 { font-family: var(--serif); font-weight: 600; font-size: 1.75rem; margin: 0 0 2rem; }
@@ -179,7 +208,7 @@ dd { margin: 0; max-width: 60ch; overflow-wrap: anywhere; }
 
 <header class="site-head">
   <div class="wrap">
-    <a class="wordmark" href="index.html" lang="en" data-i18n-ignore>ramified</a>
+    <a class="wordmark" href="index.html" lang="en" data-i18n-ignore>Pure Math Toolkit</a>
     <div class="header-controls">
     <nav class="site-nav" aria-label="Main" data-i18n-aria-label="index.navigation">
       <a href="math_workspace.html" data-i18n="index.workspace">Math Workspace</a>
@@ -204,101 +233,106 @@ dd { margin: 0; max-width: 60ch; overflow-wrap: anywhere; }
         <p class="note" data-i18n="index.note">Some parts are still being fixed. The classic index at the bottom of this page has the same calculators as separate pages.</p>
       </div>
 
-      <svg class="mock mock-wide" data-i18n-aria-label="index.diagram.label" viewBox="0 0 612 412" role="img" focusable="false" aria-label="Sketch of the workspace: an Assets list on the left, and panels for a Young diagram, a sheaf, a matrix and a Dynkin diagram on the right.">
-        <rect class="shadow" x="10" y="10" width="600" height="400" rx="6"/>
-        <rect class="frame" x="1" y="1" width="598" height="398" rx="6"/>
-        <line class="line" x1="1" y1="34" x2="599" y2="34"/>
-        <text class="ui" x="14" y="22" data-i18n="index.diagram.session">untitled session</text>
-        <line class="line" x1="160" y1="34" x2="160" y2="399"/>
+      <svg class="mock mock-wide" data-i18n-aria-label="index.diagram.label" viewBox="0 0 652 432" role="img" focusable="false" aria-label="Sketch of the workspace: a main Assets area with object tiles on the left, and a Statistics panel for a Young diagram on the right.">
+        <g lang="en" data-i18n-ignore>
+        <rect class="shadow" x="10" y="10" width="640" height="420" rx="6"/>
+        <rect class="frame" x="1" y="1" width="640" height="420" rx="6"/>
+        <text class="ttl" x="16" y="28">Math Workspace</text>
+        <line class="line" x1="1" y1="42" x2="641" y2="42"/>
 
-        <text class="cap" x="16" y="58" data-i18n="index.diagram.assets">Assets</text>
-        <rect class="sel" x="1" y="108" width="159" height="40"/>
-        <rect class="selbar" x="1" y="108" width="3" height="40"/>
-        <text class="m" x="16" y="84" font-style="italic">X</text>
-        <text class="sub" x="38" y="84" data-i18n="index.diagram.variety">variety, P²</text>
-        <text class="m" x="16" y="132" font-style="italic">F</text>
-        <text class="sub" x="38" y="132"><tspan data-i18n="index.diagram.sheafSpace">O(1) on </tspan><tspan font-family="var(--serif)" font-style="italic">X</tspan></text>
-        <text class="m" x="16" y="172" font-style="italic">i</text>
-        <text class="sub" x="38" y="172">P¹ → <tspan font-family="var(--serif)" font-style="italic">X</tspan></text>
+        <!-- main assets card -->
+        <rect class="panel" x="14" y="56" width="398" height="350" rx="4"/>
+        <text class="sm" x="26" y="80">Main · Assets</text>
+        <rect class="ctl" x="104" y="64" width="130" height="24" rx="3"/>
+        <text class="ct" x="112" y="80">Open view…</text>
+        <path class="chev" d="M218 74 l4 4 l4 -4"/>
+        <rect class="bo" x="240" y="64" width="76" height="24" rx="3"/><text class="ui mid" x="278" y="80">split view</text>
+        <rect class="bo" x="322" y="64" width="76" height="24" rx="3"/><text class="ui mid" x="360" y="80">Settings</text>
+        <line class="line" x1="14" y1="98" x2="412" y2="98"/>
+        <path class="tab" d="M24 126 V108 a3 3 0 0 1 3 -3 H95 a3 3 0 0 1 3 3 V126"/>
+        <text class="ui" x="34" y="120">Assets</text><text class="sm" x="82" y="120">×</text>
+        <rect class="panel" x="24" y="126" width="378" height="268"/>
 
-        <!-- Young diagram -->
-        <rect class="panel" x="182" y="54" width="210" height="208" rx="4"/>
-        <text class="cap" x="196" y="76" data-i18n="index.diagram.young">Young diagram</text>
-        <line class="line" x1="182" y1="88" x2="392" y2="88"/>
-        <rect class="cell" x="198" y="104" width="26" height="26"/><rect class="cell" x="224" y="104" width="26" height="26"/><rect class="cell" x="250" y="104" width="26" height="26"/><rect class="cell" x="276" y="104" width="26" height="26"/>
-        <rect class="cell" x="198" y="130" width="26" height="26"/><rect class="cell" x="224" y="130" width="26" height="26"/>
-        <rect class="cell" x="198" y="156" width="26" height="26"/>
-        <text class="m" x="198" y="210"><tspan font-style="italic">λ</tspan> = (4, 2, 1)</text>
-        <text class="sub" x="198" y="232" data-i18n="index.diagram.tableaux">35 standard tableaux</text>
+        <!-- tile: Young diagram -->
+        <rect class="cell" x="56" y="150" width="13" height="13"/><rect class="cell" x="69" y="150" width="13" height="13"/><rect class="cell" x="82" y="150" width="13" height="13"/>
+        <rect class="cell" x="56" y="163" width="13" height="13"/><rect class="cell" x="69" y="163" width="13" height="13"/>
+        <rect class="cell" x="56" y="176" width="13" height="13"/>
+        <text class="nm mid" x="76" y="216">lambda</text><text class="sm mid" x="76" y="232">Young diagram</text>
 
-        <!-- Sheaf -->
-        <rect class="panel" x="410" y="54" width="176" height="84" rx="4"/>
-        <text class="cap" x="424" y="76" data-i18n="index.diagram.sheaf">Sheaf</text>
-        <line class="line" x1="410" y1="88" x2="586" y2="88"/>
-        <text class="m" x="424" y="108" data-i18n="index.diagram.sheafP2">O(1) on P²</text>
-        <text class="mb" x="424" y="127"><tspan font-style="italic">χ</tspan> = 3</text>
+        <!-- tile: Lie type -->
+        <text class="letter mid" x="166" y="186">A₃</text>
+        <text class="nm mid" x="166" y="216">g</text><text class="sm mid" x="166" y="232">Lie type</text>
 
-        <!-- Matrix -->
-        <rect class="panel" x="410" y="150" width="176" height="112" rx="4"/>
-        <text class="cap" x="424" y="172" data-i18n="index.diagram.matrix">Matrix</text>
-        <line class="line" x1="410" y1="184" x2="586" y2="184"/>
-        <path class="bracket" d="M426 196 H420 V240 H426"/>
-        <path class="bracket" d="M474 196 H480 V240 H474"/>
-        <text class="m" x="432" y="214">1</text><text class="m" x="456" y="214">2</text>
-        <text class="m" x="432" y="234">3</text><text class="m" x="456" y="234">4</text>
-        <text class="m" x="496" y="220">det = −2</text>
+        <!-- tile: Matrix (selected) -->
+        <rect class="atsel" x="214" y="138" width="84" height="104" rx="3"/>
+        <path class="bracket" d="M247 152 H241 V190 H247"/><path class="bracket" d="M265 152 H271 V190 H265"/>
+        <text class="dig" x="250" y="168">1</text><text class="dig" x="262" y="168">2</text>
+        <text class="dig" x="250" y="186">0</text><text class="dig" x="262" y="186">3</text>
+        <text class="nm mid" x="256" y="216">A</text><text class="sm mid" x="256" y="232">Matrix</text>
 
-        <!-- Dynkin -->
-        <rect class="panel" x="182" y="276" width="404" height="104" rx="4"/>
-        <text class="cap" x="196" y="298" data-i18n="index.diagram.dynkin">Dynkin diagram</text>
-        <line class="line" x1="182" y1="310" x2="586" y2="310"/>
-        <line class="edge" x1="214" y1="344" x2="364" y2="344"/>
-        <circle class="node" cx="214" cy="344" r="9"/><circle class="node" cx="264" cy="344" r="9"/><circle class="node" cx="314" cy="344" r="9"/><circle class="node" cx="364" cy="344" r="9"/>
-        <text class="m" x="410" y="338" data-i18n="index.diagram.rank">A₄, rank 4</text>
-        <text class="sub" x="410" y="358" data-i18n="index.diagram.roots">10 positive roots</text>
+        <!-- tile: Mosaic diagram (generic icon) -->
+        <path class="gen" d="M336 151 L345.5 156.5 V167.500 L336 173 L326.5 167.500 V156.500 Z"/>
+        <path class="gen" d="M355 151 L364.5 156.5 V167.500 L355 173 L345.500 167.500 V156.500 Z"/>
+        <path class="gen" d="M345.500 167.500 L355 173 V184 L345.500 189.500 L336 184 V173 Z"/>
+        <path class="gc" d="M336 158 L339.500 160 V164 L336 166 L332.500 164 V160 Z"/>
+        <path class="gc" d="M345.500 174 L349 176 V180 L345.500 182 L342 180 V176 Z"/>
+        <text class="nm mid" x="346" y="216">D</text><text class="sm mid" x="346" y="232">Mosaic diagram</text>
+
+        <!-- panels column -->
+        <text class="ui" x="426" y="76">Panels</text>
+        <rect class="ba" x="556" y="60" width="78" height="24" rx="3"/><text class="ui acc mid" x="595" y="76">Add panel</text>
+        <rect class="panel" x="424" y="94" width="210" height="312" rx="4"/>
+        <circle class="grip" cx="433" cy="112" r="1"/><circle class="grip" cx="437" cy="112" r="1"/><circle class="grip" cx="433" cy="117" r="1"/><circle class="grip" cx="437" cy="117" r="1"/><circle class="grip" cx="433" cy="122" r="1"/><circle class="grip" cx="437" cy="122" r="1"/>
+        <text class="ui" x="446" y="121">Statistics</text>
+        <text class="sm mid" x="590" y="121">↑</text><text class="sm mid" x="603" y="121">↓</text><text class="sm mid" x="617" y="121">×</text>
+        <line class="line" x1="424" y1="134" x2="634" y2="134"/>
+        <text class="sm" x="436" y="152">Young diagram <tspan font-style="italic" font-family="var(--serif)">λ</tspan></text>
+        <rect class="ctl" x="436" y="158" width="186" height="22" rx="3"/>
+        <text class="ct" x="444" y="173">lambda · Partition (3, 2, 1)</text>
+        <path class="chev" d="M608 166 l4 4 l4 -4"/>
+
+        <text class="lab" x="436" y="206">Size |<tspan font-style="italic">λ</tspan>|</text><text class="val" x="622" y="206">6</text><line class="dash" x1="436" y1="214" x2="622" y2="214"/>
+        <text class="lab" x="436" y="232">Shape <tspan font-style="italic">λ</tspan></text><text class="val" x="622" y="232">(3, 2, 1)</text><line class="dash" x1="436" y1="240" x2="622" y2="240"/>
+        <text class="lab" x="436" y="258">Conjugate <tspan font-style="italic">λ</tspan>′</text><text class="val" x="622" y="258">(3, 2, 1)</text><line class="dash" x1="436" y1="266" x2="622" y2="266"/>
+        <text class="lab" x="436" y="284">∏ hook lengths</text><text class="val" x="622" y="284">45</text><line class="dash" x1="436" y1="292" x2="622" y2="292"/>
+        <text class="lab" x="436" y="310"># standard SYT</text><text class="val" x="622" y="310">16</text><line class="dash" x1="436" y1="318" x2="622" y2="318"/>
+        <text class="lab" x="436" y="336">Max entry <tspan font-style="italic">m</tspan> for SSYT</text>
+        <rect class="ctl" x="584" y="322" width="38" height="19" rx="3"/><text class="val mid" x="603" y="336">5</text><line class="dash" x1="436" y1="344" x2="622" y2="344"/>
+        <text class="lab" x="436" y="362"># semistandard SSYT</text><text class="val" x="622" y="362">280</text>
+      </g>
       </svg>
       <!-- Reflow the same examples on phones; do not shrink 612 units into 312px. -->
       <svg class="mock mock-compact" viewBox="0 0 320 450" role="img" focusable="false" aria-labelledby="compact-title compact-description">
         <title id="compact-title" data-i18n="index.diagram.title">Math Workspace sketch</title>
-        <desc id="compact-description" data-i18n="index.diagram.description">An Assets list beside four calculators. The partition (4, 2, 1) has 35 standard tableaux. O(1) on the projective plane has Euler characteristic 3. The matrix with rows (1, 2) and (3, 4) has determinant minus 2. The A4 Dynkin diagram has rank 4 and 10 positive roots.</desc>
+        <desc id="compact-description" data-i18n="index.diagram.description">Assets tiles for a Young diagram, a Lie type, a matrix and a mosaic diagram, beside a Statistics panel for the Young diagram λ = (3, 2, 1): size 6, hook length product 45, 16 standard tableaux, and 280 semistandard tableaux with entries at most 5.</desc>
+        <g lang="en" data-i18n-ignore>
         <rect class="shadow" x="8" y="8" width="310" height="440" rx="6"/>
         <rect class="frame" x="1" y="1" width="310" height="440" rx="6"/>
-        <text class="ui" x="13" y="24" data-i18n="index.diagram.session">untitled session</text>
-        <path class="line" d="M1 36H311M95 36V441"/>
-        <text class="cap" x="12" y="61" data-i18n="index.diagram.assets">Assets</text>
-        <text class="m" x="12" y="89" font-style="italic">X</text>
-        <text class="sub" x="12" y="109" data-i18n="index.diagram.variety">variety, P²</text>
-        <rect class="sel" x="2" y="123" width="92" height="59"/>
-        <rect class="selbar" x="2" y="123" width="3" height="59"/>
-        <text class="m" x="12" y="145" font-style="italic">F</text>
-        <text class="sub" x="12" y="167"><tspan data-i18n="index.diagram.sheafSpace">O(1) on </tspan><tspan font-family="var(--serif)" font-style="italic">X</tspan></text>
-        <text class="m" x="12" y="205" font-style="italic">i</text>
-        <text class="sub" x="12" y="225">P¹ → <tspan font-family="var(--serif)" font-style="italic">X</tspan></text>
-        <rect class="panel" x="105" y="47" width="196" height="153" rx="4"/>
-        <text class="cap" x="115" y="67" data-i18n="index.diagram.young">Young diagram</text>
-        <path class="line" d="M105 77H301"/>
-        <path class="cell" d="M116 88h22v22h-22zM138 88h22v22h-22zM160 88h22v22h-22zM182 88h22v22h-22zM116 110h22v22h-22zM138 110h22v22h-22zM116 132h22v22h-22z"/>
-        <text class="m" x="115" y="173"><tspan font-style="italic">λ</tspan> = (4, 2, 1)</text>
-        <text class="sub" x="115" y="190" data-i18n="index.diagram.tableaux">35 standard tableaux</text>
-        <rect class="panel" x="105" y="210" width="196" height="62" rx="4"/>
-        <text class="cap" x="115" y="230" data-i18n="index.diagram.sheaf">Sheaf</text>
-        <path class="line" d="M105 239H301"/>
-        <text class="m" x="115" y="260" data-i18n="index.diagram.sheafP2">O(1) on P²</text>
-        <text class="mb" x="244" y="260"><tspan font-style="italic">χ</tspan> = 3</text>
-        <rect class="panel" x="105" y="282" width="196" height="69" rx="4"/>
-        <text class="cap" x="115" y="302" data-i18n="index.diagram.matrix">Matrix</text>
-        <path class="line" d="M105 310H301"/>
-        <path class="bracket" d="M119 316h-4v29h4M164 316h4v29h-4"/>
-        <text class="m" x="123" y="327">1</text><text class="m" x="147" y="327">2</text>
-        <text class="m" x="123" y="343">3</text><text class="m" x="147" y="343">4</text>
-        <text class="m" x="204" y="336">det = −2</text>
-        <rect class="panel" x="105" y="361" width="196" height="70" rx="4"/>
-        <text class="cap" x="115" y="381" data-i18n="index.diagram.dynkin">Dynkin diagram</text>
-        <path class="line" d="M105 390H301"/>
-        <path class="edge" d="M120 405H180"/>
-        <circle class="node" cx="120" cy="405" r="4"/><circle class="node" cx="140" cy="405" r="4"/><circle class="node" cx="160" cy="405" r="4"/><circle class="node" cx="180" cy="405" r="4"/>
-        <text class="m" x="208" y="410" data-i18n="index.diagram.rank">A₄, rank 4</text>
-        <text class="sub" x="115" y="424" data-i18n="index.diagram.roots">10 positive roots</text>
+        <text class="ttl" x="13" y="26">Math Workspace</text>
+        <line class="line" x1="1" y1="38" x2="311" y2="38"/>
+        <rect class="panel" x="10" y="48" width="292" height="138" rx="4"/>
+        <text class="sm" x="20" y="66">Main · Assets</text>
+        <rect class="ctl" x="96" y="52" width="196" height="20" rx="3"/><text class="ct" x="104" y="66">Open view…</text><path class="chev" d="M276 60 l4 4 l4 -4"/>
+        <path class="tab" d="M20 96 V82 a3 3 0 0 1 3 -3 H66 a3 3 0 0 1 3 3 V96"/><text class="sx2" x="28" y="92">Assets</text>
+        <rect class="panel" x="20" y="96" width="272" height="82"/>
+        <rect class="cell" x="40" y="108" width="10" height="10"/><rect class="cell" x="50" y="108" width="10" height="10"/><rect class="cell" x="60" y="108" width="10" height="10"/><rect class="cell" x="40" y="118" width="10" height="10"/><rect class="cell" x="50" y="118" width="10" height="10"/><rect class="cell" x="40" y="128" width="10" height="10"/>
+        <text class="nm2 mid" x="55" y="152">lambda</text><text class="sx mid" x="55" y="166">Young diagram</text>
+        <text class="letter2 mid" x="123" y="134">A₃</text><text class="nm2 mid" x="123" y="152">g</text><text class="sx mid" x="123" y="166">Lie type</text>
+        <rect class="atsel" x="160" y="102" width="62" height="72" rx="3"/>
+        <path class="bracket" d="M183 108 H178 V134 H183 M199 108 H204 V134 H199"/>
+        <text class="dig2" x="186" y="118">1</text><text class="dig2" x="197" y="118">2</text><text class="dig2" x="186" y="131">0</text><text class="dig2" x="197" y="131">3</text>
+        <text class="nm2 mid" x="191" y="152">A</text><text class="sx mid" x="191" y="166">Matrix</text>
+        <path class="gen" d="M256.1 119.5 L250.0 123.0 L243.9 119.5 L243.9 112.5 L250.0 109.0 L256.1 112.5 Z"/><path class="gen" d="M268.2 119.5 L262.1 123.0 L256.1 119.5 L256.1 112.5 L262.1 109.0 L268.2 112.5 Z"/><path class="gen" d="M262.1 130.0 L256.1 133.5 L250.0 130.0 L250.0 123.0 L256.1 119.5 L262.1 123.0 Z"/><path class="gc" d="M252.3 117.3 L250.0 118.6 L247.7 117.3 L247.7 114.7 L250.0 113.4 L252.3 114.7 Z"/><path class="gc" d="M258.3 127.8 L256.1 129.1 L253.8 127.8 L253.8 125.2 L256.1 123.9 L258.3 125.2 Z"/>
+        <text class="nm2 mid" x="259" y="152">D</text><text class="sx mid" x="259" y="166">Mosaic diagram</text>
+        <rect class="panel" x="10" y="196" width="292" height="244" rx="4"/>
+        <circle class="grip" cx="19" cy="209" r="1"/><circle class="grip" cx="23" cy="209" r="1"/><circle class="grip" cx="19" cy="214" r="1"/><circle class="grip" cx="23" cy="214" r="1"/><circle class="grip" cx="19" cy="219" r="1"/><circle class="grip" cx="23" cy="219" r="1"/>
+        <text class="ui" x="32" y="219">Statistics</text>
+        <text class="sm mid" x="262" y="219">↑</text><text class="sm mid" x="274" y="219">↓</text><text class="sm mid" x="288" y="219">×</text>
+        <line class="line" x1="10" y1="228" x2="302" y2="228"/>
+        <text class="sm" x="20" y="244">Young diagram <tspan font-style="italic" font-family="var(--serif)">λ</tspan></text>
+        <rect class="ctl" x="20" y="250" width="272" height="20" rx="3"/><text class="ct" x="28" y="264">lambda · Partition (3, 2, 1)</text><path class="chev" d="M276 257 l4 4 l4 -4"/>
+        <text class="lab" x="20" y="292">Size |<tspan font-style="italic">λ</tspan>|</text><text class="val" x="290" y="292">6</text><line class="dash" x1="20" y1="299" x2="290" y2="299"/><text class="lab" x="20" y="314">Shape <tspan font-style="italic">λ</tspan></text><text class="val" x="290" y="314">(3, 2, 1)</text><line class="dash" x1="20" y1="321" x2="290" y2="321"/><text class="lab" x="20" y="336">Conjugate <tspan font-style="italic">λ</tspan>′</text><text class="val" x="290" y="336">(3, 2, 1)</text><line class="dash" x1="20" y1="343" x2="290" y2="343"/><text class="lab" x="20" y="358">∏ hook lengths</text><text class="val" x="290" y="358">45</text><line class="dash" x1="20" y1="365" x2="290" y2="365"/><text class="lab" x="20" y="380"># standard SYT</text><text class="val" x="290" y="380">16</text><line class="dash" x1="20" y1="387" x2="290" y2="387"/><text class="lab" x="20" y="402">Max entry <tspan font-style="italic">m</tspan> for SSYT</text><rect class="ctl" x="252" y="389" width="38" height="18" rx="3"/><text class="val mid" x="271" y="401">5</text><line class="dash" x1="20" y1="409" x2="290" y2="409"/><text class="lab" x="20" y="424"># semistandard SSYT</text><text class="val" x="290" y="424">280</text>
+      </g>
       </svg>
     </div>
   </section>
@@ -403,6 +437,6 @@ dd { margin: 0; max-width: 60ch; overflow-wrap: anywhere; }
 </footer>
 
 <script src="js/site_i18n.js?v=20260826-1" defer></script>
-<script src="js/i18n/index_locales.js?v=20261028-1" defer></script>
+<script src="js/i18n/index_locales.js?v=20261030-1" defer></script>
 </body>
 </html>
