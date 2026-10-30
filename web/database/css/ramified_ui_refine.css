@@ -45,3 +45,43 @@ body.ramified-theme .btn-ghost { color: var(--text); border: 1px solid var(--des
     --design-lab-interface-layout-right: 14px;
   }
 }
+
+/* Connected tabs: preserve all existing control metrics and scrolling. */
+body.ramified-theme .workspace-canvas-tab-group {
+  position: relative;
+  z-index: 1;
+  background: #EEF0EC;
+  color: var(--muted);
+  border-color: var(--border);
+}
+body.ramified-theme .workspace-canvas-tab-group:has(.active) {
+  background: #FFFFFF;
+  color: var(--text);
+}
+body.ramified-theme .workspace-canvas-tab-group:not(:has(.active)):hover {
+  background: #FFFFFF;
+}
+body.ramified-theme .workspace-canvas-tab-group:not(:has(.active))::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--border);
+  pointer-events: none;
+}
+body.ramified-theme .workspace-canvas-tab-group .workspace-canvas-tab {
+  color: inherit;
+}
+body.ramified-theme .workspace-canvas-tab-group .workspace-canvas-tab-close,
+body.ramified-theme .workspace-canvas-tab-group .workspace-canvas-tab-close:hover,
+body.ramified-theme .workspace-canvas-tab-group .workspace-canvas-tab-close:focus-visible {
+  color: inherit;
+  background: transparent;
+}
+/* Overlap the two existing separator strokes; do not resize the content box. */
+body.ramified-theme .workspace-canvas-panes {
+  position: relative;
+  top: -2px;
+}
