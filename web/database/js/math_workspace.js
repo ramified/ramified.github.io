@@ -437,9 +437,15 @@
 
   function renderCanvasTabs() {
     const host = $('#workspace-canvas-tabs'); host.replaceChildren();
+    if (splitView) host.setAttribute('aria-multiselectable', 'true');
+    else host.removeAttribute('aria-multiselectable');
     canvases.forEach((entry, id) => {
       const button = Object.assign(document.createElement('button'), { type: 'button', className: `workspace-canvas-tab${id === activeCanvasId ? ' active' : ''}`, textContent: entry.definition.label });
-      button.dataset.canvasTab = id; button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(id === activeCanvasId));
+      const shownIn = splitView ? (id === paneCanvases.primary ? 'primary' : id === paneCanvases.secondary ? 'secondary' : '') : '';
+      button.dataset.canvasTab = id; button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(splitView ? !!shownIn : id === activeCanvasId));
+      if (shownIn) button.dataset.shownIn = shownIn;
+      if (splitView && id === activeCanvasId) button.setAttribute('aria-current', 'true');
+      if (shownIn && shownIn !== focusedPane) button.title = 'Shown in the other pane. Click to swap sides.';
       button.addEventListener('click', () => {if(Date.now()>=suppressCanvasClickUntil)selectCanvasTab(id);});
       const close = Object.assign(document.createElement('button'), { type: 'button', className: 'workspace-canvas-tab-close', textContent: '×', title: `Close ${entry.definition.label}` });
       close.setAttribute('aria-label', close.title); close.addEventListener('click', (event) => { event.stopPropagation(); closeCanvas(id); });
@@ -447,9 +453,24 @@
     });
   }
 
+  function updateCanvasPaneTitles() {
+    ['primary', 'secondary'].forEach((name) => {
+      const pane = $('#workspace-canvas-pane-' + name);
+      let title = pane.querySelector('.workspace-canvas-pane-title');
+      if (!title) {
+        title = Object.assign(document.createElement('div'), { id: pane.id + '-title', className: 'workspace-canvas-pane-title', hidden: true });
+        pane.prepend(title);
+      }
+      const label = byId.get(paneCanvases[name])?.label || '';
+      title.textContent = label; title.title = label;
+      pane.setAttribute('aria-labelledby', title.id);
+    });
+  }
+
   function renderCanvasView() {
     const panes = $('#workspace-canvas-panes'), primary = $('#workspace-canvas-pane-primary'), secondary = $('#workspace-canvas-pane-secondary'), parking = $('#workspace-canvas-parking');
     panes.dataset.split = String(splitView); secondary.hidden = !splitView;
+    updateCanvasPaneTitles();
     [primary, secondary].forEach((pane) => pane.classList.toggle('focused', pane.dataset.pane === focusedPane));
     canvases.forEach((entry, id) => {
       const paneName = id === paneCanvases.primary ? 'primary' : (splitView && id === paneCanvases.secondary ? 'secondary' : '');
@@ -2739,7 +2760,7 @@
         selectCanvasTab(panel.id);
       },
       removeMain: closeCanvas,
-      title: (id, label) => { const definition = byId.get(id); if (definition && definition.label !== label) { definition.label = label; renderCanvasTabs(); if (activeCanvasId === id) $('#workspace-canvas-name').textContent = label; } },
+      title: (id, label) => { const definition = byId.get(id); if (definition && definition.label !== label) { definition.label = label; updateCanvasPaneTitles(); renderCanvasTabs(); if (activeCanvasId === id) $('#workspace-canvas-name').textContent = label; } },
       focusPane: name => { if (name === 'primary' || name === 'secondary') focusedPane = name; },
       pickerChanged: () => { if (!$('#workspace-card-picker').hidden) renderCardPicker(); scheduleDefaultCleanup(); }
     });
