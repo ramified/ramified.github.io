@@ -98,3 +98,60 @@ body.ramified-theme .workspace-canvas-tab-group .workspace-canvas-tab-close:focu
   color: inherit;
   background: transparent;
 }
+
+/* Split view: retain tab silhouettes without implying a connected pane. */
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='true']) > .workspace-canvas-tabs {
+  background-image: none;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='true']) > .workspace-canvas-tabs .workspace-canvas-tab-group {
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  margin-bottom: 0;
+}
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='true']) > .workspace-canvas-tabs .workspace-canvas-tab-group::after {
+  content: none;
+}
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='true']) > .workspace-canvas-tabs .workspace-canvas-tab-group:has([data-shown-in]) {
+  background: #FFFFFF;
+  color: var(--text);
+}
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='true']) > .workspace-canvas-tabs .workspace-canvas-tab-group:has([aria-current='true']) {
+  border-top: 2px solid var(--accent);
+}
+/* Compensate the extra border pixel without moving the label or changing height. */
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='true']) > .workspace-canvas-tabs .workspace-canvas-tab-group:has([aria-current='true']) > .workspace-canvas-tab {
+  padding-top: 5px;
+}
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='true']) > .workspace-canvas-tabs .workspace-canvas-tab {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='true']) > .workspace-canvas-tabs .workspace-canvas-tab-close {
+  flex: 0 0 auto;
+}
+/* Override hidden's default display only in split view, then visually clip. */
+body.ramified-theme .workspace-canvas-panes[data-split='true'] > .workspace-canvas-pane > .workspace-canvas-pane-title {
+  display: block;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-tabs > .workspace-canvas-tab-group:hover > [data-shown-in='primary']) > .workspace-canvas-panes[data-split='true'] > .workspace-canvas-pane[data-pane='primary'],
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-tabs > .workspace-canvas-tab-group:hover > [data-shown-in='secondary']) > .workspace-canvas-panes[data-split='true'] > .workspace-canvas-pane[data-pane='secondary'] {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
