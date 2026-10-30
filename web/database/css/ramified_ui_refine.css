@@ -1,0 +1,47 @@
+/* Frozen Interface theme selection; removing this stylesheet restores the prior theme. */
+body.ramified-theme {
+  --design-lab-interface-header-padding: 12px;
+  --design-lab-interface-title-size: 24px;
+  --design-lab-interface-subtitle-size: 14px;
+  --design-lab-interface-layout-left: 28px;
+  --design-lab-interface-layout-right: 28px;
+  --design-lab-interface-layout-max: 1500px;
+  --design-lab-interface-secondary-border: #C9D0CA;
+  --bg: #F7F8F5;
+  --workspace-icon-exact: var(--accent);
+}
+
+body.ramified-theme > header {
+        padding-block: var(--design-lab-interface-header-padding);
+        padding-left: max(var(--design-lab-interface-layout-left), calc((100% - var(--design-lab-interface-layout-max)) / 2 + var(--design-lab-interface-layout-left)));
+        padding-right: max(var(--design-lab-interface-layout-right), calc((100% - var(--design-lab-interface-layout-max)) / 2 + var(--design-lab-interface-layout-right)));
+        background: var(--bg); color: var(--text); border-bottom: 1px solid var(--border);
+      }
+      body.ramified-theme > header h1 { font-size: var(--design-lab-interface-title-size); font-weight: 400; line-height: 1.3; }
+      body.ramified-theme > header span { min-width: 0; font: var(--design-lab-interface-subtitle-size)/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--muted); }
+body.ramified-theme .workspace-canvas-pane:has(.workspace-assets-view) { border: 1px solid var(--border); outline: none; }
+      body.ramified-theme .workspace-canvas-pane:has(.workspace-assets-view):focus-within { border-color: var(--accent); }
+      body.ramified-theme .workspace-assets-view:focus-visible { box-shadow: none; }
+body.ramified-theme .btn-ghost { color: var(--text); border: 1px solid var(--design-lab-interface-secondary-border); background: transparent; }
+      body.ramified-theme .btn-ghost:hover { color: var(--accent); border-color: var(--accent); background: transparent; }
+      body.ramified-theme .workspace-canvas-tab-group:has(.active) { border-color: var(--border); }
+      body.ramified-theme .workspace-canvas-tab.active { color: var(--text); }
+      body.ramified-theme .workspace-asset-item[aria-selected='true'] { color: var(--text); border-color: var(--accent); }
+      body.ramified-theme .card-head :is(.workspace-card-tool, .card-pin-btn, .toggle-icon, .drag-handle),
+      body.ramified-theme .workspace-canvas-tab-close { color: var(--muted); background: transparent; }
+      body.ramified-theme .card-head :is(.workspace-card-tool, .card-pin-btn, .toggle-icon, .drag-handle):hover,
+      body.ramified-theme .card-head :is(.workspace-card-tool, .card-pin-btn):focus-visible,
+      body.ramified-theme .workspace-canvas-tab-close:hover,
+      body.ramified-theme .workspace-canvas-tab-close:focus-visible { color: var(--text); background: transparent; }
+      body.ramified-theme .card-head :is(.workspace-card-tool, .card-pin-btn):disabled { color: var(--muted); opacity: .4; }
+      body.ramified-theme .workspace-assets-delete-confirm { border-color: var(--accent2) !important; background: var(--accent2) !important; }
+
+
+
+/* Same responsive gutter values as .math-workspace-layout in math_workspace.css. */
+@media (max-width: 620px) {
+  body.ramified-theme {
+    --design-lab-interface-layout-left: 14px;
+    --design-lab-interface-layout-right: 14px;
+  }
+}
