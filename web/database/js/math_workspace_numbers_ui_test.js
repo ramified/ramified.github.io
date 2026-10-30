@@ -166,7 +166,7 @@ async function run() {
     assert.deepEqual(await read(()=>get(sheaf).data.rank),{kind:'literal',value:'4'},'rank uses the same source control');
     await read(()=>document.querySelector('[data-scalar-value="rank"]').focus());
     await key('a','KeyA',2);await type('0');await read(()=>api.flushAssetInputInstance(api.activeAssetInputInstance()));
-    assert.equal(await read(()=>get(sheaf).data.rank.value),'4','an invalid rank does not overwrite the model');
+    assert.equal(await read(()=>get(sheaf).data.rank.value),'0','rank zero is supported by the original calculator');
     await key('a','KeyA',2);await type('12');await read(()=>document.querySelector('[data-scalar-value="rank"]').blur());
     assert.equal(await read(()=>get(sheaf).data.rank.value),'12');
     await read(()=>{api.bindAssetInputInstance(inlineCurve);document.querySelector('.workspace-scalar-field').scrollIntoView({block:'center'});});

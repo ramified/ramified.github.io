@@ -93,7 +93,7 @@ async function run() {
       ['symmetric-product-curve', '3', '\\operatorname{Sym}^{3}(C)'],
       ['ppav-moduli', '3', '\\mathcal{A}_{2}'],
       ['grassmannian', '4', '\\operatorname{Gr}(2,4)'],
-      ['complete-intersection', '2', 'X_{2,3}'],
+      ['complete-intersection', '3', '\\mathbb{P}^{3}'],
       ['point', '0', 'p'],
       ['projective', '3', '\\mathbb{P}^{3}'],
       ['abelian', '3', 'A'],
@@ -111,12 +111,16 @@ async function run() {
     assert.equal(await read(() => nField.value), '1', 'a parameter prefix is retained even while invalid for this construction');
     assert.equal(await read(() => values()[3]), '4', 'invalid construction parameters do not replace the last valid model');
     await client.send('Input.insertText', { text: '2' });
-    assert.equal(await read(() => document.querySelector('[data-assets-field="n"]') === nField), true, 'live derivation never replaces the focused control');
-    assert.deepEqual(await read(() => values().slice(0, 2)), ['\\operatorname{Gr}(2,12)', '20'], 'dependent fields update during valid parameter entry');
     await read(() => { nField.blur(); api.flushAssetInputInstance(api.activeAssetInputInstance()); });
-    assert.deepEqual(await read(() => values()), ['\\operatorname{Gr}(2,12)', '20', '\\operatorname{Gr}(2,12)', '20']);
+    assert.equal(await read(() => values()[3]), '4', 'dimension 20 is rejected instead of silently clamped');
+    await read(() => { nField.focus(); nField.select(); });
+    await client.send('Input.insertText', { text: '9' });
+    assert.equal(await read(() => document.querySelector('[data-assets-field="n"]') === nField), true, 'live derivation never replaces the focused control');
+    assert.deepEqual(await read(() => values().slice(0, 2)), ['\\operatorname{Gr}(2,9)', '14'], 'dependent fields update during valid parameter entry');
+    await read(() => { nField.blur(); api.flushAssetInputInstance(api.activeAssetInputInstance()); });
+    assert.deepEqual(await read(() => values()), ['\\operatorname{Gr}(2,9)', '14', '\\operatorname{Gr}(2,9)', '14']);
     await read(() => { const backup = MathWorkspaceObjectPanels.exportText('workspace'); MathWorkspaceObjectPanels.importText('workspace', backup); });
-    assert.equal(await read(() => api.localAssetSnapshot().assets.find(a => a.id === asset.id).autoName), '\\operatorname{Gr}(2,12)', 'automatic naming survives backup restoration');
+    assert.equal(await read(() => api.localAssetSnapshot().assets.find(a => a.id === asset.id).autoName), '\\operatorname{Gr}(2,9)', 'automatic naming survives backup restoration');
     await read(async () => {
       asset = api.createObjectAsset('variety', { name: 'X' });
       await api.assetRequest('select-for-modify', { ref: asset }); changeType('curve');

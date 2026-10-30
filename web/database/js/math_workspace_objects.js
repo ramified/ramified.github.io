@@ -210,7 +210,7 @@
     return degree === 0 ? [] : mode === 'symmetric' ? [degree] : Array(degree).fill(1);
   }
   const definitions = [
-    {id:'sheaf-input',label:'Full Input & Constructions',engine:'complex',sheafInput:true,light:true,slots:[slot('asset','Modify object',null,{kinds:['variety','sheaf','map'],optional:true,emptyLabel:'Create / construct…'})]},
+    {id:'sheaf-input',label:'Input',engine:'complex',sheafInput:true,light:true,legacy:true,slots:[slot('asset','Modify object',null,{kinds:['variety','sheaf','map'],optional:true,emptyLabel:'Create / construct…'})]},
     {id:'complex-diagrams',label:'Complexes & Filtrations',engine:'complex',assetView:true,readOnly:true,structureScene:true,light:true,slots:[]},
     ...structures.kinds.map(kind=>({id:kind+'-input',label:structures.labels[kind]+' Input',input:kind})),
     {id:'complex-view',label:'Complex Display',engine:'complex',assetView:true,readOnly:true,viewRole:'asset',light:true,structure:true,slots:[slot('asset','Complex','complex')]},
@@ -463,11 +463,13 @@
       if (renderer.applying || panel.refreshing || !renderer.editor) return;
       if(panel.definition.sheafInput){
         if(!renderer.editor.objectIO('input-changed'))return;
+        if(renderer.sourceRevision!==snapshot.revision){feedback(panel,'Assets changed while this draft was open. Reload saved inputs before applying this draft.',true);return;}
         renderer.committing=true;
         try{
           const result=api.commitSheafGraph(renderer.editor.objectIO('input-graph'),renderer.managedKeys||[]);
           renderer.editor.objectIO('input-ack',{ids:result.ids,assets:snapshot.assets});renderer.managedKeys=result.keys;
-          panel.computation.signature=JSON.stringify(snapshot.assets);
+          renderer.sourceRevision=snapshot.revision;
+          panel.computation.signature=JSON.stringify([panel.computation.refs.asset,snapshot.assets.filter(a=>['variety','sheaf','map','number','field','complex'].includes(a.kind)&&snapshot.diagnostics?.[keyOf(a)]?.valid!==false)]);
           feedback(panel,'Saved to Assets.');
         }catch(error){feedback(panel,error.message,true);}
         finally{renderer.committing=false;}
@@ -1057,9 +1059,9 @@
         if(panel.definition.sheafInput){
           if(!panel.propertyRenderer)panel.propertyRenderer=createNative(panel,'complex','property');
           const renderer=panel.propertyRenderer,assets=snapshot.assets.filter(a=>['variety','sheaf','map','number','field','complex'].includes(a.kind)&&snapshot.diagnostics?.[keyOf(a)]?.valid!==false),signature=JSON.stringify([panel.computation.refs.asset,assets]);
-          if(!renderer.committing&&signature!==panel.computation.signature){
+          if(!renderer.committing&&signature!==panel.computation.signature&&(!renderer.editor.objectIO('input-dirty')||renderer.sourceTarget!==panel.computation.refs.asset)){
             renderer.applying=true;
-            try{renderer.editor.applyAssets({assets},refOf(get(panel.computation.refs.asset)));renderer.managedKeys=assets.filter(a=>['variety','sheaf','map'].includes(a.kind)).map(keyOf);panel.computation.signature=signature;feedback(panel);}
+            try{renderer.editor.objectIO('input-reset');renderer.editor.applyAssets({assets},refOf(get(panel.computation.refs.asset)));renderer.managedKeys=assets.filter(a=>['variety','sheaf','map','number'].includes(a.kind)).map(keyOf);renderer.sourceRevision=snapshot.revision;renderer.sourceTarget=panel.computation.refs.asset;panel.computation.signature=signature;feedback(panel);}
             catch(error){feedback(panel,error.message,true);}
             finally{renderer.applying=false;}
           }
@@ -1244,6 +1246,7 @@
       const panel = { id, definition, node, head, title, body, references, controls, message, renderArea, selectors: [], renderers: new Map(), assetKey:definition.overview||definition.structureScene?'':assetKey, location: 'hidden', closed: false, collapsed: false, refreshing: false, comparison:!!(options.newInstance||options.comparison),comparisonIndex:options.comparisonIndex };
       node.dataset.panelRole=definition.input?'modify':definition.assetView||definition.scene||definition.slicingScene||['matrix-view','slice'].includes(type)?'view':'property';
       panels.set(id, panel); head.append(title, element('em', 'toggle-icon', '▾')); body.append(references, controls, message, renderArea); node.append(head, body);
+      if(definition.sheafInput)controls.append(button('Reload saved inputs',()=>{panel.propertyRenderer?.editor.objectIO('input-reset');panel.computation.signature='';refreshPanel(panel);},'Discard this draft and reload the saved Assets'));
       if(type==='dynkin-view'){
         panel.dynkinRepair=button('Reset markings and directions',()=>{const asset=get(panel.computation.refs.dynkin);if(asset)api.update(refOf(asset),{data:{...asset.data,vertices:[1],quiver:null}});},'Reset invalid diagram data to vertex 1 without quiver directions');
         panel.dynkinRepair.hidden=true;body.insertBefore(panel.dynkinRepair,renderArea);

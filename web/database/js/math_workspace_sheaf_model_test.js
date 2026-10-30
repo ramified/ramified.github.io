@@ -1,0 +1,20 @@
+'use strict';
+const assert=require('node:assert/strict'),model=require('./math_workspace_sheaf_model.js');
+const variety=(id,type,data)=>({kind:'variety',id,type,data});
+assert.deepEqual(model.degrees(''),[]);assert.deepEqual(model.degrees('0'),[]);assert.deepEqual(model.degrees('2; 3|4'),[2,3,4]);
+for(const invalid of ['100','2a','-1','1,1,1,1,1,1,1,1,1'])assert.throws(()=>model.degrees(invalid));
+assert.equal(model.dimension(variety('X','complete-intersection',{degrees:'',ambientDimension:3}),[]),3);
+assert.equal(model.dimension(variety('X','symmetric-product-curve',{power:0}),[]),0);
+for(const [type,data]of [['abstract',{dimension:20}],['ppav-moduli',{genus:6}],['grassmannian',{r:4,n:4}],['grassmannian',{r:2,n:12}]])assert.throws(()=>model.dimension(variety('X',type,data),[]));
+const X=variety('X','projective',{dimension:3}),Y=variety('Y','projective',{dimension:2}),Z=variety('Z','point',{}),f={kind:'map',id:'f',type:'ordinary',data:{domain:'variety:X',codomain:'variety:Y'}},g={kind:'map',id:'g',type:'ordinary',data:{domain:'variety:Y',codomain:'variety:Z'}},h={kind:'map',id:'h',type:'composition',data:{domain:'map:f',codomain:'map:g'}};
+const assets=[X,Y,Z,f,g,h];assert.deepEqual(model.endpoints(h,assets),{domain:'variety:X',codomain:'variety:Z'});
+const ids=new Map(assets.map(a=>[a.kind+':'+a.id,a.id]));assert.equal(model.project(h,ids,assets).codomainId,'Z');
+g.data.domain='variety:X';assert.match(model.issues(h,assets)[0],/second map/);g.data.domain='variety:Y';
+const E={kind:'sheaf',id:'E',type:'locally-free',data:{base:'variety:X'}},F={kind:'sheaf',id:'F',type:'locally-free',data:{base:'variety:Y'}},sum={kind:'sheaf',id:'S',type:'direct-sum',data:{first:'sheaf:E',second:'sheaf:F'}};
+assert.ok(model.issues(sum,[...assets,E,F]).length);F.data.base='variety:X';assert.deepEqual(model.issues(sum,[...assets,E,F]),[]);
+const self={kind:'sheaf',id:'T',type:'self-direct-sum',data:{parent:'sheaf:E',multiplicity:'2',workspaceSheafComplex:{payload:{id:'T2',construction:{type:'self-direct-sum',multiplicity:'2'}}}}};
+assert.ok(model.editedData(self,self.type,self.data).workspaceSheafComplex.payload.construction);
+assert.deepEqual(model.editedData(self,self.type,{...self.data,multiplicity:'3'}).workspaceSheafComplex.payload,{id:'T2'});
+assert.equal(self.data.workspaceSheafComplex.payload.construction.multiplicity,'2');
+console.log('Sheaf model: CI parsing, range boundaries, composition endpoints, dependent bases and saved construction invalidation passed.');
+

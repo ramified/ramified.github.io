@@ -63,7 +63,7 @@
         if(a.type==='abel-jacobi'){
           if(!['curve','symmetric-product-curve'].includes(from.type))throw new Error('Abel–Jacobi requires a curve or symmetric product of a curve.');
           const c=to.data.workspaceSheafComplex?.payload?.construction||to.data.construction;
-          if(c?.type!=='jacobian'||![key(from),from.data.workspaceSheafComplex?.payload?.id].includes(c.sourceId||c.curveId))throw new Error('Use Full Input to create or select the source’s Jacobian.');
+          if(c?.type!=='jacobian'||![key(from),from.data.workspaceSheafComplex?.payload?.id].includes(c.sourceId||c.curveId))throw new Error('Use Input to create or select the source’s Jacobian.');
         }
         return [];
       }
@@ -77,7 +77,7 @@
         const m=get(d.map),e=endpoints(m,assets),from=get(e.domain),to=get(e.codomain);
         if(from?.kind!=='variety'||to?.kind!=='variety')throw new Error('This construction requires a map of varieties.');
         if(['normal-bundle','conormal-bundle'].includes(a.type)&&dimension(from,assets)>dimension(to,assets))throw new Error('An embedding cannot have negative codimension.');
-        if(['ideal-sheaf','normal-bundle','conormal-bundle','relative-tangent','relative-cotangent'].includes(a.type)&&!d.workspaceSheafComplex?.payload?.construction&&d.confirmed!==true)throw new Error('Confirm the geometric hypotheses in Full Input before using this construction.');
+        if(['ideal-sheaf','normal-bundle','conormal-bundle','relative-tangent','relative-cotangent'].includes(a.type)&&!d.workspaceSheafComplex?.payload?.construction&&d.confirmed!==true)throw new Error('Confirm the geometric hypotheses in Input before using this construction.');
         if(a.type==='map-operation'){const parent=get(d.parent);if(!parent||base(parent,assets)!==(d.operation==='pushforward'?e.domain:e.codomain))throw new Error('Choose a source sheaf on the correct side of the map.');}
       }
       return [];
@@ -100,6 +100,14 @@
     return n;
     function getKind(k){return assets.find(a=>key(a)===k)?.kind||null;}
   }
-  const api={direct,degrees,dimension,endpoints,base,references,issues,remap,project};
+  function editedData(previous,type,data){
+    if(previous.kind!=='sheaf'||!data.workspaceSheafComplex?.payload?.construction)return data;
+    const fields=['base','first','second','parents','exponents','parent','map','operation','multiplicity','partition','exact','proper','confirmed'];
+    if(type===previous.type&&!fields.some(k=>JSON.stringify(previous.data[k])!==JSON.stringify(data[k])))return data;
+    const next=copy(data);delete next.construction;
+    next.workspaceSheafComplex={payload:{id:data.workspaceSheafComplex.payload.id}};
+    return next;
+  }
+  const api={direct,degrees,dimension,endpoints,base,references,issues,remap,project,editedData};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.MathWorkspaceSheafModel=api;
 })(typeof window!=='undefined'?window:globalThis);

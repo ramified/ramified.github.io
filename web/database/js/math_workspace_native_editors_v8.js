@@ -63,7 +63,7 @@ if(!globalThis.MathWorkspaceSheafModel){(function(root){
         if(a.type==='abel-jacobi'){
           if(!['curve','symmetric-product-curve'].includes(from.type))throw new Error('Abel–Jacobi requires a curve or symmetric product of a curve.');
           const c=to.data.workspaceSheafComplex?.payload?.construction||to.data.construction;
-          if(c?.type!=='jacobian'||![key(from),from.data.workspaceSheafComplex?.payload?.id].includes(c.sourceId||c.curveId))throw new Error('Use Full Input to create or select the source’s Jacobian.');
+          if(c?.type!=='jacobian'||![key(from),from.data.workspaceSheafComplex?.payload?.id].includes(c.sourceId||c.curveId))throw new Error('Use Input to create or select the source’s Jacobian.');
         }
         return [];
       }
@@ -77,7 +77,7 @@ if(!globalThis.MathWorkspaceSheafModel){(function(root){
         const m=get(d.map),e=endpoints(m,assets),from=get(e.domain),to=get(e.codomain);
         if(from?.kind!=='variety'||to?.kind!=='variety')throw new Error('This construction requires a map of varieties.');
         if(['normal-bundle','conormal-bundle'].includes(a.type)&&dimension(from,assets)>dimension(to,assets))throw new Error('An embedding cannot have negative codimension.');
-        if(['ideal-sheaf','normal-bundle','conormal-bundle','relative-tangent','relative-cotangent'].includes(a.type)&&!d.workspaceSheafComplex?.payload?.construction&&d.confirmed!==true)throw new Error('Confirm the geometric hypotheses in Full Input before using this construction.');
+        if(['ideal-sheaf','normal-bundle','conormal-bundle','relative-tangent','relative-cotangent'].includes(a.type)&&!d.workspaceSheafComplex?.payload?.construction&&d.confirmed!==true)throw new Error('Confirm the geometric hypotheses in Input before using this construction.');
         if(a.type==='map-operation'){const parent=get(d.parent);if(!parent||base(parent,assets)!==(d.operation==='pushforward'?e.domain:e.codomain))throw new Error('Choose a source sheaf on the correct side of the map.');}
       }
       return [];
@@ -100,7 +100,15 @@ if(!globalThis.MathWorkspaceSheafModel){(function(root){
     return n;
     function getKind(k){return assets.find(a=>key(a)===k)?.kind||null;}
   }
-  const api={direct,degrees,dimension,endpoints,base,references,issues,remap,project};
+  function editedData(previous,type,data){
+    if(previous.kind!=='sheaf'||!data.workspaceSheafComplex?.payload?.construction)return data;
+    const fields=['base','first','second','parents','exponents','parent','map','operation','multiplicity','partition','exact','proper','confirmed'];
+    if(type===previous.type&&!fields.some(k=>JSON.stringify(previous.data[k])!==JSON.stringify(data[k])))return data;
+    const next=copy(data);delete next.construction;
+    next.workspaceSheafComplex={payload:{id:data.workspaceSheafComplex.payload.id}};
+    return next;
+  }
+  const api={direct,degrees,dimension,endpoints,base,references,issues,remap,project,editedData};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.MathWorkspaceSheafModel=api;
 })(typeof window!=='undefined'?window:globalThis);
 }
@@ -192889,7 +192897,7 @@ ${arrows.join("\n")}` : "";
         state.varieties = assets.filter((asset) => asset.kind === "variety").map((asset) => project(asset, __workspaceVarietyFromAsset));
         state.sheaves = assets.filter((asset) => asset.kind === "sheaf").map((asset) => project(asset, __workspaceSheafFromAsset));
         state.maps = assets.filter((asset) => asset.kind === "map").map((asset) => project(asset, __workspaceMapFromAsset));
-        state.sequences = assets.filter((a) => a.kind === "complex" && a.data.legacy?.nativeSequence).map((a) => window2.MathWorkspaceSheafModel.remap(a.data.nativeSequence, ids));
+        state.sequences = assets.filter((a) => a.kind === "complex" && a.data.legacy?.nativeSequence).map((a) => window2.MathWorkspaceSheafModel.remap(a.data.legacy.nativeSequence, ids));
         __workspaceMaterializeSheaves(assets, ids);
         state.sheaves.forEach((sheaf) => {
           if (previousBases.get(sheaf.__workspaceAssetKey) !== sheaf.baseVarietyId && !Number.isFinite(sheaf.labelX)) {
@@ -193553,6 +193561,7 @@ ${arrows.join("\n")}` : "";
       __workspaceSheafFromAsset = (asset, ids, properties) => window2.MathWorkspaceSheafModel.project(asset, ids, __workspaceAssetsCurrent, properties);
       __workspaceMapFromAsset = (asset, ids, properties) => window2.MathWorkspaceSheafModel.project(asset, ids, __workspaceAssetsCurrent, properties);
       function __workspaceMaterializeSheaves(assets, ids) {
+        state.nextObjectId = Math.max(state.nextObjectId, ...[...state.varieties, ...state.sheaves, ...state.maps, ...state.sequences].map((s) => Number(/^[A-Za-z]+(\d+)$/.exec(s.id)?.[1] || 0) + 1));
         const done = /* @__PURE__ */ new Set(), visiting = /* @__PURE__ */ new Set();
         function visit(asset) {
           if (done.has(__workspaceAssetKey(asset))) return;
@@ -193609,7 +193618,7 @@ ${arrows.join("\n")}` : "";
               args.type = asset.type === "relative-cotangent" ? "cotangent" : "tangent";
               fresh = createRelativeSheafConstruction(args);
             }
-            if (!fresh) throw new Error("Could not construct " + asset.name + ". Open Full Input to repair it.");
+            if (!fresh) throw new Error("Could not construct " + asset.name + ". Open Input to repair it.");
             const oldId = fresh.id, newId = target.id;
             Object.assign(target, fresh, { id: newId, __workspaceAssetKey: __workspaceAssetKey(asset), name: asset.name });
             state.sheaves = state.sheaves.filter((s) => s !== fresh);
@@ -193626,7 +193635,8 @@ ${arrows.join("\n")}` : "";
         }
         assets.filter((a) => a.kind === "sheaf").forEach(visit);
       }
-      let __workspaceFullInput = false, __workspaceInputBaseline = "", __workspaceInputApplying = false;
+      let __workspaceFullInput = false, __workspaceInputBaseline = "", __workspaceInputApplying = false, __workspaceNumberBaseline = /* @__PURE__ */ new Map(), __workspaceInputDirty = false;
+      const __workspaceNumberValue = (n) => JSON.stringify([n.name, n.hasValue, n.value, n.replaceWithValue, n.positive]);
       function __workspaceInputGraph() {
         const entries = __workspaceCollectAssets();
         for (const entry of entries) {
@@ -193645,7 +193655,17 @@ ${arrows.join("\n")}` : "";
         }
         return {
           entries,
-          numbers: state.globalInvariants.filter((n) => n.auto !== true && !__workspaceAssetsCurrent.some((a) => a.kind === "number" && window2.MathWorkspaceNumbers.symbol(a) === n.name)).map((n) => __workspaceClone(n)),
+          numbers: state.globalInvariants.filter((n) => n.auto !== true).map((n) => {
+            const asset = __workspaceAssetsCurrent.find((a) => a.kind === "number" && (__workspaceAssetKey(a) === n.__workspaceAssetKey || window2.MathWorkspaceNumbers.symbol(a) === n.name));
+            if (!asset) return __workspaceClone(n);
+            const changed = __workspaceNumberBaseline.has(n.id) && __workspaceNumberBaseline.get(n.id) !== __workspaceNumberValue(n);
+            return {
+              ...__workspaceClone(n),
+              __workspaceAssetKey: __workspaceAssetKey(asset),
+              name: n.name === window2.MathWorkspaceNumbers.symbol(asset) ? asset.name : n.name,
+              ...!changed ? { hasValue: asset.data.hasValue, value: asset.data.value, replaceWithValue: asset.data.replaceWithValue, positive: asset.data.positive } : {}
+            };
+          }),
           sequences: __workspaceClone(state.sequences),
           activeKey: [...state.sheaves, ...state.maps, ...state.varieties].find((s) => [state.activeSheafId, state.activeMapId, state.activeVarietyId].includes(s.id))?.__workspaceAssetKey || "",
           activeNativeId: state.activeSheafId || state.activeMapId || state.activeVarietyId || null
@@ -193671,6 +193691,7 @@ ${arrows.join("\n")}` : "";
                 state.inputMode = "create";
                 syncInputModeControls();
               }
+              __workspaceNumberBaseline = new Map(state.globalInvariants.map((n) => [n.id, __workspaceNumberValue(n)]));
               __workspaceInputBaseline = __workspaceInputSignature();
             }
             return result;
@@ -193683,6 +193704,12 @@ ${arrows.join("\n")}` : "";
           __workspaceFullInput = true;
           const input = document2.getElementById("input-card");
           __editor.setCardVisible("input-card", true);
+          input.addEventListener("input", () => {
+            if (!__workspaceInputApplying) __workspaceInputDirty = true;
+          }, { capture: true });
+          input.addEventListener("change", () => {
+            if (!__workspaceInputApplying) __workspaceInputDirty = true;
+          }, { capture: true });
           input.classList.remove("calculator-card-user-hidden", "workspace-card-hidden");
           input.hidden = false;
           const style = document2.createElement("style");
@@ -193696,10 +193723,19 @@ ${arrows.join("\n")}` : "";
           return true;
         },
         io(action, value) {
+          if (action === "input-dirty") return __workspaceInputDirty;
+          if (action === "input-reset") {
+            __workspaceInputDirty = false;
+            return true;
+          }
           if (action === "input-graph") return __workspaceInputGraph();
           if (action === "input-changed") return __workspaceFullInput && !__workspaceInputApplying && __workspaceInputSignature() !== __workspaceInputBaseline;
           if (action === "input-ack") {
-            for (const item of [...state.varieties, ...state.sheaves, ...state.maps]) if (value?.[item.id]) item.__workspaceAssetKey = value[item.id];
+            __workspaceInputDirty = false;
+            const ids = value.ids || value;
+            for (const item of [...state.varieties, ...state.sheaves, ...state.maps, ...state.globalInvariants]) if (ids?.[item.id]) item.__workspaceAssetKey = ids[item.id];
+            if (value.assets) __workspaceAssetsCurrent = value.assets;
+            __workspaceNumberBaseline = new Map(state.globalInvariants.map((n) => [n.id, __workspaceNumberValue(n)]));
             __workspaceInputBaseline = __workspaceInputSignature();
             return true;
           }

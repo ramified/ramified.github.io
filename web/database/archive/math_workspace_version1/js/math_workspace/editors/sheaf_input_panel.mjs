@@ -4,6 +4,7 @@ __workspaceVarietyFromAsset=(asset,ids,properties)=>window.MathWorkspaceSheafMod
 __workspaceSheafFromAsset=(asset,ids,properties)=>window.MathWorkspaceSheafModel.project(asset,ids,__workspaceAssetsCurrent,properties);
 __workspaceMapFromAsset=(asset,ids,properties)=>window.MathWorkspaceSheafModel.project(asset,ids,__workspaceAssetsCurrent,properties);
 function __workspaceMaterializeSheaves(assets,ids){
+  state.nextObjectId=Math.max(state.nextObjectId,...[...state.varieties,...state.sheaves,...state.maps,...state.sequences].map(s=>Number(/^[A-Za-z]+(\d+)$/.exec(s.id)?.[1]||0)+1));
   const done=new Set(),visiting=new Set();
   function visit(asset){
     if(done.has(__workspaceAssetKey(asset)))return;if(visiting.has(__workspaceAssetKey(asset)))throw new Error('Cyclic sheaf construction.');
@@ -28,7 +29,7 @@ function __workspaceMaterializeSheaves(assets,ids){
       else if(asset.type==='normal-bundle')fresh=createNormalBundleConstruction(args);
       else if(asset.type==='conormal-bundle')fresh=createConormalBundleConstruction(args);
       else if(['relative-tangent','relative-cotangent'].includes(asset.type)){args.type=asset.type==='relative-cotangent'?'cotangent':'tangent';fresh=createRelativeSheafConstruction(args);}
-      if(!fresh)throw new Error('Could not construct '+asset.name+'. Open Full Input to repair it.');
+      if(!fresh)throw new Error('Could not construct '+asset.name+'. Open Input to repair it.');
       const oldId=fresh.id,newId=target.id;
       Object.assign(target,fresh,{id:newId,__workspaceAssetKey:__workspaceAssetKey(asset),name:asset.name});
       state.sheaves=state.sheaves.filter(s=>s!==fresh);
@@ -43,7 +44,7 @@ function __workspaceMaterializeSheaves(assets,ids){
   }
   assets.filter(a=>a.kind==='sheaf').forEach(visit);
 }
-let __workspaceFullInput=false,__workspaceInputBaseline='',__workspaceInputApplying=false,__workspaceNumberBaseline=new Map();
+let __workspaceFullInput=false,__workspaceInputBaseline='',__workspaceInputApplying=false,__workspaceNumberBaseline=new Map(),__workspaceInputDirty=false;
 const __workspaceNumberValue=n=>JSON.stringify([n.name,n.hasValue,n.value,n.replaceWithValue,n.positive]);
 function __workspaceInputGraph(){
   const entries=__workspaceCollectAssets();
@@ -88,15 +89,20 @@ __editor.extendAssetAdapter(previous=>({...previous,
     if(config.operation!=='sheaf-input')return previous.panel?.(config)??false;
     __workspaceFullInput=true;
     const input=document.getElementById('input-card');__editor.setCardVisible('input-card',true);
+    input.addEventListener('input',()=>{if(!__workspaceInputApplying)__workspaceInputDirty=true;},{capture:true});
+    input.addEventListener('change',()=>{if(!__workspaceInputApplying)__workspaceInputDirty=true;},{capture:true});
     input.classList.remove('calculator-card-user-hidden','workspace-card-hidden');input.hidden=false;
     const style=document.createElement('style');style.textContent='.workspace-full-input{display:grid;grid-template-columns:minmax(260px,1fr) minmax(280px,1.4fr);height:100%;gap:10px}.workspace-full-input>#input-card{height:auto;max-height:100%;overflow:auto}.workspace-full-input>.sheaf-stage{min-height:340px;height:100%!important}.workspace-native-surface[data-surface-role="view"] .workspace-native-content:has(.workspace-full-input){overflow:auto}@media(max-width:800px){.workspace-full-input{grid-template-columns:1fr;height:auto}.workspace-full-input>.sheaf-stage{height:360px!important}}';document.head.append(style);
     const content=document.createElement('div');content.className='workspace-full-input';content.append(input,refs.canvas.closest('.sheaf-stage'));
     __editor.mountObjectSurfaces({content:[content]});__workspaceSetProjectionReadOnly(false);return true;
   },
   io(action,value){
+    if(action==='input-dirty')return __workspaceInputDirty;
+    if(action==='input-reset'){__workspaceInputDirty=false;return true;}
     if(action==='input-graph')return __workspaceInputGraph();
     if(action==='input-changed')return __workspaceFullInput&&!__workspaceInputApplying&&__workspaceInputSignature()!==__workspaceInputBaseline;
     if(action==='input-ack'){
+      __workspaceInputDirty=false;
       const ids=value.ids||value;
       for(const item of [...state.varieties,...state.sheaves,...state.maps,...state.globalInvariants])if(ids?.[item.id])item.__workspaceAssetKey=ids[item.id];
       if(value.assets)__workspaceAssetsCurrent=value.assets;

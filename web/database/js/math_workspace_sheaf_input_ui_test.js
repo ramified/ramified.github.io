@@ -44,9 +44,30 @@ const {startServer,launchBrowser,stopBrowser,waitFor,evaluate}=require('./math_w
    const decode=v=>Array.isArray(v)?v.map(decode):v?.$kind==='object'?Object.fromEntries(v.entries.map(([k,x])=>[k,decode(x)])):v;const raw=decode(editor.capture().model),state=raw.state||raw;
    return {debug:Object.fromEntries(Object.entries(state).filter(([k])=>/product|inputMode|canvasPick|activeVariety/.test(k))),ui:['input-mode','add-object-kind','combined-type','add-object','product-factor-a','product-factor-b'].map(id=>({id,value:root.getElementById(id).value,text:root.getElementById(id).textContent.slice(0,60),disabled:root.getElementById(id).disabled})),products,projections:snapshot.assets.filter(a=>a.kind==='map'&&a.data.workspaceSheafComplex?.payload?.construction?.type==='projection').length,message:auditInput.message.textContent,nativeProducts:editor.objectIO('input-graph').entries.filter(e=>e.type==='product')};
   });
-  console.log('combined',JSON.stringify(combined));assert.equal(combined.products.length,1,combined.message);assert.equal(combined.products[0].data.dimension,'5');assert.equal(combined.projections,2);
+  assert.equal(combined.products.length,1,combined.message);assert.equal(combined.products[0].data.dimension,'5');assert.equal(combined.projections,2);
   const reopened=await read(()=>{auditInput.computation.signature='';MathWorkspaceObjectPanels.refresh();const graph=auditInput.propertyRenderer.editor.objectIO('input-graph');return graph.entries.find(e=>e.assetKey===MathWorkspaceAssetsTest.assetKey(selfAsset)).data.workspaceSheafComplex.payload;});
   assert.equal(reopened.construction.multiplicity,'12');assert.equal(reopened.rank,'24');
+  const constructions=await read(()=>{
+   const api=MathWorkspaceAssetsTest,k=api.assetKey,P=inputSeeds.P,E=inputSeeds.E,F=inputSeeds.F,Q=api.localAssetSnapshot().assets.find(a=>a.name==='ProductFactorQ');
+   const f=api.createObjectAsset('map',{data:{domain:k(Q),codomain:k(P)}}),g=api.createObjectAsset('map',{data:{domain:k(P),codomain:k(Q)}});
+   const cases={'tensor':{first:k(E),second:k(F)},'dual':{parent:k(E)},'self-tensor-product':{parent:k(E),multiplicity:'3'},'internal-hom':{first:k(E),second:k(E)},schur:{parent:k(E),partition:'2,1'},'map-operation':{map:k(f),parent:k(E),operation:'pullback'},'ideal-sheaf':{map:k(f),confirmed:true},'normal-bundle':{map:k(f),confirmed:true},'conormal-bundle':{map:k(f),confirmed:true},'relative-tangent':{map:k(g),confirmed:true},'relative-cotangent':{map:k(g),confirmed:true}};
+   const results=[];
+   for(const [type,data]of Object.entries(cases)){
+    const a=api.createObjectAsset('sheaf',{type,data});auditInput.computation.refs.asset=k(a);MathWorkspaceObjectPanels.refresh();
+    const native=auditInput.propertyRenderer.editor.objectIO('input-graph').entries.find(e=>e.assetKey===k(a));results.push({type,construction:native?.data.workspaceSheafComplex.payload.construction?.type,message:auditInput.message.textContent});
+   }
+   return results;
+  });
+  for(const row of constructions){assert.ok(row.construction,JSON.stringify(row));assert.equal(row.message,'',JSON.stringify(row));}
+  await read(()=>{const n=auditInput.propertyRenderer.editor.shadow.getElementById('sheaf-name');n.focus();n.select();});
+  await session.client.send('Input.insertText',{text:'RelativeSaved'});
+  await waitFor(()=>read(()=>!auditInput.propertyRenderer.editor.shadow.getElementById('add-object').disabled),5000);
+  const sequenceSave=await read(()=>{auditInput.propertyRenderer.editor.shadow.getElementById('add-object').click();return {message:auditInput.message.textContent,names:MathWorkspaceAssetsTest.localAssetSnapshot().assets.map(a=>a.name),sequences:MathWorkspaceAssetsTest.localAssetSnapshot().assets.filter(a=>a.kind==='complex').length};});
+  assert.ok(sequenceSave.names.includes('RelativeSaved'),JSON.stringify(sequenceSave));assert.ok(sequenceSave.sequences>0);
+  const changed=await read(()=>{const api=MathWorkspaceAssetsTest,record=api.localAssetSnapshot().assets.find(a=>a.id===selfAsset.id&&a.kind==='sheaf');api.updateObjectAsset(record,{data:{...record.data,multiplicity:'4'}});auditInput.computation.refs.asset=api.assetKey(record);MathWorkspaceObjectPanels.refresh();return auditInput.propertyRenderer.editor.objectIO('input-graph').entries.find(e=>e.assetKey===api.assetKey(record)).data.workspaceSheafComplex.payload;});
+  assert.equal(changed.construction.multiplicity,'4');assert.equal(changed.rank,'8');
+  assert.equal(await read(()=>!!document.querySelector('[data-assets-full-input]')),false);
+  assert.notEqual(await read(()=>MathWorkspaceObjects.capabilityFor(inputSeeds.P).modify),'sheaf-input');
   console.log('Restored Input: ranks, real editing, Assets save, product/projections and reopening passed.');
  }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

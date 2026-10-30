@@ -919,15 +919,11 @@
         <label class="workspace-field workspace-field-inline"><span class="input-label">Name</span><input class="workspace-control workspace-code-control" data-assets-name type="text" value="X" maxlength="80" spellcheck="false"></label>
         <label class="workspace-field workspace-field-inline"><span class="input-label">Type</span><select class="workspace-control" data-assets-subtype></select></label>
         <div class="workspace-form-fields" data-assets-fields></div>
-        <button class="btn" type="button" data-assets-full-input>Full Input & constructions</button>
         <div class="workspace-form-actions"><button class="btn" type="submit" data-assets-save>save now</button><button class="btn btn-ghost" type="button" data-assets-delete hidden>delete</button></div>
         <p class="workspace-status" data-assets-editor-status role="status" aria-live="polite"></p>
         <div class="workspace-io-actions" data-assets-conflict-actions hidden><button type="button" class="btn btn-ghost" data-assets-resolve="draft">Save my version</button><button type="button" class="btn btn-ghost" data-assets-resolve="saved">Load saved version</button></div>
       </form>`;
     const form = card.querySelector('[data-assets-editor]');
-    form.querySelector('[data-assets-full-input]').addEventListener('click',()=>{
-      flushAssetInputInstance(activeAssetInputInstance());objectWorkspace.open('sheaf-input',assetKey(activeAssetInputInstance()?.targetRef),'main');
-    });
     form.querySelectorAll('[data-assets-resolve]').forEach(button=>button.addEventListener('click',()=>{
       const instance=activeAssetInputInstance();if(!instance)return;
       if(button.dataset.assetsResolve==='draft')captureAssetInputDraftFromForm(instance.key,instance.rendererEpoch,{schedule:false});
@@ -1042,6 +1038,7 @@
   const editorForm = () => assetState.editorCard?.querySelector('[data-assets-editor]');
   function captureAssetInputDraftFromForm(instanceKey, rendererEpoch, options = {}) {
     const instance = assetsCardState.instances.get(instanceKey), form = editorForm();
+    if(form?.querySelector('[data-assets-fields]')?.dataset.rebuilding==='true')return false;
     if (!instance || instance !== activeAssetInputInstance() || instance.rendererEpoch !== rendererEpoch || form?.dataset.inputInstanceKey !== instanceKey || Number(form.dataset.rendererEpoch) !== rendererEpoch) return false;
     const data = assetEditorData(instance);
     if (options.type && options.type !== instance.draft.type) {
@@ -1080,7 +1077,7 @@
   const VARIETY_INPUT_FIELDS = {
     abstract: ['dimension'], curve: ['genus'], 'symmetric-product-curve': ['genus', 'power'], abelian: ['dimension'],
     'ppav-moduli': ['genus'], point: [], projective: ['dimension'], grassmannian: ['r', 'n'],
-    'complete-intersection': ['ambientDimension', 'degrees'], product: ['first', 'second']
+    'complete-intersection': ['dimension', 'ambientDimension', 'degrees'], product: ['first', 'second']
   };
   const VARIETY_CONSTRUCTION_FIELDS = new Set(Object.values(VARIETY_INPUT_FIELDS).flat());
   function varietyInteger(value, fallback, min = 0) {
@@ -1245,9 +1242,11 @@
   function bindScalarField(group, spec, instance) {
     const numbers = window.MathWorkspaceNumbers, mode = group.querySelector('[data-scalar-mode]');
     mode.addEventListener('change', () => {
+      const requested=mode.value;mode.value=numbers.input(instance.draft.data,spec).kind;
       captureAssetInputDraftFromForm(instance.key, instance.rendererEpoch, { schedule: false });
+      mode.value=requested;
       const current = numbers.input(instance.draft.data, spec), saved = numbers.input(assetByKey(assetKey(instance.targetRef)).data, spec);
-      const parameter = mode.value !== 'reference' ? { kind: mode.value, value: numbers.literalValue(instance.draft, spec, assetState.snapshot.assets) || spec.defaultValue }
+      const parameter = mode.value !== 'reference' ? { kind: mode.value, value: numbers.literalValue(instance.draft, spec, assetState.snapshot.assets) }
         : saved.kind === 'reference' ? saved : { kind: 'reference', ref: '' };
       if (current.kind === 'reference' && !current.ref && saved.kind === 'literal' && mode.value === 'literal') parameter.value = saved.value;
       updateAssetInputDraft(instance, { data: { [spec.field]: parameter } }, { immediate: true });
@@ -1343,7 +1342,6 @@
     const instance = activeAssetInputInstance(), record = instance ? assetByKey(assetKey(instance.targetRef)) : null;
     const currentKey = record ? assetKey(record) : '', rawData = { ...(instance?.draft?.data || {}) }, data = ['young', 'lie'].includes(kind) ? rawData : { ...normalizedAssetData(kind, type, record?.type === type ? record.data : {}), ...window.MathWorkspaceNumbers.migrateInputs(kind, type, rawData) }, fields = form.querySelector('[data-assets-fields]'); let html = '';
     const context = { kind, type, currentKey, data };
-    form.querySelector('[data-assets-full-input]').hidden=!['variety','sheaf','map'].includes(kind)||kind==='variety'&&type==='toric';
     if (kind === 'young') {
       html += fieldHtml('Rows', 'partition', data.partition ?? (data.rows || []).join(', '));
     } else if (kind === 'lie') {
@@ -1371,7 +1369,7 @@
     } else {
       referenceFieldSpecs(kind, type).forEach((spec) => { html += referenceFieldHtml(spec, context); });
     }
-    fields.innerHTML = html;
+    fields.dataset.rebuilding='true';fields.innerHTML = html;delete fields.dataset.rebuilding;
     fields.querySelectorAll('[data-point-name]').forEach(button=>button.addEventListener('click',()=>{const name=form.querySelector('[data-assets-name]');window.CalculatorInputSettings.syncEditableValue(name,button.dataset.pointName,{force:true});captureAssetInputDraftFromForm(instance.key,instance.rendererEpoch,{immediate:true});}));
     fields.querySelectorAll('input[data-assets-field]:not([readonly])').forEach(field => {
       window.CalculatorInputSettings.listenEditable(field, 'input', () => captureAssetInputDraftFromForm(form.dataset.inputInstanceKey, Number(form.dataset.rendererEpoch), { immediate: false }), { commitHandled: true });
@@ -1388,7 +1386,7 @@
     const form = editorForm(), data = {};
     form.querySelectorAll('[data-assets-field]').forEach((field) => { if (!field.readOnly) data[field.dataset.assetsField] = field.value; });
     form.querySelectorAll('[data-scalar-value]').forEach(field => { data[field.dataset.scalarValue] = { kind: field.closest('.workspace-scalar-field').querySelector('[data-scalar-mode]').value, value: field.value }; });
-    if(form.querySelector('[data-assets-kind]').value==='variety'&&form.querySelector('[data-assets-subtype]').value==='complete-intersection'){
+    if(form.querySelector('[data-assets-kind]').value==='variety'&&form.querySelector('[data-assets-subtype]').value==='complete-intersection'&&instance?.draft.type==='complete-intersection'){
       try{const count=degreeList(data.degrees).length;if(String(data.dimension).trim()!=='')data.ambientDimension=String(Number(data.dimension)+count);}catch(_){}
     }
     form.querySelectorAll('[data-assets-reference]').forEach((field) => {
@@ -1461,7 +1459,7 @@
     if (draft?.kind === 'variety' && VARIETY_INPUT_FIELDS[draft.type]) {
       for (const field of VARIETY_CONSTRUCTION_FIELDS) if (!VARIETY_INPUT_FIELDS[draft.type].includes(field)) delete data[field];
     }
-    if (draft?.kind === 'variety' && DERIVED_VARIETY_DIMENSIONS.has(draft.type)) delete data.dimension;
+    if (draft?.kind === 'variety' && DERIVED_VARIETY_DIMENSIONS.has(draft.type)&&draft.type!=='complete-intersection') delete data.dimension;
     return { name: String(draft?.name ?? ''), autoName: draft?.autoName || '', kind: draft?.kind || 'variety', type: draft?.type || 'abstract', data };
   };
   const inputDraftFromRecord = (record) => cloneInputDraft({ name: record?.name || '', autoName: record?.autoName ?? (record?.kind === 'variety' && /^X(?:_\{[1-9]\d*\})?$/.test(record.name) ? record.name : ''), kind: record?.kind || 'variety', type: record?.type || 'abstract', data: record?.data || {} });
@@ -1548,6 +1546,8 @@
       return { committed: false, conflict: true };
     }
     const next = { ...record, ...command.normalized };
+    next.data=window.MathWorkspaceSheafModel.editedData(record,next.type,next.data);
+    next.dependencies=assetDependencies(next.kind,next.type,next.data);
     if (inputSemanticValue(record) === inputSemanticValue(next)) {
       instance.dirty = false; instance.autosaveStatus = 'Saved'; instance.conflictState = null; instance.baseRevision = assetState.snapshot.revision;instance.baseDefinition=assetInputDefinition(record);
       return { committed: false, unchanged: true };
@@ -1655,6 +1655,7 @@
     const form = editorForm();
     if (!form || !instance || instance !== activeAssetInputInstance() || instance.draft.kind !== 'variety') return;
     const { type, data, name, autoName } = instance.draft;
+    if(type==='complete-intersection')window.CalculatorInputSettings.syncEditableValue(form.querySelector('[data-assets-field="ambientDimension"]'),data.ambientDimension??'');
     if (DERIVED_VARIETY_DIMENSIONS.has(type)) {
       const field = form.querySelector('[data-assets-field="dimension"]');
       if (field?.readOnly) window.CalculatorInputSettings.syncEditableValue(field, derivedVarietyDimension(type, data) ?? '');
@@ -2587,7 +2588,7 @@
     const name = String(patch.name ?? record.name).trim(), type = patch.type || record.type;
     if (!name || !balancedLatex(name)) throw new Error('Enter a complete asset name.');
     if (assetState.snapshot.assets.some(asset => asset.id !== record.id && canonicalAssetName(asset.name) === canonicalAssetName(name))) throw new Error('Another asset already has that name.');
-    const data = normalizedAssetData(record.kind, type, patch.data || record.data);
+    const data = window.MathWorkspaceSheafModel.editedData(record,type,normalizedAssetData(record.kind, type, patch.data || record.data));
     if(patch.data||patch.type)validateAssetData(record.kind, type, data, assetKey(record));
     const view=patch.view||presentation.split(record.kind,patch.data||{}).view;if(Object.keys(view).length)viewDefaults.set(assetKey(record),JSON.parse(JSON.stringify(view)));
     const next = { ...record, name, type, data, dependencies: assetDependencies(record.kind, type, data) };
@@ -2774,7 +2775,7 @@
     assetState.nextObjectId=nextId;assetState.snapshot={...assetState.snapshot,assets:all,revision:assetState.snapshot.revision+1};
     const active=nativeKeys[graph.activeNativeId]||graph.activeKey;
     applyAssetSnapshot(localAssetSnapshot(),active?assetRefFromKey(active):null,{affectedAssetKeys:new Set(sourceKeys)});
-    return {ids:nativeKeys,keys:staged.filter(a=>['variety','sheaf','map'].includes(a.kind)).map(assetKey),active};
+    return {ids:nativeKeys,keys:staged.filter(a=>['variety','sheaf','map','number'].includes(a.kind)).map(assetKey),active};
   }
   function copyInput(value){return JSON.parse(JSON.stringify(value));}
   function initialiseObjectPanels() {
