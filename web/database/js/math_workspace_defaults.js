@@ -37,7 +37,7 @@
       if (['direct-sum', 'tensor', 'internal-hom'].includes(type)) {
         put('first', 'sheaf', { type: 'structure' }); put('second', 'sheaf', { type: 'tangent' });
       } else if (['dual', 'self-direct-sum', 'self-tensor-product', 'schur'].includes(type)) put('parent', 'sheaf', { type: 'structure' });
-      else if (['ideal-sheaf', 'normal-bundle', 'conormal-bundle', 'relative-tangent', 'relative-cotangent', 'map-operation'].includes(type)) put('map', 'map');
+      else if (['ideal-sheaf', 'normal-bundle', 'conormal-bundle', 'relative-tangent', 'relative-cotangent', 'map-operation'].includes(type)) {put('map', 'map');if(type==='map-operation')put('parent','sheaf',{type:'structure'});}
       else put('base', 'variety', space);
     }
     if (kind === 'map') {

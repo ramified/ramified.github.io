@@ -210,6 +210,7 @@
     return degree === 0 ? [] : mode === 'symmetric' ? [degree] : Array(degree).fill(1);
   }
   const definitions = [
+    {id:'sheaf-input',label:'Full Input & Constructions',engine:'complex',sheafInput:true,light:true,slots:[slot('asset','Modify object',null,{kinds:['variety','sheaf','map'],optional:true,emptyLabel:'Create / construct…'})]},
     {id:'complex-diagrams',label:'Complexes & Filtrations',engine:'complex',assetView:true,readOnly:true,structureScene:true,light:true,slots:[]},
     ...structures.kinds.map(kind=>({id:kind+'-input',label:structures.labels[kind]+' Input',input:kind})),
     {id:'complex-view',label:'Complex Display',engine:'complex',assetView:true,readOnly:true,viewRole:'asset',light:true,structure:true,slots:[slot('asset','Complex','complex')]},
@@ -460,6 +461,18 @@
     }
     function nativeChange(panel, renderer, change) {
       if (renderer.applying || panel.refreshing || !renderer.editor) return;
+      if(panel.definition.sheafInput){
+        if(!renderer.editor.objectIO('input-changed'))return;
+        renderer.committing=true;
+        try{
+          const result=api.commitSheafGraph(renderer.editor.objectIO('input-graph'),renderer.managedKeys||[]);
+          renderer.editor.objectIO('input-ack',{ids:result.ids,assets:snapshot.assets});renderer.managedKeys=result.keys;
+          panel.computation.signature=JSON.stringify(snapshot.assets);
+          feedback(panel,'Saved to Assets.');
+        }catch(error){feedback(panel,error.message,true);}
+        finally{renderer.committing=false;}
+        return;
+      }
       const dynkinKey=['dynkin-view','dynkin-starting'].includes(panel.definition.id)?panel.computation.refs.dynkin:null;
       const selectionMode=dynkinKey?renderer.editor.objectIO('selection-mode'):null;
       if(dynkinKey&&change?.interaction==='dynkin-vertex-focus'){
@@ -525,7 +538,7 @@
     function setRendererVisible(renderer, visible, property = false) {
       if (renderer.operation==='dynkin-cartan') {renderer.editor.setCanvasActive(false);renderer.editor.setInspectorActive(false);renderer.host.hidden=true;renderer.inspectorHost.hidden=true;return;}
       const mosaicCanvas=mosaic.propertyPanels.some(panel=>panel.id===renderer.operation&&panel.canvas);
-      const view=['dual-graph-view','complex-diagrams','complex-operations','filtration-operations','filtration-view'].includes(renderer.operation)||renderer.operation.startsWith('field-extension-')||mosaicCanvas||['complex-view','field-extension-view','mosaic-view','young-view','dynkin-view','lie-view','strands-view','sheaf-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
+      const view=['sheaf-input','dual-graph-view','complex-diagrams','complex-operations','filtration-operations','filtration-view'].includes(renderer.operation)||renderer.operation.startsWith('field-extension-')||mosaicCanvas||['complex-view','field-extension-view','mosaic-view','young-view','dynkin-view','lie-view','strands-view','sheaf-view','geometry-view','slice','category-diagram','slicing-scene'].includes(renderer.operation);
       const canvas = !property || view;
       const inspector = mosaicCanvas || property && !view || renderer.role === 'input' && ['mosaic','matrix', 'category', 'strand','slice'].includes(renderer.engine);
       // Slicing inputs edit Assets; the dedicated slicing scene owns the canvas.
@@ -1041,6 +1054,18 @@
       if (panel.refreshing) return;
       panel.refreshing = true;
       try {
+        if(panel.definition.sheafInput){
+          if(!panel.propertyRenderer)panel.propertyRenderer=createNative(panel,'complex','property');
+          const renderer=panel.propertyRenderer,assets=snapshot.assets.filter(a=>['variety','sheaf','map','number','field','complex'].includes(a.kind)&&snapshot.diagnostics?.[keyOf(a)]?.valid!==false),signature=JSON.stringify([panel.computation.refs.asset,assets]);
+          if(!renderer.committing&&signature!==panel.computation.signature){
+            renderer.applying=true;
+            try{renderer.editor.applyAssets({assets},refOf(get(panel.computation.refs.asset)));renderer.managedKeys=assets.filter(a=>['variety','sheaf','map'].includes(a.kind)).map(keyOf);panel.computation.signature=signature;feedback(panel);}
+            catch(error){feedback(panel,error.message,true);}
+            finally{renderer.applying=false;}
+          }
+          setRendererVisible(renderer,!panel.closed&&!panel.collapsed&&!panel.node.hidden,true);
+          panel.title.textContent=panel.definition.label;registry.register(panel);api.title(panel.id,panel.title.textContent);return;
+        }
         if(panel.definition.mosaicOwner==='mosaic-space'&&panel.computation){
           const asset=get(panel.computation.refs.asset),space=mosaic.propertyAsset(panel.definition.id,asset,snapshot.assets);
           if(space&&space!==asset)panel.computation.refs.asset=keyOf(space);
@@ -1193,7 +1218,13 @@
       }
       if(!options.id&&(!options.newInstance||definition.input)){
         const existing=find(type,assetKey,refs,options.rule);
-        if(existing){if(!options.keepPickerOpen)api.closePicker();return location==='hidden'?existing:reveal(existing,location);}
+        if(existing){
+          if(definition.structureScene){
+            const nodes=[...new Set([...(existing.computation.refs.nodes||[]),...(refs.nodes||[])])];
+            if(JSON.stringify(nodes)!==JSON.stringify(existing.computation.refs.nodes)){existing.computation.refs.nodes=nodes;refreshPanel(existing);}
+          }
+          if(!options.keepPickerOpen)api.closePicker();return location==='hidden'?existing:reveal(existing,location);
+        }
       }
       if(type==='matrix-input' && !options.id)ensureMatrixField(assetKey);
       // Restored panels retain exactly their saved references, including blanks.
@@ -1280,6 +1311,12 @@
       refreshPanel(clone);return clone;
     }
     function overviewAction(panel, action) {
+      if(panel.definition.structureScene){
+        if(action!=='collect')return;
+        const refs=panel.computation.refs;
+        refs.nodes=[...new Set([...(refs.nodes||[]),...snapshot.assets.filter(asset=>['complex','filtration'].includes(asset.kind)).map(keyOf)])];
+        refreshPanel(panel);return;
+      }
       if(panel.definition.slicingScene) {
         const refs=panel.computation.refs,frame=get(refs.frame);
         if(action==='clear') { refs.nodes=[];refs.asset=''; }

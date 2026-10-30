@@ -3,6 +3,8 @@
   const copy=value=>JSON.parse(JSON.stringify(value));
   function bindings(definition,assetKey,refs={}){
     if(definition.input)return {asset:assetKey||''};
+    // Membership is mutable display state, rather than a distinct Asset binding.
+    if(definition.structureScene)return {};
     const result={};
     for(const name of Object.keys(refs).sort()){
       if(name==='active'||definition.overview&&name==='asset')continue;

@@ -10,7 +10,9 @@ assert.deepEqual(numbers.normalizeInputs('variety', 'curve', { genus: literal('+
 assert.equal(numbers.referenceKey({ genus: literal('2') }, genus), '');
 assert.equal(numbers.referenceKey({ genus: reference('number:N1') }, genus), 'number:N1');
 for (const value of ['', '+', '-', '2.', '2e', '3/2', '-1']) assert.throws(() => numbers.normalizeInput(literal(value), genus), /integer/);
-assert.throws(() => numbers.normalizeInput(literal('0'), rank), /integer/);
+assert.deepEqual(numbers.normalizeInput(literal('0'), rank),literal('0'),'the zero bundle is a valid input');
+assert.deepEqual(numbers.normalizeInput({kind:'expression',value:'2+r'},rank),{kind:'expression',value:'2+r'});
+assert.throws(()=>numbers.normalizeInput({kind:'expression',value:'2+'},rank),/complete/);
 assert.throws(() => numbers.normalizeInput(reference(''), genus), /Choose/);
 assert.throws(() => numbers.normalizeInputs('variety', 'curve', { genus: { kind: 'unknown', value: '2' } }), /one value/);
 assert.deepEqual(numbers.migrateInputs('variety', 'curve', { genus: literal('+ ') }), { genus: literal('+ ') }, 'migration preserves incomplete drafts');

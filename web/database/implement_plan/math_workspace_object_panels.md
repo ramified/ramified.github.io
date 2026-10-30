@@ -270,6 +270,25 @@ experiment's state when switching. Removing a selected experiment moves to the
 next available one. `math_workspace_creation_defaults_ui_test.js` checks the
 approved picker and selector behavior.
 
+The approved Interface theme includes a complete green focus contour. In
+single view the upper edge continues around the active tab, with an open shared
+edge only when that tab touches the content area. Wrapped or scrolled-away tabs
+keep a closed silhouette. Split panes get their own upper edges. This contour is
+the default outside Design Lab and remains after Current, Reset, and Exit.
+Styles live in `ramified_ui_refine.css`; `math_workspace_pane_outline.js` tracks
+the touching tab edges independently of the Design Lab lifecycle.
+The active tab paints above its siblings; inactive tabs touching the pane use
+green bottom strokes so their gray pseudo-elements cannot cover the contour.
+
+Native editor hints use shared surface-local event delegation and a top-layer
+popover in the label's own shadow root. This covers existing `data-tooltip`
+labels, generated mathematical symbols, and independently docked cards without
+pane clipping or duplicate standalone-page handlers. Focus exposes the same
+hint and its accessible description; Escape dismisses it. Replaced labels and
+disposed editors remove stale hints. `math_workspace_tooltips_ui_test.js` checks
+real cursor transitions, nested and generated symbols, keyboard access, viewport
+bounds, symmetric functions/polynomials, weights, and detached cards.
+
 The approved object-type icons are Filtration = nested subspaces (`flag`),
 Complex = differential diagram (`differentials`), Field extension = L/K
 (`quotient`), Polytope = tetrahedron (`simplex`), and Voronoi cell = tessellation

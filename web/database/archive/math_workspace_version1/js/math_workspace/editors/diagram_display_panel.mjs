@@ -22,7 +22,7 @@ __editor.extendAssetAdapter(previous=>{
       }
       else row.dataset.diagramPreview='';
     }
-    refs.complexChartDelete.textContent='Remove from display';refs.complexChartDelete.title='Remove selected references or previews; keep Assets';
+    refs.complexChartDelete.textContent='remove';refs.complexChartDelete.title='Remove selected references or previews; keep Assets';refs.complexChartDelete.setAttribute('aria-label','Remove selected from display');
     refs.complexChartAdd.textContent='New preview';
     save.hidden=!ensureComplexChartState().entries.some(isPreview);
     save.disabled=!ensureComplexChartState().entries.some(e=>isPreview(e)&&e.selected!==false);
@@ -75,13 +75,19 @@ __editor.extendAssetAdapter(previous=>{
       });
       const label=document.createElement('label');label.textContent='Layout ';layout=document.createElement('select');layout.setAttribute('aria-label','Complex display layout');layout.append(new Option('Inline','inline'),new Option('Snake','snake'));label.append(layout);
       layout.addEventListener('change',()=>{presentation={display:layout.value==='snake'?'snake-les':''};project();__editor.notifyChange({interaction:'object-preview'});});
+      const collect=document.createElement('button');collect.type='button';collect.className='btn btn-ghost';collect.textContent='collect';collect.dataset.diagramAction='collect';
+      collect.setAttribute('aria-label','Collect complexes and filtrations');collect.title='Show all Complex and Filtration Assets in this display';
+      collect.addEventListener('click',()=>{options.onOverviewAction?.('collect');__editor.notifyChange({interaction:'object-preview'});});
       note=document.createElement('p');note.className='hint';
       const actions=body.querySelector('.sheaf-complex-toolbar');
       label.className='workspace-diagram-layout';note.className='hint workspace-diagram-note';
       body.classList.add('workspace-diagram-content');
-      const surface=__editor.mountObjectSurfaces({content:[body,note],toolbar:[...actions.children,label,save]});
+      const surface=__editor.mountObjectSurfaces({content:[body,note],toolbar:[collect,...actions.children,label,save]});
       actions.remove();surface.shell.classList.add('workspace-diagram-surface');surface.content.style.overflow='auto';
       const style=document.createElement('style');style.textContent="\n        .workspace-diagram-surface{font-size:.85rem;line-height:1.4;container-type:inline-size}\n        .workspace-diagram-surface>.workspace-native-toolbar{justify-content:flex-start;gap:6px 8px;padding:6px 8px}\n        .workspace-diagram-surface .btn{font-size:.75rem;line-height:1.4;padding:4px 8px;border-radius:4px}\n        .workspace-diagram-layout{display:inline-flex;align-items:center;gap:6px;margin-left:auto;color:var(--muted);font-size:.75rem}\n        .workspace-diagram-layout select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 6px;min-height:26px}\n        .workspace-diagram-content{padding:4px 8px;min-width:0}\n        .workspace-diagram-surface .sheaf-complex-saved-row{gap:8px;padding:8px 0;font-size:.85rem;border-bottom:1px solid var(--border)}\n        .workspace-diagram-surface .sheaf-step-saved-rule-kind{font-size:.75rem;max-width:12em;overflow:hidden;text-overflow:ellipsis}\n        .workspace-diagram-surface .sheaf-step-saved-rule-formula{font-size:1rem;overflow-x:auto;text-overflow:clip;padding:4px 0}\n        .workspace-diagram-surface .sheaf-step-saved-rule-formula mjx-container{overflow:visible;max-width:none!important}\n        .workspace-diagram-surface .sheaf-complex-saved-row[data-diagram-preview]{border-left:2px solid var(--accent);padding-left:8px}\n        .workspace-diagram-note{margin:8px;padding:0;color:var(--muted);font-size:.75rem;line-height:1.4}\n        @container(max-width:480px){\n          .workspace-diagram-surface .sheaf-complex-saved-row{grid-template-columns:auto minmax(0,1fr) auto}\n          .workspace-diagram-surface .sheaf-complex-saved-row>input{grid-column:1;grid-row:1}\n          .workspace-diagram-surface .sheaf-step-saved-rule-kind{grid-column:2;grid-row:1;max-width:100%}\n          .workspace-diagram-surface [data-complex-chart-edit]{grid-column:3;grid-row:1}\n          .workspace-diagram-surface .sheaf-step-saved-rule-formula{grid-column:1/-1;grid-row:2;text-align:left}\n        }\n      ";document.head.append(style);
+      // Put quotient labels in their own intrinsic grid row. Absolute labels
+      // used by the standalone renderer do not contribute to scrollport height.
+      style.textContent += "\n        .workspace-diagram-surface .sheaf-filtration-display:not(.sheaf-complex-chain-display){display:inline-grid;grid-auto-flow:column;grid-template-rows:auto auto;column-gap:.35em;row-gap:.12em;width:max-content;max-width:none}\n        .workspace-diagram-surface .sheaf-filtration-display:not(.sheaf-complex-chain-display)>.sheaf-filtration-object{grid-row:2}\n        .workspace-diagram-surface .sheaf-filtration-relation{display:contents}\n        .workspace-diagram-surface .sheaf-filtration-quotient{position:static;transform:none;grid-row:1;justify-self:center;max-width:none}\n        .workspace-diagram-surface .sheaf-filtration-quotient-sizer{display:none}\n        .workspace-diagram-surface .sheaf-filtration-relation-body{grid-row:2;align-self:center}\n      ";
       decorate();
     },
     apply(snapshot,ref,properties,binding){

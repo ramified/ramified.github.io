@@ -155,3 +155,36 @@ body.ramified-theme .workspace-view-card:has(> .workspace-canvas-tabs > .workspa
   outline: 1px solid var(--accent);
   outline-offset: -1px;
 }
+
+/* Approved connected focus contour. Edge markers follow the actual last
+   visible tab row; inactive tab strokes must not cover the green pane edge. */
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='false'] > .focused) > .workspace-canvas-tabs {
+  background-image: linear-gradient(var(--accent), var(--accent));
+}
+body.ramified-theme .workspace-canvas-tabs .workspace-canvas-tab-group:has(.active) {
+  z-index: 2;
+}
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='false'] > .focused) > .workspace-canvas-tabs .workspace-canvas-tab-group[data-pane-edge]::after {
+  background: var(--accent);
+}
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='false'] > .focused) > .workspace-canvas-tabs .workspace-canvas-tab-group:has(.active) {
+  border-color: var(--accent);
+}
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='false'] > .focused) > .workspace-canvas-tabs .workspace-canvas-tab-group:has(.active)::after {
+  left: -1px; right: -1px; background: var(--accent);
+}
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='false'] > .focused) > .workspace-canvas-tabs .workspace-canvas-tab-group[data-connected-edge]::after {
+  left: 0; right: 0; background: #FFFFFF;
+}
+body.ramified-theme .workspace-canvas-panes[data-split='true'] > .workspace-canvas-pane::before,
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-tabs:empty) > .workspace-canvas-panes > .workspace-canvas-pane::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0;
+  height: 1px; background: var(--border); pointer-events: none; z-index: 2;
+}
+body.ramified-theme .workspace-canvas-panes[data-split='true'] > .workspace-canvas-pane.focused::before,
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-tabs:empty) > .workspace-canvas-panes > .workspace-canvas-pane.focused::before {
+  background: var(--accent);
+}
+body.ramified-theme .workspace-view-card:has(> .workspace-canvas-panes[data-split='true']) > .workspace-canvas-tabs .workspace-canvas-tab-group:has([aria-current='true']) {
+  border-color: var(--accent);
+}

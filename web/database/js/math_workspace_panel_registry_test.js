@@ -20,6 +20,12 @@ assert.equal(registry.find(calc,'',{lambda:'young:a'}),calculation,'unspecified 
 calculation.computation.refs.lambda='young:b';registry.register(calculation);
 assert.equal(registry.find(calc,'',{lambda:'young:a'}),null,'retargeting removes the old binding');
 assert.equal(registry.find(calc,'',{lambda:'young:b'}),calculation);
+const diagrams={id:'complex-diagrams',structureScene:true},shared=panel('6',diagrams,'',{nodes:['complex:a']});
+registry.register(shared);
+const diagramCopy=panel('7',diagrams,'',{nodes:['filtration:b']});diagramCopy.comparison=true;registry.register(diagramCopy);
+shared.computation.refs.nodes=['filtration:b'];registry.register(shared);
+assert.equal(shared.comparison,undefined,'changing common-display membership does not turn it into a comparison');
+assert.equal(registry.find(diagrams,'',{nodes:['complex:a']}),shared,'common displays keep a stable identity across member sets');
 live.delete('number:a');registry.sync([a,b,comparison,legacy,calculation]);
 assert.equal(registry.find(input,'number:a'),null,'deleted targets are unregistered');
 registry.sync([]);assert.equal(registry.size,0);registry.clear();assert.equal(registry.size,0);

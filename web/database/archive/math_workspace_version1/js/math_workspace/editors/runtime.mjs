@@ -3,6 +3,7 @@ import workers from 'workspace:workers';
 import {encodeState,decodeState,applyState} from './state.mjs';
 import presets from 'workspace:presets';
 import {createCardDock,dockStyles} from './dock.mjs';
+import {createEditorTooltips} from './tooltips.mjs';
 
 const realWindow=globalThis, realDocument=globalThis.document;
 const canonical=url=>String(url).split(/[?#]/)[0].replace(/^.*\/web\/database\//,'').replace(/^\.\//,'');
@@ -74,6 +75,10 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
   const findAll=selector=>roots().flatMap(root=>[...root.querySelectorAll(selector)]);
   let canvasActive=true,inspectorActive=false,disposed=false,ready=false,bridge=null,stateBinding=null,assetAdapter=null,handlers={},link={},saving=false,dock=null,bindingToken=null,forcedInteraction='',forcedInteractionGeneration=0;
   const disposal=[],readyListeners=[],loadListeners=[],listeners=[],rafs=new Map(),timers=new Set(),intervals=new Set(),workerSet=new Set(),eventBindingTokens=new WeakMap(),eventChangeDetails=new WeakMap();let sequence=0;
+  // The workspace owns tooltip routing and placement for every native surface,
+  // including dynamically rendered labels and independently docked cards.
+  body.dataset.customTooltipsReady='1';
+  const tooltips=createEditorTooltips();disposal.push(()=>tooltips.destroy());
   const error=e=>{onError(e instanceof Error?e:new Error(String(e)));};
   const changed=(emittedBindingToken=bindingToken,detail={})=>{if(!saving&&!disposed)onChange({bindingToken:emittedBindingToken,...(!detail?.interaction&&forcedInteraction?{interaction:forcedInteraction}:{}),...(detail||{})});};
   // Viewport changes are presentation updates, never Asset edits. Observe the
@@ -203,7 +208,7 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
   }
   const inlineObserver=new realWindow.MutationObserver(bindInline);inlineObserver.observe(body,{subtree:true,childList:true});if(inspectorBody)inlineObserver.observe(inspectorBody,{subtree:true,childList:true});disposal.push(()=>inlineObserver.disconnect());
   const changeDetailForEvent=e=>{const chrome=e.target.closest?.('.workspace-card-tool,.card-pin-btn,.card-head,.drag-handle');const appearance=e.target.closest?.('[data-workspace-canvas-appearance-control],[data-map-control],[data-object-kind][data-object-id]');return chrome?{interaction:'card-chrome'}:appearance?{interaction:'canvas-appearance'}:{}};
-  function bindSurfaceEvents(surface){for(const type of ['input','change','click','pointerup','keyup']){const mark=e=>{eventBindingTokens.set(e,bindingToken);eventChangeDetails.set(e,changeDetailForEvent(e));},notify=e=>{const token=eventBindingTokens.get(e)??bindingToken,detail=eventChangeDetails.get(e)||changeDetailForEvent(e);if(type==='pointerup')timeout(()=>changed(token,detail),0);else changed(token,detail);};surface.addEventListener(type,mark,true);surface.addEventListener(type,notify);}}
+  function bindSurfaceEvents(surface){tooltips.bind(surface);for(const type of ['input','change','click','pointerup','keyup']){const mark=e=>{eventBindingTokens.set(e,bindingToken);eventChangeDetails.set(e,changeDetailForEvent(e));},notify=e=>{const token=eventBindingTokens.get(e)??bindingToken,detail=eventChangeDetails.get(e)||changeDetailForEvent(e);if(type==='pointerup')timeout(()=>changed(token,detail),0);else changed(token,detail);};surface.addEventListener(type,mark,true);surface.addEventListener(type,notify);}}
   bindSurfaceEvents(body);if(inspectorBody)bindSurfaceEvents(inspectorBody);
   function uiSnapshot(){return {controls:findAll('input[id],select[id],textarea[id]').filter(n=>n.type!=='file').map(n=>({id:n.id,value:n.value,checked:n.checked})),cards:findAll('.card').map((n,i)=>({i,key:n.dataset.workspaceCardId,collapsed:n.classList.contains('collapsed'),hidden:n.hidden,userHidden:n.classList.contains('calculator-card-user-hidden'),pinned:n.classList.contains('is-pinned'),wide:n.dataset.cardWideState})),dock:dock?.capture(),scrollTop:host.scrollTop};}
   function restoreUi(ui){if(!ui)return;for(const c of ui.controls||[]){const n=findOne(`#${CSS.escape(c.id)}`);if(n&&n.type!=='file'){n.value=c.value;if(c.checked!==undefined)n.checked=c.checked;}}for(const c of ui.cards||[]){const list=findAll('.card'),n=c.key?list.find(n=>n.dataset.workspaceCardId===c.key):list[c.i];if(n){n.classList.toggle('collapsed',c.collapsed);n.hidden=!!c.hidden;n.classList.toggle('calculator-card-user-hidden',!!c.userHidden);n.classList.toggle('is-pinned',!!c.pinned);n.querySelector('.card-head')?.setAttribute('aria-expanded',String(!c.collapsed));if(c.wide&&win.CalculatorCards)win.CalculatorCards.setWide(n,c.wide==='wide');}}dock?.restore(ui.dock);host.scrollTop=ui.scrollTop||0;}
@@ -212,6 +217,7 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
   // Inspector controls such as continuous frame motion also use animation frames.
   // Suspend their work only when both native surfaces are inactive.
   function syncActivity(){
+    tooltips.hide();
     if(anySurfaceActive()){
       for(const [token,item] of rafs)if(item.native===null)item.native=realWindow.requestAnimationFrame(t=>{rafs.delete(token);if(!disposed)item.fn(t);});
     }else{

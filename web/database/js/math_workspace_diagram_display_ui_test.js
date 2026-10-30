@@ -8,12 +8,22 @@ try{
   await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
   await read(()=>{
     window.api=MathWorkspaceAssetsTest;window.panels=MathWorkspaceObjectPanels;
-    window.c=api.createObjectAsset('complex');window.f=api.createObjectAsset('filtration');
+    window.c=api.createObjectAsset('complex');window.f=api.createObjectAsset('filtration',{data:{quotients:['\\frac{H^0(X,F)}{H^1(X,G)}','\\frac{\\frac{A}{B}}{\\frac{C}{D}}']}});
     window.p=panels.open('complex-diagrams','complex:'+c.id,'main');
-    p.references.querySelector('[data-diagram-member="filtration:'+f.id+'"]').click();
+    window.shared=panels.open('complex-diagrams','filtration:'+f.id,'main');
     window.editor=p.propertyRenderer.editor;window.find=sel=>editor.shadow.querySelector(sel)||editor.inspectorShadow.querySelector(sel);
   });
+  assert.equal(await read(()=>shared===p),true,'opening another filtration adds it to the common display');
+  assert.equal(await read(()=>[...panels.panels.values()].filter(p=>p.definition.structureScene).length),1);
   assert.equal(await read(()=>editor.objectIO('complex-entries').length),2);
+  assert.equal(await read(()=>find('#complex-chart-delete').textContent),'remove');
+  assert.equal(await read(()=>!!find('[data-diagram-action="clear"]')),false,'remove is the single removal action');
+  await waitFor(()=>read(()=>!!find('[data-diagram-asset="filtration:'+f.id+'"] .sheaf-filtration-quotient mjx-container')),20000);
+  const formulaFits=()=>{
+    const row=find('[data-diagram-asset="filtration:'+f.id+'"]'),formula=row.querySelector('.sheaf-step-saved-rule-formula'),bounds=formula.getBoundingClientRect();
+    return {height:bounds.height,noVerticalScroll:formula.scrollHeight<=formula.clientHeight+1,labels:[...formula.querySelectorAll('.sheaf-filtration-quotient mjx-container,.sheaf-filtration-object mjx-container')].every(node=>{const r=node.getBoundingClientRect();return r.top>=bounds.top-1&&r.bottom<=bounds.bottom+1;})};
+  };
+  assert(await read(formulaFits).then(result=>result.height>40&&result.noVerticalScroll&&result.labels),'tall quotient formulas contribute to row height instead of being clipped');
   assert.equal(await read(()=>find('[data-save-complex-results]').disabled),true,'referenced sources cannot be saved as duplicate previews');
   await read(()=>{window.other=panels.open('complex-diagrams','complex:'+c.id,'side',{newInstance:true});other.propertyRenderer.editor.objectIO('presentation',{display:'snake-les'});});
   assert.equal(await read(()=>editor.objectIO('presentation').display||''),'','panel layouts are independent');
@@ -61,7 +71,33 @@ try{
   await read(()=>{window.backup=panels.exportText('workspace');panels.importText('workspace',backup);window.restored=[...panels.panels.values()].find(a=>a.definition.id==='complex-diagrams');});
   assert.equal(await read(()=>restored.computation.refs.nodes.length),2);
   assert.equal(await read(()=>restored.propertyRenderer.editor.objectIO('complex-entries').length),2,'restore projects current Assets without duplicate sources');
+  await read(()=>{
+    window.p=restored;window.editor=p.propertyRenderer.editor;
+    window.extra=api.createObjectAsset('filtration');
+    editor.shadow.querySelector('[data-diagram-action="collect"]').click();
+  });
+  assert.equal(await read(()=>editor.objectIO('complex-entries').length),4,'collect shows all complexes and filtrations');
+  await read(()=>editor.shadow.querySelector('[data-diagram-action="collect"]').click());
+  assert.equal(await read(()=>editor.objectIO('complex-entries').length),4,'collect does not duplicate members');
+  await read(()=>{
+    find('#complex-chart-import-input').value=JSON.stringify({schema:'sheaf-complex-calculator-complex-chart',version:1,entries:[{id:'remove-preview',kind:'filtration',length:2,objects:['U','V'],quotients:['W']}]});
+    find('#complex-chart-import-apply').click();window.assetsBeforeRemove=JSON.stringify(api.localAssetSnapshot().assets);
+    for(const box of editor.shadow.querySelectorAll('[data-complex-chart-select]')){box.checked=true;box.dispatchEvent(new Event('change',{bubbles:true}));}
+    find('#complex-chart-delete').click();
+  });
+  assert.equal(await read(()=>editor.objectIO('complex-entries').length),0,'remove handles all selected references and previews');
+  assert.deepEqual(await read(()=>p.computation.refs.nodes),[]);
+  assert.equal(await read(()=>JSON.stringify(api.localAssetSnapshot().assets)),await read(()=>assetsBeforeRemove),'remove preserves Assets');
+  await read(()=>{panels.move(p,'hidden');window.reopened=panels.open('complex-diagrams','filtration:'+f.id,'main');});
+  assert.equal(await read(()=>reopened===p),true,'a closed common display is reused');
+  assert.equal(await read(()=>editor.objectIO('complex-entries').length),1);
+  await read(()=>editor.shadow.querySelector('[data-diagram-action="collect"]').click());
+  await client.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false});
+  await waitFor(()=>read(()=>getComputedStyle(find('[data-diagram-asset="filtration:'+f.id+'"] .sheaf-step-saved-rule-formula')).gridRowStart==='2'));
+  assert(await read(formulaFits).then(result=>result.noVerticalScroll&&result.labels),'narrow displays retain full quotient height');
+  await read(()=>{window.backup=panels.exportText('workspace');panels.importText('workspace',backup);});
+  assert.equal(await read(()=>[...panels.panels.values()].filter(panel=>panel.definition.structureScene&&!panel.comparison).length),1,'backup retains one common display');
   if(process.env.WORKSPACE_TEST_SCREENSHOT){const shot=await client.send('Page.captureScreenshot',{format:'png'});require('node:fs').writeFileSync(process.env.WORKSPACE_TEST_SCREENSHOT,Buffer.from(shot.data,'base64'));}
-  console.log('PASS mixed diagram display, shared editing, native operation preview, provenance, save-once, non-destructive removal and restore');
+  console.log('PASS common diagram display, tall/narrow filtration formulas, remove/collect, shared editing, previews, provenance, save-once and restore');
 }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}}
 run().catch(error=>{console.error(error);process.exitCode=1;});

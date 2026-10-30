@@ -21,13 +21,13 @@
   function references(kind, type) {
     if (kind === 'number') return [{ field: 'field', label: 'Coefficient ring', expectedKind: 'field' }];
     if (kind === 'variety' && ['curve', 'symmetric-product-curve'].includes(type)) return [{ field: 'genus', legacyField: 'genusNumber', label: 'Genus', expectedKind: 'number', scalar: true, min: 0, defaultValue: '2' }];
-    if (kind === 'sheaf' && ['abstract', 'locally-free'].includes(type)) return [{ field: 'rank', legacyField: 'rankNumber', label: 'Rank', expectedKind: 'number', scalar: true, min: 1, defaultValue: '1' }];
+    if (kind === 'sheaf' && ['abstract', 'locally-free'].includes(type)) return [{ field: 'rank', legacyField: 'rankNumber', label: 'Rank', expectedKind: 'number', scalar: true, min: 0, defaultValue: '1' }];
     return [];
   }
   function input(data, spec) {
     const value = data[spec.field];
     if (value && typeof value === 'object') {
-      if (value.kind === 'literal' && ['string', 'number'].includes(typeof value.value)) return { kind: 'literal', value: String(value.value) };
+      if (['literal','expression'].includes(value.kind) && ['string', 'number'].includes(typeof value.value)) return { kind: value.kind, value: String(value.value) };
       if (value.kind === 'reference' && typeof value.ref === 'string') return { kind: 'reference', ref: value.ref };
       throw new Error(spec.label + ' must have one value or asset reference.');
     }
@@ -41,6 +41,12 @@
     return parameter.kind === 'reference' ? parameter.ref : '';
   }
   function normalizeInput(parameter, spec) {
+    if(parameter.kind==='expression'){
+      const value=String(parameter.value).trim();let depth=0;
+      for(const c of value){if('({['.includes(c))depth++;if(')}]'.includes(c))depth--;if(depth<0)throw new Error('Incomplete '+spec.label+' expression.');}
+      if(!value||depth||/[+*/^=-]$/.test(value)||!/[A-Za-z0-9]/.test(value))throw new Error('Enter a complete '+spec.label+' expression.');
+      return {kind:'expression',value};
+    }
     if (parameter.kind === 'reference') {
       if (!parameter.ref.startsWith('number:') || !parameter.ref.slice(7)) throw new Error('Choose a Number asset for ' + spec.label + '.');
       return parameter;
@@ -64,7 +70,7 @@
   }
   function literalValue(asset, spec, assets) {
     const parameter = input(asset.data, spec);
-    if (parameter.kind === 'literal') return parameter.value;
+    if (['literal','expression'].includes(parameter.kind)) return parameter.value;
     const number = assets.find(item => keyOf(item) === parameter.ref && item.kind === 'number');
     if (!number?.data.hasValue) return '';
     try {
@@ -74,7 +80,7 @@
   }
   function scalar(asset, spec, assets) {
     const parameter = normalizeInput(input(asset.data, spec), spec);
-    if (parameter.kind === 'literal') return parameter.value;
+    if (['literal','expression'].includes(parameter.kind)) return parameter.value;
     const key = parameter.ref;
     const number = assets.find(item => keyOf(item) === key && item.kind === 'number');
     if (!number) throw new Error(spec.label + ' must reference an existing Number.');
