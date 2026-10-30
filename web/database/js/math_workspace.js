@@ -909,12 +909,20 @@
       resolveAssetInputConflict(instance,button.dataset.assetsResolve);
     }));
     form.querySelector('[data-assets-kind]').addEventListener('change', () => { if (!activeAssetInputInstance()) renderAssetsEditor(); });
-    form.addEventListener('input', (event) => {
-      if (!event.target.matches('[data-assets-name],[data-assets-field]') || event.target.matches('select,input[type="checkbox"],input[type="radio"]')) return;
+    window.CalculatorInputSettings.listenEditable(form.querySelector('[data-assets-name]'), 'input', () => {
+      if (!activeAssetInputInstance() && form.querySelector('[data-assets-name]').value !== form.dataset.autoName) form.dataset.autoName = '';
       captureAssetInputDraftFromForm(form.dataset.inputInstanceKey, Number(form.dataset.rendererEpoch), { immediate: false });
-    });
+    }, { commitHandled: true });
     form.addEventListener('change', (event) => {
       if (event.target.matches('[data-assets-subtype]')) {
+        if (!activeAssetInputInstance() && form.querySelector('[data-assets-kind]').value === 'variety') {
+          const name = form.querySelector('[data-assets-name]');
+          if (name.value === form.dataset.autoName) {
+            const data = normalizedAssetData('variety', event.target.value);
+            form.dataset.autoName = uniqueDefaultAssetName('variety', event.target.value, '', data);
+            window.CalculatorInputSettings.syncEditableValue(name, form.dataset.autoName);
+          }
+        }
         captureAssetInputDraftFromForm(form.dataset.inputInstanceKey, Number(form.dataset.rendererEpoch), { immediate: true, type: event.target.value });
         renderAssetsEditorFields();
       } else if (event.target.matches('select[data-assets-field],input[type="checkbox"][data-assets-field],input[type="radio"][data-assets-field]')) {
@@ -985,6 +993,7 @@
   let diagnosticCache = { revision: -1, assets: null, value: {} };
   function assetDiagnostics() {
     synchronizeTopologyAssets();
+    synchronizeVarietyAssets();
     if(diagnosticCache.revision!==assetState.snapshot.revision||diagnosticCache.assets!==assetState.snapshot.assets){
       diagnosticCache={revision:assetState.snapshot.revision,assets:assetState.snapshot.assets,value:window.MathWorkspaceDiagnostics?.analyze(assetState.snapshot.assets)||{}};
     }
@@ -994,7 +1003,7 @@
     const changed=window.MathWorkspaceTopology?.synchronize(assetState.snapshot.assets)||[];
     if(changed.length){for(const asset of changed){asset.dependencies=assetDependencies(asset.kind,asset.type,asset.data);asset.definition=assetDefinitionFor(asset.kind,asset.type,asset.data);asset.properties={};asset.fingerprint=JSON.stringify({name:asset.name,type:asset.type,data:asset.data,dependencies:asset.dependencies});}assetState.snapshot.revision++;}
   }
-  const localAssetSnapshot = () => {synchronizeTopologyAssets();return { revision: assetState.snapshot.revision, diagnostics: assetDiagnostics(), assets: assetState.snapshot.assets.map((asset) => ({ ...asset, ...(asset.kind === 'matrix' && asset.data.field ? {definition:assetDefinitionFor(asset.kind,asset.type,asset.data)} : {}), dependencies: (asset.dependencies || []).map((ref) => ({ ...ref })), data: cloneAssetProperties(asset.data), properties: cloneAssetProperties(asset.properties) })), capabilities: { variety: true, young: true, lie: true, sheaf: true, map: true } };};
+  const localAssetSnapshot = () => {synchronizeTopologyAssets();synchronizeVarietyAssets();return { revision: assetState.snapshot.revision, diagnostics: assetDiagnostics(), assets: assetState.snapshot.assets.map((asset) => ({ ...asset, ...(asset.kind === 'matrix' && asset.data.field ? {definition:assetDefinitionFor(asset.kind,asset.type,asset.data)} : {}), dependencies: (asset.dependencies || []).map((ref) => ({ ...ref })), data: cloneAssetProperties(asset.data), properties: cloneAssetProperties(asset.properties) })), capabilities: { variety: true, young: true, lie: true, sheaf: true, map: true } };};
   const assetMathSignature = (asset) => JSON.stringify({ kind: asset?.kind, type: asset?.type, data: asset?.data || {}, dependencies: asset?.dependencies || [] });
   function invalidateDerivedAssetProperties(record, next) {
     if (!record || assetMathSignature(record) === assetMathSignature(next)) return cloneAssetProperties(record?.properties);
@@ -1016,6 +1025,10 @@
         if (next.some(item => item.field === spec.field)) continue;
         if (options.type === 'ppav-moduli' && spec.field === 'genus') data.genus = window.MathWorkspaceNumbers.literalValue({data}, spec, assetState.snapshot.assets);
         else delete data[spec.field];
+      }
+      if (instance.draft.kind === 'variety' && VARIETY_INPUT_FIELDS[options.type]) {
+        const defaults = normalizedAssetData('variety', options.type);
+        for (const field of VARIETY_INPUT_FIELDS[options.type]) if (!Object.hasOwn(data, field) && Object.hasOwn(defaults, field)) data[field] = defaults[field];
       }
     }
     const draft = cloneInputDraft({
@@ -1049,9 +1062,85 @@
   function degreeList(value) {
     return String(value ?? '').split(/[,\s]+/).filter(Boolean).map((entry) => positiveInt(entry, 0)).filter(Boolean);
   }
-  function varietyDimension(asset) {
-    if(asset?.type==='toric') { const source=assetByKey(asset.data.fan||asset.data.cone);if(source)return source.data.ambientDimension; }
-    return nonnegativeInt(asset?.data?.dimension, 0);
+  const DERIVED_VARIETY_DIMENSIONS = new Set(['point', 'curve', 'symmetric-product-curve', 'ppav-moduli', 'grassmannian', 'complete-intersection', 'product', 'toric']);
+  const VARIETY_INPUT_FIELDS = {
+    abstract: ['dimension'], curve: ['genus'], 'symmetric-product-curve': ['genus', 'power'], abelian: ['dimension'],
+    'ppav-moduli': ['genus'], point: [], projective: ['dimension'], grassmannian: ['r', 'n'],
+    'complete-intersection': ['ambientDimension', 'degrees'], product: ['first', 'second']
+  };
+  const VARIETY_CONSTRUCTION_FIELDS = new Set(Object.values(VARIETY_INPUT_FIELDS).flat());
+  function varietyInteger(value, fallback, min = 0) {
+    const raw = value ?? fallback;
+    return String(raw).trim() !== '' && Number.isSafeInteger(Number(raw)) && Number(raw) >= min ? Number(raw) : null;
+  }
+  // Derived fields are projections of the construction, never editable drafts.
+  // This deliberately does not normalize unrelated drafts such as curve genus.
+  function derivedVarietyDimension(type, data, visiting = new Set()) {
+    if (type === 'point') return 0;
+    if (type === 'curve') return 1;
+    if (type === 'symmetric-product-curve') return varietyInteger(data.power, 3, 1);
+    if (type === 'ppav-moduli') {
+      const g = varietyInteger(data.genus, 2, 1); return g == null ? null : g * (g + 1) / 2;
+    }
+    if (type === 'grassmannian') {
+      const r = varietyInteger(data.r, 2, 1), n = varietyInteger(data.n, 4, 1);
+      return r == null || n == null || r > n ? null : r * (n - r);
+    }
+    if (type === 'complete-intersection') {
+      const ambient = varietyInteger(data.ambientDimension, 4), raw = String(data.degrees ?? '2, 3');
+      if (ambient == null || !/^\s*\d+(?:\s*[, ]\s*\d+)*\s*$/.test(raw)) return null;
+      const degrees = raw.trim().split(/[,\s]+/).map(Number);
+      return degrees.some(n => !Number.isSafeInteger(n) || n < 1) || ambient < degrees.length ? null : ambient - degrees.length;
+    }
+    if (type === 'product') {
+      const left = varietyDimension(assetByKey(data.first, 'variety'), visiting), right = varietyDimension(assetByKey(data.second, 'variety'), visiting);
+      return left == null || right == null ? null : left + right;
+    }
+    if (type === 'toric') {
+      const source = assetByKey(data.fan || data.cone);
+      return source ? varietyInteger(source.data.ambientDimension) : null;
+    }
+    return varietyInteger(data.dimension, 3);
+  }
+  function varietyDimension(asset, visiting = new Set()) {
+    if (!asset || visiting.has(assetKey(asset))) return null;
+    const next = new Set(visiting); next.add(assetKey(asset));
+    return derivedVarietyDimension(asset.type, asset.data || {}, next);
+  }
+  function defaultVarietyName(type, data = {}) {
+    if (type === 'curve') return 'C';
+    if (type === 'abelian') return 'A';
+    if (type === 'point') return 'p';
+    if (type === 'projective') return `\\mathbb{P}^{${data.dimension ?? 3}}`;
+    if (type === 'grassmannian') return `\\operatorname{Gr}(${data.r ?? 2},${data.n ?? 4})`;
+    if (type === 'ppav-moduli') return `\\mathcal{A}_{${data.genus ?? 2}}`;
+    if (type === 'symmetric-product-curve') return `\\operatorname{Sym}^{${data.power ?? 3}}(C)`;
+    if (type === 'complete-intersection') return `X_{${degreeList(data.degrees ?? '2, 3').join(',')}}`;
+    if (type === 'product') return `${assetByKey(data.first, 'variety')?.name || 'X'}\\times ${assetByKey(data.second, 'variety')?.name || 'Y'}`;
+    return 'X';
+  }
+  function synchronizeVarietyAssets() {
+    const visited = new Set(), visiting = new Set(); let changed = false;
+    const visit = record => {
+      if (!record || record.kind !== 'variety' || visited.has(assetKey(record)) || visiting.has(assetKey(record))) return;
+      visiting.add(assetKey(record));
+      if (record.type === 'product') { visit(assetByKey(record.data?.first)); visit(assetByKey(record.data?.second)); }
+      visiting.delete(assetKey(record)); visited.add(assetKey(record));
+      const data = { ...record.data };
+      if (DERIVED_VARIETY_DIMENSIONS.has(record.type)) data.dimension = String(varietyDimension(record) ?? '');
+      const automatic = record.autoName && record.autoName === record.name;
+      const name = automatic ? uniqueDefaultAssetName('variety', record.type, assetKey(record), data) : record.name;
+      if (name === record.name && data.dimension === record.data?.dimension) return;
+      const next = { ...record, name, data };
+      Object.assign(record, { name, ...(automatic ? { autoName: name } : {}), plainName: plainAssetName(name), data,
+        definition: assetDefinitionFor(record.kind, record.type, data), properties: invalidateDerivedAssetProperties(record, next) });
+      record.fingerprint = JSON.stringify({ name, type: record.type, data, dependencies: record.dependencies });
+      const instance = assetInputInstanceForRef(record);
+      if (instance && !instance.dirty) instance.draft = inputDraftFromRecord(record);
+      changed = true;
+    };
+    assetState.snapshot.assets.forEach(visit);
+    if (changed) assetState.snapshot.revision += 1;
   }
   function normalizedAssetData(kind, type, source = {}) {
     source=presentation.split(kind,source).data;
@@ -1063,14 +1152,11 @@
       if (!data.genus) throw new Error('Enter a genus value for this variety type.');
     }
     if (kind === 'variety') {
-      if (type === 'point') data.dimension = '0';
-      else if (type === 'curve') { data.dimension = '1'; }
-      else if (type === 'symmetric-product-curve') { data.power = String(positiveInt(data.power, 3)); data.dimension = data.power; }
-      else if (type === 'ppav-moduli') { const genus = positiveInt(data.genus, 2); data.genus = String(genus); data.dimension = String((genus * (genus + 1)) / 2); }
-      else if (type === 'grassmannian') { const r = positiveInt(data.r, 2), n = Math.max(r, positiveInt(data.n, 4)); data.r = String(r); data.n = String(n); data.dimension = String(r * (n - r)); }
-      else if (type === 'complete-intersection') { const degrees = degreeList(data.degrees || '2, 3'); const ambient = nonnegativeInt(data.ambientDimension, 4); data.degrees = degrees.join(', '); data.ambientDimension = String(ambient); data.dimension = String(Math.max(0, ambient - degrees.length)); }
-      else if (type === 'product') { const left = assetByKey(data.first, 'variety'), right = assetByKey(data.second, 'variety'); data.dimension = left && right ? String(varietyDimension(left) + varietyDimension(right)) : ''; }
-      else data.dimension = String(nonnegativeInt(data.dimension, 3));
+      if (type === 'symmetric-product-curve') data.power = String(positiveInt(data.power, 3));
+      else if (type === 'ppav-moduli') data.genus = String(positiveInt(data.genus, 2));
+      else if (type === 'grassmannian') { const r = positiveInt(data.r, 2), n = Math.max(r, positiveInt(data.n, 4)); data.r = String(r); data.n = String(n); }
+      else if (type === 'complete-intersection') { data.degrees = degreeList(data.degrees || '2, 3').join(', '); data.ambientDimension = String(nonnegativeInt(data.ambientDimension, 4)); }
+      data.dimension = DERIVED_VARIETY_DIMENSIONS.has(type) ? String(derivedVarietyDimension(type, data) ?? '') : String(nonnegativeInt(data.dimension, 3));
     } else if (kind === 'sheaf') {
       if (type === 'twist') data.twist = String(Math.round(Number(data.twist) || 0));
       if (!isDirectSheafType(type)) data.base = inferredSheafBase(type, data);
@@ -1241,7 +1327,9 @@
     form.querySelector('[data-assets-kind-row]').hidden = !!record;
     form.querySelector('[data-assets-kind]').value = kind; form.querySelector('[data-assets-kind]').disabled = !!record;
     updateAssetsInputCardTitle(instance, kind);
-    form.querySelector('[data-assets-name]').value = instance ? draft.name : (kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
+    const name = instance ? draft.name : uniqueDefaultAssetName(kind, subtype);
+    form.dataset.autoName = instance ? draft.autoName : name;
+    window.CalculatorInputSettings.syncEditableValue(form.querySelector('[data-assets-name]'), name);
     const subtypeSelect = form.querySelector('[data-assets-subtype]'); subtypeSelect.replaceChildren(...ASSET_SUBTYPES[kind].map(([value, label]) => new Option(label, value))); subtypeSelect.value = subtype;
     form.querySelector('[data-assets-save]').textContent = record ? 'save now' : 'add'; form.querySelector('[data-assets-delete]').hidden = !record;
     renderAssetsEditorFields();
@@ -1264,8 +1352,9 @@
       html += `<label class="workspace-field workspace-field-inline"><span class="input-label">Lie type</span><select class="workspace-control" data-assets-field="family">${['A','B','C','D','E6','E7','E8','F4','G2'].map(family => `<option value="${family}"${family === (data.family || 'A') ? ' selected' : ''}>${family}</option>`).join('')}</select></label>`;
       html += fieldHtml('Rank', 'rank', data.rank ?? 3, 'number');
     } else if (kind === 'variety') {
-      const derivedDimension = ['curve', 'symmetric-product-curve', 'ppav-moduli', 'grassmannian', 'complete-intersection', 'product'].includes(type);
-      html += fieldHtml('Dimension', 'dimension', data.dimension ?? 3, 'number', { readOnly: type === 'point' || derivedDimension });
+      const derivedDimension = DERIVED_VARIETY_DIMENSIONS.has(type);
+      const dimension = derivedDimension ? derivedVarietyDimension(type, data) ?? '' : data.dimension ?? 3;
+      html += fieldHtml('Dimension', 'dimension', dimension, 'number', { readOnly: derivedDimension });
       if (type === 'ppav-moduli') html += fieldHtml('Genus', 'genus', data.genus ?? 2, 'number');
       if (type === 'symmetric-product-curve') html += fieldHtml('Symmetric power m', 'power', data.power ?? 3, 'number');
       if (type === 'grassmannian') html += fieldHtml('r', 'r', data.r ?? 2, 'number') + fieldHtml('n', 'n', data.n ?? 4, 'number');
@@ -1283,6 +1372,9 @@
       referenceFieldSpecs(kind, type).forEach((spec) => { html += referenceFieldHtml(spec, context); });
     }
     fields.innerHTML = html;
+    fields.querySelectorAll('input[data-assets-field]:not([readonly])').forEach(field => {
+      window.CalculatorInputSettings.listenEditable(field, 'input', () => captureAssetInputDraftFromForm(form.dataset.inputInstanceKey, Number(form.dataset.rendererEpoch), { immediate: false }), { commitHandled: true });
+    });
     fields.querySelectorAll('[data-assets-reference]').forEach(bindReferenceField);
     if (instance) fields.querySelectorAll('.workspace-scalar-field').forEach(group => bindScalarField(group, referenceFieldSpecs(kind, type).find(spec => spec.field === group.querySelector('[data-scalar-mode]').dataset.scalarMode), instance));
     if (window.MathJax?.typesetPromise) {
@@ -1293,7 +1385,7 @@
   }
   function assetEditorData(instance = activeAssetInputInstance()) {
     const form = editorForm(), data = {};
-    form.querySelectorAll('[data-assets-field]').forEach((field) => { data[field.dataset.assetsField] = field.value; });
+    form.querySelectorAll('[data-assets-field]').forEach((field) => { if (!field.readOnly) data[field.dataset.assetsField] = field.value; });
     form.querySelectorAll('[data-scalar-value]').forEach(field => { data[field.dataset.scalarValue] = { kind: 'literal', value: field.value }; });
     form.querySelectorAll('[data-assets-reference]').forEach((field) => {
       const name = field.dataset.assetsReference, value = field.dataset.assetsReferenceValue || '';
@@ -1359,10 +1451,15 @@
       }
     }
   }
-  const cloneInputDraft = (draft) => ({
-    name: String(draft?.name ?? ''), kind: draft?.kind || 'variety', type: draft?.type || 'abstract', data: window.MathWorkspaceNumbers.migrateInputs(draft?.kind, draft?.type, draft?.data || {})
-  });
-  const inputDraftFromRecord = (record) => cloneInputDraft({ name: record?.name || '', kind: record?.kind || 'variety', type: record?.type || 'abstract', data: record?.data || {} });
+  const cloneInputDraft = (draft) => {
+    const data = window.MathWorkspaceNumbers.migrateInputs(draft?.kind, draft?.type, draft?.data || {});
+    if (draft?.kind === 'variety' && VARIETY_INPUT_FIELDS[draft.type]) {
+      for (const field of VARIETY_CONSTRUCTION_FIELDS) if (!VARIETY_INPUT_FIELDS[draft.type].includes(field)) delete data[field];
+    }
+    if (draft?.kind === 'variety' && DERIVED_VARIETY_DIMENSIONS.has(draft.type)) delete data.dimension;
+    return { name: String(draft?.name ?? ''), autoName: draft?.autoName || '', kind: draft?.kind || 'variety', type: draft?.type || 'abstract', data };
+  };
+  const inputDraftFromRecord = (record) => cloneInputDraft({ name: record?.name || '', autoName: record?.autoName ?? (record?.kind === 'variety' && /^X(?:_\{[1-9]\d*\})?$/.test(record.name) ? record.name : ''), kind: record?.kind || 'variety', type: record?.type || 'abstract', data: record?.data || {} });
   const assetInputDefinition = record => JSON.stringify(inputDraftFromRecord(record),(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.keys(value).sort().map(key=>[key,value[key]])):value);
   function createAssetInputInstance(targetRef, record = assetByKey(assetKey(targetRef)), revision = assetState.snapshot.revision) {
     if (!targetRef || !record || assetKey(targetRef) !== assetKey(record)) throw new Error('The Input target no longer exists.');
@@ -1404,14 +1501,15 @@
       if (numericFields.has(field) && typeof value !== 'object' && (String(value).trim() === '' || !Number.isFinite(Number(value)) || !Number.isInteger(Number(value)))) return { valid: false, message: `${field} must be a complete integer.`, field };
     }
     if (draft.kind === 'variety' && draft.type === 'complete-intersection' && !/^\s*\d+(?:\s*[, ]\s*\d+)*\s*$/.test(String(draft.data.degrees || ''))) return { valid: false, message: 'Degrees must be a complete list of positive integers.', field: 'degrees' };
+    if (draft.kind === 'variety' && !['product', 'toric'].includes(draft.type) && derivedVarietyDimension(draft.type, draft.data) == null) return { valid: false, message: 'The variety parameters must define a valid dimension.', field: '' };
     try {
       const data = normalizedAssetData(draft.kind, draft.type, draft.data);
       validateAssetData(draft.kind, draft.type, data, currentKey);
-      return { valid: true, message: '', field: '', normalized: { name, kind: draft.kind, type: draft.type, data, dependencies: assetDependencies(draft.kind, draft.type, data) } };
+      return { valid: true, message: '', field: '', normalized: { name, autoName: draft.autoName === draft.name ? name : '', kind: draft.kind, type: draft.type, data, dependencies: assetDependencies(draft.kind, draft.type, data) } };
     } catch (error) { return { valid: false, message: error.message, field: '' }; }
   }
   function inputSemanticValue(record) {
-    return JSON.stringify({ name: record?.name || '', kind: record?.kind || '', type: record?.type || '', data: record?.data || {}, dependencies: record?.dependencies || [] });
+    return JSON.stringify({ name: record?.name || '', autoName: record?.autoName || '', kind: record?.kind || '', type: record?.type || '', data: record?.data || {}, dependencies: record?.dependencies || [] });
   }
   function createAssetInputCommitCommand(instance) {
     const validation = validateAssetInputDraft(instance);
@@ -1451,7 +1549,7 @@
       return { committed: false, unchanged: true };
     }
     const staged = {
-      ...record, name: next.name, plainName: plainAssetName(next.name), kind: next.kind, type: next.type,
+      ...record, name: next.name, autoName: next.autoName, plainName: plainAssetName(next.name), kind: next.kind, type: next.type,
       typeLabel: ASSET_SUBTYPES[next.kind].find(([value]) => value === next.type)?.[1] || next.kind,
       definition: assetDefinitionFor(next.kind, next.type, next.data), dependencies: next.dependencies, data: next.data,
       properties: invalidateDerivedAssetProperties(record, next)
@@ -1490,6 +1588,7 @@
     if(item)syncAssetWarning(record,item);
     if (!instance || activeAssetInputInstance() !== instance) return;
     const card = assetState.editorCard, form = editorForm(); if (!card || !form) return;
+    syncAssetInputDerivedFields(instance);
     const compact = card.querySelector('[data-assets-autosave-status]'), message = form.querySelector('[data-assets-editor-status]');
     const diagnosticMessages=record?window.MathWorkspaceDiagnostics?.messages(assetDiagnostics()[assetKey(record)],assetState.snapshot.assets)||[]:[];
     if (compact) compact.textContent = instance.autosaveStatus;
@@ -1535,10 +1634,32 @@
     if (!instance || instance.deleted) return false;
     instance.taskGeneration += 1;
     instance.draft = cloneInputDraft({ ...instance.draft, ...patch, data: { ...instance.draft.data, ...(patch.data || {}) } });
+    if (instance.draft.name !== instance.draft.autoName) instance.draft.autoName = '';
+    if (instance.draft.kind === 'variety' && instance.draft.autoName) {
+      const validation = validateAssetInputDraft(instance);
+      if (validation.valid) {
+        instance.draft.name = uniqueDefaultAssetName('variety', instance.draft.type, assetKey(instance.targetRef), validation.normalized.data);
+        instance.draft.autoName = instance.draft.name;
+      }
+    }
     instance.dirty = true; instance.validation = { valid: true, message: '', field: '' };
     instance.autosaveStatus = instance.conflictState ? 'Conflict' : 'Editing';
     renderAssetInputStatus(instance);
     return options.schedule === false ? true : scheduleAssetInputAutosave(instance, options);
+  }
+  function syncAssetInputDerivedFields(instance = activeAssetInputInstance()) {
+    const form = editorForm();
+    if (!form || !instance || instance !== activeAssetInputInstance() || instance.draft.kind !== 'variety') return;
+    const { type, data, name, autoName } = instance.draft;
+    if (DERIVED_VARIETY_DIMENSIONS.has(type)) {
+      const field = form.querySelector('[data-assets-field="dimension"]');
+      if (field?.readOnly) window.CalculatorInputSettings.syncEditableValue(field, derivedVarietyDimension(type, data) ?? '');
+    }
+    if (autoName && name === autoName) {
+      window.CalculatorInputSettings.syncEditableValue(form.querySelector('[data-assets-name]'), name);
+      const record = assetByKey(assetKey(instance.targetRef));
+      if (record && !instance.dirty && assetState.editorCard?.dataset.workspaceLabel !== `${record.plainName || record.name} · Input`) updateAssetsInputCardTitle(instance, 'variety');
+    }
   }
   function flushAssetInputInstance(instance, options = {}) {
     if (!instance?.dirty || instance.deleted) return false;
@@ -1684,7 +1805,7 @@
     try {
       let instance = activeAssetInputInstance();
       if (!instance) {
-        const pending = cloneInputDraft({ name: form.querySelector('[data-assets-name]').value, kind: form.querySelector('[data-assets-kind]').value, type: form.querySelector('[data-assets-subtype]').value, data: assetEditorData(null) });
+        const pending = cloneInputDraft({ name: form.querySelector('[data-assets-name]').value, autoName: form.dataset.autoName, kind: form.querySelector('[data-assets-kind]').value, type: form.querySelector('[data-assets-subtype]').value, data: assetEditorData(null) });
         const record = createDefaultAsset(pending.kind);
         applyAssetSnapshot(localAssetSnapshot(), assetRef(record), { affectedAssetKeys: new Set([assetKey(record)]) });
         instance = bindAssetInputInstance(assetRef(record), { render: false });
@@ -2030,12 +2151,14 @@
     if (!present.has(assetState.renameKey)) assetState.renameKey = '';
     if (assetState.propertyRef && !present.has(assetKey(assetState.propertyRef))) assetState.propertyRef = null;
     assetState.snapshot = snapshot;
+    synchronizeVarietyAssets();
     rebaseCleanAssetInputInstances(snapshot.revision);
     pruneAssetPropertyBindings(present);
     markAffectedAssetPropertyInstances(options.affectedAssetKeys);
     reprojectActiveAssetPropertySlots(localAssetSnapshot(), { onlyStale: !!options.affectedAssetKeys?.size });
     syncAssetProjectionSessions();
     renderAssets(); renderInspector();
+    syncAssetInputDerivedFields();
     objectWorkspace?.refresh(localAssetSnapshot());
     scheduleDefaultCleanup();
   }
@@ -2233,9 +2356,14 @@
     const hiddenDefaults = assetState.showDefaults ? 0 : assetState.snapshot.assets.filter(asset => asset.isDefault).length;
     assetState.view.querySelector('[data-assets-count]').textContent = `${entries.length} object${entries.length === 1 ? '' : 's'}${hiddenDefaults ? ` · ${hiddenDefaults} default${hiddenDefaults === 1 ? '' : 's'} hidden` : ''}${assetState.selected.size ? ` · ${assetState.selected.size} selected` : ''}`;
     content.dataset.layout = assetState.layout; content.dataset.assetsEmpty = !assetState.ready ? 'loading' : !entries.length ? 'empty' : 'false'; content.replaceChildren();
+    content.setAttribute('role', entries.length ? 'listbox' : 'group');
+    if (entries.length) content.setAttribute('aria-multiselectable', 'true'); else content.removeAttribute('aria-multiselectable');
     if (!assetState.ready) { content.appendChild(Object.assign(document.createElement('p'), { className: 'workspace-assets-empty', textContent: 'Loading Assets…' })); return; }
     if (!entries.length) {
-      const empty = Object.assign(document.createElement('div'), { className: 'workspace-assets-empty' }); empty.innerHTML = '<strong>This Assets view is empty.</strong><span>Right-click here to create a mathematical object.</span>'; content.appendChild(empty); return;
+      const empty = Object.assign(document.createElement('div'), { className: 'workspace-assets-empty' });
+      empty.innerHTML = '<strong>This Assets view is empty.</strong><button type="button" class="btn workspace-assets-create" data-assets-create aria-haspopup="dialog">New object</button><span>You can also right-click here to create a mathematical object.</span>';
+      empty.querySelector('[data-assets-create]').addEventListener('click', () => { closeAssetsContextMenu(); creationPicker.open(); });
+      content.appendChild(empty); return;
     }
     if (assetState.layout === 'details') {
       const header = Object.assign(document.createElement('div'), { className: 'workspace-assets-details-header' }); header.setAttribute('role', 'row');
@@ -2362,11 +2490,13 @@
   }
 
   const reservedAssetNames = new Set();
-  function uniqueDefaultAssetName(kind) {
-    const base = ({knot:'K','dual-graph':'G',filtration:'F',complex:'C', 'field-extension':'L/K','mosaic-space':'S','mosaic-diagram':'D',number:'a',field:'R',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? 'X' : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
+  function uniqueDefaultAssetName(kind, type = '', currentKey = '', data = {}) {
+    const base = ({knot:'K','dual-graph':'G',filtration:'F',complex:'C', 'field-extension':'L/K','mosaic-space':'S','mosaic-diagram':'D',number:'a',field:'R',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? defaultVarietyName(type, data) : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
     const numbered = (number) => kind === 'sheaf' ? `\\mathcal{E}_{${number}}` : `${base}_{${number}}`;
+    const current = currentKey && assetByKey(currentKey);
+    if (current && current.autoName === current.name && (current.name === base || current.name.startsWith(base + '_{') && /^_\{[1-9]\d*\}$/.test(current.name.slice(base.length)))) return current.name;
     let name = base, number = 2;
-    const isTaken = (candidate) => reservedAssetNames.has(canonicalAssetName(candidate)) || assetState.snapshot.assets.some((asset) => canonicalAssetName(asset.name) === canonicalAssetName(candidate));
+    const isTaken = (candidate) => reservedAssetNames.has(canonicalAssetName(candidate)) || assetState.snapshot.assets.some((asset) => assetKey(asset) !== currentKey && canonicalAssetName(asset.name) === canonicalAssetName(candidate));
     while (isTaken(name)) name = numbered(number++);
     return name;
   }
@@ -2379,7 +2509,8 @@
     const data = normalizedAssetData(kind, type, supplied);
     if (options.defaults !== false) validateAssetData(kind, type, data, '');
     const prefix = { field: 'R', dynkin: 'D', strands: 'W', matrix: 'A', category: 'C', functor: 'F', young: 'Y', lie: 'L', variety: 'X', sheaf: 'E', map: 'M' }[kind] || kind.charAt(0).toUpperCase();
-    const record = { id: `${prefix}${++assetState.nextObjectId}`, kind, name: options.name || uniqueDefaultAssetName(kind), type, data, ...(options.isDefault ? { isDefault: true } : {}) };
+    const name = options.name || uniqueDefaultAssetName(kind, type, '', data);
+    const record = { id: `${prefix}${++assetState.nextObjectId}`, kind, name, ...(kind === 'variety' ? { autoName: options.name ? '' : name } : {}), type, data, ...(options.isDefault ? { isDefault: true } : {}) };
     const view=options.view||presentation.split(kind,supplied).view;if(Object.keys(view).length)viewDefaults.set(assetKey(record),JSON.parse(JSON.stringify(view)));
     record.plainName = plainAssetName(record.name);
     record.typeLabel = ASSET_SUBTYPES[kind].find(([value]) => value === type)?.[1] || kind;
