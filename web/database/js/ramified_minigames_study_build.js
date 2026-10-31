@@ -153,9 +153,9 @@ html = html.replace('<section id="player-room"', `<section id="player-room-loadi
               <header class="player-room-header">
                 <h2 id="player-room-loading-game" class="player-room-loading-game"></h2>
                 <div class="player-room-code-row" aria-hidden="true"><span class="player-room-placeholder player-room-loading-code"></span><span class="player-room-placeholder player-room-loading-copy"></span></div>
-                <div class="player-room-meta" aria-hidden="true"><span class="player-room-placeholder player-room-loading-meta"></span></div>
+                <div class="player-room-meta" aria-hidden="true"><p id="player-room-loading-host" class="player-room-placeholder player-room-loading-meta"></p><p class="player-room-placeholder player-room-loading-meta"><span data-i18n="study.roomTimeLabel">Time:</span> <span id="player-room-loading-time"></span></p></div>
               </header>
-              <p id="player-room-loading-status" class="player-room-status" role="status" aria-live="polite" aria-atomic="true"><span class="player-room-spinner" aria-hidden="true"></span><span id="player-room-loading-text"></span></p>
+              <p id="player-room-loading-status" class="player-room-status" role="status" aria-live="polite" aria-atomic="true"><span class="player-room-loading-status-content"><span class="player-room-spinner" aria-hidden="true"></span><span id="player-room-loading-text"></span></span><span id="player-room-loading-status-measure" aria-hidden="true"></span></p>
               <div class="player-room-loading-seats" aria-hidden="true"><span class="player-room-loading-legend" data-i18n="lobby.seats">Choose a seat</span><div id="player-room-loading-rows"></div></div>
               <div class="player-room-loading-space" aria-hidden="true"></div>
             </div>

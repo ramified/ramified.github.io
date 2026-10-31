@@ -210,7 +210,7 @@
       if (requestBusy) return;
       const ticket = ++serial; requestBusy = true; ui.save(); renderRooms();
       const entry = rooms.find(room => room.roomCode === code);
-      presentConnection('start', { kind: 'joining', gameMode: entry?.gameMode, seatCount: (entry?.unclaimedRoles?.length || 0) + (entry?.members || []).reduce((sum, member) => sum + member.roles.length, 0), ...presentation });
+      presentConnection('start', { kind: 'joining', gameMode: entry?.gameMode, hostName: entry?.hostName, timeControl: entry?.timeControl, roundState: entry?.roundState, seatCount: (entry?.unclaimedRoles?.length || 0) + (entry?.members || []).reduce((sum, member) => sum + member.roles.length, 0), ...presentation });
       ui.message(tk('lobby.connecting', 'Connecting…'));
       try {
         const joined = await engine.onlineJoin(code, { isCurrent: () => ticket === serial });
@@ -237,7 +237,7 @@
           if (!engine.onlineSend({ type: 'proposeConfiguration', gameMode: snapshot.gameMode, snapshot, timeControl: config, summary: snapshot.preset.label || snapshot.preset.id })) throw new Error('send');
           engine.onlineCancelSetup(); setFlow(''); ui.show('room', 'home');
         } else {
-          const presentation = { kind: 'creating', gameMode: snapshot.gameMode, seatCount: snapshot.gameMode === 'chinese-checkers' ? (snapshot.playerColors || snapshot.chineseCheckersPlayers || []).length || 6 : 2 };
+          const presentation = { kind: 'creating', gameMode: snapshot.gameMode, hostName: engine.onlineInfo().playerName, timeControl: config, roundState: 'waiting', seatCount: snapshot.gameMode === 'chinese-checkers' ? (snapshot.playerColors || snapshot.chineseCheckersPlayers || []).length || 6 : 2 };
           presentConnection('start', presentation);
           const room = await engine.onlineCreate(snapshot, config, creationId);
           if (ticket !== serial) return;

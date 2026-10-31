@@ -24,12 +24,22 @@
       connectionError = null;
       delete message.dataset.roomConnectionError;
     }
+    function pendingTime(config = {}) {
+      if (config.mode === 'total') return tk('lobby.totalMinutesSummary', '{{minutes}} minutes per side', { minutes: Number((config.totalSeconds / 60).toFixed(2)) });
+      if (config.mode === 'move') return tk('lobby.moveSummary', '{{seconds}} seconds per action', { seconds: config.moveSeconds });
+      if (config.mode === 'byoyomi') return tk('lobby.byoMinutesSummary', '{{minutes}} minutes + 3 × {{period}} seconds', { minutes: Number((config.totalSeconds / 60).toFixed(2)), period: config.periodSeconds });
+      return tk('lobby.unlimited', 'Unlimited');
+    }
     function paintWaiting() {
       if (!pending || loading.hidden) return;
       setText(el('player-room-loading-game'), engine.games().find(game => game.mode === pending.gameMode)?.label || tk('lobby.room', 'Room'));
       const text = pending.kind === 'creating' ? tk('study.roomCreating', 'Creating room…')
         : pending.kind === 'joining' ? tk('study.roomJoining', 'Joining room…') : tk('lobby.connecting', 'Connecting…');
       setText(el('player-room-loading-text'), text);
+      setText(el('player-room-loading-status-measure'), pending.roundState === 'playing' ? tk('lobby.playing', 'Playing')
+        : ['finished', 'rematch-vote'].includes(pending.roundState) ? tk('lobby.finished', 'Round ended') : tk('lobby.waiting', 'Waiting for players to choose seats and get ready'));
+      setText(el('player-room-loading-host'), tk('lobby.host', 'Host: {{name}}', { name: pending.hostName || tk('lobby.noHost', 'None') }));
+      setText(el('player-room-loading-time'), pendingTime(pending.timeControl));
       loading.style.setProperty('--loading-actions', pending.kind === 'joining' ? '2' : '3');
       loading.style.setProperty('--loading-members-size', pending.kind === 'joining' ? 'calc(1.4 * clamp(12px,var(--small),16px) + clamp(12px,1.4cqw,20px))' : '0px');
       const rows = el('player-room-loading-rows'), count = pending.seatCount || 2;
@@ -89,10 +99,13 @@
 
     function syncRoom() {
       const info = engine.onlineInfo();
-      if (!pending && info.connecting && !room.hidden && !menu.hidden) startWaiting({ kind: 'connecting', gameMode: info.gameMode, sourcePage: 'room' });
+      if (!pending && info.connecting && !room.hidden && !menu.hidden) startWaiting({ kind: 'connecting', gameMode: info.gameMode, hostName: info.hostName, timeControl: info.timeControl, roundState: info.roundState, seatCount: options.querySelectorAll('input').length || 2, sourcePage: 'room' });
       if (pending?.kind === 'connecting' && !info.connecting) stopWaiting();
-      room.dataset.roomPresentation = info.loadFailed ? 'failed' : info.connecting ? 'connecting' : 'ready';
-      if (room.hidden || !info.joined) return;
+      const connectionFailed = !info.joined && !info.connecting && el('online-status').dataset.state === 'error';
+      room.dataset.roomPresentation = info.loadFailed || connectionFailed ? 'failed' : info.connecting ? 'connecting' : 'ready';
+      if (room.hidden) return;
+      if (connectionFailed) { setText(el('player-room-state'), tk('lobby.joinError', 'Could not enter this room. Choose a room to retry, or go back.')); return; }
+      if (!info.joined) return;
       setText(el('player-room-game'), engine.games().find(game => game.mode === info.gameMode)?.label || info.gameMode);
       setText(el('player-room-code'), info.roomCode || '');
       setText(el('player-room-host'), tk('lobby.host', 'Host: {{name}}', { name: info.hostName || tk('lobby.noHost', 'None') }));

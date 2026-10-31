@@ -25,6 +25,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const sourceRoot=process.env.MATH_WORKSPACE_SOURCE_ROOT?path.resolve(process.env.MATH_WORKSPACE_SOURCE_ROOT):root;
 const outputRoot=process.env.MATH_WORKSPACE_OUTPUT_ROOT?path.resolve(process.env.MATH_WORKSPACE_OUTPUT_ROOT):sourceRoot;
 const outputs=new Map(), inputs=new Map();
+const sharedMosaicDatabases=new Map([['js/mosaic_knot_data.js','MosaicKnotData'],['js/mosaic_link_data.js','MosaicLinkData']]);
 const workspaceFile=p=>p.startsWith('js/math_workspace/')||p.startsWith('node_modules/')||['package.json','package-lock.json','math_workspace.html','math_workspace_browser_test.html'].includes(p);
 const normalizeText=text=>typeof text==='string'?text.replace(/\r\n?/g,'\n'):text;
 const sameText=(left,right)=>normalizeText(left)===normalizeText(right);
@@ -190,7 +191,15 @@ async function compileEditor(e){
   for(const n of all.filter(n=>n.tagName==='script')){
     const src=attr(n,'src'); if(src&&/^https?:/.test(src))continue;
     const file=src?clean(src):`${e.page}:inline`;
-    const original=instrument(src?await read(file):serialize(n),file,file===e.script);
+    const source=src?await read(file):serialize(n);
+    const sharedDatabase=e.id==='mosaic'&&sharedMosaicDatabases.get(file);
+    if(sharedDatabase){
+      const external=await fs.readFile(path.join(outputRoot,file),'utf8');
+      if(!sameText(source,external))throw new Error(`Mosaic database source mismatch: ${file}`);
+    }
+    const original=sharedDatabase
+      ? `(function(global){global.${sharedDatabase}=__workspaceMosaicDatabase(${JSON.stringify(sharedDatabase)});})(window);`
+      : instrument(source,file,file===e.script);
     const augmented=e.id==='complex'&&file===e.script
       ? original.replace(/\n\}\)\(\);\s*$/,`\n${complexWorkspaceExtension}\n${complexWorkspaceAuthorityExtension}\n${categoryOverviewProjection}\n${overviewArrowPresentation}\n${sheafDiagramPanel}\n${complexStructurePanel}\n${diagramDisplayPanel}\n${sheafInputPanel}\n})();\n`)
       : original;
@@ -203,7 +212,10 @@ async function compileEditor(e){
   const handlers=[...new Set(ast.body.filter(n=>n.type==='FunctionDeclaration').map(n=>n.id.name))];
   const remove=n=>{n.childNodes=(n.childNodes||[]).filter(c=>!['script','style','link'].includes(c.tagName));n.childNodes.forEach(remove);};remove(body);
   const template=serialize(body);
-  const source=`import {createEditorContext} from './runtime.mjs';\nexport const metadata=${JSON.stringify(e)};\nexport function mount(host,options){const __editor=createEditorContext(host,${JSON.stringify({page:e.page,html:template,css})},options);const {window,document,location,localStorage,sessionStorage,Worker,ResizeObserver,MutationObserver,requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval,clearInterval,fetch}=__editor.environment;const globalThis=window,self=window;\n${own.map(n=>`let ${n};`).join('')}\n__editor.linkGlobals({${own.map(n=>`get ${n}(){return ${n}},set ${n}(v){${n}=v}`).join(',')}});\n${scripts}\n__editor.registerHandlers({${handlers.join(',')}});return __editor.start();}\n`;
+  // Keep the derived Jones-index cache private to each native editor. The
+  // records and DT table are read-only inputs loaded once by the host page.
+  const sharedDatabaseBridge=e.id==='mosaic'?`function __workspaceMosaicDatabase(name){const source=globalThis[name];if(!source)throw new Error('Load '+name+' before opening Mosaic.');const {_jonesIndex,...data}=source;return data;}\n`:'';
+  const source=`import {createEditorContext} from './runtime.mjs';\n${sharedDatabaseBridge}export const metadata=${JSON.stringify(e)};\nexport function mount(host,options){const __editor=createEditorContext(host,${JSON.stringify({page:e.page,html:template,css})},options);const {window,document,location,localStorage,sessionStorage,Worker,ResizeObserver,MutationObserver,requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval,clearInterval,fetch}=__editor.environment;const globalThis=window,self=window;\n${own.map(n=>`let ${n};`).join('')}\n__editor.linkGlobals({${own.map(n=>`get ${n}(){return ${n}},set ${n}(v){${n}=v}`).join(',')}});\n${scripts}\n__editor.registerHandlers({${handlers.join(',')}});return __editor.start();}\n`;
   return source.replace('const globalThis=window,self=window;', 'const globalThis=window,self=window,module=undefined,require=undefined;');
 }
 async function expandWorker(file, seen=new Set()){
@@ -250,7 +262,10 @@ async function build(){
   outputs.set('js/math_workspace/dist/workspace.js',runtimeText);
   const revision=createHash('sha256').update(runtimeText).digest('hex');
   for(const file of ['math_workspace.html','math_workspace_browser_test.html']){
-    const html=await read(file);outputs.set(file,html.replace(/src="js\/math_workspace\/dist\/workspace\.js(?:\?[^" ]*)?"/g,`src="js/math_workspace/dist/workspace.js?v=${revision.slice(0,16)}"`));
+    let html=await read(file);
+    const databaseScripts=[...sharedMosaicDatabases.keys()].map(file=>path.relative(root,path.join(outputRoot,file)).replaceAll(path.sep,'/')).filter(src=>!html.includes(`src="${src}"`)).map(src=>`<script src="${src}"></script>`);
+    if(databaseScripts.length)html=html.replace(/<script src="js\/math_workspace\/dist\/workspace\.js/,databaseScripts.join('\n')+'\n<script src="js/math_workspace/dist/workspace.js');
+    outputs.set(file,html.replace(/src="js\/math_workspace\/dist\/workspace\.js(?:\?[^" ]*)?"/g,`src="js/math_workspace/dist/workspace.js?v=${revision.slice(0,16)}"`));
   }
   for(const p of Object.keys(result.metafile.inputs))if(!p.startsWith('calculator:')){try{await read(path.relative(root,path.resolve(p)).replaceAll('\\','/'));}catch{}}
   outputs.set('js/math_workspace/dist/build.json',JSON.stringify({bundler:'esbuild@0.25.12',sha256:revision,editors:editors.map(e=>({id:e.id,source:e.page,status:'parity-pending'}))},null,2)+'\n');

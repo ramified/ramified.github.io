@@ -102,6 +102,7 @@ async function run() {
     await a.client.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
     assert.equal(await a.read(`getComputedStyle(document.querySelector('.player-room-spinner')).animationName`),'none');
     await a.client.send('Emulation.setEmulatedMedia',{features:[]});
+    const pendingGeometries=[];
     for(const width of [1280,390,320]) {
       await a.client.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
       for(const locale of ['en','zh-CN']) {
@@ -109,14 +110,25 @@ async function run() {
         assert.equal(await a.read(`document.querySelector('#player-room-loading-text').textContent`),locale==='en'?'Creating room…':'正在创建房间…');
         assert.equal(await a.read(`(()=>{const p=document.querySelector('#player-room-loading');return p.scrollWidth<=p.clientWidth+1})()`),true);
         fs.writeFileSync(path.join(os.tmpdir(),`ramified-room-creating-${width}-${locale}.png`),Buffer.from((await a.client.send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+        pendingGeometries.push({width,locale,geometry:await a.read(`({title:document.querySelector('#player-room-loading-game').getBoundingClientRect().top,row:document.querySelector('.player-room-loading-row').getBoundingClientRect().top})`)});
       }
     }
     await a.read(`SiteI18n.setLocale('en')`);await a.client.send('Emulation.clearDeviceMetricsOverride');
     const loadingRowHeight=await a.read(`document.querySelector('.player-room-loading-row').getBoundingClientRect().height`);
+    const loadingGeometry=await a.read(`({title:document.querySelector('#player-room-loading-game').getBoundingClientRect().top,row:document.querySelector('.player-room-loading-row').getBoundingClientRect().top,pill:document.querySelector('.player-room-loading-code').getBoundingClientRect().height})`);
     await a.read(`window.__restoreConnectingFetch();window.__releaseCreating()`);
     await a.until(`RamifiedMinigames.player.onlineInfo().joined && !document.querySelector('#player-room').hidden`, 'creator waiting room');
     assert.equal(await a.read(`document.querySelector('#player-room-loading').hidden`),true);
     assert.equal(await a.read(`document.querySelector('.player-seat-card').getBoundingClientRect().height`),loadingRowHeight,'skeleton rows match real seat-row height');
+    const loadedGeometry=await a.read(`({title:document.querySelector('#player-room-game').getBoundingClientRect().top,row:document.querySelector('.player-seat-card').getBoundingClientRect().top,pill:document.querySelector('#player-room-code').getBoundingClientRect().height})`);
+    assert(Math.abs(loadingGeometry.title-loadedGeometry.title)<4&&Math.abs(loadingGeometry.row-loadedGeometry.row)<4&&Math.abs(loadingGeometry.pill-loadedGeometry.pill)<2,'skeleton geometry matches the loaded room: '+JSON.stringify({loadingGeometry,loadedGeometry}));
+    for(const {width,locale,geometry} of pendingGeometries) {
+      await a.client.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
+      await a.read(`SiteI18n.setLocale('${locale}')`);
+      const loaded=await a.read(`({title:document.querySelector('#player-room-game').getBoundingClientRect().top,row:document.querySelector('.player-seat-card').getBoundingClientRect().top})`);
+      assert(Math.abs(geometry.title-loaded.title)<4&&Math.abs(geometry.row-loaded.row)<4,'bilingual phone/desktop skeleton alignment: '+JSON.stringify({width,locale,geometry,loaded}));
+    }
+    await a.read(`SiteI18n.setLocale('en')`);await a.client.send('Emulation.clearDeviceMetricsOverride');
     const first = await a.info(); assert.deepEqual(first.roles, ['black']); assert.equal(first.roundState, 'waiting');
     assert.equal(await a.read(`document.querySelector('#player-room-code').textContent`), first.roomCode);
     assert.equal(await a.read(`document.querySelector('#player-room-game').textContent`), 'Gomoku');

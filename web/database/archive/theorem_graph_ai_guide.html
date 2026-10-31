@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Copyable Prompts — Theorem Graph Calculator</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f3ec;
+      --panel: #fffdf8;
+      --text: #26231f;
+      --muted: #6f675d;
+      --line: #d8d0c3;
+      --accent: #315f85;
+      --accent-strong: #244a69;
+      --soft: #eef4fb;
+      --code: #f1eee7;
+      --ok: #315f45;
+      --shadow: 0 10px 30px rgba(56, 45, 30, 0.08);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #181714;
+        --panel: #22201c;
+        --text: #eee9df;
+        --muted: #b7aea1;
+        --line: #403b34;
+        --accent: #8bb9dd;
+        --accent-strong: #b7d7ef;
+        --soft: #202b34;
+        --code: #191816;
+        --ok: #9ac9a8;
+        --shadow: none;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      width: min(980px, calc(100% - 32px));
+      margin: 38px auto 64px;
+    }
+
+    a { color: var(--accent); }
+    a:hover { color: var(--accent-strong); }
+
+    .topline {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 8px;
+    }
+
+    h1, h2, h3 { line-height: 1.2; }
+    h1 { margin: 0; font-size: clamp(26px, 4vw, 38px); letter-spacing: -0.02em; }
+    h2 { margin: 0 0 8px; font-size: 20px; }
+    h3 { margin: 0 0 10px; font-size: 15px; }
+
+    .lede {
+      margin: 8px 0 24px;
+      color: var(--muted);
+      max-width: 78ch;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+      margin-top: 16px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 14px;
+    }
+
+    .span-12 { grid-column: span 12; }
+    .span-8 { grid-column: span 8; }
+    .span-6 { grid-column: span 6; }
+    .span-4 { grid-column: span 4; }
+
+    @media (max-width: 720px) {
+      .span-8, .span-6, .span-4 { grid-column: span 12; }
+      .topline { display: block; }
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+
+    input, select, textarea, button {
+      font: inherit;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 10px 11px;
+      outline: none;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 82px;
+    }
+
+    #promptOutput {
+      min-height: 420px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12.5px;
+      line-height: 1.48;
+      background: var(--code);
+      white-space: pre-wrap;
+    }
+
+    .limit-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .hint {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12.5px;
+    }
+
+    .switchline {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .switchline input {
+      width: auto;
+      margin-top: 3px;
+    }
+
+    .switchline label {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    button {
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #fff;
+      border-radius: 9px;
+      padding: 9px 14px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    button.secondary {
+      background: transparent;
+      color: var(--accent);
+    }
+
+    button:hover { filter: brightness(0.96); }
+
+    #copyStatus {
+      color: var(--ok);
+      font-size: 13px;
+      min-height: 1.4em;
+    }
+
+    .notes {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .note {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      background: color-mix(in srgb, var(--soft) 60%, var(--panel));
+    }
+
+    .note p { margin: 0; color: var(--muted); font-size: 13px; }
+
+    @media (max-width: 720px) {
+      .notes { grid-template-columns: 1fr; }
+    }
+
+    code {
+      background: var(--code);
+      padding: 0.12em 0.35em;
+      border-radius: 4px;
+    }
+
+    footer {
+      margin-top: 22px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="topline">
+      <h1>Copyable Prompts</h1>
+      <a href="theorem_graph_calculator.html">Theorem Graph Calculator</a>
+    </div>
+    <p class="lede">
+      Describe the article, book, concept, or topic, choose how closely the roadmap should follow the source,
+      adjust the limits, then copy the generated prompt into an AI chat. The AI will first ask about your
+      background, then use your reply to produce plain JSON for <strong>Import / Export → JSON text</strong> in
+      the calculator.
+    </p>
+
+    <section class="panel" aria-labelledby="build-heading">
+      <h2 id="build-heading">Build a graph prompt</h2>
+      <div class="grid">
+        <div class="span-12">
+          <label for="topic">Roadmap topic</label>
+          <textarea id="topic" placeholder="e.g. Classification of integral S_n-representations from Curtis–Reiner, Methods of Representation Theory, Vol. I">some article / some concept / some topic</textarea>
+        </div>
+
+        <div class="span-8">
+          <label for="source">Primary source or reference</label>
+          <input id="source" type="text" placeholder="e.g. Curtis–Reiner, Methods of Representation Theory, Vol. I">
+          <p class="hint">Optional, but strongly recommended for a source-faithful roadmap.</p>
+        </div>
+
+        <div class="span-4">
+          <label for="mode">Roadmap mode</label>
+          <select id="mode">
+            <option value="source" selected>Source-faithful</option>
+            <option value="conceptual">Conceptual</option>
+            <option value="dependency">Theorem dependency</option>
+          </select>
+        </div>
+
+        <div class="span-6">
+          <label>Limits</label>
+          <div class="limit-row">
+            <div>
+              <label for="maxNodes">max nodes</label>
+              <input id="maxNodes" type="number" min="1" max="50" value="8">
+            </div>
+            <div>
+              <label for="maxArrows">max arrows</label>
+              <input id="maxArrows" type="number" min="0" max="100" value="15">
+            </div>
+            <div>
+              <label for="maxRefs">max references</label>
+              <input id="maxRefs" type="number" min="0" max="20" value="2">
+            </div>
+          </div>
+        </div>
+
+        <div class="span-6">
+          <label>Graph preferences</label>
+          <div class="switchline">
+            <input id="unlabeledArrows" type="checkbox" checked>
+            <label for="unlabeledArrows">Keep arrows unlabeled by default</label>
+          </div>
+          <div class="switchline">
+            <input id="preciseCitations" type="checkbox" checked>
+            <label for="preciseCitations">Require precise visible source locations when verified</label>
+          </div>
+          <div class="switchline">
+            <input id="safeBackslashes" type="checkbox" checked>
+            <label for="safeBackslashes">Use JSON-safe <code>\u005c</code> for MathJax and citation backslashes</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="note">
+          <h3>Source-faithful mode</h3>
+          <p>Prefers nodes that correspond to sections, subsections, theorems, definitions, examples, or short page ranges in the primary source.</p>
+        </div>
+        <div class="note">
+          <h3>Citation style</h3>
+          <p>When verified, prefer visible citations such as <code>\cite[§23, p. 491]{CR81}</code>. Never invent exact page or theorem numbers.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="copy-heading">
+      <h2 id="copy-heading">Copy Prompt</h2>
+      <textarea id="promptOutput" readonly spellcheck="false" aria-label="Generated prompt"></textarea>
+      <div class="actions">
+        <button id="copyButton" type="button">copy</button>
+        <button id="selectButton" class="secondary" type="button">select all</button>
+        <span id="copyStatus" role="status" aria-live="polite"></span>
+      </div>
+    </section>
+
+    <footer>
+      The prompt text is generated in your browser. <a href="theorem_graph_calculator.html">Open calculator</a>.
+    </footer>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const el = id => document.getElementById(id);
+      const controls = [
+        "topic", "source", "mode", "maxNodes", "maxArrows", "maxRefs",
+        "unlabeledArrows", "preciseCitations", "safeBackslashes"
+      ].map(el);
+
+      function boundedInt(id, fallback, min, max) {
+        const n = Number.parseInt(el(id).value, 10);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, n));
+      }
+
+      function modeInstructions(mode, source) {
+        if (mode === "source") {
+          return `Source-faithful roadmap rules:
+- Use the requested primary source as the backbone of the graph${source ? `: ${source}` : "."}
+- Prefer one node per meaningful reading location: section, subsection, theorem, proposition, definition, example, or short cluster of closely related pages.
+- Keep the mathematical dependency structure, but remain close to the source's reading order.
+- A good node should answer: (1) what should I read, (2) what concrete mathematical fact/construction should I extract, and (3) what should I be able to do before moving on?
+- Prefer actionable checkpoints such as "write the definition", "state the theorem with all hypotheses", "verify the example", "check where each hypothesis is used", "specialize the result", or "compare the local and global statements".
+- Avoid vague goals such as "understand X" or "learn Y".
+- Do not introduce secondary sources merely to make nodes look better sourced. Add one only when it materially fills a gap or supplies an explicit result absent from the primary source.`;
+        }
+        if (mode === "dependency") {
+          return `Theorem-dependency rules:
+- Organize nodes by genuine logical or proof dependency rather than reading order.
+- Prefer definitions, lemmas, propositions, theorems, corollaries, and examples that are actually used downstream.
+- Arrows should mean prerequisite, proof use, specialization, counterexample/test, or example relation.
+- Keep statements precise and include concrete verification tasks where useful.`;
+        }
+        return `Conceptual-roadmap rules:
+- Organize the material by mathematical concepts and dependencies rather than strictly following source order.
+- Still use concrete definitions, examples, theorem statements, calculations, and checkpoints.
+- If a primary source is given, ground substantive claims in it whenever possible and cite precise locations when verified.`;
+      }
+
+      function buildPrompt() {
+        const topic = el("topic").value.trim() || "some article / some concept / some topic";
+        const source = el("source").value.trim();
+        const mode = el("mode").value;
+        const maxNodes = boundedInt("maxNodes", 8, 1, 50);
+        const maxArrows = boundedInt("maxArrows", 15, 0, 100);
+        const maxRefs = boundedInt("maxRefs", 2, 0, 20);
+        const unlabeled = el("unlabeledArrows").checked;
+        const precise = el("preciseCitations").checked;
+        const safe = el("safeBackslashes").checked;
+
+        const citationRules = precise ? `Citation precision:
+- For every source-supported node, include a visible citation at the most precise VERIFIED location available.
+- Prefer forms such as \\cite[§23, p. 491]{CR81}, \\cite[§31A, p. 643]{CR81}, or \\cite[Thm. 27.1, p. 559]{CR81}.
+- If a node combines material from several locations, include multiple visible citations when necessary.
+- Do not cite only the whole book when a more precise verified location is known.
+- Never invent theorem numbers, subsection names, example numbers, or pages. If only a section is verified, cite only that section. If a location is approximate, say so.
+- Every visible citation key must match a reference key or citeKey.` : `Citation rules:
+- Use visible \\cite{key} citations for source-supported items.
+- Every visible citation key must match a reference key or citeKey.
+- Never invent precise page, theorem, subsection, or example numbers.`;
+
+        const arrowRules = unlabeled ? `Arrow policy:
+- Keep arrows visually minimal.
+- By default set "labels": [], "terms": [], and "remark": "".
+- Use an arrow only for a genuine mathematical dependency, proof dependency, specialization, example/test relation, or required prerequisite.
+- Add a label or remark only when the relation would otherwise be genuinely ambiguous.
+- Prefer fewer meaningful arrows to a densely connected graph.` : `Arrow policy:
+- Arrows must express real dependencies, proof uses, specializations, examples, or tests.
+- Keep labels concise and omit labels where the dependency is already obvious from the nodes.`;
+
+        const backslashRules = safe ? `JSON and MathJax safety:
+- The final response must be syntactically valid JSON before it is returned.
+- NEVER place a raw LaTeX backslash directly inside a JSON string.
+- For maximum copy/paste reliability, encode every MathJax and citation backslash with the JSON Unicode escape \\u005c.
+- Thus a MathJax command that should become backslash + "mathbb" after parsing must appear in the JSON source using \\u005cmathbb.
+- Likewise, a visible citation must appear in the JSON source using \\u005ccite[§23, p. 491]{CR81}.
+- Before returning, verify there are no invalid JSON backslash escapes.` : `JSON and MathJax safety:
+- Return syntactically valid JSON.
+- Escape every backslash correctly for JSON strings, including MathJax and citation commands.
+- Before returning, verify there are no invalid JSON backslash escapes.`;
+
+        return `Please help me create import-ready JSON for Theorem Graph Calculator.
+
+Topic:
+${topic}
+${source ? `\nPrimary source:\n${source}\n` : ""}
+Conversation protocol:
+- Do not create the roadmap or return JSON in your first response.
+- First inspect the topic and primary source, when provided, and identify a concise set of likely prerequisite definitions, examples, facts, and results. Do not ask about every possible concept.
+- Ask me to classify those items into three groups: (1) know well, (2) learned but not confident about, and (3) do not know or find unfamiliar.
+- Also ask briefly about my current goal and desired depth if those are not already clear from the request.
+- Make the diagnostic short and organized. Accept a brief or free-form reply, and offer sensible defaults if I am unsure how to classify something.
+- End the first response after the diagnostic questions and wait for my reply. Do not infer my answers or continue into the roadmap in the same response.
+- After I reply, tailor the roadmap to my background: omit or compress material I know well; add recall or checkpoint nodes for material I have learned but am not confident about; and add prerequisite plus concrete-example nodes for unfamiliar material.
+- Reflect those choices with the learning-status color conventions below. Do not exceed the requested graph limits while adapting the roadmap.
+
+Final roadmap output rules (apply only after I answer the diagnostic):
+- Return plain JSON only. Do not wrap it in markdown fences. Do not add commentary before or after the JSON.
+- Use schemaVersion 11.
+- Use at most ${maxNodes} nodes, ${maxArrows} arrows, and ${maxRefs} references.
+- The JSON must be suitable for Import / Export -> JSON text.
+- Use stable ASCII IDs for nodes and arrows, such as n1, n2, a1.
+- Every arrow sourceId and targetId must match an existing node id.
+- Include numeric x and y positions for every node.
+
+Calculator capabilities:
+- It supports references, MathJax, node colors, nested subgraphs, node types, repeatable arrow labels and terms, and visible citation commands.
+- Current node types: theorem, lemma, proposition, corollary, conjecture, definition, example, object, property, misc.
+- Use object nodes for mathematical objects and property nodes for properties; use theorem-style types when they fit better.
+- A node may include a small childGraph when that genuinely clarifies a local subproblem.
+
+${modeInstructions(mode, source)}
+
+${citationRules}
+
+Content strategy:
+- Focus on definitions, examples, concrete checkpoints, quick recalls of unknown definitions, and theorem statements with hypotheses.
+- If a question has a concrete factual or computational answer, state that answer in the node and make the checkpoint a verification task rather than a vague research goal.
+- Do not use a theorem node for an aspiration or learning objective; reserve theorem-style node types for actual mathematical statements.
+
+${arrowRules}
+
+Color conventions:
+- Examples: color "#2f5f9f", fillColor "#eef4fb".
+- Has a nested subgraph: fillColor "#fff7df"; prefer this for nodes with childGraph.
+- Waiting to learn: color "#7a6f65", fillColor "#f7f5f1".
+- Started but unfinished: color "#3d6b4f", fillColor "#f4f7ed".
+- Finished learning: color "#8b3a2a", fillColor "#fbefee".
+
+JSON fields to use:
+- schemaVersion: 11.
+- title: graph title.
+- titleNode: id "__title__", type "title", label matching title.
+- nodes: each has id, type, label, details or theorem-style fields, citationKeys, color, fillColor, x, y. A node may include childGraph.
+- arrows: each has id, sourceId, targetId, labels, terms, remark, body, head, tail, level, endpointScale, curve, and color.
+- arrow labels: labels is an array of {id, text, color, position, offset, align}; keep each text concise.
+- arrow terms: terms is an array of {id, label, type, text}; type is textbox, list, enumeration, or checkbox.
+- references: each has key, citeKey, title, author, year, rawBibtex or links when available.
+- view: include selectedId, layoutAvoidOverlap, layoutRunning, canvasHeight, canvasRatioLocked, and canvasAspectRatio.
+
+${backslashRules}
+
+Final roadmap validation checklist:
+- The final roadmap response parses as JSON.
+- schemaVersion is 11.
+- Node, arrow, and reference limits are respected.
+- Every node has x and y.
+- Every arrow endpoint references an existing node.
+- Every visible citation key exists in references.
+- Exact source locations are used only when verified.
+- There are no trailing commas.
+- There is no prose outside the JSON.`;
+      }
+
+      function refresh() {
+        el("promptOutput").value = buildPrompt();
+        el("copyStatus").textContent = "";
+      }
+
+      controls.forEach(control => {
+        control.addEventListener("input", refresh);
+        control.addEventListener("change", refresh);
+      });
+
+      el("copyButton").addEventListener("click", async () => {
+        const text = el("promptOutput").value;
+        try {
+          await navigator.clipboard.writeText(text);
+          el("copyStatus").textContent = "Copied.";
+        } catch (_) {
+          el("promptOutput").focus();
+          el("promptOutput").select();
+          const ok = document.execCommand("copy");
+          el("copyStatus").textContent = ok ? "Copied." : "Select the prompt and copy it manually.";
+        }
+      });
+
+      el("selectButton").addEventListener("click", () => {
+        el("promptOutput").focus();
+        el("promptOutput").select();
+        el("copyStatus").textContent = "Prompt selected.";
+      });
+
+      refresh();
+    })();
+  </script>
+</body>
+</html>
