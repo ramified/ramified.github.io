@@ -1,5 +1,7 @@
 # Ramified Minigames 独立界面对照页
 
+> 2026-10-31：实验版已成为正式入口 `ramified_minigames.html`；原入口重命名为 `ramified_minigames_classic.html`，归档后不再更新。`*_study` CSS/JS 与构建脚本名称保留，构建输出为正式入口；classic 仅作为只读 HTML 模板。下文保留历史实验记录。
+
 > Build 2026-10-28.5：Game actions 与撤销/重做/重开/设置图标工具栏恢复原版布局；修复首轮点击跳棋 AI 棋子导致回合卡住的问题，原版页和实验页均通过三款本地 AI 游戏的连续人机回归。最新状态见 `analysis/ramified_minigames_study_redesign_review_2026-10-28.md`。
 
 > Build 2026-10-28.4：选关与开局准备界面也恢复原版布局和原版预览，移除新增的随机棋盘/预设列表及双栏排版。详情见下述审查记录顶部的最新状态。

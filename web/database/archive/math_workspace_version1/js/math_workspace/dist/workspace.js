@@ -2,6 +2,56 @@ if(!globalThis.MathWorkspaceSheafModel){(function(root){
   'use strict';
   const key=a=>a.kind+':'+a.id, copy=v=>v==null?v:JSON.parse(JSON.stringify(v));
   const direct=new Set(['abstract','locally-free','structure','tangent','cotangent','canonical','twist','divisor-line','universal-bundle']);
+  const tensorLimit=6;
+  let tensorExponentParser;
+  let divisorBasisProvider;
+  function divisorBasis(baseKey,assets){if(!divisorBasisProvider)throw new Error('Divisor mathematics is not ready.');return divisorBasisProvider(baseKey,assets);}
+  function divisorCoefficients(data,assets){
+    const allowed=new Set(divisorBasis(data.base,assets).map(d=>d.id)),out={};
+    const gcd=(a,b)=>{a=a<0n?-a:a;while(b){const r=a%b;a=b;b=r;}return a;};
+    for(const [id,value] of Object.entries(data.divisorCoefficients||{})){
+      const raw=String(value).trim().replace(/\s+/g,''),match=raw.match(/^([+-]?\d+)(?:\/(\d+))?$/);
+      if(!match)throw new Error('Enter a complete integer or fraction for divisor class '+id+'.');
+      const num=BigInt(match[1]),den=BigInt(match[2]||'1');
+      if(!den)throw new Error('A divisor coefficient cannot have zero denominator.');
+      if(!num)continue;
+      if(!allowed.has(id))throw new Error('Divisor class '+id+' is unavailable on this base; set its coefficient to 0.');
+      const factor=gcd(num,den),n=num/factor,d=den/factor;out[id]=String(n)+(d===1n?'':'/'+d);
+    }
+    return out;
+  }
+  // Bott's algorithm for S_lambda(Omega^1) or S_lambda(T) on P^n,
+  // using Omega^1=Q^*(-1), T=Q(1), and the Weyl dimension formula.
+  // Reference: https://www.macaulay2.com/doc/OLD/Macaulay2-1.20/share/doc/Macaulay2/BoijSoederberg/html/_bott_lp__List_cm__Z__Z_rp.html
+  function projectiveSchurCohomology(n,partition,type){
+    if(!Number.isInteger(n)||n<0||n>15||!['tangent','cotangent'].includes(type)||!Array.isArray(partition)||partition.some((x,i)=>!Number.isInteger(x)||x<1||i&&x>partition[i-1]))throw new Error('Invalid projective Schur data.');
+    const dims=Array(n+1).fill(0n);if(partition.length>n)return dims;
+    const lambda=Array.from({length:n},(_,i)=>partition[i]||0),size=lambda.reduce((a,b)=>a+b,0);
+    const dual=type==='tangent'?lambda.map((_,i)=>(lambda[0]||0)-lambda[n-1-i]):lambda;
+    const twist=type==='tangent'?size+(lambda[0]||0):-size;
+    const weights=[twist,...dual].map((x,i)=>x+n-i);
+    if(new Set(weights).size!==weights.length)return dims;
+    let degree=0;for(let i=0;i<weights.length;i++)for(let j=i+1;j<weights.length;j++)if(weights[i]<weights[j])degree++;
+    const sorted=weights.slice().sort((a,b)=>b-a);let numerator=1n,denominator=1n;
+    for(let i=0;i<sorted.length;i++)for(let j=i+1;j<sorted.length;j++){numerator*=BigInt(sorted[i]-sorted[j]);denominator*=BigInt(j-i);}
+    dims[degree]=numerator/denominator;return dims;
+  }
+  function tensorParents(data={}){return Array.isArray(data.parents)?data.parents.slice():[data.first||'',data.second||''];}
+  function tensorExponents(data={}){
+    const parents=tensorParents(data);
+    if(parents.length>tensorLimit)throw new Error('Use at most '+tensorLimit+' tensor factors.');
+    return parents.map((_,index)=>{
+      const raw=String(data.exponents?.[index]??'1').trim();
+      if(!raw)throw new Error('Enter a complete exponent for factor '+(index+1)+'.');
+      try{
+        if(/^[+-]?\d+$/.test(raw))return BigInt(raw).toString();
+        // Validate with the native grammar, but keep the entered expression.
+        // Expanding it here could change identifier grouping in another graph.
+        if(tensorExponentParser){tensorExponentParser(raw);return raw;}
+        throw new Error('Symbolic exponent mathematics is not ready.');
+      }catch(error){throw new Error('Exponent '+(index+1)+': '+error.message);}
+    });
+  }
   function degrees(raw=''){
     raw=String(raw).trim();if(!raw||raw==='0')return [];
     if(!/^\d+(?:[\s,;|]+\d+)*$/.test(raw))throw new Error('Degrees must be positive integers separated by commas, spaces, semicolons or |.');
@@ -67,17 +117,20 @@ if(!globalThis.MathWorkspaceSheafModel){(function(root){
         }
         return [];
       }
+      if(a.type==='tensor')tensorExponents(d);
       const b=base(a,assets),variety=get(b);
       if(!variety||variety.kind!=='variety')throw new Error('This construction must determine a compatible base variety.');
+      if(['tangent','cotangent'].includes(a.type)&&d.differentialWedge===true)integer(d.wedgeDegree??1,0,dimension(variety,assets),'Exterior degree');
+      if(a.type==='divisor-line')divisorCoefficients(d,assets);
       if(a.type==='twist'){integer(d.twist??1,-24,24,'Twist');if(!['projective','complete-intersection','grassmannian'].includes(variety.type))throw new Error('O_X(r) requires projective space, a complete intersection or a Grassmannian.');}
       if(a.type==='universal-bundle'&&!['projective','grassmannian'].includes(variety.type))throw new Error('Universal bundles require projective space or a Grassmannian.');
-      if(a.type==='schur'){const parts=String(d.partition??'2,1').replace(/[;|(){}\[\]]/g,',').split(/[,\s]+/).filter(Boolean).map(Number);if(!parts.length||parts.some((p,i)=>!Number.isInteger(p)||p<1||i&&p>parts[i-1])||parts.reduce((x,y)=>x+y,0)>12)throw new Error('Partition must be non-increasing positive integers with total at most 12.');}
+      if(a.type==='schur'){const parts=String(d.partition??'2,1').replace(/[;|(){}\[\]]/g,',').split(/[,\s]+/).filter(Boolean).map(Number);if(!parts.length||parts.some((p,i)=>!Number.isInteger(p)||p<1||i&&p>parts[i-1])||parts.reduce((x,y)=>x+y,0)>(parts.every(p=>p===1)?15:12))throw new Error('Partition must be non-increasing positive integers with total at most 12 (exterior columns: at most 15).');}
       if(['self-direct-sum','self-tensor-product'].includes(a.type)&&String(d.multiplicity??'2').trim()==='')throw new Error('Enter a multiplicity.');
       if(['ideal-sheaf','normal-bundle','conormal-bundle','relative-tangent','relative-cotangent','map-operation'].includes(a.type)){
         const m=get(d.map),e=endpoints(m,assets),from=get(e.domain),to=get(e.codomain);
         if(from?.kind!=='variety'||to?.kind!=='variety')throw new Error('This construction requires a map of varieties.');
         if(['normal-bundle','conormal-bundle'].includes(a.type)&&dimension(from,assets)>dimension(to,assets))throw new Error('An embedding cannot have negative codimension.');
-        if(['ideal-sheaf','normal-bundle','conormal-bundle','relative-tangent','relative-cotangent'].includes(a.type)&&!d.workspaceSheafComplex?.payload?.construction&&d.confirmed!==true)throw new Error('Confirm the geometric hypotheses in Input before using this construction.');
+        if(['ideal-sheaf','normal-bundle','conormal-bundle','relative-tangent','relative-cotangent'].includes(a.type)&&d.confirmed!==true&&!(d.confirmed==null&&d.workspaceSheafComplex?.payload?.construction))throw new Error('Confirm the geometric hypotheses in Input before using this construction.');
         if(a.type==='map-operation'){const parent=get(d.parent);if(!parent||base(parent,assets)!==(d.operation==='pushforward'?e.domain:e.codomain))throw new Error('Choose a source sheaf on the correct side of the map.');}
       }
       return [];
@@ -95,6 +148,10 @@ if(!globalThis.MathWorkspaceSheafModel){(function(root){
     const payload=remap(copy(d.workspaceSheafComplex?.payload||{}),aliases),n={...payload,id:ids.get(k),__workspaceAssetKey:k,name:a.name,nameDirty:true};
     if(a.kind==='variety')Object.assign(n,{type:a.type==='product'?'abstract':a.type,dim:String(d.dimension??3),genus:String(d.genus??2),symmetricProductM:String(d.power??3),symmetricProductGenus:String(d.genus??2),ppavGenus:String(d.genus??2),grassmannianR:String(d.r??2),grassmannianN:String(d.n??4),ciAmbient:String(d.ambientDimension??3),ciDegrees:String(d.degrees??''),grassmannianYoungBasis:!!saved.grassmannianYoungBasis,construction:a.type==='product'?{type:'product',varietyIds:[ids.get(d.first),ids.get(d.second)]}:remap(d.construction,aliases)||payload.construction||null});
     if(a.kind==='sheaf')Object.assign(n,{type:direct.has(a.type)?a.type:payload.type||'abstract',twist:String(d.twist??1),rank:String(payload.construction?payload.rank??'':d.rank??payload.rank??''),baseVarietyId:ids.get(base(a,assets))||ids.get(d.base)||null,basis:saved.basis||payload.basis||'chern',divisorCoefficients:copy(d.divisorCoefficients||payload.divisorCoefficients||{}),construction:remap(d.construction,aliases)||payload.construction||null});
+    if(a.kind==='sheaf'){
+      n.workspaceDifferentialWedge=['tangent','cotangent'].includes(a.type)&&d.differentialWedge===true?{type:a.type,degree:Number(d.wedgeDegree??1)}:null;
+      if(['tangent','cotangent'].includes(a.type))n.rank=String(dimension(assets.find(v=>key(v)===d.base),assets));
+    }
     if(a.kind==='map'){const e=endpoints(a,assets);Object.assign(n,{domainKind:getKind(e.domain),domainId:ids.get(e.domain),codomainKind:getKind(e.codomain),codomainId:ids.get(e.codomain),construction:a.type==='composition'?{type:'composition',mapIds:[ids.get(d.domain),ids.get(d.codomain)]}:remap(d.construction,aliases)||payload.construction||null,curve:null});}
     if(saved.homology)n.homology=copy(saved.homology);
     return n;
@@ -102,13 +159,13 @@ if(!globalThis.MathWorkspaceSheafModel){(function(root){
   }
   function editedData(previous,type,data){
     if(previous.kind!=='sheaf'||!data.workspaceSheafComplex?.payload?.construction)return data;
-    const fields=['base','first','second','parents','exponents','parent','map','operation','multiplicity','partition','exact','proper','confirmed'];
+    const fields=['base','first','second','parents','exponents','parent','map','operation','multiplicity','partition','exact','proper','confirmed','differentialWedge','wedgeDegree','divisorCoefficients'];
     if(type===previous.type&&!fields.some(k=>JSON.stringify(previous.data[k])!==JSON.stringify(data[k])))return data;
     const next=copy(data);delete next.construction;
     next.workspaceSheafComplex={payload:{id:data.workspaceSheafComplex.payload.id}};
     return next;
   }
-  const api={direct,degrees,dimension,endpoints,base,references,issues,remap,project,editedData};
+  const api={direct,tensorLimit,tensorParents,tensorExponents,setTensorExponentParser(parser){tensorExponentParser=parser;},divisorBasis,divisorCoefficients,setDivisorBasisProvider(provider){divisorBasisProvider=provider;},projectiveSchurCohomology,degrees,dimension,endpoints,base,references,issues,remap,project,editedData};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.MathWorkspaceSheafModel=api;
 })(typeof window!=='undefined'?window:globalThis);
 }
@@ -126,7 +183,7 @@ if(!globalThis.MathWorkspaceSheafModel){(function(root){
     mount: () => mount
   });
 
-  // node_modules/.pnpm/acorn@8.15.0/node_modules/acorn/dist/acorn.mjs
+  // node_modules/acorn/dist/acorn.mjs
   var astralIdentifierCodes = [509, 0, 227, 0, 150, 4, 294, 9, 1368, 2, 2, 1, 6, 3, 41, 2, 5, 0, 166, 1, 574, 3, 9, 9, 7, 9, 32, 4, 318, 1, 80, 3, 71, 10, 50, 3, 123, 2, 54, 14, 32, 10, 3, 1, 11, 3, 46, 10, 8, 0, 46, 9, 7, 2, 37, 13, 2, 9, 6, 1, 45, 0, 13, 2, 49, 13, 9, 3, 2, 11, 83, 11, 7, 0, 3, 0, 158, 11, 6, 9, 7, 3, 56, 1, 2, 6, 3, 1, 3, 2, 10, 0, 11, 1, 3, 6, 4, 4, 68, 8, 2, 0, 3, 0, 2, 3, 2, 4, 2, 0, 15, 1, 83, 17, 10, 9, 5, 0, 82, 19, 13, 9, 214, 6, 3, 8, 28, 1, 83, 16, 16, 9, 82, 12, 9, 9, 7, 19, 58, 14, 5, 9, 243, 14, 166, 9, 71, 5, 2, 1, 3, 3, 2, 0, 2, 1, 13, 9, 120, 6, 3, 6, 4, 0, 29, 9, 41, 6, 2, 3, 9, 0, 10, 10, 47, 15, 343, 9, 54, 7, 2, 7, 17, 9, 57, 21, 2, 13, 123, 5, 4, 0, 2, 1, 2, 6, 2, 0, 9, 9, 49, 4, 2, 1, 2, 4, 9, 9, 330, 3, 10, 1, 2, 0, 49, 6, 4, 4, 14, 10, 5350, 0, 7, 14, 11465, 27, 2343, 9, 87, 9, 39, 4, 60, 6, 26, 9, 535, 9, 470, 0, 2, 54, 8, 3, 82, 0, 12, 1, 19628, 1, 4178, 9, 519, 45, 3, 22, 543, 4, 4, 5, 9, 7, 3, 6, 31, 3, 149, 2, 1418, 49, 513, 54, 5, 49, 9, 0, 15, 0, 23, 4, 2, 14, 1361, 6, 2, 16, 3, 6, 2, 1, 2, 4, 101, 0, 161, 6, 10, 9, 357, 0, 62, 13, 499, 13, 245, 1, 2, 9, 726, 6, 110, 6, 6, 9, 4759, 9, 787719, 239];
   var astralIdentifierStartCodes = [0, 11, 2, 25, 2, 18, 2, 1, 2, 14, 3, 13, 35, 122, 70, 52, 268, 28, 4, 48, 48, 31, 14, 29, 6, 37, 11, 29, 3, 35, 5, 7, 2, 4, 43, 157, 19, 35, 5, 35, 5, 39, 9, 51, 13, 10, 2, 14, 2, 6, 2, 1, 2, 10, 2, 14, 2, 6, 2, 1, 4, 51, 13, 310, 10, 21, 11, 7, 25, 5, 2, 41, 2, 8, 70, 5, 3, 0, 2, 43, 2, 1, 4, 0, 3, 22, 11, 22, 10, 30, 66, 18, 2, 1, 11, 21, 11, 25, 71, 55, 7, 1, 65, 0, 16, 3, 2, 2, 2, 28, 43, 28, 4, 28, 36, 7, 2, 27, 28, 53, 11, 21, 11, 18, 14, 17, 111, 72, 56, 50, 14, 50, 14, 35, 39, 27, 10, 22, 251, 41, 7, 1, 17, 2, 60, 28, 11, 0, 9, 21, 43, 17, 47, 20, 28, 22, 13, 52, 58, 1, 3, 0, 14, 44, 33, 24, 27, 35, 30, 0, 3, 0, 9, 34, 4, 0, 13, 47, 15, 3, 22, 0, 2, 0, 36, 17, 2, 24, 20, 1, 64, 6, 2, 0, 2, 3, 2, 14, 2, 9, 8, 46, 39, 7, 3, 1, 3, 21, 2, 6, 2, 1, 2, 4, 4, 0, 19, 0, 13, 4, 31, 9, 2, 0, 3, 0, 2, 37, 2, 0, 26, 0, 2, 0, 45, 52, 19, 3, 21, 2, 31, 47, 21, 1, 2, 0, 185, 46, 42, 3, 37, 47, 21, 0, 60, 42, 14, 0, 72, 26, 38, 6, 186, 43, 117, 63, 32, 7, 3, 0, 3, 7, 2, 1, 2, 23, 16, 0, 2, 0, 95, 7, 3, 38, 17, 0, 2, 0, 29, 0, 11, 39, 8, 0, 22, 0, 12, 45, 20, 0, 19, 72, 200, 32, 32, 8, 2, 36, 18, 0, 50, 29, 113, 6, 2, 1, 2, 37, 22, 0, 26, 5, 2, 1, 2, 31, 15, 0, 328, 18, 16, 0, 2, 12, 2, 33, 125, 0, 80, 921, 103, 110, 18, 195, 2637, 96, 16, 1071, 18, 5, 26, 3994, 6, 582, 6842, 29, 1763, 568, 8, 30, 18, 78, 18, 29, 19, 47, 17, 3, 32, 20, 6, 18, 433, 44, 212, 63, 129, 74, 6, 0, 67, 12, 65, 1, 2, 0, 29, 6135, 9, 1237, 42, 9, 8936, 3, 2, 6, 2, 1, 2, 290, 16, 0, 30, 2, 3, 0, 15, 3, 9, 395, 2309, 106, 6, 12, 4, 8, 8, 9, 5991, 84, 2, 70, 2, 1, 3, 0, 3, 1, 3, 3, 2, 11, 2, 0, 2, 6, 2, 64, 2, 3, 3, 7, 2, 6, 2, 27, 2, 3, 2, 4, 2, 0, 4, 6, 2, 339, 3, 24, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 7, 1845, 30, 7, 5, 262, 61, 147, 44, 11, 6, 17, 0, 322, 29, 19, 43, 485, 27, 229, 29, 3, 0, 496, 6, 2, 3, 2, 1, 2, 14, 2, 196, 60, 67, 8, 0, 1205, 3, 2, 26, 2, 1, 2, 0, 3, 0, 2, 9, 2, 3, 2, 0, 2, 0, 7, 0, 5, 0, 2, 0, 2, 0, 2, 2, 2, 1, 2, 0, 3, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 1, 2, 0, 3, 3, 2, 6, 2, 3, 2, 3, 2, 0, 2, 9, 2, 16, 6, 2, 2, 4, 2, 16, 4421, 42719, 33, 4153, 7, 221, 3, 5761, 15, 7472, 16, 621, 2467, 541, 1507, 4938, 6, 4191];
   var nonASCIIidentifierChars = "\u200C\u200D\xB7\u0300-\u036F\u0387\u0483-\u0487\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7\u0610-\u061A\u064B-\u0669\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0711\u0730-\u074A\u07A6-\u07B0\u07C0-\u07C9\u07EB-\u07F3\u07FD\u0816-\u0819\u081B-\u0823\u0825-\u0827\u0829-\u082D\u0859-\u085B\u0897-\u089F\u08CA-\u08E1\u08E3-\u0903\u093A-\u093C\u093E-\u094F\u0951-\u0957\u0962\u0963\u0966-\u096F\u0981-\u0983\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09E2\u09E3\u09E6-\u09EF\u09FE\u0A01-\u0A03\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A51\u0A66-\u0A71\u0A75\u0A81-\u0A83\u0ABC\u0ABE-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE2\u0AE3\u0AE6-\u0AEF\u0AFA-\u0AFF\u0B01-\u0B03\u0B3C\u0B3E-\u0B44\u0B47\u0B48\u0B4B-\u0B4D\u0B55-\u0B57\u0B62\u0B63\u0B66-\u0B6F\u0B82\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE6-\u0BEF\u0C00-\u0C04\u0C3C\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C62\u0C63\u0C66-\u0C6F\u0C81-\u0C83\u0CBC\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CE2\u0CE3\u0CE6-\u0CEF\u0CF3\u0D00-\u0D03\u0D3B\u0D3C\u0D3E-\u0D44\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D62\u0D63\u0D66-\u0D6F\u0D81-\u0D83\u0DCA\u0DCF-\u0DD4\u0DD6\u0DD8-\u0DDF\u0DE6-\u0DEF\u0DF2\u0DF3\u0E31\u0E34-\u0E3A\u0E47-\u0E4E\u0E50-\u0E59\u0EB1\u0EB4-\u0EBC\u0EC8-\u0ECE\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E\u0F3F\u0F71-\u0F84\u0F86\u0F87\u0F8D-\u0F97\u0F99-\u0FBC\u0FC6\u102B-\u103E\u1040-\u1049\u1056-\u1059\u105E-\u1060\u1062-\u1064\u1067-\u106D\u1071-\u1074\u1082-\u108D\u108F-\u109D\u135D-\u135F\u1369-\u1371\u1712-\u1715\u1732-\u1734\u1752\u1753\u1772\u1773\u17B4-\u17D3\u17DD\u17E0-\u17E9\u180B-\u180D\u180F-\u1819\u18A9\u1920-\u192B\u1930-\u193B\u1946-\u194F\u19D0-\u19DA\u1A17-\u1A1B\u1A55-\u1A5E\u1A60-\u1A7C\u1A7F-\u1A89\u1A90-\u1A99\u1AB0-\u1ABD\u1ABF-\u1ACE\u1B00-\u1B04\u1B34-\u1B44\u1B50-\u1B59\u1B6B-\u1B73\u1B80-\u1B82\u1BA1-\u1BAD\u1BB0-\u1BB9\u1BE6-\u1BF3\u1C24-\u1C37\u1C40-\u1C49\u1C50-\u1C59\u1CD0-\u1CD2\u1CD4-\u1CE8\u1CED\u1CF4\u1CF7-\u1CF9\u1DC0-\u1DFF\u200C\u200D\u203F\u2040\u2054\u20D0-\u20DC\u20E1\u20E5-\u20F0\u2CEF-\u2CF1\u2D7F\u2DE0-\u2DFF\u302A-\u302F\u3099\u309A\u30FB\uA620-\uA629\uA66F\uA674-\uA67D\uA69E\uA69F\uA6F0\uA6F1\uA802\uA806\uA80B\uA823-\uA827\uA82C\uA880\uA881\uA8B4-\uA8C5\uA8D0-\uA8D9\uA8E0-\uA8F1\uA8FF-\uA909\uA926-\uA92D\uA947-\uA953\uA980-\uA983\uA9B3-\uA9C0\uA9D0-\uA9D9\uA9E5\uA9F0-\uA9F9\uAA29-\uAA36\uAA43\uAA4C\uAA4D\uAA50-\uAA59\uAA7B-\uAA7D\uAAB0\uAAB2-\uAAB4\uAAB7\uAAB8\uAABE\uAABF\uAAC1\uAAEB-\uAAEF\uAAF5\uAAF6\uABE3-\uABEA\uABEC\uABED\uABF0-\uABF9\uFB1E\uFE00-\uFE0F\uFE20-\uFE2F\uFE33\uFE34\uFE4D-\uFE4F\uFF10-\uFF19\uFF3F\uFF65";
@@ -56090,7 +56147,7 @@ ${body}`;
         refreshLRModeHint2();
         resizeCanvases();
       }
-      window2.__dbg = { decomposeFixedRank, decomposeFixedRankTypeA, dominantCandidatesBelow, dominantNormBoundCandidates, boundedSliceLatticePoints, dominantSliceRepresentative, buildSliceFreudenthalContext, sliceMultiplicityFreudenthal, irreducibleCharacterFreudenthal, decomposeByCandidatesBrauerKlimyk, weightMultiplicityByFreudenthal, weightMultiplicityByWeylCharacter, kostkaNumber, semistandardTableaux, computeKostkaTableaux, decomposeKronecker, decomposePlethysm, computeKronecker, computePlethysm, computeSchurFunctor, decomposeSchurFunctorFiniteType, computeGrassmannianCup, decomposeGrassmannianCup, grassmannianChernPolynomial, schurFunctorCharacter, decomposeCharacterByHighestWeightPeeling, decomposePlethysm, weylOrbitSizeDominant, updateInvariants };
+      window2.__dbg = { decomposeFixedRank, decomposeFixedRankTypeA, dominantCandidatesBelow, dominantNormBoundCandidates, boundedSliceLatticePoints, dominantSliceRepresentative, buildSliceFreudenthalContext, sliceMultiplicityFreudenthal, irreducibleCharacterFreudenthal, decomposeByCandidatesBrauerKlimyk, weightMultiplicityByFreudenthal, weightMultiplicityByWeylCharacter, kostkaNumber, semistandardTableaux, computeKostkaTableaux, decomposeKronecker, decomposePlethysm, computeKronecker, computePlethysm, computeSchurFunctor, decomposeSchurFunctorFiniteType, computeGrassmannianCup, decomposeGrassmannianCup, grassmannianChernPolynomial, schurFunctorCharacter, decomposeCharacterByHighestWeightPeeling, weylOrbitSizeDominant, updateInvariants };
       const sliceState = {
         visible: false,
         sliceCanvas: null,
@@ -136087,9 +136144,11 @@ ${rows}
           if (!sheaf?.baseVarietyId) return;
           const base = labelMap.get(`variety:${sheaf.baseVarietyId}`);
           if (!base) return;
+          const endpoints = clippedArrowEndpoints(label, base);
+          if (!endpoints) return;
           ctx.beginPath();
-          ctx.moveTo(label.x, label.y);
-          ctx.lineTo(base.x, base.y);
+          ctx.moveTo(endpoints.x1, endpoints.y1);
+          ctx.lineTo(endpoints.x2, endpoints.y2);
           ctx.stroke();
         });
         ctx.restore();
@@ -187281,9 +187340,11 @@ ${arrows.join("\n")}` : "";
           if (!sheaf?.baseVarietyId) return;
           const base = labelMap.get(`variety:${sheaf.baseVarietyId}`);
           if (!base) return;
+          const endpoints = clippedArrowEndpoints(label, base);
+          if (!endpoints) return;
           ctx.beginPath();
-          ctx.moveTo(label.x, label.y);
-          ctx.lineTo(base.x, base.y);
+          ctx.moveTo(endpoints.x1, endpoints.y1);
+          ctx.lineTo(endpoints.x2, endpoints.y2);
           ctx.stroke();
         });
         ctx.restore();
@@ -193560,6 +193621,68 @@ ${arrows.join("\n")}` : "";
       __workspaceVarietyFromAsset = (asset, ids, properties) => window2.MathWorkspaceSheafModel.project(asset, ids, __workspaceAssetsCurrent, properties);
       __workspaceSheafFromAsset = (asset, ids, properties) => window2.MathWorkspaceSheafModel.project(asset, ids, __workspaceAssetsCurrent, properties);
       __workspaceMapFromAsset = (asset, ids, properties) => window2.MathWorkspaceSheafModel.project(asset, ids, __workspaceAssetsCurrent, properties);
+      const __workspaceOriginalSchurPartition = normalizeSchurPartition;
+      normalizeSchurPartition = function(value) {
+        const p = Array.isArray(value) ? value.map(Number) : String(value || "").replace(/[;|(){}\[\]]/g, ",").split(/[,\s]+/).filter(Boolean).map(Number);
+        return p.length > 0 && p.length <= 15 && p.every((x) => x === 1) ? p : __workspaceOriginalSchurPartition(value);
+      };
+      const __workspaceOriginalSchurCharacter = schurChComponentsFromParentCharacter;
+      schurChComponentsFromParentCharacter = function(partition, rank, parent, d) {
+        if (!partition.every((x) => x === 1)) return __workspaceOriginalSchurCharacter(partition, rank, parent, d);
+        const powers = [Poly.one()];
+        for (let k = 1; k <= partition.length; k++) {
+          let value = Poly.zero();
+          for (let j = 1; j <= k; j++) {
+            let adams = Poly.from(rank.poly);
+            for (let i = 1; i <= d; i++) adams = adams.add(componentOrZero(parent, i).scale(fraction(BigInt(j) ** BigInt(i))));
+            value = value.add(powers[k - j].mul(adams, d).scale(fraction(j % 2 ? 1 : -1)));
+          }
+          powers[k] = value.scale(fraction(1, k));
+        }
+        return Array.from({ length: d + 1 }, (_, i) => i ? homogeneousPart(powers[partition.length], i) : Poly.zero());
+      };
+      const __workspaceOriginalSchurBundle = buildSchurBundle;
+      buildSchurBundle = function(d, sheaf, parent, partition) {
+        const source = state.sheaves.find((s) => s.id === sheaf.construction?.sheafId), rank = explicitRootRankFromPlain(parent.rankPlain);
+        if (rank != null && partition.length > rank && source && !source.construction && ["tangent", "cotangent", "structure", "twist", "canonical", "divisor-line", "locally-free"].includes(source.type)) return buildTrivialBundle(d, 0, sheaf.labelLatex, sheaf.labelPlain);
+        if (!partition.every((x) => x === 1)) return __workspaceOriginalSchurBundle(d, sheaf, parent, partition);
+        const context = schurRankContext(partition, parent.rankLatex, parent.rankPlain, parent.labelPlain), ch = schurChComponentsFromParentCharacter(partition, context, parent.chComps, d);
+        let rankPoly = Poly.one();
+        for (let i = 0; i < partition.length; i++) rankPoly = rankPoly.mul(context.poly.sub(Poly.constant(i)), d).scale(fraction(1, i + 1));
+        return buildBundleFromCh(ch, formatPolyLatex(rankPoly), formatPolyPlain(rankPoly), sheaf.labelLatex, sheaf.labelPlain);
+      };
+      const __workspaceOriginalCohomologyTarget = cohomologyTargetForSheaf;
+      cohomologyTargetForSheaf = function(geometry, sheaf) {
+        const c = sheaf?.construction, partition = c?.type === "schur" ? normalizeSchurPartition(c.partition) : null;
+        const parent = partition && state.sheaves.find((s) => s.id === c.sheafId);
+        if (parent) {
+          const subject = { subjectLatex: sheafLabelLatex(sheaf), subjectPlain: sheafLabelPlain(sheaf) };
+          if (partition.length === 1 && partition[0] === 1 && parent !== sheaf) return { ...cohomologyTargetForSheaf(geometry, parent), ...subject };
+          if (!parent.construction && ["tangent", "cotangent"].includes(parent.type)) {
+            if (partition.length > geometry.dim) return { ...subject, kind: "acyclic", message: "Schur partition has more rows than the parent rank." };
+            if (geometry.type === "projective" || geometry.type === "complete-intersection" && (geometry.degrees || []).every((d) => d === 1)) return { ...subject, kind: "workspace-schur-dimensions", dimensions: window2.MathWorkspaceSheafModel.projectiveSchurCohomology(geometry.dim, partition, parent.type).map(cohomologyDimensionEntry), message: "Schur cohomology on projective space computed by Bott's algorithm." };
+            if (partition.every((x) => x === 1)) {
+              const k = partition.length;
+              if (parent.type === "cotangent") return { ...subject, kind: "hodge-row", hodgeP: k, message: "Exterior Schur power of the cotangent sheaf identified from its partition; using h^{p,q}." };
+              if (k === geometry.dim && embeddedGeometrySupportsLineCohomology(geometry)) return { ...subject, kind: "line", twist: -completeIntersectionCanonicalTwist(geometry) };
+              return { ...subject, kind: "polyvector-column", wedgeDegree: k, message: "Exterior Schur power of the tangent sheaf identified from its partition." };
+            }
+            return { ...subject, kind: "unsupported", message: "This Schur partition is recognized, but its cohomology is not determined by the available geometry." };
+          }
+          if (!parent.construction && ["structure", "twist", "canonical", "divisor-line"].includes(parent.type)) {
+            if (partition.length > 1) return { ...subject, kind: "acyclic", message: "Schur partition has more rows than this line bundle." };
+            const target = __workspaceOriginalCohomologyTarget(geometry, parent);
+            if (target.kind === "line") return { ...target, ...subject, twist: target.twist * partition[0] };
+            if (target.kind === "structure") return { ...target, ...subject };
+          }
+        }
+        return __workspaceOriginalCohomologyTarget(geometry, sheaf);
+      };
+      const __workspaceOriginalBuildCohomologyTarget = buildSheafCohomologyForTarget;
+      buildSheafCohomologyForTarget = function(geometry, target, sheaf, hodge) {
+        if (target.kind === "workspace-schur-dimensions") return { subjectLatex: target.subjectLatex, subjectPlain: target.subjectPlain, dimensions: target.dimensions, message: target.message };
+        return __workspaceOriginalBuildCohomologyTarget(geometry, target, sheaf, hodge);
+      };
       function __workspaceMaterializeSheaves(assets, ids) {
         state.nextObjectId = Math.max(state.nextObjectId, ...[...state.varieties, ...state.sheaves, ...state.maps, ...state.sequences].map((s) => Number(/^[A-Za-z]+(\d+)$/.exec(s.id)?.[1] || 0) + 1));
         const done = /* @__PURE__ */ new Set(), visiting = /* @__PURE__ */ new Set();
@@ -193572,7 +193695,8 @@ ${arrows.join("\n")}` : "";
             if (parent?.kind === "sheaf") visit(parent);
           }
           const data2 = asset.data || {}, target = state.sheaves.find((s) => s.__workspaceAssetKey === __workspaceAssetKey(asset));
-          if (target && !target.construction && !window2.MathWorkspaceSheafModel.direct.has(asset.type)) {
+          const wedge = ["tangent", "cotangent"].includes(asset.type) && data2.differentialWedge === true;
+          if (target && !target.construction && (wedge || !window2.MathWorkspaceSheafModel.direct.has(asset.type))) {
             const get = (key) => state.sheaves.find((s) => s.id === ids.get(key)), map = state.maps.find((m) => m.id === ids.get(data2.map));
             const args = {
               name: asset.name,
@@ -193597,7 +193721,12 @@ ${arrows.join("\n")}` : "";
               smoothConfirmed: data2.confirmed === true
             };
             let fresh;
-            if (["direct-sum", "tensor"].includes(asset.type)) {
+            if (wedge) {
+              target.type = "abstract";
+              const baseVariety = state.varieties.find((v) => v.id === target.baseVarietyId), geometry = baseVariety && geometryFromVariety(baseVariety), degree = Number(data2.wedgeDegree ?? 1);
+              fresh = differentialWedgeSheafObject({ sourceType: asset.type, degree, kind: differentialWedgeKind(asset.type, degree, geometry), baseVariety, baseVarietyId: target.baseVarietyId, geometry, partition: Array(degree).fill(1), rank: differentialWedgeRankPlain(asset.type, degree, geometry), name: asset.name, defaultName: asset.name, nameDirty: true }, nextInputId("E"));
+              if (fresh) fresh.workspaceDifferentialWedge = { type: asset.type, degree };
+            } else if (["direct-sum", "tensor"].includes(asset.type)) {
               args.operation = asset.type === "tensor" ? "tensor-sheaf" : "direct-sum-sheaf";
               args.parents = (data2.parents || [data2.first, data2.second]).map(get);
               args.exponents = data2.exponents;
@@ -193651,6 +193780,7 @@ ${arrows.join("\n")}` : "";
             else if (c.conormalBundleMapId) entry.type = "conormal-bundle";
             else if (c.relativeSheafMapId) entry.type = c.relativeSheafType === "cotangent" ? "relative-cotangent" : "relative-tangent";
           }
+          if (entry.kind === "sheaf" && item.workspaceDifferentialWedge) entry.type = item.workspaceDifferentialWedge.type;
           if (entry.kind === "map") entry.type = c?.type === "composition" ? "composition" : c?.type === "abel-jacobi" ? "abel-jacobi" : item.domainKind === "sheaf" ? "sheaf" : "ordinary";
         }
         return {
@@ -193677,6 +193807,19 @@ ${arrows.join("\n")}` : "";
       }
       __editor.extendAssetAdapter((previous) => ({
         ...previous,
+        capture() {
+          const command = previous.capture?.();
+          if (command?.reason !== "homology" || !command.sourceRef || !Array.isArray(command.changes)) return command;
+          const allowed = /* @__PURE__ */ new Set(), pending = [__workspaceAssetKey(command.sourceRef)];
+          while (pending.length) {
+            const key = pending.pop();
+            if (allowed.has(key)) continue;
+            allowed.add(key);
+            const asset = __workspaceAssetsCurrent.find((a) => __workspaceAssetKey(a) === key);
+            for (const ref2 of asset?.dependencies || []) pending.push(__workspaceAssetKey(ref2));
+          }
+          return { ...command, changes: command.changes.filter((change) => allowed.has(__workspaceAssetKey(change.ref))) };
+        },
         apply(snapshot, activeRef, properties, binding) {
           __workspaceInputApplying = true;
           try {
@@ -193723,6 +193866,16 @@ ${arrows.join("\n")}` : "";
           return true;
         },
         io(action, value) {
+          if (action === "divisor-basis") {
+            const variety = state.varieties.find((v) => v.__workspaceAssetKey === value);
+            if (!variety) throw new Error("Choose a base variety.");
+            return divisorHomologyClassDefinitions(geometryFromVariety(variety)).map((d) => ({ id: d.id, latex: d.symbolLatex, plain: d.symbolPlain }));
+          }
+          if (action === "tensor-exponent") {
+            const raw = String(value ?? "").trim();
+            if (!raw) throw new Error("Enter a complete exponent.");
+            return formatRuleCoefficientPlain(parseSymbolicRuleCoefficient(raw));
+          }
           if (action === "input-dirty") return __workspaceInputDirty;
           if (action === "input-reset") {
             __workspaceInputDirty = false;
@@ -242523,7 +242676,6 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
           setBackgroundHomologyCordMode,
           isBackgroundHomologyTraceClosed,
           selectedHomologyEdgeSide,
-          normalizeBackgroundMetric,
           hyperbolicMetricEligibility,
           hyperbolicMetricSurfaceSnapshot,
           hyperbolicMetricTopologyKey,
@@ -242539,7 +242691,6 @@ area: ${result.area.toFixed(6)}, \u22122\u03C0\u03C7: ${result.expectedArea.toFi
           prepareExportImportText,
           refreshExport,
           setTestBoard,
-          setTestGeometry,
           setTestExportControls,
           syncExportPresetDefaults,
           syncExportControls,

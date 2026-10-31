@@ -45,7 +45,7 @@ async function run() {
           Object.defineProperty(navigator, 'languages', { value: [${JSON.stringify(test.browser)}] });
         ` });
         paused = null;
-        await client.send('Page.navigate', { url: `http://127.0.0.1:${server.address().port}/ramified_minigames_study.html${test.query ? '?lang=' + test.query : ''}` });
+        await client.send('Page.navigate', { url: `http://127.0.0.1:${server.address().port}/ramified_minigames.html${test.query ? '?lang=' + test.query : ''}` });
         await waitFor(() => paused, 15000, 'delayed engine request');
         await delay(100);
         assert.equal(await read('document.readyState'), 'loading', 'measure before DOMContentLoaded');

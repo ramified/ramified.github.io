@@ -16,7 +16,7 @@ async function run() {
       const read = exp => evaluate(client, exp);
       await waitFor(() => read('window.RamifiedMinigames?.player.state().ready'), 15000, 'engine ready');
       async function click(selector) {
-        const point = await waitFor(() => read(`(() => { const n=document.querySelector(${JSON.stringify(selector)}); if(!n || n.disabled || !n.getClientRects().length) return null; n.scrollIntoView({block:'nearest'}); const r=n.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2; return n.contains(document.elementFromPoint(x,y)) ? {x,y}:null; })()`), 10000, selector);
+        const point = await waitFor(() => read(`(() => { const control=document.querySelector(${JSON.stringify(selector)}); if(!control || control.disabled || !control.getClientRects().length) return null; const n=control.matches('#player-room-seat-options input') ? control.closest('label') : control; n.scrollIntoView({block:'nearest'}); const r=n.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2; return n.contains(document.elementFromPoint(x,y)) ? {x,y}:null; })()`), 10000, selector);
         await mouse(client, 'mousePressed', point.x, point.y, 1); await mouse(client, 'mouseReleased', point.x, point.y, 0);
       }
       const until = (exp, label) => waitFor(() => read(exp), 15000, label || exp);
@@ -25,13 +25,37 @@ async function run() {
       return { client, read, click, until, info, set };
     }
     const a = await browser(), b = await browser();
-    await a.click('#player-new'); await a.click('#player-slot-1'); await a.click('[data-game-mode="go"]');
+    await a.click('#player-new');
+    if (await a.read(`!!document.querySelector('#player-slot-1')?.getClientRects().length`)) await a.click('#player-slot-1');
+    await a.click('[data-game-mode="go"]');
     await a.until(`!document.querySelector('#player-begin').disabled`); await a.click('#player-begin'); await a.click('#mosaic-canvas');
     await a.until(`RamifiedMinigames.__test.getGame().round===1`, 'local move before online');
     const localBefore = await a.read(`JSON.stringify(RamifiedMinigames.__test.getGame().stones)`);
     await a.click('#fullscreen-settings-open'); await a.click('#player-home-button');
     await a.click('#player-online-open'); await b.click('#player-online-open');
     await a.until(`document.querySelectorAll('#player-lobby-players li').length===2`, 'all browser identities in lobby');
+    assert.equal(await a.read(`document.activeElement.id==='player-lobby-name'`), false, 'nickname is not autofocused');
+    assert.equal(await a.read(`document.querySelector('#player-lobby-editor').hidden`), true);
+    assert.equal(await a.read(`document.querySelector('#player-lobby-player-count').textContent`), '2 players online');
+    assert.equal(await a.read(`document.querySelector('#player-lobby-rooms').textContent`), 'No rooms yet. Create one to start.');
+    await a.click('#player-lobby-edit');
+    await a.read(`window.__nicknameInput=document.querySelector('#player-lobby-name')`);
+    await a.client.send('Input.dispatchKeyEvent', {type:'keyDown',key:'a',code:'KeyA',windowsVirtualKeyCode:65,modifiers:2});
+    await a.client.send('Input.dispatchKeyEvent', {type:'keyUp',key:'a',code:'KeyA',windowsVirtualKeyCode:65,modifiers:2});
+    await a.client.send('Input.dispatchKeyEvent', {type:'keyDown',key:'Backspace',code:'Backspace',windowsVirtualKeyCode:8});
+    await a.client.send('Input.dispatchKeyEvent', {type:'keyUp',key:'Backspace',code:'Backspace',windowsVirtualKeyCode:8});
+    for (const text of ['Lobby',' ','User',' ']) await a.client.send('Input.insertText', {text});
+    await a.read(`SiteI18n.setLocale('zh-CN')`);
+    assert.equal(await a.read(`document.querySelector('#player-lobby-rooms').textContent`), '还没有房间,创建一个吧。');
+    await a.read(`SiteI18n.setLocale('en')`);
+    assert.deepEqual(await a.read(`({value:window.__nicknameInput.value,same:window.__nicknameInput===document.querySelector('#player-lobby-name'),focused:document.activeElement===window.__nicknameInput})`), {value:'Lobby User ',same:true,focused:true}, 'language/presence renders preserve the raw nickname draft and focused element');
+    await a.click('#player-lobby-rename');
+    assert.equal(await a.read(`document.querySelector('#player-lobby-editor').hidden`), true);
+    assert.equal(await a.read(`document.querySelector('#player-lobby-playing-as').textContent`), 'Playing as Lobby User');
+    await b.until(`document.querySelector('#player-lobby-players').textContent.includes('Lobby User')`, 'renamed presence');
+    await b.click('#player-lobby-player-count');
+    assert.equal(await b.read(`!!document.querySelector('#player-lobby-players').getClientRects().length`), true, 'native details reveals player names');
+    await b.click('#player-lobby-player-count');
     for (const width of [390, 320]) {
       await a.client.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
       assert.equal(await a.read(`(() => { const p=document.querySelector('#player-lobby');return p.scrollWidth<=p.clientWidth+1; })()`), true, `lobby fits ${width}`);
@@ -63,17 +87,84 @@ async function run() {
     await a.click('#player-back'); await a.click('#player-begin');
     await a.until(`RamifiedMinigames.player.onlineInfo().joined && !document.querySelector('#player-room').hidden`, 'creator waiting room');
     const first = await a.info(); assert.deepEqual(first.roles, ['black']); assert.equal(first.roundState, 'waiting');
+    assert.equal(await a.read(`document.querySelector('#player-room-code').textContent`), first.roomCode);
+    assert.equal(await a.read(`document.querySelector('#player-room-game').textContent`), 'Gomoku');
+    assert.equal(await a.read(`document.querySelector('#player-room-claim').hidden`), true, 'confirmed host sees Ready as the only primary action');
+    assert.equal(await a.read(`document.querySelector('input[value="black"][name="online-seat"]').closest('label').dataset.seatState`), 'confirmed');
+    assert.equal(await a.read(`document.querySelector('input[value="black"][name="online-seat"]').closest('label').querySelector('.player-seat-ready').textContent`), 'Not ready');
+    await a.click('#player-room-seat-options input[value="white"]');
+    assert.equal(await a.read(`document.querySelector('#player-room-ready').hidden`), true, 'pending seat choice shows Confirm instead of Ready');
+    assert.equal(await a.read(`document.querySelector('input[value="black"][name="online-seat"]').closest('label').dataset.seatState`), 'confirmed', 'choosing White does not erase the confirmed Black seat');
+    fs.writeFileSync(path.join(os.tmpdir(), 'ramified-room-pending.png'), Buffer.from((await a.client.send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+    await a.client.send('Input.dispatchKeyEvent', { type:'keyDown', key:'ArrowLeft', code:'ArrowLeft', windowsVirtualKeyCode:37 });
+    await a.client.send('Input.dispatchKeyEvent', { type:'keyUp', key:'ArrowLeft', code:'ArrowLeft', windowsVirtualKeyCode:37 });
+    assert.equal(await a.read(`document.querySelector('input[value="black"][name="online-seat"]').checked`), true, 'visually hidden native radios retain arrow-key navigation');
+    assert.equal(await a.read(`getComputedStyle(document.querySelector('input[value="black"][name="online-seat"]').closest('label')).outlineStyle`), 'solid', 'keyboard focus is visible on the card');
+    assert.equal(await a.read(`document.querySelector('#player-room-claim').hidden`), true);
+    await a.read(`(() => { window.__clipboardDescriptor=Object.getOwnPropertyDescriptor(navigator,'clipboard');Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.__copiedRoomCode=text}}}); })()`);
+    await a.click('#player-room-copy');
+    assert.equal(await a.read(`window.__copiedRoomCode`), first.roomCode, 'copy uses the exact room code');
+    await a.read(`window.__clipboardDescriptor ? Object.defineProperty(navigator,'clipboard',window.__clipboardDescriptor) : delete navigator.clipboard`);
     assert.equal(first.timeControl.totalSeconds, 300, 'minutes convert to protocol seconds');
     assert.equal(first.timeControl.periodSeconds, 30);
-    await b.click('#player-lobby-refresh'); await b.click('[data-room-code]');
+    await b.click('#player-lobby-refresh');
+    await b.until(`document.querySelectorAll('.player-lobby-seat-dot').length===2`, 'compact room directory');
+    assert.equal(await b.read(`document.querySelector('.player-lobby-seats').getAttribute('aria-label')`), '1 / 2 seats occupied');
+    assert.equal(await b.read(`document.querySelectorAll('.player-lobby-seat-dot.is-open').length`), 1);
+    assert.equal(await b.read(`document.querySelectorAll('.player-lobby-seat-dot canvas').length`), 1);
+    await b.read(`(async () => {
+      const original=window.fetch, data=await (await original(RamifiedMinigames.player.onlineInfo().baseUrl+'/api/rooms')).json(), room=data.rooms[0];
+      const rooms=[room,{...room,gameMode:'chinese-checkers',roomCode:'111222',hostName:'',members:[],unclaimedRoles:['black','white','yellow','green'],timeControl:{mode:'unlimited'},roundState:'finished'}, {...room,gameMode:'connect-four',roomCode:'333444',hostName:'',members:[],unclaimedRoles:['red','yellow'],roundState:'waiting'}, {...room,gameMode:'fide-chess',roomCode:'555666',hostName:'Guest',members:[],unclaimedRoles:['black','white']}];
+      window.__restoreDirectory=()=>{window.fetch=original};
+      window.fetch=(url,options)=>String(url).endsWith('/api/rooms')&&(!options?.method||options.method==='GET') ? Promise.resolve(new Response(JSON.stringify({rooms}),{headers:{'Content-Type':'application/json'}})) : original(url,options);
+    })()`);
+    await b.click('#player-lobby-refresh'); await b.until(`document.querySelectorAll('.player-lobby-room').length===4`);
+    for (const width of [1280,390,320]) {
+      await b.client.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
+      for (const locale of ['en','zh-CN']) {
+        await b.read(`SiteI18n.setLocale('${locale}')`);
+        assert.equal(await b.read(`(() => {const p=document.querySelector('#player-lobby');return p.scrollWidth<=p.clientWidth+1})()`),true,'compact directory has no horizontal overflow');
+        assert.equal(await b.read(`document.querySelector('#player-lobby-rooms').textContent.includes('Host: None')`),false);
+        assert.equal(await b.read(`document.querySelector('.player-lobby-room').getBoundingClientRect().height<=88 || innerWidth<600`),true,'desktop room card stays compact');
+        assert.equal(await b.read(`getComputedStyle(document.querySelector('.player-lobby-game')).fontSize`),'16px');
+        assert.equal(await b.read(`getComputedStyle(document.querySelector('#player-lobby')).scrollbarWidth`),'thin');
+        await b.read(`document.querySelector('#player-lobby').scrollTop=0`);
+        fs.writeFileSync(path.join(os.tmpdir(),`ramified-lobby-compact-${width}-${locale}.png`),Buffer.from((await b.client.send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+        await b.client.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:'dark'}]});
+        fs.writeFileSync(path.join(os.tmpdir(),`ramified-lobby-compact-dark-${width}-${locale}.png`),Buffer.from((await b.client.send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+        await b.client.send('Emulation.setEmulatedMedia',{features:[]});
+      }
+    }
+    await b.read(`window.__restoreDirectory();SiteI18n.setLocale('en')`);
+    await b.client.send('Emulation.clearDeviceMetricsOverride');
+    await b.click('#player-lobby-refresh'); await b.until(`document.querySelectorAll('.player-lobby-room').length===1`);
+    await b.click('[data-room-code]');
     await b.until(`RamifiedMinigames.player.onlineInfo().joined`);
     assert.deepEqual((await b.info()).roles, []);
+    assert.equal(await b.read(`document.querySelector('#player-room-ready').hidden`), true, 'spectator confirms a seat before Ready');
+    assert.equal(await b.read(`document.querySelector('#player-room-members li').textContent`), 'Spectators: ' + (await b.info()).playerName);
+    assert.equal(await b.read(`document.querySelector('input[value="black"][name="online-seat"]').disabled`), true, 'other player seat remains unavailable');
+    assert.equal(await b.read(`document.querySelector('input[value="black"][name="online-seat"]').closest('label').querySelector('.player-seat-occupant').textContent`), first.playerName);
     await b.click('#player-room-seat-options input[value="white"]');
+    assert.match(await b.read(`document.querySelector('input[value="white"][name="online-seat"]').closest('label').textContent`), /Selected.*confirm/);
+    assert.equal(await b.read(`document.querySelector('input[value="white"][name="online-seat"]').closest('label').dataset.seatState`), 'open', 'selection never masquerades as a confirmed occupant');
+    const draftInput = await b.read(`(() => { window.__seatDraft=document.querySelector('input[value="white"][name="online-seat"]');return true; })()`);
     await a.click('#player-room-ready'); assert.equal((await a.info()).roundState, 'waiting');
     await b.until(`RamifiedMinigames.player.onlineInfo().readyClientIds.length===1`);
     assert.equal(await b.read(`document.querySelector('#player-room-seat-options input[value="white"]').checked`), true, 'another player becoming ready does not discard the pending seat choice');
+    assert.equal(await b.read(`window.__seatDraft===document.querySelector('input[value="white"][name="online-seat"]')`), draftInput, 'presentation updates preserve the real radio input');
     await b.click('#player-room-claim');
     await b.until(`RamifiedMinigames.player.onlineInfo().roles.includes('white')`);
+    assert.equal(await b.read(`document.querySelector('#player-room-claim').hidden`), true);
+    assert.equal(await b.read(`document.querySelector('input[value="white"][name="online-seat"]').closest('label').dataset.seatState`), 'confirmed');
+    assert.equal(await b.read(`document.querySelector('#player-room-members').hidden`), true, 'seated occupants are shown only on their cards');
+    await b.read(`document.querySelector('#player-room-seat-options').prepend(document.querySelector('input[value="white"][name="online-seat"]').closest('label'))`);
+    assert.deepEqual(await b.read(`[...document.querySelectorAll('#player-room-seat-options label')].sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top).map(label=>label.querySelector('input').value)`), ['black','white'], 'visual order stays Black then White when White is held, even if DOM order differs');
+    await b.client.send('Emulation.setDeviceMetricsOverride', { width:390, height:900, deviceScaleFactor:1, mobile:false });
+    assert.equal(await b.read(`(() => { const rows=[...document.querySelectorAll('#player-room-seat-options label')];return Math.abs(rows[0].getBoundingClientRect().height-rows[1].getBoundingClientRect().height)<1; })()`), true, 'taken and confirmed rows have equal height when status text wraps');
+    fs.writeFileSync(path.join(os.tmpdir(), 'ramified-room-white-rows.png'), Buffer.from((await b.client.send('Page.captureScreenshot', { format:'png' })).data, 'base64'));
+    await b.read(`document.querySelector('#player-room-seat-options').append(document.querySelector('input[value="white"][name="online-seat"]').closest('label'))`);
+    await b.client.send('Emulation.clearDeviceMetricsOverride');
     await a.click('#player-room-ready'); await b.click('#player-room-ready');
     await a.until(`RamifiedMinigames.player.onlineInfo().roundState==='playing'`, 'two ready humans start');
     await b.until(`document.querySelector('#player-menu').hidden`);
@@ -95,14 +186,28 @@ async function run() {
     await a.until(`RamifiedMinigames.player.onlineInfo().gameMode==='connect-four' && !RamifiedMinigames.player.state().browsing`, 'new configuration');
     assert.deepEqual((await a.info()).roles, []); assert.equal((await a.info()).roundState, 'waiting');
     for (const width of [1280, 390, 320]) {
-      await a.client.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
+      await a.client.send('Emulation.setDeviceMetricsOverride', { width, height:width===1280 ? 900 : 844, deviceScaleFactor:1, mobile:false });
       assert.equal(await a.read(`(() => { const p=document.querySelector('#player-room');return p.scrollWidth<=p.clientWidth+1; })()`), true, `room fits ${width}`);
+      assert.equal(await a.read(`(() => { const p=document.querySelector('#player-room');return p.scrollHeight<=p.clientHeight+1; })()`), true, `no room scrollbar at normal height / ${width}`);
+      assert.equal(await a.read(`getComputedStyle(document.querySelector('.player-room-body')).overflowY`), 'visible', 'room body sizes naturally without nested scrolling');
+      assert.equal(await a.read(`(() => { const rows=[...document.querySelectorAll('#player-room-seat-options label')].sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top),a=rows[0].getBoundingClientRect(),b=rows[1].getBoundingClientRect();return a.bottom<=b.top && Math.abs(a.height-b.height)<1 && Math.abs(a.left-b.left)<1 && Math.abs(a.width-b.width)<1; })()`), true, `equal-height full-width stacked seat rows / ${width}`);
       await a.read(`SiteI18n.setLocale('zh-CN')`);
       assert.equal(await a.read(`document.querySelector('#player-room-ready').textContent`), '准备');
+      fs.writeFileSync(path.join(os.tmpdir(), `ramified-r19-room-${width}.png`), Buffer.from((await a.client.send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
       assert.equal(await a.read(`(() => { const p=document.querySelector('#player-room').getBoundingClientRect(), f=document.querySelector('#player-room-leave').getBoundingClientRect();return f.bottom<=p.bottom+1; })()`), true, `room footer fits ${width}`);
-      if (width === 320) fs.writeFileSync(path.join(os.tmpdir(), 'ramified-r19-room-320.png'), Buffer.from((await a.client.send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+      assert.equal(await a.read(`document.querySelector('#player-room-code').textContent`), (await a.info()).roomCode);
+      await a.client.send('Emulation.setEmulatedMedia', { features:[{ name:'prefers-color-scheme', value:'dark' }] });
+      fs.writeFileSync(path.join(os.tmpdir(), `ramified-room-dark-${width}.png`), Buffer.from((await a.client.send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+      assert.equal(await a.read(`getComputedStyle(document.querySelector('#player-room-code')).color===getComputedStyle(document.querySelector('#player-room-code')).backgroundColor`), false, 'room code stays readable in dark mode');
+      await a.client.send('Emulation.setEmulatedMedia', { features:[] });
       await a.read(`SiteI18n.setLocale('en')`);
     }
+    await a.client.send('Emulation.setDeviceMetricsOverride', { width:1280, height:420, deviceScaleFactor:1, mobile:false });
+    assert.equal(await a.read(`(() => { const p=document.querySelector('#player-room');return p.scrollHeight>p.clientHeight; })()`), true, 'genuinely short viewport scrolls the room sheet');
+    assert.equal(await a.read(`getComputedStyle(document.querySelector('#player-room')).scrollbarWidth`), 'thin');
+    assert.equal(await a.read(`getComputedStyle(document.querySelector('.player-room-body')).overflowY`), 'visible');
+    await a.read(`document.querySelector('#player-room-leave').scrollIntoView({block:'nearest'})`);
+    assert.equal(await a.read(`(() => { const p=document.querySelector('#player-room').getBoundingClientRect(),f=document.querySelector('#player-room-leave').getBoundingClientRect();return f.top>=p.top && f.bottom<=p.bottom+1; })()`), true, 'footer remains reachable on short screens');
     await a.client.send('Emulation.clearDeviceMetricsOverride');
     await a.click('#player-room-watch'); await a.click('#fullscreen-settings-open'); await a.click('#fullscreen-settings-display-tab'); await a.click('#player-fullscreen');
     await a.until(`!!document.fullscreenElement`, 'real fullscreen');
@@ -119,7 +224,12 @@ async function run() {
     assert.equal(await a.read(`document.querySelector('#fullscreen-undo-step').disabled`), false, 'local undo history is retained');
     await b.click('#player-room-leave');
     for (const mode of ['hex', 'go', 'reversi', 'chinese-checkers', 'fide-chess', 'billiards']) {
+      await a.until(`RamifiedMinigames.player.state().canPrepare`, mode + ' local restoration');
+      await a.until(`document.body.dataset.studyPage==='lobby' && !RamifiedMinigames.player.onlineInfo().joined`, mode + ' return to lobby');
+      await delay(150); // Let the refreshed room directory settle before pointer dispatch.
       await a.click('#player-lobby-create');
+      await a.until(`document.body.dataset.studyPage==='games'`, mode + ' game picker');
+      while (!await a.read(`document.querySelector('#player-games-previous').disabled`)) await a.click('#player-games-previous');
       if (await a.read(`document.querySelector('[data-game-mode="${mode}"]').hidden`)) await a.click('#player-games-next');
       await a.click(`[data-game-mode="${mode}"]`); await a.until(`!document.querySelector('#player-begin').disabled`, mode + ' preview');
       const preview = await a.read(`(() => { const g=RamifiedMinigames.__test.getGame();return [g.preset.id,g.preset.rows,g.preset.cols]; })()`);
@@ -144,7 +254,9 @@ async function run() {
       console.log('Online initialization verified: ' + mode);
     }
     // Delay an actual successful create response until after navigation away.
-    await a.click('#player-lobby-create'); await a.click('[data-game-mode="gomoku"]');
+    await a.click('#player-lobby-create');
+    while (!await a.read(`document.querySelector('#player-games-previous').disabled`)) await a.click('#player-games-previous');
+    await a.click('[data-game-mode="gomoku"]');
     await a.until(`!document.querySelector('#player-begin').disabled`);
     await a.read(`(() => { const original=window.fetch; window.__restoreFetch=()=>{window.fetch=original};window.fetch=(url,options)=>original(url,options).then(response=>options?.method==='POST' && String(url).endsWith('/api/rooms') ? new Promise(resolve=>{window.__releaseRoomResponse=()=>resolve(response)}) : response); })()`);
     await a.click('#player-begin'); await a.until(`typeof window.__releaseRoomResponse==='function'`);

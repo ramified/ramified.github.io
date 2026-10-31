@@ -145,7 +145,7 @@ function testBilliardsDisplaySpaceShotDrag() {
 }
 
 function testQuickRulesFadeAndHexSameTileHoverPersistence() {
-  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  const html = fs.readFileSync(require.resolve('../ramified_minigames_classic.html'), 'utf8');
   assert.ok(html.includes('animation: canvas-start-sheet-fade-in 300ms ease-out both'));
   assert.ok(html.includes('@keyframes canvas-start-sheet-fade-in'));
   assert.ok(html.includes('@media (prefers-reduced-motion: reduce)'));
@@ -3868,7 +3868,7 @@ function testKeyboardMapping() {
 }
 
 function testHexMovePadUsesArrowGlyphs() {
-  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  const html = fs.readFileSync(require.resolve('../ramified_minigames_classic.html'), 'utf8');
   assert.ok(html.includes('--hex-move-size: 46px;'));
   assert.ok(html.includes('--hex-row-offset: 26px;'));
   assert.ok(html.includes('width: var(--hex-pad-width);'));
@@ -3888,7 +3888,7 @@ function testHexMovePadUsesArrowGlyphs() {
 }
 
 function testMosaicBackgroundExportAndMinigameImportControlsExist() {
-  const minigameHtml = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  const minigameHtml = fs.readFileSync(require.resolve('../ramified_minigames_classic.html'), 'utf8');
   const mosaicHtml = fs.readFileSync(require.resolve('../mosaic_calculator.html'), 'utf8');
   const minigameSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
   assert.ok(!minigameHtml.includes('id="import-preset-toggle"'));
@@ -4366,7 +4366,7 @@ function testCompactPresetDslParser() {
 }
 
 function testSpeedControlDefaults() {
-  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  const html = fs.readFileSync(require.resolve('../ramified_minigames_classic.html'), 'utf8');
   assert.ok(html.includes('id="animation-speed" min="40" max="400" step="20" value="80"'));
   assert.ok(html.includes('<output id="animation-speed-value">80 ms</output>'));
   assert.ok(html.includes('id="highlight-new-boxes" checked'));
@@ -5810,7 +5810,7 @@ async function testAnimatedPlacementRayHintInteractions() {
 }
 
 function testPlacementHoverGuidanceRules() {
-  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  const html = fs.readFileSync(require.resolve('../ramified_minigames_classic.html'), 'utf8');
   assert.ok(html.includes('id="placement-preview-opacity" min="10" max="90" step="5" value="50"'));
   assert.ok(html.includes('data-i18n="setup.previewOpacity"'));
   assert.deepStrictEqual(game.__test.placementPreviewOpacityRange, { min: 10, max: 90, default: 50 });
@@ -5852,7 +5852,7 @@ function testPlacementHoverGuidanceRules() {
 }
 
 function testHexCoverOffsetDiagnosticsAndConnectFourWrappedView() {
-  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  const html = fs.readFileSync(require.resolve('../ramified_minigames_classic.html'), 'utf8');
   assert.ok(html.includes('id="hex-cover-offset-row"'));
   assert.ok(html.includes('id="hex-cover-offset-x" min="-2" max="2" step="0.05" value="0"'));
   assert.ok(html.includes('id="hex-cover-offset-y" min="-2" max="2" step="0.05" value="0"'));
@@ -6544,7 +6544,7 @@ function testRandomSetupAndPresetOptions() {
   assert.ok(registryEntrySupportsMode(presetRegistry.find((preset) => preset.id === presetSelect.value), 'connect-four'));
   assert.notStrictEqual(presetSelect.value, game.RANDOM_PRESET_CHOICE_ID);
 
-  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  const html = fs.readFileSync(require.resolve('../ramified_minigames_classic.html'), 'utf8');
   const importGameStart = html.indexOf('id="import-game-mode"');
   const importGameEnd = html.indexOf('id="import-preset-source"', importGameStart);
   assert.ok(importGameStart >= 0 && importGameEnd > importGameStart);
@@ -8742,7 +8742,7 @@ function testFullscreenSettingsPreferencesAndMarkup() {
     game.__test.setFullscreenPreferences(previousPreferences);
   }
 
-  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  const html = fs.readFileSync(require.resolve('../ramified_minigames_classic.html'), 'utf8');
   const setupSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
   assert.ok(html.includes('id="fullscreen-settings-open"'));
   assert.ok(html.includes('id="fullscreen-settings-dialog" role="dialog" aria-modal="true"'));
@@ -8766,7 +8766,7 @@ function testFullscreenSettingsPreferencesAndMarkup() {
 }
 
 function testReusableLocalizationWiring() {
-  const html = fs.readFileSync(require.resolve('../ramified_minigames.html'), 'utf8');
+  const html = fs.readFileSync(require.resolve('../ramified_minigames_classic.html'), 'utf8');
   const setupSource = fs.readFileSync(require.resolve('./ramified_minigames_setup.js'), 'utf8');
   const localeSource = fs.readFileSync(require.resolve('./i18n/ramified_minigames_locales.js'), 'utf8');
   assert.ok(html.includes('css/site_i18n.css'));

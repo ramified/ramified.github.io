@@ -903,6 +903,9 @@
       <div class="workspace-assets-content" data-assets-content role="listbox" aria-label="Mathematical assets" aria-multiselectable="true"></div>`;
     const content = view.querySelector('[data-assets-content]');
     view.addEventListener('contextmenu', handleAssetsContextMenu); content.addEventListener('pointerdown', beginAssetMarquee);
+    content.addEventListener('dblclick', event => {
+      if (content.dataset.assetsEmpty === 'empty' && !event.target.closest('button,a')) content.querySelector('[data-empty-create-variant="none"] [data-assets-create]')?.click();
+    });
     view.addEventListener('keydown', handleAssetKeydown);
     assetState.view = view;
     renderAssets();
@@ -947,11 +950,13 @@
         captureAssetInputDraftFromForm(form.dataset.inputInstanceKey, Number(form.dataset.rendererEpoch), { immediate: true, type: event.target.value });
         renderAssetsEditorFields();
       } else if (event.target.matches('select[data-assets-field],input[type="checkbox"][data-assets-field],input[type="radio"][data-assets-field]')) {
+        if(!activeAssetInputInstance()&&form.querySelector('[data-assets-kind]').value==='sheaf'){saveAssetsEditor({preventDefault(){}});return;}
         captureAssetInputDraftFromForm(form.dataset.inputInstanceKey, Number(form.dataset.rendererEpoch), { immediate: true });
+        if (['operation','differentialWedge'].includes(event.target.dataset.assetsField)) renderAssetsEditorFields();
       }
     });
     form.addEventListener('focusout', (event) => {
-      if (!event.target.matches('[data-assets-name],[data-assets-field],[data-assets-reference]')) return;
+      if (!event.target.matches('[data-assets-name],[data-assets-field],[data-assets-reference],[data-assets-tensor-exponent],[data-assets-divisor-class]')) return;
       const instance = activeAssetInputInstance();
       if (instance) { captureAssetInputDraftFromForm(form.dataset.inputInstanceKey, Number(form.dataset.rendererEpoch), { schedule: false }); flushAssetInputInstance(instance); }
     });
@@ -1039,9 +1044,16 @@
   function captureAssetInputDraftFromForm(instanceKey, rendererEpoch, options = {}) {
     const instance = assetsCardState.instances.get(instanceKey), form = editorForm();
     if(form?.querySelector('[data-assets-fields]')?.dataset.rebuilding==='true')return false;
+    // The initial Create form has no asset yet, but its CI controls still
+    // project the same draft that will be submitted at the commit boundary.
+    if (!instance && !activeAssetInputInstance()) {
+      syncCompleteIntersectionInput();
+      return false;
+    }
     if (!instance || instance !== activeAssetInputInstance() || instance.rendererEpoch !== rendererEpoch || form?.dataset.inputInstanceKey !== instanceKey || Number(form.dataset.rendererEpoch) !== rendererEpoch) return false;
     const data = assetEditorData(instance);
     if (options.type && options.type !== instance.draft.type) {
+      if (instance.draft.kind === 'sheaf' && GEOMETRIC_HYPOTHESES[options.type]) data.confirmed = false;
       const next = window.MathWorkspaceNumbers.references(instance.draft.kind, options.type);
       for (const spec of window.MathWorkspaceNumbers.references(instance.draft.kind, instance.draft.type).filter(spec => spec.scalar)) {
         if (next.some(item => item.field === spec.field)) continue;
@@ -1066,6 +1078,19 @@
   const assetByKey = (key, kind = '') => assetState.snapshot.assets.find((asset) => assetKey(asset) === key && (!kind || asset.kind === kind)) || null;
   const DIRECT_SHEAF_TYPES = new Set(['abstract', 'locally-free', 'structure', 'tangent', 'cotangent', 'canonical', 'twist', 'divisor-line', 'universal-bundle']);
   const MAP_BASE_ENDPOINT = { 'ideal-sheaf': 'codomain', 'normal-bundle': 'domain', 'conormal-bundle': 'domain', 'relative-tangent': 'domain', 'relative-cotangent': 'domain' };
+  const GEOMETRIC_HYPOTHESES = {
+    'ideal-sheaf': 'The map is an embedding and is not an isomorphism.',
+    'normal-bundle': 'The map is a regular/lci closed embedding, and its source and target are smooth.',
+    'conormal-bundle': 'The map is a regular/lci closed embedding, and its source and target are smooth.',
+    'relative-tangent': 'The map is smooth/submersive, and its source and target are smooth.',
+    'relative-cotangent': 'The map is smooth/submersive, and its source and target are smooth.'
+  };
+  function syncTensorAliases(kind, type, data) {
+    // Keep legacy binary aliases aligned with the complete factor list.
+    if (kind === 'sheaf' && type === 'tensor' && Array.isArray(data.parents)) {
+      data.first = data.parents[0] || ''; data.second = data.parents[1] || '';
+    }
+  }
   const isDirectSheafType = (type) => DIRECT_SHEAF_TYPES.has(type);
   function inferredSheafBase(type,data={}) {return window.MathWorkspaceSheafModel.base({kind:'sheaf',id:'draft',type,data},assetState.snapshot.assets);}
   const nonnegativeInt = (value, fallback = 0) => Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : fallback;
@@ -1073,7 +1098,69 @@
   function degreeList(value) {
     return window.MathWorkspaceSheafModel.degrees(value ?? '');
   }
+  function completeIntersectionInputParameters(data) {
+    const degrees = degreeList(data.degrees), dimension = varietyInteger(data.dimension, 3);
+    if (dimension == null || dimension > 15) throw new Error('Dimension must be an integer from 0 to 15.');
+    return { degrees, ambientDimension: dimension + degrees.length };
+  }
+  function changeCompleteIntersectionSlider(control) {
+    const form = editorForm(), degreesField = form?.querySelector('[data-assets-field="degrees"]');
+    if (!degreesField) return;
+    let degrees;
+    try { degrees = degreeList(degreesField.value); } catch (_) { return; }
+    if (control.hasAttribute('data-assets-ci-count')) {
+      const count = Number(control.value);
+      degrees = Array.from({ length: count }, (_, i) => degrees[i] ?? 2);
+    } else degrees[Number(control.dataset.assetsCiDegree)] = Number(control.value);
+    window.CalculatorInputSettings.syncEditableValue(degreesField, degrees.join(', '));
+    captureAssetInputDraftFromForm(form.dataset.inputInstanceKey, Number(form.dataset.rendererEpoch), { immediate: false });
+  }
+  function syncCompleteIntersectionInput(data) {
+    const form = editorForm(), count = form?.querySelector('[data-assets-ci-count]');
+    if (!count) return;
+    const degreesField = form.querySelector('[data-assets-field="degrees"]');
+    data = data || { dimension: form.querySelector('[data-assets-field="dimension"]').value, degrees: degreesField.value };
+    const rows = form.querySelector('[data-assets-ci-degrees]');
+    let degrees;
+    try { degrees = degreeList(data.degrees); } catch (_) {
+      count.disabled = true;
+      rows.querySelectorAll('input').forEach(control => { control.disabled = true; });
+      window.CalculatorInputSettings.syncEditableValue(form.querySelector('[data-assets-field="ambientDimension"]'), '');
+      return;
+    }
+    count.disabled = false;
+    window.CalculatorInputSettings.syncEditableValue(count, degrees.length);
+    form.querySelector('[data-assets-ci-count-value]').textContent = String(degrees.length);
+    // Update rows in place: dragging a slider must retain that control and focus.
+    while (rows.children.length > degrees.length) rows.lastElementChild.remove();
+    while (rows.children.length < degrees.length) {
+      const index = rows.children.length, row = document.createElement('label');
+      row.className = 'workspace-field workspace-field-inline';
+      row.innerHTML = `<span class="input-label">Degree ${index + 1}</span><span class="workspace-ci-slider"><input class="workspace-control" type="range" min="1" step="1" data-assets-ci-degree="${index}" aria-label="Degree ${index + 1}"><output data-assets-ci-degree-value></output></span>`;
+      const slider = row.querySelector('input');
+      slider.addEventListener('input', () => changeCompleteIntersectionSlider(slider));
+      slider.addEventListener('change', () => changeCompleteIntersectionSlider(slider));
+      rows.append(row);
+    }
+    degrees.forEach((degree, index) => {
+      const row = rows.children[index], slider = row.querySelector('input');
+      slider.disabled = false; slider.max = String(Math.max(12, degree));
+      window.CalculatorInputSettings.syncEditableValue(slider, degree);
+      row.querySelector('output').textContent = String(degree);
+    });
+    let ambient = '';
+    try { ambient = completeIntersectionInputParameters(data).ambientDimension; } catch (_) {}
+    window.CalculatorInputSettings.syncEditableValue(form.querySelector('[data-assets-field="ambientDimension"]'), ambient);
+    if (!activeAssetInputInstance() && ambient !== '') {
+      const name = form.querySelector('[data-assets-name]');
+      if (form.dataset.autoName && name.value === form.dataset.autoName) {
+        form.dataset.autoName = uniqueDefaultAssetName('variety', 'complete-intersection', '', { ...data, ambientDimension: ambient });
+        window.CalculatorInputSettings.syncEditableValue(name, form.dataset.autoName);
+      }
+    }
+  }
   const DERIVED_VARIETY_DIMENSIONS = new Set(['point', 'curve', 'symmetric-product-curve', 'ppav-moduli', 'grassmannian', 'complete-intersection', 'product', 'toric']);
+  const GROUPED_VARIETY_COPY_NAMES = new Set(['complete-intersection', 'ppav-moduli', 'product']);
   const VARIETY_INPUT_FIELDS = {
     abstract: ['dimension'], curve: ['genus'], 'symmetric-product-curve': ['genus', 'power'], abelian: ['dimension'],
     'ppav-moduli': ['genus'], point: [], projective: ['dimension'], grassmannian: ['r', 'n'],
@@ -1151,6 +1238,15 @@
       else if (type === 'complete-intersection') { data.degrees = degreeList(data.degrees ?? '').join(', '); data.ambientDimension = String(data.ambientDimension??3); }
       data.dimension = DERIVED_VARIETY_DIMENSIONS.has(type) ? String(derivedVarietyDimension(type, data) ?? '') : String(data.dimension??3);
     } else if (kind === 'sheaf') {
+      const cached=data.workspaceSheafComplex?.payload?.construction;
+      if (['tensor','internal-hom','map-operation'].includes(type) && !Object.hasOwn(data,'exact') && cached && (Object.hasOwn(cached,'exact')||Object.hasOwn(cached,'derived'))) data.exact=cached.exact===true||cached.derived===false;
+      if (type==='map-operation' && !Object.hasOwn(data,'proper') && cached?.type==='pushforward') data.proper=cached.proper===true;
+      if (['tangent','cotangent'].includes(type) && data.differentialWedge === true) data.wedgeDegree = String(data.wedgeDegree ?? 1);
+      if (type === 'tensor') {
+        data.parents = window.MathWorkspaceSheafModel.tensorParents(data);
+        data.exponents = window.MathWorkspaceSheafModel.tensorExponents(data);
+      }
+      syncTensorAliases(kind, type, data);
       if (type === 'twist') data.twist = String(data.twist??1);
       if (!isDirectSheafType(type)) data.base = inferredSheafBase(type, data);
     }
@@ -1158,7 +1254,7 @@
   }
   const ASSET_DRAG_TYPE = 'application/x-math-workspace-asset';
   const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  function referenceFieldSpecs(kind, type) {
+  function referenceFieldSpecs(kind, type, data = {}) {
     if(kind==='complex'||kind==='filtration')return [];
     if(kind==='field')return [{field:'constantField',label:'Constant field',expectedKind:'field',optional:true,requiresField:true}];
     if(kind==='field-extension')return [{field:'base',label:'Base field',expectedKind:'field',requiresField:true},{field:'target',label:'Target field',expectedKind:'field',optional:true,requiresField:true}];
@@ -1174,9 +1270,14 @@
     if (kind === 'variety') return type === 'product' ? [{ field: 'first', label: 'First factor', expectedKind: 'variety' }, { field: 'second', label: 'Second factor', expectedKind: 'variety' }] : [];
     if (kind === 'sheaf') {
       const specs = isDirectSheafType(type) ? [{ field: 'base', label: 'Base variety', expectedKind: 'variety' }] : [];
-      if (['direct-sum', 'tensor', 'internal-hom'].includes(type)) specs.push({ field: 'first', label: 'First sheaf', expectedKind: 'sheaf' }, { field: 'second', label: 'Second sheaf', expectedKind: 'sheaf' });
+      if (type === 'tensor') {
+        const parents = window.MathWorkspaceSheafModel.tensorParents(data);
+        if (!parents.length) specs.push({ field: 'base', label: 'Base variety', expectedKind: 'variety' });
+        parents.forEach((_,index)=>specs.push({ field: index === 0 ? 'first' : index === 1 ? 'second' : 'tensorFactor'+index, label: 'Factor '+(index+1), expectedKind: 'sheaf', tensorIndex: index }));
+      }
+      if (['direct-sum', 'internal-hom'].includes(type)) specs.push(...['first', 'second'].map((field, index) => ({ field, label: index ? 'Second sheaf' : 'First sheaf', expectedKind: 'sheaf' })));
       if (['dual', 'self-direct-sum', 'self-tensor-product', 'schur'].includes(type)) specs.push({ field: 'parent', label: 'Parent sheaf', expectedKind: 'sheaf' });
-      if (MAP_BASE_ENDPOINT[type] || type === 'map-operation') specs.push({ field: 'map', label: 'Source map', expectedKind: 'map' });
+      if (MAP_BASE_ENDPOINT[type] || type === 'map-operation') specs.push({ field: 'map', label: 'Source map', expectedKind: 'map', ...(GEOMETRIC_HYPOTHESES[type] ? { geometricConfirmation: true } : {}) });
       if(type==='map-operation')specs.push({field:'parent',label:'Source sheaf',expectedKind:'sheaf'});
       return [...specs,...(window.MathWorkspaceNumbers?.references(kind,type)||[])];
     }
@@ -1186,10 +1287,17 @@
   function referenceKeys(kind, type, data) {
     if(['complex','filtration','field-extension'].includes(kind))return window.MathWorkspaceStructures.references(kind,data);
     if (slicing?.isAsset({kind,type}) || kind === 'matrix') return slicing.refKeys({kind,type,data});
-    return [...new Set([...referenceFieldSpecs(kind, type).map((spec) => window.MathWorkspaceNumbers.referenceKey(data, spec)).filter(Boolean),...window.MathWorkspaceSheafModel.references({kind,id:'draft',type,data})])];
+    return [...new Set([...referenceFieldSpecs(kind, type, data).map((spec) => assetReferenceKey(data, spec)).filter(Boolean),...window.MathWorkspaceSheafModel.references({kind,id:'draft',type,data})])];
   }
+  function assetReferenceKey(data, spec) { return Number.isInteger(spec.tensorIndex) ? window.MathWorkspaceSheafModel.tensorParents(data)[spec.tensorIndex] || '' : window.MathWorkspaceNumbers.referenceKey(data, spec); }
   function dataWithReference(data, spec, key) {
-    return { ...data, [spec.field]: spec.scalar ? { kind: 'reference', ref: key } : key };
+    if (Number.isInteger(spec.tensorIndex)) {
+      const next = { ...data, parents: window.MathWorkspaceSheafModel.tensorParents(data) };
+      next.parents[spec.tensorIndex] = key; syncTensorAliases('sheaf', 'tensor', next); return next;
+    }
+    const next = { ...data, [spec.field]: spec.scalar ? { kind: 'reference', ref: key } : key };
+    if (spec.geometricConfirmation && data[spec.field] !== key) next.confirmed = false;
+    return next;
   }
   function referenceWouldCreateCycle(currentKey, candidateKey, kind, type, data) {
     if (!currentKey || !candidateKey) return false;
@@ -1225,11 +1333,11 @@
     return { kind, type, currentKey: record ? assetKey(record) : '', data: { ...(instance?.draft?.data || {}), ...assetEditorData(instance) } };
   }
   function referenceFieldHtml(spec, context, controlOnly = false) {
-    const selected = assetByKey(window.MathWorkspaceNumbers.referenceKey(context.data, spec),spec.expectedKind);
+    const selected = assetByKey(assetReferenceKey(context.data, spec),spec.expectedKind);
     const eligible = eligibleReferenceAssets(spec, context);
     const text = selected ? `\\(${escapeHtml(selected.name)}\\)` : `Choose ${spec.expectedKind}…`;
     const label = selected ? `${spec.label}: ${selected.plainName || selected.name}` : `${spec.label}: choose a ${spec.expectedKind}`;
-    const control = `<button class="workspace-control workspace-reference-control" type="button" data-assets-reference="${spec.field}" data-assets-reference-value="${selected ? assetKey(selected) : ''}" data-assets-expected-kind="${spec.expectedKind}" data-assets-reference-label="${escapeHtml(spec.label)}" aria-haspopup="listbox" aria-expanded="false" aria-label="${escapeHtml(label)}"${eligible.length || spec.scalar ? '' : ' disabled'}><span class="workspace-reference-value${selected ? ' workspace-reference-math' : ''}">${text}</span><span class="workspace-reference-arrow" aria-hidden="true">⌄</span></button>`;
+    const control = `<button class="workspace-control workspace-reference-control" type="button" data-assets-reference="${spec.field}"${Number.isInteger(spec.tensorIndex) ? ` data-assets-tensor-index="${spec.tensorIndex}"` : ''} data-assets-reference-value="${selected ? assetKey(selected) : ''}" data-assets-expected-kind="${spec.expectedKind}" data-assets-reference-label="${escapeHtml(spec.label)}" aria-haspopup="listbox" aria-expanded="false" aria-label="${escapeHtml(label)}"${eligible.length || spec.scalar ? '' : ' disabled'}><span class="workspace-reference-value${selected ? ' workspace-reference-math' : ''}">${text}</span><span class="workspace-reference-arrow" aria-hidden="true">⌄</span></button>`;
     return controlOnly ? control : `<label class="workspace-field workspace-field-inline"><span class="input-label">${spec.label}</span>${control}</label>`;
   }
   function scalarFieldHtml(spec, context) {
@@ -1349,32 +1457,73 @@
       html += fieldHtml('Rank', 'rank', data.rank ?? 3, 'number');
     } else if (kind === 'variety') {
       const derivedDimension = DERIVED_VARIETY_DIMENSIONS.has(type);
-      const dimension = derivedDimension ? derivedVarietyDimension(type, data) ?? '' : data.dimension ?? 3;
+      const dimension = type === 'complete-intersection' ? data.dimension ?? derivedVarietyDimension(type, data) ?? ''
+        : derivedDimension ? derivedVarietyDimension(type, data) ?? '' : data.dimension ?? 3;
       html += fieldHtml('Dimension', 'dimension', dimension, 'number', { readOnly: derivedDimension&&type!=='complete-intersection' });
       if (type === 'ppav-moduli') html += fieldHtml('Genus', 'genus', data.genus ?? 2, 'number');
       if (type === 'symmetric-product-curve') html += fieldHtml('Symmetric power m', 'power', data.power ?? 3, 'number');
       if (type === 'grassmannian') html += fieldHtml('r', 'r', data.r ?? 2, 'number') + fieldHtml('n', 'n', data.n ?? 4, 'number');
-      if (type === 'complete-intersection') html += fieldHtml('Ambient dimension', 'ambientDimension', data.ambientDimension ?? 3, 'number',{readOnly:true}) + fieldHtml('Degrees', 'degrees', data.degrees ?? '');
+      if (type === 'complete-intersection') html += fieldHtml('Ambient dimension', 'ambientDimension', data.ambientDimension ?? 3, 'number',{readOnly:true})
+        + `<label class="workspace-field workspace-field-inline"><span class="input-label">Equations</span><span class="workspace-ci-slider"><input class="workspace-control" type="range" min="0" max="8" step="1" value="0" data-assets-ci-count aria-label="Equations"><output data-assets-ci-count-value>0</output></span></label>`
+        + fieldHtml('Degrees', 'degrees', data.degrees ?? '')
+        + `<div class="workspace-form-fields" data-assets-ci-degrees></div><p class="workspace-card-context">Ambient dimension = dimension + number of equations. Leave Degrees empty for projective space. For degrees above 12, use the Degrees list (maximum 99).</p>`;
       if(type==='point')html+=`<div class="workspace-form-actions">${['\\{*\\}','pt','p','\\{p\\}'].map(name=>`<button type="button" class="btn btn-ghost" data-point-name="${escapeHtml(name)}">${escapeHtml(name)}</button>`).join('')}</div>`;
       referenceFieldSpecs(kind, type).forEach((spec) => { html += spec.scalar ? scalarFieldHtml(spec, context) : referenceFieldHtml(spec, context); });
     } else if (kind === 'sheaf') {
-      const specs = referenceFieldSpecs(kind, type);
+      const specs = referenceFieldSpecs(kind, type, data);
       specs.filter((spec) => spec.field === 'base').forEach((spec) => { html += referenceFieldHtml(spec, context); });
+      if (['tangent','cotangent'].includes(type)) {
+        html += `<label class="workspace-check"><input type="checkbox" data-assets-field="differentialWedge"${data.differentialWedge===true?' checked':''}><span>Exterior power</span></label>`;
+        if (data.differentialWedge===true) {
+          let max=null;try{max=window.MathWorkspaceSheafModel.dimension(assetByKey(data.base),assetState.snapshot.assets);}catch(_){}
+          const degree=String(data.wedgeDegree??1);
+          const degrees=max==null?[degree]:Array.from({length:max+1},(_,i)=>String(i));
+          if(!degrees.includes(degree))degrees.push(degree);
+          html += `<label class="workspace-field workspace-field-inline"><span class="input-label">Exterior degree</span><select class="workspace-control" data-assets-field="wedgeDegree"${max==null?' disabled':''}>${degrees.map(value=>`<option value="${escapeHtml(value)}"${degree===value?' selected':''}${max!=null&&Number(value)>max?' disabled':''}>${escapeHtml(value)}${max!=null&&Number(value)>max?' (unavailable)':''}</option>`).join('')}</select></label><p class="workspace-card-context">Exterior degree k means the k-th wedge power, rather than a tensor power. Degree 0 gives the structure sheaf.</p>`;
+        }
+      }
+      if (type === 'divisor-line') {
+        let basis=[];try{basis=window.MathWorkspaceSheafModel.divisorBasis(data.base,assetState.snapshot.assets);}catch(error){html+=`<p class="workspace-card-context">${escapeHtml(error.message)}</p>`;}
+        const known=new Set(basis.map(d=>d.id)),coefficients=data.divisorCoefficients||{};
+        const rows=[...basis,...Object.keys(coefficients).filter(id=>!known.has(id)&&String(coefficients[id]).trim()!=='0').map(id=>({id,plain:id+' (unavailable on this base)',latex:''}))];
+        html += rows.map(def=>`<label class="workspace-field workspace-field-inline"><span class="input-label">${def.latex?'\\('+escapeHtml(def.latex)+'\\)':escapeHtml(def.plain)}</span><input class="workspace-control workspace-code-control" type="text" data-assets-divisor-class="${escapeHtml(def.id)}" value="${escapeHtml(coefficients[def.id]??'0')}" aria-label="Coefficient of ${escapeHtml(def.plain||def.id)} in D" autocomplete="off" spellcheck="false"></label>`).join('');
+        html += `<p class="workspace-card-context">${rows.length?'Write D in the displayed divisor classes. Coefficients accept integers or fractions; set unavailable classes to 0.':'This base has no known divisor classes; D = 0.'}</p>`;
+      }
+      if (['tensor','internal-hom','map-operation'].includes(type)) html += `<label class="workspace-field workspace-field-inline"><span class="input-label">Mode</span><select class="workspace-control" data-assets-field="exact"><option value="false"${data.exact===true?'':' selected'}>Derived</option><option value="true"${data.exact===true?' selected':''}>Ordinary (assume exactness)</option></select></label>`;
       if (type === 'twist') html += fieldHtml('Twist r', 'twist', data.twist ?? 1, 'number');
       if(['self-direct-sum','self-tensor-product'].includes(type))html+=fieldHtml('Multiplicity','multiplicity',data.multiplicity??'2');
       if (type === 'map-operation') html += `<label class="workspace-field workspace-field-inline"><span class="input-label">Operation</span><select class="workspace-control" data-assets-field="operation"><option value="pullback"${data.operation === 'pushforward' ? '' : ' selected'}>Pullback</option><option value="pushforward"${data.operation === 'pushforward' ? ' selected' : ''}>Pushforward</option></select></label>`;
-      specs.filter((spec) => spec.field !== 'base').forEach((spec) => { html += spec.scalar ? scalarFieldHtml(spec, context) : referenceFieldHtml(spec, context); });
-      if (!isDirectSheafType(type)) html += inferredBaseFieldHtml(type, data);
+      if (type==='map-operation'&&data.operation==='pushforward') html += `<label class="workspace-check"><input type="checkbox" data-assets-field="proper"${data.proper!==false?' checked':''}><span>Proper map (use f_*; otherwise f_!)</span></label>`;
+      specs.filter((spec) => spec.field !== 'base').forEach((spec) => {
+        if (type === 'tensor') {
+          const index = spec.tensorIndex;
+          html += `<div class="workspace-tensor-factor workspace-form-fields" data-assets-tensor-row="${index}">${referenceFieldHtml(spec, context)}<label class="workspace-field workspace-field-inline"><span class="input-label">Exponent</span><input class="workspace-control workspace-code-control" type="text" data-assets-tensor-exponent="${index}" value="${escapeHtml(data.exponents?.[index] ?? '1')}" spellcheck="false" autocomplete="off" aria-label="Exponent for factor ${index+1}"></label><button class="btn btn-ghost" type="button" data-assets-tensor-remove="${index}" aria-label="Remove factor ${index+1}">Remove factor</button></div>`;
+        } else html += spec.scalar ? scalarFieldHtml(spec, context) : referenceFieldHtml(spec, context);
+      });
+      if (type === 'tensor') html += `<div class="workspace-form-actions"><button class="btn btn-ghost" type="button" data-assets-tensor-add${window.MathWorkspaceSheafModel.tensorParents(data).length >= window.MathWorkspaceSheafModel.tensorLimit ? ' disabled' : ''}>Add factor</button><span class="workspace-card-context">${window.MathWorkspaceSheafModel.tensorParents(data).length} / ${window.MathWorkspaceSheafModel.tensorLimit} factors</span></div><p class="workspace-card-context">Exponents accept expressions such as 2 or n + 1. An empty product is the structure sheaf on the selected base.</p>`;
+      if (!isDirectSheafType(type) && !(type === 'tensor' && !window.MathWorkspaceSheafModel.tensorParents(data).length)) html += inferredBaseFieldHtml(type, data);
+      if (GEOMETRIC_HYPOTHESES[type]) {
+        const confirmed = data.confirmed === true || data.confirmed == null && !!data.workspaceSheafComplex?.payload?.construction;
+        html += `<label class="workspace-check"><input type="checkbox" data-assets-field="confirmed"${confirmed ? ' checked' : ''}><span>${GEOMETRIC_HYPOTHESES[type]}</span></label>`;
+      }
       if (type === 'schur') html += fieldHtml('Partition', 'partition', data.partition ?? '2,1');
     } else {
       referenceFieldSpecs(kind, type).forEach((spec) => { html += referenceFieldHtml(spec, context); });
     }
     fields.dataset.rebuilding='true';fields.innerHTML = html;delete fields.dataset.rebuilding;
     fields.querySelectorAll('[data-point-name]').forEach(button=>button.addEventListener('click',()=>{const name=form.querySelector('[data-assets-name]');window.CalculatorInputSettings.syncEditableValue(name,button.dataset.pointName,{force:true});captureAssetInputDraftFromForm(instance.key,instance.rendererEpoch,{immediate:true});}));
-    fields.querySelectorAll('input[data-assets-field]:not([readonly])').forEach(field => {
+    fields.querySelectorAll('input[data-assets-field]:not([readonly]),input[data-assets-tensor-exponent],input[data-assets-divisor-class]').forEach(field => {
       window.CalculatorInputSettings.listenEditable(field, 'input', () => captureAssetInputDraftFromForm(form.dataset.inputInstanceKey, Number(form.dataset.rendererEpoch), { immediate: false }), { commitHandled: true });
     });
     fields.querySelectorAll('[data-assets-reference]').forEach(bindReferenceField);
+    fields.querySelector('[data-assets-tensor-add]')?.addEventListener('click', () => changeTensorFactors());
+    fields.querySelectorAll('[data-assets-tensor-remove]').forEach(button => button.addEventListener('click', () => changeTensorFactors(Number(button.dataset.assetsTensorRemove))));
+    const ciCount = fields.querySelector('[data-assets-ci-count]');
+    if (ciCount) {
+      ciCount.addEventListener('input', () => changeCompleteIntersectionSlider(ciCount));
+      ciCount.addEventListener('change', () => changeCompleteIntersectionSlider(ciCount));
+      syncCompleteIntersectionInput();
+    }
     if (instance) fields.querySelectorAll('.workspace-scalar-field').forEach(group => bindScalarField(group, referenceFieldSpecs(kind, type).find(spec => spec.field === group.querySelector('[data-scalar-mode]').dataset.scalarMode), instance));
     if (window.MathJax?.typesetPromise) {
       const instanceKey = instance?.key || '', rendererEpoch = instance?.rendererEpoch || 0, taskGeneration = instance?.taskGeneration || 0;
@@ -1384,12 +1533,23 @@
   }
   function assetEditorData(instance = activeAssetInputInstance()) {
     const form = editorForm(), data = {};
-    form.querySelectorAll('[data-assets-field]').forEach((field) => { if (!field.readOnly) data[field.dataset.assetsField] = field.value; });
+    if (form.querySelector('[data-assets-kind]').value === 'sheaf' && form.querySelector('[data-assets-subtype]').value === 'tensor' && form.querySelector('[data-assets-tensor-add]')) {
+      const previous = window.MathWorkspaceSheafModel.tensorParents(instance?.draft.data || {});
+      data.parents = [...form.querySelectorAll('[data-assets-tensor-index]')].map(field => field.dataset.assetsReferenceValue || previous[Number(field.dataset.assetsTensorIndex)] || '');
+      data.exponents = [...form.querySelectorAll('[data-assets-tensor-exponent]')].map(field => field.value);
+      syncTensorAliases('sheaf', 'tensor', data);
+    }
+    form.querySelectorAll('[data-assets-field]').forEach((field) => { if (!field.readOnly) data[field.dataset.assetsField] = field.type === 'checkbox' ? field.checked : field.dataset.assetsField==='exact' ? field.value==='true' : field.value; });
+    if (form.querySelector('[data-assets-subtype]').value==='divisor-line' && form.querySelector('[data-assets-divisor-class]')) {
+      data.divisorCoefficients={...(instance?.draft.data.divisorCoefficients||{})};
+      form.querySelectorAll('[data-assets-divisor-class]').forEach(field=>{data.divisorCoefficients[field.dataset.assetsDivisorClass]=field.value;});
+    }
     form.querySelectorAll('[data-scalar-value]').forEach(field => { data[field.dataset.scalarValue] = { kind: field.closest('.workspace-scalar-field').querySelector('[data-scalar-mode]').value, value: field.value }; });
-    if(form.querySelector('[data-assets-kind]').value==='variety'&&form.querySelector('[data-assets-subtype]').value==='complete-intersection'&&instance?.draft.type==='complete-intersection'){
-      try{const count=degreeList(data.degrees).length;if(String(data.dimension).trim()!=='')data.ambientDimension=String(Number(data.dimension)+count);}catch(_){}
+    if(form.querySelector('[data-assets-kind]').value==='variety'&&form.querySelector('[data-assets-subtype]').value==='complete-intersection'&&(!instance||instance.draft.type==='complete-intersection')){
+      try { data.ambientDimension = String(completeIntersectionInputParameters(data).ambientDimension); } catch (_) {}
     }
     form.querySelectorAll('[data-assets-reference]').forEach((field) => {
+      if (field.hasAttribute('data-assets-tensor-index')) return;
       const name = field.dataset.assetsReference, value = field.dataset.assetsReferenceValue || '';
       if (field.closest('.workspace-scalar-field')) { data[name] = { kind: 'reference', ref: value }; return; }
       // Reference controls are replaced when another reference is chosen.  A
@@ -1435,8 +1595,8 @@
       return;
     }
     const context = { kind, type, data, currentKey };
-    referenceFieldSpecs(kind, type).forEach((spec) => {
-      const key = window.MathWorkspaceNumbers.referenceKey(data, spec);
+    referenceFieldSpecs(kind, type, data).forEach((spec) => {
+      const key = assetReferenceKey(data, spec);
       if (spec.optional && !key) return;
       if (spec.scalar && !key) return;
       const result = referenceEligibility(spec, key, context);
@@ -1446,7 +1606,7 @@
       if (type === 'complete-intersection' && nonnegativeInt(data.ambientDimension, 0) < degreeList(data.degrees).length) throw new Error('Ambient dimension must be at least the number of defining degrees.');
     } else if (kind === 'sheaf') {
       if (!isDirectSheafType(type) && !assetByKey(data.base, 'variety')) throw new Error('This construction must determine a compatible base variety.');
-      if (['direct-sum', 'tensor', 'internal-hom'].includes(type)) {
+      if (['direct-sum', 'internal-hom'].includes(type)) {
         const firstBase = assetByKey(data.first, 'sheaf')?.data?.base, secondBase = assetByKey(data.second, 'sheaf')?.data?.base;
         if (!firstBase || firstBase !== secondBase) throw new Error('Both parent sheaves must have the same base variety.');
       }
@@ -1456,6 +1616,7 @@
   }
   const cloneInputDraft = (draft) => {
     const data = window.MathWorkspaceNumbers.migrateInputs(draft?.kind, draft?.type, draft?.data || {});
+    syncTensorAliases(draft?.kind, draft?.type, data);
     if (draft?.kind === 'variety' && VARIETY_INPUT_FIELDS[draft.type]) {
       for (const field of VARIETY_CONSTRUCTION_FIELDS) if (!VARIETY_INPUT_FIELDS[draft.type].includes(field)) delete data[field];
     }
@@ -1503,9 +1664,14 @@
       if (typeof value === 'string' && !balancedLatex(value)) return { valid: false, message: `${field} contains incomplete LaTeX.`, field };
       if (numericFields.has(field) && typeof value !== 'object' && (String(value).trim() === '' || !Number.isFinite(Number(value)) || !Number.isInteger(Number(value)))) return { valid: false, message: `${field} must be a complete integer.`, field };
     }
+    if (draft.kind === 'variety' && draft.type === 'complete-intersection') {
+      try { completeIntersectionInputParameters(draft.data); }
+      catch (error) { return { valid: false, message: error.message, field: '' }; }
+    }
     if (draft.kind === 'variety' && !['product', 'toric'].includes(draft.type) && derivedVarietyDimension(draft.type, draft.data) == null) return { valid: false, message: 'The variety parameters must define a valid dimension.', field: '' };
     try {
       const data = normalizedAssetData(draft.kind, draft.type, draft.data);
+      if(draft.kind==='sheaf'&&draft.type==='divisor-line')data.divisorCoefficients=window.MathWorkspaceSheafModel.divisorCoefficients(data,assetState.snapshot.assets);
       validateAssetData(draft.kind, draft.type, data, currentKey);
       return { valid: true, message: '', field: '', normalized: { name, autoName: draft.autoName === draft.name ? name : '', kind: draft.kind, type: draft.type, data, dependencies: assetDependencies(draft.kind, draft.type, data) } };
     } catch (error) { return { valid: false, message: error.message, field: '' }; }
@@ -1560,6 +1726,13 @@
     };
     staged.fingerprint = JSON.stringify({ name: staged.name, type: staged.type, data: staged.data, dependencies: staged.dependencies, properties: staged.properties });
     Object.assign(record, staged);
+    if (next.data !== command.normalized.data) {
+      // Invalidation must also reach the draft: another Save or autosave must
+      // not republish its old construction after the factors have committed.
+      // Keep all editable raw values and their focused controls untouched.
+      delete instance.draft.data.construction;
+      instance.draft.data.workspaceSheafComplex = copyInput(next.data.workspaceSheafComplex);
+    }
     assetState.snapshot.revision += 1;
     assetState.snapshot.capabilities = localAssetSnapshot().capabilities;
     instance.dirty = false; instance.autosaveStatus = 'Saved'; instance.conflictState = null; instance.baseRevision = assetState.snapshot.revision;instance.baseDefinition=assetInputDefinition(record);
@@ -1637,7 +1810,9 @@
   function updateAssetInputDraft(instance, patch, options = {}) {
     if (!instance || instance.deleted) return false;
     instance.taskGeneration += 1;
-    instance.draft = cloneInputDraft({ ...instance.draft, ...patch, data: { ...instance.draft.data, ...(patch.data || {}) } });
+    const data = { ...instance.draft.data, ...(patch.data || {}) };
+    if (instance.draft.kind === 'sheaf' && instance.draft.type === 'tensor' && patch.type && patch.type !== 'tensor') { delete data.parents; delete data.exponents; }
+    instance.draft = cloneInputDraft({ ...instance.draft, ...patch, data });
     if (instance.draft.name !== instance.draft.autoName) instance.draft.autoName = '';
     if (instance.draft.kind === 'variety' && instance.draft.autoName) {
       const validation = validateAssetInputDraft(instance);
@@ -1655,7 +1830,7 @@
     const form = editorForm();
     if (!form || !instance || instance !== activeAssetInputInstance() || instance.draft.kind !== 'variety') return;
     const { type, data, name, autoName } = instance.draft;
-    if(type==='complete-intersection')window.CalculatorInputSettings.syncEditableValue(form.querySelector('[data-assets-field="ambientDimension"]'),data.ambientDimension??'');
+    if(type==='complete-intersection')syncCompleteIntersectionInput(data);
     if (DERIVED_VARIETY_DIMENSIONS.has(type)) {
       const field = form.querySelector('[data-assets-field="dimension"]');
       if (field?.readOnly) window.CalculatorInputSettings.syncEditableValue(field, derivedVarietyDimension(type, data) ?? '');
@@ -1692,7 +1867,30 @@
     return referenceKeys(kind, type, data).map((key) => { const [dependencyKind, id] = key.split(':'); return { kind: dependencyKind, id }; });
   }
   function referenceSpecForControl(control, context) {
-    return referenceFieldSpecs(context.kind, context.type).find((spec) => spec.field === control.dataset.assetsReference) || null;
+    return referenceFieldSpecs(context.kind, context.type, context.data).find((spec) => spec.field === control.dataset.assetsReference) || null;
+  }
+  function ensureSheafInputInstance() {
+    if (!activeAssetInputInstance()) saveAssetsEditor({ preventDefault() {} });
+    return activeAssetInputInstance();
+  }
+  function changeTensorFactors(removeIndex = null) {
+    const instance = ensureSheafInputInstance(), form = editorForm();
+    if (!instance || instance.draft.kind !== 'sheaf' || instance.draft.type !== 'tensor') return;
+    captureAssetInputDraftFromForm(instance.key, instance.rendererEpoch, { schedule: false });
+    const data = { ...instance.draft.data }, parents = window.MathWorkspaceSheafModel.tensorParents(data);
+    const exponents = parents.map((_,index)=>data.exponents?.[index] ?? '1');
+    data.base = inferredSheafBase('tensor', data) || data.base;
+    if (removeIndex == null) {
+      if (parents.length >= window.MathWorkspaceSheafModel.tensorLimit) return;
+      parents.push(''); exponents.push('1');
+    } else {
+      if (!Number.isInteger(removeIndex) || removeIndex < 0 || removeIndex >= parents.length) return;
+      parents.splice(removeIndex, 1); exponents.splice(removeIndex, 1);
+    }
+    updateAssetInputDraft(instance, { data: { ...data, parents, exponents } }, { immediate: true });
+    renderAssetsEditorFields(); renderAssetInputStatus(instance);
+    const selector = removeIndex == null ? `[data-assets-tensor-index="${parents.length-1}"]` : parents.length ? `[data-assets-tensor-remove="${Math.min(removeIndex,parents.length-1)}"]` : '[data-assets-reference="base"]';
+    form.querySelector(selector)?.focus();
   }
   function referenceDragKey(dataTransfer) {
     try {
@@ -1715,6 +1913,10 @@
     return true;
   }
   function chooseAssetReference(control, spec, key, instanceKey = control.closest?.('form')?.dataset.inputInstanceKey, rendererEpoch = Number(control.closest?.('form')?.dataset.rendererEpoch)) {
+    if (!activeAssetInputInstance() && referenceContext(editorForm()).kind === 'sheaf') {
+      ensureSheafInputInstance();
+      return chooseAssetReference(editorForm().querySelector(`[data-assets-reference="${CSS.escape(spec.field)}"]`), spec, key);
+    }
     const boundInstance = assetsCardState.instances.get(instanceKey);
     if (!boundInstance || boundInstance !== activeAssetInputInstance() || boundInstance.rendererEpoch !== rendererEpoch) return;
     const context = referenceContext(editorForm());
@@ -1730,6 +1932,10 @@
   }
   function openReferencePicker(control) {
     const form = editorForm(); if (!form || control.disabled) return;
+    if (!activeAssetInputInstance() && form.querySelector('[data-assets-kind]').value === 'sheaf') {
+      const field = control.dataset.assetsReference; ensureSheafInputInstance();
+      return openReferencePicker(form.querySelector(`[data-assets-reference="${CSS.escape(field)}"]`));
+    }
     if (assetState.referencePicker?.control === control) { closeReferencePicker(); return; }
     closeReferencePicker();
     const context = referenceContext(form), spec = referenceSpecForControl(control, context);
@@ -1811,6 +2017,12 @@
       let instance = activeAssetInputInstance();
       if (!instance) {
         const pending = cloneInputDraft({ name: form.querySelector('[data-assets-name]').value, autoName: form.dataset.autoName, kind: form.querySelector('[data-assets-kind]').value, type: form.querySelector('[data-assets-subtype]').value, data: assetEditorData(null) });
+        if (pending.kind === 'variety' && pending.type === 'complete-intersection') {
+          // Validate before allocating an asset: an unfinished CI draft must
+          // not leave a default abstract variety behind after a failed Add.
+          completeIntersectionInputParameters(pending.data);
+          validateAssetData(pending.kind, pending.type, normalizedAssetData(pending.kind, pending.type, pending.data), '');
+        }
         const record = createDefaultAsset(pending.kind);
         applyAssetSnapshot(localAssetSnapshot(), assetRef(record), { affectedAssetKeys: new Set([assetKey(record)]) });
         instance = bindAssetInputInstance(assetRef(record), { render: false });
@@ -2354,6 +2566,8 @@
     return item;
   }
 
+  function openAssetsCreationPicker() { closeAssetsContextMenu(); creationPicker.open(); }
+
   function renderAssets() {
     renderCardPicker();
     if (!assetState.view) return;
@@ -2367,7 +2581,8 @@
     if (!entries.length) {
       const empty = Object.assign(document.createElement('div'), { className: 'workspace-assets-empty' });
       empty.innerHTML = '<strong>This Assets view is empty.</strong><button type="button" class="btn workspace-assets-create" data-assets-create aria-haspopup="dialog">New object</button><span>You can also right-click here to create a mathematical object.</span>';
-      empty.querySelector('[data-assets-create]').addEventListener('click', () => { closeAssetsContextMenu(); creationPicker.open(); });
+      empty.querySelector('[data-assets-create]').addEventListener('click', openAssetsCreationPicker);
+      window.MathWorkspaceEmptyCreateLab?.decorate(empty);
       content.appendChild(empty); return;
     }
     if (assetState.layout === 'details') {
@@ -2497,11 +2712,18 @@
   const reservedAssetNames = new Set();
   function uniqueDefaultAssetName(kind, type = '', currentKey = '', data = {}) {
     const base = ({knot:'K','dual-graph':'G',filtration:'F',complex:'C', 'field-extension':'L/K','mosaic-space':'S','mosaic-diagram':'D',number:'a',field:'R',frame:'F',polytope:'P',sphere:'S',point:'p',vector:'v',roots:'R',lattice:'L',voronoi:'V',formula:'Z',tropical:'T',weyl:'W',cone:'\\sigma',fan:'\\Sigma'})[kind] || (kind === 'dynkin' ? '\\Delta' : kind === 'strands' ? 'w' : kind === 'matrix' ? 'A' : kind === 'category' ? '\\mathcal{C}' : kind === 'functor' ? 'F' : kind === 'young' ? '\\lambda' : kind === 'lie' ? '\\mathfrak{g}' : kind === 'variety' ? defaultVarietyName(type, data) : kind === 'sheaf' ? '\\mathcal{E}' : 'f');
-    const numbered = (number) => kind === 'sheaf' ? `\\mathcal{E}_{${number}}` : `${base}_{${number}}`;
-    const current = currentKey && assetByKey(currentKey);
-    if (current && current.autoName === current.name && (current.name === base || current.name.startsWith(base + '_{') && /^_\{[1-9]\d*\}$/.test(current.name.slice(base.length)))) return current.name;
-    let name = base, number = 2;
+    // Index the whole expression for subscripted and compound variety names.
+    const grouped = kind === 'variety' && GROUPED_VARIETY_COPY_NAMES.has(type);
+    const numberedBase = grouped ? `(${base})` : base;
+    const numbered = (number) => kind === 'sheaf' ? `\\mathcal{E}_{${number}}` : `${numberedBase}_{${number}}`;
     const isTaken = (candidate) => reservedAssetNames.has(canonicalAssetName(candidate)) || assetState.snapshot.assets.some((asset) => assetKey(asset) !== currentKey && canonicalAssetName(asset.name) === canonicalAssetName(candidate));
+    const current = currentKey && assetByKey(currentKey);
+    if (current && current.autoName === current.name && (current.name === base || current.name.startsWith(numberedBase + '_{') && /^_\{[1-9]\d*\}$/.test(current.name.slice(numberedBase.length)))) return current.name;
+    if (grouped && current && current.autoName === current.name && current.name.startsWith(base + '_{')) {
+      const suffix = current.name.slice(base.length), repaired = numberedBase + suffix;
+      if (/^_\{[1-9]\d*\}$/.test(suffix) && !isTaken(repaired)) return repaired;
+    }
+    let name = base, number = 2;
     while (isTaken(name)) name = numbered(number++);
     return name;
   }
@@ -2751,6 +2973,7 @@
         Object.assign(data,{base:ids.get(p.baseVarietyId),twist:String(p.twist??1)});props.basis=p.basis||'chern';
         if(['abstract','locally-free'].includes(entry.type)){const spec=window.MathWorkspaceNumbers.references('sheaf',entry.type)[0];data.rank=scalar(p.rank,previous?.data.rank,spec);}else data.rank=String(p.rank??'');
         if(p.divisorCoefficients)data.divisorCoefficients=copyInput(p.divisorCoefficients);
+        if(p.workspaceDifferentialWedge)Object.assign(data,{differentialWedge:true,wedgeDegree:String(p.workspaceDifferentialWedge.degree)});
         if(['direct-sum','tensor','internal-hom'].includes(entry.type))Object.assign(data,{first:ids.get(c.internalHom?c.sourceSheafId:c.sheafIds?.[0]),second:ids.get(c.internalHom?c.targetSheafId:c.sheafIds?.[1]),exact:c.exact===true});
         if(entry.type==='tensor'){data.parents=(c.sheafIds||[]).map(id=>ids.get(id));data.exponents=c.exponents;}
         if(['dual','self-direct-sum','self-tensor-product','schur'].includes(entry.type))data.parent=ids.get(c.sheafId);
@@ -2870,6 +3093,7 @@
   }
 
   function beginAssetMarquee(event) {
+    if (event.currentTarget.querySelector('[data-empty-create-variant="none"]')) return;
     if (event.pointerType === 'touch' || event.button !== 0 || event.target.closest('[data-asset-key],input,select,button')) return;
     closeAssetsContextMenu(); event.preventDefault();
     const marquee = Object.assign(document.createElement('div'), { className: 'workspace-assets-marquee' }); document.body.appendChild(marquee);
@@ -3067,7 +3291,7 @@
         ? window.MathWorkspaceStructures.references(asset.kind,asset.data).map(key=>({key,kind:key.split(':')[0]}))
         : slicing.isAsset(asset) || asset.kind === 'matrix'
         ? slicing.references(asset).flatMap(spec => (spec.many ? slicing.readRef(asset.data,spec.field) || [] : [slicing.readRef(asset.data,spec.field)]).map(key => ({key,kind:spec.kind})))
-        : referenceFieldSpecs(asset.kind,asset.type).map(spec => ({key:window.MathWorkspaceNumbers.referenceKey(asset.data,spec),kind:spec.expectedKind,...(window.MathWorkspaceTopology.kinds.includes(asset.kind)&&spec.field==='source'?{allowMissing:true}:{})}))
+        : referenceFieldSpecs(asset.kind,asset.type,asset.data).map(spec => ({key:assetReferenceKey(asset.data,spec),kind:spec.expectedKind,...(window.MathWorkspaceTopology.kinds.includes(asset.kind)&&spec.field==='source'?{allowMissing:true}:{})}))
     });
     for(const asset of prepared.assets)if(['complex','filtration'].includes(asset.kind)){
       const issues=window.MathWorkspaceStructures.issues(asset,prepared.assets);if(issues.length)throw new Error(issues.join(' '));
@@ -3116,6 +3340,16 @@
       const instance = item.cardType === 'input' ? createAssetInputInstance(item.targetRef) : createAssetCardInstance(item.targetRef,item.cardType);
       instance.localUiState = io.clone(item.localUiState);
       if (item.cardType === 'input') Object.assign(instance,{draft:io.clone(item.draft),baseDefinition:typeof item.baseDefinition==='string'?item.baseDefinition:instance.baseDefinition,dirty:!!item.dirty,validation:io.clone(item.validation),autosaveStatus:item.dirty ? 'Restored draft' : item.autosaveStatus,baseRevision:revision});
+      if (item.cardType === 'input' && !instance.dirty) {
+        const record = assetByKey(assetKey(instance.targetRef));
+        // Automatic copy labels may have been repaired while loading Assets.
+        // A clean automatic Input follows that repair; user drafts stay intact.
+        if (GROUPED_VARIETY_COPY_NAMES.has(record.type) && record.autoName === record.name && instance.draft.autoName
+          && instance.draft.name === instance.draft.autoName && instance.draft.name !== record.name) {
+          Object.assign(instance.draft, { name: record.name, autoName: record.autoName });
+          instance.baseDefinition = assetInputDefinition(record);
+        }
+      }
       assetsCardState.instances.set(instance.key,instance);
     }
     for (const item of saved.assetCards.slots) {
@@ -3234,6 +3468,7 @@
     openCanvas('assets');
     const creationEntries=window.MathWorkspaceCreation.catalog(ASSET_SUBTYPES,window.MathWorkspaceObjects.kindLabels);
     creationPicker = window.MathWorkspaceCreation.init({entries:creationEntries,create:createAsset,dependencies:creationDependencies,capabilities:()=>assetState.snapshot.capabilities,returnFocus:()=>assetState.view});
+    window.MathWorkspaceEmptyCreateLab?.init(openAssetsCreationPicker);
     window.MathWorkspaceSubjectAssignments.init({entries:creationEntries,assignments:creationPicker.assignments});
     designLab = window.MathWorkspaceDesignLab.init({
       render: renderAssets,

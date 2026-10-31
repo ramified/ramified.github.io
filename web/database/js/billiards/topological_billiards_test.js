@@ -223,6 +223,7 @@ function testOrientationPersistenceAndSpinThroughGlue() {
 
 function testPageIntegration() {
   const html = fs.readFileSync(require.resolve('../../ramified_minigames.html'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../../css/ramified_minigames_study_base.css'), 'utf8');
   const setup = fs.readFileSync(require.resolve('../ramified_minigames_setup.js'), 'utf8');
   const native = fs.readFileSync(require.resolve('./topological_billiards_native.js'), 'utf8');
   const renderer = fs.readFileSync(require.resolve('./topological_billiards_renderer.js'), 'utf8');
@@ -234,7 +235,7 @@ function testPageIntegration() {
   assert.ok(html.includes('id="billiards-spin-pad"'));
   assert.ok(html.includes('id="billiards-ball-palette"'));
   assert.ok(html.includes('class="tile-palette-grid billiards-ball-palette"'));
-  assert.ok(html.includes('.billiards-spin-row[hidden]'));
+  assert.ok(css.includes('.billiards-spin-row[hidden]'));
   assert.ok(setup.includes('topological_billiards_math.js'));
   assert.ok(setup.includes('topological_billiards_physics.js'));
   assert.ok(setup.includes('topological_billiards_renderer.js'));

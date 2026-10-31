@@ -56,3 +56,18 @@ and validation report are stored outside the repository.
 
 Record subsequent workspace-only source changes here. Do not write them back
 to the frozen classic calculator pages, scripts, styles, workers, or presets.
+
+### 2026-10-31 · Sheaf Display connector endpoints
+
+The copied `js/sheaf_calculator.js` and `js/sheaf_complex_calculator.js` now
+clip sheaf-to-base connector lines with the same label-boundary calculation
+as straight Map arrows. The painted line stops at the labels instead of
+extending to their centers; object positions and Map geometry are unchanged.
+
+### 2026-10-31 · BUILD-001: duplicate debug/test API keys
+
+In the copied `js/double_young_diagram.js`, keep one `decomposePlethysm`
+entry in `window.__dbg`. In copied `js/mosaic_calculator.js`, keep one
+`normalizeBackgroundMetric` and one `setTestGeometry` entry in `api.__test`.
+Each removed entry referred to the same function as its retained entry;
+function definitions and calculator algorithms are unchanged.

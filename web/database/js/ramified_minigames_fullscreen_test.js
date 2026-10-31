@@ -41,7 +41,7 @@ async function main() {
   const server = await startServer();
   let browser;
   try {
-    browser = await launchBrowser(`http://127.0.0.1:${server.address().port}/ramified_minigames.html?fullscreenDebug=1`);
+    browser = await launchBrowser(`http://127.0.0.1:${server.address().port}/ramified_minigames_classic.html?fullscreenDebug=1`);
     const client = browser.client;
     await waitFor(() => evaluate(client, `document.readyState === 'complete' && !!window.RamifiedMinigames && document.querySelector('#mosaic-canvas').width > 300`), 20000, 'minigames initialization');
     await evaluate(client, `window.__fullscreenTestStyle = document.querySelector('style').textContent;
@@ -144,7 +144,7 @@ async function main() {
     const fit = await evaluate(client, `(${inspectPage})()`);
     assert(Math.abs(fit.canvas.width-fit.requested[0])<=1 && Math.abs(fit.canvas.height-fit.requested[1])<=1,
       'fit viewport retains its display-size CSS');
-    await client.send('Page.navigate', {url:`http://127.0.0.1:${server.address().port}/ramified_minigames.html`});
+    await client.send('Page.navigate', {url:`http://127.0.0.1:${server.address().port}/ramified_minigames_classic.html`});
     await waitFor(() => evaluate(client, `document.readyState==='complete' && !location.search && !!window.RamifiedMinigames`),20000,'normal page reload');
     await client.send('Runtime.evaluate', {expression:`document.querySelector('[data-canvas-display-mode="fullscreen"]').click()`,userGesture:true});
     await waitFor(() => evaluate(client, `document.fullscreenElement?.id === 'canvas-wrap'`),10000,'fullscreen without diagnostics');

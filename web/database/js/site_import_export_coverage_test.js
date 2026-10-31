@@ -61,7 +61,11 @@ assert.ok(panelCss.includes('.import-export-filename:empty'), 'an empty file nam
 assert.ok(panelCss.includes('.import-export-field-value'), 'fixed metadata needs a shared read-only presentation');
 activePages.forEach((file) => {
   const html = fs.readFileSync(path.join(root, file), 'utf8');
-  assert.ok(html.includes('css/import_export_panel.css'), `${file} must load the shared panel CSS`);
+  if (file === 'ramified_minigames.html') {
+    assert.ok(html.includes('css/ramified_minigames_study_base.css'), `${file} must load its bundled panel CSS`);
+    const bundledCss = fs.readFileSync(path.join(root, 'css/ramified_minigames_study_base.css'), 'utf8');
+    assert.ok(bundledCss.includes('.import-export-panel'), `${file} bundle must contain the shared panel CSS`);
+  } else assert.ok(html.includes('css/import_export_panel.css'), `${file} must load the shared panel CSS`);
   assert.ok(html.includes('js/import_export_panel.js'), `${file} must load the shared panel engine`);
 
   if (file === 'ramified_minigames.html') {

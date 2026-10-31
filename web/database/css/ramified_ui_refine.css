@@ -1,3 +1,40 @@
+/* Design Lab: temporary empty Assets treatments, scoped inside the forced grid. */
+/* Override the shared card body's 1400px hidden-overflow cap for long experiments. */
+.workspace-design-lab:not(.collapsed) > .card-body { max-height: none; overflow: visible; }
+.workspace-design-lab:not(.collapsed):not([data-location='main']) > .card-body { max-height: min(75dvh, 900px); overflow: auto; }
+.workspace-empty-create-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; margin-top: 12px; }
+.workspace-empty-create-option { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); }
+.workspace-empty-create-option[data-selected='true'] { border-color: var(--accent); }
+.workspace-empty-create-option > button { justify-self: start; }
+.workspace-empty-create-label { font: 500 .78rem/1.4 'JetBrains Mono', monospace; }
+.workspace-empty-create-preview { --workspace-session-pane-height: 260px; height: 260px; min-height: 0; }
+/* Fit real empty views to the available content box, excluding pane borders. */
+.workspace-assets-view > .workspace-assets-content[data-assets-empty='empty'] { height: 100%; grid-template-rows: minmax(0, 1fr); }
+.workspace-assets-view > .workspace-assets-content[data-assets-empty='empty'] > .workspace-assets-empty[data-empty-create-variant] { min-height: 0; }
+.workspace-assets-empty[data-empty-create-variant] { box-sizing: border-box; min-width: 0; min-height: max(0px, calc(var(--workspace-session-pane-height, 400px) - 28px)); grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr); place-content: normal; gap: 0; }
+.workspace-assets-empty[data-empty-create-raised='true'] { grid-template-rows: minmax(0, .8fr) auto minmax(0, 1.2fr); }
+.workspace-empty-create-body { grid-row: 2; display: grid; justify-items: center; gap: 5px; min-width: 0; padding: 8px; overflow-wrap: anywhere; }
+.workspace-empty-create-hint { margin: 0; color: var(--muted); }
+.workspace-empty-create-sentence { margin: 8px 0; color: var(--muted); }
+body.ramified-theme [data-empty-create-variant] .workspace-assets-create { max-width: 100%; min-height: 34px; white-space: normal; }
+body.ramified-theme :is([data-empty-create-variant='outline'], [data-empty-create-variant='round']) .workspace-assets-create { color: var(--accent); border-color: var(--accent); }
+body.ramified-theme :is([data-empty-create-variant='outline'], [data-empty-create-variant='round']) .workspace-assets-create:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+body.ramified-theme [data-empty-create-variant='current'] .workspace-assets-create { min-height: 44px; }
+body.ramified-theme :is([data-empty-create-variant='inline'], [data-empty-create-variant='dashed']) .workspace-assets-create { border: 0; background: transparent; color: var(--accent); font: inherit; letter-spacing: normal; }
+body.ramified-theme [data-empty-create-variant='inline'] .workspace-assets-create { display: inline; margin: 0; padding: 2px 0; text-decoration: underline; text-underline-offset: .15em; }
+body.ramified-theme [data-empty-create-variant='dashed'] { border: 1px dashed var(--design-lab-interface-secondary-border); border-radius: 6px; background: color-mix(in srgb, var(--accent) 2%, var(--surface)); }
+body.ramified-theme [data-empty-create-variant='dashed'] .workspace-assets-create:hover { text-decoration: underline; }
+body.ramified-theme [data-empty-create-variant='round'] .workspace-assets-create { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 50%; font-size: 1.4rem; line-height: 1; }
+/* Text-only visually; keyboard users can still tab to the original action. */
+body.ramified-theme [data-empty-create-variant='none'] .workspace-assets-create:not(:focus-visible) { position: absolute; width: 1px; height: 1px; min-height: 0; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+body.ramified-theme [data-empty-create-variant] .workspace-assets-create:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (any-pointer: coarse) {
+  body.ramified-theme [data-empty-create-variant] .workspace-assets-create { min-width: 44px; min-height: 44px; }
+  body.ramified-theme [data-empty-create-variant='round'] .workspace-assets-create { width: 44px; height: 44px; }
+  body.ramified-theme [data-empty-create-variant='none'] .workspace-assets-create:not(:focus-visible) { min-width: 0; min-height: 0; }
+  .workspace-empty-create-option > button { min-height: 44px; }
+}
+
 /* Frozen Interface theme selection; removing this stylesheet restores the prior theme. */
 body.ramified-theme {
   --design-lab-interface-header-padding: 12px;

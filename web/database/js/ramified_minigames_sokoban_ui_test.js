@@ -8,7 +8,7 @@ const { startServer, launchBrowser, stopBrowser, waitFor, evaluate, mouse, delay
 async function run() {
   const server = await startServer(); let session;
   try {
-    session = await launchBrowser(`http://127.0.0.1:${server.address().port}/ramified_minigames.html`);
+    session = await launchBrowser(`http://127.0.0.1:${server.address().port}/ramified_minigames_classic.html`);
     const { client } = session, errors = [];
     client.socket.addEventListener('message', event => {
       const message = JSON.parse(String(event.data));

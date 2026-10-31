@@ -9,6 +9,14 @@
     const settings = byId('fullscreen-settings-overlay');
     const mute = byId('study-mute');
     const sound = byId('fullscreen-sound-enabled');
+    const topologyGomoku = byId('study-topology-gomoku');
+    function syncTopologyGomoku() {
+      // beginSetup writes the selected mode before awaiting the board load;
+      // state().mode reads that selection, rather than the previous live game.
+      const state = engine.state();
+      topologyGomoku.hidden = menu.hidden || byId('player-setup').hidden
+        || byId('player-board-setup').hidden || !state.browsing || state.mode !== 'gomoku';
+    }
     let layoutFrame = 0;
     let badgeFrame = 0;
     function paintPlayerBadges() {
@@ -153,6 +161,7 @@
       status.append(mark, text);
     }
     function syncPage() {
+      syncTopologyGomoku();
       const open = !menu.hidden;
       const settingsOpen = !settings.hidden;
       document.body.classList.toggle('study-settings-open', settingsOpen);
@@ -172,9 +181,15 @@
     }
     new MutationObserver(syncPage).observe(menu, { attributes: true, attributeFilter: ['hidden'] });
     new MutationObserver(syncPage).observe(settings, { attributes: true, attributeFilter: ['hidden'] });
+    for (const id of ['player-setup', 'player-board-setup']) {
+      new MutationObserver(syncTopologyGomoku).observe(byId(id), { attributes: true, attributeFilter: ['hidden'] });
+    }
     new MutationObserver(syncTurn).observe(byId('fullscreen-action-status'), { childList: true, attributes: true, attributeFilter: ['hidden'] });
     document.addEventListener('ramified-player-state', syncPage);
-    document.addEventListener('site-language-change', () => { syncMute(); syncTurn(); refresh(); });
+    document.addEventListener('site-language-change', () => {
+      for (const node of topologyGomoku.querySelectorAll('[data-i18n]')) node.textContent = tk(node.dataset.i18n);
+      syncMute(); syncTurn(); refresh();
+    });
     syncPage();
     refresh();
   });

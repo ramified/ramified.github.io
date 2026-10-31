@@ -1,0 +1,1178 @@
+{
+  "date": "2026-10-30",
+  "scope": "Current working-tree Assets → Input; technical native projection probes are explicitly identified.",
+  "geometricConfirmation": [
+    {
+      "type": "ideal-sheaf",
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "N_{0}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "ideal-sheaf"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "map",
+          "label": "Source map: i",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "Confirm the geometric hypotheses in Input before using this construction.",
+      "savedType": "abstract",
+      "draftType": "ideal-sheaf"
+    },
+    {
+      "type": "normal-bundle",
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "N_{1}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "normal-bundle"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "map",
+          "label": "Source map: i",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "Confirm the geometric hypotheses in Input before using this construction.",
+      "savedType": "abstract",
+      "draftType": "normal-bundle"
+    },
+    {
+      "type": "conormal-bundle",
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "N_{2}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "conormal-bundle"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "map",
+          "label": "Source map: i",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "Confirm the geometric hypotheses in Input before using this construction.",
+      "savedType": "abstract",
+      "draftType": "conormal-bundle"
+    },
+    {
+      "type": "relative-tangent",
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "N_{3}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "relative-tangent"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "map",
+          "label": "Source map: h",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "Confirm the geometric hypotheses in Input before using this construction.",
+      "savedType": "abstract",
+      "draftType": "relative-tangent"
+    },
+    {
+      "type": "relative-cotangent",
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "N_{4}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "relative-cotangent"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "map",
+          "label": "Source map: h",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "Confirm the geometric hypotheses in Input before using this construction.",
+      "savedType": "abstract",
+      "draftType": "relative-cotangent"
+    }
+  ],
+  "forms": {
+    "divisor": {
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "S_{divisor}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "divisor-line"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "base",
+          "label": "Base variety: P",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "",
+      "savedType": "divisor-line",
+      "draftType": "divisor-line"
+    },
+    "cotangent": {
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "S_{cotangent}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "cotangent"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "base",
+          "label": "Base variety: P",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "",
+      "savedType": "cotangent",
+      "draftType": "cotangent"
+    },
+    "tangent": {
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "S_{tangent}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "tangent"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "base",
+          "label": "Base variety: P",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "",
+      "savedType": "tangent",
+      "draftType": "tangent"
+    },
+    "advancedTensor": {
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "S_{advancedTensor}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "tensor"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "first",
+          "label": "First sheaf: E",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "second",
+          "label": "Second sheaf: F",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "",
+      "savedType": "tensor",
+      "draftType": "tensor"
+    },
+    "tensorPowered": {
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "S_{tensorPowered}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "tensor"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "first",
+          "label": "First sheaf: E",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "second",
+          "label": "Second sheaf: F",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "",
+      "savedType": "tensor",
+      "draftType": "tensor"
+    },
+    "hom": {
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "S_{hom}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "internal-hom"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "first",
+          "label": "First sheaf: E",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "second",
+          "label": "Second sheaf: F",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "",
+      "savedType": "internal-hom",
+      "draftType": "internal-hom"
+    },
+    "pullback": {
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "S_{pullback}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "map-operation"
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "operation",
+          "label": "Operation",
+          "value": "pullback"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "map",
+          "label": "Source map: i",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "parent",
+          "label": "Source sheaf: E",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "",
+      "savedType": "map-operation",
+      "draftType": "map-operation"
+    },
+    "pushforward": {
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "S_{pushforward}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "map-operation"
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "operation",
+          "label": "Operation",
+          "value": "pushforward"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "map",
+          "label": "Source map: i",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "parent",
+          "label": "Source sheaf: T",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "",
+      "savedType": "map-operation",
+      "draftType": "map-operation"
+    },
+    "pushforwardCompact": {
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "S_{pushforwardCompact}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "map-operation"
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "operation",
+          "label": "Operation",
+          "value": "pushforward"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "map",
+          "label": "Source map: i",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "parent",
+          "label": "Source sheaf: T",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "",
+      "savedType": "map-operation",
+      "draftType": "map-operation"
+    },
+    "homOrdinary": {
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "S_{homOrdinary}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "internal-hom"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "first",
+          "label": "First sheaf: E",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "second",
+          "label": "Second sheaf: F",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "",
+      "savedType": "internal-hom",
+      "draftType": "internal-hom"
+    },
+    "exteriorSchur": {
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "W",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "schur"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "parent",
+          "label": "Parent sheaf: S cotangent",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "partition",
+          "label": "Partition",
+          "value": "1,1",
+          "checked": false
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "",
+      "savedType": "schur",
+      "draftType": "schur"
+    }
+  },
+  "publicLegacyInput": {
+    "catalogContainsLegacyInput": false,
+    "menuText": "Selected: W PropertiesSheaf Class RelationsWCharacteristic ClassesWSheaf CohomologyWOpen / displayVariety and Sheaf OverviewWObject DisplayWCurrent view · Sheaf complexesStep-by-Step FormulaComplexes and FiltrationsImport / ExportSheaf Complex · Canvas AppearanceWorkspaceImport / Export"
+  },
+  "divisorRoundtrip": {
+    "data": {
+      "base": "variety:X1",
+      "divisorCoefficients": {
+        "hyperplane": "2"
+      }
+    },
+    "form": {
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "D_{check}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "divisor-line"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "base",
+          "label": "Base variety: P",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "",
+      "savedType": "divisor-line",
+      "draftType": "divisor-line"
+    }
+  },
+  "nativeProjectionBefore": {
+    "divisor": {
+      "message": "",
+      "rank": "1",
+      "construction": null,
+      "divisorCoefficients": {
+        "hyperplane": "2"
+      }
+    },
+    "cotangent": {
+      "message": "",
+      "rank": "",
+      "construction": null,
+      "divisorCoefficients": {}
+    },
+    "tangent": {
+      "message": "",
+      "rank": "",
+      "construction": null,
+      "divisorCoefficients": {}
+    },
+    "advancedTensor": {
+      "message": "",
+      "rank": "24",
+      "construction": {
+        "type": "tensor",
+        "sheafIds": [
+          "workspace-asset-sheaf-E3",
+          "workspace-asset-sheaf-E4",
+          "workspace-asset-sheaf-E5"
+        ],
+        "derived": true,
+        "exact": false,
+        "defaultName": "E \\otimes^{\\mathbf{L}} F \\otimes^{\\mathbf{L}} G",
+        "exponents": [
+          "1",
+          "1",
+          "1"
+        ]
+      },
+      "divisorCoefficients": {}
+    },
+    "tensorPowered": {
+      "message": "",
+      "rank": "48",
+      "construction": {
+        "type": "tensor",
+        "sheafIds": [
+          "workspace-asset-sheaf-E3",
+          "workspace-asset-sheaf-E4",
+          "workspace-asset-sheaf-E5"
+        ],
+        "derived": false,
+        "exact": true,
+        "defaultName": "E^{\\otimes 2} \\otimes F \\otimes G",
+        "exponents": [
+          "2",
+          "1",
+          "1"
+        ]
+      },
+      "divisorCoefficients": {}
+    },
+    "hom": {
+      "message": "",
+      "rank": "6",
+      "construction": {
+        "type": "tensor",
+        "sheafIds": [
+          "E59",
+          "workspace-asset-sheaf-E4"
+        ],
+        "derived": true,
+        "exact": false,
+        "internalHom": true,
+        "sourceSheafId": "workspace-asset-sheaf-E3",
+        "targetSheafId": "workspace-asset-sheaf-E4",
+        "dualSheafId": "E59",
+        "defaultName": "\\mathcal{RHom}(E, F)",
+        "tensorDefaultName": "E^{\\vee} \\otimes^{\\mathbf{L}} F"
+      },
+      "divisorCoefficients": {}
+    },
+    "pullback": {
+      "message": "",
+      "rank": "2",
+      "construction": {
+        "type": "pullback",
+        "mapId": "workspace-asset-map-M7",
+        "sheafId": "workspace-asset-sheaf-E3",
+        "derived": true,
+        "exact": false,
+        "proper": false,
+        "defaultName": "\\mathbf{L}i^{*}E"
+      },
+      "divisorCoefficients": {}
+    },
+    "pushforward": {
+      "message": "",
+      "rank": "",
+      "construction": {
+        "type": "pushforward",
+        "mapId": "workspace-asset-map-M7",
+        "sheafId": "workspace-asset-sheaf-E6",
+        "derived": true,
+        "exact": false,
+        "proper": true,
+        "defaultName": "\\mathbf{R}i_{*}T"
+      },
+      "divisorCoefficients": {}
+    },
+    "pushforwardCompact": {
+      "message": "",
+      "rank": "",
+      "construction": {
+        "type": "pushforward",
+        "mapId": "workspace-asset-map-M7",
+        "sheafId": "workspace-asset-sheaf-E6",
+        "derived": true,
+        "exact": false,
+        "proper": false,
+        "defaultName": "\\mathbf{R}i_{!}T"
+      },
+      "divisorCoefficients": {}
+    },
+    "homOrdinary": {
+      "message": "",
+      "rank": "6",
+      "construction": {
+        "type": "tensor",
+        "sheafIds": [
+          "E95",
+          "workspace-asset-sheaf-E4"
+        ],
+        "derived": false,
+        "exact": true,
+        "internalHom": true,
+        "sourceSheafId": "workspace-asset-sheaf-E3",
+        "targetSheafId": "workspace-asset-sheaf-E4",
+        "dualSheafId": "E95",
+        "defaultName": "\\mathcal{H}om(E, F)",
+        "tensorDefaultName": "E^{\\vee} \\otimes F"
+      },
+      "divisorCoefficients": {}
+    },
+    "exteriorSchur": {
+      "message": "",
+      "rank": "",
+      "construction": {
+        "type": "schur",
+        "sheafId": "workspace-asset-sheaf-E15",
+        "partition": [
+          1,
+          1
+        ],
+        "defaultName": "\\mathbb{S}_{(1,1)}S_{cotangent}"
+      },
+      "divisorCoefficients": {}
+    }
+  },
+  "exteriorProperties": {
+    "characteristic-classes": {
+      "resultKeys": [],
+      "chart": "\n        \n          \\(c(W)\\)\n          \\(1 - 8\\,H + 22\\,{H}^{2} - 20\\,[p]\\)\n        \n      \n        \n          \\(\\operatorname{ch}(W)\\)\n          \\(3 - 8\\,H + 10\\,{H}^{2} - \\frac{22}{3}\\,[p]\\)\n        \n      \n        \n          \\(\\operatorname{td}(W)\\)\n          \\(1 - 4\\,H + \\frac{43}{6}\\,{H}^{2} - \\frac{22}{3}\\,[p]\\)\n        \n      ",
+      "message": ""
+    },
+    "sheaf-cohomology": {
+      "resultKeys": [],
+      "chart": "",
+      "message": "Cohomology of abstract sheaf is not determined by the current input."
+    }
+  },
+  "legacyMarkedExterior": {
+    "chart": "\n      \n        \n          \\(i\\)\\(0\\)\\(1\\)\\(2\\)\\(3\\)\n          \\(H^i(P,U)\\)\\(0\\)\\(0\\)\\(\\mathbb{C}\\)\\(0\\)\n        \n      ",
+    "message": "Cotangent exterior-power cohomology uses dim H^q(X, Omega_X^2)=h^{2,q}."
+  },
+  "tensorEdit": {
+    "data": {
+      "first": "sheaf:E5",
+      "second": "sheaf:E4",
+      "parents": [
+        "sheaf:E3",
+        "sheaf:E4",
+        "sheaf:E5"
+      ],
+      "exponents": [
+        "1",
+        "1",
+        "1"
+      ],
+      "base": "variety:X1"
+    },
+    "form": {
+      "fields": [
+        {
+          "tag": "INPUT",
+          "type": "text",
+          "field": "",
+          "label": "Name",
+          "value": "S_{advancedTensor}",
+          "checked": false
+        },
+        {
+          "tag": "SELECT",
+          "type": "select-one",
+          "field": "",
+          "label": "Type",
+          "value": "tensor"
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "first",
+          "label": "First sheaf: G",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "second",
+          "label": "Second sheaf: F",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "submit",
+          "field": "",
+          "label": "save now",
+          "value": ""
+        },
+        {
+          "tag": "BUTTON",
+          "type": "button",
+          "field": "",
+          "label": "delete",
+          "value": ""
+        }
+      ],
+      "message": "",
+      "savedType": "tensor",
+      "draftType": "tensor"
+    },
+    "native": {
+      "message": "",
+      "rank": "24",
+      "construction": {
+        "type": "tensor",
+        "sheafIds": [
+          "workspace-asset-sheaf-E3",
+          "workspace-asset-sheaf-E4",
+          "workspace-asset-sheaf-E5"
+        ],
+        "derived": true,
+        "exact": false,
+        "defaultName": "E \\otimes^{\\mathbf{L}} F \\otimes^{\\mathbf{L}} G",
+        "exponents": [
+          "1",
+          "1",
+          "1"
+        ]
+      },
+      "divisorCoefficients": {}
+    }
+  },
+  "naming": {
+    "ppav": [
+      "\\mathcal{A}_{2}",
+      "\\mathcal{A}_{2}_{2}"
+    ],
+    "grassmannian": [
+      "\\operatorname{Gr}(2,4)",
+      "\\operatorname{Gr}(2,4)_{2}"
+    ],
+    "projective": [
+      "\\mathbb{P}^{4}",
+      "\\mathbb{P}^{4}_{2}"
+    ],
+    "symmetricProduct": [
+      "\\operatorname{Sym}^{3}(C)",
+      "\\operatorname{Sym}^{3}(C)_{2}"
+    ],
+    "productEndingInSubscript": [
+      "Q\\times Y_{1}",
+      "Q\\times Y_{1}_{2}"
+    ]
+  },
+  "namingRendering": {
+    "ppav": [
+      {
+        "name": "\\mathcal{A}_{2}",
+        "error": []
+      },
+      {
+        "name": "\\mathcal{A}_{2}_{2}",
+        "error": [
+          "Double subscripts: use braces to clarify",
+          "Double subscripts: use braces to clarify"
+        ]
+      }
+    ],
+    "grassmannian": [
+      {
+        "name": "\\operatorname{Gr}(2,4)",
+        "error": []
+      },
+      {
+        "name": "\\operatorname{Gr}(2,4)_{2}",
+        "error": []
+      }
+    ],
+    "projective": [
+      {
+        "name": "\\mathbb{P}^{4}",
+        "error": []
+      },
+      {
+        "name": "\\mathbb{P}^{4}_{2}",
+        "error": []
+      }
+    ],
+    "symmetricProduct": [
+      {
+        "name": "\\operatorname{Sym}^{3}(C)",
+        "error": []
+      },
+      {
+        "name": "\\operatorname{Sym}^{3}(C)_{2}",
+        "error": []
+      }
+    ],
+    "productEndingInSubscript": [
+      {
+        "name": "Q\\times Y_{1}",
+        "error": []
+      },
+      {
+        "name": "Q\\times Y_{1}_{2}",
+        "error": [
+          "Double subscripts: use braces to clarify",
+          "Double subscripts: use braces to clarify"
+        ]
+      }
+    ]
+  }
+}

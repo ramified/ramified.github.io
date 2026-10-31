@@ -8,7 +8,7 @@ const { startServer, launchBrowser, stopBrowser, waitFor, evaluate, mouse, delay
 async function run() {
   const server = await startServer(); let session;
   try {
-    session = await launchBrowser(`http://127.0.0.1:${server.address().port}/ramified_minigames.html`);
+    session = await launchBrowser(`http://127.0.0.1:${server.address().port}/ramified_minigames_classic.html`);
     const { client } = session, errors = [];
     client.socket.addEventListener('message', event => {
       const m = JSON.parse(String(event.data));
@@ -215,7 +215,7 @@ async function run() {
     await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/robots.txt`});
     await waitFor(()=>read('document.readyState==="complete"'));
     await read(`localStorage.removeItem('ramified.minigames.player.slots.v1')`);
-    await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/ramified_minigames.html`}); await ready();
+    await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/ramified_minigames_classic.html`}); await ready();
     assert.deepStrictEqual((await stored()).slots.map(s=>s?.game?.payload.gameMode||null),['sokoban',null,null]);
     assert.deepStrictEqual((await stored()).slots[0].sokoban,legacyProgress);
     await continueSlot(1); assert.strictEqual(await read('RamifiedMinigames.player.state().solved'),true);
@@ -228,7 +228,7 @@ async function run() {
     await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/robots.txt`});
     await waitFor(()=>read('document.readyState==="complete"'));
     await read(`localStorage.removeItem('ramified.minigames.player.slots.v1');localStorage.removeItem('ramified.minigames.player.save.v1');`);
-    await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/ramified_minigames.html`}); await ready();
+    await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/ramified_minigames_classic.html`}); await ready();
     const progressOnly=await stored();
     assert.strictEqual(progressOnly.slots[0].game,null);
     await click('#player-new'); await click('#player-slot-1');
@@ -243,7 +243,7 @@ async function run() {
       await waitFor(()=>read('document.readyState==="complete"'));
       const raw = JSON.stringify({version:1,slots:[{game,sokoban:legacyProgress},null,null]});
       await read(`localStorage.setItem('ramified.minigames.player.slots.v1',${JSON.stringify(raw)})`);
-      await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/ramified_minigames.html`}); await ready();
+      await client.send('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/ramified_minigames_classic.html`}); await ready();
       await click('#player-new'); await click('#player-slot-1');
       await waitFor(()=>read('document.querySelector("#player-save-status").textContent !== SiteI18n.t("player.saveChecking")'));
       assert.strictEqual(await read('localStorage.getItem(RamifiedSaveSlots.SAVE_KEY)'),raw,'inspection preserves original bytes');

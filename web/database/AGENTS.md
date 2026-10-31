@@ -1,3 +1,9 @@
+# Ramified Minigames page lifecycle
+
+- `ramified_minigames.html` is the maintained entry point (formerly `ramified_minigames_study.html`). Existing `*_study` CSS/JS filenames remain in use.
+- `ramified_minigames_classic.html` is archived. Do not update it for future features or fixes unless explicitly requested.
+- `node js/ramified_minigames_study_build.js` builds the maintained page and its assets. It reads classic markup as a frozen template and must never write to the classic page. Implement future markup changes in the builder.
+
 # Ramified Minigames i18n requirements
 
 When changing `ramified_minigames.html`, `js/ramified_minigames_setup.js`, the minigame preset catalog, or a minigame-specific engine/UI:

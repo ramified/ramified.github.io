@@ -160,6 +160,10 @@
 .workspace-field > .input-label { margin: 0; }
 .workspace-field-inline { grid-template-columns: minmax(68px, max-content) minmax(0, 1fr); align-items: center; column-gap: 8px; row-gap: 0; }
 .workspace-field-inline > .input-label { white-space: nowrap; }
+.workspace-ci-slider { display: grid; grid-template-columns: minmax(0, 1fr) 3ch; align-items: center; gap: 8px; min-width: 0; }
+.workspace-ci-slider input[type='range'] { padding: 0; accent-color: var(--accent); }
+.workspace-ci-slider output { text-align: right; font-variant-numeric: tabular-nums; }
+[data-assets-ci-degrees]:empty { display: none; }
 .workspace-scalar-field { container-type: inline-size; align-items: start; }
 .workspace-scalar-field > .input-label { padding-top: 7px; }
 .workspace-scalar-controls { display: grid; grid-template-columns: 84px minmax(72px, 1fr) auto; align-items: center; gap: 6px; min-width: 0; }
@@ -193,6 +197,8 @@
 .workspace-check { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--text); cursor: pointer; user-select: none; }
 .workspace-check input[type='checkbox'] { flex: 0 0 auto; width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .workspace-check:has(input:disabled) { cursor: not-allowed; color: var(--muted); }
+.workspace-tensor-factor { border: 1px solid var(--border); border-radius: 7px; padding: 10px; }
+.workspace-tensor-factor > button { justify-self: end; }
 .workspace-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .workspace-assets-inspector-card .workspace-card-tools { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
 .workspace-assets-inspector-card .workspace-card-tool { border: 0; border-radius: 3px; background: transparent; color: inherit; cursor: pointer; padding: 3px 5px; font: 14px system-ui; }
@@ -218,7 +224,9 @@
 .workspace-asset-item:hover { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
 .workspace-asset-item[aria-selected='true'] { border-color: color-mix(in srgb, var(--accent) 62%, var(--border)); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
 .workspace-asset-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.workspace-asset-icon { display: grid; place-items: center; color: var(--accent); font-family: Georgia, serif; line-height: 1; }
+/* Long formulae must not enlarge the implicit grid track beyond the icon box.
+ * Scaling the formula changes its paint size, not that intrinsic track size. */
+.workspace-asset-icon { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); place-items: center; color: var(--accent); font-family: Georgia, serif; line-height: 1; }
 .workspace-asset-map .workspace-asset-icon { color: var(--accent2); }
 .workspace-asset-icon { position: relative; width: 1.2em; height: 1.2em; flex: none; color: var(--workspace-icon-exact, var(--accent)); }
 .workspace-asset-icon[data-icon-source='generic'] { color: var(--workspace-icon-generic, var(--muted)); }

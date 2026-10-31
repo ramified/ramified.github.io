@@ -1512,6 +1512,24 @@
       const payload=editor.objectIO('random-stable-curve'),space={kind:'mosaic-space',id:'preset-space',data:mosaic.fromPayload('mosaic-space',payload)},diagram={kind:'mosaic-diagram',id:'preset-diagram',data:mosaic.fromPayload('mosaic-diagram',payload,keyOf(space))};
       return topology.fromMosaic('dual-graph',diagram,[space,diagram]);
     }
+    window.MathWorkspaceSheafModel.setTensorExponentParser(value=>{
+      let editor=ioRenderers.get('tensor-exponent-kernel');
+      if(!editor){const host=element('section'),inspectorHost=element('section');api.parking.append(host,inspectorHost);editor=window.MathWorkspaceNativeEditors.factories.complex.mount(host,{id:'tensor-exponent-mathematics',inspectorHost});editor.listCards().forEach(card=>editor.setCardVisible(card.key,false));editor.setCanvasActive(false);editor.setInspectorActive(false);ioRenderers.set('tensor-exponent-kernel',editor);}
+      return editor.objectIO('tensor-exponent',value);
+    });
+    const divisorBases=new Map();
+    window.MathWorkspaceSheafModel.setDivisorBasisProvider((baseKey,assets)=>{
+      const closure=[],seen=new Set();
+      const visit=key=>{if(seen.has(key))return;seen.add(key);const asset=assets.find(a=>keyOf(a)===key);if(!asset)throw new Error('Choose an existing base variety.');for(const ref of asset.dependencies||[])visit(keyOf(ref));closure.push(asset);};
+      visit(baseKey);
+      const signature=JSON.stringify(closure.map(a=>[a.kind,a.id,a.type,a.name,a.data,a.properties]));
+      const cached=divisorBases.get(baseKey);if(cached?.signature===signature)return cached.basis;
+      let editor=ioRenderers.get('divisor-basis-kernel');
+      if(!editor){const host=element('section'),inspectorHost=element('section');api.parking.append(host,inspectorHost);editor=window.MathWorkspaceNativeEditors.factories.complex.mount(host,{id:'divisor-basis-mathematics',inspectorHost});editor.listCards().forEach(card=>editor.setCardVisible(card.key,false));editor.setCanvasActive(false);editor.setInspectorActive(false);ioRenderers.set('divisor-basis-kernel',editor);}
+      const base=closure.find(a=>keyOf(a)===baseKey);if(base?.kind!=='variety')throw new Error('Choose a base variety.');
+      editor.applyAssets({assets:closure},refOf(base));
+      const basis=editor.objectIO('divisor-basis',baseKey);divisorBases.set(baseKey,{signature,basis});return basis;
+    });
     numbers.setKernel((value,field)=>{
       let editor=ioRenderers.get('number-kernel');
       if(!editor){const host=element('section'),inspectorHost=element('section');api.parking.append(host,inspectorHost);editor=window.MathWorkspaceNativeEditors.factories.matrix.mount(host,{id:'number-mathematics',inspectorHost});editor.listCards().forEach(card=>editor.setCardVisible(card.key,false));editor.setCanvasActive(false);editor.setInspectorActive(false);ioRenderers.set('number-kernel',editor);}

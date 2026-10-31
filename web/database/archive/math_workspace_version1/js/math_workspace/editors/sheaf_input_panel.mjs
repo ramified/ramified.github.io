@@ -3,6 +3,69 @@ export const sheafInputPanel=String.raw`
 __workspaceVarietyFromAsset=(asset,ids,properties)=>window.MathWorkspaceSheafModel.project(asset,ids,__workspaceAssetsCurrent,properties);
 __workspaceSheafFromAsset=(asset,ids,properties)=>window.MathWorkspaceSheafModel.project(asset,ids,__workspaceAssetsCurrent,properties);
 __workspaceMapFromAsset=(asset,ids,properties)=>window.MathWorkspaceSheafModel.project(asset,ids,__workspaceAssetsCurrent,properties);
+// Extend structural Schur recognition, independently of UI-specific markers.
+const __workspaceOriginalSchurPartition=normalizeSchurPartition;
+normalizeSchurPartition=function(value){
+  const p=Array.isArray(value)?value.map(Number):String(value||'').replace(/[;|(){}\[\]]/g,',').split(/[,\s]+/).filter(Boolean).map(Number);
+  return p.length>0&&p.length<=15&&p.every(x=>x===1)?p:__workspaceOriginalSchurPartition(value);
+};
+const __workspaceOriginalSchurCharacter=schurChComponentsFromParentCharacter;
+schurChComponentsFromParentCharacter=function(partition,rank,parent,d){
+  if(!partition.every(x=>x===1))return __workspaceOriginalSchurCharacter(partition,rank,parent,d);
+  const powers=[Poly.one()];
+  for(let k=1;k<=partition.length;k++){
+    let value=Poly.zero();
+    for(let j=1;j<=k;j++){
+      let adams=Poly.from(rank.poly);
+      for(let i=1;i<=d;i++)adams=adams.add(componentOrZero(parent,i).scale(fraction(BigInt(j)**BigInt(i))));
+      value=value.add(powers[k-j].mul(adams,d).scale(fraction(j%2?1:-1)));
+    }
+    powers[k]=value.scale(fraction(1,k));
+  }
+  return Array.from({length:d+1},(_,i)=>i?homogeneousPart(powers[partition.length],i):Poly.zero());
+};
+const __workspaceOriginalSchurBundle=buildSchurBundle;
+buildSchurBundle=function(d,sheaf,parent,partition){
+  const source=state.sheaves.find(s=>s.id===sheaf.construction?.sheafId),rank=explicitRootRankFromPlain(parent.rankPlain);
+  if(rank!=null&&partition.length>rank&&source&&!source.construction&&['tangent','cotangent','structure','twist','canonical','divisor-line','locally-free'].includes(source.type))return buildTrivialBundle(d,0,sheaf.labelLatex,sheaf.labelPlain);
+  if(!partition.every(x=>x===1))return __workspaceOriginalSchurBundle(d,sheaf,parent,partition);
+  const context=schurRankContext(partition,parent.rankLatex,parent.rankPlain,parent.labelPlain),ch=schurChComponentsFromParentCharacter(partition,context,parent.chComps,d);
+  let rankPoly=Poly.one();
+  for(let i=0;i<partition.length;i++)rankPoly=rankPoly.mul(context.poly.sub(Poly.constant(i)),d).scale(fraction(1,i+1));
+  return buildBundleFromCh(ch,formatPolyLatex(rankPoly),formatPolyPlain(rankPoly),sheaf.labelLatex,sheaf.labelPlain);
+};
+const __workspaceOriginalCohomologyTarget=cohomologyTargetForSheaf;
+cohomologyTargetForSheaf=function(geometry,sheaf){
+  const c=sheaf?.construction,partition=c?.type==='schur'?normalizeSchurPartition(c.partition):null;
+  const parent=partition&&state.sheaves.find(s=>s.id===c.sheafId);
+  if(parent){
+    const subject={subjectLatex:sheafLabelLatex(sheaf),subjectPlain:sheafLabelPlain(sheaf)};
+    if(partition.length===1&&partition[0]===1&&parent!==sheaf)return {...cohomologyTargetForSheaf(geometry,parent),...subject};
+    if(!parent.construction&&['tangent','cotangent'].includes(parent.type)){
+      if(partition.length>geometry.dim)return {...subject,kind:'acyclic',message:'Schur partition has more rows than the parent rank.'};
+      if(geometry.type==='projective'||geometry.type==='complete-intersection'&&(geometry.degrees||[]).every(d=>d===1))return {...subject,kind:'workspace-schur-dimensions',dimensions:window.MathWorkspaceSheafModel.projectiveSchurCohomology(geometry.dim,partition,parent.type).map(cohomologyDimensionEntry),message:'Schur cohomology on projective space computed by Bott\'s algorithm.'};
+      if(partition.every(x=>x===1)){
+        const k=partition.length;
+        if(parent.type==='cotangent')return {...subject,kind:'hodge-row',hodgeP:k,message:'Exterior Schur power of the cotangent sheaf identified from its partition; using h^{p,q}.'};
+        if(k===geometry.dim&&embeddedGeometrySupportsLineCohomology(geometry))return {...subject,kind:'line',twist:-completeIntersectionCanonicalTwist(geometry)};
+        return {...subject,kind:'polyvector-column',wedgeDegree:k,message:'Exterior Schur power of the tangent sheaf identified from its partition.'};
+      }
+      return {...subject,kind:'unsupported',message:'This Schur partition is recognized, but its cohomology is not determined by the available geometry.'};
+    }
+    if(!parent.construction&&['structure','twist','canonical','divisor-line'].includes(parent.type)){
+      if(partition.length>1)return {...subject,kind:'acyclic',message:'Schur partition has more rows than this line bundle.'};
+      const target=__workspaceOriginalCohomologyTarget(geometry,parent);
+      if(target.kind==='line')return {...target,...subject,twist:target.twist*partition[0]};
+      if(target.kind==='structure')return {...target,...subject};
+    }
+  }
+  return __workspaceOriginalCohomologyTarget(geometry,sheaf);
+};
+const __workspaceOriginalBuildCohomologyTarget=buildSheafCohomologyForTarget;
+buildSheafCohomologyForTarget=function(geometry,target,sheaf,hodge){
+  if(target.kind==='workspace-schur-dimensions')return {subjectLatex:target.subjectLatex,subjectPlain:target.subjectPlain,dimensions:target.dimensions,message:target.message};
+  return __workspaceOriginalBuildCohomologyTarget(geometry,target,sheaf,hodge);
+};
 function __workspaceMaterializeSheaves(assets,ids){
   state.nextObjectId=Math.max(state.nextObjectId,...[...state.varieties,...state.sheaves,...state.maps,...state.sequences].map(s=>Number(/^[A-Za-z]+(\d+)$/.exec(s.id)?.[1]||0)+1));
   const done=new Set(),visiting=new Set();
@@ -11,7 +74,8 @@ function __workspaceMaterializeSheaves(assets,ids){
     visiting.add(__workspaceAssetKey(asset));
     for(const ref of asset.dependencies||[]){const parent=assets.find(a=>__workspaceAssetKey(a)===__workspaceAssetKey(ref));if(parent?.kind==='sheaf')visit(parent);}
     const data=asset.data||{},target=state.sheaves.find(s=>s.__workspaceAssetKey===__workspaceAssetKey(asset));
-    if(target&&!target.construction&&!window.MathWorkspaceSheafModel.direct.has(asset.type)){
+    const wedge=['tangent','cotangent'].includes(asset.type)&&data.differentialWedge===true;
+    if(target&&!target.construction&&(wedge||!window.MathWorkspaceSheafModel.direct.has(asset.type))){
       const get=key=>state.sheaves.find(s=>s.id===ids.get(key)),map=state.maps.find(m=>m.id===ids.get(data.map));
       const args={name:asset.name,defaultName:asset.name,nameDirty:true,baseVarietyId:target.baseVarietyId,
         left:get(data.first),right:get(data.second),source:get(data.first),target:get(data.second),parent:get(data.parent),sheaf:get(data.parent),
@@ -19,7 +83,13 @@ function __workspaceMaterializeSheaves(assets,ids){
         domain:state.varieties.find(v=>v.id===map?.domainId),codomain:state.varieties.find(v=>v.id===map?.codomainId),
         derived:data.exact!==true,exact:data.exact===true,proper:data.proper!==false,cleanEmbeddingConfirmed:data.confirmed===true,smoothConfirmed:data.confirmed===true};
       let fresh;
-      if(['direct-sum','tensor'].includes(asset.type)){args.operation=asset.type==='tensor'?'tensor-sheaf':'direct-sum-sheaf';args.parents=(data.parents||[data.first,data.second]).map(get);args.exponents=data.exponents;fresh=createBinarySheafConstruction(args);}
+      if(wedge){
+        target.type='abstract';
+        const baseVariety=state.varieties.find(v=>v.id===target.baseVarietyId),geometry=baseVariety&&geometryFromVariety(baseVariety),degree=Number(data.wedgeDegree??1);
+        fresh=differentialWedgeSheafObject({sourceType:asset.type,degree,kind:differentialWedgeKind(asset.type,degree,geometry),baseVariety,baseVarietyId:target.baseVarietyId,geometry,partition:Array(degree).fill(1),rank:differentialWedgeRankPlain(asset.type,degree,geometry),name:asset.name,defaultName:asset.name,nameDirty:true},nextInputId('E'));
+        if(fresh)fresh.workspaceDifferentialWedge={type:asset.type,degree};
+      }
+      else if(['direct-sum','tensor'].includes(asset.type)){args.operation=asset.type==='tensor'?'tensor-sheaf':'direct-sum-sheaf';args.parents=(data.parents||[data.first,data.second]).map(get);args.exponents=data.exponents;fresh=createBinarySheafConstruction(args);}
       else if(['self-direct-sum','self-tensor-product'].includes(asset.type)){args.operation=asset.type;fresh=createSelfSumSheafConstruction(args);}
       else if(asset.type==='dual')fresh=createDualSheafConstruction(args);
       else if(asset.type==='internal-hom')fresh=createInternalHomSheafConstruction(args);
@@ -57,6 +127,7 @@ function __workspaceInputGraph(){
       else if(c.idealSheafMapId)entry.type='ideal-sheaf';else if(c.normalBundleMapId)entry.type='normal-bundle';else if(c.conormalBundleMapId)entry.type='conormal-bundle';
       else if(c.relativeSheafMapId)entry.type=c.relativeSheafType==='cotangent'?'relative-cotangent':'relative-tangent';
     }
+    if(entry.kind==='sheaf'&&item.workspaceDifferentialWedge)entry.type=item.workspaceDifferentialWedge.type;
     if(entry.kind==='map')entry.type=c?.type==='composition'?'composition':c?.type==='abel-jacobi'?'abel-jacobi':item.domainKind==='sheaf'?'sheaf':'ordinary';
   }
   return {entries,numbers:state.globalInvariants.filter(n=>n.auto!==true).map(n=>{
@@ -71,6 +142,15 @@ function __workspaceInputGraph(){
 }
 function __workspaceInputSignature(){const graph=__workspaceInputGraph();return JSON.stringify({entries:graph.entries.map(e=>({assetKey:e.assetKey,nativeId:e.nativeId,kind:e.kind,name:e.name,type:e.type,data:e.data})),numbers:graph.numbers,sequences:graph.sequences});}
 __editor.extendAssetAdapter(previous=>({...previous,
+  capture(){
+    const command=previous.capture?.();
+    if(command?.reason!=='homology'||!command.sourceRef||!Array.isArray(command.changes))return command;
+    // The projection may include unrelated objects for symbols and context.
+    // Normalizing those objects is not an edit owned by this Property Card.
+    const allowed=new Set(),pending=[__workspaceAssetKey(command.sourceRef)];
+    while(pending.length){const key=pending.pop();if(allowed.has(key))continue;allowed.add(key);const asset=__workspaceAssetsCurrent.find(a=>__workspaceAssetKey(a)===key);for(const ref of asset?.dependencies||[])pending.push(__workspaceAssetKey(ref));}
+    return {...command,changes:command.changes.filter(change=>allowed.has(__workspaceAssetKey(change.ref)))};
+  },
   apply(snapshot,activeRef,properties,binding){
     __workspaceInputApplying=true;
     try{
@@ -97,6 +177,16 @@ __editor.extendAssetAdapter(previous=>({...previous,
     __editor.mountObjectSurfaces({content:[content]});__workspaceSetProjectionReadOnly(false);return true;
   },
   io(action,value){
+    if(action==='divisor-basis'){
+      const variety=state.varieties.find(v=>v.__workspaceAssetKey===value);
+      if(!variety)throw new Error('Choose a base variety.');
+      return divisorHomologyClassDefinitions(geometryFromVariety(variety)).map(d=>({id:d.id,latex:d.symbolLatex,plain:d.symbolPlain}));
+    }
+    if(action==='tensor-exponent'){
+      const raw=String(value??'').trim();
+      if(!raw)throw new Error('Enter a complete exponent.');
+      return formatRuleCoefficientPlain(parseSymbolicRuleCoefficient(raw));
+    }
     if(action==='input-dirty')return __workspaceInputDirty;
     if(action==='input-reset'){__workspaceInputDirty=false;return true;}
     if(action==='input-graph')return __workspaceInputGraph();

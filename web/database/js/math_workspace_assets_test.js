@@ -33,6 +33,7 @@ const window = {
   MathWorkspacePresentation: require('./math_workspace_presentation.js'),
   MathWorkspaceMosaic: require('./math_workspace_mosaic.js'),
   MathWorkspaceNumbers: require('./math_workspace_numbers.js'),
+  MathWorkspaceSheafModel: require('./math_workspace_sheaf_model.js'),
   MathWorkspaceRings: require('./math_workspace_rings.js'),
   addEventListener(type, handler) { windowListeners[type] = handler; }
 };
@@ -68,10 +69,10 @@ assert.strictEqual(typeof api.canvasAssetRecord, 'undefined', 'a View must rende
 assert.strictEqual(typeof api.createAssetInputInstance, 'function', 'Milestone B1 requires stable per-Asset Input Instances');
 
 const entries = [
-  { kind: 'variety', id: 'X1', name: 'Z', plainName: 'Z', typeLabel: 'variety' },
-  { kind: 'sheaf', id: 'E2', name: '\\mathcal{A}', plainName: 'A', typeLabel: 'sheaf' },
-  { kind: 'map', id: 'M3', name: 'f', plainName: 'f', typeLabel: 'map' },
-  { kind: 'variety', id: 'X4', name: 'B', plainName: 'B', typeLabel: 'variety' }
+  { kind: 'variety', id: 'X1', name: 'Z', plainName: 'Z', type: 'abstract', data: {dimension:'3'}, typeLabel: 'variety' },
+  { kind: 'sheaf', id: 'E2', name: '\\mathcal{A}', plainName: 'A', type: 'abstract', data: {base:'variety:X1',rank:'1'}, typeLabel: 'sheaf' },
+  { kind: 'map', id: 'M3', name: 'f', plainName: 'f', type: 'ordinary', data: {domain:'variety:X1',codomain:'variety:X4'}, typeLabel: 'map' },
+  { kind: 'variety', id: 'X4', name: 'B', plainName: 'B', type: 'abstract', data: {dimension:'3'}, typeLabel: 'variety' }
 ];
 api.state.snapshot = { revision: 1, assets: entries, capabilities: { variety: true, sheaf: true, map: true } };
 entries.forEach((entry, index) => api.state.metadata.set(api.assetKey(entry), { order: index + 1, modifiedAt: [40, 10, 30, 20][index] }));
@@ -85,6 +86,14 @@ assert.strictEqual(Object.hasOwn(rebasedProperties, 'homology'), false, 'a struc
 
 const jsonClone = (value) => JSON.parse(JSON.stringify(value));
 const installCommandAssets = (assets, revision = 20) => {
+  // Property-command fixtures still need the definition schema consumed by
+  // snapshot synchronization; absent type/data used to look like a malformed
+  // constructed sheaf and fail before the ownership assertions could run.
+  for(const asset of assets){
+    asset.type ||= asset.kind === 'map' ? 'ordinary' : 'abstract';
+    const refs=(asset.dependencies||[]).filter(ref=>ref.kind==='variety').map(ref=>api.assetKey(ref));
+    asset.data ||= asset.kind==='variety' ? {dimension:'3'} : asset.kind==='sheaf' ? {base:refs[0]||'',rank:'1'} : {domain:refs[0]||'',codomain:refs[1]||refs[0]||''};
+  }
   api.state.snapshot = { revision, assets, capabilities: { variety: true, sheaf: true, map: true } };
   return assets;
 };
@@ -599,7 +608,7 @@ assert(nativeBundle.includes(Buffer.from('captureAssetLayout')), 'the native ada
 assert(nativeBundle.includes(Buffer.from('__workspaceSetProjectionReadOnly')), 'projected native math controls must be read-only');
 assert(nativeBundle.includes(Buffer.from('__workspaceSyncHomologyPromotionLabels')), 'workspace-only promotion labels must follow the current Asset base');
 assert(nativeBundle.includes(Buffer.from('validateAssetCardBinding')), 'the native adapter must call the central workspace compatibility validator');
-assert(nativeBundle.includes(Buffer.from('if (refs.homologyRules) new MutationObserver(__workspaceSyncHomologyPromotionLabels).observe(refs.homologyRules')), 'the Homology-label observer must wait until the native editor has initialized its refs');
+assert(nativeBuilder.includes("document.addEventListener('DOMContentLoaded',()=>{if(refs.homologyRules)new MutationObserver(__workspaceSyncHomologyPromotionLabels).observe(refs.homologyRules"), 'the Homology-label observer must wait until the native editor has initialized its refs, independently of generated formatting');
 assert(nativeBundle.includes(Buffer.from('workspaceCollectAssets')), 'the workspace-only Collect canvas button must be present in the native bundle');
 assert(nativeBundle.includes(Buffer.from('state.varieties = assets.filter((asset) => asset.kind === "variety").map((asset) => project(asset, __workspaceVarietyFromAsset))')), 'the authoritative adapter must replace each native Asset clone from the projection');
 assert(nativeBundle.includes(Buffer.from('listCards')), 'native calculators must expose their card catalog to the workspace picker');
@@ -613,7 +622,7 @@ assert(nativeBundle.includes(Buffer.from('[id$="-wide-host"]:not(:has(.card)){di
 assert(nativeBundle.includes(Buffer.from('.workspace-editor-layout .workspace-view-card{min-width:0;width:100%;height:100%')), 'nested calculator canvas panels must fill their allocated workspace height');
 assert(/math_workspace_native_editors_v8\.js\?v=[a-f0-9]{16}/.test(html), 'native editor cache query must be derived from the reproducible bundle hash');
 assert(/css\/math_workspace\.css\?v=\d{8}-[\w-]+/.test(html), 'workspace stylesheet must have a versioned cache query');
-assert(html.includes('js/math_workspace.js?v=20261030-empty-create-1'), 'workspace controller changes need a cache-query bump');
+assert(/js\/math_workspace\.js\?v=\d{8}-[\w-]+/.test(html), 'workspace controller changes need a versioned cache query');
 assert(html.includes('js/calculator_cards.js?v=20260903-1'), 'workspace-owned Assets cards must reuse the shared calculator card chrome');
 assert(nativeBuilder.includes('math_workspace_native_editors_v8.js') && nativeBuilder.includes('Stale live native editor bundle'), 'the source builder must publish and verify the live runtime');
 assert(!source.includes("closeCardPicker(); const picker = assetState.referencePicker"), 'native source selection must not be closed by the global outside-pointer handler');

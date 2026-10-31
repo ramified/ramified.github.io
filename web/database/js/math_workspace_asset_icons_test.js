@@ -45,6 +45,12 @@ assert.equal(icons.describe(young([4,-3],'generalized')).source,'generic');
 assert.deepEqual(icons.describe(young([2,0,-2],'generalized')).rows,[2,0,-2]);
 for (const name of ['X','\\lambda','\\mathcal{F}^{st}_{2}','F_2','\\mathbb{K}','α','X_{a_{2}}']) assert(icons.letterName(name),name);
 for (const name of ['XY','X+Y','\\operatorname{Hom}','X_{2','F_2_3','\\mathcal{FG}','F_{\\href{x}{y}}']) assert(!icons.letterName(name),name);
+for (const name of ['(X_{2,3})_{2}', '(\\mathbb{P}^{3})_{12}']) {
+  assert.deepEqual(icons.describe({kind:'variety',type:'complete-intersection',name,data:{}}),{source:'name',name},'grouped CI copy retains its actual formula icon');
+}
+for (const name of ['(XY)_{2}', '(X+Y)_{2}', '(X_{2,3})_{2}_{3}', '(X_{\\href{x}{y}})_{2}']) {
+  assert.equal(icons.describe({kind:'variety',type:'complete-intersection',name,data:{}}).source,'generic','CI copy notation does not admit arbitrary expressions');
+}
 const lie={kind:'lie',data:{family:'A',rank:3}}, strand={kind:'strands',data:{lie:'lie:a',generators:[]}};
 const marked={kind:'dynkin',name:'\\Delta',data:{lie:'lie:a',vertices:[2],quiver:null}};
 assert.equal(icons.describe(marked,()=>lie).source,'diagram');

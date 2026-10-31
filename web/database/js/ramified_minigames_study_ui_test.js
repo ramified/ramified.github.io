@@ -18,7 +18,7 @@ async function run() {
   const server = await startServer();
   let session;
   try {
-    session = await launchBrowser(`http://127.0.0.1:${server.address().port}/ramified_minigames.html`);
+    session = await launchBrowser(`http://127.0.0.1:${server.address().port}/ramified_minigames_classic.html`);
     const { client } = session;
     const browserErrors = [];
     await client.send('Runtime.enable');
@@ -56,7 +56,7 @@ async function run() {
     for (const width of [1280,768,360]) { await resize(width); await shot(`original-home-${width}-en`); }
     await click('#player-new'); await click('#player-slot-1');
     for (const width of [1280,768,360]) { await resize(width); await shot(`original-games-${width}-en`); }
-    await client.send('Page.navigate', {url:`http://127.0.0.1:${server.address().port}/ramified_minigames_study.html`});
+    await client.send('Page.navigate', {url:`http://127.0.0.1:${server.address().port}/ramified_minigames.html`});
     await waitFor(()=>read('document.body.classList.contains("design-study")'),10000,'study loaded');
     await ready();
     for (const width of [1280,768,360]) {

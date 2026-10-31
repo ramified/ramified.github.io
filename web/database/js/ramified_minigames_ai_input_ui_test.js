@@ -7,7 +7,7 @@ async function run() {
   let session;
   try {
     const origin = `http://127.0.0.1:${server.address().port}`;
-    session = await launchBrowser(`${origin}/ramified_minigames_study.html`);
+    session = await launchBrowser(`${origin}/ramified_minigames.html`);
     const { client } = session;
     const read = expression => evaluate(client, expression);
     const errors = [];
@@ -58,7 +58,7 @@ async function run() {
       await clickCell(move.from);
       await clickCell(move.to);
     }
-    const pages = process.env.RAMIFIED_AI_INPUT_PAGE ? [process.env.RAMIFIED_AI_INPUT_PAGE] : ['ramified_minigames_study.html', 'ramified_minigames.html'];
+    const pages = process.env.RAMIFIED_AI_INPUT_PAGE ? [process.env.RAMIFIED_AI_INPUT_PAGE] : ['ramified_minigames.html', 'ramified_minigames_classic.html'];
     for (const page of pages) {
       await client.send('Page.navigate', { url: `${origin}/${page}` });
       await waitFor(() => read('!!window.RamifiedMinigames?.player.state().ready'), 60000, page+' loaded');

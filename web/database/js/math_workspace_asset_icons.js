@@ -62,6 +62,11 @@
     }
     return true;
   }
+  function completeIntersectionCopyName(asset) {
+    if (asset.kind !== 'variety' || asset.type !== 'complete-intersection') return false;
+    const match = String(asset.name || '').trim().match(/^\((.+)\)_\{[1-9]\d*\}$/);
+    return !!match && letterName(match[1]);
+  }
   function describeValue(asset, resolve = () => null) {
     if(asset.kind==='knot'||asset.kind==='dual-graph')return {source:'generic',kind:asset.kind,symbol:asset.kind==='knot'?'⋈':'●—●'};
     if (asset.kind === 'mosaic-space' || asset.kind === 'mosaic-diagram') return { source: 'generic', kind: asset.kind, symbol: generic[asset.kind] };
@@ -100,7 +105,7 @@
         const letter = family[0];
         return {source:'name',name:letter + '_{' + rank + '}',fallback:letter + rank};
       }
-    } else if (letterName(asset.name)) return { source: 'name', name: asset.name };
+    } else if (letterName(asset.name) || completeIntersectionCopyName(asset)) return { source: 'name', name: asset.name };
     return { source: 'generic', symbol: generic[asset.kind] || '◇', ...(representatives[asset.kind] ? {representative:representatives[asset.kind]} : {}) };
   }
   function describe(asset, resolve = () => null) {

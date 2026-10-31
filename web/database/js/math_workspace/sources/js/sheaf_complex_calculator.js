@@ -41440,9 +41440,11 @@
       if (!sheaf?.baseVarietyId) return;
       const base = labelMap.get(`variety:${sheaf.baseVarietyId}`);
       if (!base) return;
+      const endpoints = clippedArrowEndpoints(label, base);
+      if (!endpoints) return;
       ctx.beginPath();
-      ctx.moveTo(label.x, label.y);
-      ctx.lineTo(base.x, base.y);
+      ctx.moveTo(endpoints.x1, endpoints.y1);
+      ctx.lineTo(endpoints.x2, endpoints.y2);
       ctx.stroke();
     });
     ctx.restore();

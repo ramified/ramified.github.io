@@ -4,6 +4,7 @@
   const allowed = new Set(['hex', 'gomoku', 'go', 'connect-four', 'reversi', 'chinese-checkers', 'fide-chess', 'billiards']);
   window.RamifiedOnlinePlayer = { allowed, create(engine, ui) {
     const el = id => document.getElementById(id);
+    const compactLobby = !!el('player-lobby-edit');
     let flow = '', serial = 0, creationId = '', lobbySocket = null, reconnectTimer = null;
     let players = [], rooms = [], previousRound = '', stopped = false, requestBusy = false;
     let lastPresence = '', lastRoomKey = '', lastSeatKey = '', creationFingerprint = '';
@@ -66,13 +67,72 @@
     function appendText(parent, tag, text) {
       const node = document.createElement(tag); node.textContent = text; parent.append(node); return node;
     }
+    function renderLobbyIdentity() {
+      if (!compactLobby) return;
+      el('player-lobby-playing-as').textContent = tk('study.lobbyPlayingAs', 'Playing as {{name}}', { name: engine.onlineInfo().playerName || '' });
+    }
+    function editLobbyIdentity(editing) {
+      if (!compactLobby) return;
+      el('player-lobby-editor').hidden = !editing;
+      el('player-lobby-edit').setAttribute('aria-expanded', String(editing));
+      // Only an explicit Edit action focuses the existing input. Never replace
+      // or normalize its draft during presence or language updates.
+      if (editing) el('player-lobby-name').focus();
+    }
     function renderPlayers() {
       const list = el('player-lobby-players'); list.replaceChildren();
       if (!players.length) appendText(list, 'li', tk('lobby.connecting', 'Connecting…'));
       for (const player of players) appendText(list, 'li', player.playerName);
+      if (compactLobby) {
+        el('player-lobby-player-count').textContent = players.length === 1
+          ? tk('study.lobbyPlayerOne', '1 player online')
+          : tk('study.lobbyPlayerMany', '{{count}} players online', { count: players.length });
+        renderLobbyIdentity();
+      }
+    }
+    function compactRoomCard(room) {
+      const row = document.createElement('div'); row.className = 'player-lobby-room';
+      row.setAttribute('role', 'group');
+      row.setAttribute('aria-label', tk('lobby.roomTitle', '{{game}} · {{code}}', { game: gameName(room.gameMode), code: room.roomCode }));
+      if (room.hostName) row.title = tk('lobby.host', 'Host: {{name}}', { name: room.hostName });
+      const heading = document.createElement('div'); heading.className = 'player-lobby-room-title'; row.append(heading);
+      appendText(heading, 'span', gameName(room.gameMode)).className = 'player-lobby-game';
+      appendText(heading, 'span', room.roomCode).className = 'player-lobby-code';
+      const button = appendText(row, 'button', tk('lobby.join', 'Enter room'));
+      button.className = 'btn'; button.type = 'button'; button.dataset.roomCode = room.roomCode;
+      button.disabled = requestBusy;
+      button.addEventListener('click', () => join(room.roomCode));
+      const meta = document.createElement('div'); meta.className = 'player-lobby-room-meta'; row.append(meta);
+      const occupiedRoles = new Set((room.members || []).flatMap(member => member.roles || []));
+      const order = ['black', 'white', 'red', 'yellow', 'blue', 'green', 'purple', 'orange', 'player-1', 'player-2'];
+      const roles = [...new Set([...occupiedRoles, ...(room.unclaimedRoles || [])])].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      const seats = document.createElement('span'); seats.className = 'player-lobby-seats';
+      const seatCount = tk('lobby.seatCount', '{{occupied}} / {{total}} seats occupied', { occupied: occupiedRoles.size, total: roles.length });
+      seats.setAttribute('role', 'img'); seats.setAttribute('aria-label', seatCount); seats.title = seatCount;
+      for (const role of roles) {
+        const color = ({ 'player-1': 'black', 'player-2': 'white' })[role] || role;
+        const dot = document.createElement('span'); dot.className = `player-stone player-stone-${color} player-lobby-seat-dot`;
+        dot.classList.toggle('is-open', !occupiedRoles.has(role)); dot.setAttribute('aria-hidden', 'true'); seats.append(dot);
+        if (occupiedRoles.has(role)) {
+          const canvas = document.createElement('canvas'); canvas.className = 'study-player-piece'; dot.append(canvas);
+          if (!engine.paintPlayerPiece?.(canvas, color)) canvas.remove();
+        }
+      }
+      meta.append(seats);
+      for (const text of [timeSummary(room.timeControl), room.roundState === 'playing' || ['finished', 'rematch-vote'].includes(room.roundState)
+        ? roundLabel(room.roundState) : tk('study.lobbyWaiting', 'Waiting for players')]) {
+        appendText(meta, 'span', '·').setAttribute('aria-hidden', 'true');
+        appendText(meta, 'span', text);
+      }
+      return row;
     }
     function renderRooms() {
       const list = el('player-lobby-rooms'); list.replaceChildren();
+      if (compactLobby) {
+        if (!rooms.length) appendText(list, 'p', tk('study.lobbyEmpty', 'No rooms yet. Create one to start.')).className = 'player-lobby-empty';
+        for (const room of rooms) list.append(compactRoomCard(room));
+        return;
+      }
       if (!rooms.length) appendText(list, 'p', tk('lobby.empty', 'No rooms available.'));
       for (const room of rooms) {
         const row = document.createElement('div'); row.className = 'player-lobby-room';
@@ -131,6 +191,7 @@
       if (engine.onlineInfo().joined) { renderRoom(true); ui.show('room', 'home'); return; }
       ui.show('lobby', 'home');
       el('player-lobby-name').value = engine.onlineInfo().playerName || '';
+      editLobbyIdentity(false); renderLobbyIdentity();
       renderPlayers(); connectLobby(); refresh();
     }
     function prepare(change = false) {
@@ -244,7 +305,11 @@
     el('player-online-open').addEventListener('click', open);
     el('player-lobby-create').addEventListener('click', () => prepare(false));
     el('player-lobby-refresh').addEventListener('click', () => { connectLobby(); refresh(); });
-    el('player-lobby-rename').addEventListener('click', () => { engine.onlineRename(el('player-lobby-name').value); presence(); });
+    el('player-lobby-rename').addEventListener('click', () => {
+      engine.onlineRename(el('player-lobby-name').value); presence();
+      if (compactLobby) { editLobbyIdentity(false); renderLobbyIdentity(); el('player-lobby-edit').focus(); }
+    });
+    el('player-lobby-edit')?.addEventListener('click', () => editLobbyIdentity(el('player-lobby-editor').hidden));
     el('player-time-mode').addEventListener('change', modeFields);
     el('player-room-claim').addEventListener('click', () => engine.onlineSend({ type: 'claimRoles', rolesRequested: Array.from(el('player-room-seat-options').querySelectorAll('input:checked'), input => input.value) }));
     el('player-room-ready').addEventListener('click', () => { const i = engine.onlineInfo(); engine.onlineSend({ type: 'setReady', ready: !i.readyClientIds?.includes(i.clientId) }); });
