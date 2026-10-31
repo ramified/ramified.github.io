@@ -84,8 +84,39 @@ async function run() {
     await a.set('player-time-mode', 'move'); await a.set('player-time-mode', 'byoyomi');
     assert.equal(await a.read('document.querySelector("#player-time-main").value'), '15', 'mode switch retains chosen time');
     await a.set('player-time-main', '5'); await a.set('player-time-action', '30');
-    await a.click('#player-back'); await a.click('#player-begin');
+    await a.click('#player-back');
+    await a.read(`(() => {
+      const fetch=window.fetch;window.__restoreConnectingFetch=()=>{window.fetch=fetch};
+      window.fetch=(url,options)=>fetch(url,options).then(response=>options?.method==='POST'&&String(url).endsWith('/api/rooms') ? new Promise(resolve=>{window.__releaseCreating=()=>resolve(response)}) : response);
+      document.addEventListener('ramified-room-presentation',event=>{if(event.detail.phase==='start'&&!window.__connectionStart){window.__connectionStart=performance.now();setTimeout(()=>{window.__hiddenBeforeDelay=document.querySelector('#player-room-loading').hidden},100)}});
+      new MutationObserver(()=>{if(!document.querySelector('#player-room-loading').hidden)window.__loadingDelay=performance.now()-window.__connectionStart}).observe(document.querySelector('#player-room-loading'),{attributes:true,attributeFilter:['hidden']});
+    })()`);
+    await a.click('#player-begin');
+    await a.until(`typeof window.__releaseCreating==='function' && !document.querySelector('#player-room-loading').hidden`, 'delayed creating presentation');
+    assert.equal(await a.read(`window.__hiddenBeforeDelay`),true,'no loading flash during the first 200 ms');
+    assert(await a.read(`window.__loadingDelay>=190`),'loading presentation waits about 200 ms');
+    assert.equal(await a.read(`document.body.dataset.studyPage`),'setup','waiting presentation preserves the existing Back/cancellation route');
+    assert.equal(await a.read(`document.querySelector('#player-room-loading-text').textContent`),'Creating room…');
+    assert.equal(await a.read(`document.querySelector('#player-room-loading-game').textContent`),'Gomoku');
+    assert.deepEqual(await a.read(`[...document.querySelectorAll('#player-menu button')].filter(n=>n.getClientRects().length&&!n.disabled).map(n=>n.id)`),['player-back'],'only Back is interactive before a room exists');
+    await a.client.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+    assert.equal(await a.read(`getComputedStyle(document.querySelector('.player-room-spinner')).animationName`),'none');
+    await a.client.send('Emulation.setEmulatedMedia',{features:[]});
+    for(const width of [1280,390,320]) {
+      await a.client.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
+      for(const locale of ['en','zh-CN']) {
+        await a.read(`SiteI18n.setLocale('${locale}')`);
+        assert.equal(await a.read(`document.querySelector('#player-room-loading-text').textContent`),locale==='en'?'Creating room…':'正在创建房间…');
+        assert.equal(await a.read(`(()=>{const p=document.querySelector('#player-room-loading');return p.scrollWidth<=p.clientWidth+1})()`),true);
+        fs.writeFileSync(path.join(os.tmpdir(),`ramified-room-creating-${width}-${locale}.png`),Buffer.from((await a.client.send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+      }
+    }
+    await a.read(`SiteI18n.setLocale('en')`);await a.client.send('Emulation.clearDeviceMetricsOverride');
+    const loadingRowHeight=await a.read(`document.querySelector('.player-room-loading-row').getBoundingClientRect().height`);
+    await a.read(`window.__restoreConnectingFetch();window.__releaseCreating()`);
     await a.until(`RamifiedMinigames.player.onlineInfo().joined && !document.querySelector('#player-room').hidden`, 'creator waiting room');
+    assert.equal(await a.read(`document.querySelector('#player-room-loading').hidden`),true);
+    assert.equal(await a.read(`document.querySelector('.player-seat-card').getBoundingClientRect().height`),loadingRowHeight,'skeleton rows match real seat-row height');
     const first = await a.info(); assert.deepEqual(first.roles, ['black']); assert.equal(first.roundState, 'waiting');
     assert.equal(await a.read(`document.querySelector('#player-room-code').textContent`), first.roomCode);
     assert.equal(await a.read(`document.querySelector('#player-room-game').textContent`), 'Gomoku');
@@ -138,7 +169,36 @@ async function run() {
     await b.read(`window.__restoreDirectory();SiteI18n.setLocale('en')`);
     await b.client.send('Emulation.clearDeviceMetricsOverride');
     await b.click('#player-lobby-refresh'); await b.until(`document.querySelectorAll('.player-lobby-room').length===1`);
+    await b.read(`(() => {const fetch=window.fetch;window.__restoreJoinFailure=()=>{window.fetch=fetch};window.fetch=(url,options)=>String(url).endsWith('/api/rooms/${first.roomCode}') ? Promise.reject(new DOMException('Timed out','TimeoutError')) : fetch(url,options)})()`);
     await b.click('[data-room-code]');
+    await b.until(`document.querySelector('#player-message').hasAttribute('data-room-connection-error')`,'existing join failure banner');
+    await delay(250);
+    assert.equal(await b.read(`document.querySelector('#player-room-loading').hidden`),true,'a fast failure does not flash a spinner or skeleton');
+    assert.equal(await b.read(`document.body.dataset.studyPage`),'lobby','join failures retain the existing lobby retry route');
+    await b.read(`window.__restoreJoinFailure();(() => {
+      const fetch=window.fetch;window.__restoreJoiningFetch=()=>{window.fetch=fetch};
+      window.fetch=(url,options)=>fetch(url,options).then(response=>String(url).endsWith('/api/rooms/${first.roomCode}') ? new Promise(resolve=>{window.__releaseJoining=()=>resolve(response)}) : response);
+      const Native=window.WebSocket;window.__restoreRoomSocket=()=>{window.WebSocket=Native};window.__failFirstSnapshot=true;
+      window.WebSocket=class extends Native {constructor(...args){super(...args);this.addEventListener('message',event=>{const data=JSON.parse(event.data);if(data.type==='state'&&data.snapshot&&window.__failFirstSnapshot){window.__failFirstSnapshot=false;Object.defineProperty(event,'data',{value:JSON.stringify({...data,snapshot:{invalid:true}})})}})}};
+    })()`);
+    await b.click('[data-room-code]');
+    await b.until(`typeof window.__releaseJoining==='function'&&!document.querySelector('#player-room-loading').hidden`,'delayed joining presentation');
+    assert.equal(await b.read(`document.querySelector('#player-room-loading-text').textContent`),'Joining room…');
+    await b.read(`SiteI18n.setLocale('zh-CN')`);
+    assert.equal(await b.read(`document.querySelector('#player-room-loading-text').textContent`),'正在加入房间…');
+    await b.client.send('Emulation.setDeviceMetricsOverride',{width:390,height:900,deviceScaleFactor:1,mobile:false});
+    await b.client.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:'dark'}]});
+    fs.writeFileSync(path.join(os.tmpdir(),'ramified-room-joining-dark-390.png'),Buffer.from((await b.client.send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await b.read(`SiteI18n.setLocale('en');window.__restoreJoiningFetch();window.__releaseJoining()`);
+    await b.until(`RamifiedMinigames.player.onlineInfo().loadFailed`,'existing snapshot-load failure');
+    assert.equal(await b.read(`document.querySelector('#player-room-state').textContent`),'Could not load the room. Refresh to retry.');
+    assert.equal(await b.read(`document.querySelector('#player-room-state').getAttribute('aria-live')`),'polite');
+    assert.deepEqual(await b.read(`[...document.querySelectorAll('#player-room .player-room-actions button')].filter(n=>n.getClientRects().length).map(n=>n.id)`),['player-room-retry'],'existing resync button is the only room action after load failure');
+    fs.writeFileSync(path.join(os.tmpdir(),'ramified-room-load-failed-dark-390.png'),Buffer.from((await b.client.send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await b.read(`window.__restoreRoomSocket()`);
+    await b.click('#player-room-retry');
+    await b.until(`!RamifiedMinigames.player.onlineInfo().loadFailed&&document.querySelector('#player-room').dataset.roomPresentation==='ready'`,'existing resync recovers');
+    await b.client.send('Emulation.setEmulatedMedia',{features:[]});await b.client.send('Emulation.clearDeviceMetricsOverride');
     await b.until(`RamifiedMinigames.player.onlineInfo().joined`);
     assert.deepEqual((await b.info()).roles, []);
     assert.equal(await b.read(`document.querySelector('#player-room-ready').hidden`), true, 'spectator confirms a seat before Ready');
@@ -258,12 +318,18 @@ async function run() {
     while (!await a.read(`document.querySelector('#player-games-previous').disabled`)) await a.click('#player-games-previous');
     await a.click('[data-game-mode="gomoku"]');
     await a.until(`!document.querySelector('#player-begin').disabled`);
+    await a.read(`(() => {const fetch=window.fetch;window.__restoreCreateFailure=()=>{window.fetch=fetch};window.fetch=(url,options)=>options?.method==='POST'&&String(url).endsWith('/api/rooms')?Promise.reject(new DOMException('Timed out','TimeoutError')):fetch(url,options)})()`);
+    await a.click('#player-begin');await a.until(`document.querySelector('#player-message').hasAttribute('data-room-connection-error')`,'existing create failure presentation');
+    assert.equal(await a.read(`document.body.dataset.studyPage`),'setup','create failure retains the existing preparation retry route');
+    await a.read(`window.__restoreCreateFailure()`);
     await a.read(`(() => { const original=window.fetch; window.__restoreFetch=()=>{window.fetch=original};window.fetch=(url,options)=>original(url,options).then(response=>options?.method==='POST' && String(url).endsWith('/api/rooms') ? new Promise(resolve=>{window.__releaseRoomResponse=()=>resolve(response)}) : response); })()`);
     await a.click('#player-begin'); await a.until(`typeof window.__releaseRoomResponse==='function'`);
+    await a.until(`!document.querySelector('#player-room-loading').hidden`,'creating skeleton before cancellation');
     await a.click('#player-back'); await a.click('#player-back');
     await a.read(`window.__restoreFetch(); window.__releaseRoomResponse()`); await delay(250);
     assert.equal(await a.read(`document.querySelector('#player-lobby').hidden`), false, 'late create response does not replace the page after cancel');
     assert.equal((await a.info()).joined, false);
+    assert.equal(await a.read(`document.querySelector('#player-room-loading').hidden&&!document.body.hasAttribute('data-room-connection-pending')`),true,'cancellation and stale responses cannot leave a loading view behind');
     await a.click('#player-back');
     assert.equal(await a.read(`JSON.stringify(RamifiedMinigames.__test.getGame().stones)`), localBefore, 'cancelled request preserves the local game');
     assert.deepEqual(errors, []);

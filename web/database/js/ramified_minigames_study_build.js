@@ -7,6 +7,7 @@ const BUILD = '20261028-6';
 const TOPOLOGY_GOMOKU_BUILD = '20261031-topology-gomoku-1';
 const ROOM_UI_BUILD = '20261031-room-ui-2';
 const LOBBY_UI_BUILD = '20261031-lobby-ui-1';
+const CONNECTION_UI_BUILD = '20261031-room-connection-1';
 const check = process.argv.includes('--check');
 function emit(filename, contents) {
   if (check) {
@@ -147,6 +148,25 @@ for (const asset of ['css/ramified_minigames_study.css', 'js/ramified_minigames_
   html = html.replace(`${asset}?v=${ROOM_UI_BUILD}`, `${asset}?v=${LOBBY_UI_BUILD}`);
 }
 html = html.replace(/js\/ramified_minigames_online\.js\?v=[^"\s]+/, `js/ramified_minigames_online.js?v=${LOBBY_UI_BUILD}`);
+html = html.replace('<section id="player-room"', `<section id="player-room-loading" class="player-room-loading" aria-labelledby="player-room-loading-game" hidden>
+            <div class="player-room-loading-body">
+              <header class="player-room-header">
+                <h2 id="player-room-loading-game" class="player-room-loading-game"></h2>
+                <div class="player-room-code-row" aria-hidden="true"><span class="player-room-placeholder player-room-loading-code"></span><span class="player-room-placeholder player-room-loading-copy"></span></div>
+                <div class="player-room-meta" aria-hidden="true"><span class="player-room-placeholder player-room-loading-meta"></span></div>
+              </header>
+              <p id="player-room-loading-status" class="player-room-status" role="status" aria-live="polite" aria-atomic="true"><span class="player-room-spinner" aria-hidden="true"></span><span id="player-room-loading-text"></span></p>
+              <div class="player-room-loading-seats" aria-hidden="true"><span class="player-room-loading-legend" data-i18n="lobby.seats">Choose a seat</span><div id="player-room-loading-rows"></div></div>
+              <div class="player-room-loading-space" aria-hidden="true"></div>
+            </div>
+            <div class="player-room-loading-footer" aria-hidden="true"></div>
+          </section>
+          <section id="player-room"`);
+html = html.replace('<p id="player-room-state" role="status">', '<p id="player-room-state" class="player-room-status" role="status" aria-live="polite">');
+html = html.replace('<p id="player-message" role="status"', '<p id="player-message" role="status" aria-live="polite"');
+for (const asset of ['css/ramified_minigames_study.css', 'js/ramified_minigames_study_locales.js', 'js/ramified_minigames_online.js', 'js/ramified_minigames_room_ui.js']) {
+  html = html.replace(new RegExp(`${asset.replaceAll('.', '\\.')}\\?v=[^"\\s]+`), `${asset}?v=${CONNECTION_UI_BUILD}`);
+}
 // The first rendered home must already use the study's copy and page state.
 // Read the English fallbacks from the same catalog used at runtime.
 const studyEnglish = {};

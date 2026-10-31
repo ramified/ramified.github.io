@@ -203,9 +203,14 @@
       el('player-time-action').value = config.moveSeconds || config.periodSeconds || 30;
       modeFields(); setFlow(change ? 'change' : 'create'); ui.games();
     }
-    async function join(code) {
+    function presentConnection(phase, detail = {}) {
+      if (el('player-room-loading')) document.dispatchEvent(new CustomEvent('ramified-room-presentation', { detail: { phase, sourcePage: ui.page(), ...detail } }));
+    }
+    async function join(code, presentation = {}) {
       if (requestBusy) return;
       const ticket = ++serial; requestBusy = true; ui.save(); renderRooms();
+      const entry = rooms.find(room => room.roomCode === code);
+      presentConnection('start', { kind: 'joining', gameMode: entry?.gameMode, seatCount: (entry?.unclaimedRoles?.length || 0) + (entry?.members || []).reduce((sum, member) => sum + member.roles.length, 0), ...presentation });
       ui.message(tk('lobby.connecting', 'Connecting…'));
       try {
         const joined = await engine.onlineJoin(code, { isCurrent: () => ticket === serial });
@@ -215,7 +220,8 @@
         if (ticket !== serial) return;
         engine.onlineLeave(); ui.show('lobby', 'home');
         ui.message(tk('lobby.joinError', 'Could not enter this room. Choose a room to retry, or go back.'));
-      } finally { if (ticket === serial) { requestBusy = false; renderRooms(); } }
+        presentConnection('error', { key: 'lobby.joinError' });
+      } finally { if (ticket === serial) { requestBusy = false; renderRooms(); presentConnection('end'); } }
     }
     async function submit() {
       if (!flow || requestBusy) return;
@@ -231,13 +237,18 @@
           if (!engine.onlineSend({ type: 'proposeConfiguration', gameMode: snapshot.gameMode, snapshot, timeControl: config, summary: snapshot.preset.label || snapshot.preset.id })) throw new Error('send');
           engine.onlineCancelSetup(); setFlow(''); ui.show('room', 'home');
         } else {
+          const presentation = { kind: 'creating', gameMode: snapshot.gameMode, seatCount: snapshot.gameMode === 'chinese-checkers' ? (snapshot.playerColors || snapshot.chineseCheckersPlayers || []).length || 6 : 2 };
+          presentConnection('start', presentation);
           const room = await engine.onlineCreate(snapshot, config, creationId);
           if (ticket !== serial) return;
           engine.onlineCancelSetup(); setFlow(''); requestBusy = false;
-          await join(room.roomCode);
+          await join(room.roomCode, presentation);
         }
       } catch (_) {
-        if (ticket === serial) ui.message(tk('lobby.createError', 'Could not apply the configuration. Retry or go back; your previous game is unchanged.'));
+        if (ticket === serial) {
+          ui.message(tk('lobby.createError', 'Could not apply the configuration. Retry or go back; your previous game is unchanged.'));
+          presentConnection('error', { key: 'lobby.createError' });
+        }
       } finally { if (ticket === serial) requestBusy = false; ui.sync(); }
     }
     function renderRoom(force = false) {
@@ -344,10 +355,11 @@
     setTimeout(connectLobby, 0); modeFields();
     return { open, prepare, back, submit, flow: () => flow, busy: () => requestBusy, renderRoom,
       home() {
+        presentConnection('cancel');
         ++serial; requestBusy = false; engine.onlineCancelSetup();
         if (!engine.onlineInfo().joined) engine.onlineLeave();
         setFlow(''); ui.show('home');
       },
-      cancelRequest() { ++serial; requestBusy = false; ui.sync(); } };
+      cancelRequest() { ++serial; requestBusy = false; ui.sync(); presentConnection('cancel'); } };
   } };
 })();
