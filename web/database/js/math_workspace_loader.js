@@ -1,6 +1,6 @@
 (function (root) {
   'use strict';
-  const enabled = new URLSearchParams(root.location.search).get('loader') === 'twophase';
+  const enabled = new URLSearchParams(root.location.search).get('loader') !== 'classic';
   const entries = new Map(), generations = new Map();
   const mathConfig = root.MathJax, mathHistory = [];
   const mathBackup = 'https://cdn.bootcdn.net/ajax/libs/mathjax/3.2.2/es5/tex-chtml.js';
