@@ -899,6 +899,7 @@
       visit(asset); return result;
     }
     function importText(key, text) {
+      window.MathWorkspaceLoader?.assertImportReady();
       if (key === 'workspace') return api.restoreWorkspace(text);
       if (key === 'category-graph') return api.importCategoryGraph(JSON.parse(text));
       if (key === 'slicing-graph') return api.importSlicing(JSON.parse(text));
@@ -1205,6 +1206,10 @@
       if (!panel.definition.display) panels.forEach(other => { if (other.definition.display) refreshPanel(other); });
     }
     function open(type, assetKey = '', location = 'side', options = {}) {
+      if (window.MathWorkspaceLoader?.shouldWait()) {
+        window.MathWorkspaceLoader.afterReady(null, () => open(type, assetKey, location, options));
+        return null;
+      }
       const definition = byType.get(type); if (!definition) throw new Error('Unknown mathematical panel.');
       if(definition.mosaicOwner==='mosaic-space')assetKey=keyOf(mosaic.propertyAsset(type,get(assetKey),snapshot.assets))||assetKey;
       let refs = JSON.parse(JSON.stringify(options.refs || {}));
@@ -1363,6 +1368,10 @@
       editor.objectIO('select',refOf(asset)); api.ioChanged(); return true;
     }
     function openOverview(type, key) {
+      if (window.MathWorkspaceLoader?.shouldWait()) {
+        window.MathWorkspaceLoader.afterReady(null, () => openOverview(type, key));
+        return null;
+      }
       const definition = byType.get(type);
       if (!definition?.overview) return open(type,key,'hidden');
       let panel = find(type);
@@ -1440,6 +1449,7 @@
       panels.clear(); computations.clear(); legacyViews.clear(); dynkinFocus.clear();dynkinSelectionModes.clear(); registry.clear(); nextId = 0;
     }
     function restorePanels(saved) {
+      window.MathWorkspaceLoader?.assertImportReady();
       snapshot = api.snapshot();
       for(const item of saved)if(['dynkin-view','dynkin-starting'].includes(item.type)){
         if(Number.isInteger(item.computation?.options?.vertex))dynkinFocus.set(item.computation.refs.dynkin,item.computation.options.vertex);

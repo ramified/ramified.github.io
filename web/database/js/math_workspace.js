@@ -297,6 +297,9 @@
   }
 
   function openCanvas(id) {
+    const loader = window.MathWorkspaceLoader;
+    if (id !== 'assets' && loader?.shouldWait()) return loader.afterReady('canvas', () => openCanvas(id));
+    if (id === 'assets') loader?.cancel('canvas');
     if (id.startsWith('object:')) { objectWorkspace?.open(id.slice(7), '', 'main'); return; }
     const definition = byId.get(id);
     if (!definition) return;
@@ -572,7 +575,7 @@
         const row = Object.assign(document.createElement('label'),{className:'workspace-check workspace-card-option'}), check = Object.assign(document.createElement('input'),{type:'checkbox',checked:!!checked});
         check.dataset.cardKey=key;check.dataset.optionIdentity=identity;if(type)check.dataset.panelType=type;
         const text=document.createElement('span');text.append(document.createTextNode(label));if(detail)text.append(Object.assign(document.createElement('small'),{textContent:detail}));
-        check.addEventListener('change',()=>{try{action(check.checked);}catch(error){status(error.message,'error');}renderInspector();renderCardPicker();});
+        check.addEventListener('change',async()=>{const visible=check.checked;try{const loader=window.MathWorkspaceLoader;if(loader?.shouldWait())await loader.afterReady('panel-option:'+identity,()=>action(visible));else action(visible);}catch(error){status(error.message,'error');}renderInspector();renderCardPicker();});
         row.append(check,text);parent.append(row);
       };
       const appendSuggestion = suggestion => {
@@ -2790,6 +2793,7 @@
     });
   }
   async function createAsset(kind, options = {}) {
+    if (window.MathWorkspaceLoader?.shouldWait()) await window.MathWorkspaceLoader.whenReady();
     if (OBJECT_INPUT_KINDS.includes(kind)) {
       closeAssetsContextMenu(); const record = createObjectAsset(kind, options); const panel=objectWorkspace?.open(`${kind}-input`, assetKey(record), 'side'); return ()=>panel?.name?.focus();
     }
@@ -3389,6 +3393,7 @@
     renderAssets(); renderAssetsEditor(); renderCanvasView(); renderInspector();
   }
   function restoreWorkspace(text) {
+    window.MathWorkspaceLoader?.assertImportReady();
     const saved = prepareWorkspace(text), before = captureWorkspace();
     restoringWorkspace = true;
     try { applyWorkspaceBackup(saved); }
@@ -3406,12 +3411,15 @@
     const formats = exporter.value ? objectWorkspace.exportFormats(exporter.value) : [];
     chooseOptions($('#workspace-io-format'), formats, 'Default format'); $('#workspace-io-format-row').hidden = formats.length < 2;
     chooseOptions(importer, entries.filter(entry => entry.canImport), 'Choose the destination asset…');
+    const importWaiting = !!window.MathWorkspaceLoader?.shouldWait();
+    if (importWaiting) importer.disabled = true;
     $('#workspace-io-target').textContent = importer.value === 'workspace' ? 'Importing a complete workspace backup replaces this workspace, including its objects and panels.' : 'Choose a complete workspace backup, an asset, or a property. Object imports update the selected asset.';
+    if (importWaiting) $('#workspace-io-target').textContent = window.MathWorkspaceLoader.loadingMessage;
     try { $('#workspace-io-output').value = exporter.value ? objectWorkspace.exportText(exporter.value, $('#workspace-io-format').value || 'json') : ''; }
     catch (error) { $('#workspace-io-output').value = error.message; }
     ['export', 'copy', 'download'].forEach(action => { $('#workspace-io-' + action).disabled = !exporter.value; });
-    $('#workspace-io-input').disabled = !importer.value;
-    $('#workspace-io-import').disabled = !importer.value;
+    $('#workspace-io-input').disabled = importWaiting || !importer.value;
+    $('#workspace-io-import').disabled = importWaiting || !importer.value;
   }
   function initialiseImportExport() {
     const run = action => async () => { try { await action(); } catch (error) { status(error.message, 'error'); } };
@@ -3431,6 +3439,7 @@
       link.href = url; link.download = entry.filename.replace(/\.json$/, '.' + extension); link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     }));
     $('#workspace-io-import').addEventListener('click', run(() => {
+      window.MathWorkspaceLoader?.assertImportReady();
       const key = $('#workspace-io-importer').value;
       objectWorkspace.importText(key, $('#workspace-io-input').value);
       const entry = objectWorkspace.ioEntries().find(entry => entry.id === key);
@@ -3488,5 +3497,15 @@
 
   window.MathWorkspaceAssetsTest = { assetKey, layouts: ASSET_LAYOUTS.slice(), selectAssetKey, orderedAssets, state: assetState, assetRequest, renderAssetsEditor, canonicalAssetName, normalizedAssetData, validateAssetData, referenceFieldSpecs, referenceEligibility, referenceWouldCreateCycle, referenceDragKey, isDirectSheafType, inferredSheafBase, assetMathSignature, invalidateDerivedAssetProperties, createAssetPropertyCommand, commitAssetPropertyCommand, captureAndCommitAssetPropertyCommand, captureSheafComplexLayout, cardSupportsAsset, assetCardInstanceKey, ASSET_CARD_REGISTRY, NATIVE_ASSET_CARD_TYPES, assetsCardState, assetsUtilitySlots, assetInputCardTitleState, createAssetsCardCoordinator, planAssetPropertySlotBinding, bindAssetPropertySlot, handleAssetPropertySessionChange, createAssetInputInstance, bindAssetInputInstance, activeAssetInputInstance, assetInputInstanceForRef, validateAssetInputDraft, createAssetInputCommitCommand, commitAssetInputCommand, resolveAssetInputConflict, updateAssetInputDraft, scheduleAssetInputAutosave, flushAssetInputInstance, cancelAssetInputAutosave, queueAssetInputAutosave, drainAssetInputQueue, removeAssetInputInstances, acceptAssetInputAsyncResult, markAffectedAssetPropertyInstances, reprojectActiveAssetPropertySlots, INPUT_AUTOSAVE_DEBOUNCE_MS, INPUT_AUTOSAVE_MAX_WAIT_MS, DEFAULT_CANVAS_HEIGHT, MIN_CANVAS_HEIGHT, MAX_CANVAS_HEIGHT, canvasHeightFor, sessions };
   Object.assign(window.MathWorkspaceAssetsTest, { createObjectAsset, updateObjectAsset, localAssetSnapshot, applyAssetSnapshot, openCanvas, closeCanvas, setSplitView, selectCanvasTab });
-  document.addEventListener('DOMContentLoaded', initialise);
+  function typesetWorkspaceWhenReady() {
+    if (!window.MathJax?.typesetPromise) return;
+    window.MathJax.typesetPromise([document.body]).then(() => window.MathWorkspaceAssetIcons.typeset(document.body)).catch(() => {});
+  }
+  window.addEventListener('workspace-mathjax-ready', typesetWorkspaceWhenReady);
+  window.addEventListener('workspace-loader-state', updateImportExport);
+  document.addEventListener('DOMContentLoaded', () => {
+    initialise();
+    window.MathWorkspaceLoader?.shellReady({ open:openCanvas });
+    if (window.MathJax?.typesetPromise) Promise.resolve(window.MathJax.startup?.promise).then(typesetWorkspaceWhenReady);
+  });
 }());

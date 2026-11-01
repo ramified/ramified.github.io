@@ -123,7 +123,7 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
       }
     }
   }
-  const mathApi=realWindow.MathJax?.typesetPromise?new Proxy(realWindow.MathJax,{get(target,key){
+  const wrapMath=target=>target?.typesetPromise?new Proxy(target,{get(target,key){
     if(key==='typesetPromise')return (elements=[body])=>{
       const run=mathQueue.then(()=>{if(!disposed){syncMathStyles();return target.typesetPromise(elements);}}).then(()=>{
         syncMathStyles();
@@ -132,6 +132,10 @@ export function createEditorContext(host,definition,{id,onChange=()=>{},onError=
     if(key==='typesetClear')return (elements=[body])=>target.typesetClear(elements);
     return target[key];
   }}):null;
+  let mathApi=wrapMath(realWindow.MathJax);
+  const mathReady=()=>{if(disposed||mathApi)return;mathApi=wrapMath(realWindow.MathJax);mathApi?.typesetPromise([body,inspectorBody].filter(Boolean)).catch(error);};
+  realWindow.addEventListener('workspace-mathjax-ready',mathReady);
+  disposal.push(()=>realWindow.removeEventListener('workspace-mathjax-ready',mathReady));
   const localStorageMap=new Map(Object.entries(snapshot?.storage||{}));
   const storage={getItem:k=>localStorageMap.get(String(k))??null,setItem:(k,v)=>{localStorageMap.set(String(k),String(v));changed();},removeItem:k=>{localStorageMap.delete(String(k));changed();},clear:()=>localStorageMap.clear(),key:i=>[...localStorageMap.keys()][i]??null,get length(){return localStorageMap.size;}};
   function settingsApi(value){

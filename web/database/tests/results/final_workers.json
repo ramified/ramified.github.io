@@ -1,0 +1,6 @@
+{
+  "workspace": "5cbd3bd94df7bcffba679a50d5745b42dad44fb65c83f6f215772964c9df3c92",
+  "js/toric_cone_worker.js": "c35a2fb410b8ff73fd17cf334e20a267b53f797eedf1275c961b3ae554e240f8",
+  "js/background_homology_worker.js": "a7f939cf6de8f02d0b47fdcc83bee9274c3235a507fcf444dc160c3fcaf6a727",
+  "js/mosaic_hyperbolic_metric_worker.js": "ed94af4137e066bd5a77bc8ae11d3e9d8ced506a7f8cd382b9bf36836eebbfa3"
+}

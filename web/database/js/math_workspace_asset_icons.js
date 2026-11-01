@@ -313,7 +313,7 @@
     else {
       const formula = document.createElement('span'); formula.className = 'workspace-icon-formula'; formula.textContent = '\\(' + model.name + '\\)'; host.append(formula);
       host.dataset.iconName = model.name; host.dataset.iconFallback = model.fallback || generic[asset.kind] || '◇';
-      if (!root.MathJax?.typesetPromise) genericFallback(host);
+      // Keep the original formula while the asynchronously loaded renderer starts.
     }
     return host;
   }

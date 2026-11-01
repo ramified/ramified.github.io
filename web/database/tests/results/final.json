@@ -1,0 +1,440 @@
+{
+  "version": 1,
+  "outputs": {
+    "slice:0": {
+      "kind": "circle",
+      "radius": 1
+    },
+    "slice:1": {
+      "kind": "empty"
+    },
+    "young:0": {
+      "boxes": "5",
+      "standardTableaux": "5",
+      "conjugate": "(2, 2, 1)"
+    },
+    "young:1": {
+      "boxes": "3",
+      "standardTableaux": "2",
+      "conjugate": "(2, 1)"
+    },
+    "double-young:0": [
+      [
+        [
+          4
+        ],
+        1
+      ],
+      [
+        [
+          2,
+          2
+        ],
+        1
+      ]
+    ],
+    "double-young:1": [
+      [
+        [
+          2
+        ],
+        1
+      ]
+    ],
+    "production:0": {
+      "title": "How Young Diagram² Calculator was made",
+      "algorithms": true
+    },
+    "production:1": {
+      "summary": true,
+      "lessons": true
+    },
+    "dynkin:0": [
+      [
+        2,
+        -1
+      ],
+      [
+        -1,
+        2
+      ]
+    ],
+    "dynkin:1": [
+      [
+        2,
+        -1,
+        0
+      ],
+      [
+        -1,
+        2,
+        -1
+      ],
+      [
+        0,
+        -1,
+        2
+      ]
+    ],
+    "strand:0": [
+      3,
+      2,
+      1
+    ],
+    "strand:1": [
+      1,
+      2,
+      3
+    ],
+    "matrix:0": {
+      "rank": "2",
+      "trace": "5",
+      "determinant": "-2"
+    },
+    "matrix:1": {
+      "rank": "2",
+      "trace": "2",
+      "determinant": "1"
+    },
+    "sheaf:0": [
+      "3",
+      "0"
+    ],
+    "sheaf:1": [
+      "0",
+      "1"
+    ],
+    "complex:0": [
+      "0",
+      "0",
+      "1"
+    ],
+    "complex:1": [
+      "27",
+      "0",
+      "0"
+    ],
+    "mosaic:0": {
+      "group": "Z^2",
+      "freeRank": 2
+    },
+    "mosaic:1": {
+      "freeRank": 0,
+      "torsion": []
+    },
+    "category:0": {
+      "opposite": true,
+      "label": "C"
+    },
+    "category:1": {
+      "opposite": false,
+      "label": "D"
+    },
+    "ramification:0": {
+      "behavior": "ramified",
+      "components": [
+        [
+          2,
+          1
+        ]
+      ]
+    },
+    "ramification:1": {
+      "behavior": "inert",
+      "components": [
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    "worker": {
+      "ok": true,
+      "id": 7,
+      "group": "Z^2",
+      "freeRank": 2
+    },
+    "saveRefreshRestore": {
+      "name": "P_saved",
+      "dimension": "1",
+      "draft": "P_saved"
+    },
+    "backupRoundtrip": {
+      "category": "C",
+      "opposite": true,
+      "formulaProjected": true,
+      "savedMosaic": true
+    },
+    "formula": {
+      "rendered": true,
+      "errors": false
+    }
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found) [origin]/favicon.ico"
+  ],
+  "metrics": {
+    "interfaceReady": 3298,
+    "transferBytes": 11162182,
+    "bodyBytes": 11146882,
+    "delayedMathJaxReady": 557.7999999970198,
+    "interfaceBeforeMathJax": true,
+    "bundleBytes": 7527296
+  },
+  "network": [
+    {
+      "url": "[origin]/css/site.css?v=20260903-1",
+      "encoded": 36780,
+      "transfer": 37080
+    },
+    {
+      "url": "[origin]/css/import_export_panel.css?v=20260821-7",
+      "encoded": 6285,
+      "transfer": 6585
+    },
+    {
+      "url": "[origin]/css/math_workspace.css?v=20261031-tensor-editor-1",
+      "encoded": 56312,
+      "transfer": 56612
+    },
+    {
+      "url": "[origin]/css/ramified_theme.css",
+      "encoded": 2694,
+      "transfer": 2994
+    },
+    {
+      "url": "[origin]/css/ramified_ui_refine.css?v=20261031-empty-assets-fit-4",
+      "encoded": 15058,
+      "transfer": 15358
+    },
+    {
+      "url": "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js",
+      "encoded": 202809,
+      "transfer": 203109
+    },
+    {
+      "url": "[origin]/js/calculator_cards.js?v=20260903-1",
+      "encoded": 27130,
+      "transfer": 27430
+    },
+    {
+      "url": "[origin]/js/calculator_input_settings.js?v=20261019-workspace-settings-1",
+      "encoded": 45595,
+      "transfer": 45895
+    },
+    {
+      "url": "[origin]/js/math_workspace_presentation.js?v=20261027-presentation-1",
+      "encoded": 3155,
+      "transfer": 3455
+    },
+    {
+      "url": "[origin]/js/math_workspace_rings.js?v=20261027-repair-input-1",
+      "encoded": 1954,
+      "transfer": 2254
+    },
+    {
+      "url": "[origin]/js/math_workspace_slicing.js?v=20261027-repair-input-1",
+      "encoded": 27264,
+      "transfer": 27564
+    },
+    {
+      "url": "[origin]/js/math_workspace_mosaic.js?v=20261029-topology-1",
+      "encoded": 5999,
+      "transfer": 6299
+    },
+    {
+      "url": "[origin]/js/mosaic_knot_data.js?v=20261029-topology-1",
+      "encoded": 1434958,
+      "transfer": 1435258
+    },
+    {
+      "url": "[origin]/js/mosaic_link_data.js?v=20261029-topology-1",
+      "encoded": 992632,
+      "transfer": 992932
+    },
+    {
+      "url": "[origin]/js/math_workspace/sources/js/mosaic_knot_engine.js?v=20261029-topology-1",
+      "encoded": 48740,
+      "transfer": 49040
+    },
+    {
+      "url": "[origin]/js/math_workspace_topology_preset_data.js?v=20261029-topology-presets-2",
+      "encoded": 2425,
+      "transfer": 2725
+    },
+    {
+      "url": "[origin]/js/math_workspace_topology.js?v=20261029-topology-presets-3",
+      "encoded": 15454,
+      "transfer": 15754
+    },
+    {
+      "url": "[origin]/js/math_workspace_knot_drawing.js?v=20261029-knot-editing-1",
+      "encoded": 9891,
+      "transfer": 10191
+    },
+    {
+      "url": "[origin]/js/math_workspace_knot_operations.js?v=20261029-knot-english-halo-2",
+      "encoded": 6958,
+      "transfer": 7258
+    },
+    {
+      "url": "[origin]/js/math_workspace_knot_editing.js?v=20261029-knot-english-halo-2",
+      "encoded": 11197,
+      "transfer": 11497
+    },
+    {
+      "url": "[origin]/js/math_workspace_topology_ui.js?v=20261029-knot-editing-1",
+      "encoded": 9183,
+      "transfer": 9483
+    },
+    {
+      "url": "[origin]/js/math_workspace_io.js?v=20261029-topology-1",
+      "encoded": 14999,
+      "transfer": 15299
+    },
+    {
+      "url": "[origin]/js/math_workspace_defaults.js?v=20261030-input-parity-2",
+      "encoded": 6335,
+      "transfer": 6635
+    },
+    {
+      "url": "[origin]/js/math_workspace_numbers.js?v=20261030-input-parity-2",
+      "encoded": 7172,
+      "transfer": 7472
+    },
+    {
+      "url": "[origin]/js/math_workspace_structures.js?v=20261027-presentation-1",
+      "encoded": 7490,
+      "transfer": 7790
+    },
+    {
+      "url": "[origin]/js/math_workspace_sheaf_model.js?v=20261031-sheaf-options-1",
+      "encoded": 15425,
+      "transfer": 15725
+    },
+    {
+      "url": "[origin]/js/math_workspace_diagnostics.js?v=20261030-input-parity-2",
+      "encoded": 4678,
+      "transfer": 4978
+    },
+    {
+      "url": "[origin]/js/math_workspace_panel_registry.js?v=20261030-shared-complex-display-1",
+      "encoded": 3326,
+      "transfer": 3626
+    },
+    {
+      "url": "[origin]/js/math_workspace_objects.js?v=20261031-sheaf-options-1",
+      "encoded": 153358,
+      "transfer": 153658
+    },
+    {
+      "url": "[origin]/js/math_workspace_panel_catalog.js?v=20261027-diagram-display-1",
+      "encoded": 10421,
+      "transfer": 10721
+    },
+    {
+      "url": "[origin]/js/math_workspace_settings.js?v=20261027-ui-cleanup-1",
+      "encoded": 5384,
+      "transfer": 5684
+    },
+    {
+      "url": "[origin]/js/math_workspace_native_editors_v8.js?v=ff655f7c38517173",
+      "encoded": 7527296,
+      "transfer": 7527596
+    },
+    {
+      "url": "[origin]/js/strand_drawing.js?v=20261021-icon-braids-1",
+      "encoded": 25543,
+      "transfer": 25843
+    },
+    {
+      "url": "[origin]/js/math_workspace_asset_icons.js?v=20261031-cleanup-mathjax-1",
+      "encoded": 32878,
+      "transfer": 33178
+    },
+    {
+      "url": "[origin]/js/dynkin_diagram_geometry.js?v=20261021-dynkin-icons-1",
+      "encoded": 4139,
+      "transfer": 4439
+    },
+    {
+      "url": "[origin]/js/math_workspace_creation.js?v=20261029-shortcut-close-alignment-1",
+      "encoded": 26577,
+      "transfer": 26877
+    },
+    {
+      "url": "[origin]/js/math_workspace_design_lab.js?v=20261026-scalar-input-1",
+      "encoded": 6708,
+      "transfer": 7008
+    },
+    {
+      "url": "[origin]/js/math_workspace_favorite_stars_lab.js?v=20261029-favorite-stars-4",
+      "encoded": 5684,
+      "transfer": 5984
+    },
+    {
+      "url": "[origin]/js/math_workspace_topology_icons_lab.js?v=20261029-topology-approved-4",
+      "encoded": 2356,
+      "transfer": 2656
+    },
+    {
+      "url": "[origin]/js/math_workspace_empty_create_lab.js?v=20261031-empty-create-approved-3",
+      "encoded": 5349,
+      "transfer": 5649
+    },
+    {
+      "url": "[origin]/js/math_workspace_knot_smoothing_lab.js?v=20261029-knot-gaps-2",
+      "encoded": 3528,
+      "transfer": 3828
+    },
+    {
+      "url": "[origin]/js/math_workspace_design_lab_theme.js?v=20261030-connected-default-1",
+      "encoded": 1312,
+      "transfer": 1612
+    },
+    {
+      "url": "[origin]/js/math_workspace_knot_hover_lab.js?v=20261029-knot-editing-1",
+      "encoded": 2332,
+      "transfer": 2632
+    },
+    {
+      "url": "[origin]/js/math_workspace_cartan.js?v=20261021-approved-designs-1",
+      "encoded": 3552,
+      "transfer": 3852
+    },
+    {
+      "url": "[origin]/js/math_workspace_subject_assignments.js?v=20261022-compact-filters-2",
+      "encoded": 4858,
+      "transfer": 5158
+    },
+    {
+      "url": "[origin]/js/math_workspace_principal_assets.js?v=20261021-principal-approved-1",
+      "encoded": 6322,
+      "transfer": 6622
+    },
+    {
+      "url": "[origin]/js/math_workspace_pane_outline.js?v=20261030-connected-default-1",
+      "encoded": 1014,
+      "transfer": 1314
+    },
+    {
+      "url": "[origin]/js/math_workspace.js?v=20261031-cleanup-mathjax-1",
+      "encoded": 280150,
+      "transfer": 280450
+    },
+    {
+      "url": "[origin]/js/math_workspace_touch.js?v=20261026-touch-1",
+      "encoded": 5129,
+      "transfer": 5429
+    },
+    {
+      "url": "[origin]/favicon.ico",
+      "encoded": 9,
+      "transfer": 309
+    }
+  ],
+  "environment": {
+    "node": "v24.15.0",
+    "browser": "Edg/156.0.4314.50"
+  }
+}

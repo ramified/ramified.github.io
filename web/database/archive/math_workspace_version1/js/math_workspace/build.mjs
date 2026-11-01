@@ -25,6 +25,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const sourceRoot=process.env.MATH_WORKSPACE_SOURCE_ROOT?path.resolve(process.env.MATH_WORKSPACE_SOURCE_ROOT):root;
 const outputRoot=process.env.MATH_WORKSPACE_OUTPUT_ROOT?path.resolve(process.env.MATH_WORKSPACE_OUTPUT_ROOT):sourceRoot;
 const outputs=new Map(), inputs=new Map();
+const minify=process.env.MATH_WORKSPACE_MINIFY!=='0';
 const sharedMosaicDatabases=new Map([['js/mosaic_knot_data.js','MosaicKnotData'],['js/mosaic_link_data.js','MosaicLinkData']]);
 const workspaceFile=p=>p.startsWith('js/math_workspace/')||p.startsWith('node_modules/')||['package.json','package-lock.json','math_workspace.html','math_workspace_browser_test.html'].includes(p);
 const normalizeText=text=>typeof text==='string'?text.replace(/\r\n?/g,'\n'):text;
@@ -212,8 +213,7 @@ async function compileEditor(e){
   const handlers=[...new Set(ast.body.filter(n=>n.type==='FunctionDeclaration').map(n=>n.id.name))];
   const remove=n=>{n.childNodes=(n.childNodes||[]).filter(c=>!['script','style','link'].includes(c.tagName));n.childNodes.forEach(remove);};remove(body);
   const template=serialize(body);
-  // Keep the derived Jones-index cache private to each native editor. The
-  // records and DT table are read-only inputs loaded once by the host page.
+  // Preserve each editor's derived index cache while sharing read-only records.
   const sharedDatabaseBridge=e.id==='mosaic'?`function __workspaceMosaicDatabase(name){const source=globalThis[name];if(!source)throw new Error('Load '+name+' before opening Mosaic.');const {_jonesIndex,...data}=source;return data;}\n`:'';
   const source=`import {createEditorContext} from './runtime.mjs';\n${sharedDatabaseBridge}export const metadata=${JSON.stringify(e)};\nexport function mount(host,options){const __editor=createEditorContext(host,${JSON.stringify({page:e.page,html:template,css})},options);const {window,document,location,localStorage,sessionStorage,Worker,ResizeObserver,MutationObserver,requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval,clearInterval,fetch}=__editor.environment;const globalThis=window,self=window;\n${own.map(n=>`let ${n};`).join('')}\n__editor.linkGlobals({${own.map(n=>`get ${n}(){return ${n}},set ${n}(v){${n}=v}`).join(',')}});\n${scripts}\n__editor.registerHandlers({${handlers.join(',')}});return __editor.start();}\n`;
   return source.replace('const globalThis=window,self=window;', 'const globalThis=window,self=window,module=undefined,require=undefined;');
@@ -256,8 +256,10 @@ async function build(){
   }
   virtual.set('workspace:presets',presetCode+'};');
   virtual.set('workspace:editors',editors.map((e,i)=>`import * as e${i} from 'editor:${e.id}';`).join('\n')+`\nexport default {${editors.map((e,i)=>`${JSON.stringify(e.id)}:e${i}`).join(',')}};`);
-  const result=await esbuild.build({absWorkingDir:root,entryPoints:[path.join(root,'js/math_workspace/native_bootstrap.mjs')],bundle:true,write:false,format:'iife',target:'es2022',sourcemap:false,legalComments:'eof',minify:false,plugins:[{name:'calculator-sources',setup(b){b.onResolve({filter:/^(editor:|workspace:)/},a=>({path:a.path,namespace:'calculator'}));b.onLoad({filter:/.*/,namespace:'calculator'},a=>({contents:virtual.get(a.path),loader:'js',resolveDir:path.join(root,'js/math_workspace/editors')}));}}],metafile:true});
-  const modelCode=await fs.readFile(path.join(outputRoot,'js/math_workspace_sheaf_model.js'),'utf8');
+  // Worker payloads above stay byte-identical; keep names for state codecs and
+  // reflective UI bindings when minifying the main runtime.
+  const result=await esbuild.build({absWorkingDir:root,entryPoints:[path.join(root,'js/math_workspace/native_bootstrap.mjs')],bundle:true,write:false,format:'iife',target:'es2022',sourcemap:false,legalComments:'eof',minify,keepNames:minify,plugins:[{name:'calculator-sources',setup(b){b.onResolve({filter:/^(editor:|workspace:)/},a=>({path:a.path,namespace:'calculator'}));b.onLoad({filter:/.*/,namespace:'calculator'},a=>({contents:virtual.get(a.path),loader:'js',resolveDir:path.join(root,'js/math_workspace/editors')}));}}],metafile:true});
+  const modelCode=normalizeText(await fs.readFile(path.join(outputRoot,'js/math_workspace_sheaf_model.js'),'utf8'));
   const runtimeText='if(!globalThis.MathWorkspaceSheafModel){'+modelCode+'}\n'+result.outputFiles[0].text;
   outputs.set('js/math_workspace/dist/workspace.js',runtimeText);
   const revision=createHash('sha256').update(runtimeText).digest('hex');
@@ -268,8 +270,13 @@ async function build(){
     outputs.set(file,html.replace(/src="js\/math_workspace\/dist\/workspace\.js(?:\?[^" ]*)?"/g,`src="js/math_workspace/dist/workspace.js?v=${revision.slice(0,16)}"`));
   }
   for(const p of Object.keys(result.metafile.inputs))if(!p.startsWith('calculator:')){try{await read(path.relative(root,path.resolve(p)).replaceAll('\\','/'));}catch{}}
-  outputs.set('js/math_workspace/dist/build.json',JSON.stringify({bundler:'esbuild@0.25.12',sha256:revision,editors:editors.map(e=>({id:e.id,source:e.page,status:'parity-pending'}))},null,2)+'\n');
-  for(const [p,contents] of outputs){const previous=await fs.readFile(path.join(root,p),'utf8').catch(()=>null);if(process.argv.includes('--check')){if(!sameText(previous,contents))throw new Error(`Stale build: ${p}; run npm run workspace:build`);}else if(!sameText(previous,contents)){await fs.mkdir(path.dirname(path.join(root,p)),{recursive:true});await fs.writeFile(path.join(root,p),contents);}}
+  outputs.set('js/math_workspace/dist/build.json',JSON.stringify({bundler:'esbuild@0.25.12',minified:minify,keepNames:minify,sha256:revision,editors:editors.map(e=>({id:e.id,source:e.page,status:'parity-pending'}))},null,2)+'\n');
+  for(const [p,contents] of outputs){
+    const previous=await fs.readFile(path.join(root,p),'utf8').catch(()=>null);
+    const matches=p==='js/math_workspace/dist/workspace.js'?previous===contents:sameText(previous,contents);
+    if(process.argv.includes('--check')){if(!matches)throw new Error(`Stale build: ${p}; run npm run workspace:build`);}
+    else if(!matches){await fs.mkdir(path.dirname(path.join(root,p)),{recursive:true});await fs.writeFile(path.join(root,p),contents);}
+  }
   // The live workspace consumes this self-contained bundle.  Publishing it
   // here keeps the generated runtime, its hash, and the live HTML in one
   // reproducible build instead of relying on a manual copy of dist/workspace.
@@ -280,10 +287,10 @@ async function build(){
   const previousHtml=await fs.readFile(liveHtml,'utf8').catch(()=>null);
   const nextHtml=previousHtml?.replace(/js\/math_workspace_native_editors_v8\.js(?:\?[^" ]*)?/g,liveScript);
   if(process.argv.includes('--check')){
-    if(!sameText(previousBundle,runtimeText))throw new Error('Stale live native editor bundle; run npm run workspace:build');
+    if(previousBundle!==runtimeText)throw new Error('Stale live native editor bundle; run npm run workspace:build');
     if(!sameText(previousHtml,nextHtml))throw new Error('Stale live workspace cache query; run npm run workspace:build');
   }else{
-    if(!sameText(previousBundle,runtimeText))await fs.writeFile(liveBundle,runtimeText);
+    if(previousBundle!==runtimeText)await fs.writeFile(liveBundle,runtimeText);
     if(!sameText(previousHtml,nextHtml))await fs.writeFile(liveHtml,nextHtml);
   }
   console.log(`Workspace: ${editors.length} native editor factories, ${(result.outputFiles[0].contents.length/1024/1024).toFixed(1)} MB classic bundle`);

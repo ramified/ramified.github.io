@@ -1,0 +1,66 @@
+{
+  "0": {
+    "commit": "3f6f0fd",
+    "files": [
+      "A\tweb/database/tests/README.md",
+      "A\tweb/database/tests/cleanup_baseline.json",
+      "A\tweb/database/tests/cleanup_paths.json",
+      "A\tweb/database/tests/cleanup_runner.cjs",
+      "A\tweb/database/tests/results/step0-check.json",
+      "A\tweb/database/tests/results/step0.json"
+    ]
+  },
+  "2": {
+    "commit": "da9ffd0",
+    "files": [
+      "M\tweb/database/archive/math_workspace_version1/js/math_workspace/build.mjs",
+      "M\tweb/database/archive/math_workspace_version1/js/math_workspace/dist/build.json",
+      "M\tweb/database/archive/math_workspace_version1/js/math_workspace/dist/workspace.js",
+      "M\tweb/database/archive/math_workspace_version1/math_workspace.html",
+      "M\tweb/database/archive/math_workspace_version1/math_workspace_browser_test.html",
+      "M\tweb/database/js/math_workspace_native_editors_v8.js",
+      "M\tweb/database/math_workspace.html",
+      "M\tweb/database/tests/README.md",
+      "A\tweb/database/tests/cleanup_databases.cjs",
+      "A\tweb/database/tests/results/step2.json",
+      "A\tweb/database/tests/results/step2_databases.json",
+      "A\tweb/database/tests/results/step2_static.json"
+    ]
+  },
+  "3": {
+    "commit": "9905b36",
+    "files": [
+      "M\tweb/database/archive/math_workspace_version1/js/math_workspace/build.mjs",
+      "M\tweb/database/archive/math_workspace_version1/js/math_workspace/dist/build.json",
+      "M\tweb/database/archive/math_workspace_version1/js/math_workspace/dist/workspace.js",
+      "M\tweb/database/archive/math_workspace_version1/math_workspace.html",
+      "M\tweb/database/archive/math_workspace_version1/math_workspace_browser_test.html",
+      "M\tweb/database/js/math_workspace_native_editors_v8.js",
+      "M\tweb/database/math_workspace.html",
+      "M\tweb/database/tests/README.md",
+      "A\tweb/database/tests/results/step3-uncompressed.json",
+      "A\tweb/database/tests/results/step3.json",
+      "A\tweb/database/tests/results/step3_databases.json",
+      "A\tweb/database/tests/results/step3_sizes.json",
+      "A\tweb/database/tests/results/step3_workers_compressed.json",
+      "A\tweb/database/tests/results/step3_workers_uncompressed.json"
+    ]
+  },
+  "4": {
+    "commit": "3b258d7",
+    "files": [
+      "M\tweb/database/archive/math_workspace_version1/js/math_workspace/dist/build.json",
+      "M\tweb/database/archive/math_workspace_version1/js/math_workspace/dist/workspace.js",
+      "M\tweb/database/archive/math_workspace_version1/js/math_workspace/editors/runtime.mjs",
+      "M\tweb/database/archive/math_workspace_version1/math_workspace.html",
+      "M\tweb/database/archive/math_workspace_version1/math_workspace_browser_test.html",
+      "M\tweb/database/js/math_workspace.js",
+      "M\tweb/database/js/math_workspace_asset_icons.js",
+      "M\tweb/database/js/math_workspace_native_editors_v8.js",
+      "M\tweb/database/math_workspace.html",
+      "M\tweb/database/tests/cleanup_runner.cjs",
+      "A\tweb/database/tests/results/step4.json",
+      "A\tweb/database/tests/results/step4_databases.json"
+    ]
+  }
+}

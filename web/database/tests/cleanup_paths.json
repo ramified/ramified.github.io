@@ -1,0 +1,5 @@
+{
+  "browserHelper": "js/math_workspace_drag_regression_test.js",
+  "builder": "js/build_math_workspace_native_editors.mjs",
+  "bundle": "js/math_workspace_native_editors_v8.js"
+}

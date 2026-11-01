@@ -1,0 +1,25 @@
+{
+  "rows": [
+    {
+      "file": "mosaic_knot_data.js",
+      "rawByteEqual": true,
+      "dataSHA256": "81cff33956bcdc0b9245ae9db94591378aef64a638554f6abfb9cde72d307381"
+    },
+    {
+      "file": "mosaic_link_data.js",
+      "rawByteEqual": true,
+      "dataSHA256": "61a01d634bb762b9f3b0d9e83e6ac895e9ff3b85d24346f9a0f3157533d42919"
+    }
+  ],
+  "assignments": [
+    {
+      "name": "MosaicKnotData",
+      "type": "CallExpression"
+    },
+    {
+      "name": "MosaicLinkData",
+      "type": "CallExpression"
+    }
+  ],
+  "bundleBytes": 13161011
+}

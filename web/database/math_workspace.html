@@ -109,18 +109,20 @@
 <script>
   window.MathJax = {
     tex: { inlineMath: [['\\(', '\\)']], processEscapes: true },
-    options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'input'] }
+    options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'input'] },
+    startup: { ready() { MathJax.startup.defaultReady(); MathJax.startup.promise.then(() => window.dispatchEvent(new Event('workspace-mathjax-ready'))); } }
   };
 </script>
-<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<script src="js/math_workspace_loader.js?v=20261101-mathjax-fallback-1"></script>
+<script>MathWorkspaceLoader.include('mathjax', 'https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js', true);</script>
 <script src="js/calculator_cards.js?v=20260903-1"></script>
 <script src="js/calculator_input_settings.js?v=20261019-workspace-settings-1"></script>
 <script src="js/math_workspace_presentation.js?v=20261027-presentation-1"></script>
 <script src="js/math_workspace_rings.js?v=20261027-repair-input-1"></script>
 <script src="js/math_workspace_slicing.js?v=20261027-repair-input-1"></script>
 <script src="js/math_workspace_mosaic.js?v=20261029-topology-1"></script>
-<script src="js/mosaic_knot_data.js?v=20261029-topology-1"></script>
-<script src="js/mosaic_link_data.js?v=20261029-topology-1"></script>
+<script>MathWorkspaceLoader.include('knot', 'js/mosaic_knot_data.js?v=20261029-topology-1');</script>
+<script>MathWorkspaceLoader.include('link', 'js/mosaic_link_data.js?v=20261029-topology-1');</script>
 <script src="js/math_workspace/sources/js/mosaic_knot_engine.js?v=20261029-topology-1"></script>
 <script src="js/math_workspace_topology_preset_data.js?v=20261029-topology-presets-2"></script>
 <script src="js/math_workspace_topology.js?v=20261029-topology-presets-3"></script>
@@ -135,13 +137,13 @@
 <script src="js/math_workspace_sheaf_model.js?v=20261031-sheaf-options-1"></script>
 <script src="js/math_workspace_diagnostics.js?v=20261030-input-parity-2"></script>
 <script src="js/math_workspace_panel_registry.js?v=20261030-shared-complex-display-1"></script>
-<script src="js/math_workspace_objects.js?v=20261031-sheaf-options-1"></script>
+<script src="js/math_workspace_objects.js?v=20261031-two-phase-2"></script>
 <script src="js/math_workspace_panel_catalog.js?v=20261027-diagram-display-1"></script>
-<script src="js/math_workspace_settings.js?v=20261027-ui-cleanup-1"></script>
-<script src="js/math_workspace_native_editors_v8.js?v=5366076d92beee13"></script>
+<script src="js/math_workspace_settings.js?v=20261031-two-phase-2"></script>
+<script>MathWorkspaceLoader.include('native', "js/math_workspace_native_editors_v8.js?v=894cdbe252ca0ee6");</script>
 <script src="js/strand_drawing.js?v=20261021-icon-braids-1"></script>
 <script src="js/dynkin_diagram_geometry.js?v=20261021-dynkin-icons-1"></script>
-<script src="js/math_workspace_asset_icons.js?v=20261030-ci-copy-names-1"></script>
+<script src="js/math_workspace_asset_icons.js?v=20261031-cleanup-mathjax-1"></script>
 <script src="js/math_workspace_creation.js?v=20261029-shortcut-close-alignment-1"></script>
 <script src="js/math_workspace_design_lab.js?v=20261026-scalar-input-1"></script>
 <script src="js/math_workspace_favorite_stars_lab.js?v=20261029-favorite-stars-4"></script>
@@ -154,7 +156,7 @@
 <script src="js/math_workspace_cartan.js?v=20261021-approved-designs-1"></script>
 <script src="js/math_workspace_principal_assets.js?v=20261021-principal-approved-1"></script>
 <script src="js/math_workspace_pane_outline.js?v=20261030-connected-default-1"></script>
-<script src="js/math_workspace.js?v=20261031-name-copy-1"></script>
+<script src="js/math_workspace.js?v=20261031-two-phase-2"></script>
 <script src="js/math_workspace_touch.js?v=20261026-touch-1"></script>
 </body>
 </html>

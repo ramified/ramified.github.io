@@ -1,0 +1,228 @@
+{
+  "recognition": {
+    "trefoil": {
+      "parent": {
+        "pd": "PD[X[4,1,3,6], X[5,2,6,3], X[2,5,1,4]]",
+        "dt": "DT[4,6,2]",
+        "status": "invariant table match",
+        "name": "trefoil knot (3_1)",
+        "href": "https://knotinfo.org/diagram_display.php?3_1",
+        "linkText": "more data",
+        "methodResult": "invariant match",
+        "braid": [
+          1,
+          1,
+          1
+        ],
+        "candidates": [
+          {
+            "name": "3_1",
+            "label": "trefoil knot (3_1)",
+            "href": "https://knotinfo.org/diagram_display.php?3_1",
+            "braid": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "tone": "good",
+        "componentCount": 1,
+        "crossingCount": 3
+      },
+      "native": {
+        "pd": "PD[X[4,1,3,6], X[5,2,6,3], X[2,5,1,4]]",
+        "dt": "DT[4,6,2]",
+        "status": "invariant table match",
+        "name": "trefoil knot (3_1)",
+        "href": "https://knotinfo.org/diagram_display.php?3_1",
+        "linkText": "more data",
+        "methodResult": "invariant match",
+        "braid": [
+          1,
+          1,
+          1
+        ],
+        "candidates": [
+          {
+            "name": "3_1",
+            "label": "trefoil knot (3_1)",
+            "href": "https://knotinfo.org/diagram_display.php?3_1",
+            "braid": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "tone": "good",
+        "componentCount": 1,
+        "crossingCount": 3
+      }
+    },
+    "hopf-link": {
+      "parent": {
+        "pd": "PD[X[1,3,2,4], X[4,2,3,1]]",
+        "dt": "",
+        "status": "link table match",
+        "name": "Hopf link (L2a1)",
+        "href": "https://knotinfo.org/linkinfo/diagram_display.php?L2a1%7B0%7D",
+        "linkText": "more data",
+        "methodResult": "link invariant match",
+        "braid": null,
+        "candidates": [
+          {
+            "name": "L2a1{0}",
+            "label": "Hopf link (L2a1)",
+            "href": "https://knotinfo.org/linkinfo/diagram_display.php?L2a1%7B0%7D",
+            "kind": "link"
+          }
+        ],
+        "tone": "good",
+        "kind": "link",
+        "componentCount": 2,
+        "crossingCount": 2
+      },
+      "native": {
+        "pd": "PD[X[1,3,2,4], X[4,2,3,1]]",
+        "dt": "",
+        "status": "link table match",
+        "name": "Hopf link (L2a1)",
+        "href": "https://knotinfo.org/linkinfo/diagram_display.php?L2a1%7B0%7D",
+        "linkText": "more data",
+        "methodResult": "link invariant match",
+        "braid": null,
+        "candidates": [
+          {
+            "name": "L2a1{0}",
+            "label": "Hopf link (L2a1)",
+            "href": "https://knotinfo.org/linkinfo/diagram_display.php?L2a1%7B0%7D",
+            "kind": "link"
+          }
+        ],
+        "tone": "good",
+        "kind": "link",
+        "componentCount": 2,
+        "crossingCount": 2
+      }
+    },
+    "figure-eight": {
+      "parent": {
+        "pd": "PD[X[5,7,4,8], X[1,3,8,4], X[6,1,7,2], X[3,6,2,5]]",
+        "dt": "DT[4,6,8,2]",
+        "status": "invariant table match",
+        "name": "figure-eight knot (4_1)",
+        "href": "https://knotinfo.org/diagram_display.php?4_1",
+        "linkText": "more data",
+        "methodResult": "invariant match",
+        "braid": [
+          1,
+          -2,
+          1,
+          -2
+        ],
+        "candidates": [
+          {
+            "name": "4_1",
+            "label": "figure-eight knot (4_1)",
+            "href": "https://knotinfo.org/diagram_display.php?4_1",
+            "braid": [
+              1,
+              -2,
+              1,
+              -2
+            ]
+          }
+        ],
+        "tone": "good",
+        "componentCount": 1,
+        "crossingCount": 4
+      },
+      "native": {
+        "pd": "PD[X[5,7,4,8], X[1,3,8,4], X[6,1,7,2], X[3,6,2,5]]",
+        "dt": "DT[4,6,8,2]",
+        "status": "invariant table match",
+        "name": "figure-eight knot (4_1)",
+        "href": "https://knotinfo.org/diagram_display.php?4_1",
+        "linkText": "more data",
+        "methodResult": "invariant match",
+        "braid": [
+          1,
+          -2,
+          1,
+          -2
+        ],
+        "candidates": [
+          {
+            "name": "4_1",
+            "label": "figure-eight knot (4_1)",
+            "href": "https://knotinfo.org/diagram_display.php?4_1",
+            "braid": [
+              1,
+              -2,
+              1,
+              -2
+            ]
+          }
+        ],
+        "tone": "good",
+        "componentCount": 1,
+        "crossingCount": 4
+      }
+    },
+    "whitehead-link": {
+      "parent": {
+        "pd": "PD[X[10,5,7,6], X[1,10,6,9], X[4,2,5,1], X[3,7,2,8], X[8,4,9,3]]",
+        "dt": "",
+        "status": "link table match",
+        "name": "Whitehead link (L5a1)",
+        "href": "https://knotinfo.org/linkinfo/diagram_display.php?L5a1%7B0%7D",
+        "linkText": "more data",
+        "methodResult": "link invariant match",
+        "braid": null,
+        "candidates": [
+          {
+            "name": "L5a1{0}",
+            "label": "Whitehead link (L5a1)",
+            "href": "https://knotinfo.org/linkinfo/diagram_display.php?L5a1%7B0%7D",
+            "kind": "link"
+          }
+        ],
+        "tone": "good",
+        "kind": "link",
+        "componentCount": 2,
+        "crossingCount": 5
+      },
+      "native": {
+        "pd": "PD[X[10,5,7,6], X[1,10,6,9], X[4,2,5,1], X[3,7,2,8], X[8,4,9,3]]",
+        "dt": "",
+        "status": "link table match",
+        "name": "Whitehead link (L5a1)",
+        "href": "https://knotinfo.org/linkinfo/diagram_display.php?L5a1%7B0%7D",
+        "linkText": "more data",
+        "methodResult": "link invariant match",
+        "braid": null,
+        "candidates": [
+          {
+            "name": "L5a1{0}",
+            "label": "Whitehead link (L5a1)",
+            "href": "https://knotinfo.org/linkinfo/diagram_display.php?L5a1%7B0%7D",
+            "kind": "link"
+          }
+        ],
+        "tone": "good",
+        "kind": "link",
+        "componentCount": 2,
+        "crossingCount": 5
+      }
+    }
+  },
+  "cache": {
+    "privateRoots": true,
+    "sharedRecords": true,
+    "secondCold": true,
+    "separateIndexes": true,
+    "parentUntouched": true,
+    "namesAgree": true
+  }
+}

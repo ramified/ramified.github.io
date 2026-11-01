@@ -1,0 +1,10 @@
+{
+  "uncompressed": {
+    "bytes": 13161011,
+    "gzip": 2357647
+  },
+  "compressed": {
+    "bytes": 7527165,
+    "gzip": 1976713
+  }
+}

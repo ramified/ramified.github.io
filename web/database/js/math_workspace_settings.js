@@ -32,6 +32,7 @@
     if(!backend.editor.openInputSettings())body.dataset.empty='true';else delete body.dataset.empty;
   }
   function open(){
+    if(root.MathWorkspaceLoader?.shouldWait())return root.MathWorkspaceLoader.afterReady('settings',open);
     if(!dialog){dialog=document.createElement('dialog');dialog.className='workspace-settings-dialog';dialog.setAttribute('aria-labelledby','workspace-settings-title');
       const header=document.createElement('header'),title=document.createElement('h2'),close=document.createElement('button');title.id='workspace-settings-title';title.textContent='Workspace Settings';close.type='button';close.className='btn btn-ghost';close.textContent='Close';close.addEventListener('click',()=>dialog.close());header.append(title,close);
       select=document.createElement('select');select.className='workspace-control';select.setAttribute('aria-label','Shortcuts for visible editors');select.addEventListener('change',choose);

@@ -1,0 +1,41 @@
+{
+  "gitOriginalNative": {
+    "bytes": 15944082,
+    "gzip": 2610822
+  },
+  "checkoutBaseline": {
+    "interfaceReady": 3454,
+    "transferBytes": 19838996,
+    "bodyBytes": 19823996,
+    "delayedMathJaxReady": 2756.39999999851,
+    "bundleBytes": 16205064
+  },
+  "finalNative": {
+    "bytes": 7527296,
+    "gzip": 1976748
+  },
+  "final": {
+    "interfaceReady": 3298,
+    "transferBytes": 11162182,
+    "bodyBytes": 11146882,
+    "delayedMathJaxReady": 557.7999999970198,
+    "interfaceBeforeMathJax": true,
+    "bundleBytes": 7527296
+  },
+  "databases": [
+    {
+      "url": "[origin]/js/mosaic_knot_data.js?v=20261029-topology-1",
+      "encoded": 1434958,
+      "transfer": 1435258
+    },
+    {
+      "url": "[origin]/js/mosaic_link_data.js?v=20261029-topology-1",
+      "encoded": 992632,
+      "transfer": 992932
+    }
+  ],
+  "outputsEqual": true,
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found) [origin]/favicon.ico"
+  ]
+}

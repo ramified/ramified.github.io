@@ -1,0 +1,14 @@
+[
+  {
+    "page": "archive/math_workspace_version1/math_workspace.html",
+    "knotShared": true,
+    "linkShared": true,
+    "cards": true
+  },
+  {
+    "page": "archive/math_workspace_version1/math_workspace_browser_test.html",
+    "knotShared": true,
+    "linkShared": true,
+    "cards": true
+  }
+]
