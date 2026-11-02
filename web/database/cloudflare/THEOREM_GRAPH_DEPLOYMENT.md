@@ -94,6 +94,16 @@ npx wrangler d1 create theorem-graph-personal
 
 ## 本地预览与验证
 
+只想直接测试界面、登录和保存时，在 `web/database` 执行：
+
+```powershell
+node cloudflare/preview-theorem-graph.mjs
+```
+
+命令自动构建网页，启动仅本机可访问的完整保存服务，并打印测试地址、用户名和随机测试密码。打开打印的 HTTP 地址，通过 **Import / Export → Import → Sign in to My graphs** 登录；未登录时 My graphs 面板隐藏。测试数据库在内存中，停止服务后清空，与线上账号和图完全独立。不要直接双击 HTML 文件测试云端登录，也不要用只提供静态文件的服务器替代这个入口。
+
+需要保留本地测试数据、自己设置密码时，使用下面的方式。
+
 以下命令从 `web/database` 执行：
 
 ```powershell

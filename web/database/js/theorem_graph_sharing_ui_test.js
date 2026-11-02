@@ -132,7 +132,7 @@ async function run() {
     assert.equal(await owner.read(`document.getElementById('personal-rename-title').value`), 'Owner ', 'name drafts preserve trailing spaces');
     await owner.c.send('Input.insertText', { text: 'renamed' });
     await owner.read(`document.getElementById('personal-rename').requestSubmit()`);
-    await waitFor(() => owner.read(`document.getElementById('personal-current').textContent === 'Current: Owner renamed'`)); await owner.sync();
+    await waitFor(() => owner.read(`document.getElementById('personal-current').textContent === 'Editing saved graph: Owner renamed'`)); await owner.sync();
     assert.equal(await owner.read(`document.getElementById('graph-title').value`), 'Owner graph');
     assert.equal(JSON.parse(backend.db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(documentId).content).graph.titleNode.label, 'Owner graph');
     assert.equal(backend.db.sqlite.prepare('SELECT title FROM documents WHERE id=?').get(documentId).title, 'Owner renamed');
@@ -195,7 +195,7 @@ async function run() {
     assert.equal(await viewer.read(`document.getElementById('graph-title').value`), 'Alice offline');
     await viewer.c.send('Network.setBlockedURLs', { urls: [] });
     await viewer.read(`window.dispatchEvent(new Event('online'))`);
-    await waitFor(() => viewer.read(`document.getElementById('personal-status').textContent === 'Saved to cloud'`), 15000);
+    await waitFor(() => viewer.read(`document.getElementById('personal-status').dataset.state === 'synced'`), 15000);
     // Reconnecting still refreshes the catalog after acknowledging its save.
     // Finish that flow before the separate sign-out scenario revokes its session.
     await viewer.settled();
@@ -214,13 +214,13 @@ async function run() {
     assert.equal(backend.db.sqlite.prepare('SELECT COUNT(*) AS n FROM documents').get().n, countBeforeCopy, 'cancelling a named copy creates no entry');
     await owner.click('personal-copy'); await owner.type('personal-rename-title', 'Alternative proof');
     await owner.read(`document.getElementById('personal-rename').requestSubmit()`);
-    await waitFor(() => owner.read(`document.getElementById('personal-current').textContent === 'Current: Alternative proof'`));
+    await waitFor(() => owner.read(`document.getElementById('personal-current').textContent === 'Editing saved graph: Alternative proof'`));
     await owner.sync();
     assert.equal(await owner.read(`document.getElementById('graph-title').value`), 'Saved by recipient');
     const copies = backend.db.sqlite.prepare('SELECT title,content FROM documents WHERE title IN (?,?)').all('Owner renamed', 'Alternative proof');
     assert.equal(copies.length, 2);
     assert(copies.every(copy => JSON.parse(copy.content).graph.title === 'Saved by recipient'), 'distinct saved names can share the same graph title');
-    await owner.read(`document.getElementById('personal-share-panel').hidden=true; document.getElementById('personal-users').open=false; document.getElementById('personal-wide-host').scrollIntoView({block:'center'})`);
+    await owner.read(`document.getElementById('personal-share-panel').hidden=true; document.getElementById('personal-users').open=false; document.getElementById('personal-wide-host').scrollIntoView({block:'start'})`);
     const shot = await owner.c.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     fs.writeFileSync(path.join(root, 'cloudflare/.theorem-local/ui-wide-library.png'), Buffer.from(shot.data, 'base64'));
     await owner.c.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });

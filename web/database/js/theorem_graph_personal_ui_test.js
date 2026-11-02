@@ -29,11 +29,13 @@ async function run() {
     const clear = async id => { await read(`document.getElementById(${JSON.stringify(id)}).focus()`); await key('a', 'KeyA', 2); await key('Backspace', 'Backspace'); };
     const type = async text => { for (const character of text) await client.send('Input.insertText', { text: character }); };
     const ready = () => waitFor(() => read(`document.getElementById('theorem-personal')?.dataset.ready === 'true'`), 20000, 'personal editor ready');
-    const synced = () => waitFor(() => read(`document.getElementById('personal-status').textContent === 'Saved to cloud'`), 20000, 'cloud acknowledgement');
+    const synced = () => waitFor(() => read(`document.getElementById('personal-status').dataset.state === 'synced'`), 20000, 'cloud acknowledgement');
     const click = id => read('document.getElementById(' + JSON.stringify(id) + ').click()');
     const idle = () => waitFor(() => read('!document.getElementById("personal-login-submit").disabled'));
     const save = async (name) => {
-      await idle(); await click('personal-save');
+      await idle();
+      await waitFor(() => read(`!document.getElementById('personal-primary').disabled && !document.getElementById('personal-primary').hidden`));
+      await click('personal-primary');
       if (name) {
         await waitFor(() => read('!document.getElementById("personal-rename").hidden'));
         await clear('personal-rename-title'); await type(name);
@@ -52,7 +54,10 @@ async function run() {
       return target;
     };
     await ready();
-    assert(await read(`document.getElementById('theorem-personal').getClientRects().length > 0`), 'guests can manage local drafts and saved graphs');
+    assert(await read(`document.getElementById('theorem-personal').hidden && document.getElementById('theorem-personal').getClientRects().length === 0`), 'guests never see the My graphs panel');
+    await read(`document.getElementById('personal-show-graphs').click()`);
+    assert(await read(`document.getElementById('theorem-personal').hidden && document.getElementById('personal-show-graphs').hidden`), 'the signed-out reopen control cannot reveal My graphs');
+    assert(await read(`document.getElementById('personal-member-content').hidden && !document.getElementById('personal-login-notice').hidden`), 'My graphs management requires sign-in');
     assert(await read(`document.getElementById('theorem-personal').parentElement.id === 'cards'`), 'personal graphs belong to the right sidebar');
     assert(await read(`document.getElementById('personal-login').hidden`), 'credentials are initially collapsed');
     assert(await read(`document.querySelector('#theorem-graph-import-panel #personal-sign-in') !== null`), 'sign-in belongs to Import, not the hidden legacy controls');
@@ -77,6 +82,7 @@ async function run() {
     await read(`document.getElementById('personal-password').focus()`); await type(password);
     await read(`document.getElementById('personal-login').requestSubmit()`);
     await waitFor(() => read(`document.getElementById('personal-login-status').textContent.includes('Incorrect username or password')`));
+    assert(await read(`document.getElementById('theorem-personal').hidden`), 'failed sign-in never reveals My graphs');
     assert(await read(`document.getElementById('personal-login-status').getClientRects().length > 0`), 'failed sign-in is visible without revealing My graphs');
     await clear('personal-username'); await type('ramified');
     await read(`document.getElementById('personal-password').focus()`); await type(password);
@@ -85,6 +91,11 @@ async function run() {
     assert(await read(`document.getElementById('personal-login').hidden`), 'successful sign-in closes the form');
     const record = db.sqlite.prepare('SELECT * FROM documents').get();
     assert.equal(JSON.parse(record.content).graph.title, 'personal graph');
+    assert.equal(record.title, 'Version A', 'the saved graph name stays independent of the workspace title');
+    assert(await read(`document.getElementById('personal-current').textContent === 'Editing saved graph: Version A'`));
+    assert(await read(`!document.getElementById('personal-cloud-group').hidden && document.getElementById('personal-local-group').hidden`), 'a confirmed upload belongs to Cloud');
+    assert(await read(`document.getElementById('personal-primary').hidden && document.getElementById('personal-status').textContent.includes('☁✓')`), 'confirmed state has no upload primary');
+    assert(await read(`document.querySelector('#personal-cloud-rows .theorem-personal-badge').dataset.state === 'synced'`));
     assert.equal(await value('personal-password'), '');
     assert(!record.content.includes(password), 'passwords must never be captured in graph drafts');
     await client.send('Page.reload'); await delay(100); await ready(); await synced();
@@ -115,7 +126,7 @@ async function run() {
       await waitFor(() => readSecond(`document.querySelector('#personal-graph-list .theorem-personal-item-name') && !document.getElementById('personal-login-submit').disabled`));
       assert.equal(await readSecond(`document.getElementById('graph-title').value`), 'Maintenance Tracker', 'login does not select a cloud graph');
       await readSecond(`document.querySelector('#personal-graph-list .theorem-personal-item-name').click()`);
-      await waitFor(() => readSecond(`document.getElementById('graph-title').value === 'cloud title' && document.getElementById('personal-status').textContent === 'Saved to cloud'`), 20000, 'fresh device loads saved cloud graph');
+      await waitFor(() => readSecond(`document.getElementById('graph-title').value === 'cloud title' && document.getElementById('personal-status').dataset.state === 'synced'`), 20000, 'fresh device loads saved cloud graph');
     } finally { second.client.close(); await stopBrowser(second.browser, second.profile); }
 
     // IME input is preserved locally without publishing an intermediate model.
@@ -130,7 +141,9 @@ async function run() {
     await clear('graph-title'); await type('offline work'); await delay(700);
     assert.equal(await value('graph-title'), 'offline work');
     await click('personal-save'); await idle(); await read(`document.getElementById('personal-sync').click()`); await delay(800);
-    assert.match(await read(`document.getElementById('personal-status').textContent`), /device/);
+    assert.match(await read(`document.getElementById('personal-consequence').textContent`), /computer/);
+    await waitFor(() => read(`document.getElementById('personal-status').dataset.state === 'failed'`), 15000, 'upload failure is visible');
+    assert.equal(await read(`document.getElementById('personal-primary').textContent`), 'Retry upload');
     await client.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
     await read(`window.dispatchEvent(new Event('online'))`); await synced();
     assert.equal(JSON.parse(db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(record.id).content).graph.title, 'offline work');
@@ -141,13 +154,24 @@ async function run() {
     remotePayload.drafts = []; remotePayload.editor.detailEditBaseline = null;
     db.sqlite.prepare('UPDATE documents SET revision=revision+1, content=?, title=? WHERE id=?')
       .run(JSON.stringify(remotePayload), 'remote device', record.id);
+    await click('personal-refresh'); await idle();
+    assert.equal(await read(`document.getElementById('personal-status').dataset.state`), 'remote', 'a newer queried cloud revision is not called up to date');
     await clear('graph-title'); await type('local conflict'); await click('personal-save');
     await waitFor(() => read(`!document.getElementById('personal-conflict').hidden`), 15000, 'conflict banner');
+    await waitFor(() => read(`(async()=> { const store = new TheoremGraphStorage.IndexedStore('theorem-graphs-v2:'+window.THEOREM_GRAPH_API_BASE+':ramified'); return (await store.read(${JSON.stringify(record.id)}))?.conflict; })()`), 15000, 'server confirms the conflict');
+    await idle(); await click('personal-primary');
+    assert(await read(`document.getElementById('personal-conflict').open`), 'the primary action opens the version choices');
     assert.equal(await value('graph-title'), 'local conflict');
     await read(`document.getElementById('personal-cloud-version').click()`);
     await waitFor(() => read(`document.getElementById('graph-title').value === 'remote device'`), 10000, 'open remote graph');
+    await idle();
     const recovered = await read(`(async()=> (await new TheoremGraphStorage.IndexedStore('theorem-graphs-v2:'+window.THEOREM_GRAPH_API_BASE+':ramified').list()).some(row=>row.recovered && row.payload.graph.title==='local conflict'))()`);
     assert(recovered, 'conflict resolution preserves the displaced local graph');
+    assert(await read(`!document.getElementById('personal-local-group').hidden`), 'a recovered local graph has its own Only this computer group');
+    assert(await read(`(() => { const row=document.querySelector('#personal-local-rows .theorem-personal-item'); return row.querySelector('.theorem-personal-badge').dataset.state==='local' && row.querySelectorAll('.theorem-personal-item-actions button')[1].disabled && row.textContent.includes('Upload to cloud before sharing'); })()`), 'local row explains location and why sharing is disabled');
+    await read(`document.querySelector('#personal-local-rows .theorem-personal-row-next').click()`); await idle();
+    await waitFor(() => read(`document.getElementById('personal-local-group').hidden`), 10000, 'row action uploads the saved local graph');
+    assert.equal(await value('graph-title'), 'remote device', 'uploading a different saved graph does not switch the editor');
 
     await clear('graph-title'); await type('before restore'); await save(); await clear('graph-title'); await type('discard me'); await delay(700);
     await read(`document.getElementById('personal-revert').click()`);
@@ -168,6 +192,8 @@ async function run() {
     const original = db.sqlite.prepare('SELECT content,title FROM documents WHERE id=?').get(record.id);
     await click('personal-sync'); await idle();
     assert.equal(db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(record.id).content, original.content, 'Sync never commits a draft');
+    assert.equal(await read(`document.getElementById('personal-status').dataset.state`), 'changed', 'a cloud-saved graph with unsaved editor changes is not labelled up to date');
+    assert(await read(`document.getElementById('personal-drafts-panel').open && !document.getElementById('personal-drafts-heading').textContent.includes('(0)')`), 'drafts with content are expanded and counted');
     await click('personal-copy'); await idle(); await click('personal-rename-cancel');
     assert.equal(db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(record.id).content, original.content, 'cancelled Save as preserves A');
     await click('personal-copy'); await idle(); await clear('personal-rename-title'); await type('Version B');
@@ -177,7 +203,7 @@ async function run() {
     await clear('graph-title'); await type('more experiments'); await delay(500);
     assert.equal(db.sqlite.prepare('SELECT title FROM documents WHERE title=?').get('Version B').title, 'Version B');
     await click('personal-detach'); await idle();
-    assert.match(await read(`document.getElementById('personal-current').textContent`), /Temporary draft/);
+    assert.match(await read(`document.getElementById('personal-current').textContent`), /Unsaved draft/);
     await client.send('Page.reload'); await delay(100); await ready();
     assert.equal(await value('graph-title'), 'more experiments', 'detached draft survives reload');
     await click('personal-new'); await idle();
@@ -192,18 +218,22 @@ async function run() {
     imported.title = 'Imported experiment'; imported.titleNode.label = 'Imported experiment';
     await read(`SiteImportExportPageAdapter.applyImport('json-whole', {data:${JSON.stringify(imported)}})`);
     await delay(500);
-    assert.match(await read(`document.getElementById('personal-current').textContent`), /Temporary draft/);
+    assert.match(await read(`document.getElementById('personal-current').textContent`), /Unsaved draft/);
     assert.equal(await value('graph-title'), 'Imported experiment');
     assert.equal(db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(record.id).content, original.content, 'whole import does not overwrite a saved graph');
     assert(await read(`(async()=> (await new TheoremGraphStorage.IndexedStore('theorem-graphs-v2:'+window.THEOREM_GRAPH_API_BASE+':ramified:drafts').list()).some(row=>row.payload.graph.title==='last keystroke before import'))()`), 'whole import keeps even the final unsaved keystroke');
 
     await client.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     assert(await read('document.documentElement.scrollWidth <= window.innerWidth + 1'), 'personal controls must fit narrow screens');
+    await read(`CalculatorCards.openCard('#theorem-personal'); document.getElementById('theorem-personal').scrollIntoView({block:'start'})`);
+    assert(await read(`document.getElementById('theorem-personal').scrollWidth <= document.getElementById('theorem-personal').clientWidth + 1`), 'default-width panel has no internal horizontal overflow');
+    await screenshot('ui-mygraphs-narrow.png');
     await client.send('Emulation.clearDeviceMetricsOverride');
     await read(`document.getElementById('theorem-personal').scrollIntoView({block:'start'})`);
     const screenshotPath = await screenshot('ui-test.png');
     await read(`document.getElementById('personal-logout').click()`);
     await waitFor(() => read(`!document.getElementById('personal-sign-in').hidden`), 10000, 'sign-out returns to local workspace');
+    assert(await read(`document.getElementById('theorem-personal').hidden`), 'sign-out hides the entire My graphs panel');
     await openLogin();
     await client.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     assert(await read('document.documentElement.scrollWidth <= window.innerWidth + 1'), 'login fields fit narrow screens');
@@ -219,7 +249,9 @@ async function run() {
     const beforeExpiry = await value('graph-title');
     db.sqlite.prepare('UPDATE graph_sessions SET expires_at=0').run();
     await read(`document.getElementById('personal-refresh').click()`);
-    await waitFor(() => read(`document.getElementById('personal-status').textContent.includes('Session expired')`), 10000, 'session expiry is reported');
+    await waitFor(() => read(`document.getElementById('personal-account-name').textContent.includes('Session expired')`), 10000, 'session expiry is reported');
+    assert(await read(`document.getElementById('personal-member-content').hidden`), 'expired sessions hide My graphs management');
+    assert(await read(`document.getElementById('theorem-personal').hidden`), 'expired sessions hide the whole panel');
     assert.equal(await value('graph-title'), beforeExpiry, 'session expiry never replaces the canvas');
     assert.deepEqual(errors, []);
     console.log('PASS theorem personal UI: explicit saves, Save as preserves original, cancelled Save as, sync excludes drafts, detached/blank/recovered drafts, import isolation, session expiry, real typing/caret/IME, offline saves, conflicts, history as draft, account login/logout and narrow layout');

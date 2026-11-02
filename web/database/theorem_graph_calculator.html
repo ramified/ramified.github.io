@@ -1403,20 +1403,42 @@
     <section class="card collapsed theorem-personal" id="theorem-personal" aria-labelledby="personal-heading" data-card-wide="true" data-card-wide-host="#personal-wide-host" hidden>
       <div class="card-head"><span class="drag-handle" title="drag card">&#8942;&#8942;</span><span class="card-head-label" id="personal-heading">My graphs</span><em class="toggle-icon">&#9662;</em></div>
       <div class="card-body">
-        <p id="personal-current">Loading local drafts…</p>
-        <p class="hint">Editing automatically backs up a private draft on this device. Saved graphs change only when you choose Save. Opening another graph keeps your draft below.</p>
-        <p id="personal-account-name" class="hint"></p>
-        <p class="theorem-personal-status" id="personal-status" role="status" aria-live="polite">Opening storage…</p>
-        <div class="theorem-personal-row">
-          <button id="personal-save" class="btn" type="button">Save</button>
-          <button id="personal-copy" class="btn" type="button">Save as new graph</button>
-          <button id="personal-detach" class="btn btn-ghost" type="button">Continue as temporary draft</button>
-          <button id="personal-new" class="btn btn-ghost" type="button">New blank draft</button>
-          <button id="personal-sync" class="btn btn-ghost" type="button" disabled>Sync now</button>
-          <button id="personal-revert" class="btn btn-ghost" type="button" disabled>Discard unsaved changes</button>
-          <button id="personal-history" class="btn btn-ghost" type="button">History</button>
-          <button id="personal-download" class="btn btn-ghost" type="button">Download JSON</button>
-          <button id="personal-logout" class="btn btn-ghost" type="button" hidden>Sign out</button>
+        <div class="theorem-personal-account-notice">
+          <p id="personal-account-name"></p>
+          <p id="personal-login-notice">Sign in to use My graphs and open your saved graphs on other computers. Use Import / Export → Import → Sign in to My graphs.</p>
+        </div>
+        <div id="personal-member-content" hidden>
+        <div class="theorem-personal-state-card">
+          <p id="personal-current">Loading saved graphs…</p>
+          <p class="theorem-personal-badge" id="personal-status" role="status" aria-live="polite">⟳ Opening storage…</p>
+          <p id="personal-consequence"></p>
+          <p id="personal-version-detail" class="theorem-personal-detail"></p>
+          <div class="theorem-personal-row">
+            <button id="personal-primary" class="btn" type="button" hidden></button>
+            <span id="personal-primary-reason" class="theorem-personal-detail"></span>
+          </div>
+          <p id="personal-feedback" class="theorem-personal-feedback" role="status" aria-live="polite" hidden></p>
+          <details class="theorem-personal-help">
+            <summary>How do I open this on another computer?</summary>
+            <p>Sign in with the same account → My graphs → Cloud. Only versions confirmed as stored in the cloud are available there. Click Refresh on the other computer to check for updates.</p>
+          </details>
+          <details id="personal-more" class="theorem-personal-more">
+            <summary>More</summary>
+            <div class="theorem-personal-row">
+              <button id="personal-copy" class="btn btn-ghost" type="button">Save a separate graph…</button>
+              <button id="personal-revert" class="btn btn-ghost" type="button" disabled>Discard unsaved changes</button>
+              <button id="personal-history" class="btn btn-ghost" type="button">Version history</button>
+              <button id="personal-download" class="btn btn-ghost" type="button">Download JSON</button>
+              <button id="personal-new" class="btn btn-ghost" type="button">Start a blank graph</button>
+              <button id="personal-detach" class="btn btn-ghost" type="button">Edit a separate draft</button>
+              <button id="personal-logout" class="btn btn-ghost" type="button" hidden>Sign out</button>
+            </div>
+            <p class="theorem-personal-detail">Editing backs up a draft on this computer. Choose Save before your changes can be uploaded. A separate graph has its own saved name; your workspace title stays unchanged.</p>
+          </details>
+          <div hidden>
+            <button id="personal-save" type="button">Save</button>
+            <button id="personal-sync" type="button" disabled>Sync saved versions</button>
+          </div>
         </div>
         <div class="theorem-personal-row" hidden>
           <label for="personal-select">Saved graphs</label>
@@ -1424,7 +1446,16 @@
           <button id="personal-open" class="btn" type="button" disabled>Open</button>
         </div>
         <div class="theorem-personal-list-head"><span>Saved graphs</span><button id="personal-refresh" class="btn btn-ghost" type="button">Refresh</button></div>
-        <div id="personal-graph-list" class="theorem-personal-list" aria-label="Saved graphs"></div>
+        <div id="personal-graph-list" aria-label="Saved graphs">
+          <section id="personal-cloud-group" class="theorem-personal-group" hidden aria-labelledby="personal-cloud-heading">
+            <h3 id="personal-cloud-heading">Cloud <small>Open on any computer with the same account</small></h3>
+            <div id="personal-cloud-rows" class="theorem-personal-list"></div>
+          </section>
+          <section id="personal-local-group" class="theorem-personal-group" hidden aria-labelledby="personal-local-heading">
+            <h3 id="personal-local-heading">Only this computer <small>Unavailable on other computers</small></h3>
+            <div id="personal-local-rows" class="theorem-personal-list"></div>
+          </section>
+        </div>
         <p id="personal-list-empty" class="hint">No saved graphs yet.</p>
         <form id="personal-rename" class="theorem-personal-subpanel" hidden>
           <label id="personal-name-label" class="input-label" for="personal-rename-title">Saved version name</label>
@@ -1449,7 +1480,8 @@
         </div>
 
         <details id="personal-drafts-panel">
-          <summary>Device drafts (not saved graphs)</summary>
+          <summary id="personal-drafts-heading">Drafts &amp; recovery copies · only this computer (0)</summary>
+          <p>These local drafts are not uploaded. This list also keeps recovery copies after saving, so not every entry has unsaved changes. Clearing browser data will remove them. Open a draft, then choose Save to keep a saved version.</p>
           <div id="personal-draft-list" class="theorem-personal-list" aria-label="Recoverable device drafts"></div>
         </details>
         <details id="personal-users" class="theorem-personal-subpanel" hidden>
@@ -1465,10 +1497,14 @@
           <p id="personal-user-status" class="hint" role="status"></p>
           <ul id="personal-user-list" class="theorem-personal-history"></ul>
         </details>
-        <div class="theorem-personal-conflict" id="personal-conflict" hidden>
-          <p>This graph changed elsewhere. Use “Save as new graph” to keep editing a separate copy, or open the cloud version. Your local changes will be kept as a recovered copy.</p>
-          <button id="personal-cloud-version" class="btn" type="button">Open cloud version and keep local copy</button>
-        </div>
+        <details class="theorem-personal-conflict" id="personal-conflict" hidden>
+          <summary>Review the versions</summary>
+          <p>The cloud version changed or was deleted. Save a separate graph to keep your version, or open the cloud version if it is still available. Opening the cloud version preserves your saved local changes as a recovered graph and keeps your unsaved draft below.</p>
+          <div class="theorem-personal-row">
+            <button id="personal-conflict-copy" class="btn btn-ghost" type="button">Keep mine as a separate graph…</button>
+            <button id="personal-cloud-version" class="btn btn-ghost" type="button">Open cloud version and keep local copy</button>
+          </div>
+        </details>
         <div id="personal-history-panel" hidden>
           <p>Previous saved versions are kept when you save. Older automatic checkpoints remain available. Loading a version changes only your draft until you save. The latest 50 versions are retained in each storage location.</p>
           <p id="personal-history-empty"></p>
@@ -1477,6 +1513,7 @@
             <pre id="personal-preview-text" class="theorem-personal-preview"></pre>
             <button id="personal-restore-history" class="btn" type="button">Load this version as draft</button>
           </div>
+        </div>
         </div>
       </div>
     </section>
