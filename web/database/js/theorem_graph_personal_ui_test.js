@@ -96,6 +96,11 @@ async function run() {
     assert(await read(`!document.getElementById('personal-cloud-group').hidden && document.getElementById('personal-local-group').hidden`), 'a confirmed upload belongs to Cloud');
     assert(await read(`document.getElementById('personal-primary').hidden && document.getElementById('personal-status').textContent.includes('☁✓')`), 'confirmed state has no upload primary');
     assert(await read(`document.querySelector('#personal-cloud-rows .theorem-personal-badge').dataset.state === 'synced'`));
+    assert(await read(`document.querySelector('#personal-cloud-rows .theorem-personal-row-next').textContent === 'Open'`), 'synced rows retain one main action');
+    assert(await read(`!document.getElementById('personal-drafts-panel').open`), 'drafts start collapsed even with recovery copies');
+    await read(`document.querySelector('#personal-cloud-rows .theorem-personal-menu > summary').click(); document.querySelector('#personal-cloud-rows .theorem-personal-details > summary').click()`);
+    assert(await read(`(() => { const menu=document.querySelector('#personal-cloud-rows .theorem-personal-menu'); const lines=[...menu.querySelectorAll('.theorem-personal-detail-body > p')]; return menu.open && lines.length>1 && lines[1].getBoundingClientRect().top-lines[0].getBoundingClientRect().bottom>=7; })()`), 'Details separates explanations and version lines with visible spacing');
+    await read(`document.querySelector('#personal-cloud-rows .theorem-personal-menu').open=false`);
     assert.equal(await value('personal-password'), '');
     assert(!record.content.includes(password), 'passwords must never be captured in graph drafts');
     await client.send('Page.reload'); await delay(100); await ready(); await synced();
@@ -193,7 +198,7 @@ async function run() {
     await click('personal-sync'); await idle();
     assert.equal(db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(record.id).content, original.content, 'Sync never commits a draft');
     assert.equal(await read(`document.getElementById('personal-status').dataset.state`), 'changed', 'a cloud-saved graph with unsaved editor changes is not labelled up to date');
-    assert(await read(`document.getElementById('personal-drafts-panel').open && !document.getElementById('personal-drafts-heading').textContent.includes('(0)')`), 'drafts with content are expanded and counted');
+    assert(await read(`!document.getElementById('personal-drafts-panel').open && !document.getElementById('personal-drafts-heading').textContent.includes('(0)')`), 'drafts stay collapsed while their count updates');
     await click('personal-copy'); await idle(); await click('personal-rename-cancel');
     assert.equal(db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(record.id).content, original.content, 'cancelled Save as preserves A');
     await click('personal-copy'); await idle(); await clear('personal-rename-title'); await type('Version B');
@@ -227,6 +232,7 @@ async function run() {
     assert(await read('document.documentElement.scrollWidth <= window.innerWidth + 1'), 'personal controls must fit narrow screens');
     await read(`CalculatorCards.openCard('#theorem-personal'); document.getElementById('theorem-personal').scrollIntoView({block:'start'})`);
     assert(await read(`document.getElementById('theorem-personal').scrollWidth <= document.getElementById('theorem-personal').clientWidth + 1`), 'default-width panel has no internal horizontal overflow');
+    assert(await read(`(() => { const rows=[...document.querySelectorAll('#personal-graph-list .theorem-personal-item')]; return rows.every(row=> { const items=[...row.children].map(node=>node.getBoundingClientRect()); return Math.max(...items.map(rect=>rect.top+rect.height/2))-Math.min(...items.map(rect=>rect.top+rect.height/2))<2 && row.querySelector('.theorem-personal-short-id').textContent.length===7 && row.querySelector('.theorem-personal-badge').textContent.trim().split(/\\s+/).length<=6; }); })()`), 'narrow rows keep name, short ID, state, time and action on one line');
     await screenshot('ui-mygraphs-narrow.png');
     await client.send('Emulation.clearDeviceMetricsOverride');
     await read(`document.getElementById('theorem-personal').scrollIntoView({block:'start'})`);

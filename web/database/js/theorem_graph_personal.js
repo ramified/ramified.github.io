@@ -23,7 +23,7 @@
     let edited = new Map(), preview = null, localFlight = null;
     let loginExpanded = false, loginMessage = '', signedIn = false;
     // Presentation only: never persisted, and never used by the storage/sync engine.
-    let draftCount = -1, feedbackKey = '', feedbackArmed = false, syncFailure = '';
+    let feedbackKey = '', feedbackArmed = false, syncFailure = '';
     let activeKey = storeName() + ':active';
     function activeId() { try { return localStorage.getItem(activeKey); } catch { return null; } }
     function remember() { try {
@@ -37,11 +37,7 @@
     async function refreshDrafts() { draftEntries = await workspace.list(); renderDrafts(); }
     function renderDrafts() {
       const target = $('personal-draft-list');
-      text('personal-drafts-heading', `Drafts & recovery copies · only this computer (${draftEntries.length})`);
-      if (draftCount !== draftEntries.length) {
-        $('personal-drafts-panel').open = draftEntries.length > 0;
-        draftCount = draftEntries.length;
-      }
+      text('personal-drafts-heading', `Local drafts (${draftEntries.length})`);
       // Do not rebuild controls on every keystroke or steal keyboard focus.
       const rows = new Map([...target.children].map(row => [row.dataset.id, row]));
       if (!target.children.length) target.textContent = '';
@@ -211,45 +207,52 @@
       else if (!cloud) kind = 'local';
       else if (changed || dirty) kind = 'changed';
       const labels = {
-        draft: '✎ Unsaved draft · only this computer',
-        local: '▣ Only on this computer',
-        changed: '⚠ New changes are not in the cloud',
-        syncing: '⟳ Uploading saved versions…',
-        failed: '✕ Cloud upload failed',
-        conflict: '⚠ Versions need review',
-        remote: '☁↓ A newer cloud version is available',
-        synced: '☁✓ Stored in cloud · up to date at last check'
+        draft: '✎ Local draft',
+        local: '▣ Local only',
+        changed: '⚠ Not uploaded',
+        syncing: '⟳ Uploading…',
+        failed: '✕ Upload failed',
+        conflict: '⚠ Version conflict',
+        remote: '☁↓ Cloud newer',
+        synced: '☁✓ Cloud saved'
       };
-      const consequence = kind === 'synced' ? 'Open this saved version on another computer by signing in with the same account.'
-        : kind === 'draft' || !cloud ? 'These changes are only on this computer. You cannot open them on another computer yet.'
-        : kind === 'conflict' ? 'The cloud version changed or was deleted. Review your options before uploading; your local work is kept.'
-        : kind === 'remote' ? 'Another computer can open the newer cloud version. Open it here to update your saved version.'
-        : 'Another computer can only open the cloud version. Your latest local changes are not confirmed there yet.';
+      const consequence = kind === 'synced' ? 'Available on other computers with this account.'
+        : kind === 'draft' || !cloud ? 'Unavailable on other computers.'
+        : kind === 'conflict' ? 'The cloud version changed or was deleted; review before uploading.'
+        : kind === 'remote' ? 'Open the newer cloud version to update this computer.'
+        : 'Other computers show the last cloud version.';
       const detail = [];
-      if (item?.updatedAt) detail.push(`${item.cloudRevision === undefined && remote ? 'Cloud updated' : 'Saved version updated on this computer'}: ${time(item.updatedAt)}`);
-      if (remote && (!item?.cloudRevision || remote.revision >= item.cloudRevision)) detail.push(`Cloud version ${remote.revision}: ${time(remote.updatedAt)}`);
-      else if (item?.cloudRevision) detail.push(`Last confirmed cloud version: ${item.cloudRevision}; cloud time unavailable`);
-      if (changed) detail.push('The editor also has unsaved changes on this computer.');
-      if (kind === 'syncing' && changed) detail.push('This upload excludes unsaved editor changes.');
-      if (kind === 'failed') detail.push(`Upload queue: ${syncFailure}`);
-      return { kind, label: labels[kind], consequence, detail: detail.join(' · '), cloud, dirty, changed };
+      if (item?.updatedAt) detail.push(`${item.cloudRevision === undefined && remote ? 'Cloud' : 'Local'}: ${time(item.updatedAt)}`);
+      if (remote && (!item?.cloudRevision || remote.revision >= item.cloudRevision)) detail.push(`Cloud v${remote.revision}: ${time(remote.updatedAt)}`);
+      else if (item?.cloudRevision) detail.push(`Confirmed cloud v${item.cloudRevision}; time unavailable`);
+      if (changed) detail.push('Unsaved editor changes stay on this computer.');
+      if (kind === 'failed') detail.push(`Upload: ${syncFailure}`);
+      return { kind, label: labels[kind], consequence, detail, cloud, dirty, changed };
     }
     function paintState(node, state) {
       node.dataset.state = state.kind;
       node.textContent = state.label;
       node.setAttribute('aria-label', state.label);
     }
+    function renderDetails(node, lines) {
+      const values = lines.filter(Boolean);
+      values.forEach((value, index) => {
+        const paragraph = node.children[index] || node.appendChild(document.createElement('p'));
+        if (paragraph.textContent !== value) paragraph.textContent = value;
+      });
+      while (node.children.length > values.length) node.lastElementChild.remove();
+    }
     function renderPanelState() {
       const current = library.current, state = graphState(current, true);
       text('personal-current', shared ? `Shared graph: ${shared.title}` : current ? `Editing saved graph: ${current.title}${current.recovered ? ' (recovered copy)' : ''}` : 'Unsaved draft · no saved graph selected');
       if (shared) {
-        state.kind = 'draft'; state.label = '↗ Shared graph · separate from My graphs';
-        state.consequence = 'Shared-graph permissions and saving are shown in the existing shared-graph banner.';
-        state.detail = '';
+        state.kind = 'draft'; state.label = '↗ Shared graph';
+        state.consequence = 'Use the shared-graph banner to save.';
+        state.detail = [];
       }
       paintState($('personal-status'), state);
       text('personal-consequence', state.consequence);
-      text('personal-version-detail', [state.detail, localError ? `Local backup failed: ${localError}. Download JSON before closing.` : '', cloudError && !syncFailure ? cloudError : ''].filter(Boolean).join(' · '));
+      renderDetails($('personal-version-detail'), [...state.detail, localError ? `Local backup failed: ${localError}` : '', cloudError && !syncFailure ? cloudError : '']);
       const primary = $('personal-primary');
       const labels = { draft: 'Save a graph…', local: 'Upload to cloud', changed: 'Upload latest changes', failed: state.changed ? 'Save changes and retry upload' : 'Retry upload', conflict: 'Review versions', remote: 'Review cloud version' };
       primary.hidden = !!shared || ['synced', 'syncing'].includes(state.kind);
@@ -257,16 +260,16 @@
       const canSaveLocally = (state.changed || !current) && !review;
       primary.textContent = !library.online && canSaveLocally ? 'Save on this computer' : labels[state.kind] || '';
       primary.disabled = actionBusy || pendingLocal || !!localError || (!library.online && !canSaveLocally && !review);
-      text('personal-primary-reason', shared ? '' : state.kind === 'synced' ? '✓ Up to date at last check' : state.kind === 'syncing' ? 'Wait for cloud confirmation. Unsaved editor changes stay on this computer.' : localError ? 'Local backup failed; download JSON from More first.' : pendingLocal ? 'Backing up your changes on this computer…' : !library.online ? 'Cloud connection unavailable. Your changes stay on this computer.' : '');
+      text('personal-primary-reason', shared ? '' : state.kind === 'synced' ? 'Confirmed at last check.' : state.kind === 'syncing' ? 'Uploading saved versions only.' : localError ? 'Download JSON before closing.' : pendingLocal ? 'Backing up locally…' : !library.online ? 'Cloud connection unavailable.' : '');
       primary.setAttribute('aria-describedby', 'personal-primary-reason personal-consequence');
       if (!$('personal-rename').hidden) {
         primary.hidden = true;
-        text('personal-primary-reason', 'Confirm or cancel the saved graph name below.');
+        text('personal-primary-reason', 'Confirm the name below.');
       }
       // One panel-local live feedback region; never report cloud success for a draft.
       const key = current ? `${current.id}:${current.updatedAt}:${current.cloudRevision}:${state.kind}` : '';
       if (feedbackArmed && key !== feedbackKey && current && !state.changed && !['conflict', 'syncing', 'remote'].includes(state.kind)) {
-        text('personal-feedback', state.kind === 'synced' ? 'Stored in cloud ✓ Sign in with the same account on another computer to open it.' : 'Saved on this computer · not uploaded yet. You cannot open these changes on another computer.');
+        text('personal-feedback', state.kind === 'synced' ? '✓ Saved to cloud.' : 'Saved locally; upload pending.');
         $('personal-feedback').hidden = false;
         feedbackKey = key;
         if (state.kind === 'synced') feedbackArmed = false;
@@ -456,9 +459,19 @@
           row = document.createElement('div'); row.className = 'theorem-personal-item'; row.dataset.id = item.id;
           const name = button('', () => action(() => openGraph(item.id)));
           name.className = 'theorem-personal-item-name';
+          const title = document.createElement('span');
+          const id = document.createElement('small'); id.className = 'theorem-personal-short-id';
+          const editing = document.createElement('small'); editing.className = 'theorem-personal-current-tag'; editing.textContent = 'Editing';
+          name.append(title, id, editing);
           const date = document.createElement('time'); date.className = 'theorem-personal-item-date';
           const badge = document.createElement('span'); badge.className = 'theorem-personal-badge';
-          const description = document.createElement('p'); description.className = 'theorem-personal-row-detail';
+          const menu = document.createElement('details'); menu.className = 'theorem-personal-menu';
+          const toggle = document.createElement('summary'); toggle.textContent = '⋯';
+          const body = document.createElement('div'); body.className = 'theorem-personal-menu-body';
+          const details = document.createElement('details'); details.className = 'theorem-personal-details';
+          const summary = document.createElement('summary'); summary.textContent = 'Details';
+          const description = document.createElement('div'); description.className = 'theorem-personal-detail-body theorem-personal-row-detail';
+          details.append(summary, description);
           const actions = document.createElement('div'); actions.className = 'theorem-personal-item-actions';
           actions.append(button('Rename', () => {
             const title = library.current?.id === item.id ? library.current.title : entries.find(entry => entry.id === item.id)?.title || item.title;
@@ -472,7 +485,9 @@
             await list();
           })));
           const next = button('', () => {
-            if (library.current?.id === item.id) $('personal-primary').click();
+            const entry = library.current?.id === item.id ? library.current : entries.find(entry => entry.id === item.id) || item;
+            if (graphState(entry, library.current?.id === item.id).kind === 'synced') action(() => openGraph(item.id));
+            else if (library.current?.id === item.id) $('personal-primary').click();
             else {
               const entry = entries.find(entry => entry.id === item.id) || item;
               if (['conflict', 'remote'].includes(graphState(entry).kind)) action(async () => {
@@ -484,31 +499,45 @@
             }
           });
           next.classList.add('theorem-personal-row-next');
-          row.append(name, date, badge, description, actions, next);
+          body.append(actions, details); menu.append(toggle, body);
+          menu.addEventListener('click', event => {
+            const control = event.target.closest('button');
+            if (control && !control.disabled) menu.open = false;
+          }, { capture: true });
+          row.append(name, date, badge, menu, next);
         }
         row.classList.toggle('is-current', current);
         if (current) row.setAttribute('aria-current', 'true'); else row.removeAttribute('aria-current');
-        const label = `${item.title}${item.recovered ? ' (recovered copy)' : ''}${current ? ' · Editing' : ''}`;
-        if (row.firstChild.textContent !== label) row.firstChild.textContent = label;
+        const name = row.firstChild;
+        name.children[0].textContent = item.title;
+        name.children[1].textContent = '#' + item.id.slice(0, 6);
+        name.children[2].hidden = !current;
+        name.title = `${item.title} · ${time(item.updatedAt)} · ${item.id}`;
+        name.setAttribute('aria-label', `${item.title} · ${item.id}${current ? ' · Editing' : ''}`);
         row.children[1].dateTime = new Date(item.updatedAt).toISOString();
-        row.children[1].textContent = time(item.updatedAt);
+        row.children[1].textContent = new Date(item.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        row.children[1].title = time(item.updatedAt);
+        row.children[1].setAttribute('aria-label', time(item.updatedAt));
         paintState(row.children[2], state);
-        row.children[3].textContent = `${state.consequence} ${state.detail}`;
+        const description = row.querySelector('.theorem-personal-row-detail');
+        const lines = [state.consequence, ...state.detail, `ID: ${item.id}`, item.recovered ? 'Recovered local copy.' : ''];
         row.querySelectorAll('button').forEach(node => { node.disabled = actionBusy; });
         const share = row.querySelector('.theorem-personal-item-actions').children[1];
         share.disabled = actionBusy || !state.cloud || state.dirty || state.kind === 'conflict' || !library.online;
         const shareReason = !state.cloud ? 'Upload to cloud before sharing.' : state.dirty ? 'Upload the saved changes before sharing.' : state.kind === 'conflict' ? 'Review the versions before sharing.' : !library.online ? 'Connect to cloud before sharing.' : 'Share the saved cloud version; unsaved editor changes are excluded.';
         share.title = shareReason;
         share.setAttribute('aria-label', `Share — ${shareReason}`);
-        // A visible reason is also available to touch users, where titles cannot be hovered.
-        row.children[3].textContent += share.disabled ? ` Share: ${shareReason}` : '';
+        if (share.disabled) lines.push(`Share: ${shareReason}`);
+        renderDetails(description, lines);
+        row.querySelector('.theorem-personal-menu > summary').setAttribute('aria-label', `More actions for ${item.title} · ${item.id.slice(0, 6)}`);
         const next = row.lastChild;
-        next.hidden = ['synced', 'syncing'].includes(state.kind);
-        next.textContent = state.kind === 'conflict' || state.kind === 'remote' ? 'Review versions' : state.kind === 'failed' ? 'Retry upload' : state.kind === 'local' ? 'Upload to cloud' : 'Upload latest changes';
-        if (current && !library.online && state.changed && !['conflict', 'remote'].includes(state.kind)) next.textContent = 'Save on this computer';
+        next.textContent = state.kind === 'synced' ? 'Open' : state.kind === 'syncing' ? 'Uploading' : state.kind === 'conflict' || state.kind === 'remote' ? 'Review' : state.kind === 'failed' ? 'Retry' : 'Upload';
+        if (current && !library.online && state.changed && !['conflict', 'remote'].includes(state.kind)) next.textContent = 'Save';
         next.title = current ? 'Use the current graph action above.' : ['conflict', 'remote'].includes(state.kind) ? 'Open this graph to review its versions.' : 'Upload saved versions waiting in this account. Unsaved editor changes are excluded.';
         next.disabled = actionBusy || (current && (pendingLocal || !!localError || (!library.online && !state.changed && !['conflict', 'remote'].includes(state.kind))));
         if (!current && !library.online && !['conflict', 'remote'].includes(state.kind)) next.disabled = true;
+        if (state.kind === 'syncing') next.disabled = true;
+        if (state.kind === 'synced') next.disabled = actionBusy;
         ordered[state.cloud ? 'cloud' : 'local'].push(row);
         rows.delete(item.id);
       }
@@ -809,6 +838,10 @@
       else { feedbackArmed = true; $('personal-sync').click(); }
     });
     $('personal-conflict-copy').addEventListener('click', () => $('personal-copy').click());
+    $('personal-more').addEventListener('click', event => {
+      const control = event.target.closest('button');
+      if (control && !control.disabled) $('personal-more').open = false;
+    }, { capture: true });
     $('personal-detach').addEventListener('click', () => action(async () => {
       library.current = null; library.opening = null; workspace.release();
       baselineKey = ''; await backupNow();
