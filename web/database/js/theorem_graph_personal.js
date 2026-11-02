@@ -360,8 +360,30 @@
     }
     async function list(refreshCloud = true) {
       await library.queue;
-      const local = await library.store.summaries();
-      if (library.online && refreshCloud) cloudList = (await api.request('/documents')).documents;
+      let local = await library.store.summaries();
+      if (library.online && refreshCloud) {
+        cloudList = (await api.request('/documents')).documents;
+        const cached = new Map(local.map(item => [item.id, item]));
+        const renamed = cloudList.filter(remote => {
+          const item = cached.get(remote.id);
+          return item?.cloudRevision > 0 && remote.revision > item.cloudRevision && remote.title !== item.title;
+        });
+        if (renamed.length) {
+          await library.serial(async () => {
+            for (const remote of renamed) {
+              const record = await library.store.read(remote.id);
+              if (!record || record.pending || record.conflict || remote.revision <= record.cloudRevision
+                || record.title !== (record.syncedTitle ?? record.title)) continue;
+              // Adopt a cloud rename unless this device has its own unsent rename.
+              // Catalog entries cannot prove the content is unchanged: preserve
+              // payload, drafts and cloudRevision until the cloud version is opened.
+              try { await library.write({ ...record, title: remote.title, syncedTitle: remote.title }); }
+              catch (error) { if (error.status !== 409) throw error; }
+            }
+          });
+          local = await library.store.summaries();
+        }
+      }
       const merged = new Map(cloudList.map(item => [item.id, { ...item, cloud: true }]));
       for (const item of local) merged.set(item.id, { ...item, cloud: merged.has(item.id) });
       entries = [...merged.values()].sort((a, b) => b.updatedAt - a.updatedAt);
