@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const { IndexedStore, CloudAPI, Library, WorkspaceDrafts } = window.TheoremGraphStorage;
+  const { IndexedStore, CloudAPI, Library, WorkspaceDrafts, mergePayload, documentContent } = window.TheoremGraphStorage;
   const $ = id => document.getElementById(id);
   const text = (id, value) => { if ($(id) && $(id).textContent !== value) $(id).textContent = value; };
   const time = value => new Date(value).toLocaleString();
@@ -24,6 +24,11 @@
     let loginExpanded = false, loginMessage = '', signedIn = false;
     // Presentation only: never persisted, and never used by the storage/sync engine.
     let feedbackKey = '', feedbackArmed = false, syncFailure = '';
+    let pendingApply = null, workspaceConflict = null, pulling = null, composing = false, applying = false;
+    const sameContent = (a, b) => JSON.stringify(documentContent(a)) === JSON.stringify(documentContent(b));
+    function queueIncoming(id, base) {
+      pendingApply ||= { id, base: workspaceConflict?.id === id ? workspaceConflict.base : base };
+    }
     let activeKey = storeName() + ':active';
     function activeId() { try { return localStorage.getItem(activeKey); } catch { return null; } }
     function remember() { try {
@@ -79,16 +84,21 @@
     async function loadDraft(id) {
       const draft = await workspace.open(id);
       if (!draft) return false;
+      pendingApply = null; workspaceConflict = null;
       library.current = null; library.opening = null;
       if (draft.sourceId && await library.store.read(draft.sourceId)) await library.openLocal(draft.sourceId);
       baselineKey = draft.baselineKey || '';
       if (draft.sourceSignature && draft.sourceSignature !== JSON.stringify(library.current?.payload)) baselineKey = '';
+      if (library.current && draft.sourceSignature && !sameContent(JSON.parse(draft.sourceSignature), library.current.payload)) {
+        pendingApply = { id: library.current.id, base: JSON.parse(draft.sourceSignature) };
+      }
       restore(draft.payload); remember(); return true;
     }
     async function backupNow() { lastKey = ''; await flushLocal(); if (localError) throw new Error(localError); }
     async function saveCurrent() {
       if (!library.current) { await suggestName(); return; }
-      if (library.current.conflict) throw new Error('Resolve the cloud conflict or save as a new graph.');
+      if (library.current.conflict || workspaceConflict?.id === library.current.id) throw new Error('Resolve the cloud conflict or save as a new graph.');
+      if (pendingApply?.id === library.current.id) throw new Error('Apply the incoming update before saving.');
       const key = contentKey(), payload = capture();
       await library.save(payload, true, 'Before manual save');
       baselineKey = key; await backupNow(); scheduleCloud(); await list(false);
@@ -206,6 +216,8 @@
       else if (dirty && syncFailure) kind = 'failed';
       else if (!cloud) kind = 'local';
       else if (changed || dirty) kind = 'changed';
+      if (current && pendingApply && pendingApply.id === item?.id && kind !== 'conflict') kind = 'remote';
+      if (current && workspaceConflict && workspaceConflict.id === item?.id) kind = 'conflict';
       const labels = {
         draft: '✎ Local draft',
         local: '▣ Local only',
@@ -213,7 +225,7 @@
         syncing: '⟳ Uploading…',
         failed: '✕ Upload failed',
         conflict: '⚠ Version conflict',
-        remote: '☁↓ Cloud newer',
+        remote: '☁↓ Update waiting',
         synced: '☁✓ Cloud saved'
       };
       const consequence = kind === 'synced' ? 'Available on other computers with this account.'
@@ -254,7 +266,7 @@
       text('personal-consequence', state.consequence);
       renderDetails($('personal-version-detail'), [...state.detail, localError ? `Local backup failed: ${localError}` : '', cloudError && !syncFailure ? cloudError : '']);
       const primary = $('personal-primary');
-      const labels = { draft: 'Save a graph…', local: 'Upload to cloud', changed: 'Upload latest changes', failed: state.changed ? 'Save changes and retry upload' : 'Retry upload', conflict: 'Review versions', remote: 'Review cloud version' };
+      const labels = { draft: 'Save a graph…', local: 'Upload to cloud', changed: 'Upload latest changes', failed: state.changed ? 'Save changes and retry upload' : 'Retry upload', conflict: 'Review versions', remote: 'Update now' };
       primary.hidden = !!shared || ['synced', 'syncing'].includes(state.kind);
       const review = ['conflict', 'remote'].includes(state.kind);
       const canSaveLocally = (state.changed || !current) && !review;
@@ -290,7 +302,7 @@
         option.textContent = `${current.title}${current.recovered ? ' (recovered copy)' : ''} · ${library.online && !library.dirty() ? 'cloud' : 'this device'}`;
         $('personal-open').disabled = false;
       }
-      $('personal-conflict').hidden = !['conflict', 'remote'].includes(graphState(current, true).kind);
+      $('personal-conflict').hidden = graphState(current, true).kind !== 'conflict';
       $('personal-cloud-version').disabled = !library.online || actionBusy;
       $('personal-sync').disabled = !!shared || !api || !library.online || !!library.syncing || actionBusy;
       $('personal-revert').disabled = !!shared || !current || actionBusy;
@@ -324,7 +336,8 @@
       const payload = capture();
       pendingLocal = true;
       try {
-        await workspace.save(payload, library.current?.id || null, baselineKey, library.current?.title, JSON.stringify(library.current?.payload));
+        await workspace.save(payload, library.current?.id || null, baselineKey, library.current?.title,
+          JSON.stringify(workspaceConflict && workspaceConflict.id === library.current?.id ? workspaceConflict.base : library.current?.payload));
         lastKey = key; localError = ''; pendingLocal = contentKey() !== key;
         remember(); await refreshDrafts();
       } catch (error) { localError = error.message; pendingLocal = true; }
@@ -348,7 +361,14 @@
       clearTimeout(syncTimer); clearTimeout(maxTimer); maxTimer = null;
       await flushLocal();
       if (!library.online) return;
-      try { await library.sync(); cloudError = ''; syncFailure = ''; await list(false); }
+      const before = library.current && { id: library.current.id, payload: clone(library.current.payload) };
+      try {
+        await library.sync(); cloudError = ''; syncFailure = '';
+        if (before && library.current?.id === before.id && !sameContent(before.payload, library.current.payload)) {
+          queueIncoming(before.id, before.payload);
+        }
+        await applyIncoming(); await list(false);
+      }
       catch (error) {
         cloudError = error.status === 401 ? 'Session expired; sign in again.' : error.message || 'Cloud sync failed; retrying when connected.';
         syncFailure = cloudError;
@@ -360,30 +380,45 @@
     }
     async function list(refreshCloud = true) {
       await library.queue;
-      let local = await library.store.summaries();
-      if (library.online && refreshCloud) {
-        cloudList = (await api.request('/documents')).documents;
-        const cached = new Map(local.map(item => [item.id, item]));
-        const renamed = cloudList.filter(remote => {
-          const item = cached.get(remote.id);
-          return item?.cloudRevision > 0 && remote.revision > item.cloudRevision && remote.title !== item.title;
-        });
-        if (renamed.length) {
-          await library.serial(async () => {
-            for (const remote of renamed) {
-              const record = await library.store.read(remote.id);
-              if (!record || record.pending || record.conflict || remote.revision <= record.cloudRevision
-                || record.title !== (record.syncedTitle ?? record.title)) continue;
-              // Adopt a cloud rename unless this device has its own unsent rename.
-              // Catalog entries cannot prove the content is unchanged: preserve
-              // payload, drafts and cloudRevision until the cloud version is opened.
-              try { await library.write({ ...record, title: remote.title, syncedTitle: remote.title }); }
-              catch (error) { if (error.status !== 409) throw error; }
-            }
-          });
-          local = await library.store.summaries();
+      // Tabs in the same browser share IndexedDB, but not their in-memory
+      // current record. Refresh that pointer even when cloud revisions match.
+      const sourceLibrary = library, previous = library.current;
+      if (previous) {
+        const fresh = await sourceLibrary.store.read(previous.id);
+        if (sourceLibrary !== library) return;
+        if (fresh && library.current?.id === previous.id && fresh.localVersion > library.current.localVersion) {
+          library.current = fresh;
+          if (!sameContent(previous.payload, fresh.payload)) queueIncoming(fresh.id, previous.payload);
+          library.emit();
         }
       }
+      let local = await library.store.summaries();
+      if (library.online && refreshCloud) {
+        const source = library;
+        const catalog = (await api.request('/documents')).documents;
+        if (source !== library) return;
+        cloudList = catalog;
+        const cached = new Map(local.map(item => [item.id, item]));
+        const newer = cloudList.filter(remote => {
+          const item = cached.get(remote.id);
+          return item?.cloudRevision > 0 && remote.revision > item.cloudRevision;
+        });
+        for (const item of newer) {
+          const target = library;
+          const remote = await api.request(`/documents/${encodeURIComponent(item.id)}`);
+          if (target !== library || !signedIn || shared) return;
+          const result = await target.receive(remote);
+          if (result.changed && library.current?.id === item.id && !sameContent(result.before, result.payload)) {
+            queueIncoming(item.id, result.before);
+          }
+        }
+        if (newer.length) {
+          await applyIncoming();
+          local = await library.store.summaries();
+          if (local.some(item => item.dirty && !item.conflict)) scheduleCloud();
+        }
+      }
+      await applyIncoming();
       const merged = new Map(cloudList.map(item => [item.id, { ...item, cloud: true }]));
       for (const item of local) merged.set(item.id, { ...item, cloud: merged.has(item.id) });
       entries = [...merged.values()].sort((a, b) => b.updatedAt - a.updatedAt);
@@ -397,6 +432,50 @@
       if (merged.has(selected)) select.value = selected;
       $('personal-open').disabled = !merged.size;
       renderRows();
+    }
+    async function applyIncoming() {
+      if (applying || !pendingApply || shared || !signedIn) return;
+      const target = library, pending = pendingApply;
+      if (target.current?.id !== pending.id) { pendingApply = null; return; }
+      applying = true;
+      try {
+        await flushLocal();
+        if (target !== library || target.current?.id !== pending.id || shared) return;
+        const local = capture(), saved = clone(target.current.payload);
+        const merged = mergePayload(pending.base, local, saved);
+        if (merged.conflicts.length) {
+          panel.dataset.syncConflictPaths = merged.conflicts.join(', ');
+          // Unsaved textbox conflicts belong to this workspace, not to the
+          // shared saved record that another browser tab may be uploading.
+          workspaceConflict = { id: pending.id, base: pending.base };
+          await workspace.save(local, pending.id, baselineKey, target.current.title, JSON.stringify(pending.base));
+          pendingApply = null; render(); return;
+        }
+        const editing = document.activeElement?.matches('input, textarea, select, [contenteditable="true"]');
+        if (composing || adapter.busy() || editing) return;
+        const focus = document.activeElement;
+        const automatic = payload => ({ ...clone(payload), editor: local.editor,
+          drafts: (payload.drafts || []).map(item => ({ ...item, focused: false })) });
+        // Keep the previous workspace recoverable; unsaved merged edits remain
+        // a draft and are never added to the saved graph's upload queue.
+        workspace.release();
+        restore(automatic(saved)); baselineKey = contentKey();
+        if (!sameContent(merged.payload, saved)) restore(automatic(merged.payload));
+        pendingApply = null;
+        workspaceConflict = null;
+        if (focus?.isConnected && typeof focus.focus === 'function') focus.focus({ preventScroll: true });
+        await backupNow();
+      } finally { applying = false; }
+    }
+    function pullLatest() {
+      if (pulling || !ready || !signedIn || !library.online || shared || actionBusy || restoring) return pulling;
+      const target = library;
+      pulling = list().catch(error => {
+        if (target !== library) return;
+        if (error.status === 401) expireSession();
+        else { cloudError = error.message; render(); }
+      }).finally(() => { pulling = null; });
+      return pulling;
     }
     async function action(task) {
       if (actionBusy) return;
@@ -415,6 +494,8 @@
       if (user?.username === session.username) { accountExpired = false; library.online = true; render(); return; }
       const guest = !resume && !user && !shared ? capture() : null;
       user = { username: session.username, admin: !!session.admin };
+      pendingApply = null;
+      workspaceConflict = null;
       syncFailure = ''; feedbackArmed = false; feedbackKey = '';
       accountExpired = false;
       library = new Library({ store: new IndexedStore(storeName(user.username)), api, onChange: render });
@@ -451,6 +532,8 @@
       baselineKey = contentKey();
     }
     async function signOutLocally() {
+      pendingApply = null;
+      workspaceConflict = null;
       await flushLocal(); await library.queue;
       library.online = false; api?.setToken(''); user = null; accountExpired = false;
       library = new Library({ store: new IndexedStore(storeName()), api, onChange: render });
@@ -514,8 +597,10 @@
               const entry = entries.find(entry => entry.id === item.id) || item;
               if (['conflict', 'remote'].includes(graphState(entry).kind)) action(async () => {
                 await openGraph(item.id);
-                $('personal-conflict').open = true;
-                $('personal-conflict').scrollIntoView({ block: 'nearest' });
+                if (library.current?.conflict) {
+                  $('personal-conflict').open = true;
+                  $('personal-conflict').scrollIntoView({ block: 'nearest' });
+                }
               });
               else $('personal-sync').click();
             }
@@ -553,7 +638,7 @@
         renderDetails(description, lines);
         row.querySelector('.theorem-personal-menu > summary').setAttribute('aria-label', `More actions for ${item.title} · ${item.id.slice(0, 6)}`);
         const next = row.lastChild;
-        next.textContent = state.kind === 'synced' ? 'Open' : state.kind === 'syncing' ? 'Uploading' : state.kind === 'conflict' || state.kind === 'remote' ? 'Review' : state.kind === 'failed' ? 'Retry' : 'Upload';
+        next.textContent = state.kind === 'synced' ? 'Open' : state.kind === 'syncing' ? 'Uploading' : state.kind === 'conflict' ? 'Review' : state.kind === 'remote' ? 'Update' : state.kind === 'failed' ? 'Retry' : 'Upload';
         if (current && !library.online && state.changed && !['conflict', 'remote'].includes(state.kind)) next.textContent = 'Save';
         next.title = current ? 'Use the current graph action above.' : ['conflict', 'remote'].includes(state.kind) ? 'Open this graph to review its versions.' : 'Upload saved versions waiting in this account. Unsaved editor changes are excluded.';
         next.disabled = actionBusy || (current && (pendingLocal || !!localError || (!library.online && !state.changed && !['conflict', 'remote'].includes(state.kind))));
@@ -583,11 +668,14 @@
       renderPanelState();
     }
     async function openGraph(id) {
+      pendingApply = null;
+      workspaceConflict = null;
       feedbackArmed = false; $('personal-feedback').hidden = true;
       leaveShared();
       const cloud = library.online && cloudList.some(item => item.id === id);
       const payload = await (cloud ? library.openCloud(id, flushLocal) : library.openLocal(id));
-      workspace.release(); restore(payload); baselineKey = contentKey(); await backupNow();
+      workspace.release(); restore(cloud ? { ...payload, drafts: (payload.drafts || []).map(item => ({ ...item, focused: false })) } : payload);
+      baselineKey = contentKey(); await backupNow();
       $('personal-select').value = id; $('personal-history-panel').hidden = true;
       $('personal-rename').hidden = true; $('personal-share-panel').hidden = true;
     }
@@ -851,7 +939,9 @@
     $('personal-primary').addEventListener('click', () => {
       if (!signedIn || actionBusy) return;
       const state = graphState(library.current, true);
-      if (state.kind === 'conflict' || state.kind === 'remote') {
+      if (state.kind === 'remote') {
+        $('personal-primary').focus(); action(async () => { await applyIncoming(); await list(); });
+      } else if (state.kind === 'conflict') {
         $('personal-conflict').hidden = false;
         $('personal-conflict').open = true;
         $('personal-conflict').scrollIntoView({ block: 'nearest' });
@@ -875,6 +965,8 @@
       restore(blank); baselineKey = ''; await backupNow();
     }));
     $('personal-cloud-version').addEventListener('click', () => action(async () => {
+      pendingApply = null;
+      workspaceConflict = null;
       const payload = await library.useCloudVersion(flushLocal);
       workspace.release(); restore(payload); baselineKey = contentKey(); await backupNow(); await list();
     }));
@@ -902,10 +994,16 @@
       edited.set(selector(event.target), { context: adapter.context() }); changed();
     });
     document.addEventListener('compositionend', event => { if (eligible(event.target)) changed(); });
+    document.addEventListener('compositionstart', () => { composing = true; });
+    document.addEventListener('compositionend', () => { composing = false; });
+    document.addEventListener('focusout', () => { setTimeout(() => applyIncoming().catch(error => { localError = error.message; render(); }), 0); });
     document.addEventListener('change', event => { if (eligible(event.target)) changed(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden) { flushLocal(); sync(); } });
     window.addEventListener('pagehide', flushLocal);
     window.addEventListener('online', () => { if (api && !library.online) connect(); else sync(); });
+    window.addEventListener('focus', pullLatest);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) pullLatest(); });
+    setInterval(pullLatest, 5000);
     // A short periodic local checkpoint also captures continuous layout movement.
     setInterval(() => { if (ready && !restoring && !adapter.busy() && contentKey() !== lastKey) flushLocal(); }, 1500);
     async function connect() {

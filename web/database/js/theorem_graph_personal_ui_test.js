@@ -157,11 +157,10 @@ async function run() {
     const remotePayload = JSON.parse(record.content);
     remotePayload.graph.title = 'remote device'; remotePayload.graph.titleNode.label = 'remote device';
     remotePayload.drafts = []; remotePayload.editor.detailEditBaseline = null;
+    await clear('graph-title'); await type('local conflict'); await click('personal-save'); await idle();
     db.sqlite.prepare('UPDATE documents SET revision=revision+1, content=?, title=? WHERE id=?')
       .run(JSON.stringify(remotePayload), 'remote device', record.id);
-    await click('personal-refresh'); await idle();
-    assert.equal(await read(`document.getElementById('personal-status').dataset.state`), 'remote', 'a newer queried cloud revision is not called up to date');
-    await clear('graph-title'); await type('local conflict'); await click('personal-save');
+    await click('personal-sync'); await idle();
     await waitFor(() => read(`!document.getElementById('personal-conflict').hidden`), 15000, 'conflict banner');
     await waitFor(() => read(`(async()=> { const store = new TheoremGraphStorage.IndexedStore('theorem-graphs-v2:'+window.THEOREM_GRAPH_API_BASE+':ramified'); return (await store.read(${JSON.stringify(record.id)}))?.conflict; })()`), 15000, 'server confirms the conflict');
     await idle(); await click('personal-primary');

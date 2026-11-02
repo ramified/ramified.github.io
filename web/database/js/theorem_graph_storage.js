@@ -6,6 +6,83 @@
   'use strict';
   const clone = value => JSON.parse(JSON.stringify(value));
   const signature = value => JSON.stringify(value);
+  const equal = (a, b) => signature(a) === signature(b);
+  const copy = value => value === undefined ? undefined : clone(value);
+  const draftKey = item => item.selector === '#graph-title' ? item.selector : item.selector + '|' + (item.context || '');
+  // Compare the shared document separately from device-specific editor state.
+  function documentContent(payload) {
+    if (!payload) return null;
+    const graph = clone(payload.graph);
+    const clean = graph => {
+      if (!graph) return;
+      if (graph.view) for (const key of ['selectedId', 'selectedReferenceKeys', 'layoutRunning']) delete graph.view[key];
+      for (const node of graph.nodes || []) if (node.childGraph) clean(node.childGraph);
+    };
+    clean(graph);
+    const drafts = (payload.drafts || []).map(item => ({ selector: item.selector, context: item.selector === '#graph-title' ? undefined : item.context, value: item.value, checked: !!item.checked }))
+      .sort((a, b) => (a.selector + (a.context || '')).localeCompare(b.selector + (b.context || '')));
+    return { graph, drafts };
+  }
+  function mergeValue(base, local, remote, path = '', conflicts = []) {
+    if (equal(local, remote) || equal(remote, base)) return copy(local);
+    if (equal(local, base)) return copy(remote);
+    const object = value => value && typeof value === 'object' && !Array.isArray(value);
+    if (object(local) && object(remote) && (object(base) || base === undefined)) {
+      const result = {};
+      for (const key of new Set([...Object.keys(base || {}), ...Object.keys(local), ...Object.keys(remote)])) {
+        if (['__proto__', 'constructor', 'prototype'].includes(key)) continue;
+        const value = mergeValue(base?.[key], local[key], remote[key], `${path}/${key}`, conflicts);
+        if (value !== undefined) result[key] = value;
+      }
+      return result;
+    }
+    if ([base, local, remote].every(Array.isArray)) {
+      const key = ['id', 'key'].find(key => [base, local, remote].every(list => list.every(item => object(item) && typeof item[key] === 'string')
+        && new Set(list.map(item => item[key])).size === list.length));
+      if (key) {
+        const maps = [base, local, remote].map(list => new Map(list.map(item => [item[key], item])));
+        const common = new Set(base.map(item => item[key]).filter(id => maps[1].has(id) && maps[2].has(id)));
+        const orders = [base, local, remote].map(list => list.map(item => item[key]).filter(id => common.has(id)));
+        const localOrderChanged = !equal(orders[0], orders[1]), remoteOrderChanged = !equal(orders[0], orders[2]);
+        if (localOrderChanged && remoteOrderChanged && !equal(orders[1], orders[2])) conflicts.push(`${path}/order`);
+        const preferred = localOrderChanged && !remoteOrderChanged ? [local, remote] : [remote, local];
+        const result = [];
+        for (const id of new Set([...preferred.flatMap(list => list.map(item => item[key])), ...base.map(item => item[key])])) {
+          const value = mergeValue(...maps.map(map => map.get(id)), `${path}/${id}`, conflicts);
+          if (value !== undefined) result.push(value);
+        }
+        return result;
+      }
+    }
+    conflicts.push(path || '/');
+    return copy(local);
+  }
+  function mergePayload(base, local, remote) {
+    if (equal(documentContent(local), documentContent(base))) return { payload: clone(remote), conflicts: [] };
+    if (equal(documentContent(remote), documentContent(base))) return { payload: clone(local), conflicts: [] };
+    const conflicts = [];
+    const graph = mergeValue(base?.graph, local.graph, remote.graph, '/graph', conflicts);
+    const validateLinks = (graph, path = '/graph') => {
+      const ids = new Set(['__title__', ...(graph.nodes || []).map(node => node.id)]);
+      for (const arrow of graph.arrows || []) if ((arrow.sourceId && !ids.has(arrow.sourceId)) || (arrow.targetId && !ids.has(arrow.targetId))) conflicts.push(`${path}/arrows/${arrow.id}`);
+      for (const node of graph.nodes || []) if (node.childGraph) validateLinks(node.childGraph, `${path}/nodes/${node.id}/childGraph`);
+    };
+    validateLinks(graph);
+    const maps = [base, local, remote].map(payload => new Map((payload?.drafts || []).map(item => [draftKey(item), item])));
+    const value = item => item && { value: item.value, checked: !!item.checked };
+    const drafts = [];
+    for (const key of new Set(maps.flatMap(map => [...map.keys()]))) {
+      const [before, here, there] = maps.map(map => map.get(key));
+      // Missing textbox drafts usually mean a different node was selected or a
+      // value was committed; they do not mean the shared field was deleted.
+      if (!here) { if (there) drafts.push(clone(there)); continue; }
+      if (!there) { if (!equal(value(here), value(before))) drafts.push(clone(here)); continue; }
+      const merged = mergeValue(value(before), value(here), value(there), `/drafts/${key}`, conflicts);
+      drafts.push(clone(equal(merged, value(here)) ? here : there));
+    }
+    const payload = { ...clone(local), graph, drafts };
+    return { payload: equal(documentContent(payload), documentContent(remote)) ? clone(remote) : payload, conflicts };
+  }
   const title = payload => String(payload?.graph?.title || 'Untitled graph');
   // `title` on a storage record is the library name, independent of payload.graph.title.
   const normalizeName = value => {
@@ -213,13 +290,13 @@
       const previousId = this.current?.id;
       const remote = await this.api.request(`/documents/${encodeURIComponent(id)}`);
       await beforeApply();
+      if (await this.store.read(id)) await this.receive(remote);
       return this.serial(async () => {
         if (this.current?.id !== previousId) throw new Error('The active graph changed while loading. Open the cloud graph again.');
         const local = await this.store.read(id);
         // A refresh must never discard an unsent edit, even after an uncertain response.
-        if (local && this.dirty(local)) {
+        if (local && (this.dirty(local) || local.cloudRevision >= remote.revision)) {
           this.current = local;
-          if (local.cloudRevision !== remote.revision) this.current = await this.write({ ...local, conflict: true });
         } else {
           const record = { ...(local || this.make(remote.payload)), id, payload: remote.payload, title: remote.title,
             cloudRevision: remote.revision, updatedAt: remote.updatedAt, syncedPayload: signature(remote.payload), syncedTitle: remote.title, pending: null, conflict: false };
@@ -244,6 +321,34 @@
           pending: null, conflict: false, forceCheckpoint: false }, latest.localVersion);
         this.opening = clone(remote.payload); this.sessionId = this.uuid(); this.emit();
         return clone(remote.payload);
+      });
+    }
+    async receive(remote) {
+      return this.serial(async () => {
+        const record = await this.store.read(remote.id);
+        if (!record || remote.revision <= record.cloudRevision) return { changed: false };
+        let base;
+        try { base = JSON.parse(record.syncedPayload); } catch { base = null; }
+        // A lost acknowledgement can already be present on the server; edits
+        // made after that request must be compared against its acknowledged body.
+        const acknowledged = record.pending && equal(remote.payload, record.pending.payload)
+          && remote.title === record.pending.title;
+        if (acknowledged) base = remote.payload;
+        const merged = mergePayload(base, record.payload, remote.payload);
+        const conflicts = [...merged.conflicts];
+        const name = mergeValue(acknowledged ? record.pending.title : record.syncedTitle ?? record.title,
+          record.title, remote.title, '/title', conflicts);
+        if (conflicts.length) {
+          if (!record.conflict) await this.write({ ...record, conflict: true });
+          this.emit();
+          return { changed: false, conflict: true, conflicts };
+        }
+        const next = { ...record, payload: merged.payload, title: name, cloudRevision: remote.revision,
+          syncedPayload: signature(remote.payload), syncedTitle: remote.title, pending: null, conflict: false,
+          updatedAt: this.dirty(record) ? record.updatedAt : remote.updatedAt,
+          forceCheckpoint: !!(record.forceCheckpoint || record.pending?.checkpoint) };
+        await this.write(next); this.emit();
+        return { changed: true, before: record.payload, payload: clone(next.payload) };
       });
     }
     async rename(id, name) {
@@ -318,7 +423,13 @@
               this.emit();
             });
           } catch (error) {
-            if (error.status === 409 || error.status === 410) {
+            if (error.status === 409) {
+              const remote = await this.api.request(`/documents/${encodeURIComponent(record.id)}`);
+              const result = await this.receive(remote);
+              if (!result.conflict) continue;
+              break;
+            }
+            if (error.status === 410) {
               await this.serial(async () => {
                 const latest = await this.store.read(record.id);
                 if (latest) await this.write({ ...latest, conflict: true });
@@ -355,5 +466,5 @@
     async list() { return (await (this.store.summaries ? this.store.summaries() : this.store.list())).sort((a, b) => b.updatedAt - a.updatedAt); }
     release() { this.generation++; this.current = null; }
   }
-  return { IndexedStore, CloudAPI, Library, WorkspaceDrafts, signature };
+  return { IndexedStore, CloudAPI, Library, WorkspaceDrafts, signature, mergePayload, documentContent };
 });

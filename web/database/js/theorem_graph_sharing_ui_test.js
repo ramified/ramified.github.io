@@ -103,8 +103,44 @@ async function run() {
     await observer.read(`${row}.querySelector('.theorem-personal-item-name').click()`);
     await waitFor(() => observer.read(`document.getElementById('graph-title').value === 'Owner graph'`));
     await observer.settled();
+    for (const savedName of ['Sibling tab name', 'Owner graph']) {
+      await observer.read(`(async()=> { const api=new TheoremGraphStorage.CloudAPI(window.THEOREM_GRAPH_API_BASE); const store=new TheoremGraphStorage.IndexedStore('theorem-graphs-v2:'+window.THEOREM_GRAPH_API_BASE+':ramified'); const sibling=new TheoremGraphStorage.Library({store,api}); sibling.online=true; await sibling.openLocal(${JSON.stringify(documentId)}); await sibling.rename(${JSON.stringify(documentId)},${JSON.stringify(savedName)}); await sibling.sync(); })()`);
+      await waitFor(() => observer.read(`${row}.querySelector('.theorem-personal-item-name > span').textContent === ${JSON.stringify(savedName)}`), 15000, 'a sibling tab updating the shared cache also updates the current name');
+    }
+    await owner.type('graph-title', 'Remote content v2'); await owner.save(); await owner.sync();
+    await waitFor(() => observer.read(`document.getElementById('graph-title').value === 'Remote content v2'`), 15000, 'unchanged browser automatically receives content without Review or Refresh');
+    assert(await observer.read(`document.getElementById('personal-conflict').hidden`));
+    await owner.type('graph-title', 'Owner graph'); await owner.save(); await owner.sync();
+    await waitFor(() => observer.read(`document.getElementById('graph-title').value === 'Owner graph'`), 15000);
     await observer.type('graph-title', 'Unsaved observer draft ');
     await delay(500);
+    const node = await owner.read(`(() => { const node=document.querySelector('#theorem-node-layer [data-node-id]:not([data-node-id="__title__"])'); node.scrollIntoView({block:'center'}); const rect=node.getBoundingClientRect(); return {id:node.dataset.nodeId,x:rect.left+rect.width/2,y:rect.top+rect.height/2}; })()`);
+    await owner.c.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: node.x, y: node.y, button: 'left', clickCount: 1 });
+    await owner.c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: node.x, y: node.y, button: 'left', clickCount: 1 });
+    await owner.read(`CalculatorCards.openCard('#node-card')`);
+    await owner.type('node-label', 'Remote independent node'); await owner.save(); await owner.sync();
+    await waitFor(() => observer.read(`document.getElementById('personal-status').dataset.state === 'remote'`), 15000, 'remote update waits while the local textbox is focused');
+    assert.equal(await observer.read(`document.activeElement.id`), 'graph-title');
+    assert.equal(await observer.read(`document.getElementById('graph-title').value`), 'Unsaved observer draft ');
+    await observer.read(`document.activeElement.blur()`);
+    await waitFor(() => observer.read(`document.querySelector('#theorem-node-layer [data-node-id="${node.id}"]').textContent.includes('Remote independent node') && document.getElementById('personal-status').dataset.state === 'changed'`), 15000, 'independent remote node change merges into an unsaved local title after editing');
+    assert.equal((await observer.read(`document.getElementById('graph-title').value`)).trim(), 'Unsaved observer draft');
+    assert(await observer.read(`document.getElementById('personal-conflict').hidden`));
+    assert.equal(JSON.parse(backend.db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(documentId).content).graph.title, 'Owner graph', 'incoming merges never upload an unsaved local draft');
+    await observer.type('graph-title', 'Unsaved observer draft ');
+    await owner.type('graph-title', 'Remote conflicting title'); await owner.save(); await owner.sync();
+    await waitFor(() => observer.read(`document.getElementById('personal-status').dataset.state === 'conflict'`), 15000, 'only a real same-field edit produces Review');
+    assert(await observer.read(`(async()=> !(await new TheoremGraphStorage.IndexedStore('theorem-graphs-v2:'+window.THEOREM_GRAPH_API_BASE+':ramified').read(${JSON.stringify(documentId)})).conflict)()`), 'an unsaved workspace conflict never blocks the shared saved record');
+    await observer.navigate(page);
+    assert.equal(await observer.read(`document.getElementById('personal-status').dataset.state`), 'conflict', 'an unsaved conflict retains its common base after reload');
+    assert.equal((await observer.read(`document.getElementById('graph-title').value`)).trim(), 'Unsaved observer draft');
+    assert.equal(JSON.parse(backend.db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(documentId).content).graph.title, 'Remote conflicting title');
+    await observer.click('personal-cloud-version'); await observer.settled();
+    await observer.read(`document.activeElement.blur()`);
+    await owner.type('graph-title', 'Owner graph'); await owner.save(); await owner.sync();
+    await waitFor(() => observer.read(`document.getElementById('graph-title').value === 'Owner graph' && document.getElementById('personal-status').dataset.state === 'synced'`), 15000);
+    await observer.type('graph-title', 'Unsaved observer draft ');
+    await owner.read(`CalculatorCards.openCard('#theorem-personal')`);
     assert(await owner.read(`${row}.classList.contains('is-current') && ${row}.hasAttribute('aria-current')`));
     assert(await owner.read(`${row}.querySelector('time').dateTime.length > 0`));
     const sidebarBefore = await owner.read(`document.getElementById('cards').getBoundingClientRect().top + scrollY`);
@@ -144,19 +180,16 @@ async function run() {
     assert.equal(await owner.read(`document.getElementById('graph-title').value`), 'Owner graph');
     assert.equal(JSON.parse(backend.db.sqlite.prepare('SELECT content FROM documents WHERE id=?').get(documentId).content).graph.titleNode.label, 'Owner graph');
     assert.equal(backend.db.sqlite.prepare('SELECT title FROM documents WHERE id=?').get(documentId).title, 'Owner renamed');
-    await observer.click('personal-refresh'); await observer.settled();
+    await waitFor(() => observer.read(`${row}.querySelector('.theorem-personal-item-name > span').textContent === 'Owner renamed'`), 15000, 'saved name automatically updates in the second browser');
     assert.equal(await observer.read(`${row}.querySelector('.theorem-personal-item-name > span').textContent`), 'Owner renamed', 'Refresh adopts the remote saved name for a cached current graph');
     assert.equal(await observer.read(`document.getElementById('personal-current').textContent`), 'Editing saved graph: Owner renamed');
     assert.equal(await observer.read(`document.getElementById('graph-title').value`), 'Unsaved observer draft ', 'remote rename never replaces the focused editor draft');
-    await observer.click('personal-primary');
-    await observer.click('personal-cloud-version'); await observer.settled();
-    assert.equal(await observer.read(`${row}.querySelector('.theorem-personal-item-name > span').textContent`), 'Owner renamed', 'reviewing the cloud version retains the new saved name');
-    assert(await observer.read(`(async()=> (await new TheoremGraphStorage.IndexedStore('theorem-graphs-v2:'+window.THEOREM_GRAPH_API_BASE+':ramified:drafts').list()).some(item=>JSON.stringify(item.payload).includes('Unsaved observer draft')) )()`), 'review keeps the unsaved editor draft recoverable');
+    assert(await observer.read(`document.getElementById('personal-conflict').hidden`), 'a remote rename plus a local content draft never requires Review');
     await observer.click('personal-detach'); await observer.settled();
     await owner.read(`${row}.querySelector('.theorem-personal-item-actions button').click()`);
     await owner.type('personal-rename-title', 'Renamed elsewhere');
     await owner.read(`document.getElementById('personal-rename').requestSubmit()`); await owner.sync();
-    await observer.click('personal-refresh'); await observer.settled();
+    await waitFor(() => observer.read(`${row}.querySelector('.theorem-personal-item-name > span').textContent === 'Renamed elsewhere'`), 15000, 'inactive cached name updates automatically');
     assert.equal(await observer.read(`${row}.querySelector('.theorem-personal-item-name > span').textContent`), 'Renamed elsewhere', 'Refresh also updates a cached graph that is not open');
     await observer.c.send('Network.setBlockedURLs', { urls: [backend.origin + '/*'] });
     await observer.read(`${row}.querySelector('.theorem-personal-item-actions button').click()`);
@@ -169,7 +202,7 @@ async function run() {
     await observer.click('personal-refresh'); await observer.settled();
     assert.equal(await observer.read(`${row}.querySelector('.theorem-personal-item-name > span').textContent`), 'My pending local name', 'remote refresh never overwrites an unsent local rename');
     assert.equal(backend.db.sqlite.prepare('SELECT title FROM documents WHERE id=?').get(documentId).title, 'Owner renamed', 'refresh never writes a local rename over the server');
-    console.log('PASS browser: cross-browser rename refresh for current/inactive cached graphs, review, and preserved unsaved editor drafts');
+    console.log('PASS browser: automatic repeated content/name updates, independent edits, focused-draft protection and real rename conflicts');
     await owner.read(`document.getElementById('personal-users').open = true`); await delay(200);
     await owner.type('personal-user-name', 'alice'); await owner.type('personal-user-password', password);
     await owner.read(`document.getElementById('personal-user-form').requestSubmit()`);
@@ -267,7 +300,7 @@ async function run() {
     assert.deepEqual(errors, []);
     console.log('PASS browser: local account isolation, no shared-draft uploads, sidebar/wide responsive layout, deleting graphs and share links');
   } catch (error) {
-    for (const session of sessions) console.error('UI state:', await evaluate(session.client, `({login:document.getElementById('personal-login-status')?.textContent,status:document.getElementById('personal-status')?.textContent,user:document.getElementById('personal-account-name')?.textContent,username:document.getElementById('personal-username')?.value,newUser:document.getElementById('personal-user-name')?.value,userStatus:document.getElementById('personal-user-status')?.textContent,active:document.activeElement?.id,cardHidden:document.getElementById('theorem-personal')?.hidden,api:window.THEOREM_GRAPH_API_BASE})`).catch(() => null));
+    for (const session of sessions) console.error('UI state:', await evaluate(session.client, `({login:document.getElementById('personal-login-status')?.textContent,status:document.getElementById('personal-status')?.textContent,user:document.getElementById('personal-account-name')?.textContent,username:document.getElementById('personal-username')?.value,newUser:document.getElementById('personal-user-name')?.value,userStatus:document.getElementById('personal-user-status')?.textContent,active:document.activeElement?.id,cardHidden:document.getElementById('theorem-personal')?.hidden,api:window.THEOREM_GRAPH_API_BASE,conflicts:document.getElementById('theorem-personal')?.dataset.syncConflictPaths})`).catch(() => null));
     console.error('Runtime errors:', errors); throw error;
   } finally {
     for (const session of sessions) { session.client.close(); await stopBrowser(session.browser, session.profile); }
