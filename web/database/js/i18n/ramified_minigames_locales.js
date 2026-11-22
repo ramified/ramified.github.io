@@ -287,6 +287,7 @@
     'sfx.audition.winTwo': ['Win 2', '获胜 2'],
     'sfx.audition.winThree': ['Win 3', '获胜 3'],
     'sfx.event.action': ['Accepted action', '成功操作'],
+    'sfx.event.connectFourDrop': ['Connect Four drop', '四子棋落子'],
     'sfx.event.invalid': ['Invalid action', '无效操作'],
     'sfx.event.win': ['Win', '获胜'],
     'sfx.event.draw': ['Draw', '和局'],

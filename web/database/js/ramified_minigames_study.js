@@ -77,6 +77,14 @@
     });
     sound.addEventListener('change', syncMute);
     syncMute();
+    function unlockSound(event) {
+      if (event.isTrusted && sound.checked) window.RamifiedMinigameSfx?.unlock();
+    }
+    // Touch activates on pointerup. Capture also covers a first board click.
+    for (const type of ['pointerdown', 'pointerup', 'click', 'keydown']) {
+      document.addEventListener(type, unlockSound, true);
+    }
+    mute.addEventListener('click', unlockSound);
     const workshop = byId('study-workshop-content');
     for (const node of [byId('debug-toggle')?.closest('.mosaic-debug-actions'), byId('debug-tools'), byId('ramified-import-export-card')]) {
       if (!node) continue;
@@ -123,13 +131,6 @@
       const delta = ({ ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns, ArrowDown: columns })[event.key];
       buttons[(index + delta + buttons.length) % buttons.length].focus();
     });
-    let soundAsked = false;
-    try { soundAsked = localStorage.getItem('design-study:sound-asked') === 'true'; } catch {}
-    byId('study-sound-yes').addEventListener('click', () => {
-      if (!sound.checked) mute.click();
-      byId('study-notice').hidden = true;
-    });
-    byId('study-sound-no').addEventListener('click', () => { byId('study-notice').hidden = true; });
     function syncTurn() {
       const status = byId('study-status');
       const state = engine.presentationInfo();
@@ -170,12 +171,6 @@
       const state = engine.state();
       document.body.dataset.studyGame = state.mode;
       byId('study-hud').hidden = open || settingsOpen || state.mode !== '2048';
-      byId('study-notice').hidden = true;
-      if (!soundAsked && state.active && !state.browsing && !open && !settingsOpen) {
-        soundAsked = true;
-        try { localStorage.setItem('design-study:sound-asked', 'true'); } catch {}
-        byId('study-notice').hidden = false;
-      }
       syncTurn();
       paintPlayerBadges();
     }

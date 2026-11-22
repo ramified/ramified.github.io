@@ -2994,6 +2994,7 @@ function tryApplyOnlineRemoteAction(action, snapshot, message) {
 }
 
 function remoteSoundEventForAction(mode, type) {
+  if (mode === GAME_MODES.CONNECT_FOUR) return 'connect-four-drop';
   if (mode === GAME_MODES.BILLIARDS) return 'billiards-strike';
   if (mode === GAME_MODES.CHINESE_CHECKERS) return 'checkers-move';
   if (mode === GAME_MODES.FIDE_CHESS) return 'chess-move';
@@ -11214,6 +11215,11 @@ function handleHexPieSwap() {
   onlineSendLocalAction({ type: 'pie-swap', gameMode: GAME_MODES.HEX, role: 'blue' });
 }
 
+function playConnectFourDropSound() {
+  playSoundEffect('connect-four-drop');
+  if (game.phase === 'gameover') playSoundEffect(game.winner ? 'shared-win' : 'shared-draw');
+}
+
 function handleConnectFourCanvasClick(event) {
   if (!game || currentAnimation) return;
   if (game.phase === 'setup') {
@@ -11253,8 +11259,7 @@ function handleConnectFourCanvasClick(event) {
   clearSetupAlert();
   pushUndoSnapshot(`Connect Four ${result.token.color} from ${target.label}`, { actor: 'human' });
   game = result.state;
-  playSoundEffect('placement-place');
-  if (game.phase === 'gameover') playSoundEffect(game.winner ? 'shared-win' : 'shared-draw');
+  playConnectFourDropSound();
   resumeLocalAiAfterReplacementHumanMove();
   startConnectFourDropAnimation(result);
   if (game.phase === 'gameover') {
@@ -33727,6 +33732,7 @@ function commitLocalAiMove(move) {
     if (!result.changed) return false;
     pushUndoSnapshot(`Local AI Connect Four ${result.token.color}`, { actor: 'ai' });
     game = result.state;
+    playConnectFourDropSound();
     startConnectFourDropAnimation(result);
     syncStatusForCurrentGame();
     render();

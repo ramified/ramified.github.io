@@ -36,7 +36,7 @@
     ['shared-win', 'sfx.event.win', 'shared'], ['shared-draw', 'sfx.event.draw', 'shared'],
     ['shared-restart', 'sfx.event.restart', 'shared'], ['shared-undo', 'sfx.event.undo', 'shared'], ['shared-redo', 'sfx.event.redo', 'shared'],
     ['2048-slide', 'sfx.event.slide', '2048'], ['2048-merge', 'sfx.event.merge', '2048'], ['2048-bomb', 'sfx.event.bomb', '2048'], ['2048-gameover', 'sfx.event.gameover', '2048'],
-    ['placement-place', 'sfx.event.place', 'placement'], ['go-capture', 'sfx.event.capture', 'go'], ['reversi-flip', 'sfx.event.flip', 'reversi'],
+    ['placement-place', 'sfx.event.place', 'placement'], ['connect-four-drop', 'sfx.event.connectFourDrop', 'connect-four'], ['go-capture', 'sfx.event.capture', 'go'], ['reversi-flip', 'sfx.event.flip', 'reversi'],
     ['chess-move', 'sfx.event.chessMove', 'fide-chess'], ['chess-capture', 'sfx.event.chessCapture', 'fide-chess'],
     ['checkers-move', 'sfx.event.checkersMove', 'chinese-checkers'], ['checkers-jump', 'sfx.event.checkersJump', 'chinese-checkers'], ['checkers-lake-hop', 'sfx.event.checkersLakeHop', 'chinese-checkers'], ['checkers-land', 'sfx.event.checkersLake', 'chinese-checkers'], ['checkers-goal', 'sfx.event.checkersGoal', 'chinese-checkers'], 
     ['tile-select', 'sfx.event.tileSelect', 'lianliankan'], ['tile-match', 'sfx.event.tileMatch', 'lianliankan'], ['tile-mismatch', 'sfx.event.tileMismatch', 'lianliankan'], ['tile-shuffle', 'sfx.event.tileShuffle', 'lianliankan'], ['tile-cleared', 'sfx.event.tileCleared', 'lianliankan'],
@@ -96,15 +96,19 @@
   }
 
   function eventsForMode(mode) {
-    return EVENTS.filter((event) => event.mode === 'shared' || event.mode === mode || (event.mode === 'placement' && ['hex', 'gomoku', 'connect-four', 'go', 'reversi'].includes(mode)));
+    return EVENTS.filter((event) => event.mode === 'shared' || event.mode === mode || (event.mode === 'placement' && ['hex', 'gomoku', 'go', 'reversi'].includes(mode)));
   }
 
   function audioContext() {
     if (context) return context;
     const AudioContext = globalThis.AudioContext || globalThis.webkitAudioContext;
     if (typeof AudioContext !== 'function') return null;
-    try { context = new AudioContext(); } catch (_) { return null; }
+    try { context = new AudioContext({ latencyHint: 'interactive' }); } catch (_) { return null; }
     return context;
+  }
+
+  function resumeContext(ctx) {
+    if (ctx && ctx.state !== 'running' && typeof ctx.resume === 'function') ctx.resume().catch(() => {});
   }
 
   function noiseBuffer(ctx, duration) {
@@ -115,7 +119,10 @@
   }
 
   function recipeFor(eventId, variant) {
-    const physical = /billiards|sokoban|placement|chess|checkers/.test(eventId);
+    if (eventId === 'connect-four-drop' && variant === 'arcade') {
+      return { waveform: 'triangle', frequency: 460, duration: 0.07, noise: false, sweep: -245 };
+    }
+    const physical = /billiards|sokoban|placement|connect-four|chess|checkers/.test(eventId);
     const positive = /win|cleared|solved|target|goal|merge|match|pocket/.test(eventId);
     const negative = /invalid|mismatch|blocked|foul|gameover/.test(eventId);
     if (eventId === 'checkers-lake-hop') {
@@ -170,7 +177,7 @@
     if (activeVoices >= 12) return false;
     const ctx = audioContext();
     if (!ctx || typeof ctx.createOscillator !== 'function') return false;
-    if (ctx.state === 'suspended' && typeof ctx.resume === 'function') ctx.resume().catch(() => {});
+    resumeContext(ctx);
     const variant = normalizeVariants(preferences && preferences.soundVariants)[eventId];
     const savedSeed = normalizeSeeds(preferences && preferences.soundSeeds)[eventId];
     const recipe = recipeForSeed(options.seedId || savedSeed) || recipeFor(eventId, variant);
@@ -202,5 +209,5 @@
     return true;
   }
 
-  globalThis.RamifiedMinigameSfx = Object.freeze({ EVENTS, VARIANTS, AUDITION_SEEDS, defaultVariants, normalizeVariants, normalizeSeeds, auditionSeedsForCategory, auditionSeedId, auditionSeedInfo, eventsForMode, play });
+  globalThis.RamifiedMinigameSfx = Object.freeze({ EVENTS, VARIANTS, AUDITION_SEEDS, defaultVariants, normalizeVariants, normalizeSeeds, auditionSeedsForCategory, auditionSeedId, auditionSeedInfo, eventsForMode, play, unlock() { resumeContext(audioContext()); } });
 })();

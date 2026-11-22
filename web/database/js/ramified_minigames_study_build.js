@@ -15,7 +15,8 @@ function emit(filename, contents) {
   } else fs.writeFileSync(filename, contents);
 }
 const buildRenderer = require('./ramified_minigames_study_render_build.js');
-emit(path.join(__dirname, 'ramified_minigames_study_engine.js'), buildRenderer(fs.readFileSync(path.join(__dirname, 'ramified_minigames_setup.js'), 'utf8')));
+const engine = buildRenderer(fs.readFileSync(path.join(__dirname, 'ramified_minigames_setup.js'), 'utf8'));
+emit(path.join(__dirname, 'ramified_minigames_study_engine.js'), engine.replace('soundEnabled: false,', 'soundEnabled: true,'));
 // Classic is archived: read its existing markup, but never emit to that page.
 // Make future main-page markup changes in this builder, not in the archive.
 let html = fs.readFileSync(path.join(root, 'ramified_minigames_classic.html'), 'utf8').replace(/\r\n/g, '\n');
@@ -94,7 +95,6 @@ html = html.replace('<section id="player-home" class="player-page">', `<section 
 html = html.replace('<div id="player-language"></div>', `<div id="player-language"></div><details id="study-workshop"><summary data-i18n="study.workshop">Workshop</summary><p data-i18n="study.workshopHelp">Editing, sound experiments and file tools. These are optional; close this section to return to ordinary settings.</p><div id="study-workshop-content"></div></details>`);
 html = html.replace('<div id="player-toolbar">', `<div id="study-hud" role="status" aria-live="polite"></div><button id="study-mute" class="btn" type="button" aria-pressed="true" data-i18n="study.muted">Sound off</button>
 <div id="study-status" role="status" aria-live="polite"></div>
-<div id="study-notice" hidden><span data-i18n="study.soundQuestion">Sound on?</span><button class="btn" id="study-sound-yes" data-i18n="study.enableSound">Turn on</button><button class="btn" id="study-sound-no" data-i18n="study.notNow">Not now</button></div>
 <footer id="study-build" lang="en" data-i18n-ignore>Build 2026-10-28.6</footer>
       <div id="player-toolbar">`);
 // Reuse existing locale keys with player-facing copy in the study catalog.
@@ -168,6 +168,9 @@ for (const asset of ['css/ramified_minigames_study.css', 'js/ramified_minigames_
   html = html.replace(new RegExp(`${asset.replaceAll('.', '\\.')}\\?v=[^"\\s]+`), `${asset}?v=${CONNECTION_UI_BUILD}`);
 }
 // The first rendered home must already use the study's copy and page state.
+for (const asset of ['js/ramified_minigames_sfx.js', 'js/ramified_minigames_study_engine.js', 'js/ramified_minigames_study.js', 'js/i18n/ramified_minigames_locales.js']) {
+  html = html.replace(new RegExp(`${asset.replaceAll('.', '\\.') }\\?v=[^"\\s]+`), `${asset}?v=20261122-drop-sound-1`);
+}
 // Read the English fallbacks from the same catalog used at runtime.
 const studyEnglish = {};
 require('vm').runInNewContext(fs.readFileSync(path.join(__dirname, 'ramified_minigames_study_locales.js'), 'utf8'), {
