@@ -203,7 +203,7 @@ for (const asset of ['css/ramified_minigames_study.css', 'js/ramified_minigames_
 // The first rendered home must already use the study's copy and page state.
 for (const [asset, version] of Object.entries({
   'js/ramified_minigames_sfx.js': '20261122-drop-sound-1',
-  'js/ramified_minigames_study.js': '20261122-sokoban-flow-1',
+  'js/ramified_minigames_study.js': '20261122-sokoban-layout-1',
   'js/ramified_minigames_study_engine.js': '20261122-sokoban-result-1',
   'js/ramified_minigames_study_player.js': '20261122-sokoban-result-1',
   'js/ramified_minigames_online.js': '20261122-room-invite-1',

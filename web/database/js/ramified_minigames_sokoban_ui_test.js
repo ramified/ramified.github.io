@@ -126,6 +126,29 @@ async function run() {
       await click('#canvas-start-begin'); await ready();
       assert.equal(await read('RamifiedMinigames.player.state().sokobanLevelId'), 'bridges-blocking');
       assert.equal(await read('RamifiedMinigames.player.state().solved'), false, 'Play again restarts the final level');
+      for (const [width, height] of [[1280,900],[390,620]]) {
+        await client.send('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:false});
+        for (const id of ['pedestrian', 'curling-on-cube', 'expand3']) {
+          assert(await read(`(async () => {
+            const p=RamifiedMinigames.player;
+            return await p.beginSetup('sokoban', {presetId:'${id}'}) && p.commitSetup({sokobanLevelId:'${id}'});
+          })()`));
+          const measure = () => read(`(() => {
+            const r=document.querySelector('#mosaic-canvas').getBoundingClientRect(), g=RamifiedMinigames.__test.getGeometry();
+            return { scaleGap:Math.abs(r.width/g.width-r.height/g.height), width:r.width, height:r.height };
+          })()`);
+          const initial = await measure();
+          assert(initial.scaleGap < .015, `${id} starts proportionally at ${width}px`);
+          const direction = await read(`(() => {
+            const e=RamifiedMinigames, g=e.__test.getGame();
+            const dirs=g.preset.lattice==='hexagonal'?e.HEX_DIRS:e.DIRS;
+            return Object.keys(dirs).find(d=>e.moveSokobanPlayers(g,dirs[d]).changed);
+          })()`);
+          await click(`#study-sokoban-directions [data-move-dir="${direction}"]`); await ready();
+          const moved = await measure();
+          assert(Math.abs(initial.width-moved.width)<2 && Math.abs(initial.height-moved.height)<2, `${id} keeps the same size on the first move at ${width}px`);
+        }
+      }
       assert.deepEqual(errors, []);
       console.log('Maintained Sokoban: narrow controls, Stay, undo/reset, three automatic advances, persisted progress and final replay passed');
       return;

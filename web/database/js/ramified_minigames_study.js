@@ -50,7 +50,10 @@
         paintPlayerBadges();
       });
     }
-    new ResizeObserver(refresh).observe(document.querySelector('.mosaic-layout'));
+    const layoutObserver = new ResizeObserver(refresh);
+    layoutObserver.observe(document.querySelector('.mosaic-layout'));
+    // Game UI can change the wrapper's padding without resizing the outer stage.
+    layoutObserver.observe(byId('canvas-wrap'), { box: 'content-box' });
     function watchDpr() {
       const query = matchMedia(`(resolution: ${devicePixelRatio}dppx)`);
       query.addEventListener('change', () => { watchDpr(); refresh(); }, { once: true });
@@ -96,12 +99,17 @@
     const moveRow = byId('move-row');
     const directions = byId('study-sokoban-directions');
     const actionControls = byId('player-action-controls');
+    const sokobanHud = byId('study-sokoban-hud');
+    const sokobanControls = byId('study-sokoban-controls');
     const sokobanUndo = byId('study-sokoban-undo');
     sokobanUndo.addEventListener('click', () => engine.undoSokobanPresentation());
     byId('study-sokoban-reset').addEventListener('click', () => engine.restartSokobanPresentation());
     function syncSokoban() {
       const puzzle = menu.hidden && settings.hidden ? engine.sokobanPresentation() : null;
-      byId('study-sokoban-hud').hidden = byId('study-sokoban-controls').hidden = !puzzle;
+      const hidden = !puzzle;
+      const layoutChanged = sokobanHud.hidden !== hidden;
+      sokobanHud.hidden = sokobanControls.hidden = hidden;
+      if (layoutChanged && puzzle) engine.refreshPresentation();
       if (!puzzle) {
         if (moveRow.parentElement === directions) actionControls.prepend(moveRow);
         return;
