@@ -204,11 +204,11 @@ for (const asset of ['css/ramified_minigames_study.css', 'js/ramified_minigames_
 for (const [asset, version] of Object.entries({
   'js/ramified_minigames_sfx.js': '20261122-drop-sound-1',
   'js/ramified_minigames_study.js': '20261122-match-ended-1',
-  'js/ramified_minigames_study_engine.js': '20261122-match-ended-1',
+  'js/ramified_minigames_study_engine.js': '20261122-room-errors-1',
   'js/ramified_minigames_study_player.js': '20261122-sokoban-result-1',
-  'js/ramified_minigames_online.js': '20261122-match-ended-1',
-  'js/ramified_minigames_room_ui.js': '20261122-room-invite-1',
-  'js/i18n/ramified_minigames_locales.js': '20261122-match-ended-1',
+  'js/ramified_minigames_online.js': '20261122-room-errors-1',
+  'js/ramified_minigames_room_ui.js': '20261122-room-errors-1',
+  'js/i18n/ramified_minigames_locales.js': '20261122-room-errors-1',
   'css/ramified_minigames_study.css': '20261122-match-ended-1'
 })) {
   html = html.replace(new RegExp(`${asset.replaceAll('.', '\\.')}\\?v=[^"\\s]+`), `${asset}?v=${version}`);

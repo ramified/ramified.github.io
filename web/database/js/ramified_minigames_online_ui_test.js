@@ -410,7 +410,13 @@ async function run() {
     await a.read(`(() => {const fetch=window.fetch;window.__restoreCreateFailure=()=>{window.fetch=fetch};window.fetch=(url,options)=>options?.method==='POST'&&String(url).endsWith('/api/rooms')?Promise.reject(new DOMException('Timed out','TimeoutError')):fetch(url,options)})()`);
     await a.click('#player-begin');await a.until(`document.querySelector('#player-message').hasAttribute('data-room-connection-error')`,'existing create failure presentation');
     assert.equal(await a.read(`document.body.dataset.studyPage`),'setup','create failure retains the existing preparation retry route');
+    assert.match(await a.read(`document.querySelector('#player-message').textContent`), /timed out/);
     await a.read(`window.__restoreCreateFailure()`);
+    await a.read(`(() => {const original=window.fetch;window.__restoreCreateFailure=()=>{window.fetch=original};window.fetch=(url,options)=>options?.method==='POST'&&String(url).endsWith('/api/rooms')?Promise.resolve(new Response('{}',{status:503})):original(url,options)})()`);
+    await a.click('#player-begin'); await a.until(`document.querySelector('#player-message').textContent.includes('HTTP 503')`, 'show real HTTP status');
+    await a.read(`SiteI18n.setLocale('zh-CN')`);
+    assert.match(await a.read(`document.querySelector('#player-message').textContent`), /建房失败（HTTP 503）/);
+    await a.read(`SiteI18n.setLocale('en'); window.__restoreCreateFailure()`);
     await a.read(`(() => { const original=window.fetch; window.__restoreFetch=()=>{window.fetch=original};window.fetch=(url,options)=>original(url,options).then(response=>options?.method==='POST' && String(url).endsWith('/api/rooms') ? new Promise(resolve=>{window.__releaseRoomResponse=()=>resolve(response)}) : response); })()`);
     await a.click('#player-begin'); await a.until(`typeof window.__releaseRoomResponse==='function'`);
     await a.until(`!document.querySelector('#player-room-loading').hidden`,'creating skeleton before cancellation');

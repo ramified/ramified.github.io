@@ -67,7 +67,7 @@
       else {
         stopWaiting();
         if (detail.phase === 'error') {
-          connectionError = { key: detail.key, text: message.textContent };
+          connectionError = { key: detail.key, params: detail.params, text: message.textContent };
           message.dataset.roomConnectionError = 'true';
         } else if (detail.phase === 'cancel') clearConnectionError();
         syncRoom();
@@ -232,7 +232,7 @@
     document.addEventListener('ramified-online-state', syncRoom);
     document.addEventListener('site-language-change', () => {
       paintWaiting();
-      if (connectionError) { connectionError.text = tk(connectionError.key); setText(message, connectionError.text); }
+      if (connectionError) { connectionError.text = tk(connectionError.key, undefined, connectionError.params); setText(message, connectionError.text); }
       syncRoom();
     });
     new MutationObserver(syncRoom).observe(el('online-status'), { childList: true });

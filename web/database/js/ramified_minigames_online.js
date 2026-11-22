@@ -364,7 +364,7 @@
         if (creationFingerprint && fingerprint !== creationFingerprint) creationId = crypto.randomUUID();
         creationFingerprint = fingerprint;
         if (flow === 'change') {
-          if (!engine.onlineSend({ type: 'proposeConfiguration', gameMode: snapshot.gameMode, snapshot, timeControl: config, summary: snapshot.preset.label || snapshot.preset.id })) throw new Error('send');
+          if (!engine.onlineSend({ type: 'proposeConfiguration', gameMode: snapshot.gameMode, snapshot, timeControl: config, summary: snapshot.preset.label || snapshot.preset.id })) throw Object.assign(new Error('Room connection closed.'), { roomIssue: 'network' });
           engine.onlineCancelSetup(); setFlow(''); ui.show('room', 'home');
         } else {
           const presentation = { kind: 'creating', gameMode: snapshot.gameMode, hostName: engine.onlineInfo().playerName, timeControl: config, roundState: 'waiting', seatCount: snapshot.gameMode === 'chinese-checkers' ? (snapshot.playerColors || snapshot.chineseCheckersPlayers || []).length || 6 : 2 };
@@ -374,10 +374,26 @@
           engine.onlineCancelSetup(); setFlow(''); requestBusy = false;
           await join(room.roomCode, presentation);
         }
-      } catch (_) {
+      } catch (error) {
         if (ticket === serial) {
-          ui.message(tk('lobby.createError', 'Could not apply the configuration. Retry or go back; your previous game is unchanged.'));
-          presentConnection('error', { key: 'lobby.createError' });
+          let key = 'lobby.createError', params;
+          let text = tk('lobby.createError', 'Could not apply the configuration. Retry or go back; your previous game is unchanged.');
+          if (error?.roomIssue === 'http') {
+            key = 'lobby.createHttpError';
+            params = { status: error.status };
+            text = tk('lobby.createHttpError', 'Room not created (HTTP {{status}}). Try again or go back.', params);
+          } else if (error?.roomIssue === 'timeout') {
+            key = 'lobby.createTimeout';
+            text = tk('lobby.createTimeout', 'The room request timed out. Try again or go back.');
+          } else if (error?.roomIssue === 'network') {
+            key = 'lobby.createNetworkError';
+            text = tk('lobby.createNetworkError', 'Could not reach the room server. Check your connection and try again.');
+          } else if (error?.roomIssue === 'response') {
+            key = 'lobby.createResponseError';
+            text = tk('lobby.createResponseError', 'The room server sent an unexpected reply. Try again or go back.');
+          }
+          ui.message(text);
+          presentConnection('error', { key, params });
         }
       } finally { if (ticket === serial) requestBusy = false; ui.sync(); }
     }

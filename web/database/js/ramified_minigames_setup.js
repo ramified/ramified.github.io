@@ -34862,12 +34862,19 @@ const api = {
     },
     async onlineCreate(snapshot, config, creationId) {
       const roles = onlineModeRoles(snapshot.gameMode);
-      const response = await fetch(`${onlineState.baseUrl}/api/rooms`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000),
-        body: JSON.stringify({ gameMode: snapshot.gameMode, snapshot, timeControl: config, creationId, clientId: onlineState.clientId, playerName: currentOnlinePlayerName(), role: (snapshot.playerColors || snapshot.chineseCheckersPlayers || roles)[0], summary: snapshot.preset.label || snapshot.preset.id })
-      });
-      if (!response.ok) throw new Error('Room creation failed.');
-      return response.json();
+      const body = JSON.stringify({ gameMode: snapshot.gameMode, snapshot, timeControl: config, creationId, clientId: onlineState.clientId, playerName: currentOnlinePlayerName(), role: (snapshot.playerColors || snapshot.chineseCheckersPlayers || roles)[0], summary: snapshot.preset.label || snapshot.preset.id });
+      let response;
+      try {
+        response = await fetch(`${onlineState.baseUrl}/api/rooms`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000), body
+        });
+      } catch (cause) {
+        throw Object.assign(new Error('Room request failed.', { cause }), { roomIssue: cause?.name === 'TimeoutError' ? 'timeout' : 'network' });
+      }
+      if (!response.ok) throw Object.assign(new Error('Room creation rejected.'), { roomIssue: 'http', status: response.status });
+      const room = await response.json().catch(() => null);
+      if (!/^\d{6}$/.test(room?.roomCode || '')) throw Object.assign(new Error('Invalid room response.'), { roomIssue: 'response' });
+      return room;
     },
     state() {
       return {
