@@ -141,8 +141,20 @@ body.ramified-player.design-study {
 .design-study .player-room-header { display:grid; justify-items:center; gap:8px; min-height:0; padding:0; border:0; border-radius:0; box-shadow:none; background:transparent; color:var(--text); text-align:center; }
 .design-study #player-room-game,.design-study .player-room-loading-game { margin:0; font-size:clamp(26px,2.8cqw,36px); }
 .design-study .player-room-code-row { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:8px; }
-.design-study #player-room-code { padding:4px 14px; border:1px solid var(--border); border-radius:999px; background:var(--bg); color:var(--text); font:inherit; font-variant-numeric:tabular-nums; letter-spacing:.12em; user-select:all; }
-.design-study #player-room-copy { min-height:32px; padding:4px 8px; font-size:clamp(12px,var(--small),16px); color:var(--muted); }
+.design-study #player-invite { display:grid; justify-items:center; align-content:start; gap:12px; }
+.design-study #player-room-invite-actions { display:contents; }
+.design-study #player-room-link-status { color:var(--muted); text-align:center; font-size:clamp(13px,var(--small),17px); }
+.design-study #player-room-link-fallback { max-width:100%; user-select:all; overflow-wrap:anywhere; color:var(--accent); }
+.design-study #player-room-invite-rules { text-align:center; }
+.design-study #player-invite-board-help { position:absolute; inset:calc(var(--control) + 12px) var(--inset) auto; z-index:11; display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--border); background:var(--surface); }
+.design-study #player-invite-board-help p { flex:1; margin:0; font-size:clamp(13px,var(--small),17px); line-height:1.3; }
+.design-study #player-invite-board-help button { flex:none; }
+.design-study #canvas-wrap:has(#player-invite-board-help:not([hidden])) { padding-block-start:max(120px,19cqh); }
+.design-study:has(#player-invite-board-help:not([hidden])) #study-status { top:max(106px,16cqh); }
+.design-study.player-menu-open #player-invite-board-help,.design-study.study-settings-open #player-invite-board-help { visibility:hidden; }
+.design-study #player-room-copy { min-height:0; padding:4px 14px; border:1px solid var(--border); border-radius:999px; background:var(--bg); color:var(--text); font:inherit; line-height:1.4; font-variant-numeric:tabular-nums; letter-spacing:.12em; }
+.design-study #player-room-code { user-select:all; }
+.design-study #player-room-invite-actions > .btn { min-height:32px; padding:4px 8px; font-size:clamp(12px,var(--small),16px); color:var(--muted); }
 .design-study .player-room-meta { display:flex; flex-wrap:wrap; justify-content:center; gap:4px 16px; color:var(--muted); font-size:clamp(12px,var(--small),16px); }
 .design-study .player-room-meta p { font:inherit; }
 .design-study .player-room-meta span { font:inherit; color:inherit; letter-spacing:normal; }

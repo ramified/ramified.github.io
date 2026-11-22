@@ -25,6 +25,46 @@ async function run() {
       return { client, read, click, until, info, set };
     }
     const a = await browser(), b = await browser();
+    if (process.argv.includes('--invites')) {
+      await a.click('#player-online-open'); await a.click('#player-lobby-create');
+      await a.click('[data-game-mode="gomoku"]'); await a.click('#player-begin');
+      await a.until(`RamifiedMinigames.player.onlineInfo().roundState==='waiting'`);
+      const code = (await a.info()).roomCode;
+      await a.read(`navigator.clipboard.writeText=async text=>{window.__inviteLink=text}`);
+      await a.click('#player-room-copy-link');
+      const link = new URL(await a.read('window.__inviteLink'));
+      assert.deepEqual([...link.searchParams], [['room', code]]);
+      assert.equal(link.hash, '');
+      assert.equal(await a.read(`document.querySelector('#player-room-link-status').dataset.i18n`), 'lobby.inviteHostCopied');
+      await a.read(`navigator.clipboard.writeText=async()=>{throw new Error('Clipboard denied')}`);
+      await a.click('#player-room-copy-link');
+      assert.equal(await a.read(`document.querySelector('#player-room-link-fallback').textContent`), link.href);
+      await b.client.send('Page.navigate', { url: link.href });
+      await b.until(`RamifiedMinigames.player.onlineInfo().roundState==='playing' && document.querySelector('#player-menu').hidden`, 'guest auto-joins, takes the vacant seat, and starts');
+      await a.until(`RamifiedMinigames.player.onlineInfo().roundState==='playing' && document.querySelector('#player-menu').hidden`, 'host starts without pressing Ready');
+      assert.equal((await b.info()).roomCode, code);
+      assert.deepEqual((await b.info()).roles, ['white']);
+      assert.match(await b.read(`document.querySelector('#player-invite-board-rules').textContent`), /Gomoku.*five in a line/);
+      await b.click('#player-invite-dismiss');
+      await a.click('#mosaic-canvas');
+      await b.until(`RamifiedMinigames.__test.getGame().round===1`, 'move reaches invited guest');
+      const c = await browser();
+      async function checkInvite(room, key) {
+        const url = new URL(link);
+        url.searchParams.set('room', room);
+        await c.client.send('Page.navigate', { url: url.href });
+        await c.until(`!document.querySelector('#player-invite')?.hidden && document.querySelector('#player-invite-status')?.dataset.i18n==='lobby.${key}'`, key);
+        assert.equal((await c.info()).joined, false);
+      }
+      await checkInvite(code, 'inviteFull');
+      bridge.objects.get(code).room.roundState = 'finished';
+      await checkInvite(code, 'inviteEnded');
+      await checkInvite('wrong', 'inviteInvalid');
+      await checkInvite(code === '999999' ? '999998' : '999999', 'inviteMissing');
+      assert.deepEqual(errors, []);
+      console.log('Room invites: clipboard, fallback, automatic seats and start, gameplay, full, ended, invalid and missing passed');
+      return;
+    }
     await a.click('#player-new');
     if (await a.read(`!!document.querySelector('#player-slot-1')?.getClientRects().length`)) await a.click('#player-slot-1');
     await a.click('[data-game-mode="go"]');
@@ -120,7 +160,7 @@ async function run() {
     await a.until(`RamifiedMinigames.player.onlineInfo().joined && !document.querySelector('#player-room').hidden`, 'creator waiting room');
     assert.equal(await a.read(`document.querySelector('#player-room-loading').hidden`),true);
     assert.equal(await a.read(`document.querySelector('.player-seat-card').getBoundingClientRect().height`),loadingRowHeight,'skeleton rows match real seat-row height');
-    const loadedGeometry=await a.read(`({title:document.querySelector('#player-room-game').getBoundingClientRect().top,row:document.querySelector('.player-seat-card').getBoundingClientRect().top,pill:document.querySelector('#player-room-code').getBoundingClientRect().height})`);
+    const loadedGeometry=await a.read(`({title:document.querySelector('#player-room-game').getBoundingClientRect().top,row:document.querySelector('.player-seat-card').getBoundingClientRect().top,pill:document.querySelector('#player-room-copy').getBoundingClientRect().height})`);
     assert(Math.abs(loadingGeometry.title-loadedGeometry.title)<4&&Math.abs(loadingGeometry.row-loadedGeometry.row)<4&&Math.abs(loadingGeometry.pill-loadedGeometry.pill)<2,'skeleton geometry matches the loaded room: '+JSON.stringify({loadingGeometry,loadedGeometry}));
     for(const {width,locale,geometry} of pendingGeometries) {
       await a.client.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});

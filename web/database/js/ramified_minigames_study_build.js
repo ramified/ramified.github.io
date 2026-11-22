@@ -150,7 +150,7 @@ html = html.replace(/<section id="player-room"[\s\S]*?<\/section>/, section => s
   .replace('<p id="player-room-summary"></p>', `<p id="player-room-summary" hidden></p>
               <header class="player-room-header">
                 <h2 id="player-room-game"></h2>
-                <div class="player-room-code-row"><output id="player-room-code" data-i18n-aria-label="study.roomCode" aria-label="Room code"></output><button class="btn" id="player-room-copy" type="button" data-i18n="study.roomCopy" data-i18n-aria-label="study.roomCopyLabel" aria-label="Copy room code">Copy</button><span id="player-room-copy-status" class="player-visually-hidden" role="status"></span></div>
+                <div class="player-room-code-row"><button class="btn" id="player-room-copy" type="button" data-i18n-title="study.roomCopyLabel" title="Copy room code"><span id="player-room-code"></span></button><span id="player-room-copy-status" class="player-visually-hidden" role="status"></span></div>
                 <div class="player-room-meta"><p id="player-room-host"></p><p><span data-i18n="study.roomTimeLabel">Time:</span> <span id="player-room-time"></span></p></div>
               </header>`)
   .replace('              <p id="player-room-time"></p>\n              <ul id="player-room-members"></ul>\n', '')
@@ -178,13 +178,39 @@ html = html.replace('<section id="player-room"', `<section id="player-room-loadi
           </section>
           <section id="player-room"`);
 html = html.replace('<p id="player-room-state" role="status">', '<p id="player-room-state" class="player-room-status" role="status" aria-live="polite">');
+html = html.replace('<section id="player-room-loading"', `<section id="player-invite" class="player-page" hidden>
+            <p id="player-invite-status" class="player-room-status" role="status"></p>
+            <button class="btn" id="player-invite-retry" type="button" data-i18n="lobby.inviteRetry" hidden>Try again</button>
+          </section>
+          <section id="player-room-loading"`);
+html = html.replace('<span id="player-room-copy-status"', `<span id="player-room-invite-actions" hidden>
+                  <button class="btn" id="player-room-copy-link" type="button" data-i18n="lobby.inviteCopy">Copy invite link</button>
+                  <button class="btn" id="player-room-share-link" type="button" data-i18n="lobby.inviteShare" hidden>Share</button>
+                </span><span id="player-room-copy-status"`);
+html = html.replace('<p id="player-room-state"', `<p id="player-room-link-status" role="status" hidden></p>
+              <output id="player-room-link-fallback" hidden></output>
+              <p id="player-room-invite-rules" hidden></p>
+              <p id="player-room-state"`);
+html = html.replace('<div id="player-toolbar">', `<aside id="player-invite-board-help" hidden>
+        <p id="player-invite-board-rules"></p>
+        <button class="btn" id="player-invite-dismiss" type="button" data-i18n="lobby.inviteDismiss">Got it</button>
+      </aside>
+      <div id="player-toolbar">`);
 html = html.replace('<p id="player-message" role="status"', '<p id="player-message" role="status" aria-live="polite"');
 for (const asset of ['css/ramified_minigames_study.css', 'js/ramified_minigames_study_locales.js', 'js/ramified_minigames_online.js', 'js/ramified_minigames_room_ui.js']) {
   html = html.replace(new RegExp(`${asset.replaceAll('.', '\\.')}\\?v=[^"\\s]+`), `${asset}?v=${CONNECTION_UI_BUILD}`);
 }
 // The first rendered home must already use the study's copy and page state.
-for (const asset of ['js/ramified_minigames_sfx.js', 'js/ramified_minigames_study_engine.js', 'js/ramified_minigames_study.js', 'js/ramified_minigames_study_player.js', 'js/i18n/ramified_minigames_locales.js', 'css/ramified_minigames_study.css']) {
-  const version = asset.endsWith('_sfx.js') ? '20261122-drop-sound-1' : '20261122-sokoban-flow-1';
+for (const [asset, version] of Object.entries({
+  'js/ramified_minigames_sfx.js': '20261122-drop-sound-1',
+  'js/ramified_minigames_study.js': '20261122-sokoban-flow-1',
+  'js/ramified_minigames_study_engine.js': '20261122-room-invite-1',
+  'js/ramified_minigames_study_player.js': '20261122-room-invite-1',
+  'js/ramified_minigames_online.js': '20261122-room-invite-1',
+  'js/ramified_minigames_room_ui.js': '20261122-room-invite-1',
+  'js/i18n/ramified_minigames_locales.js': '20261122-room-invite-1',
+  'css/ramified_minigames_study.css': '20261122-room-invite-1'
+})) {
   html = html.replace(new RegExp(`${asset.replaceAll('.', '\\.')}\\?v=[^"\\s]+`), `${asset}?v=${version}`);
 }
 // Read the English fallbacks from the same catalog used at runtime.

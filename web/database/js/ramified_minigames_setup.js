@@ -34770,12 +34770,14 @@ const api = {
         return snapshot;
       } finally { game = preview; undoStack = previousUndo; redoStack = previousRedo; playerSetupCommitting = false; syncControls(); render(); }
     },
-    async onlineJoin(code, { isCurrent = () => true } = {}) {
+    async onlineJoin(code, { isCurrent = () => true, checkRoom } = {}) {
       if (!api.player.onlineEnter()) throw new Error('Wait for the current move.');
       const serial = ++playerOnlineSerial;
       const response = await fetch(`${onlineState.baseUrl}/api/rooms/${encodeURIComponent(code)}`, { signal: AbortSignal.timeout(15000) });
-      if (!response.ok) throw new Error('Room unavailable.');
+      if (!response.ok) throw Object.assign(new Error('Room unavailable.'), { status: response.status });
       const meta = await response.json();
+      if (serial !== playerOnlineSerial || !isCurrent()) return false;
+      checkRoom?.(meta);
       await ensureModeDependencies(meta.gameMode);
       if (serial !== playerOnlineSerial || !isCurrent()) return false;
       await connectOnlineSocket(code, ['spectator']);

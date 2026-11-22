@@ -525,7 +525,7 @@
         setup: PREPARATION_LAYOUTS[engine.state().mode]?.title || 'player.gameOptions', 'chess-category': 'games.chess', 'board-options': 'player.moreOptions', confirm: 'player.start',
         levels: 'player.chooseLevel',
         slots: 'player.chooseSave', 'slot-confirm': 'player.chooseSave',
-        online: 'online.title', lobby: 'online.title', room: 'lobby.room'
+        online: 'online.title', lobby: 'online.title', room: 'lobby.room', invite: 'lobby.inviteTitle'
       };
       byId('player-menu-title').dataset.i18n = titleKeys[next];
       byId('player-menu-title').textContent = window.SiteI18n.t(titleKeys[next]);

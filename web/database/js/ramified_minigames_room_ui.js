@@ -9,7 +9,6 @@
     const options = el('player-room-seat-options');
     const setText = (node, text) => { if (node.textContent !== text) node.textContent = text; };
     const copy = el('player-room-copy');
-    let copyTimer;
     const loading = el('player-room-loading'), menu = el('player-menu'), message = el('player-message');
     let pending = null, loadingTimer = 0, connectionError = null;
 
@@ -108,6 +107,7 @@
       if (!info.joined) return;
       setText(el('player-room-game'), engine.games().find(game => game.mode === info.gameMode)?.label || info.gameMode);
       setText(el('player-room-code'), info.roomCode || '');
+      copy.setAttribute('aria-label', tk('lobby.inviteCopyCode', 'Copy room code {{code}}', { code: info.roomCode }));
       setText(el('player-room-host'), tk('lobby.host', 'Host: {{name}}', { name: info.hostName || tk('lobby.noHost', 'None') }));
       if (info.loadFailed) {
         setText(el('player-room-state'), tk('study.roomLoadFailed', 'Could not load the room. Refresh to retry.'));
@@ -162,25 +162,67 @@
       syncActions(info);
     }
 
+    const inviteActions = el('player-room-invite-actions');
+    const inviteStatus = el('player-room-link-status');
+    const inviteFallback = el('player-room-link-fallback');
+    const share = el('player-room-share-link');
+    let inviteRoom = '';
+    function syncInviteActions() {
+      const info = engine.onlineInfo();
+      inviteActions.hidden = !info.joined || info.loadFailed || ['finished', 'rematch-vote'].includes(info.roundState);
+      if (inviteRoom !== info.roomCode) {
+        inviteRoom = info.roomCode;
+        inviteStatus.hidden = inviteFallback.hidden = true;
+      }
+    }
+    function showInviteCopyStatus(key, fallback, url = '') {
+      inviteStatus.dataset.i18n = key;
+      setText(inviteStatus, tk(key, fallback));
+      setText(inviteFallback, url);
+      inviteStatus.hidden = false;
+      inviteFallback.hidden = !url;
+    }
+    function inviteUrl(code) {
+      const url = new URL(location.pathname, location.origin);
+      url.searchParams.set('room', code);
+      return url.href;
+    }
+    async function shareInvite(useShare) {
+      const code = engine.onlineInfo().roomCode;
+      if (!/^\d{6}$/.test(code)) return;
+      const url = inviteUrl(code);
+      try {
+        if (useShare) await navigator.share({ url });
+        else await navigator.clipboard.writeText(url);
+        if (engine.onlineInfo().roomCode !== code) return;
+        const info = engine.onlineInfo();
+        if (!useShare && info.hostId === info.clientId && info.roundState === 'waiting') {
+          showInviteCopyStatus('lobby.inviteHostCopied', 'Link copied. You’ll be ready when the seats fill.');
+        } else if (!useShare) showInviteCopyStatus('lobby.inviteCopied', 'Invite link copied');
+      } catch (error) {
+        if (engine.onlineInfo().roomCode !== code || useShare && error?.name === 'AbortError') return;
+        showInviteCopyStatus('lobby.inviteCopyFallback', 'Press and hold or select the link below to copy it.', url);
+      }
+      document.dispatchEvent(new CustomEvent('ramified-room-share-invite'));
+    }
+    share.hidden = typeof navigator.share !== 'function';
+    share.addEventListener('click', () => shareInvite(true));
+    el('player-room-copy-link').addEventListener('click', () => shareInvite(false));
+    document.addEventListener('ramified-online-state', syncInviteActions);
+    new MutationObserver(syncInviteActions).observe(room, { attributes: true, attributeFilter: ['hidden'] });
+
     copy.addEventListener('click', async () => {
       const code = engine.onlineInfo().roomCode;
       if (!code) return;
-      clearTimeout(copyTimer);
       try {
         await navigator.clipboard.writeText(code);
         if (engine.onlineInfo().roomCode !== code) return;
-        copy.dataset.i18n = 'study.roomCopied';
-        copy.textContent = tk('study.roomCopied', 'Copied');
         el('player-room-copy-status').dataset.i18n = 'study.roomCopied';
-        el('player-room-copy-status').textContent = copy.textContent;
+        el('player-room-copy-status').textContent = tk('study.roomCopied', 'Copied');
       } catch (_) {
         el('player-room-copy-status').dataset.i18n = 'study.roomCopyFailed';
         el('player-room-copy-status').textContent = tk('study.roomCopyFailed', 'Could not copy. Select the room code to copy it.');
       }
-      copyTimer = setTimeout(() => {
-        copy.dataset.i18n = 'study.roomCopy';
-        copy.textContent = tk('study.roomCopy', 'Copy');
-      }, 1800);
     });
     options.addEventListener('change', syncRoom);
     // The existing controller rebuilds only the seat inputs when their state changes.

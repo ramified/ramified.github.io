@@ -7,10 +7,10 @@
 
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:wght@400;600&family=Source+Sans+3:wght@400;600;700&display=swap">
 <link rel="stylesheet" href="css/ramified_minigames_study_base.css?v=20261028-6">
-<link rel="stylesheet" href="css/ramified_minigames_study.css?v=20261122-sokoban-flow-1">
+<link rel="stylesheet" href="css/ramified_minigames_study.css?v=20261122-room-invite-1">
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20261122-sokoban-flow-1"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20261122-room-invite-1"></script>
 <script src="js/ramified_minigames_study_locales.js?v=20261031-room-connection-1"></script>
 <script>
   window.SiteI18n.init({ namespace: 'ramified-minigames', defaultLocale: 'en', supportedLocales: ['en', 'zh-CN'] });
@@ -62,6 +62,10 @@
   </div>
 </div>
 <footer id="study-build" lang="en" data-i18n-ignore>Build 2026-10-28.6</footer>
+      <aside id="player-invite-board-help" hidden>
+        <p id="player-invite-board-rules"></p>
+        <button class="btn" id="player-invite-dismiss" type="button" data-i18n="lobby.inviteDismiss">Got it</button>
+      </aside>
       <div id="player-toolbar">
         <button class="btn" id="player-return-to-setup" type="button" data-i18n="player.returnToPreparation" hidden>Back to preparation</button>
       </div>
@@ -187,6 +191,10 @@
               <div id="player-lobby-rooms"></div>
             </div>
           </section>
+          <section id="player-invite" class="player-page" hidden>
+            <p id="player-invite-status" class="player-room-status" role="status"></p>
+            <button class="btn" id="player-invite-retry" type="button" data-i18n="lobby.inviteRetry" hidden>Try again</button>
+          </section>
           <section id="player-room-loading" class="player-room-loading" aria-labelledby="player-room-loading-game" hidden>
             <div class="player-room-loading-body">
               <header class="player-room-header">
@@ -205,9 +213,15 @@
               <p id="player-room-summary" hidden></p>
               <header class="player-room-header">
                 <h2 id="player-room-game"></h2>
-                <div class="player-room-code-row"><output id="player-room-code" data-i18n-aria-label="study.roomCode" aria-label="Room code"></output><button class="btn" id="player-room-copy" type="button" data-i18n="study.roomCopy" data-i18n-aria-label="study.roomCopyLabel" aria-label="Copy room code">Copy</button><span id="player-room-copy-status" class="player-visually-hidden" role="status"></span></div>
+                <div class="player-room-code-row"><button class="btn" id="player-room-copy" type="button" data-i18n-title="study.roomCopyLabel" title="Copy room code"><span id="player-room-code"></span></button><span id="player-room-invite-actions" hidden>
+                  <button class="btn" id="player-room-copy-link" type="button" data-i18n="lobby.inviteCopy">Copy invite link</button>
+                  <button class="btn" id="player-room-share-link" type="button" data-i18n="lobby.inviteShare" hidden>Share</button>
+                </span><span id="player-room-copy-status" class="player-visually-hidden" role="status"></span></div>
                 <div class="player-room-meta"><p id="player-room-host"></p><p><span data-i18n="study.roomTimeLabel">Time:</span> <span id="player-room-time"></span></p></div>
               </header>
+              <p id="player-room-link-status" role="status" hidden></p>
+              <output id="player-room-link-fallback" hidden></output>
+              <p id="player-room-invite-rules" hidden></p>
               <p id="player-room-state" class="player-room-status" role="status" aria-live="polite"></p>
               <fieldset id="player-room-seats"><legend data-i18n="lobby.seats">Choose a seat</legend><div id="player-room-seat-options"></div></fieldset>
               <ul id="player-room-members" hidden></ul>
@@ -1253,14 +1267,14 @@
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
 <script src="js/ramified_minigames_sfx.js?v=20261122-drop-sound-1"></script>
-<script src="js/ramified_minigames_study_engine.js?v=20261122-sokoban-flow-1"></script>
+<script src="js/ramified_minigames_study_engine.js?v=20261122-room-invite-1"></script>
 <script src="js/ramified_minigames_sokoban_progress.js?v=20261008-3"></script>
 <script src="js/ramified_minigames_save_slots.js?v=20261010-1"></script>
-<script src="js/ramified_minigames_online.js?v=20261031-room-connection-1"></script>
-<script src="js/ramified_minigames_study_player.js?v=20261122-sokoban-flow-1"></script>
+<script src="js/ramified_minigames_online.js?v=20261122-room-invite-1"></script>
+<script src="js/ramified_minigames_study_player.js?v=20261122-room-invite-1"></script>
 <script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
 <script src="js/ramified_minigames_study.js?v=20261122-sokoban-flow-1"></script>
-<script src="js/ramified_minigames_room_ui.js?v=20261031-room-connection-1"></script>
+<script src="js/ramified_minigames_room_ui.js?v=20261122-room-invite-1"></script>
 </body>
 </html>
