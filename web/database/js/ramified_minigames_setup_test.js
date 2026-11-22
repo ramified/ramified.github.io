@@ -6834,7 +6834,7 @@ async function testUnifiedLocalResultCard() {
   assert.strictEqual(afterClose.resultDismissed, true);
 }
 
-async function testConnectFourWinningDropSettlesImmediately() {
+async function testConnectFourWinningDropSettlesAfterLanding() {
   const harness = createHeadlessDomHarness();
   const { elements, canvas, advanceTimers } = harness;
   elements.get('debug-export-output').value = JSON.stringify({
@@ -6873,9 +6873,14 @@ async function testConnectFourWinningDropSettlesImmediately() {
   await settleHeadlessImports();
   canvas.listeners.click({ clientX: 159, clientY: 41 });
   assert.strictEqual(elements.get('status-line').textContent, 'red wins');
-  assert.strictEqual(elements.get('canvas-start-overlay').hidden, false);
-  assert.strictEqual(harness.context.window.RamifiedMinigames.player.matchPresentationState(), 'finished');
+  const player = harness.context.window.RamifiedMinigames.player;
+  assert.strictEqual(player.matchPresentationState(), 'finishing');
+  assert.strictEqual(elements.get('canvas-start-overlay').hidden, true);
+  advanceTimers(100);
+  assert.strictEqual(player.matchPresentationState(), 'finishing');
+  assert.strictEqual(elements.get('canvas-start-overlay').hidden, true);
   advanceTimers(1000);
+  assert.strictEqual(player.matchPresentationState(), 'finished');
   assert.strictEqual(elements.get('canvas-start-overlay').hidden, false);
   assert.strictEqual(elements.get('canvas-start-title').textContent, 'red wins');
   assert.strictEqual(elements.get('canvas-start-begin').textContent, 'play again');
@@ -9132,7 +9137,7 @@ async function run() {
   await testNewPlacementGameStatusRoundTrips();
   await testNewPlacementGameAnimationsStartFromUi();
   await testUnifiedLocalResultCard();
-  await testConnectFourWinningDropSettlesImmediately();
+  await testConnectFourWinningDropSettlesAfterLanding();
   testBackgroundExportFormats();
   await testFullStatusImportWithoutDebugMode();
   testStepPauseRendersAfterSelectingNextEvent();

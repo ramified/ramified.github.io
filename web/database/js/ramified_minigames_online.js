@@ -439,7 +439,7 @@
       clearTimeout(clockTimer);
       clockTimer = null;
       const info = engine.onlineInfo(), clock = info.clock, config = info.timeControl || {};
-      const visible = info.joined && !!clock && config.mode !== 'unlimited' && !['finished', 'scoring'].includes(engine.matchPresentationState());
+      const visible = info.joined && !!clock && config.mode !== 'unlimited' && !['finishing', 'finished', 'scoring'].includes(engine.matchPresentationState());
       el('player-online-clock').hidden = !visible;
       if (!visible) return;
       const now = (info.serverNow || Date.now()) + Date.now() - (info.clockReceivedAt || Date.now());

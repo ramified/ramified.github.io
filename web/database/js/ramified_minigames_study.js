@@ -20,7 +20,7 @@
     let layoutFrame = 0;
     let badgeFrame = 0;
     function paintPlayerBadges() {
-      if (badgeFrame) return;
+      if (badgeFrame || menu.hidden) return;
       badgeFrame = requestAnimationFrame(() => {
         badgeFrame = 0;
         for (const stone of document.querySelectorAll('#player-setup-players .player-stone, #player-setup-options .player-stone')) {

@@ -184,9 +184,14 @@
         });
       }
       byId('player-actions').hidden = !Array.from(byId('player-action-controls').children).some((node) => !node.hidden);
-      if (!restoring && activeSlot !== null && state.active && !state.online && !saveTimer) {
-        const owner = activeSlot;
-        saveTimer = setTimeout(() => save(owner), 250);
+      if (!restoring && activeSlot !== null && state.active && !state.online) {
+        const presentation = engine.matchPresentationState();
+        if (presentation === 'finished') {
+          if (!state.sokobanLevelId) save();
+        } else if (presentation !== 'finishing' && !saveTimer) {
+          const owner = activeSlot;
+          saveTimer = setTimeout(() => save(owner), 250);
+        }
       }
     }
 
