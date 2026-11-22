@@ -5,7 +5,7 @@
   window.RamifiedOnlinePlayer = { allowed, create(engine, ui) {
     const el = id => document.getElementById(id);
     const compactLobby = !!el('player-lobby-edit');
-    let flow = '', serial = 0, creationId = '', lobbySocket = null, reconnectTimer = null;
+    let flow = '', serial = 0, creationId = '', lobbySocket = null, reconnectTimer = null, clockTimer = null;
     let players = [], rooms = [], previousRound = '', stopped = false, requestBusy = false;
     let lastPresence = '', lastRoomKey = '', lastSeatKey = '', creationFingerprint = '';
     const invitePage = el('player-invite');
@@ -420,9 +420,12 @@
       el('player-proposal-cancel').hidden = !host;
     }
     function clockText() {
+      clearTimeout(clockTimer);
+      clockTimer = null;
       const info = engine.onlineInfo(), clock = info.clock, config = info.timeControl || {};
-      el('player-online-clock').hidden = !info.joined || !clock || config.mode === 'unlimited';
-      if (!clock || config.mode === 'unlimited') return;
+      const visible = info.joined && !!clock && config.mode !== 'unlimited' && !['finished', 'scoring'].includes(engine.matchPresentationState());
+      el('player-online-clock').hidden = !visible;
+      if (!visible) return;
       const now = (info.serverNow || Date.now()) + Date.now() - (info.clockReceivedAt || Date.now());
       const elapsed = info.roundState === 'playing' ? Math.max(0, now - Math.max(clock.at, clock.resumeAt || 0)) : 0;
       const format = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -436,6 +439,7 @@
         }
         return tk('lobby.clock', '{{side}} {{time}}', { side: roleName(role), time: format(ms) });
       }).join('   ');
+      if (!stopped && info.roundState === 'playing') clockTimer = setTimeout(clockText, 250);
     }
     function back(page) {
       if (page === 'invite') { forgetInvite(); engine.onlineLeave(); ui.show('home'); return true; }
@@ -488,7 +492,7 @@
       const round = `${info.roundId}:${info.roundState}`;
       if (previousRound !== round && info.joined && !flow) {
         if (info.roundState === 'playing' && ui.page() === 'room' && !info.proposal && (!invited || info.roles.length)) ui.setOpen(false);
-        if ((info.roundState === 'finished' || info.roundState === 'waiting') && (!invited || invited.started || info.roles.length && invited.loaded)) ui.show('room', 'home');
+        if ((info.roundState === 'waiting' || !invitePage && info.roundState === 'finished') && (!invited || invited.started || info.roles.length && invited.loaded)) ui.show('room', 'home');
       }
       if (info.proposal && !flow && info.roles?.length && info.hostId !== info.clientId && !info.proposal.accepted.includes(info.clientId)) ui.show('room', 'home');
       previousRound = round;
@@ -511,9 +515,8 @@
       document.addEventListener('ramified-player-state', startInvite);
       queueMicrotask(startInvite);
     }
-    window.addEventListener('pagehide', () => { stopped = true; clearTimeout(reconnectTimer); lobbySocket?.close(); });
-    window.addEventListener('pageshow', () => { stopped = false; connectLobby(); });
-    setInterval(() => { presence(); clockText(); }, 250);
+    window.addEventListener('pagehide', () => { stopped = true; clearTimeout(reconnectTimer); clearTimeout(clockTimer); lobbySocket?.close(); });
+    window.addEventListener('pageshow', () => { stopped = false; connectLobby(); clockText(); });
     setInterval(() => { if (ui.page() === 'lobby') refresh(); if (lobbySocket?.readyState === WebSocket.OPEN) lobbySocket.send('{"type":"ping"}'); }, 15000);
     // Start presence for the entire game collection, including the main menu.
     setTimeout(connectLobby, 0); modeFields();

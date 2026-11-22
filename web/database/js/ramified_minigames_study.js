@@ -130,7 +130,7 @@
       byId('player-online-open').click();
     });
     byId('study-again').addEventListener('click', () => engine.replayPresentation());
-    byId('study-result-menu').addEventListener('click', () => byId('fullscreen-settings-open').click());
+    byId('study-result-menu').addEventListener('click', () => byId('player-home-button').click());
     const stats = document.createElement('details');
     stats.id = 'study-stats';
     const statsTitle = document.createElement('summary');
@@ -171,13 +171,20 @@
         status.hidden = true; // The restored toolbar owns its confirmation text.
         return;
       }
-      const finished = ['gameover', 'complete'].includes(state.phase);
+      const presentation = engine.matchPresentationState();
+      const finished = presentation === 'finished';
       const levelResult = finished && !!shell.sokobanLevelId;
-      byId('study-again').hidden = byId('study-result-menu').hidden = !finished || levelResult;
+      const onlineResult = finished && engine.onlineInfo().joined;
+      byId('study-again').hidden = byId('study-result-menu').hidden = !finished || levelResult || onlineResult;
       document.body.classList.toggle('study-finished', finished && !levelResult);
-      if (!state.turn || finished) {
-        status.dataset.message = '';
-        status.textContent = finished ? tk('study.finished') : '';
+      document.body.toggleAttribute('data-study-online-result', onlineResult);
+      if (!state.turn || presentation !== 'playing') {
+        const message = presentation === 'scoring' ? tk('runtime.goCounting', 'Review the board and confirm the score.')
+          : presentation === 'reconnecting' ? tk('runtime.waitingForReconnect', 'Waiting for reconnect…') : '';
+        if (status.dataset.message !== message) {
+          status.dataset.message = message;
+          status.textContent = message;
+        }
         return;
       }
       const sideKeys = { black: 'study.side.black', white: 'study.side.white', red: 'study.side.red', yellow: 'study.side.yellow', blue: 'study.side.blue', green: 'study.side.green', purple: 'study.side.purple' };
@@ -214,6 +221,7 @@
     }
     new MutationObserver(syncTurn).observe(byId('fullscreen-action-status'), { childList: true, attributes: true, attributeFilter: ['hidden'] });
     document.addEventListener('ramified-player-state', syncPage);
+    document.addEventListener('ramified-online-state', syncTurn);
     document.addEventListener('site-language-change', () => {
       for (const node of topologyGomoku.querySelectorAll('[data-i18n]')) node.textContent = tk(node.dataset.i18n);
       syncMute(); syncSokoban(); syncTurn(); refresh();

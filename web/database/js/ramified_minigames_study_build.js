@@ -115,7 +115,7 @@ html = html.replace('<div id="player-toolbar">', `<div id="study-hud" role="stat
 // Reuse existing locale keys with player-facing copy in the study catalog.
 html = html.replace('<div id="player-language"></div>', '<button class="btn" id="study-saves" type="button" data-i18n="study.saves">Saved games</button><div id="player-language"></div>');
 html = html.replace('<div id="player-language"></div>', '<button class="btn" id="study-online" type="button" data-i18n="online.title">Online</button><div id="player-language"></div>');
-html = html.replace('<div class="canvas-start-actions">', '<div class="canvas-start-actions"><button class="btn" id="study-again" type="button" data-i18n="study.again" hidden>Again</button><button class="btn" id="study-result-menu" type="button" data-i18n="study.menu" hidden>Menu</button>');
+html = html.replace('<div class="canvas-start-actions">', '<div class="canvas-start-actions"><button class="btn" id="study-again" type="button" data-i18n="runtime.rematchAgain" hidden>Play again</button><button class="btn" id="study-result-menu" type="button" data-i18n="player.back" hidden>Back</button>');
 player = player.replace('showSlots();\n    });\n    byId(\'player-continue\')', 'selectSlot(activeSlot ?? 0);\n    });\n    byId(\'player-continue\')');
 player = player.replace("byId('player-settings').addEventListener", "byId('study-saves').addEventListener('click', () => { engine.closeSettings(); showSlots(); });\n    byId('player-settings').addEventListener");
 player = player.replace("page = next;", "page = next;\n      document.body.dataset.studyPage = next;");
@@ -203,13 +203,13 @@ for (const asset of ['css/ramified_minigames_study.css', 'js/ramified_minigames_
 // The first rendered home must already use the study's copy and page state.
 for (const [asset, version] of Object.entries({
   'js/ramified_minigames_sfx.js': '20261122-drop-sound-1',
-  'js/ramified_minigames_study.js': '20261122-sokoban-layout-1',
-  'js/ramified_minigames_study_engine.js': '20261122-sokoban-result-1',
+  'js/ramified_minigames_study.js': '20261122-match-ended-1',
+  'js/ramified_minigames_study_engine.js': '20261122-match-ended-1',
   'js/ramified_minigames_study_player.js': '20261122-sokoban-result-1',
-  'js/ramified_minigames_online.js': '20261122-room-invite-1',
+  'js/ramified_minigames_online.js': '20261122-match-ended-1',
   'js/ramified_minigames_room_ui.js': '20261122-room-invite-1',
-  'js/i18n/ramified_minigames_locales.js': '20261122-sokoban-result-1',
-  'css/ramified_minigames_study.css': '20261122-sokoban-result-1'
+  'js/i18n/ramified_minigames_locales.js': '20261122-match-ended-1',
+  'css/ramified_minigames_study.css': '20261122-match-ended-1'
 })) {
   html = html.replace(new RegExp(`${asset.replaceAll('.', '\\.')}\\?v=[^"\\s]+`), `${asset}?v=${version}`);
 }

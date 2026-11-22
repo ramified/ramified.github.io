@@ -25,6 +25,43 @@ async function run() {
       return { client, read, click, until, info, set };
     }
     const a = await browser(), b = await browser();
+    if (process.argv.includes('--terminal')) {
+      await a.click('#player-online-open'); await a.click('#player-lobby-create');
+      await a.click('[data-game-mode="go"]'); await a.click('#player-more');
+      await a.set('player-time-mode', 'move'); await a.set('player-time-action', '120'); await a.click('#player-back'); await a.click('#player-begin');
+      await a.until(`RamifiedMinigames.player.onlineInfo().roundState==='waiting'`);
+      await a.read(`navigator.clipboard.writeText=async url=>{window.__invite=url}`);
+      await a.click('#player-room-copy-link');
+      await b.client.send('Page.navigate', { url: await a.read('window.__invite') });
+      for (const p of [a,b]) await p.until(`RamifiedMinigames.player.onlineInfo().roundState==='playing' && document.querySelector('#player-menu').hidden`);
+      const {roomCode} = await a.info(), {clientId: guestId} = await b.info();
+      const room = bridge.objects.get(roomCode);
+      const guestSocket = [...room.sessions.keys()].find(socket => socket.deserializeAttachment().clientId===guestId);
+      assert(guestSocket);
+      guestSocket.close();
+      await a.until(`RamifiedMinigames.player.matchPresentationState()==='reconnecting' && document.querySelector('#study-status').textContent==='Waiting for reconnect…'`, 'opponent disconnect stops turn cues');
+      assert.equal((await a.info()).roundState, 'playing', 'temporary disconnect is not a win');
+      await a.until(`RamifiedMinigames.player.matchPresentationState()==='playing'`, 'opponent reconnect restores the turn');
+      assert.deepEqual((await a.info()).roles, ['black'], 'opponent connection notices preserve the original seat');
+      await a.click('#player-actions > summary'); await a.click('#go-pass');
+      await b.until(`RamifiedMinigames.__test.getGame().round===1`, 'first pass');
+      await b.click('#player-actions > summary'); await b.click('#go-pass');
+      for (const p of [a,b]) await p.until(`RamifiedMinigames.player.matchPresentationState()==='scoring' && document.querySelector('#player-online-clock').hidden`, 'two passes stop the clock for scoring');
+      await a.click('#go-confirm-score');
+      for (const p of [a,b]) await p.until(`RamifiedMinigames.player.matchPresentationState()==='finished' && document.querySelector('#player-online-clock').hidden && !document.querySelector('#canvas-start-overlay').hidden`, 'result replaces turn and clock');
+      assert.match(await a.read(`document.querySelector('#canvas-start-title').textContent`), /wins|draw/i);
+      const board = await a.read(`document.querySelector('#mosaic-canvas').toDataURL()`);
+      const clock = await a.read(`document.querySelector('#player-online-clock').textContent`);
+      await delay(650);
+      assert.equal(await a.read(`document.querySelector('#mosaic-canvas').toDataURL()`),board);
+      assert.equal(await a.read(`document.querySelector('#player-online-clock').textContent`),clock);
+      await a.click('#canvas-start-begin'); await b.until(`RamifiedMinigames.player.onlineInfo().roundState==='rematch-vote'`);
+      await b.click('#canvas-start-begin');
+      await a.until(`RamifiedMinigames.player.matchPresentationState()==='playing' && !document.querySelector('#player-online-clock').hidden`, 'rematch restores play and clock');
+      assert.deepEqual(errors, []);
+      console.log('Terminal Go: disconnect and reconnect, two passes, score, frozen result, and rematch passed');
+      return;
+    }
     if (process.argv.includes('--invites')) {
       await a.click('#player-online-open'); await a.click('#player-lobby-create');
       await a.click('[data-game-mode="gomoku"]'); await a.click('#player-begin');

@@ -73,9 +73,10 @@ body.ramified-player.design-study {
 .design-study .player-slot-actions { display:flex; gap:var(--gap); }
 .design-study #fullscreen-exit { display:none; }
 .design-study #study-status { position:absolute; left:var(--inset); top:calc(var(--player-icon-size) + 2cqh); z-index:8; font-size:var(--ui); max-width:70%; }
-.design-study.study-finished #study-status { visibility:hidden; }
+.design-study.study-finished :is(#study-status,#player-toolbar,#player-actions,#study-hud,#player-invite-board-help) { visibility:hidden; }
 .design-study.study-finished #canvas-start-overlay { top:1cqh; }
-.design-study.study-finished :is(#canvas-start-context,#canvas-start-rules,#canvas-start-begin,#canvas-start-close) { display:none; }
+.design-study.study-finished #canvas-start-rules,.design-study.study-finished:not([data-study-online-result]) :is(#canvas-start-begin,#canvas-start-close) { display:none; }
+.design-study.study-finished #canvas-start-context:empty { display:none; }
 .design-study .canvas-start-actions { display:flex; gap:var(--gap); }
 .design-study.player-menu-open #study-status,.design-study.study-settings-open #study-status { visibility:hidden; }
 .design-study #study-hud { position:absolute; top:2cqh; right:3cqw; z-index:8; display:flex; gap:2cqw; font-size:var(--ui); pointer-events:none; }

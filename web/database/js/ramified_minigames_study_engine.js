@@ -2185,7 +2185,26 @@ function onlineWaitingPromptCopy(state = onlineState) {
 }
 
 function syncOnlineCanvasPrompt() {
-  if (playerShellEnabled && onlineIsInRoom()) { hideCanvasStartPrompt(); return; }
+  if (playerShellEnabled && onlineIsInRoom()) {
+    if (!document.body.classList.contains('design-study') || matchPresentationState() !== 'finished' || !['finished', 'rematch-vote'].includes(onlineState.roundState)) {
+      hideCanvasStartPrompt();
+      return;
+    }
+    const voting = onlineState.roundState === 'rematch-vote';
+    const accepted = voting && onlineState.rematch?.acceptedClientIds?.includes(onlineState.clientId);
+    const losers = onlineState.outcome?.losers || [];
+    showCanvasStartPrompt({ force: true, dismissible: true, action: voting ? 'online-accept-rematch' : 'online-propose-rematch', copy: {
+      localized: true,
+      title: onlineState.outcome?.type === 'timeout' ? tk('lobby.timeout', 'Time expired: {{sides}}. Round ended.', { sides: losers.map(localizedRoleLabel).join(', ') })
+        : game && ['gameover', 'complete'].includes(game.phase) ? gameResultTitle(game) : tk('lobby.finished', 'Round ended'),
+      context: game && ['gameover', 'complete'].includes(game.phase) ? gameResultDetail(game) : '',
+      rules: '',
+      action: accepted ? tk('runtime.rematchWaiting', 'Waiting for players') : voting ? tk('runtime.rematchAccept', 'Accept rematch') : tk('runtime.rematchAgain', 'Play again'),
+      closeAction: tk('player.back', 'Back')
+    } });
+    refs.canvasStartBegin.disabled = accepted || !onlineStateHasPlayableRole();
+    return;
+  }
   if (!onlineIsInRoom() || !game || !onlineState) return;
   if (onlineState.roundState === 'waiting') {
     showCanvasStartPrompt({
@@ -2564,6 +2583,8 @@ function connectOnlineSocket(roomCode, requestedRoles = []) {
       }
       syncOnlineStatus(`${reason}; reconnecting...`, 'error');
       syncOnlineControls();
+    render();
+    syncControls();
       scheduleOnlineReconnect();
     });
   });
@@ -2712,7 +2733,9 @@ function handleOnlineSocketMessage(event) {
   }
   if (!message || typeof message !== 'object') return;
   if (message.type === 'departed') { leaveOnlineRoomFromUi(); return; }
-  updateOnlineRoomMetaFromMessage(message);
+  // The seats in a connection notice belong to the player named in it.
+  const connectionNotice = ['playerLeft', 'playerDisconnected', 'playerReconnected'].includes(message.type);
+  updateOnlineRoomMetaFromMessage(message, { applyAssignedRoles: !connectionNotice });
   if (typeof document !== 'undefined') queueMicrotask(() => document.dispatchEvent(new CustomEvent('ramified-online-state', { detail: message })));
   if (message.type === 'joined') {
     onlineState.roomCode = normalizeOnlineRoomCode(message.roomCode || onlineState.pendingRoomCode || onlineState.roomCode);
@@ -2990,6 +3013,7 @@ function tryApplyOnlineRemoteAction(action, snapshot, message) {
   syncOnlineRoleOptions(mode);
   syncOnlineStatus('Opponent move synchronized.', 'idle');
   syncOnlineControls();
+  syncOnlineCanvasPrompt();
   syncControls();
   return true;
 }
@@ -6441,6 +6465,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   function placementReachInteractionAvailable(state = game) {
     return !!(
       isPlacementGame(state)
+      && matchPresentationState(state) === 'playing'
       && !currentAnimation
       && !fideChessDrag
       && !billiardsShotPending
@@ -6813,6 +6838,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   function placementHoverInteractionAvailable(state = game) {
     return !!(
       state
+      && matchPresentationState(state) === 'playing'
       && !currentAnimation
       && !fideChessDrag
       && !billiardsShotPending
@@ -8717,6 +8743,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function startPlacementFeedback(feedback) {
+    if (matchPresentationState() !== 'playing') return;
     placementFeedbacks = activePlacementFeedbacks();
     placementFeedbacks.push(feedback);
     render();
@@ -9038,8 +9065,45 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     };
   }
 
+  // The board phase and room are authoritative. Scoring and reconnecting
+  // pause turn cues without declaring a winner.
+  function matchPresentationState(state = game) {
+    const room = state === game && onlineIsInRoom() ? onlineState : null;
+    if (['gameover', 'complete'].includes(state?.phase) || ['finished', 'rematch-vote'].includes(room?.roundState)) return 'finished';
+    if (state?.scoringReview) return 'scoring';
+    if (room?.roundState === 'playing' && (!onlineSocketOpen() || room.members?.some(member => member.online === false && member.roles?.length))) return 'reconnecting';
+    return 'playing';
+  }
+
+  function stopMatchPlayback(state) {
+    return state === 'finished' || state !== 'playing' && !isBilliardsGame(game);
+  }
+
+  function settleMatchPresentation(state) {
+    if (state === 'playing') return;
+    if (stopMatchPlayback(state) && (currentAnimation || animationFrameId != null)) {
+      stopPlayback();
+      if (onlineState?.pendingStateMessages?.length) queueMicrotask(flushQueuedOnlineStateMessages);
+    }
+    clearPlacementReachAssist();
+    clearPlacementHover(false);
+    clearPlacementFeedbacks();
+    clearHexNeighborHint(false);
+    hoveredGlue = null;
+    hoveredHexIndex = null;
+    if (localAiThinking || localAiTimer != null) {
+      cancelLocalAiWork();
+      localAiWorker?.terminate();
+      localAiWorker = null;
+    }
+  }
+
   function tickAnimation() {
     if (!currentAnimation) return;
+    if (stopMatchPlayback(matchPresentationState())) {
+      render();
+      return;
+    }
     const elapsed = now() - currentAnimation.startedAt;
     const progress = currentAnimation.duration <= 0 ? 1 : Math.min(1, elapsed / currentAnimation.duration);
     currentAnimation.progress = progress;
@@ -9660,7 +9724,7 @@ function wrappedFideChessPuzzleTrayOverlayActive(state = game, preset = state &&
   // Wrapped charts have no clickable boundary markers.  The final Hex/Nash
   // arrows are deliberately context-only, so they do not restore this affordance.
 function glueHoverInteractionAvailable(preset = (game ? game.preset : selectedPreset())) {
-  return !wrappedViewIsActive(preset);
+  return matchPresentationState() === 'playing' && !wrappedViewIsActive(preset);
 }
 
 function wrappedViewCamera(profile = wrappedViewProfile()) {
@@ -10490,6 +10554,10 @@ function handleCanvasStartBeginClick(event) {
 
 function handleCanvasStartCloseClick(event) {
   if (event && event.preventDefault) event.preventDefault();
+  if (onlineIsInRoom() && playerShellEnabled && canvasPromptAction.startsWith('online-')) {
+    document.getElementById('player-menu-button')?.click();
+    return;
+  }
   if (!game || onlineIsInRoom() || !['gameover', 'complete'].includes(game.phase)) return;
   const stayOnLevel = canvasPromptAction === 'sokoban-next' && document.body.classList.contains('design-study');
   if (playerShellEnabled && game.playerSokobanLevelId && !stayOnLevel) {
@@ -11047,7 +11115,7 @@ function handleCanvasHover(event, options = {}) {
     clearHexHover();
     return;
   }
-  const target = isHexGame(game) ? tileFromCanvasEvent(event) : null;
+  const target = isHexGame(game) && matchPresentationState() === 'playing' ? tileFromCanvasEvent(event) : null;
   const playableTarget = target && !game.removed.has(target.index) ? target : null;
   updateHexNeighborHover(playableTarget ? playableTarget.index : null);
   setHexHover(game && game.phase === 'ready' && playableTarget && !hexTileAt(game, playableTarget.index)
@@ -11068,7 +11136,7 @@ function clearHexHover() {
 }
 
 function updateHexNeighborHover(index) {
-  const next = Number.isInteger(index) ? index : null;
+  const next = matchPresentationState() === 'playing' && Number.isInteger(index) ? index : null;
   if (hexNeighborHoverIndex === next) return;
   if (hexNeighborHintTimer != null) clearTimeout(hexNeighborHintTimer);
   hexNeighborHintTimer = null;
@@ -11136,7 +11204,9 @@ function sameGlueHover(left, right) {
 
 function syncCanvasCursor() {
   if (!refs.canvas || !refs.canvas.style) return;
-  if (isBilliardsGame(game)) {
+  if (matchPresentationState() === 'finished') {
+    refs.canvas.style.cursor = '';
+  } else if (isBilliardsGame(game)) {
     refs.canvas.style.cursor = game.phase === 'moving' || game.phase === 'gameover' ? 'default' : 'crosshair';
   } else if (fideChessDrag) {
     refs.canvas.style.cursor = 'grabbing';
@@ -15444,6 +15514,7 @@ function render() {
   if ((wrappedTouchPointers.size && (wrappedTouchGame !== game || !wrappedViewIsActive()))
     || (wrappedPanGesture && (wrappedPanGesture.game !== game || !wrappedViewIsActive()))) clearWrappedViewGestures();
     if (!refs.canvas || !refs.ctx) return;
+  settleMatchPresentation(matchPresentationState());
   if (placementReachAssistData && (!placementReachInteractionAvailable() || placementReachAssistState !== game)) clearPlacementReachAssist();
   if (placementHover && (!placementHoverInteractionAvailable() || placementHover.state !== game)) clearPlacementHover(false);
   const preset = game ? game.preset : selectedPreset();
@@ -33518,7 +33589,7 @@ function localAiHasHumanController(state = game) {
 function localAiOwnsCurrentTurn(state = game) {
   return !!(localAiSupportedState(state)
     && state.phase !== 'setup'
-    && state.phase !== 'gameover'
+    && matchPresentationState(state) === 'playing'
     && isLocalAiControllerValue(localAiControllerForColor(state, state.turn)));
 }
 
@@ -34715,6 +34786,7 @@ function cancelPlayerSetup() {
 const api = {
   // Small adapter for the player shell; the archive keeps its original lifecycle.
   player: {
+    matchPresentationState: () => matchPresentationState(),
     onlineInfo() {
       if (!onlineState) return {};
       const keys = ['baseUrl', 'clientId', 'playerName', 'roomCode', 'pendingRoomCode', 'joined', 'connecting', 'gameMode', 'roles', 'roomRoles', 'rolePlayers', 'roundState', 'readyClientIds', 'hostId', 'hostName', 'members', 'roundId', 'timeControl', 'clock', 'outcome', 'proposal', 'serverNow', 'clockReceivedAt', 'unclaimedRoles'];
