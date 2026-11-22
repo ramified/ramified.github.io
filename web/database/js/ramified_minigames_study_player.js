@@ -137,6 +137,7 @@
       const state = engine.state();
       byId('player-return-to-setup').hidden = !state.browsing || !menu.hidden;
       if (!restoring && activeSlot !== null && !state.online && state.solved && state.sokobanLevelId) save();
+      syncSokobanAdvance(state);
       syncLevels(state);
       if (page === 'slots') syncSlots(state);
       if (page === 'games') syncGameEntry(state);
@@ -555,7 +556,49 @@
       if (engine.state().online) { online.home(); return; }
       engine.cancelSetup(); show('home');
     });
+    const sokobanDock = byId('study-sokoban-controls');
+    let previousSokobanLevel = null, previousSokobanSolved = false, nextLevelTimer = null;
+    function cancelSokobanAdvance() {
+      clearTimeout(nextLevelTimer);
+      nextLevelTimer = null;
+    }
+    function syncSokobanAdvance(state) {
+      if (!sokobanDock) return;
+      const id = state.sokobanLevelId;
+      const canAdvance = menu.hidden && byId('fullscreen-settings-overlay').hidden && !document.hidden
+        && !restoring && !state.online && activeSlot !== null && byId('study-sokoban-auto').checked;
+      if (!canAdvance || !state.solved || id !== previousSokobanLevel) cancelSokobanAdvance();
+      const next = levelIds[levelIds.indexOf(id) + 1];
+      if (id && id === previousSokobanLevel && state.solved && !previousSokobanSolved && canAdvance
+        && next && slots.progress(activeSlot).unlocked.includes(next)) {
+        const slot = activeSlot;
+        nextLevelTimer = setTimeout(() => {
+          nextLevelTimer = null;
+          const current = engine.state();
+          if (current.solved && current.sokobanLevelId === id && activeSlot === slot && menu.hidden
+            && byId('fullscreen-settings-overlay').hidden && !document.hidden && !byId('canvas-start-overlay').hidden) {
+            byId('canvas-start-begin').click();
+          }
+        }, 1200);
+      }
+      previousSokobanLevel = id;
+      previousSokobanSolved = state.solved;
+    }
+    if (sokobanDock) {
+      byId('study-sokoban-auto').addEventListener('change', cancelSokobanAdvance);
+      byId('canvas-start-close').addEventListener('click', cancelSokobanAdvance);
+      byId('study-sokoban-levels').addEventListener('click', () => {
+        cancelSokobanAdvance();
+        selectedSlot = activeSlot;
+        showLevels('games');
+      });
+      new MutationObserver(() => {
+        if (!byId('fullscreen-settings-overlay').hidden) cancelSokobanAdvance();
+      }).observe(byId('fullscreen-settings-overlay'), { attributes: true, attributeFilter: ['hidden'] });
+      document.addEventListener('visibilitychange', () => { if (document.hidden) cancelSokobanAdvance(); });
+    }
     document.addEventListener('ramified-player-sokoban-action', event => {
+      cancelSokobanAdvance();
       const state = engine.state();
       if (state.online || !state.solved || !state.sokobanLevelId) return;
       selectedSlot = activeSlot;

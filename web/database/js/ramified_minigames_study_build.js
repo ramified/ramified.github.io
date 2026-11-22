@@ -95,6 +95,21 @@ html = html.replace('<section id="player-home" class="player-page">', `<section 
 html = html.replace('<div id="player-language"></div>', `<div id="player-language"></div><details id="study-workshop"><summary data-i18n="study.workshop">Workshop</summary><p data-i18n="study.workshopHelp">Editing, sound experiments and file tools. These are optional; close this section to return to ordinary settings.</p><div id="study-workshop-content"></div></details>`);
 html = html.replace('<div id="player-toolbar">', `<div id="study-hud" role="status" aria-live="polite"></div><button id="study-mute" class="btn" type="button" aria-pressed="true" data-i18n="study.muted">Sound off</button>
 <div id="study-status" role="status" aria-live="polite"></div>
+<div id="study-sokoban-hud" hidden>
+  <strong id="study-sokoban-goal"></strong><span id="study-sokoban-progress"></span>
+  <span data-i18n="player.sokobanMoveHelp">Use the arrows or swipe the board.</span>
+  <span id="study-sokoban-bridge" data-i18n="player.sokobanBridgeHelp" hidden>Push a bridge block to move its glowing beam.</span>
+  <span id="study-sokoban-glue" data-i18n="player.sokobanGlueHelp" hidden>Matching edge marks show where you cross.</span>
+</div>
+<div id="study-sokoban-controls" hidden>
+  <div id="study-sokoban-directions"></div>
+  <div class="study-sokoban-actions">
+    <button class="btn" id="study-sokoban-undo" type="button" data-i18n="player.sokobanUndo">Undo</button>
+    <button class="btn" id="study-sokoban-reset" type="button" data-i18n="player.sokobanReset">Restart level</button>
+    <button class="btn" id="study-sokoban-levels" type="button" data-i18n="player.sokobanLevelList">Levels</button>
+    <label><input id="study-sokoban-auto" type="checkbox" checked><span data-i18n="player.sokobanAutoNext">Auto-next</span></label>
+  </div>
+</div>
 <footer id="study-build" lang="en" data-i18n-ignore>Build 2026-10-28.6</footer>
       <div id="player-toolbar">`);
 // Reuse existing locale keys with player-facing copy in the study catalog.
@@ -168,8 +183,9 @@ for (const asset of ['css/ramified_minigames_study.css', 'js/ramified_minigames_
   html = html.replace(new RegExp(`${asset.replaceAll('.', '\\.')}\\?v=[^"\\s]+`), `${asset}?v=${CONNECTION_UI_BUILD}`);
 }
 // The first rendered home must already use the study's copy and page state.
-for (const asset of ['js/ramified_minigames_sfx.js', 'js/ramified_minigames_study_engine.js', 'js/ramified_minigames_study.js', 'js/i18n/ramified_minigames_locales.js']) {
-  html = html.replace(new RegExp(`${asset.replaceAll('.', '\\.') }\\?v=[^"\\s]+`), `${asset}?v=20261122-drop-sound-1`);
+for (const asset of ['js/ramified_minigames_sfx.js', 'js/ramified_minigames_study_engine.js', 'js/ramified_minigames_study.js', 'js/ramified_minigames_study_player.js', 'js/i18n/ramified_minigames_locales.js', 'css/ramified_minigames_study.css']) {
+  const version = asset.endsWith('_sfx.js') ? '20261122-drop-sound-1' : '20261122-sokoban-flow-1';
+  html = html.replace(new RegExp(`${asset.replaceAll('.', '\\.')}\\?v=[^"\\s]+`), `${asset}?v=${version}`);
 }
 // Read the English fallbacks from the same catalog used at runtime.
 const studyEnglish = {};

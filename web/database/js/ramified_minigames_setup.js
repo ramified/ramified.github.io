@@ -10468,7 +10468,7 @@ function handleCanvasStartBeginClick(event) {
     document.dispatchEvent(new CustomEvent('ramified-player-sokoban-action', { detail: { action } }));
     return;
   }
-  if (action === 'restart') {
+  if (action === 'restart' || action === 'sokoban-replay') {
     resetCurrentGameFromShortcut();
     return;
   }
@@ -10490,7 +10490,8 @@ function handleCanvasStartBeginClick(event) {
 function handleCanvasStartCloseClick(event) {
   if (event && event.preventDefault) event.preventDefault();
   if (!game || onlineIsInRoom() || !['gameover', 'complete'].includes(game.phase)) return;
-  if (playerShellEnabled && game.playerSokobanLevelId) {
+  const stayOnLevel = canvasPromptAction === 'sokoban-next' && document.body.classList.contains('design-study');
+  if (playerShellEnabled && game.playerSokobanLevelId && !stayOnLevel) {
     document.dispatchEvent(new CustomEvent('ramified-player-sokoban-action', { detail: { action: 'sokoban-levels' } }));
     return;
   }
@@ -10598,6 +10599,19 @@ function showLocalReplayPrompt() {
       if (index >= 0) {
         const hasNext = index + 1 < levels.length;
         const allCompleted = levels.every(level => playerSokobanCompleted.has(level.id));
+        if (document.body.classList.contains('design-study')) {
+          showCanvasStartPrompt({ force: true, action: hasNext ? 'sokoban-next' : 'sokoban-replay', dismissible: true,
+            copy: {
+              localized: true,
+              title: hasNext ? tk('player.sokobanCleared', 'Level cleared!') : tk('player.sokobanLastCleared', 'Final level cleared!'),
+              context: tk('player.sokobanResult', '{{moves}} moves · {{pushes}} pushes', { moves: game.moves || 0, pushes: game.pushes || 0 }),
+              rules: '',
+              action: hasNext ? tk('player.nextLevel', 'Next level') : tk('player.sokobanReplay', 'Play again'),
+              closeAction: hasNext ? tk('player.sokobanStay', 'Stay here') : tk('player.chooseLevel', 'Choose a level')
+            }
+          });
+          return;
+        }
         showCanvasStartPrompt({ force: true, action: hasNext ? 'sokoban-next' : 'sokoban-levels', dismissible: hasNext,
           copy: {
             localized: true,

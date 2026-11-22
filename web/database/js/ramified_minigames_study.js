@@ -93,6 +93,29 @@
       workshop.append(node);
     }
     byId('player-action-controls').prepend(byId('fullscreen-billiards-spin'));
+    const moveRow = byId('move-row');
+    const directions = byId('study-sokoban-directions');
+    const actionControls = byId('player-action-controls');
+    const sokobanUndo = byId('study-sokoban-undo');
+    sokobanUndo.addEventListener('click', () => engine.undoSokobanPresentation());
+    byId('study-sokoban-reset').addEventListener('click', () => engine.restartSokobanPresentation());
+    function syncSokoban() {
+      const puzzle = menu.hidden && settings.hidden ? engine.sokobanPresentation() : null;
+      byId('study-sokoban-hud').hidden = byId('study-sokoban-controls').hidden = !puzzle;
+      if (!puzzle) {
+        if (moveRow.parentElement === directions) actionControls.prepend(moveRow);
+        return;
+      }
+      if (moveRow.parentElement !== directions) directions.append(moveRow);
+      const goal = puzzle.bridges ? tk('player.sokobanBridgeGoal', 'Cover all targets with boxes or bridge blocks.')
+        : tk('player.sokobanGoal', 'Push boxes onto all the targets.');
+      const progress = tk('player.sokobanProgress', 'Targets {{covered}}/{{total}} · Moves {{moves}}', { ...puzzle, total: puzzle.targets });
+      if (byId('study-sokoban-goal').textContent !== goal) byId('study-sokoban-goal').textContent = goal;
+      if (byId('study-sokoban-progress').textContent !== progress) byId('study-sokoban-progress').textContent = progress;
+      byId('study-sokoban-bridge').hidden = !puzzle.bridges;
+      byId('study-sokoban-glue').hidden = !puzzle.glued;
+      sokobanUndo.disabled = !puzzle.canUndo;
+    }
     byId('player-actions').addEventListener('toggle', refresh);
     byId('study-online').addEventListener('click', () => {
       engine.closeSettings();
@@ -141,8 +164,9 @@
         return;
       }
       const finished = ['gameover', 'complete'].includes(state.phase);
-      byId('study-again').hidden = byId('study-result-menu').hidden = !finished;
-      document.body.classList.toggle('study-finished', finished);
+      const levelResult = finished && !!shell.sokobanLevelId;
+      byId('study-again').hidden = byId('study-result-menu').hidden = !finished || levelResult;
+      document.body.classList.toggle('study-finished', finished && !levelResult);
       if (!state.turn || finished) {
         status.dataset.message = '';
         status.textContent = finished ? tk('study.finished') : '';
@@ -171,6 +195,7 @@
       const state = engine.state();
       document.body.dataset.studyGame = state.mode;
       byId('study-hud').hidden = open || settingsOpen || state.mode !== '2048';
+      syncSokoban();
       syncTurn();
       paintPlayerBadges();
     }
@@ -183,7 +208,7 @@
     document.addEventListener('ramified-player-state', syncPage);
     document.addEventListener('site-language-change', () => {
       for (const node of topologyGomoku.querySelectorAll('[data-i18n]')) node.textContent = tk(node.dataset.i18n);
-      syncMute(); syncTurn(); refresh();
+      syncMute(); syncSokoban(); syncTurn(); refresh();
     });
     syncPage();
     refresh();

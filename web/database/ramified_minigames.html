@@ -7,10 +7,10 @@
 
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:wght@400;600&family=Source+Sans+3:wght@400;600;700&display=swap">
 <link rel="stylesheet" href="css/ramified_minigames_study_base.css?v=20261028-6">
-<link rel="stylesheet" href="css/ramified_minigames_study.css?v=20261031-room-connection-1">
+<link rel="stylesheet" href="css/ramified_minigames_study.css?v=20261122-sokoban-flow-1">
 <script src="js/site_i18n.js?v=20260826-1"></script>
 <script src="js/i18n/ramified_minigames_legacy_sources.js?v=20260824-12"></script>
-<script src="js/i18n/ramified_minigames_locales.js?v=20261122-drop-sound-1"></script>
+<script src="js/i18n/ramified_minigames_locales.js?v=20261122-sokoban-flow-1"></script>
 <script src="js/ramified_minigames_study_locales.js?v=20261031-room-connection-1"></script>
 <script>
   window.SiteI18n.init({ namespace: 'ramified-minigames', defaultLocale: 'en', supportedLocales: ['en', 'zh-CN'] });
@@ -46,6 +46,21 @@
     <div id="canvas-wrap">
       <div id="study-hud" role="status" aria-live="polite"></div><button id="study-mute" class="btn" type="button" aria-pressed="true" data-i18n="study.muted">Sound off</button>
 <div id="study-status" role="status" aria-live="polite"></div>
+<div id="study-sokoban-hud" hidden>
+  <strong id="study-sokoban-goal"></strong><span id="study-sokoban-progress"></span>
+  <span data-i18n="player.sokobanMoveHelp">Use the arrows or swipe the board.</span>
+  <span id="study-sokoban-bridge" data-i18n="player.sokobanBridgeHelp" hidden>Push a bridge block to move its glowing beam.</span>
+  <span id="study-sokoban-glue" data-i18n="player.sokobanGlueHelp" hidden>Matching edge marks show where you cross.</span>
+</div>
+<div id="study-sokoban-controls" hidden>
+  <div id="study-sokoban-directions"></div>
+  <div class="study-sokoban-actions">
+    <button class="btn" id="study-sokoban-undo" type="button" data-i18n="player.sokobanUndo">Undo</button>
+    <button class="btn" id="study-sokoban-reset" type="button" data-i18n="player.sokobanReset">Restart level</button>
+    <button class="btn" id="study-sokoban-levels" type="button" data-i18n="player.sokobanLevelList">Levels</button>
+    <label><input id="study-sokoban-auto" type="checkbox" checked><span data-i18n="player.sokobanAutoNext">Auto-next</span></label>
+  </div>
+</div>
 <footer id="study-build" lang="en" data-i18n-ignore>Build 2026-10-28.6</footer>
       <div id="player-toolbar">
         <button class="btn" id="player-return-to-setup" type="button" data-i18n="player.returnToPreparation" hidden>Back to preparation</button>
@@ -1238,14 +1253,14 @@
 </script>
 <script src="js/ramified_minigames_korean_audio.js?v=20260901-1"></script>
 <script src="js/ramified_minigames_sfx.js?v=20261122-drop-sound-1"></script>
-<script src="js/ramified_minigames_study_engine.js?v=20261122-drop-sound-1"></script>
+<script src="js/ramified_minigames_study_engine.js?v=20261122-sokoban-flow-1"></script>
 <script src="js/ramified_minigames_sokoban_progress.js?v=20261008-3"></script>
 <script src="js/ramified_minigames_save_slots.js?v=20261010-1"></script>
 <script src="js/ramified_minigames_online.js?v=20261031-room-connection-1"></script>
-<script src="js/ramified_minigames_study_player.js?v=20261028-6"></script>
+<script src="js/ramified_minigames_study_player.js?v=20261122-sokoban-flow-1"></script>
 <script src="js/ramified_minigames_ai.js?v=20260908-3"></script>
 <script src="js/ramified_minigames_analytics.js?v=20260904-1"></script>
-<script src="js/ramified_minigames_study.js?v=20261122-drop-sound-1"></script>
+<script src="js/ramified_minigames_study.js?v=20261122-sokoban-flow-1"></script>
 <script src="js/ramified_minigames_room_ui.js?v=20261031-room-connection-1"></script>
 </body>
 </html>
