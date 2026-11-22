@@ -10501,7 +10501,10 @@ function handleCanvasStartCloseClick(event) {
 }
 
 function hideCanvasStartPrompt() {
-  if (refs.canvasStartOverlay) refs.canvasStartOverlay.hidden = true;
+  if (refs.canvasStartOverlay) {
+    refs.canvasStartOverlay.hidden = true;
+    refs.canvasStartOverlay.removeAttribute('data-sokoban-result');
+  }
   if (refs.canvasStartClose) refs.canvasStartClose.hidden = true;
   canvasPromptAction = '';
 }
@@ -10568,6 +10571,8 @@ function showCanvasStartPrompt(options = {}) {
     refs.canvasStartClose.textContent = promptText(copy.closeAction || 'view completed board');
   }
   canvasPromptAction = options.action || 'begin';
+  if (options.sokobanResult) refs.canvasStartOverlay.setAttribute('data-sokoban-result', '');
+  else refs.canvasStartOverlay.removeAttribute('data-sokoban-result');
   refs.canvasStartOverlay.hidden = false;
   if (copy.status) syncStatus(copy.statusTitle || 'begin from canvas', copy.status, options.badge || 'setup');
 }
@@ -10600,14 +10605,14 @@ function showLocalReplayPrompt() {
         const hasNext = index + 1 < levels.length;
         const allCompleted = levels.every(level => playerSokobanCompleted.has(level.id));
         if (document.body.classList.contains('design-study')) {
-          showCanvasStartPrompt({ force: true, action: hasNext ? 'sokoban-next' : 'sokoban-replay', dismissible: true,
+          showCanvasStartPrompt({ force: true, action: hasNext ? 'sokoban-next' : 'sokoban-replay', dismissible: true, sokobanResult: true,
             copy: {
               localized: true,
-              title: hasNext ? tk('player.sokobanCleared', 'Level cleared!') : tk('player.sokobanLastCleared', 'Final level cleared!'),
-              context: tk('player.sokobanResult', '{{moves}} moves · {{pushes}} pushes', { moves: game.moves || 0, pushes: game.pushes || 0 }),
+              title: hasNext ? tk('player.sokobanCleared', 'Level {{number}} complete', { number: index + 1 }) : tk('player.allLevelsComplete', 'All levels complete'),
+              context: tk('player.sokobanMoveCount', '{{moves}} moves', { moves: game.moves || 0 }),
               rules: '',
               action: hasNext ? tk('player.nextLevel', 'Next level') : tk('player.sokobanReplay', 'Play again'),
-              closeAction: hasNext ? tk('player.sokobanStay', 'Stay here') : tk('player.chooseLevel', 'Choose a level')
+              closeAction: hasNext ? tk('player.sokobanStay', 'Stay here') : tk('player.sokobanLevelList', 'Levels')
             }
           });
           return;

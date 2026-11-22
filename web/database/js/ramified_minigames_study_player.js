@@ -557,10 +557,14 @@
       engine.cancelSetup(); show('home');
     });
     const sokobanDock = byId('study-sokoban-controls');
+    const sokobanResult = byId('canvas-start-overlay');
+    const SOKOBAN_ADVANCE_MS = 1200;
     let previousSokobanLevel = null, previousSokobanSolved = false, nextLevelTimer = null;
     function cancelSokobanAdvance() {
       clearTimeout(nextLevelTimer);
       nextLevelTimer = null;
+      sokobanResult?.style.removeProperty('--sokoban-advance');
+      sokobanResult?.removeAttribute('data-sokoban-countdown');
     }
     function syncSokobanAdvance(state) {
       if (!sokobanDock) return;
@@ -572,14 +576,16 @@
       if (id && id === previousSokobanLevel && state.solved && !previousSokobanSolved && canAdvance
         && next && slots.progress(activeSlot).unlocked.includes(next)) {
         const slot = activeSlot;
+        sokobanResult.style.setProperty('--sokoban-advance', `${SOKOBAN_ADVANCE_MS}ms`);
+        sokobanResult.setAttribute('data-sokoban-countdown', '');
         nextLevelTimer = setTimeout(() => {
-          nextLevelTimer = null;
+          cancelSokobanAdvance();
           const current = engine.state();
           if (current.solved && current.sokobanLevelId === id && activeSlot === slot && menu.hidden
             && byId('fullscreen-settings-overlay').hidden && !document.hidden && !byId('canvas-start-overlay').hidden) {
             byId('canvas-start-begin').click();
           }
-        }, 1200);
+        }, SOKOBAN_ADVANCE_MS);
       }
       previousSokobanLevel = id;
       previousSokobanSolved = state.solved;

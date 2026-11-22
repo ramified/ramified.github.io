@@ -68,6 +68,8 @@ async function run() {
         assert(await read(`(() => {const n=document.getElementById('${id}'),r=n.getBoundingClientRect();return n.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()`), `${id} is reachable at 320px`);
       }
       await solve();
+      assert.equal(await read('document.querySelector("#canvas-start-title").textContent'), 'Level 1 complete');
+      assert(await read(`(() => {const overlay=document.querySelector('#canvas-start-overlay');return overlay.hasAttribute('data-sokoban-countdown') && [...overlay.querySelectorAll('.canvas-start-actions button:not([hidden])')].every(button=>button.getBoundingClientRect().height>=44)})()`));
       assert.equal(await read('document.querySelector("#canvas-start-close").textContent'), 'Stay here');
       await click('#canvas-start-close');
       await delay(1400);
@@ -118,9 +120,9 @@ async function run() {
       })()`);
       assert(finalPush, 'final level has a valid finishing-push fixture');
       await solve('', 'W');
-      await waitFor(() => read(`!document.querySelector('#canvas-start-overlay').hidden && document.querySelector('#canvas-start-title').textContent==='Final level cleared!'`), 5000, 'final result');
+      await waitFor(() => read(`!document.querySelector('#canvas-start-overlay').hidden && document.querySelector('#canvas-start-title').textContent==='All levels complete'`), 5000, 'final result');
       await delay(1400);
-      assert.equal(await read('document.querySelector("#canvas-start-close").textContent'), 'Choose a level');
+      assert.equal(await read('document.querySelector("#canvas-start-close").textContent'), 'Levels');
       await click('#canvas-start-begin'); await ready();
       assert.equal(await read('RamifiedMinigames.player.state().sokobanLevelId'), 'bridges-blocking');
       assert.equal(await read('RamifiedMinigames.player.state().solved'), false, 'Play again restarts the final level');
