@@ -287,8 +287,11 @@
   }
   function genericFallback(host) {
     const model=representatives[host.dataset.iconKind];
-    if(model?.variant){host.replaceChildren(objectTypeIcon(model));host.dataset.iconVariant=model.variant;}
-    else host.textContent=host.dataset.iconFallback;
+    host.querySelector('.workspace-icon-formula')?.remove();
+    if(model?.variant){
+      host.querySelector('.workspace-icon-fallback')?.replaceWith(objectTypeIcon(model));
+      host.dataset.iconVariant=model.variant;
+    }
     host.dataset.iconSource='generic';delete host.dataset.iconName;
   }
   function render(asset, resolve) {
@@ -311,9 +314,16 @@
       root.StrandDrawing.thumbnail(canvas.getContext('2d'), 256, 256, model, color,{strokeWidth:settings.strandStroke});host.append(canvas);
     } else if (description.source==='generic' && !model.name) host.textContent=description.symbol;
     else {
-      const formula = document.createElement('span'); formula.className = 'workspace-icon-formula'; formula.textContent = '\\(' + model.name + '\\)'; host.append(formula);
       host.dataset.iconName = model.name; host.dataset.iconFallback = model.fallback || generic[asset.kind] || '◇';
-      // Keep the original formula while the asynchronously loaded renderer starts.
+      const fallback = document.createElement('span');
+      fallback.className = 'workspace-icon-fallback';
+      const label = host.dataset.iconFallback;
+      if (asset.kind === 'lie' && /^[A-Z]\d+$/.test(label)) {
+        const rank = document.createElement('sub');
+        rank.textContent = label.slice(1);
+        fallback.append(label[0], rank);
+      } else fallback.textContent = label;
+      host.append(fallback);
     }
     return host;
   }
@@ -336,13 +346,28 @@
     if (!hosts.length) return;
     try {
       if (!root.MathJax?.typesetPromise) { if (!root.MathJax?.startup?.promise) return; await root.MathJax.startup.promise; }
-      await root.MathJax.typesetPromise(hosts);
-      for (const host of hosts) {
+    } catch (_) { return; }
+    const pending = [];
+    for (const host of hosts) {
+      if (!host.isConnected || !host.dataset.iconName || host.querySelector('.workspace-icon-formula')) continue;
+      const formula = document.createElement('span');
+      formula.className = 'workspace-icon-formula';
+      formula.hidden = true;
+      formula.textContent = '\\(' + host.dataset.iconName + '\\)';
+      host.append(formula);
+      pending.push({ host, formula });
+    }
+    if (!pending.length) return;
+    try {
+      await root.MathJax.typesetPromise(pending.map(({ formula }) => formula));
+      for (const { host, formula } of pending) {
         if (!host.isConnected) continue;
-        if (host.querySelector('mjx-merror,[data-mjx-error]') || !host.querySelector('mjx-container')) { genericFallback(host); continue; }
+        if (formula.querySelector('mjx-merror,[data-mjx-error]') || !formula.querySelector('mjx-container')) { genericFallback(host); continue; }
+        host.querySelector('.workspace-icon-fallback').remove();
+        formula.hidden = false;
         watch(host);
       }
-    } catch (_) { hosts.forEach(genericFallback); }
+    } catch (_) { pending.forEach(({ host }) => { if (host.isConnected) genericFallback(host); }); }
   }
   function configure(next = {}) {
     settings = Object.fromEntries(Object.keys(defaults).map(key=>[key,next[key]??defaults[key]])); cache.clear();

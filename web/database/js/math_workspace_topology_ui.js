@@ -22,6 +22,14 @@
     parameters.append(field('g',genus),field('n',markings));parameters.hidden=true;
     const load=button('Load preset',()=>loadPreset());load.dataset.topologyLoadPreset='';
     function loadPreset(){const a=read(),choice=preset.value!==''&&model.presets[a?.kind]?.[Number(preset.value)];if(!a||a.data.source||!choice)return;
+      const loader=root.MathWorkspaceLoader,resources=loader?.editorResources('mosaic');
+      if(choice.generator&&choice.generator!=='moduli'&&loader?.needs(resources)){
+        const destination=keyOf(a),selection=preset.value;
+        loader.perform('topology-preset:'+destination,resources,choice.label,()=>{
+          if(host.isConnected&&keyOf(read())===destination&&preset.value===selection)loadPreset();
+        },error=>feedback(error.message,true));
+        return;
+      }
       try{const data=choice.generator==='moduli'?model.moduliPreset(Number(genus.value),Number(markings.value)):choice.generator?generatePreset(choice.generator):model.normalize(a.kind,choice.data);save(data);}catch(error){feedback(error.message,true);}
     }
     preset.addEventListener('change',()=>{const a=read(),choice=preset.value!==''&&model.presets[a?.kind]?.[Number(preset.value)];parameters.hidden=choice?.generator!=='moduli';load.disabled=!choice||!!a?.data.source;if(choice&&!choice.generator){loadPreset();preset.value='';load.disabled=true;}});

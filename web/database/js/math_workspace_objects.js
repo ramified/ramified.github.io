@@ -290,6 +290,21 @@
   for(const kind of ['complex','filtration']){capabilities[kind].open='complex-diagrams';capabilities[kind].properties=capabilities[kind].properties.filter(id=>!id.endsWith('-operations'));}
   for(const definition of definitions)if(['complex-view','filtration-view','complex-operations','filtration-operations'].includes(definition.id))definition.legacy=true;
   const byType = new Map(definitions.map(definition => [definition.id, definition]));
+  function panelResources(type, asset) {
+    const definition=byType.get(type),engine=definition?.engine||(definition?.sheafInput?'complex':null);
+    const resources=engine==='mosaic'?['mosaic','knot','link']:engine?[engine]:[];
+    if(type==='knot-info')resources.push('knot','link');
+    if(asset?.kind==='matrix'&&asset.data.construction)resources.push('slice');
+    return resources;
+  }
+  function assetResources(asset) {
+    const {kind,type,data}=asset||{};
+    if(kind==='matrix')return data?.construction?['matrix','slice']:['matrix'];
+    if(kind==='number'&&data?.hasValue)return ['matrix'];
+    if(['formula','tropical'].includes(kind))return ['slice'];
+    if(kind==='sheaf'&&['tensor','divisor-line'].includes(type))return ['complex'];
+    return [];
+  }
   function compatible(asset, spec, definition) {
     return !!asset && (spec.kinds || [spec.kind]).includes(asset.kind) && (!spec.subtype || asset.type === spec.subtype)
       && (!spec.requiresField || rings.isField(asset))
@@ -552,6 +567,7 @@
       renderer.inspectorHost.hidden = !visible || !inspector || renderer.hideInputInspector;
     }
     function updateDensity(panel) {
+      if (root.MathWorkspaceLoader?.needs(resourcesForPanel(panel))) return;
       if(panel.definition.engine==='mosaic'&&panel.definition.input){const asset=get(panel.assetKey);panel.inputIssues=asset?mosaic.issues(asset,snapshot.assets):[];feedback(panel,panel.inputIssues.join(' '),!!panel.inputIssues.length);}
       if (panel.definition.slicing && panel.definition.input) { const asset = get(panel.assetKey); panel.inputIssues = asset ? slicing.inputIssues(asset,snapshot.assets) : []; }
       if(panel.definition.input==='matrix') { const asset=get(panel.assetKey); panel.inputIssues=[]; if(asset) { try {slicing.materialize(asset,snapshot.assets);}catch(error){panel.inputIssues=[error.message];} } }
@@ -671,8 +687,20 @@
         const value=element('input','workspace-control workspace-code-control');value.type='text';value.setAttribute('aria-label','Number value');value.spellcheck=false;
         const replace=element('input');replace.type='checkbox';replace.setAttribute('aria-label','Substitute value in calculations');
         const positive=element('input');positive.type='checkbox';positive.setAttribute('aria-label','Assume positive');
-        const commit=()=>{const asset=get(panel.assetKey);if(!asset)return;panel.numberDraftMode={key:panel.assetKey,mode:mode.value,value:value.value,replace:replace.checked,positive:positive.checked};try{api.update(refOf(asset),{data:{...asset.data,hasValue:mode.value==='value',value:value.value,replaceWithValue:replace.checked,positive:positive.checked}});panel.numberDraftMode=null;feedback(panel);}catch(error){feedback(panel,error.message,true);}};
-        mode.addEventListener('change',()=>{replace.checked=mode.value==='value';panel.numberValueRow.hidden=panel.numberReplaceRow.hidden=mode.value!=='value';panel.numberPositiveRow.hidden=mode.value==='value';commit();});listen(value,commit);replace.addEventListener('change',commit);positive.addEventListener('change',commit);
+        const commit=()=>{
+          const asset=get(panel.assetKey);if(!asset)return;
+          panel.numberDraftMode={key:panel.assetKey,mode:mode.value,value:value.value,replace:replace.checked,positive:positive.checked};
+          if(mode.value==='value'&&root.MathWorkspaceLoader?.needs(['matrix']))return;
+          try{api.update(refOf(asset),{data:{...asset.data,hasValue:mode.value==='value',value:value.value,replaceWithValue:replace.checked,positive:positive.checked}});panel.numberDraftMode=null;feedback(panel);}catch(error){feedback(panel,error.message,true);}
+        };
+        mode.addEventListener('change',()=>{
+          replace.checked=mode.value==='value';panel.numberValueRow.hidden=panel.numberReplaceRow.hidden=mode.value!=='value';panel.numberPositiveRow.hidden=mode.value==='value';commit();
+          const loader=root.MathWorkspaceLoader,task='number-value:'+panel.id,key=panel.assetKey;
+          loader?.cancel(task);
+          if(mode.value==='value'&&loader?.needs(['matrix']))loader.perform(task,['matrix'],'Number arithmetic',()=>{
+            if(panels.get(panel.id)===panel&&panel.assetKey===key&&mode.value==='value')commit();
+          },error=>feedback(panel,error.message,true));
+        });listen(value,commit);replace.addEventListener('change',commit);positive.addEventListener('change',commit);
         panel.numberControls={mode,value,replace,positive};panel.numberValueRow=field('Value',value);panel.numberReplaceRow=field('Substitute value in calculations',replace);panel.numberPositiveRow=field('Assume positive',positive);
         panel.controls.append(field('Mode',mode),panel.numberValueRow,panel.numberReplaceRow,panel.numberPositiveRow,element('p','workspace-card-context','Choose Asset in a variety’s Genus or a sheaf’s Rank to use this Number. References follow renames and shared value changes.'));
       } else if (definition.input === 'field') {
@@ -706,7 +734,21 @@
         panel.functionFieldNote=element('p','workspace-card-context','Leave the algebraic relation empty for k(t₁,…,tₙ). Otherwise give a polynomial in the algebraic generator over this rational function field. This is a declared field presentation; irreducibility is not verified.');panel.controls.append(panel.functionFieldNote);
       } else if (definition.input === 'matrix') {
         const mode = element('select','workspace-control'); mode.setAttribute('aria-label','Matrix construction'); mode.append(new Option('Manual matrix','manual'),new Option('Simple roots from Lie type','simple-roots'),new Option('Fundamental weights from Lie type','fundamental-weights')); panel.matrixConstruction = mode;
-        mode.addEventListener('change',()=>{ const asset=get(panel.assetKey); if(!asset) return; const data={...asset.data}; if(mode.value==='manual') { try { Object.assign(data,slicing.materialize(asset,snapshot.assets).data); } catch(_) {} delete data.construction;delete data.field; } else {delete data.field;data.construction={lie:asset.data.construction?.lie||'',basis:mode.value};} api.update(refOf(asset),{data});if(mode.value==='manual')ensureMatrixField(panel.assetKey); });
+        mode.addEventListener('change',()=>{
+          const key=panel.assetKey,selection=mode.value,loader=root.MathWorkspaceLoader,task='matrix-construction:'+panel.id;
+          const apply=()=>{
+            const asset=get(key);
+            if(!asset||panel.assetKey!==key||mode.value!==selection||panels.get(panel.id)!==panel)return;
+            const data={...asset.data};
+            if(selection==='manual'){
+              try { Object.assign(data,slicing.materialize(asset,snapshot.assets).data); } catch(_) {}
+              delete data.construction;delete data.field;
+            }else{delete data.field;data.construction={lie:asset.data.construction?.lie||'',basis:selection};}
+            api.update(refOf(asset),{data});if(selection==='manual')ensureMatrixField(key);
+          };
+          if((selection!=='manual'||get(key)?.data.construction)&&loader?.needs(['slice']))loader.perform(task,['slice'],'Lie type matrix construction',apply,error=>feedback(panel,error.message,true));
+          else {loader?.cancel(task);apply();}
+        });
         panel.controls.append(field('Construction',mode));
         referenceControl(panel,slot('field','Coefficient ring','field'),definition,()=>get(panel.assetKey)?.data.field||'',value=>{
           const asset=get(panel.assetKey); if(!asset)return;
@@ -872,7 +914,12 @@
         if (asset.kind !== 'matrix') return window.MathWorkspaceIO.casExport(asset, format);
       }
       if (asset) {
-        if (format !== 'json') return ioRenderer(asset).objectIO('export', format);
+        if (format !== 'json') {
+          const loader=root.MathWorkspaceLoader,engine=slicing.isAsset(asset)?'slice':({strands:'strand',dynkin:'dynkin',matrix:'matrix'})[asset.kind]||'category';
+          const resources=[...new Set([engine,...assetResources(asset)])];
+          if(loader?.needs(resources))return loader.ensure(resources).then(()=>exportText(key,format));
+          return ioRenderer(asset).objectIO('export', format);
+        }
         const parent = ['dynkin','strands'].includes(asset.kind) ? get(asset.data.lie) : null;
         const dependencies = dependencyRecords(asset);
         return JSON.stringify({ kind: asset.kind, id: asset.id, name: asset.name, type: asset.type, data: asset.data, properties: asset.properties || {}, ...(dependencies.length ? { dependencies } : {}), ...(parent ? { lieAsset: { kind: 'lie', type: parent.type, data: parent.data } } : {}) }, null, 2);
@@ -899,14 +946,23 @@
       visit(asset); return result;
     }
     function importText(key, text) {
-      window.MathWorkspaceLoader?.assertImportReady();
       if (key === 'workspace') return api.restoreWorkspace(text);
-      if (key === 'category-graph') return api.importCategoryGraph(JSON.parse(text));
-      if (key === 'slicing-graph') return api.importSlicing(JSON.parse(text));
+      const loader=root.MathWorkspaceLoader;
+      if (key === 'category-graph' || key === 'slicing-graph') {
+        const value=JSON.parse(text),category=key==='category-graph',ids=category?['category']:['slice','matrix'];
+        const apply=()=>category?api.importCategoryGraph(value):api.importSlicing(value);
+        return loader?.needs(ids)?loader.ensure(ids).then(apply):apply();
+      }
       const asset = get(key);
       if (!asset) throw new Error('Choose the destination asset first.');
-      if (asset.kind === 'matrix' && !text.trim().startsWith('{')) return api.update(refOf(asset), { data: normalize('matrix', 'matrix', ioRenderer(asset).objectIO('parse', text)) });
+      if (asset.kind === 'matrix' && !text.trim().startsWith('{')) {
+        if(loader?.needs(['matrix']))return loader.ensure(['matrix']).then(()=>importText(key,text));
+        return api.update(refOf(asset), { data: normalize('matrix', 'matrix', ioRenderer(asset).objectIO('parse', text)) });
+      }
       const raw = text.trim(), value = raw.startsWith('{') ? JSON.parse(raw) : { kind: 'young', type: asset.type, data: { partition: raw } };
+      const resources=[...new Set([value,...(Array.isArray(value.dependencies)?value.dependencies:[])].flatMap(assetResources))];
+      if(asset.kind==='matrix'&&!resources.includes('matrix'))resources.push('matrix');
+      if(loader?.needs(resources))return loader.ensure(resources).then(()=>importText(key,text));
       if (slicing.isAsset(asset) || asset.kind === 'matrix' && (value.data?.construction || value.data?.field || value.dependencies)) return api.importSlicing(value,refOf(asset));
       if (asset.kind === 'number') return api.importNumberAsset(refOf(asset),value);
       if (['dynkin','strands'].includes(asset.kind)) return api.importRootObject(refOf(asset), value);
@@ -1053,8 +1109,38 @@
       for(const a of candidates){const check=element('input');check.type='checkbox';check.checked=nodes.includes(keyOf(a));check.dataset.diagramMember=keyOf(a);const row=element('label');row.append(check,document.createTextNode(' '+a.name+' · '+kindLabels[a.kind]));check.addEventListener('change',()=>{panel.computation.refs.nodes=check.checked?[...new Set([...panel.computation.refs.nodes,keyOf(a)])]:panel.computation.refs.nodes.filter(key=>key!==keyOf(a));refreshPanel(panel);});panel.diagramChoices.append(row);}
       if(!candidates.length)panel.diagramChoices.append(element('p','','Create a Complex or Filtration asset, or save a preview from this panel.'));
     }
+    function resourcesForPanel(panel) {
+      return panelResources(panel.definition.id,get(panel.assetKey || panel.computation?.refs.matrix));
+    }
+    function loadPanelResources(panel,ids) {
+      const loader=root.MathWorkspaceLoader;
+      panel.loadingResources=true;
+      panel.renderArea.hidden=true;
+      panel.resourceRetry?.remove();
+      feedback(panel,loader.loadingMessage(panel.definition.label));
+      loader.ensure(ids).then(()=>{
+        panel.loadingResources=false;
+        if(panels.get(panel.id)!==panel)return;
+        try {
+          snapshot=api.snapshot();feedback(panel);refreshPanel(panel);
+          if(!panel.definition.display)panels.forEach(other=>{if(other.definition.display)refreshPanel(other);});
+        } catch(error){feedback(panel,error.message,true);}
+      },()=>{
+        panel.loadingResources=false;
+        if(panels.get(panel.id)!==panel)return;
+        feedback(panel,loader.failureMessage(panel.definition.label),true);
+        panel.resourceRetry=button(loader.retryLabel,()=>loadPanelResources(panel,resourcesForPanel(panel)));
+        panel.message.after(panel.resourceRetry);
+      });
+    }
     function refreshPanel(panel) {
       if (panel.refreshing) return;
+      const resources=resourcesForPanel(panel);
+      if (root.MathWorkspaceLoader?.needs(resources)) {
+        if(!panel.loadingResources&&!panel.resourceRetry?.isConnected&&(!panel.closed||panel.location!=='hidden'))loadPanelResources(panel,resources);
+        return;
+      }
+      if(panel.resourceRetry?.isConnected){panel.resourceRetry.remove();feedback(panel);}
       panel.refreshing = true;
       try {
         if(panel.definition.sheafInput){
@@ -1206,10 +1292,6 @@
       if (!panel.definition.display) panels.forEach(other => { if (other.definition.display) refreshPanel(other); });
     }
     function open(type, assetKey = '', location = 'side', options = {}) {
-      if (window.MathWorkspaceLoader?.shouldWait()) {
-        window.MathWorkspaceLoader.afterReady(null, () => open(type, assetKey, location, options));
-        return null;
-      }
       const definition = byType.get(type); if (!definition) throw new Error('Unknown mathematical panel.');
       if(definition.mosaicOwner==='mosaic-space')assetKey=keyOf(mosaic.propertyAsset(type,get(assetKey),snapshot.assets))||assetKey;
       let refs = JSON.parse(JSON.stringify(options.refs || {}));
@@ -1368,10 +1450,6 @@
       editor.objectIO('select',refOf(asset)); api.ioChanged(); return true;
     }
     function openOverview(type, key) {
-      if (window.MathWorkspaceLoader?.shouldWait()) {
-        window.MathWorkspaceLoader.afterReady(null, () => openOverview(type, key));
-        return null;
-      }
       const definition = byType.get(type);
       if (!definition?.overview) return open(type,key,'hidden');
       let panel = find(type);
@@ -1449,7 +1527,6 @@
       panels.clear(); computations.clear(); legacyViews.clear(); dynkinFocus.clear();dynkinSelectionModes.clear(); registry.clear(); nextId = 0;
     }
     function restorePanels(saved) {
-      window.MathWorkspaceLoader?.assertImportReady();
       snapshot = api.snapshot();
       for(const item of saved)if(['dynkin-view','dynkin-starting'].includes(item.type)){
         if(Number.isInteger(item.computation?.options?.vertex))dynkinFocus.set(item.computation.refs.dynkin,item.computation.options.vertex);
@@ -1552,7 +1629,7 @@
     });
     return { panels, computations, registry,find,reveal,compare,open, openOverview, selectAsset, move, refresh, listCards, setVisible, syncPresentation, capturePanels, clearPanels, restorePanels, ioEntries, exportFormats, exportText, importText, resize: () => panels.forEach(updateDensity), closed: id => { const panel = panels.get(id); if (panel) { panel.lastLocation = 'main'; panel.location = 'hidden'; panel.closed = true; refreshPanel(panel); api.pickerChanged(); } } };
   }
-  const api = { normalize, kindLabels, powerRows, fieldLabel, definitions, capabilities, capabilityFor, contextFor, compatible, keyOf, mount, inputKinds, prepareCategoryGraph, strandContext, dynkinEdges, rootObjectIssues, lieEngineIssues, prepareRootImport };
+  const api = { normalize, kindLabels, powerRows, fieldLabel, definitions, capabilities, capabilityFor, contextFor, compatible, keyOf, mount, inputKinds, prepareCategoryGraph, strandContext, dynkinEdges, rootObjectIssues, lieEngineIssues, prepareRootImport, panelResources, assetResources };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MathWorkspaceObjects = api;
 }(typeof window !== 'undefined' ? window : globalThis));

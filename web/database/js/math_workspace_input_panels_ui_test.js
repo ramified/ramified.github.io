@@ -13,6 +13,7 @@ async function run(){
       window.input=panels.open('matrix-input',key(matrix),'main');
       window.view=panels.open('matrix-view',key(matrix),'side');
     });
+    await waitFor(()=>read(()=>!!input.activeRenderer&&!!view.propertyRenderer),15000,'Matrix editor and display');
     assert.equal(await read(()=>view.computation.refs.matrix),await read(()=>key(matrix)));
     assert.equal(await read(()=>getComputedStyle(view.propertyRenderer.host).display),'none','Matrix Display uses a result surface instead of an embedded editor');
     assert.equal(await read(()=>[...view.propertyRenderer.editor.inspectorShadow.querySelectorAll('input,select,textarea')].filter(control=>control.getClientRects().length).length),4,'Open exposes the working cell grid without setup controls');
@@ -60,6 +61,7 @@ async function run(){
       window.lattice=api.createObjectAsset('lattice',{data:{ambientDimension:3,basisRows:[[2,1,0],[0,3,0],[0,0,4]]}});
       window.li=panels.open('lattice-input',key(lattice),'side');
     });
+    await waitFor(()=>read(()=>!!li.activeRenderer),15000,'Lattice editor');
     assert.equal(await read(()=>li.activeRenderer.editor.inspectorShadow.querySelectorAll('[data-object-matrix-row]').length),0,'Lattice Input does not construct an inline matrix editor');
     assert.equal(await read(()=>getComputedStyle(li.activeRenderer.inspectorHost).display),'none');
     const basis=await read(()=>lattice.data.basisRows);

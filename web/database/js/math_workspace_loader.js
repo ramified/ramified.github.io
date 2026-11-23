@@ -1,30 +1,20 @@
 (function (root) {
   'use strict';
   const enabled = new URLSearchParams(root.location.search).get('loader') !== 'classic';
-  const entries = new Map(), generations = new Map();
+  const entries = new Map(), actions = new Map();
   const mathConfig = root.MathJax, mathHistory = [];
   const mathBackup = 'https://cdn.bootcdn.net/ajax/libs/mathjax/3.2.2/es5/tex-chtml.js';
   const words = {
-    en: { loading:'Engine loading… Import is available when the calculators are ready.', failed:'Calculator download failed. Retry to continue pending actions.', retry:'Retry download', math:'Calculators are ready; formulas are loading.', mathFailed:'Formula download failed; raw formulas remain visible.', link:'Unknown calculator view in the URL.' },
-    zh: { loading:'引擎加载中，计算器就绪后即可导入。', failed:'计算器下载失败，重试后继续等待的操作。', retry:'重试下载', math:'计算器已就绪，正在加载公式排版。', mathFailed:'公式下载失败，暂时显示公式原文。', link:'网址中的计算器视图不存在。' }
+    en: { loading:label=>`Loading ${label}…`, failed:label=>`Could not download resources for ${label}.`, retry:'Retry download', math:'Formula formatting is loading.', mathFailed:'Formula download failed; raw formulas remain visible.', link:'Unknown calculator view in the URL.' },
+    zh: { loading:label=>`正在加载${label}…`, failed:label=>`无法下载${label}所需的资源。`, retry:'重试下载', math:'正在加载公式排版。', mathFailed:'公式下载失败，暂时显示公式原文。', link:'网址中的计算器视图不存在。' }
   };
   const t = key => words[/^zh/i.test(document.documentElement.lang) ? 'zh' : 'en'][key];
-  let shell = false, ready = !enabled, phase = enabled ? 'waiting' : 'legacy';
-  let mathPhase = 'waiting', attempt = null, shellAt = null, engineAt = null, linkFailure = '';
+  let shell = false, mathPhase = 'waiting', shellAt = null, linkFailure = '', revision = 0;
   let mathTask = null, mathSource = null, mathCycle = 0;
-  let box, message, retryButton, release;
-  const gate = new Promise(resolve => { release = resolve; });
-  if (!enabled) release();
+  let box, message, retryButton;
 
-  function shouldWait() { return enabled && !ready; }
-  function assertImportReady() {
-    if (!shouldWait()) return;
-    const error = new Error(t('loading'));
-    error.name = 'WorkspaceEngineLoadingError'; error.code = 'WORKSPACE_ENGINE_LOADING';
-    throw error;
-  }
   function notify() {
-    if (!shell || !enabled && mathPhase !== 'error' && !box) return;
+    if (!shell) return;
     if (!box) {
       box = document.createElement('section'); box.id = 'workspace-engine-loader';
       box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite');
@@ -32,23 +22,47 @@
       message = document.createElement('span');
       retryButton = document.createElement('button'); retryButton.type = 'button';
       retryButton.className = 'btn btn-ghost';
-      retryButton.addEventListener('click', () => { retry().catch(() => {}); });
+      retryButton.addEventListener('click', () => {
+        const failed = [...actions.values()].filter(action => action.failed);
+        if (failed.length) failed.forEach(run);
+        else if (mathPhase === 'error') loadMath();
+      });
       box.append(message, retryButton); document.querySelector('main').prepend(box);
     }
-    message.textContent = linkFailure || (phase === 'error' ? t('failed') : !ready ? t('loading') : mathPhase === 'error' ? t('mathFailed') : mathPhase !== 'ready' ? t('math') : '');
+    const current = [...actions.values()].find(action=>action.failed) || [...actions.values()].at(-1);
+    message.textContent = current ? t(current.failed ? 'failed' : 'loading')(current.label)
+      : linkFailure || (mathPhase === 'error' ? t('mathFailed') : mathPhase === 'loading' ? t('math') : '');
     retryButton.textContent = t('retry');
-    retryButton.hidden = phase !== 'error' && mathPhase !== 'error';
-    box.hidden = !message.textContent; box.dataset.phase = phase;
-    root.dispatchEvent(new Event('workspace-loader-state'));
+    retryButton.hidden = current ? !current.failed : mathPhase !== 'error';
+    box.hidden = !message.textContent;
   }
   function cancel(key) {
-    if (enabled) generations.set(key, (generations.get(key) || 0) + 1);
+    if (actions.delete(key)) notify();
   }
-  function afterReady(key, action) {
-    if (!shouldWait()) return action();
-    const version = (generations.get(key) || 0) + 1;
-    if (key) generations.set(key, version);
-    return gate.then(() => { if (!key || generations.get(key) === version) return action(); });
+  function cancelActions() {
+    actions.clear();
+    notify();
+  }
+  async function run(task) {
+    const {key,ids,action,onError} = task;
+    task.failed = false;
+    notify();
+    try { await ensure(ids); }
+    catch (_) {
+      if (actions.get(key) === task) { task.failed = true; notify(); }
+      return;
+    }
+    if (actions.get(key) !== task) return;
+    cancel(key);
+    try { return await action(); }
+    catch (error) { onError(error); }
+  }
+  function perform(key, ids, label, action, onError) {
+    cancel(key);
+    if (!needs(ids)) return action();
+    const task = {key,ids,label,action,onError};
+    actions.set(key,task);
+    return run(task);
   }
   function include(id, url, async = false) {
     if (id === 'mathjax') {
@@ -61,30 +75,41 @@
       document.write('<script ' + (async ? 'async ' : '') + 'src="' + escaped + '"></' + 'script>');
       return;
     }
-    entries.set(id, { id, url, done:false, promise:null });
+    if (id !== 'native') entries.set(id, { id, url, promise:null });
   }
   function valid(id) {
-    if (id === 'native') return !!root.MathWorkspaceNativeEditors?.factories;
     if (id === 'knot') return !!root.MosaicKnotData;
     if (id === 'link') return !!root.MosaicLinkData;
-    return true;
+    return !!root.MathWorkspaceNativeEditors?.factories?.[id]?.mount;
   }
-  function load(entry) {
-    if (!entry) return Promise.reject(new Error('Missing loader resource.'));
-    if (entry.done) return Promise.resolve();
+  function needs(ids) { return ids.some(id => !valid(id)); }
+  function load(id) {
+    if (valid(id)) return Promise.resolve();
+    let entry = entries.get(id);
+    if (!entry) {
+      const url = root.MathWorkspaceNativeEditors?.urls?.[id];
+      if (!url) return Promise.reject(new Error('Unknown workspace resource: ' + id));
+      entry = {id,url,promise:null}; entries.set(id,entry);
+    }
     if (entry.promise) return entry.promise;
     entry.promise = new Promise((resolve, reject) => {
       const node = document.createElement('script'); node.async = true; node.src = entry.url;
       node.dataset.workspaceResource = entry.id;
+      const fail = message => { node.remove(); reject(new Error(message + entry.id)); };
+      const timer = root.setTimeout(() => fail('Download timed out: '), 60000);
       node.onload = () => {
-        if (!valid(entry.id)) { reject(new Error('Resource did not initialize: ' + entry.id)); return; }
-        entry.done = true; resolve();
+        root.clearTimeout(timer);
+        if (!valid(entry.id)) { fail('Resource did not initialize: '); return; }
+        revision++;
+        resolve();
       };
-      node.onerror = () => { node.remove(); reject(new Error('Download failed: ' + entry.id)); };
+      node.onerror = () => { root.clearTimeout(timer); fail('Download failed: '); };
       document.head.append(node);
     }).catch(error => { entry.promise = null; throw error; });
     return entry.promise;
   }
+  function ensure(ids) { return Promise.all(ids.map(load)); }
+  function editorResources(id) { return id === 'mosaic' ? [id,'knot','link'] : id ? [id] : []; }
   async function mathText(url) {
     const controller = new AbortController();
     let timer;
@@ -139,40 +164,24 @@
     })();
     return mathTask;
   }
-  function retry() {
-    if (mathPhase === 'waiting' || mathPhase === 'error') loadMath();
-    if (!enabled || ready) { notify(); return Promise.resolve(); }
-    if (attempt) return attempt;
-    phase = 'loading'; notify();
-    attempt = Promise.all(['native', 'knot', 'link'].map(id => load(entries.get(id))))
-      .then(() => {
-        engineAt = performance.now(); ready = true; phase = 'ready';
-        notify(); release(); root.dispatchEvent(new Event('workspace-engine-ready'));
-      })
-      .catch(error => { phase = 'error'; notify(); throw error; })
-      .finally(() => { attempt = null; });
-    return attempt;
-  }
   function shellReady(callbacks) {
     if (shell) return;
     shell = true; shellAt = performance.now();
-    if (!enabled) { notify(); return; }
     const canvas = new URLSearchParams(root.location.search).get('canvas');
     if (canvas) {
       if (['assets', 'mosaic', 'places', 'sheaf-complexes'].includes(canvas)) callbacks.open(canvas);
       else linkFailure = t('link');
     }
     notify();
-    // Let the fully wired shell paint before requesting the large resources.
-    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => { retry().catch(() => {}); }, 0)));
+    if (enabled) requestAnimationFrame(() => requestAnimationFrame(loadMath));
   }
   root.addEventListener('site-language-change', notify);
   root.MathWorkspaceLoader = {
-    enabled, include, shouldWait, assertImportReady, afterReady, cancel, shellReady, retry,
-    whenReady:() => ready ? Promise.resolve() : gate,
-    get ready() { return ready; }, get phase() { return phase; },
-    get loadingMessage() { return t('loading'); },
-    get shellAt() { return shellAt; }, get engineAt() { return engineAt; },
+    enabled, include, needs, ensure, editorResources, perform, cancel, cancelActions, shellReady,
+    loadingMessage:label=>t('loading')(label), failureMessage:label=>t('failed')(label),
+    get retryLabel() { return t('retry'); },
+    get revision() { return revision; },
+    get shellAt() { return shellAt; },
     get mathPhase() { return mathPhase; }, get mathSource() { return mathSource; },
     get mathAttempts() { return mathHistory.map(record => ({ ...record })); }
   };

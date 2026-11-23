@@ -9,9 +9,10 @@ async function run(){
     const read=(fn,...args)=>evaluate(client,'('+fn.toString()+')(...'+JSON.stringify(args)+')');
     await client.send('Runtime.enable');client.socket.addEventListener('message',event=>{const m=JSON.parse(String(event.data));if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.exception?.description||m.params.exceptionDetails.text);});
     await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels&&!!window.MathJax?.typesetPromise),20000);
-    const factoryIds=await read(()=>Object.keys(MathWorkspaceNativeEditors.factories));
+    const factoryIds=await read(()=>MathWorkspaceNativeEditors.definitions.map(editor=>editor.id));
     for(const id of factoryIds){
       const audit=await read(async id=>{
+        await MathWorkspaceLoader.ensure(MathWorkspaceLoader.editorResources(id));
         const host=document.createElement('section'),inspector=document.createElement('section');for(const node of [host,inspector]){node.style.cssText='width:640px;height:700px;display:block';document.body.append(node);}
         const editor=MathWorkspaceNativeEditors.factories[id].mount(host,{id:'math-render-audit-'+id,inspectorHost:inspector});
         editor.setCanvasActive(true);editor.setInspectorActive(true);

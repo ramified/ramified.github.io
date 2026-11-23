@@ -27,6 +27,12 @@ const outputRoot=process.env.MATH_WORKSPACE_OUTPUT_ROOT?path.resolve(process.env
 const outputs=new Map(), inputs=new Map();
 const minify=process.env.MATH_WORKSPACE_MINIFY!=='0';
 const sharedMosaicDatabases=new Map([['js/mosaic_knot_data.js','MosaicKnotData'],['js/mosaic_link_data.js','MosaicLinkData']]);
+const presetDirectories=['presets/category','presets/ramified_minigames'];
+const editorResources={
+  slice:{workers:['js/toric_cone_worker.js']},
+  mosaic:{workers:['js/background_homology_worker.js','js/mosaic_hyperbolic_metric_worker.js'],presets:presetDirectories[1]},
+  category:{presets:presetDirectories[0]}
+};
 const workspaceFile=p=>p.startsWith('js/math_workspace/')||p.startsWith('node_modules/')||['package.json','package-lock.json','math_workspace.html','math_workspace_browser_test.html'].includes(p);
 const normalizeText=text=>typeof text==='string'?text.replace(/\r\n?/g,'\n'):text;
 const sameText=(left,right)=>normalizeText(left)===normalizeText(right);
@@ -233,6 +239,41 @@ async function presetFiles(directory){
   }
   return files.sort();
 }
+const calculatorSources=sources=>({name:'calculator-sources',setup(b){
+  b.onResolve({filter:/^(editor:|workspace:)/},a=>({path:a.path,namespace:'calculator'}));
+  b.onLoad({filter:/.*/,namespace:'calculator'},a=>({contents:sources.get(a.path),loader:'js',resolveDir:path.join(root,'js/math_workspace/editors')}));
+}});
+const bundleOptions={absWorkingDir:root,bundle:true,write:false,format:'iife',target:'es2022',sourcemap:false,legalComments:'eof',minify,keepNames:minify};
+async function liveEditorFiles(virtual,workers,presetEntries){
+  const output=new Map(),urls={};
+  const run=sources=>esbuild.build({...bundleOptions,stdin:{contents:sources.get('workspace:entry'),resolveDir:path.join(root,'js/math_workspace/editors')},plugins:[calculatorSources(sources)]})
+    .then(result=>result.outputFiles[0].text);
+  const hash=text=>createHash('sha256').update(text).digest('hex').slice(0,16);
+  const encodePresets=paths=>'export default {'+paths.map(p=>presetEntries.get(p)).join('')+'};';
+  const chunks=await Promise.all(editors.map(async ({id})=>{
+    const resources=editorResources[id]||{};
+    const sources=new Map([
+      ['workspace:entry',`import * as factory from 'editor:${id}'; globalThis.MathWorkspaceNativeEditors.factories[${JSON.stringify(id)}]=factory;`],
+      [`editor:${id}`,virtual.get(`editor:${id}`)],
+      ['workspace:workers',`export default ${JSON.stringify(Object.fromEntries((resources.workers||[]).map(key=>[key,workers[key]])))};`],
+      ['workspace:presets',encodePresets([...presetEntries.keys()].filter(p=>resources.presets&&p.startsWith(resources.presets+'/')))]
+    ]);
+    return [id,await run(sources)];
+  }));
+  for(const [id,data] of chunks){
+    const file=`js/math_workspace_editors/${id}.js`;
+    output.set(file,data);urls[id]=`${file}?v=${hash(data)}`;
+  }
+  const manifest=await run(new Map([['workspace:entry',`
+    import {encodeState,decodeState} from './state.mjs';
+    globalThis.MathWorkspaceNativeEditors=Object.freeze({
+      definitions:Object.freeze(${JSON.stringify(editors)}.map(Object.freeze)),
+      urls:Object.freeze(${JSON.stringify(urls)}),factories:Object.create(null),encodeState,decodeState
+    });`]]));
+  const manifestFile='js/math_workspace_native_manifest.js';
+  output.set(manifestFile,manifest);
+  return {output,manifestScript:`${manifestFile}?v=${hash(manifest)}`};
+}
 async function build(){
   inputs.clear();outputs.clear();
   for(const file of ['js/math_workspace/build.mjs','js/math_workspace/editors/catalog.mjs','package.json','package-lock.json'])await read(file);
@@ -250,15 +291,15 @@ async function build(){
   const workers={workspace:workerResult.outputFiles[0].text};
   for(const f of ['js/toric_cone_worker.js','js/background_homology_worker.js','js/mosaic_hyperbolic_metric_worker.js'])workers[f]=await expandWorker(f);
   virtual.set('workspace:workers',`export default ${JSON.stringify(workers)};`);
-  let presetCode='export default {\n';
-  for(const directory of ['presets/category','presets/ramified_minigames'])for(const p of await presetFiles(directory)){
-    presetCode+=`${JSON.stringify(p)}:(window)=>{const globalThis=window,self=window,module=undefined,require=undefined;${await read(p)}\n},\n`;
+  const presetEntries=new Map();
+  for(const directory of presetDirectories)for(const p of await presetFiles(directory)){
+    presetEntries.set(p,`${JSON.stringify(p)}:(window)=>{const globalThis=window,self=window,module=undefined,require=undefined;${await read(p)}\n},\n`);
   }
-  virtual.set('workspace:presets',presetCode+'};');
+  virtual.set('workspace:presets','export default {\n'+[...presetEntries.values()].join('')+'};');
   virtual.set('workspace:editors',editors.map((e,i)=>`import * as e${i} from 'editor:${e.id}';`).join('\n')+`\nexport default {${editors.map((e,i)=>`${JSON.stringify(e.id)}:e${i}`).join(',')}};`);
   // Worker payloads above stay byte-identical; keep names for state codecs and
   // reflective UI bindings when minifying the main runtime.
-  const result=await esbuild.build({absWorkingDir:root,entryPoints:[path.join(root,'js/math_workspace/native_bootstrap.mjs')],bundle:true,write:false,format:'iife',target:'es2022',sourcemap:false,legalComments:'eof',minify,keepNames:minify,plugins:[{name:'calculator-sources',setup(b){b.onResolve({filter:/^(editor:|workspace:)/},a=>({path:a.path,namespace:'calculator'}));b.onLoad({filter:/.*/,namespace:'calculator'},a=>({contents:virtual.get(a.path),loader:'js',resolveDir:path.join(root,'js/math_workspace/editors')}));}}],metafile:true});
+  const result=await esbuild.build({...bundleOptions,entryPoints:[path.join(root,'js/math_workspace/native_bootstrap.mjs')],plugins:[calculatorSources(virtual)],metafile:true});
   const modelCode=normalizeText(await fs.readFile(path.join(outputRoot,'js/math_workspace_sheaf_model.js'),'utf8'));
   const runtimeText='if(!globalThis.MathWorkspaceSheafModel){'+modelCode+'}\n'+result.outputFiles[0].text;
   outputs.set('js/math_workspace/dist/workspace.js',runtimeText);
@@ -285,7 +326,17 @@ async function build(){
   const liveScript=`js/math_workspace_native_editors_v8.js?v=${revision.slice(0,16)}`;
   const previousBundle=await fs.readFile(liveBundle,'utf8').catch(()=>null);
   const previousHtml=await fs.readFile(liveHtml,'utf8').catch(()=>null);
-  const nextHtml=previousHtml?.replace(/js\/math_workspace_native_editors_v8\.js(?:\?[^" ]*)?/g,liveScript);
+  let nextHtml=previousHtml?.replace(/js\/math_workspace_native_editors_v8\.js(?:\?[^" ]*)?/g,liveScript);
+  if(nextHtml?.includes('js/math_workspace_native_manifest.js')){
+    const {output,manifestScript}=await liveEditorFiles(virtual,workers,presetEntries);
+    for(const [file,contents] of output){
+      const destination=path.join(outputRoot,file),previous=await fs.readFile(destination,'utf8').catch(()=>null);
+      if(previous===contents)continue;
+      if(process.argv.includes('--check'))throw new Error(`Stale native editor asset: ${file}`);
+      await fs.mkdir(path.dirname(destination),{recursive:true});await fs.writeFile(destination,contents);
+    }
+    nextHtml=nextHtml.replace(/js\/math_workspace_native_manifest\.js(?:\?[^" ]*)?/g,manifestScript);
+  }
   if(process.argv.includes('--check')){
     if(previousBundle!==runtimeText)throw new Error('Stale live native editor bundle; run npm run workspace:build');
     if(!sameText(previousHtml,nextHtml))throw new Error('Stale live workspace cache query; run npm run workspace:build');

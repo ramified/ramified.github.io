@@ -7,7 +7,9 @@ async function run() {
     session = await launchBrowser('http://127.0.0.1:'+server.address().port+'/math_workspace.html');
     const {client} = session, read = (fn,...args)=>evaluate(client,'('+fn.toString()+')(...'+JSON.stringify(args)+')');
     await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
-    await read(()=>{
+    await read(async()=>{
+      // The fixture builds and captures renderer state in a single page call.
+      await MathWorkspaceLoader.ensure(['matrix','category','slice','complex','mosaic','knot','link','ramification']);
       window.api=MathWorkspaceAssetsTest; window.panels=MathWorkspaceObjectPanels;
       window.key=a=>a.kind+':'+a.id;
       window.y=api.createObjectAsset('young',{data:{partition:'3,2'}});

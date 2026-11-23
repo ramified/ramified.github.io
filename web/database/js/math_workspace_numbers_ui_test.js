@@ -23,9 +23,11 @@ async function run() {
       [...document.querySelectorAll('#workspace-assets-context-menu button')].find(button=>button.textContent==='New…').click();
       document.querySelector('[data-create-kind="number"]').click();
       window.n=api.localAssetSnapshot().assets.find(a=>a.kind==='number');
-      api.updateObjectAsset(n,{name:'g',data:{...get(n).data,hasValue:true,value:'2',replaceWithValue:true}});
       window.input=panels.open('number-input',key(n),'main');window.display=panels.open('number-view',key(n),'side');
+      input.numberControls.mode.value='value';input.numberControls.mode.dispatchEvent(new Event('change'));
     });
+    await waitFor(()=>read(()=>get(n).data.hasValue),15000,'Number arithmetic ready');
+    await read(()=>api.updateObjectAsset(n,{name:'g',data:{...get(n).data,value:'2'}}));
     assert.equal(await read(()=>get(n).dependencies[0].kind),'field');
     assert.equal(await read(()=>api.localAssetSnapshot().assets.find(a=>key(a)===get(n).data.field).data.dataType),'rational');
     assert.match(await read(()=>display.computation.result.text),/g = 2/);
@@ -61,7 +63,8 @@ async function run() {
     }
     assert.match(await read(()=>{try{const f={kind:'field',id:'f',data:MathWorkspaceObjects.normalize('field','field',{dataType:'finite-field'})};MathWorkspaceNumbers.evaluate({data:{hasValue:true,value:'1/7',field:key(f)}},[f]);return '';}catch(error){return error.message;}}),/zero/i);
 
-    await read(()=>{
+    await read(async()=>{
+      await MathWorkspaceLoader.ensure(['complex']);
       api.updateObjectAsset(n,{data:{...get(n).data,value:'2'}});
       window.curve=api.createObjectAsset('variety',{type:'curve',name:'C',data:{genus:'1',genusNumber:key(n)}});
       window.sym=api.createObjectAsset('variety',{type:'symmetric-product-curve',name:'S',data:{genus:'1',power:'2',genusNumber:key(n)}});

@@ -7,7 +7,8 @@ async function run(){
     session=await launchBrowser('http://127.0.0.1:'+server.address().port+'/math_workspace.html');
     const {client}=session,read=(fn,...args)=>evaluate(client,'('+fn.toString()+')(...'+JSON.stringify(args)+')');
     await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
-    await read(()=>{
+    await read(async()=>{
+      await MathWorkspaceLoader.ensure(['complex']);
       window.api=MathWorkspaceAssetsTest;window.k=api.assetKey;window.get=ref=>api.localAssetSnapshot().assets.find(a=>k(a)===k(ref));
       window.P=api.createObjectAsset('variety',{name:'P',type:'projective',data:{dimension:'3'}});
       window.L=api.createObjectAsset('variety',{name:'L',type:'projective',data:{dimension:'1'}});
@@ -163,7 +164,7 @@ async function run(){
       const cohomRefs=await read(()=>[S,newWedge].map(ref=>({kind:ref.kind,id:ref.id})));
       const divisorRef=await read(()=>({kind:newDivisor.kind,id:newDivisor.id}));
       await client.send('Page.reload');await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
-      await read(text=>{MathWorkspaceObjectPanels.importText('workspace',text);},backup);
+      await read(text=>MathWorkspaceObjectPanels.importText('workspace',text),backup);
       assert.deepEqual(await read(()=>MathWorkspaceAssetsTest.localAssetSnapshot().assets.map(a=>({id:a.id,type:a.type,data:a.data}))),expected,'all new options and coefficients survive cross-page restore');
       for(const ref of cohomRefs){
         const actual=await read(ref=>{

@@ -53,7 +53,7 @@
     function reset(){entries.forEach(entry=>{entry.subjects=[...defaults[entry.kind]];});listeners.forEach(listener=>listener());}
     return {settings,set,reset,subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);}};
   }
-  function init({entries,create,dependencies=()=>[],capabilities,returnFocus}) {
+  function init({entries,create,prepare=()=>null,dependencies=()=>[],capabilities,returnFocus}) {
     const assignments=subjectAssignments(entries);
     const preferenceKey='math-workspace-create-preferences-v1',known=new Set(entries.map(entry=>entry.kind));
     let preferences={favorites:[],recent:[],hiddenRows:[]};
@@ -67,7 +67,7 @@
     }catch(_){} // Storage may be unavailable; the picker still works for this visit.
     const savePreferences=()=>{try{root.localStorage.setItem(preferenceKey,JSON.stringify(preferences));}catch(_){}};
     const shortcutVisibility=new Map();
-    let dialog,search,list,count,filters,filterDetails,filterSummary,displaySelect,subjectSelect,opener,stayOpen,dependencyMode,addedStatus,statusTimer,lastCreatedFocus,subject='',display='',creating=false,busy=false,resultsSignature='';
+    let dialog,search,list,count,filters,filterDetails,filterSummary,displaySelect,subjectSelect,opener,stayOpen,dependencyMode,addedStatus,downloadStatus,downloadRow,retry,cancel,statusTimer,lastCreatedFocus,pending,subject='',display='',creating=false,busy=false,resultsSignature='';
     const element=(tag,text,className)=>Object.assign(document.createElement(tag),{textContent:text||'',className:className||''});
     function closeIcon(){
       const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg'),path=document.createElementNS(ns,'path');
@@ -170,23 +170,73 @@
       clearTimeout(statusTimer);addedStatus.textContent=message;
       statusTimer=setTimeout(()=>{addedStatus.textContent='';},4000);
     }
+    function clearPending() {
+      pending=null;
+      list.inert=false;
+      list.removeAttribute('aria-busy');
+      retry.hidden=cancel.hidden=true;delete downloadRow.dataset.active;
+      downloadStatus.textContent='';
+    }
+    function cancelPending() {
+      if(!pending)return;
+      pending.cancelled=true;
+      const {button}=pending;
+      busy=false;
+      clearPending();
+      if(dialog.open)button.focus({preventScroll:true});
+    }
+    async function waitForEditor(request,download) {
+      const {item}=request;
+      const chinese=/^zh/i.test(document.documentElement.lang);
+      clearTimeout(statusTimer);
+      pending=request;list.inert=true;list.setAttribute('aria-busy','true');
+      retry.hidden=true;cancel.hidden=false;downloadRow.dataset.active='true';addedStatus.textContent='';
+      downloadStatus.textContent=chinese?`正在加载 ${item.label} 编辑器，完成后将自动创建对象。`:`Loading the ${item.label} editor. The object will be created automatically.`;
+      cancel.focus({preventScroll:true});
+      try { await download; }
+      catch (_) {
+        if(pending!==request||!dialog.open)return false;
+        list.removeAttribute('aria-busy');
+        downloadStatus.textContent=chinese?`无法下载 ${item.label} 编辑器。`:`Could not download the ${item.label} editor.`;
+        retry.hidden=false;retry.focus({preventScroll:true});
+        return false;
+      }
+      if(pending!==request||!dialog.open)return false;
+      clearPending();
+      return true;
+    }
+    async function finish(request) {
+      const download=prepare(request.item.kind);
+      if(download && !await waitForEditor(request,download))return;
+      if(pending===request)clearPending();
+      const focus=await create(request.item.kind,request.options);
+      if(focus===null){showStatus('The object could not be added.');return;}
+      preferences.recent=[request.item.kind,...preferences.recent.filter(kind=>kind!==request.item.kind)].slice(0,6);savePreferences();
+      if(typeof focus==='function')lastCreatedFocus=focus;
+      if(!request.keepOpen){creating=true;dialog.close();lastCreatedFocus?.();}
+      showStatus('Added '+request.item.label+'.');
+    }
+    async function retryPending() {
+      if(!pending||retry.hidden)return;
+      const request=pending;
+      try { await finish(request); }
+      catch(error){clearPending();showStatus(error.message||'The object could not be added.');}
+      if(!pending&&request.keepOpen&&dialog.open)request.button.focus({preventScroll:true});
+    }
     async function activate(item,button){
-      if(busy||capabilities()?.[item.kind]===false)return;
-      busy=true;const keepOpen=stayOpen.checked,scroll=list.scrollTop,pageX=window.scrollX,pageY=window.scrollY;
+      if(busy||pending||capabilities()?.[item.kind]===false)return;
+      const activation={};busy=activation;
+      const keepOpen=stayOpen.checked,scroll=list.scrollTop,pageX=window.scrollX,pageY=window.scrollY;
+      let request;
       try{
         const mode=dependencyMode.value,slots=mode==='automatic'?[]:dependencies(item.kind);
         const options=mode==='review'&&slots.length?await chooseDependencies(item,slots):{data:Object.fromEntries(slots.map(slot=>[slot.field,slot.candidates[0].key]))};
         if(options===null){button.focus({preventScroll:true});return;}
-        if(!keepOpen){creating=true;dialog.close();}
-        const focus=await create(item.kind,options);
-        if(focus===null){showStatus('The object could not be added.');return;}
-        preferences.recent=[item.kind,...preferences.recent.filter(kind=>kind!==item.kind)].slice(0,6);savePreferences();
-        if(typeof focus==='function')lastCreatedFocus=focus;
-        showStatus('Added '+item.label+'.');
+        request={item,button,keepOpen,options};await finish(request);
       }catch(error){showStatus(error.message||'The object could not be added.');}
       finally{
-        busy=false;
-        if(keepOpen&&dialog.open){window.scrollTo(pageX,pageY);button.focus({preventScroll:true});list.scrollTop=scroll;}
+        if(busy===activation)busy=false;
+        if(!request?.cancelled&&!pending&&keepOpen&&dialog.open){window.scrollTo(pageX,pageY);button.focus({preventScroll:true});list.scrollTop=scroll;}
       }
     }
     function build(){
@@ -221,12 +271,19 @@
       dependencyMode.title='Prefer existing uses suggested assets immediately. Review choices lets you check them first. Automatic creates or reuses supporting assets.';
       dependencyMode.setAttribute('aria-label','Dependencies');
       dependencyLabel.append(element('span','Dependencies:','workspace-dependency-label-full'),element('span','Use:','workspace-dependency-label-short'),dependencyMode);
-      addedStatus=element('span','','workspace-create-added');addedStatus.setAttribute('role','status');actions.append(stayLabel,dependencyLabel);footer.append(actions,addedStatus);
+      const chinese=/^zh/i.test(document.documentElement.lang);
+      addedStatus=element('span','','workspace-create-added');addedStatus.setAttribute('role','status');
+      retry=element('button',chinese?'重试下载':'Retry download','btn btn-ghost');retry.type='button';retry.hidden=true;retry.addEventListener('click',retryPending);
+      cancel=element('button',chinese?'取消创建':'Cancel creation','btn btn-ghost');cancel.type='button';cancel.hidden=true;cancel.addEventListener('click',cancelPending);
+      downloadStatus=element('span','','workspace-create-added');downloadStatus.setAttribute('role','status');
+      downloadRow=element('div','','workspace-create-download');downloadRow.append(downloadStatus,retry,cancel);
+      actions.append(stayLabel,dependencyLabel);footer.append(actions,addedStatus,downloadRow);
       dialog.append(head,searchArea,list,footer);document.body.append(dialog);
-      dialog.addEventListener('close',()=>{if(creating)return;if(lastCreatedFocus)lastCreatedFocus();else if(opener?.isConnected)opener.focus({preventScroll:true});else returnFocus()?.focus({preventScroll:true});});
+      dialog.addEventListener('close',()=>{if(dialog.open)return;cancelPending();if(creating)return;if(lastCreatedFocus)lastCreatedFocus();else if(opener?.isConnected)opener.focus({preventScroll:true});else returnFocus()?.focus({preventScroll:true});});
       dialog.addEventListener('keydown',event=>{
         if(event.isComposing||event.keyCode===229)return;
-        if(event.key==='Escape'){event.preventDefault();event.stopPropagation();dialog.close();return;}
+        if(event.key==='Escape'){event.preventDefault();event.stopPropagation();cancelPending();dialog.close();return;}
+        if(pending)return;
         if(event.target===filterSummary&&(event.key==='Enter'||event.key===' ')){
           event.preventDefault();event.stopPropagation();filterDetails.open=!filterDetails.open;return;
         }
