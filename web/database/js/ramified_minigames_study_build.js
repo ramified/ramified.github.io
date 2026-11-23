@@ -15,7 +15,8 @@ function emit(filename, contents) {
   } else fs.writeFileSync(filename, contents);
 }
 const buildRenderer = require('./ramified_minigames_study_render_build.js');
-emit(path.join(__dirname, 'ramified_minigames_study_engine.js'), buildRenderer(fs.readFileSync(path.join(__dirname, 'ramified_minigames_setup.js'), 'utf8')));
+const engine = buildRenderer(fs.readFileSync(path.join(__dirname, 'ramified_minigames_setup.js'), 'utf8'));
+emit(path.join(__dirname, 'ramified_minigames_study_engine.js'), engine.replace('soundEnabled: false,', 'soundEnabled: true,'));
 // Classic is archived: read its existing markup, but never emit to that page.
 // Make future main-page markup changes in this builder, not in the archive.
 let html = fs.readFileSync(path.join(root, 'ramified_minigames_classic.html'), 'utf8').replace(/\r\n/g, '\n');
@@ -94,13 +95,27 @@ html = html.replace('<section id="player-home" class="player-page">', `<section 
 html = html.replace('<div id="player-language"></div>', `<div id="player-language"></div><details id="study-workshop"><summary data-i18n="study.workshop">Workshop</summary><p data-i18n="study.workshopHelp">Editing, sound experiments and file tools. These are optional; close this section to return to ordinary settings.</p><div id="study-workshop-content"></div></details>`);
 html = html.replace('<div id="player-toolbar">', `<div id="study-hud" role="status" aria-live="polite"></div><button id="study-mute" class="btn" type="button" aria-pressed="true" data-i18n="study.muted">Sound off</button>
 <div id="study-status" role="status" aria-live="polite"></div>
-<div id="study-notice" hidden><span data-i18n="study.soundQuestion">Sound on?</span><button class="btn" id="study-sound-yes" data-i18n="study.enableSound">Turn on</button><button class="btn" id="study-sound-no" data-i18n="study.notNow">Not now</button></div>
+<div id="study-sokoban-hud" hidden>
+  <strong id="study-sokoban-goal"></strong><span id="study-sokoban-progress"></span>
+  <span data-i18n="player.sokobanMoveHelp">Use the arrows or swipe the board.</span>
+  <span id="study-sokoban-bridge" data-i18n="player.sokobanBridgeHelp" hidden>Push a bridge block to move its glowing beam.</span>
+  <span id="study-sokoban-glue" data-i18n="player.sokobanGlueHelp" hidden>Matching edge marks show where you cross.</span>
+</div>
+<div id="study-sokoban-controls" hidden>
+  <div id="study-sokoban-directions"></div>
+  <div class="study-sokoban-actions">
+    <button class="btn" id="study-sokoban-undo" type="button" data-i18n="player.sokobanUndo">Undo</button>
+    <button class="btn" id="study-sokoban-reset" type="button" data-i18n="player.sokobanReset">Restart level</button>
+    <button class="btn" id="study-sokoban-levels" type="button" data-i18n="player.sokobanLevelList">Levels</button>
+    <label><input id="study-sokoban-auto" type="checkbox" checked><span data-i18n="player.sokobanAutoNext">Auto-next</span></label>
+  </div>
+</div>
 <footer id="study-build" lang="en" data-i18n-ignore>Build 2026-10-28.6</footer>
       <div id="player-toolbar">`);
 // Reuse existing locale keys with player-facing copy in the study catalog.
 html = html.replace('<div id="player-language"></div>', '<button class="btn" id="study-saves" type="button" data-i18n="study.saves">Saved games</button><div id="player-language"></div>');
 html = html.replace('<div id="player-language"></div>', '<button class="btn" id="study-online" type="button" data-i18n="online.title">Online</button><div id="player-language"></div>');
-html = html.replace('<div class="canvas-start-actions">', '<div class="canvas-start-actions"><button class="btn" id="study-again" type="button" data-i18n="study.again" hidden>Again</button><button class="btn" id="study-result-menu" type="button" data-i18n="study.menu" hidden>Menu</button>');
+html = html.replace('<div class="canvas-start-actions">', '<div class="canvas-start-actions"><button class="btn" id="study-again" type="button" data-i18n="runtime.rematchAgain" hidden>Play again</button><button class="btn" id="study-result-menu" type="button" data-i18n="player.back" hidden>Back</button>');
 player = player.replace('showSlots();\n    });\n    byId(\'player-continue\')', 'selectSlot(activeSlot ?? 0);\n    });\n    byId(\'player-continue\')');
 player = player.replace("byId('player-settings').addEventListener", "byId('study-saves').addEventListener('click', () => { engine.closeSettings(); showSlots(); });\n    byId('player-settings').addEventListener");
 player = player.replace("page = next;", "page = next;\n      document.body.dataset.studyPage = next;");
@@ -135,7 +150,7 @@ html = html.replace(/<section id="player-room"[\s\S]*?<\/section>/, section => s
   .replace('<p id="player-room-summary"></p>', `<p id="player-room-summary" hidden></p>
               <header class="player-room-header">
                 <h2 id="player-room-game"></h2>
-                <div class="player-room-code-row"><output id="player-room-code" data-i18n-aria-label="study.roomCode" aria-label="Room code"></output><button class="btn" id="player-room-copy" type="button" data-i18n="study.roomCopy" data-i18n-aria-label="study.roomCopyLabel" aria-label="Copy room code">Copy</button><span id="player-room-copy-status" class="player-visually-hidden" role="status"></span></div>
+                <div class="player-room-code-row"><button class="btn" id="player-room-copy" type="button" data-i18n-title="study.roomCopyLabel" title="Copy room code"><span id="player-room-code"></span></button><span id="player-room-copy-status" class="player-visually-hidden" role="status"></span></div>
                 <div class="player-room-meta"><p id="player-room-host"></p><p><span data-i18n="study.roomTimeLabel">Time:</span> <span id="player-room-time"></span></p></div>
               </header>`)
   .replace('              <p id="player-room-time"></p>\n              <ul id="player-room-members"></ul>\n', '')
@@ -163,11 +178,41 @@ html = html.replace('<section id="player-room"', `<section id="player-room-loadi
           </section>
           <section id="player-room"`);
 html = html.replace('<p id="player-room-state" role="status">', '<p id="player-room-state" class="player-room-status" role="status" aria-live="polite">');
+html = html.replace('<section id="player-room-loading"', `<section id="player-invite" class="player-page" hidden>
+            <p id="player-invite-status" class="player-room-status" role="status"></p>
+            <button class="btn" id="player-invite-retry" type="button" data-i18n="lobby.inviteRetry" hidden>Try again</button>
+          </section>
+          <section id="player-room-loading"`);
+html = html.replace('<span id="player-room-copy-status"', `<span id="player-room-invite-actions" hidden>
+                  <button class="btn" id="player-room-copy-link" type="button" data-i18n="lobby.inviteCopy">Copy invite link</button>
+                  <button class="btn" id="player-room-share-link" type="button" data-i18n="lobby.inviteShare" hidden>Share</button>
+                </span><span id="player-room-copy-status"`);
+html = html.replace('<p id="player-room-state"', `<p id="player-room-link-status" role="status" hidden></p>
+              <output id="player-room-link-fallback" hidden></output>
+              <p id="player-room-invite-rules" hidden></p>
+              <p id="player-room-state"`);
+html = html.replace('<div id="player-toolbar">', `<aside id="player-invite-board-help" hidden>
+        <p id="player-invite-board-rules"></p>
+        <button class="btn" id="player-invite-dismiss" type="button" data-i18n="lobby.inviteDismiss">Got it</button>
+      </aside>
+      <div id="player-toolbar">`);
 html = html.replace('<p id="player-message" role="status"', '<p id="player-message" role="status" aria-live="polite"');
 for (const asset of ['css/ramified_minigames_study.css', 'js/ramified_minigames_study_locales.js', 'js/ramified_minigames_online.js', 'js/ramified_minigames_room_ui.js']) {
   html = html.replace(new RegExp(`${asset.replaceAll('.', '\\.')}\\?v=[^"\\s]+`), `${asset}?v=${CONNECTION_UI_BUILD}`);
 }
 // The first rendered home must already use the study's copy and page state.
+for (const [asset, version] of Object.entries({
+  'js/ramified_minigames_sfx.js': '20261122-drop-sound-1',
+  'js/ramified_minigames_study.js': '20261122-winning-drop-1',
+  'js/ramified_minigames_study_engine.js': '20261122-winning-drop-1',
+  'js/ramified_minigames_study_player.js': '20261122-winning-drop-1',
+  'js/ramified_minigames_online.js': '20261122-winning-drop-1',
+  'js/ramified_minigames_room_ui.js': '20261122-room-errors-1',
+  'js/i18n/ramified_minigames_locales.js': '20261122-room-errors-1',
+  'css/ramified_minigames_study.css': '20261122-match-ended-1'
+})) {
+  html = html.replace(new RegExp(`${asset.replaceAll('.', '\\.')}\\?v=[^"\\s]+`), `${asset}?v=${version}`);
+}
 // Read the English fallbacks from the same catalog used at runtime.
 const studyEnglish = {};
 require('vm').runInNewContext(fs.readFileSync(path.join(__dirname, 'ramified_minigames_study_locales.js'), 'utf8'), {

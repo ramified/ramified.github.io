@@ -20,7 +20,7 @@
     let layoutFrame = 0;
     let badgeFrame = 0;
     function paintPlayerBadges() {
-      if (badgeFrame) return;
+      if (badgeFrame || menu.hidden) return;
       badgeFrame = requestAnimationFrame(() => {
         badgeFrame = 0;
         for (const stone of document.querySelectorAll('#player-setup-players .player-stone, #player-setup-options .player-stone')) {
@@ -50,7 +50,10 @@
         paintPlayerBadges();
       });
     }
-    new ResizeObserver(refresh).observe(document.querySelector('.mosaic-layout'));
+    const layoutObserver = new ResizeObserver(refresh);
+    layoutObserver.observe(document.querySelector('.mosaic-layout'));
+    // Game UI can change the wrapper's padding without resizing the outer stage.
+    layoutObserver.observe(byId('canvas-wrap'), { box: 'content-box' });
     function watchDpr() {
       const query = matchMedia(`(resolution: ${devicePixelRatio}dppx)`);
       query.addEventListener('change', () => { watchDpr(); refresh(); }, { once: true });
@@ -77,6 +80,14 @@
     });
     sound.addEventListener('change', syncMute);
     syncMute();
+    function unlockSound(event) {
+      if (event.isTrusted && sound.checked) window.RamifiedMinigameSfx?.unlock();
+    }
+    // Touch activates on pointerup. Capture also covers a first board click.
+    for (const type of ['pointerdown', 'pointerup', 'click', 'keydown']) {
+      document.addEventListener(type, unlockSound, true);
+    }
+    mute.addEventListener('click', unlockSound);
     const workshop = byId('study-workshop-content');
     for (const node of [byId('debug-toggle')?.closest('.mosaic-debug-actions'), byId('debug-tools'), byId('ramified-import-export-card')]) {
       if (!node) continue;
@@ -85,13 +96,41 @@
       workshop.append(node);
     }
     byId('player-action-controls').prepend(byId('fullscreen-billiards-spin'));
+    const moveRow = byId('move-row');
+    const directions = byId('study-sokoban-directions');
+    const actionControls = byId('player-action-controls');
+    const sokobanHud = byId('study-sokoban-hud');
+    const sokobanControls = byId('study-sokoban-controls');
+    const sokobanUndo = byId('study-sokoban-undo');
+    sokobanUndo.addEventListener('click', () => engine.undoSokobanPresentation());
+    byId('study-sokoban-reset').addEventListener('click', () => engine.restartSokobanPresentation());
+    function syncSokoban() {
+      const puzzle = menu.hidden && settings.hidden ? engine.sokobanPresentation() : null;
+      const hidden = !puzzle;
+      const layoutChanged = sokobanHud.hidden !== hidden;
+      sokobanHud.hidden = sokobanControls.hidden = hidden;
+      if (layoutChanged && puzzle) engine.refreshPresentation();
+      if (!puzzle) {
+        if (moveRow.parentElement === directions) actionControls.prepend(moveRow);
+        return;
+      }
+      if (moveRow.parentElement !== directions) directions.append(moveRow);
+      const goal = puzzle.bridges ? tk('player.sokobanBridgeGoal', 'Cover all targets with boxes or bridge blocks.')
+        : tk('player.sokobanGoal', 'Push boxes onto all the targets.');
+      const progress = tk('player.sokobanProgress', 'Targets {{covered}}/{{total}} · Moves {{moves}}', { ...puzzle, total: puzzle.targets });
+      if (byId('study-sokoban-goal').textContent !== goal) byId('study-sokoban-goal').textContent = goal;
+      if (byId('study-sokoban-progress').textContent !== progress) byId('study-sokoban-progress').textContent = progress;
+      byId('study-sokoban-bridge').hidden = !puzzle.bridges;
+      byId('study-sokoban-glue').hidden = !puzzle.glued;
+      sokobanUndo.disabled = !puzzle.canUndo;
+    }
     byId('player-actions').addEventListener('toggle', refresh);
     byId('study-online').addEventListener('click', () => {
       engine.closeSettings();
       byId('player-online-open').click();
     });
     byId('study-again').addEventListener('click', () => engine.replayPresentation());
-    byId('study-result-menu').addEventListener('click', () => byId('fullscreen-settings-open').click());
+    byId('study-result-menu').addEventListener('click', () => byId('player-home-button').click());
     const stats = document.createElement('details');
     stats.id = 'study-stats';
     const statsTitle = document.createElement('summary');
@@ -123,13 +162,6 @@
       const delta = ({ ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns, ArrowDown: columns })[event.key];
       buttons[(index + delta + buttons.length) % buttons.length].focus();
     });
-    let soundAsked = false;
-    try { soundAsked = localStorage.getItem('design-study:sound-asked') === 'true'; } catch {}
-    byId('study-sound-yes').addEventListener('click', () => {
-      if (!sound.checked) mute.click();
-      byId('study-notice').hidden = true;
-    });
-    byId('study-sound-no').addEventListener('click', () => { byId('study-notice').hidden = true; });
     function syncTurn() {
       const status = byId('study-status');
       const state = engine.presentationInfo();
@@ -139,12 +171,20 @@
         status.hidden = true; // The restored toolbar owns its confirmation text.
         return;
       }
-      const finished = ['gameover', 'complete'].includes(state.phase);
-      byId('study-again').hidden = byId('study-result-menu').hidden = !finished;
-      document.body.classList.toggle('study-finished', finished);
-      if (!state.turn || finished) {
-        status.dataset.message = '';
-        status.textContent = finished ? tk('study.finished') : '';
+      const presentation = engine.matchPresentationState();
+      const finished = presentation === 'finished';
+      const levelResult = finished && !!shell.sokobanLevelId;
+      const onlineResult = finished && engine.onlineInfo().joined;
+      byId('study-again').hidden = byId('study-result-menu').hidden = !finished || levelResult || onlineResult;
+      document.body.classList.toggle('study-finished', finished && !levelResult);
+      document.body.toggleAttribute('data-study-online-result', onlineResult);
+      if (!state.turn || presentation !== 'playing') {
+        const message = presentation === 'scoring' ? tk('runtime.goCounting', 'Review the board and confirm the score.')
+          : presentation === 'reconnecting' ? tk('runtime.waitingForReconnect', 'Waiting for reconnect…') : '';
+        if (status.dataset.message !== message) {
+          status.dataset.message = message;
+          status.textContent = message;
+        }
         return;
       }
       const sideKeys = { black: 'study.side.black', white: 'study.side.white', red: 'study.side.red', yellow: 'study.side.yellow', blue: 'study.side.blue', green: 'study.side.green', purple: 'study.side.purple' };
@@ -170,12 +210,7 @@
       const state = engine.state();
       document.body.dataset.studyGame = state.mode;
       byId('study-hud').hidden = open || settingsOpen || state.mode !== '2048';
-      byId('study-notice').hidden = true;
-      if (!soundAsked && state.active && !state.browsing && !open && !settingsOpen) {
-        soundAsked = true;
-        try { localStorage.setItem('design-study:sound-asked', 'true'); } catch {}
-        byId('study-notice').hidden = false;
-      }
+      syncSokoban();
       syncTurn();
       paintPlayerBadges();
     }
@@ -186,9 +221,10 @@
     }
     new MutationObserver(syncTurn).observe(byId('fullscreen-action-status'), { childList: true, attributes: true, attributeFilter: ['hidden'] });
     document.addEventListener('ramified-player-state', syncPage);
+    document.addEventListener('ramified-online-state', syncTurn);
     document.addEventListener('site-language-change', () => {
       for (const node of topologyGomoku.querySelectorAll('[data-i18n]')) node.textContent = tk(node.dataset.i18n);
-      syncMute(); syncTurn(); refresh();
+      syncMute(); syncSokoban(); syncTurn(); refresh();
     });
     syncPage();
     refresh();

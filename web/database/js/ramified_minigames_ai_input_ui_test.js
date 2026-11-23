@@ -12,6 +12,22 @@ async function run() {
     const read = expression => evaluate(client, expression);
     const errors = [];
     await client.send('Runtime.enable');
+    const audioProbe = `(() => {
+      window.__drops = [];
+      let clickedAt = 0;
+      document.addEventListener('click', event => {
+        if (event.isTrusted && event.target.id === 'mosaic-canvas') clickedAt = performance.now();
+      }, true);
+      const start = OscillatorNode.prototype.start;
+      OscillatorNode.prototype.start = function(at) {
+        const game = window.RamifiedMinigames?.__test.getGame();
+        if (game?.gameMode === 'connect-four' && this.type === 'triangle') {
+          window.__drops.push({round:game.round, running:this.context.state==='running',
+            scheduledMs:(at-this.context.currentTime)*1000, sinceClickMs:performance.now()-clickedAt});
+        }
+        return start.call(this, at);
+      };
+    })()`;
     client.socket.addEventListener('message', event => {
       const message = JSON.parse(String(event.data));
       if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails.exception?.description || message.params.exceptionDetails.text);
@@ -62,6 +78,7 @@ async function run() {
     for (const page of pages) {
       await client.send('Page.navigate', { url: `${origin}/${page}` });
       await waitFor(() => read('!!window.RamifiedMinigames?.player.state().ready'), 60000, page+' loaded');
+      if (page === 'ramified_minigames.html') await read(audioProbe);
       await click('#player-new');
       if (await visible('player-slot-1')) await click('#player-slot-1');
       for (const mode of ['chinese-checkers', 'gomoku', 'connect-four']) {
@@ -72,6 +89,8 @@ async function run() {
           for (const color of colors) await read(`(() => {const n=document.querySelector('#chinese-checkers-player-options select[data-color="${color}"]');n.value=${JSON.stringify(color === 'black' ? 'human' : 'local-ai-challenging')};n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
         }
         await begin();
+        const checkSound = mode === 'connect-four' && page === 'ramified_minigames.html';
+        const wavRequests = checkSound ? await read(`performance.getEntriesByName(new URL('assets/audio/accepted-action.wav', location.href).href).length`) : 0;
         if (mode === 'chinese-checkers') {
           const before = await read('(()=>{const g=RamifiedMinigames.__test.getGame();return {turn:g.turn,selected:g.selectedIndex,round:g.round,ai:g.marbles.find(p=>p.color!=="black").index}})()');
           assert.equal(before.turn, 'black');
@@ -101,6 +120,15 @@ async function run() {
             await clickCell(snapshot.ai);
             assert.deepEqual(await read('(()=>{const g=RamifiedMinigames.__test.getGame();return {round:g.round,turn:g.turn}})()'), { round:snapshot.round, turn:snapshot.turn }, mode+' AI piece click leaves the human turn intact');
           }
+        }
+        if (checkSound) {
+          const drops = await read('window.__drops');
+          assert.deepEqual(drops.map(drop => drop.round), [1, 2, 3, 4], 'both players schedule one drop sound per accepted move');
+          assert(drops.every(drop => drop.running && drop.scheduledMs <= 1), 'drop audio is unlocked and scheduled immediately');
+          const clickDelays = drops.filter(drop => drop.round % 2).map(drop => drop.sinceClickMs);
+          assert(clickDelays.every(ms => ms < 50), 'human input reaches the audio scheduler in under 50 ms');
+          assert.equal(await read(`performance.getEntriesByName(new URL('assets/audio/accepted-action.wav', location.href).href).length`), wavRequests, 'Connect Four plays without fetching the WAV');
+          console.log(`Connect Four browser click-to-audio scheduling: ${clickDelays.map(ms=>ms.toFixed(1)).join(', ')} ms`);
         }
         await click('#fullscreen-settings-open');
         await click('#player-menu-button');

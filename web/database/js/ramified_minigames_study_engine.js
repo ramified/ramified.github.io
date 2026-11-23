@@ -511,7 +511,7 @@
   const BILLIARDS_CUE_GUIDANCE_FRAME_MS = 1000 / 15;
   const BILLIARDS_CUE_GUIDANCE_ANIMATION_MS = 900;
   const FULLSCREEN_SETTINGS_DEFAULTS = Object.freeze({
-    soundEnabled: false,
+    soundEnabled: true,
     soundVolume: 1,
     soundVariants: Object.freeze(MinigameSfx && typeof MinigameSfx.defaultVariants === 'function' ? MinigameSfx.defaultVariants() : {}),
     soundSeeds: Object.freeze({}),
@@ -2185,7 +2185,31 @@ function onlineWaitingPromptCopy(state = onlineState) {
 }
 
 function syncOnlineCanvasPrompt() {
-  if (playerShellEnabled && onlineIsInRoom()) { hideCanvasStartPrompt(); return; }
+  if (matchPresentationState() === 'finishing') {
+    hideCanvasStartPrompt();
+    return;
+  }
+  if (playerShellEnabled && onlineIsInRoom()) {
+    const awaitingFinalDrop = isConnectFourGame(game) && game.phase !== 'gameover' && !onlineState.outcome;
+    if (!document.body.classList.contains('design-study') || matchPresentationState() !== 'finished' || !['finished', 'rematch-vote'].includes(onlineState.roundState) || awaitingFinalDrop) {
+      hideCanvasStartPrompt();
+      return;
+    }
+    const voting = onlineState.roundState === 'rematch-vote';
+    const accepted = voting && onlineState.rematch?.acceptedClientIds?.includes(onlineState.clientId);
+    const losers = onlineState.outcome?.losers || [];
+    showCanvasStartPrompt({ force: true, dismissible: true, action: voting ? 'online-accept-rematch' : 'online-propose-rematch', copy: {
+      localized: true,
+      title: onlineState.outcome?.type === 'timeout' ? tk('lobby.timeout', 'Time expired: {{sides}}. Round ended.', { sides: losers.map(localizedRoleLabel).join(', ') })
+        : game && ['gameover', 'complete'].includes(game.phase) ? gameResultTitle(game) : tk('lobby.finished', 'Round ended'),
+      context: game && ['gameover', 'complete'].includes(game.phase) ? gameResultDetail(game) : '',
+      rules: '',
+      action: accepted ? tk('runtime.rematchWaiting', 'Waiting for players') : voting ? tk('runtime.rematchAccept', 'Accept rematch') : tk('runtime.rematchAgain', 'Play again'),
+      closeAction: tk('player.back', 'Back')
+    } });
+    refs.canvasStartBegin.disabled = accepted || !onlineStateHasPlayableRole();
+    return;
+  }
   if (!onlineIsInRoom() || !game || !onlineState) return;
   if (onlineState.roundState === 'waiting') {
     showCanvasStartPrompt({
@@ -2564,6 +2588,8 @@ function connectOnlineSocket(roomCode, requestedRoles = []) {
       }
       syncOnlineStatus(`${reason}; reconnecting...`, 'error');
       syncOnlineControls();
+    render();
+    syncControls();
       scheduleOnlineReconnect();
     });
   });
@@ -2712,7 +2738,9 @@ function handleOnlineSocketMessage(event) {
   }
   if (!message || typeof message !== 'object') return;
   if (message.type === 'departed') { leaveOnlineRoomFromUi(); return; }
-  updateOnlineRoomMetaFromMessage(message);
+  // The seats in a connection notice belong to the player named in it.
+  const connectionNotice = ['playerLeft', 'playerDisconnected', 'playerReconnected'].includes(message.type);
+  updateOnlineRoomMetaFromMessage(message, { applyAssignedRoles: !connectionNotice });
   if (typeof document !== 'undefined') queueMicrotask(() => document.dispatchEvent(new CustomEvent('ramified-online-state', { detail: message })));
   if (message.type === 'joined') {
     onlineState.roomCode = normalizeOnlineRoomCode(message.roomCode || onlineState.pendingRoomCode || onlineState.roomCode);
@@ -2990,11 +3018,13 @@ function tryApplyOnlineRemoteAction(action, snapshot, message) {
   syncOnlineRoleOptions(mode);
   syncOnlineStatus('Opponent move synchronized.', 'idle');
   syncOnlineControls();
+  syncOnlineCanvasPrompt();
   syncControls();
   return true;
 }
 
 function remoteSoundEventForAction(mode, type) {
+  if (mode === GAME_MODES.CONNECT_FOUR) return 'connect-four-drop';
   if (mode === GAME_MODES.BILLIARDS) return 'billiards-strike';
   if (mode === GAME_MODES.CHINESE_CHECKERS) return 'checkers-move';
   if (mode === GAME_MODES.FIDE_CHESS) return 'chess-move';
@@ -6044,7 +6074,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function handleGameShortcutKey(event, key) {
-    if (!game || isEditableKeyboardTarget(event) || event.ctrlKey || event.metaKey || event.altKey) return false;
+    if (!game || matchPresentationState() === 'finishing' || isEditableKeyboardTarget(event) || event.ctrlKey || event.metaKey || event.altKey) return false;
     if (key === 'KeyZ') {
       if (!undoStack.length) return false;
       if (event.preventDefault) event.preventDefault();
@@ -6440,6 +6470,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   function placementReachInteractionAvailable(state = game) {
     return !!(
       isPlacementGame(state)
+      && matchPresentationState(state) === 'playing'
       && !currentAnimation
       && !fideChessDrag
       && !billiardsShotPending
@@ -6812,6 +6843,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   function placementHoverInteractionAvailable(state = game) {
     return !!(
       state
+      && matchPresentationState(state) === 'playing'
       && !currentAnimation
       && !fideChessDrag
       && !billiardsShotPending
@@ -7038,7 +7070,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function restartFromInputShortcut() {
-    if (!game || playerMenuOpen || fullscreenSettingsOpen || onlineIsInRoom()) return false;
+    if (!game || matchPresentationState() === 'finishing' || playerMenuOpen || fullscreenSettingsOpen || onlineIsInRoom()) return false;
     if (!fullscreenRestartPending) {
       setFullscreenRestartConfirmation(true);
       syncStatus(
@@ -8716,6 +8748,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
   }
 
   function startPlacementFeedback(feedback) {
+    if (matchPresentationState() !== 'playing') return;
     placementFeedbacks = activePlacementFeedbacks();
     placementFeedbacks.push(feedback);
     render();
@@ -9037,8 +9070,47 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     };
   }
 
+  // The board phase and room are authoritative. Scoring and reconnecting
+  // pause turn cues without declaring a winner.
+  function matchPresentationState(state = game) {
+    const room = state === game && onlineIsInRoom() ? onlineState : null;
+    if (['gameover', 'complete'].includes(state?.phase) || ['finished', 'rematch-vote'].includes(room?.roundState)) {
+      return state === game && isConnectFourDropAnimation() ? 'finishing' : 'finished';
+    }
+    if (state?.scoringReview) return 'scoring';
+    if (room?.roundState === 'playing' && (!onlineSocketOpen() || room.members?.some(member => member.online === false && member.roles?.length))) return 'reconnecting';
+    return 'playing';
+  }
+
+  function stopMatchPlayback(state) {
+    return state === 'finished' || (state === 'scoring' || state === 'reconnecting') && !isBilliardsGame(game);
+  }
+
+  function settleMatchPresentation(state) {
+    if (state === 'playing') return;
+    if (stopMatchPlayback(state) && (currentAnimation || animationFrameId != null)) {
+      stopPlayback();
+      if (onlineState?.pendingStateMessages?.length) queueMicrotask(flushQueuedOnlineStateMessages);
+    }
+    clearPlacementReachAssist();
+    clearPlacementHover(false);
+    clearPlacementFeedbacks();
+    clearHexNeighborHint(false);
+    hoveredGlue = null;
+    hoveredHexIndex = null;
+    if (localAiThinking || localAiTimer != null) {
+      cancelLocalAiWork();
+      localAiWorker?.terminate();
+      localAiWorker = null;
+    }
+  }
+
   function tickAnimation() {
     if (!currentAnimation) return;
+    if (stopMatchPlayback(matchPresentationState())) {
+      render();
+      return;
+    }
     const elapsed = now() - currentAnimation.startedAt;
     const progress = currentAnimation.duration <= 0 ? 1 : Math.min(1, elapsed / currentAnimation.duration);
     currentAnimation.progress = progress;
@@ -9061,6 +9133,7 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     animationFrameId = requestFrame(tickAnimation);
     return;
   }
+  animationFrameId = null;
   const event = currentAnimation.event;
   if (
     event.kind === 'connectFourDrop'
@@ -9074,7 +9147,8 @@ function onlineDisplaySettingsFromSnapshot(snapshot) {
     currentAnimation = null;
   if (event.kind === 'chineseCheckersMove') syncStatusForCurrentGame();
   render();
-  showLocalReplayPrompt();
+  if (onlineIsInRoom()) syncOnlineCanvasPrompt();
+  else showLocalReplayPrompt();
   syncControls();
   refreshDebugExportIfNeeded();
   flushQueuedOnlineStateMessages();
@@ -9659,7 +9733,7 @@ function wrappedFideChessPuzzleTrayOverlayActive(state = game, preset = state &&
   // Wrapped charts have no clickable boundary markers.  The final Hex/Nash
   // arrows are deliberately context-only, so they do not restore this affordance.
 function glueHoverInteractionAvailable(preset = (game ? game.preset : selectedPreset())) {
-  return !wrappedViewIsActive(preset);
+  return matchPresentationState() === 'playing' && !wrappedViewIsActive(preset);
 }
 
 function wrappedViewCamera(profile = wrappedViewProfile()) {
@@ -10468,7 +10542,7 @@ function handleCanvasStartBeginClick(event) {
     document.dispatchEvent(new CustomEvent('ramified-player-sokoban-action', { detail: { action } }));
     return;
   }
-  if (action === 'restart') {
+  if (action === 'restart' || action === 'sokoban-replay') {
     resetCurrentGameFromShortcut();
     return;
   }
@@ -10489,8 +10563,13 @@ function handleCanvasStartBeginClick(event) {
 
 function handleCanvasStartCloseClick(event) {
   if (event && event.preventDefault) event.preventDefault();
+  if (onlineIsInRoom() && playerShellEnabled && canvasPromptAction.startsWith('online-')) {
+    document.getElementById('player-menu-button')?.click();
+    return;
+  }
   if (!game || onlineIsInRoom() || !['gameover', 'complete'].includes(game.phase)) return;
-  if (playerShellEnabled && game.playerSokobanLevelId) {
+  const stayOnLevel = canvasPromptAction === 'sokoban-next' && document.body.classList.contains('design-study');
+  if (playerShellEnabled && game.playerSokobanLevelId && !stayOnLevel) {
     document.dispatchEvent(new CustomEvent('ramified-player-sokoban-action', { detail: { action: 'sokoban-levels' } }));
     return;
   }
@@ -10500,7 +10579,10 @@ function handleCanvasStartCloseClick(event) {
 }
 
 function hideCanvasStartPrompt() {
-  if (refs.canvasStartOverlay) refs.canvasStartOverlay.hidden = true;
+  if (refs.canvasStartOverlay) {
+    refs.canvasStartOverlay.hidden = true;
+    refs.canvasStartOverlay.removeAttribute('data-sokoban-result');
+  }
   if (refs.canvasStartClose) refs.canvasStartClose.hidden = true;
   canvasPromptAction = '';
 }
@@ -10567,6 +10649,8 @@ function showCanvasStartPrompt(options = {}) {
     refs.canvasStartClose.textContent = promptText(copy.closeAction || 'view completed board');
   }
   canvasPromptAction = options.action || 'begin';
+  if (options.sokobanResult) refs.canvasStartOverlay.setAttribute('data-sokoban-result', '');
+  else refs.canvasStartOverlay.removeAttribute('data-sokoban-result');
   refs.canvasStartOverlay.hidden = false;
   if (copy.status) syncStatus(copy.statusTitle || 'begin from canvas', copy.status, options.badge || 'setup');
 }
@@ -10598,6 +10682,19 @@ function showLocalReplayPrompt() {
       if (index >= 0) {
         const hasNext = index + 1 < levels.length;
         const allCompleted = levels.every(level => playerSokobanCompleted.has(level.id));
+        if (document.body.classList.contains('design-study')) {
+          showCanvasStartPrompt({ force: true, action: hasNext ? 'sokoban-next' : 'sokoban-replay', dismissible: true, sokobanResult: true,
+            copy: {
+              localized: true,
+              title: hasNext ? tk('player.sokobanCleared', 'Level {{number}} complete', { number: index + 1 }) : tk('player.allLevelsComplete', 'All levels complete'),
+              context: tk('player.sokobanMoveCount', '{{moves}} moves', { moves: game.moves || 0 }),
+              rules: '',
+              action: hasNext ? tk('player.nextLevel', 'Next level') : tk('player.sokobanReplay', 'Play again'),
+              closeAction: hasNext ? tk('player.sokobanStay', 'Stay here') : tk('player.sokobanLevelList', 'Levels')
+            }
+          });
+          return;
+        }
         showCanvasStartPrompt({ force: true, action: hasNext ? 'sokoban-next' : 'sokoban-levels', dismissible: hasNext,
           copy: {
             localized: true,
@@ -11027,7 +11124,7 @@ function handleCanvasHover(event, options = {}) {
     clearHexHover();
     return;
   }
-  const target = isHexGame(game) ? tileFromCanvasEvent(event) : null;
+  const target = isHexGame(game) && matchPresentationState() === 'playing' ? tileFromCanvasEvent(event) : null;
   const playableTarget = target && !game.removed.has(target.index) ? target : null;
   updateHexNeighborHover(playableTarget ? playableTarget.index : null);
   setHexHover(game && game.phase === 'ready' && playableTarget && !hexTileAt(game, playableTarget.index)
@@ -11048,7 +11145,7 @@ function clearHexHover() {
 }
 
 function updateHexNeighborHover(index) {
-  const next = Number.isInteger(index) ? index : null;
+  const next = matchPresentationState() === 'playing' && Number.isInteger(index) ? index : null;
   if (hexNeighborHoverIndex === next) return;
   if (hexNeighborHintTimer != null) clearTimeout(hexNeighborHintTimer);
   hexNeighborHintTimer = null;
@@ -11116,7 +11213,9 @@ function sameGlueHover(left, right) {
 
 function syncCanvasCursor() {
   if (!refs.canvas || !refs.canvas.style) return;
-  if (isBilliardsGame(game)) {
+  if (matchPresentationState() === 'finished') {
+    refs.canvas.style.cursor = '';
+  } else if (isBilliardsGame(game)) {
     refs.canvas.style.cursor = game.phase === 'moving' || game.phase === 'gameover' ? 'default' : 'crosshair';
   } else if (fideChessDrag) {
     refs.canvas.style.cursor = 'grabbing';
@@ -11215,6 +11314,11 @@ function handleHexPieSwap() {
   onlineSendLocalAction({ type: 'pie-swap', gameMode: GAME_MODES.HEX, role: 'blue' });
 }
 
+function playConnectFourDropSound() {
+  playSoundEffect('connect-four-drop');
+  if (game.phase === 'gameover') playSoundEffect(game.winner ? 'shared-win' : 'shared-draw');
+}
+
 function handleConnectFourCanvasClick(event) {
   if (!game || currentAnimation) return;
   if (game.phase === 'setup') {
@@ -11254,8 +11358,7 @@ function handleConnectFourCanvasClick(event) {
   clearSetupAlert();
   pushUndoSnapshot(`Connect Four ${result.token.color} from ${target.label}`, { actor: 'human' });
   game = result.state;
-  playSoundEffect('placement-place');
-  if (game.phase === 'gameover') playSoundEffect(game.winner ? 'shared-win' : 'shared-draw');
+  playConnectFourDropSound();
   resumeLocalAiAfterReplacementHumanMove();
   startConnectFourDropAnimation(result);
   if (game.phase === 'gameover') {
@@ -12330,6 +12433,7 @@ function restoreHistorySnapshot(snapshot, status, info) {
 }
 
 function undoPreviousStep(options = {}) {
+  if (matchPresentationState() === 'finishing' && !options.onlineApproved) return;
   if (onlineIsInRoom() && !options.onlineApproved) {
     requestOnlineHistoryChange('undo');
     return;
@@ -12376,6 +12480,7 @@ function undoPreviousStep(options = {}) {
 }
 
 function redoPreviousUndo(options = {}) {
+  if (matchPresentationState() === 'finishing' && !options.onlineApproved) return;
   if (onlineIsInRoom() && !options.onlineApproved) {
     requestOnlineHistoryChange('redo');
     return;
@@ -15420,6 +15525,7 @@ function render() {
   if ((wrappedTouchPointers.size && (wrappedTouchGame !== game || !wrappedViewIsActive()))
     || (wrappedPanGesture && (wrappedPanGesture.game !== game || !wrappedViewIsActive()))) clearWrappedViewGestures();
     if (!refs.canvas || !refs.ctx) return;
+  settleMatchPresentation(matchPresentationState());
   if (placementReachAssistData && (!placementReachInteractionAvailable() || placementReachAssistState !== game)) clearPlacementReachAssist();
   if (placementHover && (!placementHoverInteractionAvailable() || placementHover.state !== game)) clearPlacementHover(false);
   const preset = game ? game.preset : selectedPreset();
@@ -32893,12 +32999,13 @@ function syncControls() {
   syncSokobanEnergyGlowOutput();
   syncSokobanBeamOutput();
   if (refs.nextStep) refs.nextStep.disabled = !modeDirectional || !(isStepMode() && stepPaused && eventQueue.length && !currentAnimation);
-  const onlineHistoryBlocked = onlineRoomActive && onlineState && !onlineStateHasPlayableRole();
-  if (refs.undo) refs.undo.disabled = onlineHistoryBlocked || !undoStack.length;
-  if (refs.redo) refs.redo.disabled = onlineHistoryBlocked || !redoStack.length;
-  if (refs.fullscreenUndo) refs.fullscreenUndo.disabled = onlineHistoryBlocked || !undoStack.length;
-  if (refs.fullscreenRedo) refs.fullscreenRedo.disabled = onlineHistoryBlocked || !redoStack.length;
-  if (refs.fullscreenRestart) refs.fullscreenRestart.disabled = onlineRoomActive || !game;
+  const finishing = matchPresentationState() === 'finishing';
+  const historyBlocked = finishing || onlineRoomActive && onlineState && !onlineStateHasPlayableRole();
+  if (refs.undo) refs.undo.disabled = historyBlocked || !undoStack.length;
+  if (refs.redo) refs.redo.disabled = historyBlocked || !redoStack.length;
+  if (refs.fullscreenUndo) refs.fullscreenUndo.disabled = historyBlocked || !undoStack.length;
+  if (refs.fullscreenRedo) refs.fullscreenRedo.disabled = historyBlocked || !redoStack.length;
+  if (refs.fullscreenRestart) refs.fullscreenRestart.disabled = finishing || onlineRoomActive || !game;
   syncFullscreenActionText();
   const lianliankanFullscreenActions = (!!currentFullscreenElement() || playerShellEnabled)
   && fullscreenPreferences.showGameTools
@@ -33494,7 +33601,7 @@ function localAiHasHumanController(state = game) {
 function localAiOwnsCurrentTurn(state = game) {
   return !!(localAiSupportedState(state)
     && state.phase !== 'setup'
-    && state.phase !== 'gameover'
+    && matchPresentationState(state) === 'playing'
     && isLocalAiControllerValue(localAiControllerForColor(state, state.turn)));
 }
 
@@ -33649,7 +33756,8 @@ function scheduleLocalAiTurn(delay = 80) {
       failLocalAiMove();
       return;
     }
-    window.setTimeout(() => {
+    localAiTimer = window.setTimeout(() => {
+      localAiTimer = null;
       try {
         handleLocalAiWorkerMessage({
           data: {
@@ -33728,6 +33836,7 @@ function commitLocalAiMove(move) {
     if (!result.changed) return false;
     pushUndoSnapshot(`Local AI Connect Four ${result.token.color}`, { actor: 'ai' });
     game = result.state;
+    playConnectFourDropSound();
     startConnectFourDropAnimation(result);
     syncStatusForCurrentGame();
     render();
@@ -34690,6 +34799,7 @@ function cancelPlayerSetup() {
 const api = {
   // Small adapter for the player shell; the archive keeps its original lifecycle.
   player: {
+    matchPresentationState: () => matchPresentationState(),
     onlineInfo() {
       if (!onlineState) return {};
       const keys = ['baseUrl', 'clientId', 'playerName', 'roomCode', 'pendingRoomCode', 'joined', 'connecting', 'gameMode', 'roles', 'roomRoles', 'rolePlayers', 'roundState', 'readyClientIds', 'hostId', 'hostName', 'members', 'roundId', 'timeControl', 'clock', 'outcome', 'proposal', 'serverNow', 'clockReceivedAt', 'unclaimedRoles'];
@@ -34751,12 +34861,14 @@ const api = {
         return snapshot;
       } finally { game = preview; undoStack = previousUndo; redoStack = previousRedo; playerSetupCommitting = false; syncControls(); render(); }
     },
-    async onlineJoin(code, { isCurrent = () => true } = {}) {
+    async onlineJoin(code, { isCurrent = () => true, checkRoom } = {}) {
       if (!api.player.onlineEnter()) throw new Error('Wait for the current move.');
       const serial = ++playerOnlineSerial;
       const response = await fetch(`${onlineState.baseUrl}/api/rooms/${encodeURIComponent(code)}`, { signal: AbortSignal.timeout(15000) });
-      if (!response.ok) throw new Error('Room unavailable.');
+      if (!response.ok) throw Object.assign(new Error('Room unavailable.'), { status: response.status });
       const meta = await response.json();
+      if (serial !== playerOnlineSerial || !isCurrent()) return false;
+      checkRoom?.(meta);
       await ensureModeDependencies(meta.gameMode);
       if (serial !== playerOnlineSerial || !isCurrent()) return false;
       await connectOnlineSocket(code, ['spectator']);
@@ -34764,12 +34876,19 @@ const api = {
     },
     async onlineCreate(snapshot, config, creationId) {
       const roles = onlineModeRoles(snapshot.gameMode);
-      const response = await fetch(`${onlineState.baseUrl}/api/rooms`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000),
-        body: JSON.stringify({ gameMode: snapshot.gameMode, snapshot, timeControl: config, creationId, clientId: onlineState.clientId, playerName: currentOnlinePlayerName(), role: (snapshot.playerColors || snapshot.chineseCheckersPlayers || roles)[0], summary: snapshot.preset.label || snapshot.preset.id })
-      });
-      if (!response.ok) throw new Error('Room creation failed.');
-      return response.json();
+      const body = JSON.stringify({ gameMode: snapshot.gameMode, snapshot, timeControl: config, creationId, clientId: onlineState.clientId, playerName: currentOnlinePlayerName(), role: (snapshot.playerColors || snapshot.chineseCheckersPlayers || roles)[0], summary: snapshot.preset.label || snapshot.preset.id });
+      let response;
+      try {
+        response = await fetch(`${onlineState.baseUrl}/api/rooms`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000), body
+        });
+      } catch (cause) {
+        throw Object.assign(new Error('Room request failed.', { cause }), { roomIssue: cause?.name === 'TimeoutError' ? 'timeout' : 'network' });
+      }
+      if (!response.ok) throw Object.assign(new Error('Room creation rejected.'), { roomIssue: 'http', status: response.status });
+      const room = await response.json().catch(() => null);
+      if (!/^\d{6}$/.test(room?.roomCode || '')) throw Object.assign(new Error('Invalid room response.'), { roomIssue: 'response' });
+      return room;
     },
     state() {
       return {
@@ -34904,6 +35023,19 @@ const api = {
       return true;
     },
     presentationInfo() { return { restartPending: fullscreenRestartPending, turn: game?.turn, gameMode: game?.gameMode, phase: game?.phase }; },
+    sokobanPresentation() {
+      if (!isSokobanGame(game) || game.phase === 'setup' || playerSetupSession) return null;
+      const cargo = new Set(sokobanSurfaceCargoIndices(game));
+      return {
+        moves: game.moves || 0, targets: game.targets.size,
+        covered: [...game.targets].filter(index => cargo.has(index)).length,
+        bridges: sokobanBridgeEntries(game).length > 0,
+        glued: !!game.preset.gluedEdges?.length,
+        canUndo: undoStack.length > 0
+      };
+    },
+    undoSokobanPresentation() { if (isSokobanGame(game)) undoFromFullscreenAction(); },
+    restartSokobanPresentation() { if (isSokobanGame(game) && resetCurrentGameFromShortcut()) refs.canvas?.focus(); },
     replayPresentation() { if (!game || !['gameover', 'complete'].includes(game.phase)) return false; if (onlineIsInRoom()) { handleCanvasStartBeginClick(); return true; } return resetCurrentGameFromShortcut(); },
     fit() { setCanvasDisplayMode('fit-viewport'); },
     fullscreen() { toggleCanvasFullscreen(); },

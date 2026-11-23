@@ -6,9 +6,11 @@ const path = require('path');
 const { startServer, launchBrowser, stopBrowser, waitFor, evaluate, mouse, delay } = require('./math_workspace_drag_regression_test.js');
 
 async function run() {
+  const study = process.argv.includes('--study');
   const server = await startServer(); let session;
   try {
-    session = await launchBrowser(`http://127.0.0.1:${server.address().port}/ramified_minigames_classic.html`);
+    const page = study ? 'ramified_minigames.html' : 'ramified_minigames_classic.html';
+    session = await launchBrowser(`http://127.0.0.1:${server.address().port}/${page}`);
     const { client } = session, errors = [];
     client.socket.addEventListener('message', event => {
       const message = JSON.parse(String(event.data));
@@ -36,7 +38,7 @@ async function run() {
       const { data } = await client.send('Page.captureScreenshot', { format:'png' });
       fs.writeFileSync(path.join(process.env.RAMIFIED_UI_SCREENSHOTS, name+'.png'), Buffer.from(data,'base64'));
     };
-    const progress = () => read('JSON.parse(localStorage.getItem(RamifiedSaveSlots.SAVE_KEY))?.slots[0]?.sokoban');
+    const progress = () => read(`JSON.parse(localStorage.getItem(${study ? "'design-study:' + " : ''}RamifiedSaveSlots.SAVE_KEY))?.slots[0]?.sokoban`);
     const saveContents = () => read(`(() => { const s=JSON.parse(localStorage.getItem(RamifiedSaveSlots.SAVE_KEY))?.slots[0]?.game; if(s)delete s.payload.exportedAt; return s; })()`);
     const openMenu = async () => { await click('#fullscreen-settings-open'); await click('#player-menu-button'); };
     const levelSelect = async number => {
@@ -44,16 +46,113 @@ async function run() {
       if (await read('!document.querySelector("#player-confirm").hidden')) await click('#player-confirm-new');
       await waitFor(() => read('document.querySelector("#player-menu").hidden'), 5000, 'started level');
     };
-    const solve = async (prefix = '') => {
-      if (!await read('document.querySelector("#player-actions").open')) await click('#player-actions > summary');
-      for (const d of 'EWSSNWWENN'.slice(prefix.length)) {
+    const solve = async (prefix = '', route = 'EWSSNWWENN') => {
+      if (!study && !await read('document.querySelector("#player-actions").open')) await click('#player-actions > summary');
+      for (const d of route.slice(prefix.length)) {
         const before = await read('RamifiedMinigames.__test.getGame().moves');
-        await click(`#player-action-controls [data-move-dir="${d}"]`);
+        await click(`${study ? '#study-sokoban-directions' : '#player-action-controls'} [data-move-dir="${d}"]`);
         await waitFor(() => read(`RamifiedMinigames.player.state().canPrepare && RamifiedMinigames.__test.getGame().moves > ${before}`), 5000, 'move '+d);
       }
       await waitFor(() => read('RamifiedMinigames.player.state().solved && !document.querySelector("#canvas-start-overlay").hidden'), 5000, 'solved');
     };
-    await ready(); await click('#player-new'); await click('#player-slot-1'); await click('#player-games-next'); await chooseGame('[data-game-mode="sokoban"]');
+    await ready(); await click('#player-new');
+    if (!study) await click('#player-slot-1');
+    if (await read('document.querySelector("[data-game-mode=sokoban]").hidden')) await click('#player-games-next');
+    await chooseGame('[data-game-mode="sokoban"]');
+    if (study) {
+      await levelSelect(1);
+      await client.send('Emulation.setDeviceMetricsOverride', {width:320,height:844,deviceScaleFactor:1,mobile:false});
+      await waitFor(() => read('!document.querySelector("#study-sokoban-hud").hidden'), 5000, 'level goal');
+      assert.match(await read('document.querySelector("#study-sokoban-goal").textContent'), /targets/);
+      for (const id of ['study-sokoban-reset', 'study-sokoban-undo', 'study-sokoban-auto']) {
+        assert(await read(`(() => {const n=document.getElementById('${id}'),r=n.getBoundingClientRect();return n.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()`), `${id} is reachable at 320px`);
+      }
+      await solve();
+      assert.equal(await read('document.querySelector("#canvas-start-title").textContent'), 'Level 1 complete');
+      assert(await read(`(() => {const overlay=document.querySelector('#canvas-start-overlay');return overlay.hasAttribute('data-sokoban-countdown') && [...overlay.querySelectorAll('.canvas-start-actions button:not([hidden])')].every(button=>button.getBoundingClientRect().height>=44)})()`));
+      assert.equal(await read('document.querySelector("#canvas-start-close").textContent'), 'Stay here');
+      await click('#canvas-start-close');
+      await delay(1400);
+      assert(await read('RamifiedMinigames.player.state().solved'), 'Stay here keeps the solved position');
+      await click('#study-sokoban-undo'); await ready();
+      assert.equal(await read('RamifiedMinigames.player.state().solved'), false);
+      await click('#study-sokoban-reset'); await ready();
+      assert.equal(await read('RamifiedMinigames.__test.getGame().moves'), 0);
+      await solve();
+      const next = id => waitFor(() => read(`RamifiedMinigames.player.state().sokobanLevelId==='${id}' && document.querySelector('#player-menu').hidden`), 6000, id + ' auto-started');
+      await next('pedestrian');
+      await solve();
+      await next('classic-fans-glue');
+      // Put the larger third board one ordinary push away from completion.
+      // The production move, result, autosave and advance paths still run.
+      const thirdPush = await read(`(() => {
+        const e=RamifiedMinigames, initial=e.__test.getGame(), targets=[...initial.targets];
+        for (const target of targets) for (const letter of 'ENWS') {
+          const d=e.DIRS[letter], rows=initial.preset.rows, cols=initial.preset.cols;
+          const [dx,dy]=[[1,0],[0,1],[-1,0],[0,-1]][d];
+          const x=target%cols, y=Math.floor(target/cols);
+          if (x-2*dx<0 || x-2*dx>=cols || y-2*dy<0 || y-2*dy>=rows) continue;
+          const delta=dy*cols+dx, box=target-delta, player=box-delta;
+          if (targets.includes(box) || targets.includes(player)) continue;
+          const g=e.cloneGameState(initial);
+          g.players[0].index=player;
+          g.boxes.forEach((b,i)=>{b.index=targets[i]===target?box:targets[i]});
+          if (e.moveSokobanPlayers(g,d).state.winner==='solved') {e.__test.setGame(g);return letter;}
+        }
+      })()`);
+      assert(thirdPush, 'third level has a valid finishing-push fixture');
+      await solve('', thirdPush);
+      await next('ice-test');
+      assert.deepEqual((await progress()).completed, ['classic-fans', 'pedestrian', 'classic-fans-glue']);
+      // Exercise the final screen on the real final board with one push left.
+      const finalPush = await read(`(async () => {
+        const e=RamifiedMinigames, id='bridges-blocking';
+        if (!await e.player.beginSetup('sokoban',{presetId:id}) || !e.player.commitSetup({sokobanLevelId:id})) return false;
+        const g=e.cloneGameState(e.__test.getGame());
+        const bridges=[...g.targets].map(target=>target===0?1:target);
+        g.energyBridges=new Set(bridges);
+        g.energyBridgeZ=new Map();
+        g.energyBridgeLevelKeys=new Set(bridges.map(index=>index+':0'));
+        g.players[0].index=2;
+        if (e.moveSokobanPlayers(g,e.DIRS.W).state.winner!=='solved') return false;
+        e.__test.setGame(g);
+        return true;
+      })()`);
+      assert(finalPush, 'final level has a valid finishing-push fixture');
+      await solve('', 'W');
+      await waitFor(() => read(`!document.querySelector('#canvas-start-overlay').hidden && document.querySelector('#canvas-start-title').textContent==='All levels complete'`), 5000, 'final result');
+      await delay(1400);
+      assert.equal(await read('document.querySelector("#canvas-start-close").textContent'), 'Levels');
+      await click('#canvas-start-begin'); await ready();
+      assert.equal(await read('RamifiedMinigames.player.state().sokobanLevelId'), 'bridges-blocking');
+      assert.equal(await read('RamifiedMinigames.player.state().solved'), false, 'Play again restarts the final level');
+      for (const [width, height] of [[1280,900],[390,620]]) {
+        await client.send('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:false});
+        for (const id of ['pedestrian', 'curling-on-cube', 'expand3']) {
+          assert(await read(`(async () => {
+            const p=RamifiedMinigames.player;
+            return await p.beginSetup('sokoban', {presetId:'${id}'}) && p.commitSetup({sokobanLevelId:'${id}'});
+          })()`));
+          const measure = () => read(`(() => {
+            const r=document.querySelector('#mosaic-canvas').getBoundingClientRect(), g=RamifiedMinigames.__test.getGeometry();
+            return { scaleGap:Math.abs(r.width/g.width-r.height/g.height), width:r.width, height:r.height };
+          })()`);
+          const initial = await measure();
+          assert(initial.scaleGap < .015, `${id} starts proportionally at ${width}px`);
+          const direction = await read(`(() => {
+            const e=RamifiedMinigames, g=e.__test.getGame();
+            const dirs=g.preset.lattice==='hexagonal'?e.HEX_DIRS:e.DIRS;
+            return Object.keys(dirs).find(d=>e.moveSokobanPlayers(g,dirs[d]).changed);
+          })()`);
+          await click(`#study-sokoban-directions [data-move-dir="${direction}"]`); await ready();
+          const moved = await measure();
+          assert(Math.abs(initial.width-moved.width)<2 && Math.abs(initial.height-moved.height)<2, `${id} keeps the same size on the first move at ${width}px`);
+        }
+      }
+      assert.deepEqual(errors, []);
+      console.log('Maintained Sokoban: narrow controls, Stay, undo/reset, three automatic advances, persisted progress and final replay passed');
+      return;
+    }
     assert.strictEqual(await read('document.querySelectorAll("#player-level-list > button").length'),19);
     await waitFor(() => read('document.querySelectorAll("#player-level-list > button[data-preview=" + "ready" + "]").length === 19'), 20000, 'all level previews');
     assert.strictEqual(await read('[...document.querySelectorAll(".player-level-name")].every(n => n.textContent.trim().length > 1)'), true);

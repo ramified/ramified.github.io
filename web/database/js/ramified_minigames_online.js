@@ -5,9 +5,12 @@
   window.RamifiedOnlinePlayer = { allowed, create(engine, ui) {
     const el = id => document.getElementById(id);
     const compactLobby = !!el('player-lobby-edit');
-    let flow = '', serial = 0, creationId = '', lobbySocket = null, reconnectTimer = null;
+    let flow = '', serial = 0, creationId = '', lobbySocket = null, reconnectTimer = null, clockTimer = null;
     let players = [], rooms = [], previousRound = '', stopped = false, requestBusy = false;
     let lastPresence = '', lastRoomKey = '', lastSeatKey = '', creationFingerprint = '';
+    const invitePage = el('player-invite');
+    const initialInvite = invitePage ? new URL(location.href).searchParams.get('room') : null;
+    let inviteStarted = false, invited = null, sharedRound = '', autoReadyPending = '';
     const gameName = mode => engine.games().find(game => game.mode === mode)?.label || mode;
     const roleName = role => ({
       black: tk('status.black', 'Black'), white: tk('status.white', 'White'),
@@ -206,6 +209,133 @@
     function presentConnection(phase, detail = {}) {
       if (el('player-room-loading')) document.dispatchEvent(new CustomEvent('ramified-room-presentation', { detail: { phase, sourcePage: ui.page(), ...detail } }));
     }
+    function inviteStatus(key, fallback, retry = false) {
+      const status = el('player-invite-status');
+      status.dataset.i18n = key;
+      status.textContent = tk(key, fallback);
+      el('player-invite-retry').hidden = !retry;
+    }
+    function forgetInvite() {
+      invited = null;
+      if (!invitePage) return;
+      const url = new URL(location.href);
+      if (url.searchParams.has('room')) {
+        url.searchParams.delete('room');
+        history.replaceState(history.state, '', url);
+      }
+    }
+    function ended(info) { return ['finished', 'rematch-vote'].includes(info.roundState); }
+    function inviteFailure(reason) {
+      invited = null;
+      engine.onlineLeave();
+      ui.show('invite', 'home');
+      if (reason === 'full') inviteStatus('lobby.inviteFull', 'All seats are taken. Ask your friend for a new link.', true);
+      else if (reason === 'ended') inviteStatus('lobby.inviteEnded', 'This round has ended. Ask your friend for a new link.');
+      else if (reason === 'missing') inviteStatus('lobby.inviteMissing', 'This room has closed or the link is wrong.');
+      else inviteStatus('lobby.inviteNetwork', 'Could not connect to the room. Check your connection and try again.', true);
+    }
+    async function openInvite(code) {
+      if (requestBusy) return;
+      ui.show('invite', 'home');
+      if (!/^\d{6}$/.test(code)) { inviteStatus('lobby.inviteInvalid', 'This invite link has an invalid room code.'); return; }
+      const ticket = ++serial;
+      requestBusy = true;
+      const attempt = { code, claims: new Set(), claiming: false, joining: true, loaded: false, started: false, help: true, autoReady: true };
+      invited = attempt;
+      inviteStatus('lobby.inviteConnecting', 'Finding your room…');
+      try {
+        const clientId = engine.onlineInfo().clientId;
+        const joined = await engine.onlineJoin(code, {
+          isCurrent: () => ticket === serial,
+          checkRoom(meta) {
+            if (ended(meta)) throw new Error('ended');
+            if (!meta.unclaimedRoles?.length && !meta.members?.some(member => member.clientId === clientId && member.roles.length)) throw new Error('full');
+          }
+        });
+        if (!joined || ticket !== serial) return;
+        attempt.joining = false;
+        const info = engine.onlineInfo();
+        handleInviteState(info);
+        syncInviteReady(engine.onlineInfo());
+        renderInviteHelp(engine.onlineInfo());
+      } catch (error) {
+        if (ticket !== serial) return;
+        inviteFailure(error.status === 404 ? 'missing' : error.message);
+      } finally { if (ticket === serial) requestBusy = false; }
+    }
+    function startInvite() {
+      if (initialInvite === null || inviteStarted || !engine.state().canPrepare) return;
+      inviteStarted = true;
+      openInvite(initialInvite);
+    }
+    function handleInviteState(info, error = '') {
+      if (!invited || invited.joining || !info.joined || info.roomCode !== invited.code) return;
+      if (invited.started) return;
+      if (ended(info)) { inviteFailure('ended'); return; }
+      if (error || info.loadFailed) {
+        if (invited.claiming && error === 'This seat is occupied.') {
+          invited.claiming = false;
+          if (engine.onlineSend({ type: 'resync' })) return;
+        }
+        inviteFailure('network');
+        return;
+      }
+      if (!invited.loaded || !['waiting', 'playing'].includes(info.roundState)) return;
+      if (!info.roles.length) {
+        if (invited.claiming || info.proposal) return;
+        const role = info.unclaimedRoles.find(role => !invited.claims.has(role));
+        if (!role) { inviteFailure('full'); return; }
+        invited.claims.add(role);
+        invited.claiming = engine.onlineSend({ type: 'claimRoles', rolesRequested: [role] });
+        if (!invited.claiming) inviteFailure('network');
+        return;
+      }
+      if (info.roundState === 'playing') {
+        invited.started = true;
+        ui.setOpen(false);
+      } else if (ui.page() === 'invite') ui.show('room', 'home');
+    }
+    function inviteRound(info) { return info.roundId ? `${info.roomCode}:${info.roundId}` : ''; }
+    function syncInviteReady(info) {
+      const round = inviteRound(info);
+      const guest = invited && invited.code === info.roomCode && invited.loaded && !invited.joining && invited.autoReady && !invited.started;
+      const host = round && round === sharedRound && info.clientId === info.hostId && !info.unclaimedRoles?.length;
+      if (!guest && !host) return;
+      if (!info.joined || !info.roles.length || info.roundState !== 'waiting' || info.proposal || info.readyClientIds?.includes(info.clientId)) {
+        autoReadyPending = '';
+        return;
+      }
+      const seats = JSON.stringify((info.members || []).map(member => [member.clientId, member.roles]));
+      const attempt = `${round}:${seats}`;
+      if (autoReadyPending !== attempt && engine.onlineSend({ type: 'setReady', ready: true })) autoReadyPending = attempt;
+    }
+    function inviteRules(mode) {
+      switch (mode) {
+        case 'connect-four': return tk('lobby.inviteConnectFour', 'Tap a white hole to drop a token. Get four in a line to win.');
+        case 'gomoku': return tk('lobby.inviteGomoku', 'Tap an empty point to place a stone. Get five in a line to win.');
+        case 'go': return tk('lobby.inviteGo', 'Tap an empty point to place a stone. Surround opposing stones to capture them.');
+        case 'hex': return tk('lobby.inviteHex', 'Tap an empty tile to fill it. Make a connected loop with nonzero H₁ to win.');
+        case 'reversi': return tk('lobby.inviteReversi', 'Place a disc to trap and flip opposing discs. Finish with the most discs.');
+        case 'chinese-checkers': return tk('lobby.inviteCheckers', 'Tap your marble, then a spot it can move or jump to. Race to the opposite camp.');
+        case 'fide-chess': return tk('lobby.inviteChess', 'Tap one of your pieces, then tap its destination. Checkmate to win.');
+        case 'billiards': return tk('lobby.inviteBilliards', 'Pull back from the white ball and release to shoot. Sink numbered balls to score.');
+        default: return '';
+      }
+    }
+    function renderInviteHelp(info) {
+      if (!invitePage) return;
+      const rules = info.joined && invited?.code === info.roomCode ? inviteRules(info.gameMode) : '';
+      const roomRules = el('player-room-invite-rules');
+      roomRules.hidden = !rules;
+      roomRules.textContent = rules;
+      const boardHelp = el('player-invite-board-help');
+      const hideHelp = !rules || !invited?.help || info.roundState !== 'playing';
+      if (boardHelp.hidden !== hideHelp) {
+        boardHelp.hidden = hideHelp;
+        requestAnimationFrame(() => engine.refreshPresentation?.());
+      }
+      el('player-invite-board-rules').textContent = rules ? tk('lobby.inviteBoardHelp', '{{game}}. {{rules}}', { game: gameName(info.gameMode), rules }) : '';
+    }
     async function join(code, presentation = {}) {
       if (requestBusy) return;
       const ticket = ++serial; requestBusy = true; ui.save(); renderRooms();
@@ -234,7 +364,7 @@
         if (creationFingerprint && fingerprint !== creationFingerprint) creationId = crypto.randomUUID();
         creationFingerprint = fingerprint;
         if (flow === 'change') {
-          if (!engine.onlineSend({ type: 'proposeConfiguration', gameMode: snapshot.gameMode, snapshot, timeControl: config, summary: snapshot.preset.label || snapshot.preset.id })) throw new Error('send');
+          if (!engine.onlineSend({ type: 'proposeConfiguration', gameMode: snapshot.gameMode, snapshot, timeControl: config, summary: snapshot.preset.label || snapshot.preset.id })) throw Object.assign(new Error('Room connection closed.'), { roomIssue: 'network' });
           engine.onlineCancelSetup(); setFlow(''); ui.show('room', 'home');
         } else {
           const presentation = { kind: 'creating', gameMode: snapshot.gameMode, hostName: engine.onlineInfo().playerName, timeControl: config, roundState: 'waiting', seatCount: snapshot.gameMode === 'chinese-checkers' ? (snapshot.playerColors || snapshot.chineseCheckersPlayers || []).length || 6 : 2 };
@@ -244,10 +374,26 @@
           engine.onlineCancelSetup(); setFlow(''); requestBusy = false;
           await join(room.roomCode, presentation);
         }
-      } catch (_) {
+      } catch (error) {
         if (ticket === serial) {
-          ui.message(tk('lobby.createError', 'Could not apply the configuration. Retry or go back; your previous game is unchanged.'));
-          presentConnection('error', { key: 'lobby.createError' });
+          let key = 'lobby.createError', params;
+          let text = tk('lobby.createError', 'Could not apply the configuration. Retry or go back; your previous game is unchanged.');
+          if (error?.roomIssue === 'http') {
+            key = 'lobby.createHttpError';
+            params = { status: error.status };
+            text = tk('lobby.createHttpError', 'Room not created (HTTP {{status}}). Try again or go back.', params);
+          } else if (error?.roomIssue === 'timeout') {
+            key = 'lobby.createTimeout';
+            text = tk('lobby.createTimeout', 'The room request timed out. Try again or go back.');
+          } else if (error?.roomIssue === 'network') {
+            key = 'lobby.createNetworkError';
+            text = tk('lobby.createNetworkError', 'Could not reach the room server. Check your connection and try again.');
+          } else if (error?.roomIssue === 'response') {
+            key = 'lobby.createResponseError';
+            text = tk('lobby.createResponseError', 'The room server sent an unexpected reply. Try again or go back.');
+          }
+          ui.message(text);
+          presentConnection('error', { key, params });
         }
       } finally { if (ticket === serial) requestBusy = false; ui.sync(); }
     }
@@ -290,9 +436,12 @@
       el('player-proposal-cancel').hidden = !host;
     }
     function clockText() {
+      clearTimeout(clockTimer);
+      clockTimer = null;
       const info = engine.onlineInfo(), clock = info.clock, config = info.timeControl || {};
-      el('player-online-clock').hidden = !info.joined || !clock || config.mode === 'unlimited';
-      if (!clock || config.mode === 'unlimited') return;
+      const visible = info.joined && !!clock && config.mode !== 'unlimited' && !['finishing', 'finished', 'scoring'].includes(engine.matchPresentationState());
+      el('player-online-clock').hidden = !visible;
+      if (!visible) return;
       const now = (info.serverNow || Date.now()) + Date.now() - (info.clockReceivedAt || Date.now());
       const elapsed = info.roundState === 'playing' ? Math.max(0, now - Math.max(clock.at, clock.resumeAt || 0)) : 0;
       const format = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -306,8 +455,10 @@
         }
         return tk('lobby.clock', '{{side}} {{time}}', { side: roleName(role), time: format(ms) });
       }).join('   ');
+      if (!stopped && info.roundState === 'playing') clockTimer = setTimeout(clockText, 250);
     }
     function back(page) {
+      if (page === 'invite') { forgetInvite(); engine.onlineLeave(); ui.show('home'); return true; }
       if (flow && page === 'games') { ++serial; requestBusy = false; engine.onlineCancelSetup(); setFlow(''); open(); return true; }
       if (page === 'room') { ui.setOpen(false); return true; }
       if (page === 'lobby') { ++serial; requestBusy = false; engine.onlineLeave(); setFlow(''); ui.show('home'); return true; }
@@ -323,16 +474,32 @@
     el('player-lobby-edit')?.addEventListener('click', () => editLobbyIdentity(el('player-lobby-editor').hidden));
     el('player-time-mode').addEventListener('change', modeFields);
     el('player-room-claim').addEventListener('click', () => engine.onlineSend({ type: 'claimRoles', rolesRequested: Array.from(el('player-room-seat-options').querySelectorAll('input:checked'), input => input.value) }));
-    el('player-room-ready').addEventListener('click', () => { const i = engine.onlineInfo(); engine.onlineSend({ type: 'setReady', ready: !i.readyClientIds?.includes(i.clientId) }); });
+    el('player-room-ready').addEventListener('click', () => {
+      const i = engine.onlineInfo();
+      sharedRound = '';
+      if (invited) invited.autoReady = false;
+      engine.onlineSend({ type: 'setReady', ready: !i.readyClientIds?.includes(i.clientId) });
+    });
     el('player-room-watch').addEventListener('click', () => ui.setOpen(false));
     el('player-room-retry').addEventListener('click', () => engine.onlineSend({ type: 'resync' }));
     el('player-room-change').addEventListener('click', () => prepare(true));
-    el('player-room-leave').addEventListener('click', () => { ++serial; engine.onlineLeave(); setFlow(''); open(); });
+    el('player-room-leave').addEventListener('click', () => { ++serial; sharedRound = ''; forgetInvite(); engine.onlineLeave(); setFlow(''); open(); });
     el('player-proposal-accept').addEventListener('click', () => engine.onlineSend({ type: 'configurationResponse', proposalId: engine.onlineInfo().proposal?.id, accept: true }));
     el('player-proposal-reject').addEventListener('click', () => engine.onlineSend({ type: 'configurationResponse', proposalId: engine.onlineInfo().proposal?.id, accept: false }));
     el('player-proposal-cancel').addEventListener('click', () => engine.onlineSend({ type: 'cancelConfiguration' }));
     document.addEventListener('ramified-online-state', event => {
       const info = engine.onlineInfo(); presence(); renderRoom(); clockText(); ui.sync();
+      const type = event.detail.type;
+      if (type === 'joined' && invited?.code === info.roomCode && !invited.joining && !invited.started) {
+        invited.loaded = false;
+        invited.claiming = false;
+        invited.claims.clear();
+      }
+      if (type === 'stateApplied' && invited?.code === info.roomCode) invited.loaded = true;
+      handleInviteState(info, type === 'error' ? event.detail.error || 'error' : '');
+      if (info.joined && !engine.onlineInfo().joined) return;
+      syncInviteReady(info);
+      renderInviteHelp(info);
       if (event.detail.type === 'departed' && ['room', 'home'].includes(ui.page())) { ui.show('lobby', 'home'); refresh(); }
       if (event.detail.type === 'error') {
         if (info.loadFailed && !flow) ui.show('room', 'home');
@@ -340,16 +507,32 @@
       }
       const round = `${info.roundId}:${info.roundState}`;
       if (previousRound !== round && info.joined && !flow) {
-        if (info.roundState === 'playing' && ui.page() === 'room' && !info.proposal) ui.setOpen(false);
-        if (info.roundState === 'finished' || info.roundState === 'waiting') ui.show('room', 'home');
+        if (info.roundState === 'playing' && ui.page() === 'room' && !info.proposal && (!invited || info.roles.length)) ui.setOpen(false);
+        if ((info.roundState === 'waiting' || !invitePage && info.roundState === 'finished') && (!invited || invited.started || info.roles.length && invited.loaded)) ui.show('room', 'home');
       }
       if (info.proposal && !flow && info.roles?.length && info.hostId !== info.clientId && !info.proposal.accepted.includes(info.clientId)) ui.show('room', 'home');
       previousRound = round;
     });
-    document.addEventListener('site-language-change', () => { modeFields(); renderPlayers(); renderRooms(); renderRoom(true); clockText(); });
-    window.addEventListener('pagehide', () => { stopped = true; clearTimeout(reconnectTimer); lobbySocket?.close(); });
-    window.addEventListener('pageshow', () => { stopped = false; connectLobby(); });
-    setInterval(() => { presence(); clockText(); }, 250);
+    document.addEventListener('site-language-change', () => { modeFields(); renderPlayers(); renderRooms(); renderRoom(true); clockText(); renderInviteHelp(engine.onlineInfo()); });
+    if (invitePage) {
+      el('player-invite-retry').addEventListener('click', () => openInvite(initialInvite));
+      el('player-invite-dismiss').addEventListener('click', () => {
+        if (invited) invited.help = false;
+        renderInviteHelp(engine.onlineInfo());
+        el('mosaic-canvas').focus();
+      });
+      document.addEventListener('ramified-room-share-invite', () => {
+        const info = engine.onlineInfo();
+        if (info.roundState === 'waiting' && info.hostId === info.clientId) {
+          sharedRound = inviteRound(info);
+          syncInviteReady(info);
+        }
+      });
+      document.addEventListener('ramified-player-state', startInvite);
+      queueMicrotask(startInvite);
+    }
+    window.addEventListener('pagehide', () => { stopped = true; clearTimeout(reconnectTimer); clearTimeout(clockTimer); lobbySocket?.close(); });
+    window.addEventListener('pageshow', () => { stopped = false; connectLobby(); clockText(); });
     setInterval(() => { if (ui.page() === 'lobby') refresh(); if (lobbySocket?.readyState === WebSocket.OPEN) lobbySocket.send('{"type":"ping"}'); }, 15000);
     // Start presence for the entire game collection, including the main menu.
     setTimeout(connectLobby, 0); modeFields();

@@ -11,7 +11,9 @@ const out = process.env.RAMIFIED_STUDY_SCREENSHOTS ? path.resolve(process.env.RA
 const normalize = source => source.replace(/\r\n/g, '\n');
 const sharedEngine = normalize(fs.readFileSync(path.join(__dirname, 'ramified_minigames_setup.js'), 'utf8'));
 const studyEngine = normalize(fs.readFileSync(path.join(__dirname, 'ramified_minigames_study_engine.js'), 'utf8'));
+assert(studyEngine.includes('soundEnabled: true,'), 'sound is on by default in the maintained page');
 const restoredEngine = studyEngine.replace(/^\/\* Generated study adapter[^\n]*\n/, '')
+  .replace('soundEnabled: true,', 'soundEnabled: false,')
   .replace(/    refreshPresentation\(\)[\s\S]*?(?=    fit\(\))/, '');
 assert.equal(restoredEngine, sharedEngine, 'original drawing and rules are preserved exactly');
 async function run() {
@@ -175,7 +177,7 @@ async function run() {
     await read('SiteI18n.setLocale("zh-CN")');
     for(const width of [1280,768,360]) { await resize(width); await shot(`workshop-${width}-zh`); }
     assert.equal(await read('Object.keys(localStorage).some(k=>k.startsWith("design-study:"))'),true);
-    assert.equal(await read('document.querySelector("#study-mute").textContent'), '声音已关闭');
+    assert.equal(await read('document.querySelector("#study-mute").textContent'), before ? '声音已开启' : '声音已关闭');
     await client.send('Emulation.setEmulatedMedia', { features:[{name:'prefers-color-scheme',value:'dark'}] });
     await read('document.querySelector("#study-workshop").open=false');
     await shot('settings-dark-360-zh');

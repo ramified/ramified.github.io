@@ -18,6 +18,19 @@ module.exports = function buildStudyAdapter(source) {
       return true;
     },
     presentationInfo() { return { restartPending: fullscreenRestartPending, turn: game?.turn, gameMode: game?.gameMode, phase: game?.phase }; },
+    sokobanPresentation() {
+      if (!isSokobanGame(game) || game.phase === 'setup' || playerSetupSession) return null;
+      const cargo = new Set(sokobanSurfaceCargoIndices(game));
+      return {
+        moves: game.moves || 0, targets: game.targets.size,
+        covered: [...game.targets].filter(index => cargo.has(index)).length,
+        bridges: sokobanBridgeEntries(game).length > 0,
+        glued: !!game.preset.gluedEdges?.length,
+        canUndo: undoStack.length > 0
+      };
+    },
+    undoSokobanPresentation() { if (isSokobanGame(game)) undoFromFullscreenAction(); },
+    restartSokobanPresentation() { if (isSokobanGame(game) && resetCurrentGameFromShortcut()) refs.canvas?.focus(); },
     replayPresentation() { if (!game || !['gameover', 'complete'].includes(game.phase)) return false; if (onlineIsInRoom()) { handleCanvasStartBeginClick(); return true; } return resetCurrentGameFromShortcut(); },
     ${anchor}`);
 };

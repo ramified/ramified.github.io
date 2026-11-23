@@ -6727,7 +6727,8 @@ async function testNewPlacementGameAnimationsStartFromUi() {
     turn: 'black',
     discs: [
       { id: 1, row: 1, col: 1, color: 'black' },
-      { id: 2, row: 2, col: 2, color: 'white' }
+      { id: 2, row: 2, col: 2, color: 'white' },
+      { id: 3, row: 3, col: 4, color: 'white' }
     ]
   });
   calls.length = 0;
@@ -6755,7 +6756,7 @@ async function testNewPlacementGameAnimationsStartFromUi() {
           yellow: [{ row: 1, col: 2 }]
         },
         targets: {
-          red: [{ row: 1, col: 3 }],
+          red: [{ row: 1, col: 4 }],
           yellow: [{ row: 4, col: 4 }]
         }
       }
@@ -6769,7 +6770,7 @@ async function testNewPlacementGameAnimationsStartFromUi() {
         yellow: [{ row: 1, col: 2 }]
       },
       targets: {
-        red: [{ row: 1, col: 3 }],
+        red: [{ row: 1, col: 4 }],
         yellow: [{ row: 4, col: 4 }]
       }
     },
@@ -6833,7 +6834,7 @@ async function testUnifiedLocalResultCard() {
   assert.strictEqual(afterClose.resultDismissed, true);
 }
 
-async function testConnectFourResultCardAppearsAfterDropAnimation() {
+async function testConnectFourWinningDropSettlesAfterLanding() {
   const harness = createHeadlessDomHarness();
   const { elements, canvas, advanceTimers } = harness;
   elements.get('debug-export-output').value = JSON.stringify({
@@ -6872,8 +6873,14 @@ async function testConnectFourResultCardAppearsAfterDropAnimation() {
   await settleHeadlessImports();
   canvas.listeners.click({ clientX: 159, clientY: 41 });
   assert.strictEqual(elements.get('status-line').textContent, 'red wins');
+  const player = harness.context.window.RamifiedMinigames.player;
+  assert.strictEqual(player.matchPresentationState(), 'finishing');
+  assert.strictEqual(elements.get('canvas-start-overlay').hidden, true);
+  advanceTimers(100);
+  assert.strictEqual(player.matchPresentationState(), 'finishing');
   assert.strictEqual(elements.get('canvas-start-overlay').hidden, true);
   advanceTimers(1000);
+  assert.strictEqual(player.matchPresentationState(), 'finished');
   assert.strictEqual(elements.get('canvas-start-overlay').hidden, false);
   assert.strictEqual(elements.get('canvas-start-title').textContent, 'red wins');
   assert.strictEqual(elements.get('canvas-start-begin').textContent, 'play again');
@@ -9130,7 +9137,7 @@ async function run() {
   await testNewPlacementGameStatusRoundTrips();
   await testNewPlacementGameAnimationsStartFromUi();
   await testUnifiedLocalResultCard();
-  await testConnectFourResultCardAppearsAfterDropAnimation();
+  await testConnectFourWinningDropSettlesAfterLanding();
   testBackgroundExportFormats();
   await testFullStatusImportWithoutDebugMode();
   testStepPauseRendersAfterSelectingNextEvent();

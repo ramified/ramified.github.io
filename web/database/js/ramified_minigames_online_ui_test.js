@@ -25,6 +25,83 @@ async function run() {
       return { client, read, click, until, info, set };
     }
     const a = await browser(), b = await browser();
+    if (process.argv.includes('--terminal')) {
+      await a.click('#player-online-open'); await a.click('#player-lobby-create');
+      await a.click('[data-game-mode="go"]'); await a.click('#player-more');
+      await a.set('player-time-mode', 'move'); await a.set('player-time-action', '120'); await a.click('#player-back'); await a.click('#player-begin');
+      await a.until(`RamifiedMinigames.player.onlineInfo().roundState==='waiting'`);
+      await a.read(`navigator.clipboard.writeText=async url=>{window.__invite=url}`);
+      await a.click('#player-room-copy-link');
+      await b.client.send('Page.navigate', { url: await a.read('window.__invite') });
+      for (const p of [a,b]) await p.until(`RamifiedMinigames.player.onlineInfo().roundState==='playing' && document.querySelector('#player-menu').hidden`);
+      const {roomCode} = await a.info(), {clientId: guestId} = await b.info();
+      const room = bridge.objects.get(roomCode);
+      const guestSocket = [...room.sessions.keys()].find(socket => socket.deserializeAttachment().clientId===guestId);
+      assert(guestSocket);
+      guestSocket.close();
+      await a.until(`RamifiedMinigames.player.matchPresentationState()==='reconnecting' && document.querySelector('#study-status').textContent==='Waiting for reconnect…'`, 'opponent disconnect stops turn cues');
+      assert.equal((await a.info()).roundState, 'playing', 'temporary disconnect is not a win');
+      await a.until(`RamifiedMinigames.player.matchPresentationState()==='playing'`, 'opponent reconnect restores the turn');
+      assert.deepEqual((await a.info()).roles, ['black'], 'opponent connection notices preserve the original seat');
+      await a.click('#player-actions > summary'); await a.click('#go-pass');
+      await b.until(`RamifiedMinigames.__test.getGame().round===1`, 'first pass');
+      await b.click('#player-actions > summary'); await b.click('#go-pass');
+      for (const p of [a,b]) await p.until(`RamifiedMinigames.player.matchPresentationState()==='scoring' && document.querySelector('#player-online-clock').hidden`, 'two passes stop the clock for scoring');
+      await a.click('#go-confirm-score');
+      for (const p of [a,b]) await p.until(`RamifiedMinigames.player.matchPresentationState()==='finished' && document.querySelector('#player-online-clock').hidden && !document.querySelector('#canvas-start-overlay').hidden`, 'result replaces turn and clock');
+      assert.match(await a.read(`document.querySelector('#canvas-start-title').textContent`), /wins|draw/i);
+      const board = await a.read(`document.querySelector('#mosaic-canvas').toDataURL()`);
+      const clock = await a.read(`document.querySelector('#player-online-clock').textContent`);
+      await delay(650);
+      assert.equal(await a.read(`document.querySelector('#mosaic-canvas').toDataURL()`),board);
+      assert.equal(await a.read(`document.querySelector('#player-online-clock').textContent`),clock);
+      await a.click('#canvas-start-begin'); await b.until(`RamifiedMinigames.player.onlineInfo().roundState==='rematch-vote'`);
+      await b.click('#canvas-start-begin');
+      await a.until(`RamifiedMinigames.player.matchPresentationState()==='playing' && !document.querySelector('#player-online-clock').hidden`, 'rematch restores play and clock');
+      assert.deepEqual(errors, []);
+      console.log('Terminal Go: disconnect and reconnect, two passes, score, frozen result, and rematch passed');
+      return;
+    }
+    if (process.argv.includes('--invites')) {
+      await a.click('#player-online-open'); await a.click('#player-lobby-create');
+      await a.click('[data-game-mode="gomoku"]'); await a.click('#player-begin');
+      await a.until(`RamifiedMinigames.player.onlineInfo().roundState==='waiting'`);
+      const code = (await a.info()).roomCode;
+      await a.read(`navigator.clipboard.writeText=async text=>{window.__inviteLink=text}`);
+      await a.click('#player-room-copy-link');
+      const link = new URL(await a.read('window.__inviteLink'));
+      assert.deepEqual([...link.searchParams], [['room', code]]);
+      assert.equal(link.hash, '');
+      assert.equal(await a.read(`document.querySelector('#player-room-link-status').dataset.i18n`), 'lobby.inviteHostCopied');
+      await a.read(`navigator.clipboard.writeText=async()=>{throw new Error('Clipboard denied')}`);
+      await a.click('#player-room-copy-link');
+      assert.equal(await a.read(`document.querySelector('#player-room-link-fallback').textContent`), link.href);
+      await b.client.send('Page.navigate', { url: link.href });
+      await b.until(`RamifiedMinigames.player.onlineInfo().roundState==='playing' && document.querySelector('#player-menu').hidden`, 'guest auto-joins, takes the vacant seat, and starts');
+      await a.until(`RamifiedMinigames.player.onlineInfo().roundState==='playing' && document.querySelector('#player-menu').hidden`, 'host starts without pressing Ready');
+      assert.equal((await b.info()).roomCode, code);
+      assert.deepEqual((await b.info()).roles, ['white']);
+      assert.match(await b.read(`document.querySelector('#player-invite-board-rules').textContent`), /Gomoku.*five in a line/);
+      await b.click('#player-invite-dismiss');
+      await a.click('#mosaic-canvas');
+      await b.until(`RamifiedMinigames.__test.getGame().round===1`, 'move reaches invited guest');
+      const c = await browser();
+      async function checkInvite(room, key) {
+        const url = new URL(link);
+        url.searchParams.set('room', room);
+        await c.client.send('Page.navigate', { url: url.href });
+        await c.until(`!document.querySelector('#player-invite')?.hidden && document.querySelector('#player-invite-status')?.dataset.i18n==='lobby.${key}'`, key);
+        assert.equal((await c.info()).joined, false);
+      }
+      await checkInvite(code, 'inviteFull');
+      bridge.objects.get(code).room.roundState = 'finished';
+      await checkInvite(code, 'inviteEnded');
+      await checkInvite('wrong', 'inviteInvalid');
+      await checkInvite(code === '999999' ? '999998' : '999999', 'inviteMissing');
+      assert.deepEqual(errors, []);
+      console.log('Room invites: clipboard, fallback, automatic seats and start, gameplay, full, ended, invalid and missing passed');
+      return;
+    }
     await a.click('#player-new');
     if (await a.read(`!!document.querySelector('#player-slot-1')?.getClientRects().length`)) await a.click('#player-slot-1');
     await a.click('[data-game-mode="go"]');
@@ -120,7 +197,7 @@ async function run() {
     await a.until(`RamifiedMinigames.player.onlineInfo().joined && !document.querySelector('#player-room').hidden`, 'creator waiting room');
     assert.equal(await a.read(`document.querySelector('#player-room-loading').hidden`),true);
     assert.equal(await a.read(`document.querySelector('.player-seat-card').getBoundingClientRect().height`),loadingRowHeight,'skeleton rows match real seat-row height');
-    const loadedGeometry=await a.read(`({title:document.querySelector('#player-room-game').getBoundingClientRect().top,row:document.querySelector('.player-seat-card').getBoundingClientRect().top,pill:document.querySelector('#player-room-code').getBoundingClientRect().height})`);
+    const loadedGeometry=await a.read(`({title:document.querySelector('#player-room-game').getBoundingClientRect().top,row:document.querySelector('.player-seat-card').getBoundingClientRect().top,pill:document.querySelector('#player-room-copy').getBoundingClientRect().height})`);
     assert(Math.abs(loadingGeometry.title-loadedGeometry.title)<4&&Math.abs(loadingGeometry.row-loadedGeometry.row)<4&&Math.abs(loadingGeometry.pill-loadedGeometry.pill)<2,'skeleton geometry matches the loaded room: '+JSON.stringify({loadingGeometry,loadedGeometry}));
     for(const {width,locale,geometry} of pendingGeometries) {
       await a.client.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
@@ -333,7 +410,13 @@ async function run() {
     await a.read(`(() => {const fetch=window.fetch;window.__restoreCreateFailure=()=>{window.fetch=fetch};window.fetch=(url,options)=>options?.method==='POST'&&String(url).endsWith('/api/rooms')?Promise.reject(new DOMException('Timed out','TimeoutError')):fetch(url,options)})()`);
     await a.click('#player-begin');await a.until(`document.querySelector('#player-message').hasAttribute('data-room-connection-error')`,'existing create failure presentation');
     assert.equal(await a.read(`document.body.dataset.studyPage`),'setup','create failure retains the existing preparation retry route');
+    assert.match(await a.read(`document.querySelector('#player-message').textContent`), /timed out/);
     await a.read(`window.__restoreCreateFailure()`);
+    await a.read(`(() => {const original=window.fetch;window.__restoreCreateFailure=()=>{window.fetch=original};window.fetch=(url,options)=>options?.method==='POST'&&String(url).endsWith('/api/rooms')?Promise.resolve(new Response('{}',{status:503})):original(url,options)})()`);
+    await a.click('#player-begin'); await a.until(`document.querySelector('#player-message').textContent.includes('HTTP 503')`, 'show real HTTP status');
+    await a.read(`SiteI18n.setLocale('zh-CN')`);
+    assert.match(await a.read(`document.querySelector('#player-message').textContent`), /建房失败（HTTP 503）/);
+    await a.read(`SiteI18n.setLocale('en'); window.__restoreCreateFailure()`);
     await a.read(`(() => { const original=window.fetch; window.__restoreFetch=()=>{window.fetch=original};window.fetch=(url,options)=>original(url,options).then(response=>options?.method==='POST' && String(url).endsWith('/api/rooms') ? new Promise(resolve=>{window.__releaseRoomResponse=()=>resolve(response)}) : response); })()`);
     await a.click('#player-begin'); await a.until(`typeof window.__releaseRoomResponse==='function'`);
     await a.until(`!document.querySelector('#player-room-loading').hidden`,'creating skeleton before cancellation');
