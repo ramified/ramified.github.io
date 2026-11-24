@@ -330,9 +330,13 @@
       if (shownIn && shownIn !== focusedPane) button.title = 'Shown in the other pane. Click to swap sides.';
       button.addEventListener('click', () => {if(Date.now()>=suppressCanvasClickUntil)selectCanvasTab(id);});
       const close = Object.assign(document.createElement('button'), { type: 'button', className: 'workspace-canvas-tab-close', textContent: '×', title: `Close ${entry.definition.label}` });
-      close.setAttribute('aria-label', close.title); close.addEventListener('click', (event) => { event.stopPropagation(); closeCanvas(id); });
+      close.setAttribute('aria-label', close.title); close.addEventListener('click', (event) => { event.stopPropagation(); closeCanvas(id); if (!canvases.size) focusCanvasEmptyAction(); });
       const tab = Object.assign(document.createElement('div'), { className: 'workspace-canvas-tab-group' }); tab.append(button, close); host.appendChild(tab);
     });
+    const add = Object.assign(document.createElement('button'), { type: 'button', className: 'workspace-canvas-add-tab', title: 'Open a panel' });
+    const glyph = Object.assign(document.createElement('span'), { className: 'workspace-canvas-add-tab-glyph', textContent: '+' }); glyph.setAttribute('aria-hidden', 'true'); add.append(glyph);
+    add.dataset.workspaceAddTab = ''; add.setAttribute('aria-label', 'Open a panel'); add.setAttribute('aria-haspopup', 'menu'); add.setAttribute('aria-expanded', String(addTabMenuOpen()));
+    add.addEventListener('click', () => toggleAddTabMenu(add)); host.appendChild(add);
   }
 
   function updateCanvasPaneTitles() {
@@ -377,12 +381,90 @@
     [primary, secondary].forEach((pane) => {
       const slot = pane.querySelector('.workspace-canvas-pane-slot'), id = paneCanvases[pane.dataset.pane];
       pane.classList.toggle('workspace-canvas-pane-empty', !id);
-      if (!id) slot.replaceChildren(Object.assign(document.createElement('p'), { className: 'workspace-canvas-empty', textContent: 'Open an object from Assets or choose Add panel.' }));
+      if (id) return;
+      // Rebuild only when the situation changes, so a focused action survives re-renders.
+      const state = canvasEmptyState(), current = slot.querySelector(':scope > .workspace-canvas-empty');
+      if (current?.dataset.canvasEmpty !== state) slot.replaceChildren(buildCanvasEmpty(state));
     });
     $('#workspace-canvas-name').textContent = activeCanvasId ? byId.get(activeCanvasId).label : 'No open panels';
     const split = $('#workspace-split-view'); split.disabled = canvases.size < 2; split.textContent = splitView ? 'single view' : 'split view'; split.setAttribute('aria-pressed', String(splitView));
     renderCanvasTabs(); renderInspector(); renderCardPicker(); updateCanvasHeightLayout();
     objectWorkspace?.resize();
+  }
+
+  // An empty main area must offer a way back: Assets itself can be closed, so
+  // the guidance depends on where Assets currently is.
+  function canvasEmptyState() {
+    return dockedPanels.get('assets')?.location === 'side' ? 'assets-side' : 'all-closed';
+  }
+  function buildCanvasEmpty(state) {
+    const element = (tag, className, text = '') => Object.assign(document.createElement(tag), { className, textContent: text });
+    const action = (label, key, className, run) => {
+      const button = element('button', className, label); button.type = 'button'; button.dataset.canvasEmptyAction = key;
+      button.addEventListener('click', run); return button;
+    };
+    const empty = element('div', 'workspace-canvas-empty'), body = element('div', 'workspace-canvas-empty-body'), actions = element('div', 'workspace-canvas-empty-actions');
+    empty.dataset.canvasEmpty = state; empty.setAttribute('role', 'group'); empty.setAttribute('aria-label', 'Empty main area');
+    const newObject = action('New object', 'new-object', 'btn', startNewObject); newObject.setAttribute('aria-haspopup', 'dialog');
+    if (state === 'assets-side') {
+      body.append(element('strong', '', 'No panel is open here.'), element('p', 'workspace-canvas-empty-hint', 'Open an object from Assets in the side panels, or create a new one.'));
+      actions.append(newObject);
+    } else {
+      newObject.classList.add('btn-ghost');
+      body.append(element('strong', '', 'All panels are closed.'), element('p', 'workspace-canvas-empty-hint', 'Reopen Assets to browse your objects, or create a new one.'));
+      actions.append(action('Open Assets', 'assets', 'btn', () => openCanvas('assets')), newObject);
+    }
+    const more = element('p', 'workspace-canvas-empty-more', 'Need something else? ');
+    more.append(action('Add panel…', 'add-panel', 'workspace-canvas-empty-link', revealCardPicker));
+    body.append(actions, more); empty.append(body);
+    return empty;
+  }
+  function focusCanvasEmptyAction() {
+    document.querySelector('#workspace-canvas-pane-primary .workspace-canvas-empty-actions button')?.focus({ preventScroll: true });
+  }
+  // New objects appear in Assets, so an empty main area shows Assets first.
+  // When other panels are open, creation leaves the current view in place.
+  function startNewObject() {
+    if (!canvases.size && dockedPanels.get('assets')?.location !== 'side') openCanvas('assets');
+    openAssetsCreationPicker();
+  }
+  // Opens the existing picker at its sidebar button, so the user also learns where it lives.
+  function revealCardPicker() {
+    $('#workspace-add-card').scrollIntoView?.({ block: 'nearest' });
+    if ($('#workspace-card-picker').hidden) openCardPicker();
+  }
+
+  function addTabMenuOpen() {
+    const menu = $('#workspace-assets-context-menu');
+    return !menu.hidden && menu.dataset.menuOwner === 'add-tab';
+  }
+  function toggleAddTabMenu(anchor) {
+    if (addTabMenuOpen()) { closeAssetsContextMenu(); return; }
+    closeAssetsContextMenu(); closeCardPicker();
+    const menu = $('#workspace-assets-context-menu'), assetsShown = paneCanvases.primary === 'assets' || paneCanvases.secondary === 'assets';
+    menu.replaceChildren(); menu.style.maxHeight = ''; menu.classList.remove('workspace-touch-menu', 'workspace-assets-menu-left');
+    const assets = menuButton('Assets', () => openCanvas('assets'), { disabled: assetsShown, checked: assetsShown });
+    if (dockedPanels.get('assets')?.location === 'side') assets.title = 'Move Assets from the side panels to the main area';
+    menu.append(assets, menuButton('New object…', startNewObject), Object.assign(document.createElement('div'), { className: 'workspace-assets-menu-separator' }), menuButton('Add panel…', revealCardPicker));
+    menu.dataset.menuOwner = 'add-tab'; menu.setAttribute('aria-label', 'Open a panel'); anchor.setAttribute('aria-expanded', 'true');
+    menu.hidden = false; menu.style.left = '0px'; menu.style.top = '0px';
+    const box = anchor.getBoundingClientRect(), rect = menu.getBoundingClientRect();
+    const below = box.bottom + 4, top = below + rect.height <= window.innerHeight - 6 ? below : Math.max(6, box.top - rect.height - 4);
+    menu.style.left = `${Math.max(6, Math.min(box.left, window.innerWidth - rect.width - 6))}px`; menu.style.top = `${top}px`;
+    menu.querySelector('button:not(:disabled)')?.focus();
+  }
+  function handleContextMenuKeydown(event) {
+    const menu = event.currentTarget;
+    if (event.key === 'Escape') {
+      event.preventDefault(); const owner = menu.dataset.menuOwner; closeAssetsContextMenu();
+      if (owner === 'add-tab') document.querySelector('[data-workspace-add-tab]')?.focus();
+      else if (assetState.view?.isConnected && !assetState.view.closest('[hidden]')) assetState.view.focus({ preventScroll: true });
+    } else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !event.target.closest('.workspace-assets-submenu')) {
+      const items = [...menu.querySelectorAll(':scope > button:not(:disabled), :scope > .workspace-assets-menu-cascade > button:not(:disabled)')];
+      if (!items.length) return;
+      event.preventDefault(); const index = items.indexOf(event.target), step = event.key === 'ArrowDown' ? 1 : -1;
+      items[index < 0 ? (step > 0 ? 0 : items.length - 1) : (index + step + items.length) % items.length].focus();
+    }
   }
 
   function renderCardPicker() {
@@ -635,7 +717,7 @@
           const groups=[...tabs.children].filter(group=>group!==card&&group.querySelector('[data-canvas-tab]'));
           const before=groups.find(group=>{const box=group.getBoundingClientRect();return moveEvent.clientY<box.top||moveEvent.clientY<=box.bottom&&moveEvent.clientX<box.left+box.width/2;});
           drag.beforeTab=before?.querySelector('[data-canvas-tab]').dataset.canvasTab||null;
-          tabs.insertBefore(drag.tabMarker,before||null);return;
+          tabs.insertBefore(drag.tabMarker,before||tabs.querySelector(':scope > [data-workspace-add-tab]'));return;
         }
         if (drag.target === 'main') {
           drag.pane = target.closest('[data-pane]');
@@ -2937,7 +3019,7 @@
     wrapper.append(trigger, submenu); return wrapper;
   }
   function showAssetsContextMenu(x, y, kind) {
-    const menu = $('#workspace-assets-context-menu'); menu.replaceChildren(); menu.style.maxHeight = ''; menu.classList.toggle('workspace-touch-menu', !!assetState.touchMenu);
+    closeAssetsContextMenu(); const menu = $('#workspace-assets-context-menu'); menu.replaceChildren(); menu.style.maxHeight = ''; menu.classList.toggle('workspace-touch-menu', !!assetState.touchMenu);
     if (kind === 'item') {
       menu.append(
         menuButton('Open', openSelectedAsset, { disabled: assetState.selected.size !== 1 }),
@@ -2971,7 +3053,9 @@
   }
   function closeAssetsContextMenu() {
     const menu = $('#workspace-assets-context-menu'); if (menu.hidden) return false;
-    menu.hidden = true; menu.replaceChildren(); return true;
+    menu.hidden = true; menu.replaceChildren();
+    if (menu.dataset.menuOwner) { delete menu.dataset.menuOwner; menu.removeAttribute('aria-label'); document.querySelector('[data-workspace-add-tab]')?.setAttribute('aria-expanded', 'false'); }
+    return true;
   }
 
   async function deleteAssets(refs) {
@@ -3231,7 +3315,9 @@
     document.querySelectorAll('[data-pane]').forEach((pane) => pane.addEventListener('pointerdown', () => focusCanvasPane(pane.dataset.pane)));
     $('#workspace-canvas-resizer').addEventListener('pointerdown', beginCanvasResize);
     $('#workspace-canvas-resizer').addEventListener('keydown', handleCanvasResizeKeydown);
-    document.addEventListener('pointerdown', (event) => { if (!$('#workspace-assets-context-menu').hidden && !$('#workspace-assets-context-menu').contains(event.target)) closeAssetsContextMenu(); const picker = assetState.referencePicker; if (picker && !picker.node.contains(event.target) && !picker.control.contains(event.target)) closeReferencePicker(); }, true);
+    $('#workspace-assets-context-menu').addEventListener('keydown', handleContextMenuKeydown);
+    // The + button toggles its own menu, so its pointer-down must not close it first.
+    document.addEventListener('pointerdown', (event) => { if (!$('#workspace-assets-context-menu').hidden && !$('#workspace-assets-context-menu').contains(event.target) && !(addTabMenuOpen() && event.target.closest?.('[data-workspace-add-tab]'))) closeAssetsContextMenu(); const picker = assetState.referencePicker; if (picker && !picker.node.contains(event.target) && !picker.control.contains(event.target)) closeReferencePicker(); }, true);
     window.addEventListener('blur', () => { closeAssetsContextMenu(); closeReferencePicker(); }); window.addEventListener('resize', () => { updateCanvasHeightLayout(); closeAssetsContextMenu(); closeCardPicker(); closeReferencePicker(); });
     document.querySelectorAll('[data-workspace-io-tab]').forEach((tab) => tab.addEventListener('click', () => { const name = tab.dataset.workspaceIoTab; document.querySelectorAll('[data-workspace-io-tab]').forEach((item) => item.setAttribute('aria-selected', String(item === tab))); $('#workspace-io-export-panel').hidden = name !== 'export'; $('#workspace-io-import-panel').hidden = name !== 'import'; }));
     openCanvas('assets');
