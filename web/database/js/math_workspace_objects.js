@@ -21,6 +21,9 @@
     if (data.dataType === 'number-field') return 'ℚ(' + data.numberFieldSymbol + ') / (' + data.numberFieldPolynomial + ')';
     return coefficientTypes.find(([type]) => type === data.dataType)?.[1] || data.dataType;
   }
+  // Compact notation for reference menus ("R = ℂ"), so ring choices fit the sidebar's inline selects.
+  const ringSymbols = { complex: 'ℂ', real: 'ℝ', rational: 'ℚ', integer: 'ℤ' };
+  function ringNotation(data) { return ringSymbols[data?.dataType] || fieldLabel(data || {}); }
   const branchingRules = [
     ['diag-gl', 'GL(n) × GL(n) → GL(n)'], ['diag-o', 'O(n) × O(n) → O(n)'], ['diag-sp', 'Sp(2n) × Sp(2n) → Sp(2n)'],
     ['sum-gl', 'GL(n+m) → GL(n) × GL(m)'], ['sum-o', 'O(n+m) → O(n) × O(m)'], ['sum-sp', 'Sp(2n+2m) → Sp(2n) × Sp(2m)'],
@@ -293,6 +296,7 @@
   function panelResources(type, asset) {
     const definition=byType.get(type),engine=definition?.engine||(definition?.sheafInput?'complex':null);
     const resources=engine==='mosaic'?['mosaic','knot','link']:engine?[engine]:[];
+    if(type==='category-diagram')resources.push('category'); // The overview exports through the category editor.
     if(type==='knot-info')resources.push('knot','link');
     if(asset?.kind==='matrix'&&asset.data.construction)resources.push('slice');
     return resources;
@@ -444,7 +448,6 @@
       renderer.editor = window.MathWorkspaceNativeEditors.factories[engine].mount(host, { workspaceObjectPanel:true,
         id: `${panel.id}-${role}`, inspectorHost,
         onChange: change => nativeChange(panel, renderer, change),
-        onCollectAssets: () => overviewAction(panel,'collect'),
         onCollectComplexAssets: entries => {
           const added=[];
           for(const entry of entries||[]){if(!['chain-complex','filtration'].includes(entry.kind))continue;const kind=entry.kind==='filtration'?'filtration':'complex',asset=api.create(kind,{data:structures.fromComplexEntry(entry),view:root.MathWorkspacePresentation.split(kind,{legacy:entry}).view});added.push(keyOf(asset));if(!panel.definition.structureScene)open('complex-diagrams',keyOf(asset),'main');}
@@ -609,7 +612,7 @@
       const signature = JSON.stringify(candidates.map(asset => [keyOf(asset), asset.name, asset.definition]));
       if (select.dataset.signature !== signature || (value && ![...select.options].some(option => option.value === value))) {
         select.replaceChildren(new Option(spec.emptyLabel || (spec.optional ? 'None (when the rule uses one input)' : `Choose ${spec.label}…`), ''));
-        candidates.forEach(asset => select.append(new Option(`${asset.plainName || asset.name} · ${asset.definition || asset.typeLabel}`, keyOf(asset))));
+        candidates.forEach(asset => select.append(new Option(asset.kind === 'field' ? `${asset.plainName || asset.name} = ${ringNotation(asset.data)}` : `${asset.plainName || asset.name} · ${asset.definition || asset.typeLabel}`, keyOf(asset))));
         if (value && !candidates.some(asset => keyOf(asset) === value)) {const existing=get(value);select.append(new Option(existing?(existing.plainName||existing.name)+' · incompatible':'Missing asset', value));}
         select.dataset.signature = signature;
       }

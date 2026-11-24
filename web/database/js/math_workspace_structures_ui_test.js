@@ -6,6 +6,7 @@ try{
  session=await launchBrowser('http://127.0.0.1:'+server.address().port+'/math_workspace.html');const {client}=session;
  const read=(fn,...args)=>evaluate(client,'('+fn.toString()+')(...'+JSON.stringify(args)+')');
  await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
+    await read(() => MathWorkspaceLoader.ensure(["complex","ramification"]));
  await read(()=>{window.api=MathWorkspaceAssetsTest;window.panels=MathWorkspaceObjectPanels;window.c=api.createObjectAsset('complex');window.cv=panels.open('complex-view','complex:'+c.id,'main');window.ci=panels.open('complex-input','complex:'+c.id,'side');});
  assert.equal(await read(()=>cv.computation.status),'current');
  assert(await read(()=>cv.propertyRenderer.editor.shadow.querySelector('.workspace-complex-display').textContent.includes('not verified')));
@@ -48,23 +49,13 @@ try{
    editor.shadow.querySelector('[data-save-complex-results]').click();
  });
  assert(await read(()=>api.localAssetSnapshot().assets.some(a=>a.kind==='complex'&&a.data.legacy?.id==='derived-complex')),'operation results can become independent Assets');
- await read(()=>{
-   api.openCanvas('sheaf-complexes');window.legacy=api.sessions.get('sheaf-complexes').editor;
-   legacy.inspectorShadow.querySelector('#complex-chart-import-input').value=JSON.stringify({schema:'sheaf-complex-calculator-complex-chart',version:1,entries:[{id:'legacy-complex',kind:'chain-complex',length:2,objects:['P','Q'],maps:['f'],selected:true},{id:'legacy-filtration',kind:'filtration',length:2,objects:['U','V'],quotients:['W'],selected:true}]});
-   legacy.inspectorShadow.querySelector('#complex-chart-import-apply').click();
-   legacy.inspectorShadow.querySelector('[data-save-complex-assets]').click();
- });
- assert.equal(await read(()=>api.localAssetSnapshot().assets.filter(a=>a.kind==='complex'&&a.data.legacy?.id==='legacy-complex').length),1);
- await read(()=>legacy.inspectorShadow.querySelector('[data-save-complex-assets]').click());
- assert.equal(await read(()=>api.localAssetSnapshot().assets.filter(a=>a.kind==='complex'&&a.data.legacy?.id==='legacy-complex').length),1,'repeat migration updates instead of duplicating');
- assert.equal(await read(()=>legacy.objectIO('complex-entries').length),2,'legacy filtration and complex are preserved');
  await read(()=>{window.nf=api.createObjectAsset('field',{data:{dataType:'number-field',numberFieldPolynomial:'x^2-3'}});window.nv=panels.open('field-view','field:'+nf.id,'main');[...nv.renderArea.querySelectorAll('button')].find(b=>b.textContent==='Ramification over ℚ').click();});
  assert(await read(()=>api.localAssetSnapshot().assets.some(a=>a.kind==='field-extension'&&a.data.target==='field:'+nf.id&&a.data.polynomial==='x^2-3')));
  const backup=await read(()=>panels.exportText('workspace'));
  await read(text=>panels.importText('workspace',text),backup);
  assert(await read(()=>api.localAssetSnapshot().assets.some(a=>a.kind==='complex'&&a.data.objects[0].symbol==='E ')));
  assert(await read(()=>api.localAssetSnapshot().assets.some(a=>a.kind==='field-extension'&&a.data.base)));
- console.log('PASS complex display/operations, draft preservation, extension computation/properties, legacy migration, number-field shortcut and backup restore');
+ console.log('PASS complex display/operations, draft preservation, extension computation/properties, number-field shortcut and backup restore');
 }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}}
 run().catch(e=>{console.error(e.stack||e);process.exitCode=1;});
 

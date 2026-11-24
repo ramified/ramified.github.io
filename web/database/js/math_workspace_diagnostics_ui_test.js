@@ -57,9 +57,6 @@ async function run(){
     assert.equal(await read(()=>hodge().dependencyInvalid),true);
     assert.match(await read(()=>hodge().dependencyWarning.textContent),/Needs repair.*Genus.*integer/);
     assert.equal(await read(()=>hodge().dependencyWarning.hidden),false);
-    await read(()=>{api.openCanvas('sheaf-complexes');window.canvas=api.sessions.get('sheaf-complexes');canvas.editor.shadow.querySelector('[data-workspace-collect-assets]').click();});
-    assert.match(await read(()=>canvas.projectionWarning.textContent),/need repair.*Genus.*integer/);
-    assert.equal(await read(()=>canvas.editor.captureAssetLayout().some(entry=>entry.key===key(curve))),false);
     await read(()=>{panels.importText('workspace',panels.exportText('workspace'));});
     assert.equal(await read(()=>hodge().dependencyInvalid),true,'saved native properties cannot revive an invalid result');
     assert.equal(await read(()=>hodge().editor.listCards().some(card=>card.available!==false&&card.visible)),false,JSON.stringify(await read(()=>hodge().editor.listCards().filter(card=>card.visible))));
@@ -70,7 +67,6 @@ async function run(){
     await read(()=>api.updateObjectAsset(genus,{data:{...get(genus).data,value:'3'}}));
     assert.equal(await read(()=>valid(curve)),true);assert.equal(await read(()=>hodge().dependencyInvalid),false);assert.equal(await read(()=>hodge().dependencyWarning.hidden),true);assert.equal(await read(()=>hodge().dependencyWarning.getClientRects().length),0);
     assert.equal(await read(()=>[...panels.panels.values()].find(panel=>panel.definition.id==='sheaf-view').computation.status),'current');
-    assert.equal(await read(()=>api.sessions.get('sheaf-complexes').projectionWarning.hidden),true);
     assert.equal(await read(()=>document.querySelectorAll('.workspace-asset-warning').length),0,'repair clears all warnings');
     await read(()=>{api.updateObjectAsset(ring,{data:{...get(ring).data,dataType:'integer'}});window.editor=panels.open('number-input',key(fraction),'side');editor.numberControls.value.focus();});
     await press('a','KeyA',2);await client.send('Input.insertText',{text:'+'});

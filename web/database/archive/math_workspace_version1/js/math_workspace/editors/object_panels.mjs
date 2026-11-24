@@ -16,8 +16,14 @@ __editor.setAssetAdapter({panel(config) {
   refs.clearCanvas.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();options.onOverviewAction?.('clear');},{capture:true});
   const setProjectionReadOnly = __workspaceSetProjectionReadOnly;
   __workspaceSetProjectionReadOnly = function(locked) { setProjectionReadOnly(locked); refs.clearCanvas.disabled=false; };
-  const collect = document.querySelector('[data-workspace-collect-assets]');
-  if (collect) collect.title = categoryOverview ? 'Show all category and functor Assets on this overview' : 'Show all variety, sheaf and map Assets on this overview';
+  const collect = document.createElement('button');
+  collect.type = 'button';
+  collect.className = 'btn btn-ghost canvas-collect-button';
+  collect.dataset.workspaceCollectAssets = 'true';
+  collect.textContent = 'collect';
+  collect.title = categoryOverview ? 'Show all category and functor Assets on this overview' : 'Show all variety, sheaf and map Assets on this overview';
+  collect.addEventListener('click', () => options.onOverviewAction?.('collect'));
+  refs.clearCanvas.parentElement.append(collect);
   // Dragging out removes membership in this overview, preserving Assets.
   removeCanvasObject = (kind,id) => {
     const item = objectByKind(kind,id);

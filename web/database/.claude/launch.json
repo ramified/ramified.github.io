@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "database-static",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:\\Users\\bbh8149\\AppData\\Local\\Temp\\claude\\482a04f57c86d5ee\\9a8fdf01-2419-4b22-b50a-28b365a59e95\\scratchpad\\static_server.js", "C:\\Users\\bbh8149\\xiaoxiang_zhou\\structured\\github\\ramified.github.io\\web\\database", "8765"],
+      "port": 8765
+    }
+  ]
+}

@@ -4,11 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Math Workspace | Pure Math Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Non-blocking: canvases must not wait for web fonts (see css/site.css). -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&family=Source+Sans+3:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&family=Source+Sans+3:wght@400;500;600;700&display=swap"></noscript>
 <link rel="stylesheet" href="css/site.css?v=20260903-1">
 <link rel="stylesheet" href="css/import_export_panel.css?v=20260821-7">
-<link rel="stylesheet" href="css/math_workspace.css?v=20261123-icon-fallback-2">
-<link rel="stylesheet" href="css/ramified_theme.css">
-<link rel="stylesheet" href="css/ramified_ui_refine.css?v=20261031-empty-assets-fit-4">
+<link rel="stylesheet" href="css/math_workspace.css?v=20261124-width-3">
+<link rel="stylesheet" href="css/ramified_theme.css?v=20261124-type-1">
+<link rel="stylesheet" href="css/ramified_ui_refine.css?v=20261124-type-1">
+<link rel="stylesheet" href="css/math_workspace_typography.css?v=20261124-width-2">
 </head>
 <body class="ramified-theme">
 <header>
@@ -19,10 +25,8 @@
 <main class="math-workspace-layout">
   <section class="canvas-panel workspace-view-card" aria-label="Workspace view">
     <header class="panel-title workspace-panel-title">
-      <span class="panel-title-text">Main · <span id="workspace-canvas-name">Choose a panel</span></span>
+      <span class="panel-title-text">Main · <span id="workspace-canvas-name">Assets</span></span>
       <div class="workspace-canvas-controls">
-        <label class="sr-only" for="workspace-open-canvas">Open panel in main area</label>
-        <select id="workspace-open-canvas" class="workspace-canvas-picker workspace-control calculator-control" aria-label="Open panel in main area"></select>
         <button id="workspace-split-view" class="btn btn-ghost" type="button" aria-pressed="false" disabled>split view</button>
         <button id="workspace-settings" class="btn btn-ghost" type="button" aria-haspopup="dialog">Settings</button>
       </div>
@@ -113,7 +117,7 @@
     startup: { ready() { MathJax.startup.defaultReady(); MathJax.startup.promise.then(() => window.dispatchEvent(new Event('workspace-mathjax-ready'))); } }
   };
 </script>
-<script src="js/math_workspace_loader.js?v=20261123-on-demand-1"></script>
+<script src="js/math_workspace_loader.js?v=20261124-workspace-views-1"></script>
 <script>MathWorkspaceLoader.include('mathjax', 'https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js', true);</script>
 <script src="js/calculator_cards.js?v=20260903-1"></script>
 <script src="js/calculator_input_settings.js?v=20261019-workspace-settings-1"></script>
@@ -130,18 +134,18 @@
 <script src="js/math_workspace_knot_operations.js?v=20261029-knot-english-halo-2"></script>
 <script src="js/math_workspace_knot_editing.js?v=20261029-knot-english-halo-2"></script>
 <script src="js/math_workspace_topology_ui.js?v=20261123-on-demand-1"></script>
-<script src="js/math_workspace_io.js?v=20261029-topology-1"></script>
+<script src="js/math_workspace_io.js?v=20261124-workspace-views-1"></script>
 <script src="js/math_workspace_defaults.js?v=20261030-input-parity-2"></script>
 <script src="js/math_workspace_numbers.js?v=20261030-input-parity-2"></script>
 <script src="js/math_workspace_structures.js?v=20261027-presentation-1"></script>
 <script src="js/math_workspace_sheaf_model.js?v=20261031-sheaf-options-1"></script>
 <script src="js/math_workspace_diagnostics.js?v=20261030-input-parity-2"></script>
 <script src="js/math_workspace_panel_registry.js?v=20261030-shared-complex-display-1"></script>
-<script src="js/math_workspace_objects.js?v=20261123-on-demand-1"></script>
+<script src="js/math_workspace_objects.js?v=20261124-ring-notation-1"></script>
 <script src="js/math_workspace_panel_catalog.js?v=20261027-diagram-display-1"></script>
 <script src="js/math_workspace_settings.js?v=20261123-on-demand-1"></script>
-<script src="js/math_workspace_native_manifest.js?v=3cc9e3a0438d0656"></script>
-<script>MathWorkspaceLoader.include('native', "js/math_workspace_native_editors_v8.js?v=894cdbe252ca0ee6");</script>
+<script src="js/math_workspace_native_manifest.js?v=c3166ee333f069b9"></script>
+<script>MathWorkspaceLoader.include('native', "js/math_workspace_native_editors_v8.js?v=9c8a41a644fdff36");</script>
 <script src="js/strand_drawing.js?v=20261021-icon-braids-1"></script>
 <script src="js/dynkin_diagram_geometry.js?v=20261021-dynkin-icons-1"></script>
 <script src="js/math_workspace_asset_icons.js?v=20261123-icon-fallback-2"></script>
@@ -157,7 +161,7 @@
 <script src="js/math_workspace_cartan.js?v=20261021-approved-designs-1"></script>
 <script src="js/math_workspace_principal_assets.js?v=20261021-principal-approved-1"></script>
 <script src="js/math_workspace_pane_outline.js?v=20261030-connected-default-1"></script>
-<script src="js/math_workspace.js?v=20261123-on-demand-1"></script>
+<script src="js/math_workspace.js?v=20261124-workspace-views-1"></script>
 <script src="js/math_workspace_touch.js?v=20261026-touch-1"></script>
 </body>
 </html>

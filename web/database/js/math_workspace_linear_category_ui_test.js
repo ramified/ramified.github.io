@@ -38,7 +38,7 @@ async function run() {
     assert.equal(await read(() => op.closed), true);
     await read(() => { document.querySelector('#workspace-card-options input[data-card-key="' + op.id + '"]').click(); document.querySelector('#workspace-add-card').click(); });
     assert.equal(await read(() => op.computation.refs.matrix), 'matrix:' + await read(() => a.id));
-    assert.equal(await read(() => [...document.querySelector('#workspace-open-canvas').options].some(o => ['matrices','categories'].includes(o.value))), false);
+    assert.equal(await read(() => document.getElementById('workspace-open-canvas')), null);
     assert.match(await read(() => inv.propertyRenderer.editor.readObjectResult().text), /-2/);
     await read(() => {
       const root = op.propertyRenderer.editor.inspectorShadow;

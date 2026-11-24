@@ -92,7 +92,7 @@
           <div class="card-body">
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
               <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Type:</label>
-              <select id="lie-type" onchange="onTypeChange()" style="padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
+              <select id="lie-type" onchange="onTypeChange()" style="padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:var(--ws-font-ui,'EB Garamond',serif);font-size:var(--ws-text-md,0.9rem);color:var(--text);">
                 <optgroup label="Classical">
                   <option value="A" selected>A&#8345; &nbsp;&#x1D4C8;&#x1D4C1;(n+1) / &#x1D4C8;&#x1D4CA;(n+1)</option>
                   <option value="B">B&#8345; &nbsp;&#x1D4C8;&#x1D4C0;(2n+1)</option>
@@ -112,7 +112,7 @@
                 <input type="number" id="lie-rank" value="6" min="1" max="12"
                   onchange="onAlgebraChange()"
                   style="width:52px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;
-                         font-family:'JetBrains Mono',monospace;font-size:0.82rem;
+                         font-family:var(--ws-font-ui,'JetBrains Mono',monospace);font-size:var(--ws-text-sm,0.82rem);
                          background:var(--bg);color:var(--text);text-align:center;">
               </span>
               <label class="lie-gl-toggle" id="lie-gl-wrap" hidden title="For generalized Type A_n weights, use gl_{n+1}: the Weyl group permutes the n+1 matrix-coordinate weights.">
@@ -121,7 +121,7 @@
               <label class="lie-gl-toggle tooltip-label" id="lie-conformal-wrap" hidden data-tooltip="">
                 <input type="checkbox" id="lie-conformal-toggle" onchange="onAlgebraChange()"> <span id="lie-conformal-label">csp</span>
               </label>
-              <span id="lie-algebra-desc" style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--muted);"></span>
+              <span id="lie-algebra-desc" style="font-family:var(--ws-font-ui,'JetBrains Mono',monospace);font-size:var(--ws-text-sm,0.75rem);color:var(--muted);"></span>
             </div>
             <div id="lie-warning" class="err" style="margin-bottom:4px;"></div>
             <!-- Stats -->
@@ -180,7 +180,7 @@
           <div class="card-body">
             <div class="branching-rule-row" style="display:flex;align-items:center;gap:8px;">
               <label class="stat-label" style="white-space:nowrap;flex-shrink:0;">Rule:</label>
-              <select id="br-rule" onchange="onBranchingRuleChange()" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'EB Garamond',serif;font-size:0.9rem;color:var(--text);">
+              <select id="br-rule" onchange="onBranchingRuleChange()" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:var(--ws-font-ui,'EB Garamond',serif);font-size:var(--ws-text-md,0.9rem);color:var(--text);">
                 <optgroup label="Diagonal">
                   <option value="diag-gl">GL(n) x GL(n) &#8594; GL(n)</option>
                   <option value="diag-o">O(n) x O(n) &#8594; O(n)</option>
@@ -207,14 +207,14 @@
             </div>
             <div id="br-source-b-wrap" class="branching-rule-row" hidden>
               <label class="stat-label" for="br-source-b" style="white-space:nowrap;display:block;margin-bottom:4px;">Source B:</label>
-              <input type="text" id="br-source-b" placeholder="e.g. 1 or 2,1 or 2,-1" oninput="markBranchingStale()" style="width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--text);">
+              <input type="text" id="br-source-b" placeholder="e.g. 1 or 2,1 or 2,-1" oninput="markBranchingStale()" style="width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:var(--ws-font-ui,'JetBrains Mono',monospace);font-size:var(--ws-text-sm,0.78rem);color:var(--text);">
             </div>
             <div id="br-ranks-wrap" class="branching-rule-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <label class="stat-label" style="white-space:nowrap;">rank n:</label>
-              <input type="number" id="br-rank-n" min="1" step="1" placeholder="stable" oninput="markBranchingStale()" style="width:74px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--text);text-align:center;">
+              <input type="number" id="br-rank-n" min="1" step="1" placeholder="stable" oninput="markBranchingStale()" style="width:74px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:var(--ws-font-ui,'JetBrains Mono',monospace);font-size:var(--ws-text-sm,0.78rem);color:var(--text);text-align:center;">
               <span id="br-rank-m-wrap" style="display:inline-flex;align-items:center;gap:6px;">
                 <label class="stat-label" style="white-space:nowrap;">rank m:</label>
-                <input type="number" id="br-rank-m" min="1" step="1" placeholder="stable" oninput="markBranchingStale()" style="width:74px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--text);text-align:center;">
+                <input type="number" id="br-rank-m" min="1" step="1" placeholder="stable" oninput="markBranchingStale()" style="width:74px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:var(--ws-font-ui,'JetBrains Mono',monospace);font-size:var(--ws-text-sm,0.78rem);color:var(--text);text-align:center;">
               </span>
               <span class="hint" style="margin:0;">blank = stable formula only</span>
             </div>

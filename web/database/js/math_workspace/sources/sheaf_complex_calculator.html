@@ -33,7 +33,7 @@
 
     .sheaf-object-button {
       padding: 4px 10px;
-      font-size: 0.76rem;
+      font-size: var(--ws-text-sm, 0.76rem);
     }
 
     .sheaf-input-toolbar {
@@ -75,8 +75,8 @@
       margin: 0;
       padding: 2px 0;
       color: var(--text);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       letter-spacing: 0;
       text-transform: none;
       white-space: nowrap;
@@ -84,7 +84,7 @@
 
     .sheaf-modify-warning {
       color: var(--muted);
-      font-size: 0.82rem;
+      font-size: var(--ws-text-sm, 0.82rem);
       font-style: italic;
     }
 
@@ -130,8 +130,8 @@
       min-height: 58px;
       max-height: 150px;
       resize: vertical;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-code, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       line-height: 1.35;
       border: 1px solid var(--border);
       border-radius: 3px;
@@ -150,8 +150,8 @@
 
     .sheaf-import-message {
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-xs, 0.7rem);
       line-height: 1.35;
       min-height: 1em;
       overflow-wrap: anywhere;
@@ -166,8 +166,8 @@
     }
 
     .sheaf-editor-title {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       letter-spacing: 0;
       text-transform: none;
       color: var(--muted);
@@ -219,13 +219,13 @@
       border-radius: 3px;
       background: var(--bg);
       color: var(--text);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.76rem;
+      font-family: var(--ws-font-code, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.76rem);
     }
 
     .sheaf-select {
-      font-family: 'EB Garamond', serif;
-      font-size: 0.9rem;
+      font-family: var(--ws-font-ui, 'EB Garamond', serif);
+      font-size: var(--ws-text-md, 0.9rem);
     }
 
     .sheaf-input[type=number] {
@@ -248,7 +248,7 @@
       padding-top: 7px;
       border-top: 1px dotted var(--border);
       color: var(--muted);
-      font-size: 0.82rem;
+      font-size: var(--ws-text-sm, 0.82rem);
       line-height: 1.45;
     }
 
@@ -274,7 +274,7 @@
   .canvas-clear-button,
   .canvas-show-button {
       padding: 4px 10px;
-      font-size: 0.74rem;
+      font-size: var(--ws-text-sm, 0.74rem);
     background: rgba(255,253,248,0.88);
   }
 
@@ -289,7 +289,7 @@
     gap: 7px;
     align-items: center;
     color: inherit;
-    font-size: 0.76rem;
+    font-size: var(--ws-text-sm, 0.76rem);
   }
 
   .map-curve-control {
@@ -304,7 +304,7 @@
 
   .map-curve-control output {
     font-family: inherit;
-    font-size: 0.76rem;
+    font-size: var(--ws-text-sm, 0.76rem);
     text-align: right;
   }
 
@@ -322,7 +322,7 @@
 
   .map-curve-reset {
     padding: 4px 9px;
-    font-size: 0.72rem;
+    font-size: var(--ws-text-sm, 0.72rem);
   }
 
   .sequence-tail-tools {
@@ -401,7 +401,7 @@
       text-align: center;
       line-height: 1.28;
       color: var(--text);
-      font-size: 1rem;
+      font-size: var(--ws-text-md, 1rem);
       overflow-wrap: anywhere;
       pointer-events: auto;
       cursor: grab;
@@ -430,7 +430,7 @@
 
   .sheaf-canvas-label.is-map {
     color: #8b3a2a;
-    font-size: 0.84rem;
+    font-size: var(--ws-text-sm, 0.84rem);
     background: rgba(255,247,243,0.9);
     cursor: pointer;
   }
@@ -509,8 +509,8 @@
     }
 
     .sheaf-formula-label {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       color: var(--muted);
       white-space: nowrap;
       padding-top: 2px;
@@ -519,7 +519,7 @@
     .sheaf-formula-value {
       min-width: 0;
       color: var(--text);
-      font-size: 0.88rem;
+      font-size: var(--ws-text-md, 0.88rem);
       line-height: 1.55;
       overflow-wrap: anywhere;
     }
@@ -550,7 +550,7 @@
       gap: 7px;
       min-width: 0;
       color: var(--text);
-      font-size: 0.88rem;
+      font-size: var(--ws-text-md, 0.88rem);
     }
 
     .sheaf-term-only-control .sheaf-input {
@@ -597,7 +597,7 @@
     .sheaf-base-pick-button,
     .map-pick-reset {
       padding: 4px 10px;
-      font-size: 0.74rem;
+      font-size: var(--ws-text-sm, 0.74rem);
     }
 
     .product-factor-picker {
@@ -610,7 +610,7 @@
 
     .product-factor-button {
       padding: 4px 8px;
-      font-size: 0.72rem;
+      font-size: var(--ws-text-sm, 0.72rem);
       letter-spacing: 0;
       text-transform: none;
       overflow: hidden;
@@ -633,7 +633,7 @@
 
     .point-name-preset-button {
       padding: 4px 6px;
-      font-size: 0.72rem;
+      font-size: var(--ws-text-sm, 0.72rem);
       letter-spacing: 0;
       text-transform: none;
       overflow: hidden;
@@ -654,8 +654,8 @@
       gap: 5px;
       align-items: center;
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.74rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.74rem);
     }
 
     .grassmannian-param .sheaf-input {
@@ -667,8 +667,8 @@
 
     .product-factor-times {
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.78rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.78rem);
     }
 
     .sheaf-map-formula-picker {
@@ -716,13 +716,13 @@
     .combined-sequence-map-button {
       max-width: 58px;
       padding: 2px 5px;
-      font-size: 0.64rem;
+      font-size: var(--ws-text-xs, 0.64rem);
       line-height: 1.05;
     }
 
     .sheaf-map-slot-button {
       padding: 4px 8px;
-      font-size: 0.72rem;
+      font-size: var(--ws-text-sm, 0.72rem);
       letter-spacing: 0;
       text-transform: none;
       overflow: hidden;
@@ -735,7 +735,7 @@
       max-width: 44px;
       min-height: 17px;
       padding: 1px 4px;
-      font-size: 0.56rem;
+      font-size: var(--ws-text-xs, 0.56rem);
       line-height: 1;
     }
 
@@ -757,7 +757,7 @@
       flex-direction: column;
       align-items: stretch;
       color: var(--muted);
-      font-size: 0.72rem;
+      font-size: var(--ws-text-sm, 0.72rem);
     }
 
     .identify-class-review label {
@@ -770,7 +770,7 @@
     .identify-class-review .sheaf-input {
       width: 82px;
       padding: 3px 6px;
-      font-size: 0.7rem;
+      font-size: var(--ws-text-xs, 0.7rem);
     }
 
     .identify-class-review.is-warning {
@@ -785,8 +785,8 @@
 
     .sheaf-map-formula-mark {
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.78rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.78rem);
       line-height: 1;
     }
 
@@ -839,7 +839,7 @@
 
     .sheaf-input-reveal-button {
       padding: 4px 10px;
-      font-size: 0.72rem;
+      font-size: var(--ws-text-sm, 0.72rem);
       letter-spacing: 0;
       text-transform: none;
     }
@@ -856,8 +856,8 @@
 
     .map-pick-status {
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       line-height: 1.45;
       overflow-wrap: anywhere;
     }
@@ -875,8 +875,8 @@
 
     .global-invariant-usage {
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       line-height: 1.45;
       overflow-wrap: anywhere;
     }
@@ -936,8 +936,8 @@
 
     .ci-equation-count-control output,
     .ci-degree-slider-row output {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.74rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.74rem);
       color: var(--text);
       text-align: right;
     }
@@ -960,8 +960,8 @@
 
     .ci-degree-slider-row span {
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       white-space: nowrap;
     }
 
@@ -984,7 +984,7 @@
 
     .sheaf-chart-export {
       padding: 4px 10px;
-      font-size: 0.76rem;
+      font-size: var(--ws-text-sm, 0.76rem);
     }
 
     .sheaf-step-card .card-body {
@@ -1042,8 +1042,8 @@
     .sheaf-step-token-row .input-label {
       margin-top: 5px;
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       white-space: nowrap;
     }
 
@@ -1062,7 +1062,7 @@
 
     .sheaf-step-token-list.is-empty {
       color: var(--muted);
-      font-size: 0.82rem;
+      font-size: var(--ws-text-sm, 0.82rem);
       line-height: 1.5;
     }
 
@@ -1099,8 +1099,8 @@
       border-radius: 4px;
       background: color-mix(in srgb, var(--accent) 8%, var(--surface));
       color: var(--text);
-      font-family: 'EB Garamond', serif;
-      font-size: 0.9rem;
+      font-family: var(--ws-font-display, 'EB Garamond', serif);
+      font-size: var(--ws-text-md, 0.9rem);
       line-height: 1.35;
       cursor: pointer;
       white-space: nowrap;
@@ -1170,8 +1170,8 @@
       border-radius: 4px;
       background: color-mix(in srgb, var(--surface) 86%, var(--bg));
       color: var(--text);
-      font-family: 'EB Garamond', serif;
-      font-size: 0.9rem;
+      font-family: var(--ws-font-display, 'EB Garamond', serif);
+      font-size: var(--ws-text-md, 0.9rem);
       line-height: 1.35;
       cursor: pointer;
       white-space: nowrap;
@@ -1211,8 +1211,8 @@
       border-radius: 4px;
       background: color-mix(in srgb, var(--accent) 10%, var(--surface));
       color: var(--accent);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.68rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-xs, 0.68rem);
       line-height: 1.35;
       cursor: pointer;
       vertical-align: baseline;
@@ -1328,7 +1328,7 @@
       align-items: center;
       border-top: 1px dotted var(--border);
       padding: 6px 0;
-      font-size: 0.92rem;
+      font-size: var(--ws-text-md, 0.92rem);
     }
 
     .sheaf-step-rule-row:first-child {
@@ -1361,7 +1361,7 @@
 
     .sheaf-step-rule-meta {
       color: var(--muted);
-      font-size: 0.82rem;
+      font-size: var(--ws-text-sm, 0.82rem);
       margin-left: 6px;
     }
 
@@ -1371,10 +1371,10 @@
 
     .sheaf-step-saved-rule-title {
       color: var(--muted);
-      font-size: 0.82rem;
+      font-size: var(--ws-text-sm, 0.82rem);
       margin-bottom: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.02em;
+      text-transform: var(--ws-label-transform, uppercase);
+      letter-spacing: var(--ws-label-tracking, 0.02em);
     }
 
     .sheaf-step-select-all-row {
@@ -1395,7 +1395,7 @@
       gap: 8px;
       align-items: center;
       padding: 4px 0;
-      font-size: 0.88rem;
+      font-size: var(--ws-text-md, 0.88rem);
       min-width: 0;
     }
 
@@ -1439,7 +1439,7 @@
 
     .sheaf-step-saved-rule-kind {
       color: var(--muted);
-      font-size: 0.76rem;
+      font-size: var(--ws-text-sm, 0.76rem);
       white-space: nowrap;
     }
 
@@ -1546,7 +1546,7 @@
       border-left: 3px solid #b07a16;
       background: rgba(176,122,22,0.09);
       color: var(--text);
-      font-size: 0.78rem;
+      font-size: var(--ws-text-sm, 0.78rem);
       line-height: 1.45;
     }
 
@@ -1595,7 +1595,7 @@
 
     .sheaf-complex-les-switch .hint {
       margin-left: 4px;
-      font-size: 0.72rem;
+      font-size: var(--ws-text-sm, 0.72rem);
     }
 
     .sheaf-complex-les-switch .is-selected {
@@ -1990,7 +1990,7 @@
       min-width: 100%;
       border-collapse: collapse;
       color: var(--text);
-      font-size: 0.88rem;
+      font-size: var(--ws-text-md, 0.88rem);
       line-height: 1.45;
     }
 
@@ -2010,8 +2010,8 @@
       min-width: 76px;
       color: var(--muted);
       background: var(--surface);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       text-align: left;
     }
 
@@ -2028,8 +2028,8 @@
 
     .homology-active {
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       line-height: 1.45;
       margin-bottom: 8px;
       overflow-wrap: anywhere;
@@ -2061,8 +2061,8 @@
       display: list-item;
       min-width: 0;
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       cursor: pointer;
       user-select: none;
     }
@@ -2093,7 +2093,7 @@
       align-items: center;
       min-width: 0;
       color: var(--text);
-      font-size: 0.84rem;
+      font-size: var(--ws-text-sm, 0.84rem);
       line-height: 1.45;
     }
 
@@ -2166,7 +2166,7 @@
       background: var(--surface);
       box-shadow: 0 4px 12px rgba(40, 34, 20, 0.14);
       color: var(--text);
-      font-size: 0.8rem;
+      font-size: var(--ws-text-sm, 0.8rem);
       line-height: 1.35;
     }
 
@@ -2179,7 +2179,7 @@
       grid-column: 1 / -1;
       margin: 0;
       color: var(--muted);
-      font-size: 0.76rem;
+      font-size: var(--ws-text-sm, 0.76rem);
     }
 
     .homology-promotion-actions {
@@ -2190,7 +2190,7 @@
     }
 
     .homology-map-rule-input {
-      font-size: 0.74rem;
+      font-size: var(--ws-text-sm, 0.74rem);
     }
 
     .homology-map-tools {
@@ -2226,19 +2226,19 @@
 
     .homology-map-mode-select {
       max-width: 190px;
-      font-size: 0.74rem;
+      font-size: var(--ws-text-sm, 0.74rem);
     }
 
     .homology-expression-panel {
       min-width: 0;
       color: var(--text);
-      font-size: 0.78rem;
+      font-size: var(--ws-text-sm, 0.78rem);
     }
 
     .homology-expression-panel summary {
       cursor: pointer;
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
       list-style-position: outside;
       padding: 2px 0;
     }
@@ -2272,7 +2272,7 @@
       width: max-content;
       min-width: 100%;
       border-collapse: collapse;
-      font-size: 0.76rem;
+      font-size: var(--ws-text-sm, 0.76rem);
       line-height: 1.45;
     }
 
@@ -2291,7 +2291,7 @@
       z-index: 1;
       color: var(--muted);
       background: var(--surface);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     }
 
     .homology-expression-list {
@@ -2341,8 +2341,8 @@
 
     .homology-assignment-lhs {
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       overflow-wrap: anywhere;
     }
 
@@ -2368,7 +2368,7 @@
     .homology-update-button,
     .homology-transpose-button {
       padding: 4px 9px;
-      font-size: 0.7rem;
+      font-size: var(--ws-text-xs, 0.7rem);
       align-self: start;
       white-space: normal;
     }
@@ -2394,18 +2394,18 @@
       min-width: 48px;
       padding: 4px 6px;
       text-align: center;
-      font-size: 0.74rem;
+      font-size: var(--ws-text-sm, 0.74rem);
     }
 
     .homology-coefficient-plus,
     .homology-coefficient-empty {
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
     }
 
     .sheaf-divisor-coefficients .homology-coefficient-term span {
-      font-size: 0.72rem;
+      font-size: var(--ws-text-sm, 0.72rem);
       line-height: 1.35;
     }
 
@@ -2455,8 +2455,8 @@
 
     .homology-symbol-kind {
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-xs, 0.7rem);
       white-space: nowrap;
     }
 
@@ -2489,7 +2489,7 @@
 
     .homology-rule-delete {
       padding: 3px 8px;
-      font-size: 0.7rem;
+      font-size: var(--ws-text-xs, 0.7rem);
     }
 
     .homology-add-class {
@@ -2516,7 +2516,7 @@
     .homology-add-class .sheaf-input,
     .homology-add-class .sheaf-select,
     .homology-add-rule .sheaf-select {
-      font-size: 0.74rem;
+      font-size: var(--ws-text-sm, 0.74rem);
     }
 
     .homology-message {
@@ -2597,8 +2597,8 @@
       align-items: center;
       gap: 6px;
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       white-space: nowrap;
     }
 
@@ -2616,7 +2616,7 @@
     .hodge-wide-toggle {
       display: none;
       padding: 4px 10px;
-      font-size: 0.76rem;
+      font-size: var(--ws-text-sm, 0.76rem);
     }
 
     .hodge-export-button {
@@ -2640,7 +2640,7 @@
       align-items: center;
       justify-content: center;
       color: var(--text);
-      font-size: 0.9rem;
+      font-size: var(--ws-text-md, 0.9rem);
       line-height: 1.2;
       white-space: nowrap;
     }
@@ -2655,7 +2655,7 @@
       z-index: 1;
       justify-self: start;
       color: var(--muted);
-      font-size: 0.9rem;
+      font-size: var(--ws-text-md, 0.9rem);
       line-height: 1.25;
       white-space: nowrap;
     }
@@ -2671,7 +2671,7 @@
       z-index: 1;
       justify-self: start;
       color: var(--accent2);
-      font-size: 0.9rem;
+      font-size: var(--ws-text-md, 0.9rem);
       line-height: 1.25;
       white-space: nowrap;
     }
@@ -2681,7 +2681,7 @@
       z-index: 1;
       justify-self: center;
       color: var(--muted);
-      font-size: 0.82rem;
+      font-size: var(--ws-text-sm, 0.82rem);
       line-height: 1.25;
       white-space: nowrap;
     }
@@ -2731,19 +2731,19 @@
       align-items: center;
       gap: 5px;
       color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.74rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.74rem);
     }
 
     .hodge-query-index input {
       width: 52px;
-      font-size: 0.74rem;
+      font-size: var(--ws-text-sm, 0.74rem);
     }
 
     .hodge-query-output {
       min-height: 22px;
       color: var(--text);
-      font-size: 0.86rem;
+      font-size: var(--ws-text-sm, 0.86rem);
     }
 
     .hodge-chern-numbers {
@@ -2755,7 +2755,7 @@
       padding-top: 8px;
       border-top: 1px dotted var(--border);
       color: var(--muted);
-      font-size: 0.82rem;
+      font-size: var(--ws-text-sm, 0.82rem);
     }
 
     .hodge-chern-number {
@@ -2781,13 +2781,13 @@
       padding-top: 8px;
       border-top: 1px dotted var(--border);
       color: var(--muted);
-      font-size: 0.82rem;
+      font-size: var(--ws-text-sm, 0.82rem);
     }
 
     .hodge-polyvector-title {
       margin-bottom: 6px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       color: var(--muted);
     }
 
@@ -2829,7 +2829,7 @@
       align-items: center;
       justify-content: center;
       color: var(--text);
-      font-size: 0.86rem;
+      font-size: var(--ws-text-sm, 0.86rem);
       line-height: 1.2;
       white-space: nowrap;
     }
@@ -2842,7 +2842,7 @@
     .hodge-polyvector-hh {
       justify-self: start;
       color: var(--accent2);
-      font-size: 0.86rem;
+      font-size: var(--ws-text-sm, 0.86rem);
       line-height: 1.25;
       white-space: nowrap;
     }
@@ -2851,7 +2851,7 @@
       justify-self: center;
       align-self: end;
       color: var(--muted);
-      font-size: 0.76rem;
+      font-size: var(--ws-text-sm, 0.76rem);
       line-height: 1.25;
       white-space: nowrap;
     }
@@ -2883,15 +2883,15 @@
       width: max-content;
       min-width: 100%;
       border-collapse: collapse;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+      font-size: var(--ws-text-xs, 0.7rem);
     }
 
     .betti-table-note {
       margin-bottom: 6px;
       color: var(--muted);
       line-height: 1.45;
-      font-size: 0.76rem;
+      font-size: var(--ws-text-sm, 0.76rem);
     }
 
     .betti-table th,
@@ -2929,7 +2929,7 @@
     .betti-table-message {
       margin-top: 6px;
       line-height: 1.45;
-      font-size: 0.76rem;
+      font-size: var(--ws-text-sm, 0.76rem);
     }
 
     @media (max-width: 860px) {

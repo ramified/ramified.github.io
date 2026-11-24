@@ -6,7 +6,7 @@
 .workspace-empty-create-option { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); }
 .workspace-empty-create-option[data-selected='true'] { border-color: var(--accent); }
 .workspace-empty-create-option > button { justify-self: start; }
-.workspace-empty-create-label { font: 500 .78rem/1.4 'JetBrains Mono', monospace; }
+.workspace-empty-create-label { font: 600 var(--ws-text-xs)/1.4 var(--ws-font-ui); }
 .workspace-empty-create-preview { --workspace-session-pane-height: 260px; height: 260px; min-height: 0; }
 /* Fit real empty views to the available content box, excluding pane borders. */
 .workspace-assets-view > .workspace-assets-content[data-assets-empty='empty'] { height: 100%; grid-template-rows: minmax(0, 1fr); }
@@ -38,8 +38,8 @@ body.ramified-theme [data-empty-create-variant] .workspace-assets-create:focus-v
 /* Frozen Interface theme selection; removing this stylesheet restores the prior theme. */
 body.ramified-theme {
   --design-lab-interface-header-padding: 12px;
-  --design-lab-interface-title-size: 24px;
-  --design-lab-interface-subtitle-size: 14px;
+  --design-lab-interface-title-size: var(--ws-text-xl);
+  --design-lab-interface-subtitle-size: var(--ws-text-md);
   --design-lab-interface-layout-left: 28px;
   --design-lab-interface-layout-right: 28px;
   --design-lab-interface-layout-max: 1500px;
@@ -55,7 +55,7 @@ body.ramified-theme > header {
         background: var(--bg); color: var(--text); border-bottom: 1px solid var(--border);
       }
       body.ramified-theme > header h1 { font-size: var(--design-lab-interface-title-size); font-weight: 400; line-height: 1.3; }
-      body.ramified-theme > header span { min-width: 0; font: var(--design-lab-interface-subtitle-size)/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--muted); }
+      body.ramified-theme > header span { min-width: 0; font: var(--design-lab-interface-subtitle-size)/1.5 var(--ws-font-ui); color: var(--muted); }
 body.ramified-theme .workspace-canvas-pane { border: 1px solid var(--border); border-top: 0; outline: none; }
 body.ramified-theme .workspace-canvas-pane.focused { border-color: var(--accent); }
 body.ramified-theme .workspace-canvas-pane + .workspace-canvas-pane { border-left: 0; }

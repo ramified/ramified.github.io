@@ -64,6 +64,67 @@ clip sheaf-to-base connector lines with the same label-boundary calculation
 as straight Map arrows. The painted line stops at the labels instead of
 extending to their centers; object positions and Map geometry are unchanged.
 
+### 2026-11-24 · Typography tokens with unchanged fallbacks
+
+UI DOM typography in the copies now reads workspace tokens, following the B3a
+pattern: every wrapper is `var(--ws-*, <original literal>)`, no `--ws-*` value
+is defined in the copies, and standalone pages would render exactly as before.
+The values live in `css/math_workspace_typography.css` on the live page and
+inherit into the shadow roots.
+
+- Family by role, not by original face: `--ws-font-ui` (labels, buttons,
+  selects, plain inputs, help, tables, badges, eyebrow labels),
+  `--ws-font-code` (export/import textareas, TeX and generator inputs, matrix
+  cells and result tables, vectors, keyboard bindings), `--ws-font-display`
+  (dialog headings and serif math tokens such as strand relation operators).
+- Size by original px (rem at 16px): `< 11.5` xs, `< 13.9` sm, `< 17.5` md,
+  `< 22` lg, otherwise xl. `em`, `%`, `clamp()`, `inherit` and icon glyph
+  sizes (×, ▾, arrows, drag handles, pins) are unchanged.
+- Uppercase UI labels: `text-transform` → `--ws-label-transform`; the same
+  rule's non-zero `letter-spacing` → `--ws-label-tracking`.
+- Unchanged: canvas `ctx.font`, SVG export text, MathJax fonts, the production
+  page's own `var(--sans)` / `var(--mono)`, colors, spacing and layout.
+- The copied `site.css` `body` rule (`.editor-body`) also uses the UI tokens
+  (user decision, 2026-11-24: full unification). MathJax scales formulas to
+  the surrounding text, so workspace formulas are proportionally smaller than
+  in the classic calculators; `math_workspace_math_rendering_ui_test.js` now
+  compares the Dynkin Parabolic matrix spacing in em instead of px.
+- Widths: `.matrix-inline-row` columns/gap read `--ws-inline-columns` /
+  `--ws-inline-gap` (the workspace's shared label column);
+  `.matrix-preset-buttons` reads `--ws-preset-display` (adds an inert
+  `grid-template-columns` that only applies when the workspace switches it to
+  grid) and `--ws-preset-btn-padding`; `.canvas-size-inline` reads
+  `--ws-inline-indent` / `--ws-inline-rule`. Fallbacks are the original values.
+- Mosaic `.mosaic-inline-row` uses `--ws-inline-columns` and `--ws-inline-gap`
+  for its grid columns and column gap, with the original fallbacks
+  `116px minmax(0, 1fr)` and `10px`. Its `.input-label` `white-space` reads
+  `--ws-inline-label-wrap` (fallback `nowrap`) so the two labels wider than
+  the shared column ("Contraction multiplier", "Glide damping / s⁻¹") wrap.
+- Added declarations whose fallback is `inherit` (identical to the original
+  cascade): `font-family: var(--ws-font-ui, inherit)` on `.canvas-size-inline`,
+  `.opt-row` and `.calculator-input-settings-content`, and
+  `font-size: var(--ws-text-sm, inherit)` on
+  `.canvas-size-inline`. These UI labels previously inherited the editor body
+  face.
+
+| File | ui | code | display | xs | sm | md | lg/xl | label |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `category_calculator.html` | 5 | 3 | 0 | 1 | 10 | 3 | 0 | 0 |
+| `double_young_diagram.html` | 18 | 4 | 0 | 4 | 20 | 4 | 0 | 0 |
+| `double_young_diagram_production_process.html` | 0 | 0 | 0 | 0 | 5 | 5 | 0 | 6 |
+| `dynkin_diagram_calculator.html` | 10 | 2 | 2 | 0 | 9 | 7 | 0 | 0 |
+| `higher_dimensional_slice_calculator.html` | 21 | 9 | 0 | 23 | 9 | 1 | 0 | 5 |
+| `matrix_calculator.html` | 4 | 4 | 0 | 2 | 9 | 0 | 0 | 4 |
+| `mosaic_calculator.html` | 21 | 1 | 0 | 7 | 28 | 6 | 0 | 0 |
+| `place_ramification_calculator.html` | 6 | 2 | 0 | 1 | 7 | 4 | 0 | 0 |
+| `sheaf_calculator.html` | 28 | 2 | 2 | 10 | 62 | 12 | 0 | 2 |
+| `sheaf_complex_calculator.html` | 26 | 2 | 2 | 9 | 63 | 12 | 0 | 2 |
+| `strand_diagram_calculator.html` | 15 | 3 | 4 | 5 | 20 | 7 | 2 | 1 |
+| `young_diagrams.html` (inline `style=`) | 7 | 0 | 0 | 0 | 5 | 2 | 0 | 0 |
+| `css/import_export_panel.css` | 3 | 1 | 0 | 0 | 5 | 2 | 0 | 0 |
+| `css/site.css` | 40 | 2 | 1 | 9 | 41 | 7 | 2 | 14 |
+| `js/young_diagrams.js` (DOM `style.cssText` only) | 9 | 0 | 0 | 0 | 11 | 0 | 0 | 0 |
+
 ### 2026-10-31 · BUILD-001: duplicate debug/test API keys
 
 In the copied `js/double_young_diagram.js`, keep one `decomposePlethysm`

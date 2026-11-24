@@ -11,6 +11,7 @@ async function run() {
     await client.send('Runtime.enable');
     client.socket.addEventListener('message',event=>{const msg=JSON.parse(String(event.data));if(msg.method==='Runtime.exceptionThrown')errors.push(msg.params.exceptionDetails.exception?.description||msg.params.exceptionDetails.text);});
     await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
+    await read(() => MathWorkspaceLoader.ensure(MathWorkspaceObjects.panelResources('category-diagram')));
     await read(()=>{window.api=MathWorkspaceAssetsTest;window.panels=MathWorkspaceObjectPanels;window.key=a=>a.kind+':'+a.id;});
     const click=async point=>{await mouse(client,'mouseMoved',point.x,point.y,0);await mouse(client,'mousePressed',point.x,point.y,1);await mouse(client,'mouseReleased',point.x,point.y,0);};
     const blank=()=>read(()=>{const r=view.propertyRenderer.editor.shadow.querySelector('.sheaf-stage').getBoundingClientRect();return {x:r.right-20,y:r.top+20};});

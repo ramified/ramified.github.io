@@ -75,14 +75,6 @@ async function run() {
     assert((await read(() => window.dropped || [])).includes('text/plain'),'touch drag carries asset payload');
     assert.equal(await read(() => document.querySelectorAll('.workspace-touch-drag-ghost,[data-touch-held]').length),0);
     await read(() => document.querySelector('#touch-drop-test').remove());
-    // Drop into the real native canvas through its shadow DOM.
-    await read(() => {api.openCanvas('sheaf-complexes'); api.setSplitView(true);});
-    await waitFor(() => read(() => !!api.sessions.get('sheaf-complexes')?.assetProjection),20000);
-    const destination = await read(() => {const r=api.sessions.get('sheaf-complexes').host.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};});
-    await send('touchStart',await position(item(ids[0])));await delay(550);
-    await send('touchMove',destination);await send('touchEnd');
-    assert(await read(() => api.sessions.get('sheaf-complexes').assetProjection.keys.has('variety:'+a.id)),'real canvas accepts touch asset drop');
-    await read(() => {api.setSplitView(false);api.selectCanvasTab('assets');});
     // The visually thin resize grip also responds to a touch just outside it.
     const resize = await read(() => {const r=document.querySelector('#workspace-canvas-resizer').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top-4,height:document.querySelector('.workspace-view-card').getBoundingClientRect().height};});
     await send('touchStart',resize);await send('touchMove',{x:resize.x,y:resize.y+40});await send('touchEnd');

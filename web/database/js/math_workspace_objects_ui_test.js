@@ -21,7 +21,7 @@ async function run() {
       }
     });
     await waitFor(() => read(() => !!window.MathWorkspaceObjectPanels && !!document.querySelector('[data-assets-editor]')), 20000);
-    assert.equal(await read(() => [...document.querySelector('#workspace-open-canvas').options].some(option => option.value === 'double-young')), false);
+    assert.equal(await read(() => document.getElementById('workspace-open-canvas')), null);
     await read(() => {
       const api = window.MathWorkspaceAssetsTest;
       const a = api.createObjectAsset('young', { name: 'a', data: { partition: '2,1' } });

@@ -46,9 +46,6 @@ async function run(){
   await read(()=>{window.pointAsset=api.createObjectAsset('point',{data:{ambientDimension:3,position:[1,2,3]}});window.geometryView=panels.open('geometry-view',key(pointAsset),'main');});await fit('geometryView','#slice-viewport');
   await read(()=>{window.category=api.createObjectAsset('category');window.categoryView=panels.open('category-diagram',key(category),'main');});await fit('categoryView','.sheaf-stage');
   await read(()=>{window.lambda=api.createObjectAsset('young',{data:{partition:'2'}});window.mu=api.createObjectAsset('young',{data:{partition:'1,1'}});window.sliceLie=api.createObjectAsset('lie',{data:{family:'A',rank:2}});window.weightSlice=panels.open('slice','','main',{refs:{lambda:key(lambda),mu:key(mu),lie:key(sliceLie)}});});await fit('weightSlice','#slice-canvas');
-  for(const [id,selector] of [['mosaic','#mosaic-canvas'],['places','#ramification-canvas'],['sheaf-complexes','#sheaf-canvas']]){
-   await read(id=>{api.openCanvas(id);window.legacy=api.sessions.get(id);},id);await fit('legacy',selector);
-  }
   for(const [name,selector] of [['signedView','#yd-canvas'],['dynkinView','#dynkin-canvas'],['strandView','#strand-canvas'],['geometryView','#slice-viewport'],['categoryView','.sheaf-stage'],['weightSlice','#slice-canvas']]){
    await read(name=>panels.move(window[name],'side'),name);await fit(name,selector);
    await read(name=>{panels.move(window[name],'main');api.setSplitView(true);},name);await fit(name,selector);

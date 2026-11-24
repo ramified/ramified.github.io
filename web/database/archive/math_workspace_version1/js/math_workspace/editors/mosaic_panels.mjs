@@ -61,11 +61,6 @@ updateStatisticsChart=function(report){
     refs.out.openEndsRow.hidden=true;refs.out.componentsRow.hidden=true;
   }
 };
-document.addEventListener('DOMContentLoaded',()=>{
-  const toolbar=document.querySelector('.canvas-toolbar'),save=document.createElement('button');
-  save.type='button';save.className='btn btn-ghost';save.dataset.mosaicSaveAssets='';save.textContent='Save to Assets';
-  save.addEventListener('click',()=>options.onCollectAssets?.());toolbar.append(save);
-});
 function __mosaicPayload(){
   return {rows:state.rows,cols:state.cols,lattice:state.lattice,boundary:state.boundaryMode,backgroundMetric:state.backgroundMetric,
     removedTiles:removedTilesForExport(),cutEdges:cutEdgesForExport(),gluedEdges:gluedEdgesForExport(),diagramType:state.diagramType,
@@ -77,7 +72,6 @@ __editor.setAssetAdapter({
   panel(config){
     __mosaicConfig=config;
     if(config.mode==='topology-preset-kernel')return true;
-    document.querySelector('[data-mosaic-save-assets]')?.remove();
     const style=document.createElement('style');
     style.textContent='.workspace-native-content #canvas-wrap{height:100%;min-height:0;display:flex;align-items:center;justify-content:center}.workspace-native-content>.card-body{padding:8px}.workspace-native-content .input-mode-panel{max-width:100%}';document.head.append(style);
     const property=__mosaicProperty();

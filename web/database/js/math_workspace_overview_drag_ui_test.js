@@ -12,6 +12,7 @@ async function run() {
     await client.send('Runtime.enable');
     client.socket.addEventListener('message',event=>{const msg=JSON.parse(String(event.data));if(msg.method==='Runtime.exceptionThrown')errors.push(msg.params.exceptionDetails.exception?.description||msg.params.exceptionDetails.text);});
     await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
+    await read(() => MathWorkspaceLoader.ensure(MathWorkspaceObjects.panelResources('category-diagram')));
     await read(()=>{
       window.api=MathWorkspaceAssetsTest; window.panels=MathWorkspaceObjectPanels; window.key=a=>a.kind+':'+a.id;
       window.c=api.createObjectAsset('category',{name:'C'}); window.d=api.createObjectAsset('category',{name:'D'});

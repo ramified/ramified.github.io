@@ -58,7 +58,32 @@
       seen.add(id);
     }
   }
-  function validate(value, { subtypes, definitions, calculatorIds, nameKey, validName, normalize, references }) {
+  const legacyCalculatorIds = ['sheaf-complexes', 'mosaic', 'places'];
+
+  // Old backups can contain work saved only inside a standalone calculator.
+  // Keep those snapshots in the backup, but remove their retired UI surfaces.
+  function retireCalculatorLayout(value) {
+    if (!value.calculators.length) return value;
+    const workspace = value.workspace;
+    const retired = new Set(value.calculators.map(item => item.id));
+    for (const panel of workspace.dockedPanels || []) {
+      if (panel.source === 'native-card') retired.add(panel.id);
+    }
+    workspace.dockedPanels = (workspace.dockedPanels || []).filter(panel => !retired.has(panel.id));
+    const hadRetiredTab = workspace.tabs.some(id => retired.has(id));
+    workspace.tabs = workspace.tabs.filter(id => !retired.has(id));
+    if (hadRetiredTab && !workspace.tabs.length && !workspace.dockedPanels.some(panel => panel.id === 'assets')) workspace.tabs.push('assets');
+    const { primary, secondary } = workspace.panes;
+    if (retired.has(primary) || retired.has(secondary)) {
+      workspace.panes = { primary: [primary, secondary].find(id => workspace.tabs.includes(id)) || workspace.tabs[0] || '', secondary: '' };
+      workspace.split = false;
+      workspace.focusedPane = 'primary';
+    }
+    if (retired.has(workspace.inspectorSourceId)) workspace.inspectorSourceId = 'assets';
+    workspace.inspectorOrder = workspace.inspectorOrder.filter(key => !retired.has(key) && !value.calculators.some(item => key === 'calculator:' + item.id));
+    return value;
+  }
+  function validate(value, { subtypes, definitions, nameKey, validName, normalize, references }) {
     unique(value.assets, a => record(a) && a.kind + ':' + a.id, 'asset ID');
     unique(value.assets, a => record(a) && typeof a.name === 'string' && nameKey(a.name), 'asset name');
     const assets = value.assets.map(asset => {
@@ -100,7 +125,7 @@
       for (const renderer of panel.renderers) if (!['input','compact','large','property'].includes(renderer.role) || !record(renderer.snapshot)) throw new Error('Invalid saved panel renderer.');
     }
     unique(value.calculators, c => c?.id, 'calculator session');
-    for (const item of value.calculators) if (!calculatorIds.includes(item.id) || !record(item.snapshot)) throw new Error('Invalid calculator session.');
+    for (const item of value.calculators) if (!legacyCalculatorIds.includes(item.id) || !record(item.snapshot)) throw new Error('Invalid calculator session.');
     const workspace = value.workspace, docked=workspace.dockedPanels||[];
     if(!Array.isArray(docked))throw new Error('Invalid saved docked panels.');
     unique(docked,p=>p?.id,'docked panel');
@@ -163,7 +188,7 @@
     n /= a; d /= a;
     return d === 1n ? String(n) : '(' + n + '/' + d + ')';
   }
-  const api = { schema, clone, parse, validate, migrateHomologyCards, casFormats, casExport };
+  const api = { schema, clone, parse, validate, migrateHomologyCards, retireCalculatorLayout, casFormats, casExport };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MathWorkspaceIO = api;
 }(typeof window !== 'undefined' ? window : globalThis));

@@ -91,7 +91,7 @@ async function run() {
     assert.equal(await read(() => basis.computation.refs.lie), 'lie:' + await read(() => lie.id));
     assert.equal(await read(() => relations.computation.status), 'current');
     assert.equal(await read(() => panels.listCards().some(c => /Input/.test(c.label))), false);
-    assert.equal(await read(() => [...document.querySelector('#workspace-open-canvas').options].some(o => ['dynkin','strands'].includes(o.value))), false);
+    assert.equal(await read(() => document.getElementById('workspace-open-canvas')), null);
     await read(() => {
       const root = calc.propertyRenderer.editor.inspectorShadow, target = root.querySelector('#strand-calculation-target');
       target.value = 'symmetric'; target.dispatchEvent(new Event('change',{ bubbles: true })); root.querySelector('#strand-calculate').click();

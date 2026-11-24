@@ -19,8 +19,8 @@ async function run(){
   await read(()=>{property.node.classList.add('collapsed');panels.syncPresentation(property.id);panels.move(property,'main');});
   assert.equal(await read(()=>property.collapsed),false,'a main-area panel cannot remain collapsed with its header hidden');
   assert.equal(await read(()=>api.canvasHeightFor(property.id)),propertyHeight,'height survives moving out of the main area and back');
-  await read(()=>{api.openCanvas('mosaic');});
-  const calculatorHeight=await drag(40);assert.equal(await read(()=>api.canvasHeightFor('mosaic')),calculatorHeight,'calculator canvases share the resizer');
+  await read(()=>{api.openCanvas('assets');});
+  const calculatorHeight=await drag(40);assert.equal(await read(()=>api.canvasHeightFor('assets')),calculatorHeight,'Assets shares the resizer');
   await read(()=>{window.frame=api.createObjectAsset('frame',{data:{ambientDimension:3}});window.point=api.createObjectAsset('point',{data:{ambientDimension:3}});window.geometry=panels.open('geometry-view',key(point),'main');geometry.computation.refs.frame=key(frame);panels.refresh();window.matrix=api.createObjectAsset('matrix',{data:{rows:2,cols:2}});window.matrixView=panels.open('matrix-view',key(matrix),'main');api.setSplitView(true);document.getElementById('workspace-canvas-pane-secondary').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));api.selectCanvasTab(geometry.id);});
   const before=await read(()=>geometry.propertyRenderer.host.getBoundingClientRect().height);
   const splitHeight=await drag(70);

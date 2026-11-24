@@ -53,7 +53,7 @@ async function run() {
       }
     }
     await read(() => {
-      api.state.layout = 'icons'; api.openCanvas('sheaf-complexes');
+      api.state.layout = 'icons'; MathWorkspaceObjectPanels.open('sheaf-view','variety:'+ci.id,'main');
       const current = api.localAssetSnapshot().assets.find(a => a.id === ci.id);
       api.updateObjectAsset(ci, { data: { ...current.data, degrees: '2, 2, 2', ambientDimension: '6' } });
       api.selectCanvasTab('assets');

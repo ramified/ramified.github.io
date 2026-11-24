@@ -29,8 +29,6 @@ async function run() {
       scene.propertyRenderer.editor.objectIO('view',{viewport:{...scene.propertyRenderer.editor.objectIO('view').viewport,zoom:1.7},layers:[]});
       window.display=panels.open('slicing-display','','side');display.computation.refs.view=scene.id;panels.refresh();
       mi.node.classList.add('collapsed','is-pinned');panels.syncPresentation(mi.id);
-      api.openCanvas('sheaf-complexes'); api.closeCanvas('sheaf-complexes'); // Closed canvas sessions are still part of a complete backup.
-      api.openCanvas('mosaic');api.closeCanvas('mosaic');api.openCanvas('places');api.closeCanvas('places');
       api.bindAssetInputInstance({kind:'variety',id:v.id});
       api.updateAssetInputDraft(api.activeAssetInputInstance(),{name:'unfinished ',data:{dimension:''}},{schedule:false});
       api.bindAssetPropertySlot('hodge',{kind:'variety',id:v.id},{focus:false,promote:false});
@@ -39,7 +37,7 @@ async function run() {
     });
     assert.equal(await read(()=>savedData.schema),'ramified-math-workspace');
     assert.equal(await read(()=>savedData.assets.length),9);
-    assert.equal(await read(()=>savedData.calculators.some(c=>c.id==='sheaf-complexes')),true);
+    assert.deepEqual(await read(()=>savedData.calculators),[]);
     assert.equal(await read(()=>panels.ioEntries().some(e=>e.id==='workspace'&&e.canImport)),true);
     assert.deepEqual(await read(()=>panels.exportFormats('workspace').map(f=>f.id)),['json']);
     for (const id of ['frame','sphere','variety','sheaf','category','functor']) {
@@ -78,8 +76,6 @@ async function run() {
     assert.deepEqual(await read(()=>{const point=panels.panels.get(diagram.id).propertyRenderer.editor.captureAssetLayout().find(item=>item.key===key(c)).point;return {x:point.x,y:point.y};}),{x:.3,y:.7});
     assert.equal(await read(()=>api.activeAssetInputInstance().draft.name),'unfinished ');
     assert.equal(await read(()=>api.activeAssetInputInstance().draft.data.dimension),'');
-    assert.equal(await read(()=>api.sessions.has('sheaf-complexes')),true);
-    assert.deepEqual(await read(()=>[...api.sessions.keys()]),['sheaf-complexes','mosaic','places']);
     assert.equal(await read(()=>api.assetsCardState.slots.get('hodge').visible),true);
     assert.deepEqual(await read(()=>JSON.parse(panels.exportText('workspace')).workspace.panes),await read(()=>savedData.workspace.panes));
     assert.deepEqual(await read(()=>JSON.parse(panels.exportText('workspace')).workspace.inspectorOrder),await read(()=>savedData.workspace.inspectorOrder));
@@ -98,9 +94,23 @@ async function run() {
     await read(()=>{const importer=document.querySelector('#workspace-io-importer');importer.value='workspace';importer.dispatchEvent(new Event('change'));});
     assert.match(await read(()=>document.querySelector('#workspace-io-target').textContent),/replaces this workspace/);
     // Import into a fresh document, with none of the original renderer instances available.
-    const portable=await read(()=>saved);
+    const portable=await read(()=>{
+      const old=JSON.parse(saved);
+      old.calculators=['mosaic','places','sheaf-complexes'].map(id=>({id,snapshot:{draft:id}}));
+      const id='native-card:sheaf-complexes:input-card';
+      old.workspace.dockedPanels.push({id,source:'native-card',sessionId:'sheaf-complexes',key:'input-card',location:'main'});
+      old.workspace.tabs.push('sheaf-complexes',id);
+      old.workspace.panes={primary:'sheaf-complexes',secondary:id};
+      old.workspace.split=true;
+      return JSON.stringify(old);
+    });
     await client.send('Page.reload');await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels),20000);
     await read(text=>MathWorkspaceObjectPanels.importText('workspace',text),portable);
+    const restored=await read(()=>JSON.parse(MathWorkspaceObjectPanels.exportText('workspace')));
+    assert.deepEqual(restored.calculators,JSON.parse(portable).calculators,'old session data survives re-export');
+    assert.deepEqual(restored.workspace.tabs,JSON.parse(portable).workspace.tabs.slice(0,-2));
+    assert.equal(restored.workspace.split,false);
+    assert(restored.workspace.tabs.includes(restored.workspace.panes.primary));
     assert.equal(await read(()=>MathWorkspaceAssetsTest.localAssetSnapshot().assets.length),9);
     assert.equal(await read(()=>[...MathWorkspaceObjectPanels.panels.values()].find(p=>p.definition.slicingScene).propertyRenderer.editor.objectIO('view').viewport.zoom),1.7);
     assert.equal(await read(()=>MathWorkspaceAssetsTest.activeAssetInputInstance().draft.data.dimension),'');

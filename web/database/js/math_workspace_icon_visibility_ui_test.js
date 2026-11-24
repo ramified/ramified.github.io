@@ -16,7 +16,7 @@ async function run(){
         api.createObjectAsset('matrix',{data:{rows:5,cols:2}})
       ];
     });
-    await read(()=>api.openCanvas('sheaf-complexes'));
+    await read(()=>panels.open('field-view','field:'+item.id,'main'));
     await read(()=>api.updateObjectAsset({kind:'field',id:item.id},{data:{dataType:'real'}}));
     await delay(150);
     await read(()=>api.selectCanvasTab('assets'));
@@ -24,7 +24,7 @@ async function run(){
     const iconBox=await read(()=>{const box=icon().getBoundingClientRect();return {width:box.width,height:box.height,transform:icon().style.transform};});
     console.log('Returned icon:',JSON.stringify(iconBox));
     for(const layout of ['list','details','tiles','content','icons']) {
-      await read(layout=>{api.state.layout=layout;api.openCanvas('sheaf-complexes');api.updateObjectAsset({kind:'field',id:item.id},{name:item.name});},layout);
+      await read(layout=>{api.state.layout=layout;panels.open('field-view','field:'+item.id,'main');api.updateObjectAsset({kind:'field',id:item.id},{name:item.name});},layout);
       await delay(100);await read(()=>api.selectCanvasTab('assets'));await delay(100);
       const fitted=await read(()=>{const formula=icon().getBoundingClientRect(),box=icon().parentElement.getBoundingClientRect();return {width:formula.width,height:formula.height,maxWidth:box.width,maxHeight:box.height};});
       assert(fitted.width>5&&fitted.height>5&&fitted.width<=fitted.maxWidth+1&&fitted.height<=fitted.maxHeight+1,layout+' letter icon must fit after returning');

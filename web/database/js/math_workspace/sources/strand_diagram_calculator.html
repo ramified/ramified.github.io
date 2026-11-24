@@ -88,8 +88,8 @@
       border-radius: 3px;
       background: var(--bg);
       color: var(--text);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.68rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-xs, 0.68rem);
       letter-spacing: 0;
       text-transform: none;
       white-space: nowrap;
@@ -100,8 +100,8 @@
       align-items: center;
       gap: 5px;
       color: var(--muted);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       white-space: nowrap;
     }
 
@@ -115,8 +115,8 @@
       border-radius: 3px;
       background: var(--bg);
       color: var(--text);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.76rem;
+      font-family: var(--ws-font-code, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-sm, 0.76rem);
     }
 
     .strand-field-row input[type="range"] {
@@ -135,8 +135,8 @@
 
     .strand-field-inline select {
       padding: 3px 7px;
-      font-family: 'EB Garamond', Georgia, serif;
-      font-size: 0.92rem;
+      font-family: var(--ws-font-ui, 'EB Garamond', Georgia, serif);
+      font-size: var(--ws-text-md, 0.92rem);
     }
 
     .strand-field-inline input:focus,
@@ -155,8 +155,8 @@
       padding: 9px 16px 12px;
       border-top: 1px solid var(--border);
       color: var(--muted);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       overflow-wrap: anywhere;
     }
 
@@ -175,8 +175,8 @@
       align-items: center;
       gap: 4px;
       color: var(--text);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.86rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-sm, 0.86rem);
       white-space: nowrap;
     }
 
@@ -187,8 +187,8 @@
       border-radius: 3px;
       background: var(--bg);
       color: var(--text);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.78rem;
+      font-family: var(--ws-font-code, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-sm, 0.78rem);
       text-align: center;
     }
 
@@ -199,7 +199,7 @@
 
     .strand-small-button {
       padding: 4px 10px;
-      font-size: 0.74rem;
+      font-size: var(--ws-text-sm, 0.74rem);
     }
 
     .strand-small-button:disabled,
@@ -227,8 +227,8 @@
     .strand-field-row select {
       width: 100%;
       padding: 5px 8px;
-      font-family: 'EB Garamond', Georgia, serif;
-      font-size: 0.94rem;
+      font-family: var(--ws-font-ui, 'EB Garamond', Georgia, serif);
+      font-size: var(--ws-text-md, 0.94rem);
     }
 
     .strand-textarea {
@@ -252,7 +252,7 @@
 
     .strand-message {
       color: var(--muted);
-      font-size: 0.82rem;
+      font-size: var(--ws-text-sm, 0.82rem);
       line-height: 1.45;
       overflow-wrap: anywhere;
     }
@@ -293,8 +293,8 @@
       border-radius: 3px;
       background: var(--bg);
       color: var(--text);
-      font-family: 'EB Garamond', Georgia, serif;
-      font-size: 0.94rem;
+      font-family: var(--ws-font-ui, 'EB Garamond', Georgia, serif);
+      font-size: var(--ws-text-md, 0.94rem);
     }
 
     .strand-basic-format-control select:focus {
@@ -339,8 +339,8 @@
     .strand-slider-value {
       min-width: 42px;
       color: var(--muted);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.72rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-sm, 0.72rem);
       text-align: right;
       white-space: nowrap;
     }
@@ -380,8 +380,8 @@
 
     .strand-generator-family-title {
       color: var(--muted);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.68rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-xs, 0.68rem);
       letter-spacing: 0;
     }
 
@@ -403,8 +403,8 @@
       border-radius: 3px;
       background: var(--bg);
       color: var(--text);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.78rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-sm, 0.78rem);
       line-height: 1.1;
       text-align: center;
       cursor: grab;
@@ -448,8 +448,8 @@
       border-radius: 3px;
       background: var(--surface);
       color: var(--accent);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.78rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-sm, 0.78rem);
       line-height: 1.1;
       text-align: center;
       box-shadow: 0 8px 24px rgba(0,0,0,0.18);
@@ -482,13 +482,13 @@
 
     .strand-stat-label {
       color: var(--muted);
-      font-size: 0.84rem;
+      font-size: var(--ws-text-sm, 0.84rem);
     }
 
     .strand-stat-value {
       color: var(--text);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.76rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-sm, 0.76rem);
       line-height: 1.45;
       overflow-wrap: anywhere;
       text-align: right;
@@ -521,7 +521,7 @@
 
     .strand-note {
       color: var(--muted);
-      font-size: 0.82rem;
+      font-size: var(--ws-text-sm, 0.82rem);
       font-style: italic;
       line-height: 1.45;
       overflow-wrap: anywhere;
@@ -551,8 +551,8 @@
     .strand-calculation-source-output {
       min-width: 0;
       color: var(--text);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.74rem;
+      font-family: var(--ws-font-code, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-sm, 0.74rem);
       overflow-wrap: anywhere;
       text-align: right;
     }
@@ -596,7 +596,7 @@
       background: transparent;
       color: var(--muted);
       font: inherit;
-      font-size: 0.76rem;
+      font-size: var(--ws-text-sm, 0.76rem);
       font-weight: 600;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -661,7 +661,7 @@
       min-height: 1.25em;
       margin-top: 2px;
       color: var(--muted);
-      font-size: 0.8rem;
+      font-size: var(--ws-text-sm, 0.8rem);
       line-height: 1.4;
       overflow-wrap: anywhere;
     }
@@ -679,7 +679,7 @@
       border-left: 2px solid var(--accent);
       background: rgba(196, 127, 23, 0.07);
       color: var(--text);
-      font-size: 0.76rem;
+      font-size: var(--ws-text-sm, 0.76rem);
       line-height: 1.4;
       overflow-wrap: anywhere;
     }
@@ -701,8 +701,8 @@
       margin: 8px 0 0;
       padding: 0;
       color: var(--text);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.7rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-xs, 0.7rem);
       overflow-wrap: anywhere;
     }
 
@@ -720,8 +720,8 @@
       overflow-x: auto;
       overflow-y: hidden;
       padding: 2px 0;
-      font-family: 'EB Garamond', Georgia, serif;
-      font-size: 1rem;
+      font-family: var(--ws-font-ui, 'EB Garamond', Georgia, serif);
+      font-size: var(--ws-text-md, 1rem);
       white-space: nowrap;
     }
 
@@ -734,7 +734,7 @@
     .strand-basis-algorithm {
       margin: 0;
       color: var(--text);
-      font-size: 0.78rem;
+      font-size: var(--ws-text-sm, 0.78rem);
       line-height: 1.5;
     }
 
@@ -785,7 +785,7 @@
       width: 34px;
       min-width: 34px;
       padding: 5px;
-      font-size: 1rem;
+      font-size: var(--ws-text-md, 1rem);
     }
 
     .strand-basis-page-input {
@@ -798,8 +798,8 @@
     .strand-basis-page-status {
       min-width: 76px;
       color: var(--muted);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-      font-size: 0.68rem;
+      font-family: var(--ws-font-ui, 'JetBrains Mono', Consolas, monospace);
+      font-size: var(--ws-text-xs, 0.68rem);
       text-align: center;
       white-space: nowrap;
     }
@@ -818,9 +818,9 @@
 
     .strand-diagram-relation-group-title {
       color: var(--muted);
-      font-size: 0.68rem;
+      font-size: var(--ws-text-xs, 0.68rem);
       font-weight: 700;
-      text-transform: uppercase;
+      text-transform: var(--ws-label-transform, uppercase);
     }
 
     .strand-diagram-relation-list {
@@ -872,8 +872,8 @@
     .strand-diagram-relation-operator {
       min-width: 18px;
       color: var(--text);
-      font-family: 'EB Garamond', Georgia, serif;
-      font-size: 1.08rem;
+      font-family: var(--ws-font-display, 'EB Garamond', Georgia, serif);
+      font-size: var(--ws-text-md, 1.08rem);
       text-align: center;
       white-space: nowrap;
     }
@@ -922,7 +922,7 @@
     .strand-calculation-matrix-label {
       margin-top: 5px;
       color: var(--muted);
-      font-size: 0.76rem;
+      font-size: var(--ws-text-sm, 0.76rem);
     }
 
     .strand-diagram-trace {
@@ -942,14 +942,14 @@
 
     .strand-diagram-trace-equals {
       color: var(--text);
-      font-family: 'EB Garamond', Georgia, serif;
-      font-size: 1.1rem;
+      font-family: var(--ws-font-display, 'EB Garamond', Georgia, serif);
+      font-size: var(--ws-text-lg, 1.1rem);
       text-align: center;
     }
 
     .strand-diagram-trace-annotation {
       color: var(--muted);
-      font-size: 0.74rem;
+      font-size: var(--ws-text-sm, 0.74rem);
       white-space: nowrap;
     }
 
@@ -978,8 +978,8 @@
 
     .strand-diagram-parenthesis {
       color: var(--muted);
-      font-family: 'EB Garamond', Georgia, serif;
-      font-size: 2.2rem;
+      font-family: var(--ws-font-display, 'EB Garamond', Georgia, serif);
+      font-size: var(--ws-text-xl, 2.2rem);
       line-height: 1;
     }
 
@@ -987,8 +987,8 @@
     .strand-diagram-coefficient,
     .strand-diagram-representation-badge {
       color: var(--text);
-      font-family: 'EB Garamond', Georgia, serif;
-      font-size: 1rem;
+      font-family: var(--ws-font-display, 'EB Garamond', Georgia, serif);
+      font-size: var(--ws-text-md, 1rem);
       white-space: nowrap;
     }
 

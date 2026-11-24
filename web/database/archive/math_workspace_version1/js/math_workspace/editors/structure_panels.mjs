@@ -1,10 +1,5 @@
 // Keep legacy full calculators intact; activate these adapters only for asset panels.
 export const complexStructurePanel=String.raw`
-document.addEventListener('DOMContentLoaded',()=>{
-  if(!options.onCollectComplexAssets||options.workspaceObjectPanel)return;
-  const save=document.createElement('button');save.type='button';save.className='btn btn-ghost';save.textContent='Save selected complexes / filtrations to Assets';save.dataset.saveComplexAssets='';
-  save.addEventListener('click',()=>options.onCollectComplexAssets());refs.complexChartExport?.parentElement?.append(save);
-});
 __editor.extendAssetAdapter(previous=>{
   let enabled=false,display=null,current=null,operations=false,signature='',operationBody=null,layoutSelect=null,localView={},targetKey='';
   const copy=value=>JSON.parse(JSON.stringify(value));

@@ -4,20 +4,17 @@
   const presentation = window.MathWorkspacePresentation, viewDefaults = new Map();
   const viewDefaultsFor = ref => viewDefaults.get(assetKey(ref)) || {};
 
-  const calculators = [
-    ['sheaf-complexes', 'Sheaf complexes', 'complex'],
-    ['mosaic', 'Mosaic', 'mosaic'],
-    ['places', 'Place ramification', 'ramification']
-  ].map(([id, label, nativeId]) => ({ id, label, nativeId, kind: 'calculator' }));
   const assetsDefinition = { id: 'assets', label: 'Assets', kind: 'assets' };
-  const byId = new Map([...calculators, assetsDefinition].map((item) => [item.id, item]));
-  const canvases = new Map(), sessions = new Map(), liveCards = new Map(), dockedPanels = new Map();
+  const byId = new Map([[assetsDefinition.id, assetsDefinition]]);
+  const canvases = new Map(), dockedPanels = new Map();
+  // Retain imported standalone calculator data for lossless backup export.
+  let legacyCalculatorSnapshots = [];
   const paneCanvases = { primary: '', secondary: '' };
   let designLab = null, creationPicker = null;
   let defaultCleanupQueued = false, collectingDefaults = false;
   const DESIGN_LAB_ID = 'dock:workspace-design-lab';
   let objectWorkspace = null, panelCatalog = null, renderingCardPicker = false, panelManagerOpen = false, restoringWorkspace = false;
-  let activeCanvasId = '', focusedPane = 'primary', splitView = false, inspectorSourceId = '', suppressCanvasClickUntil = 0;
+  let activeCanvasId = '', focusedPane = 'primary', splitView = false, suppressCanvasClickUntil = 0;
   const DEFAULT_CANVAS_HEIGHT = 680, MIN_CANVAS_HEIGHT = 240, MAX_CANVAS_HEIGHT = 1600;
   const ASSET_LAYOUTS = ['icons', 'list', 'details', 'tiles', 'content'];
   const OBJECT_INPUT_KINDS = ['number', 'young', 'lie', 'field', 'matrix', 'category', 'functor', 'dynkin', 'strands', ...(slicing?.kinds || []), ...(window.MathWorkspaceMosaic?.kinds||[]), ...(window.MathWorkspaceTopology?.kinds||[]), 'complex','filtration','field-extension'];
@@ -89,105 +86,28 @@
     node.dataset.state = kind;
   }
 
-  function makeNativeCalculator(calculator, options = {}) {
-    const library = window.MathWorkspaceNativeEditors;
-    const factory = library?.factories?.[calculator.nativeId];
-    if (!factory?.mount) throw new Error(`The native ${calculator.label} editor is unavailable.`);
-    const host = document.createElement('section'), inspectorHost = document.createElement('section');
-    host.className = 'workspace-native-calculator'; host.dataset.nativeCalculator = calculator.nativeId;
-    inspectorHost.className = 'workspace-native-inspector'; inspectorHost.dataset.nativeInspector = options.sessionId || calculator.id; inspectorHost.hidden = true;
-    let editor;
-    editor = factory.mount(host, {
-      id: `workspace-${options.sessionId || calculator.id}`,
-      inspectorHost,
-      onChange: (change) => {
-        for(const record of dockedPanels.values())if(record.source==='native-card'&&record.sessionId===calculator.id&&record.location!=='hidden'&&editor?.listCards().find(card=>card.key===record.key)?.visible===false)placeDockedPanel(record,'hidden');
-        if (options.onChange) options.onChange(editor, change);
-        else if (calculator.id === activeCanvasId) updateImportExport();
-      },
-      createAssetPropertyCommand: options.createAssetPropertyCommand,
-      validateAssetCardBinding: options.validateAssetCardBinding,
-      onCollectAssets: () => options.onCollectAssets?.(editor),
-      onCollectComplexAssets: options.onCollectComplexAssets,
-      onError: (error) => status(error?.message || String(error), 'error')
-    });
-    $('#workspace-canvas-parking').appendChild(host); $('#workspace-cards').appendChild(inspectorHost);
-    // A workspace session starts with no Inspector cards selected.  The
-    // historical calculator's default card state stays inside its editor,
-    // but the shared Inspector is opt-in through its Add card checkboxes.
-    editor.listCards?.().forEach((card) => editor.setCardVisible?.(card.key, false));
-    editor.setCanvasActive?.(false); editor.setInspectorActive?.(false);
-    return { host, inspectorHost, editor };
-  }
-
-  function ensureCalculatorSession(definition) {
-    let session = sessions.get(definition.id);
-    if (!session) {
-      const options = definition.id === 'sheaf-complexes' ? {
-        onCollectAssets: () => collectSheafComplexAssets(session),
-        onCollectComplexAssets: () => {
-          const entries=session.editor.objectIO('complex-entries')||[];
-          let saved=0,skipped=0;
-          for(const entry of entries.filter(item=>item.selected!==false)){
-            if(!['chain-complex','filtration'].includes(entry.kind)){skipped++;continue;}
-            const kind=entry.kind==='filtration'?'filtration':'complex';
-            const data=window.MathWorkspaceStructures.fromComplexEntry(entry);
-            const existing=assetState.snapshot.assets.find(a=>a.kind===kind&&a.data.legacy?.id===entry.id);
-            const view=presentation.split(kind,{legacy:entry}).view;
-            const asset=existing?updateObjectAsset(assetRef(existing),{data,view}):createObjectAsset(kind,{data,view});
-            if(asset)objectWorkspace.open('complex-diagrams',assetKey(asset),'main');saved++;
-          }
-          status(`Saved ${saved} complex / filtration assets.${skipped?' Unsupported entries were retained in the original editor.':''}`,'success');
-        },
-        onChange: (_editor, change) => {
-          if (!session || session.applyingAssets) return;
-          captureSheafComplexLayout(session);
-          if (change?.interaction === 'canvas-appearance' || change?.interaction === 'canvas-appearance-live' || change?.interaction === 'card-chrome') return;
-          projectAssetsToSheafComplex(session);
-        }
-      } : definition.id==='mosaic'?{onCollectAssets:editor=>{
-        try{
-          const payload=editor.objectIO('mosaic-payload'),model=window.MathWorkspaceMosaic;
-          const spaceData=model.fromPayload('mosaic-space',payload),diagramData=model.fromPayload('mosaic-diagram',payload,'');
-          const space=createObjectAsset('mosaic-space',{data:spaceData});
-          const diagram=createObjectAsset('mosaic-diagram',{data:{...diagramData,space:assetKey(space)}});
-          objectWorkspace.open('mosaic-diagram-input',assetKey(diagram),'main');
-          status('Saved Mosaic space and diagram to Assets.','success');
-        }catch(error){status(error.message,'error');}
-      }}:{};
-      const created = makeNativeCalculator(definition, options);
-      session = { kind: 'calculator', definition, canvasHeight: DEFAULT_CANVAS_HEIGHT, applyingAssets: false, assetProjection: definition.id === 'sheaf-complexes' ? { keys: new Set(), layout: new Map(), activeRef: null } : null, ...created };
-      sessions.set(definition.id, session);
-      if (session.assetProjection) {
-        session.editor.applyAssets?.({ revision: 0, assets: [] }, null, null);
-        session.editor.setCardVisible?.('canvas-appearance-card', true);
-        bindSheafComplexAssetDrop(session);
-      }
-    }
-    return session;
-  }
-
   function ensureAssetsPropertySlotSession(cardType) {
     const slot = assetsCardState.slots.get(cardType), card = ASSET_CARD_REGISTRY[cardType];
     if (!slot || !card?.nativeCardKey) throw new Error('Unknown Assets Property Card.');
     if (slot.rendererSession) return slot.rendererSession;
     let session = null;
-    const definition = byId.get('sheaf-complexes');
-    const created = makeNativeCalculator(definition, {
-      sessionId: `assets-properties-${cardType}`,
-      createAssetPropertyCommand,
+    const host = document.createElement('section'), inspectorHost = document.createElement('section');
+    const id = 'assets-properties-' + cardType;
+    inspectorHost.className = 'workspace-native-inspector';
+    inspectorHost.hidden = true;
+    const editor = window.MathWorkspaceNativeEditors.factories.complex.mount(host, {
+      id: 'workspace-' + id, inspectorHost, createAssetPropertyCommand,
       validateAssetCardBinding: cardSupportsAsset,
-      onChange: (_editor, change) => {
+      onChange: change => {
         try { handleAssetPropertySessionChange(session, change); }
-        catch (error) { status(error?.message || String(error), 'error'); }
+        catch (error) { status(error.message, 'error'); }
       },
-      onCardAction: (action) => handleAssetPropertyCardAction(cardType, action),
-      getCardActionState: () => assetPropertyCardActionState(cardType)
+      onError: error => status(error.message || String(error), 'error')
     });
-    session = {
-      kind: 'assets-property-slot', definition, cardType, applyingAssets: false,
-      boundInstanceKey: null, bindingToken: null, ...created
-    };
+    $('#workspace-canvas-parking').append(host);
+    $('#workspace-cards').append(inspectorHost);
+    session = { kind: 'assets-property-slot', cardType, applyingAssets: false,
+      boundInstanceKey: null, bindingToken: null, host, inspectorHost, editor };
     session.inspectorHost.dataset.assetCardSlot = cardType;
     slot.rendererSession = session;
     session.editor.listCards?.().forEach((entry) => session.editor.setCardVisible?.(entry.key, false));
@@ -199,9 +119,9 @@
   const clampCanvasHeight = (height) => Math.max(MIN_CANVAS_HEIGHT, Math.min(MAX_CANVAS_HEIGHT, Math.round(Number(height) || DEFAULT_CANVAS_HEIGHT)));
   function canvasHeightFor(id) {
     if (id === 'assets') return clampCanvasHeight(assetState.canvasHeight);
-    return clampCanvasHeight((sessions.get(id)||objectWorkspace?.panels.get(id)||dockedPanels.get(id))?.canvasHeight);
+    return clampCanvasHeight((objectWorkspace?.panels.get(id)||dockedPanels.get(id))?.canvasHeight);
   }
-  function canvasHeightModeFor(id) { return (id==='assets'?assetState:(sessions.get(id)||objectWorkspace?.panels.get(id)||dockedPanels.get(id)))?.canvasHeightMode; }
+  function canvasHeightModeFor(id) { return (id==='assets'?assetState:(objectWorkspace?.panels.get(id)||dockedPanels.get(id)))?.canvasHeightMode; }
   function visibleCanvasIds() {
     return (splitView ? [paneCanvases.primary, paneCanvases.secondary] : [paneCanvases.primary]).filter(Boolean);
   }
@@ -230,7 +150,7 @@
     const next = clampCanvasHeight(height);
     if (id === 'assets') { assetState.canvasHeight = next; assetState.canvasHeightMode = 'manual'; }
     else {
-      const session = sessions.get(id)||objectWorkspace?.panels.get(id)||dockedPanels.get(id);
+      const session = objectWorkspace?.panels.get(id)||dockedPanels.get(id);
       if (!session) return;
       session.canvasHeight = next; session.canvasHeightMode = 'manual';
     }
@@ -266,10 +186,6 @@
 
   function renderInspector() {
     scheduleDefaultCleanup();
-    sessions.forEach((session) => {
-      const hasVisibleCard = session.editor?.listCards?.().some((card) => !card.docked && card.available !== false && card.visible);
-      session.editor?.setInspectorActive?.(!!hasVisibleCard);
-    });
     NATIVE_ASSET_CARD_TYPES.forEach((cardType) => {
       const slot = assetsCardState.slots.get(cardType), session = slot?.rendererSession;
       if (!session) return;
@@ -282,44 +198,21 @@
     if (assetState.editorCard) assetState.editorCard.hidden = !workspaceOwnedCardSlot('input').visible;
     for (const record of dockedPanels.values()) {
       const active = record.location === 'side' || record.location === 'main' && visibleCanvasIds().includes(record.id);
-      if (record.source === 'canvas') { record.node.hidden = record.location !== 'side'; if(record.location !== 'main')record.entry.editor?.setCanvasActive?.(active); }
+      if (record.source === 'canvas') record.node.hidden = record.location !== 'side';
       else { record.node.hidden = !active; record.entry.editor?.setCanvasActive?.(active); }
     }
     $('#workspace-add-card').setAttribute('aria-expanded', String(!$('#workspace-card-picker').hidden));
     refreshWorkspaceOwnedCardChrome();
   }
 
-  function selectInspectorSource(id) {
-    const definition = byId.get(id); if (!definition) return;
-    if (inspectorSourceId === 'assets' && id !== 'assets') flushAssetInputInstance(activeAssetInputInstance());
-    if (definition.kind === 'calculator') ensureCalculatorSession(definition);
-    inspectorSourceId = id; renderInspector(); updateImportExport(); renderCardPicker();
-  }
-
   function openCanvas(id) {
-    const loader = window.MathWorkspaceLoader;
-    loader?.cancel('canvas');
     if (id.startsWith('object:')) { objectWorkspace?.open(id.slice(7), '', 'main'); return; }
-    const definition = byId.get(id);
-    if (!definition) return;
-    const resources = loader?.editorResources(definition.nativeId);
-    if (loader?.needs(resources)) return loader.perform('canvas', resources, definition.label, () => openCanvas(id), error=>status(error.message,'error'));
-    if(dockedPanels.has(id)){placeDockedPanel(dockedPanels.get(id),'main');return;}
+    if (dockedPanels.has(id)) { placeDockedPanel(dockedPanels.get(id), 'main'); return; }
+    if (id !== 'assets') return;
     if (!canvases.has(id)) {
-      if (definition.kind === 'assets') {
-        canvases.set(id, { kind: 'assets', definition, node: ensureAssetsView() });
-        ensureAssetsEditor(false);
-      } else {
-        try {
-          const session = ensureCalculatorSession(definition);
-          canvases.set(id, { kind: 'calculator', definition, node: session.host, editor: session.editor, ready: true });
-        } catch (error) {
-          status(error?.message || String(error), 'error');
-          return;
-        }
-      }
+      canvases.set(id, {kind: 'assets', definition: assetsDefinition, node: ensureAssetsView()});
+      ensureAssetsEditor(false);
     }
-    if (!inspectorSourceId) selectInspectorSource(id);
     selectCanvasTab(id);
   }
 
@@ -329,28 +222,19 @@
     if(dockedPanels.has(spec.id))return dockedPanels.get(spec.id);
     const record={...spec,location:'side',canvasHeight:clampCanvasHeight(spec.canvasHeight)};
     if(spec.source==='canvas'){
-      const definition=byId.get(spec.id),session=sessions.get(spec.id);
-      record.entry=canvases.get(spec.id)||{kind:definition.kind,definition,node:spec.id==='assets'?ensureAssetsView():session.host,editor:session?.editor,ready:true};
+      const definition = assetsDefinition;
+      record.entry = canvases.get('assets') || {kind:'assets', definition, node:ensureAssetsView()};
       const shell=document.createElement('section'),head=document.createElement('div'),title=document.createElement('span'),body=document.createElement('div');
       shell.className='card workspace-assets-inspector-card workspace-docked-canvas';head.className='card-head';head.tabIndex=0;head.setAttribute('role','button');head.setAttribute('aria-expanded','true');title.className='card-head-label';title.textContent=definition.label;body.className='card-body';head.append(title,Object.assign(document.createElement('em'),{className:'toggle-icon',textContent:'▾'}));shell.append(head,body);record.node=shell;record.body=body;
       const toggle=event=>{if(!shouldToggleWorkspaceOwnedCard(event,shell))return;shell.classList.toggle('collapsed');head.setAttribute('aria-expanded',String(!shell.classList.contains('collapsed')));};
       head.addEventListener('click',toggle);head.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();toggle(event);}});
       installWorkspaceOwnedCardChrome(shell,spec.id,{hide:()=>placeDockedPanel(record,'hidden'),actions:[['move-area','Move to main area','↗',()=>placeDockedPanel(record,'main')]]});
     }else{
-      let editor,label;
-      if(spec.source==='native-card'){
-        const session=sessions.get(spec.sessionId);if(!session)throw new Error('The calculator panel no longer exists.');
-        record.node=document.createElement('section');record.node.className='workspace-native-inspector workspace-docked-native';
-        if(!session.editor.moveCardSurface(spec.key,record.node))throw new Error('The calculator card no longer exists.');
-        label=session.editor.listCards().find(card=>card.key===spec.key).label;
-        editor={setCanvasActive:active=>session.editor.setCardSurfaceActive(spec.key,active)};
-      }else{
-        record.node=[...$('#workspace-cards').children].find(node=>inspectorNodeKey(node)===spec.key);
-        if(!record.node)throw new Error('The sidebar panel no longer exists.');
-        const session=record.node.dataset.assetCardSlot&&assetsCardState.slots.get(record.node.dataset.assetCardSlot)?.rendererSession;
-        label=record.node.querySelector('.card-head-label')?.textContent||session?.editor.listCards().find(card=>card.visible)?.label||'Panel';
-        editor=session?{setCanvasActive:active=>session.editor.setInspectorActive(active)}:null;
-      }
+      record.node=[...$('#workspace-cards').children].find(node=>inspectorNodeKey(node)===spec.key);
+      if(!record.node)throw new Error('The sidebar panel no longer exists.');
+      const session=record.node.dataset.assetCardSlot&&assetsCardState.slots.get(record.node.dataset.assetCardSlot)?.rendererSession;
+      const label=record.node.querySelector('.card-head-label')?.textContent||session?.editor.listCards().find(card=>card.visible)?.label||'Panel';
+      const editor=session?{setCanvasActive:active=>session.editor.setInspectorActive(active)}:null;
       record.entry={kind:'docked-panel',definition:{id:spec.id,label,kind:'docked-panel'},node:record.node,editor};byId.set(spec.id,record.entry.definition);
     }
     record.node.dataset.dockedPanel=record.id;dockedPanels.set(record.id,record);return record;
@@ -360,7 +244,6 @@
     record.location=location;
     if(location==='main'){
       record.node.classList.remove('collapsed');record.node.querySelector('.card-head')?.setAttribute('aria-expanded','true');
-      if(record.source==='native-card')sessions.get(record.sessionId).editor.setCardPresentation(record.key,{collapsed:false});
       if(record.source==='sidebar'&&record.node.dataset.assetCardSlot){const slot=assetsCardState.slots.get(record.node.dataset.assetCardSlot);slot.collapsed=false;slot.rendererSession?.editor.setCardPresentation(ASSET_CARD_REGISTRY[slot.cardType].nativeCardKey,{collapsed:false});}
       if(record.source==='canvas'){record.node.hidden=true;$('#workspace-canvas-parking').append(record.node);}
       record.entry.node.classList.remove('collapsed');record.entry.node.dataset.location='main';
@@ -381,7 +264,6 @@
   function clearDockedPanels(){
     for(const record of dockedPanels.values()){
       if(record.source==='canvas'){$('#workspace-canvas-parking').append(record.entry.node);record.node.remove();}
-      else if(record.source==='native-card'){sessions.get(record.sessionId)?.editor.returnCardSurface(record.key);byId.delete(record.id);}
       else{delete record.node.dataset.dockedPanel;$('#workspace-cards').append(record.node);byId.delete(record.id);}
     }
     dockedPanels.clear();
@@ -418,11 +300,7 @@
   function closeCanvas(id) {
     const canvas = canvases.get(id);
     if (!canvas) return;
-    if (canvas.kind === 'calculator') {
-      $('#workspace-canvas-parking').appendChild(canvas.node); canvas.node.hidden = true; canvas.editor?.setCanvasActive?.(false);
-    } else {
-      $('#workspace-canvas-parking').appendChild(canvas.node); canvas.node.hidden = true;
-    }
+    $('#workspace-canvas-parking').appendChild(canvas.node); canvas.node.hidden = true;
     canvases.delete(id);
     if(dockedPanels.has(id))dockedPanels.get(id).location='hidden';
     if (canvas.kind === 'object-panel') objectWorkspace?.closed(id);
@@ -499,61 +377,12 @@
     [primary, secondary].forEach((pane) => {
       const slot = pane.querySelector('.workspace-canvas-pane-slot'), id = paneCanvases[pane.dataset.pane];
       pane.classList.toggle('workspace-canvas-pane-empty', !id);
-      if (!id) slot.replaceChildren(Object.assign(document.createElement('p'), { className: 'workspace-canvas-empty', textContent: 'Open a view to begin.' }));
+      if (!id) slot.replaceChildren(Object.assign(document.createElement('p'), { className: 'workspace-canvas-empty', textContent: 'Open an object from Assets or choose Add panel.' }));
     });
-    $('#workspace-canvas-name').textContent = activeCanvasId ? byId.get(activeCanvasId).label : 'Choose a view';
+    $('#workspace-canvas-name').textContent = activeCanvasId ? byId.get(activeCanvasId).label : 'No open panels';
     const split = $('#workspace-split-view'); split.disabled = canvases.size < 2; split.textContent = splitView ? 'single view' : 'split view'; split.setAttribute('aria-pressed', String(splitView));
     renderCanvasTabs(); renderInspector(); renderCardPicker(); updateCanvasHeightLayout();
     objectWorkspace?.resize();
-  }
-
-  function availableCardsFor(sourceId) {
-    if (sourceId === 'objects') return objectWorkspace?.listCards() || [];
-    if (sourceId === 'assets') {
-      ensureAssetsEditor(false);
-      return [
-        { key: 'input', label: 'Assets Input', available: true, visible: !!workspaceOwnedCardSlot('input').visible },
-        { key: 'importExport', label: 'Import / Export (session-only)', available: true, visible: !!workspaceOwnedCardSlot('importExport').visible }
-      ];
-    }
-    const definition = byId.get(sourceId);
-    if (!definition || definition.kind !== 'calculator') return [];
-    const session = ensureCalculatorSession(definition), cards = session.editor.listCards?.() || [];
-    // A projected Sheaf Complex card has no independent mathematical target.
-    // Object-owned cards must instead be opened through openAssetProperty(),
-    // which passes the stable Asset reference and commits through its command.
-    if (session.assetProjection?.keys.size) return cards.map((card) => ASSET_PROPERTY_CARDS.has(card.key)
-      ? { ...card, available: false, visible: false, unavailableReason: 'Open this from Assets > Properties so it stays bound to one Asset.' }
-      : card);
-    return cards;
-  }
-
-  function applyCardVisibility(sourceId, key, visible) {
-    if (sourceId === 'objects') { objectWorkspace?.setVisible(key, visible); return; }
-    if (sourceId === 'assets') {
-      if (key === 'input' && !visible) flushAssetInputInstance(activeAssetInputInstance());
-      const slot = workspaceOwnedCardSlot(key);
-      if (!slot) return;
-      slot.visible = !!visible;
-      // Compatibility observation for older tests/imported session state.
-      assetState.cards[key] = !!visible;
-      if (key === 'input' && visible) ensureAssetsEditor(false);
-      const docked=[...dockedPanels.values()].find(record=>record.source==='sidebar'&&record.key===(key==='importExport'?'workspace-io-card':assetState.editorCard?.dataset.workspaceCard));
-      if(docked)placeDockedPanel(docked,visible?'side':'hidden');
-      return;
-    }
-    const definition = byId.get(sourceId);
-    if (definition?.kind === 'calculator') {
-      const session = ensureCalculatorSession(definition);
-      if (session.assetProjection?.keys.size && ASSET_PROPERTY_CARDS.has(key)) return;
-      session.editor.setCardVisible?.(key, visible);
-      const docked=[...dockedPanels.values()].find(record=>record.source==='native-card'&&record.sessionId===sourceId&&record.key===key);
-      if(docked)placeDockedPanel(docked,visible?'side':'hidden');
-    }
-  }
-  function setCardVisibility(sourceId, key, visible) {
-    applyCardVisibility(sourceId, key, visible);
-    renderInspector(); renderCardPicker();
   }
 
   function renderCardPicker() {
@@ -619,14 +448,16 @@
         existing.forEach(panel=>append(details,{key:panel.id,type:panel.definition.id,label:panelLabel(panel),checked:!panel.closed,action:visible=>objectWorkspace.setVisible(panel.id,visible)}));
         nativeExisting.forEach(type=>{const slot=assetsCardState.slots.get(type),instance=assetsCardState.instances.get(slot.activeInstanceKey),card=ASSET_CARD_REGISTRY[type];append(details,{key:'asset:'+type,label:card.targetLabels?.[instance?.targetRef?.kind]||card.label,detail:instance?name(assetKey(instance.targetRef)):'',checked:slot.visible,action:visible=>{slot.visible=visible;}});});
       }
-      if(sessions.has(activeCanvasId)&&byId.get(activeCanvasId)?.kind==='calculator') {
-        const sourceId=activeCanvasId,cards=availableCardsFor(sourceId).filter(card=>card.available!==false&&!['input-card','homology-card'].includes(card.key));
-        if(cards.length){heading('Current view · '+byId.get(sourceId).label);cards.forEach(card=>append(options,{key:card.key,label:card.label,checked:!!card.visible&&(card.docked?[...dockedPanels.values()].some(record=>record.sessionId===sourceId&&record.key===card.key&&record.location!=='hidden'):!sessions.get(sourceId).inspectorHost.hidden),action:visible=>applyCardVisibility(sourceId,card.key,visible)}));}
-      }
       const closedDocked=[...dockedPanels.values()].filter(record=>record.location==='hidden'&&record.id!==DESIGN_LAB_ID);
-      if(closedDocked.length){heading('Closed panels');closedDocked.forEach(record=>append(options,{key:record.id,label:record.entry.definition.label,checked:false,action:visible=>{if(visible){if(record.source==='native-card')sessions.get(record.sessionId).editor.setCardVisible(record.key,true);placeDockedPanel(record,'side');}}}));}
+      if(closedDocked.length){heading('Closed panels');closedDocked.forEach(record=>append(options,{key:record.id,label:record.entry.definition.label,checked:false,action:visible=>{if(visible)placeDockedPanel(record,'side');}}));}
       if(designLab?.active) append(options,{key:'design-lab',label:'Design Lab',checked:!document.getElementById('workspace-design-lab')?.hidden,action:visible=>{if(visible)designLab.open();else {const record=dockedPanels.get(DESIGN_LAB_ID);if(record)placeDockedPanel(record,'hidden');}}});
-      heading('Workspace');append(options,{key:'importExport',label:'Import / Export',checked:workspaceOwnedCardSlot('importExport').visible,action:visible=>applyCardVisibility('assets','importExport',visible)});
+      heading('Workspace');
+      if (!canvases.has('assets') && !dockedPanels.has('assets')) append(options,{key:'assets',label:'Assets',checked:false,action:()=>openCanvas('assets')});
+      append(options,{key:'importExport',label:'Import / Export',checked:importExportSlot.visible,action:visible=>{
+        importExportSlot.visible = assetState.cards.importExport = visible;
+        const dock = dockedPanels.get('dock:workspace-io-card');
+        if (dock) placeDockedPanel(dock, visible ? 'side' : 'hidden');
+      }});
       if(focusedOption)[...options.querySelectorAll('input')].find(input=>input.dataset.optionIdentity===focusedOption)?.focus({preventScroll:true});
     } finally { renderingCardPicker=false; }
   }
@@ -686,23 +517,6 @@
     syncWorkspaceOwnedCardOrder();
     refreshWorkspaceOwnedCardChrome();
     return true;
-  }
-  function assetPropertyCardActionState(cardType) {
-    const host = assetsCardState.slots.get(cardType)?.rendererSession?.inspectorHost;
-    return host ? workspaceOwnedCardActionState(host) : { canMoveUp: false, canMoveDown: false };
-  }
-  function handleAssetPropertyCardAction(cardType, action = {}) {
-    const slot = assetsCardState.slots.get(cardType), host = slot?.rendererSession?.inspectorHost;
-    if (!slot || !host) return false;
-    if (action.action === 'move') return moveWorkspaceOwnedCard(host, Number(action.delta) || 0);
-    if (action.action === 'hide') {
-      slot.visible = false;
-      renderInspector();
-      if (!$('#workspace-card-picker')?.hidden) renderCardPicker();
-      refreshWorkspaceOwnedCardChrome();
-      return true;
-    }
-    return false;
   }
   function applyWorkspaceOwnedSlotPresentation(card, key) {
     const slot = workspaceOwnedCardSlot(key);
@@ -775,14 +589,12 @@
       const objectNode = path.find(node => node?.dataset?.objectPanel);
       const panel = objectWorkspace?.panels.get(tab?.dataset.canvasTab||objectNode?.dataset.objectPanel);
       const topCard = path.find(node=>node?.dataset?.dockedPanel||node?.parentElement===container&&(node.classList?.contains('workspace-assets-inspector-card')||node.dataset?.assetCardSlot));
-      const nativeCard = path.find(node=>node?.dataset?.workspaceCardId), nativeHost=path.find(node=>node?.dataset?.nativeInspector);
-      const card = tab?.closest('.workspace-canvas-tab-group') || objectNode || topCard || nativeCard;
+      const card = tab?.closest('.workspace-canvas-tab-group') || objectNode || topCard;
       if (!handle || !card || event.button !== 0) return;
       let spec = panel ? null : dockedPanels.get(tab?.dataset.canvasTab||topCard?.dataset.dockedPanel);
       if(!panel&&!spec){
         if(tab)spec={id:tab.dataset.canvasTab,source:'canvas'};
         else if(topCard)spec={id:'dock:'+inspectorNodeKey(topCard),source:'sidebar',key:inspectorNodeKey(topCard)};
-        else if(nativeCard&&sessions.has(nativeHost?.dataset.nativeInspector))spec={id:'native-card:'+nativeHost.dataset.nativeInspector+':'+nativeCard.dataset.workspaceCardId,source:'native-card',sessionId:nativeHost.dataset.nativeInspector,key:nativeCard.dataset.workspaceCardId};
         else return;
       }
       const id=panel?.id||spec.id,tabs=$('#workspace-canvas-tabs');
@@ -984,7 +796,7 @@
     });
     form.addEventListener('submit', saveAssetsEditor);
     form.querySelector('[data-assets-delete]').addEventListener('click', () => { const instance = activeAssetInputInstance(); if (instance) deleteAssets([instance.targetRef]); });
-    installWorkspaceOwnedCardChrome(card, 'input'); $('#workspace-cards').appendChild(card); liveCards.set(identity, card);
+    installWorkspaceOwnedCardChrome(card, 'input'); $('#workspace-cards').appendChild(card);
     assetState.editorCard = card; assetState.editorRecord = { card };
     initialiseWorkspaceOwnedCardShells();
     renderAssetsEditor();
@@ -2396,7 +2208,6 @@
     pruneAssetPropertyBindings(present);
     markAffectedAssetPropertyInstances(options.affectedAssetKeys);
     reprojectActiveAssetPropertySlots(localAssetSnapshot(), { onlyStale: !!options.affectedAssetKeys?.size });
-    syncAssetProjectionSessions();
     renderAssets(); renderInspector();
     syncAssetInputDerivedFields();
     objectWorkspace?.refresh(localAssetSnapshot());
@@ -2420,7 +2231,6 @@
       const draft = instance.draft;
       if (draft) { try { referenceKeys(draft.kind, draft.type, draft.data).forEach(add); } catch (_) { /* Keep the model dependency closure for incomplete drafts. */ } }
     }
-    for (const session of sessions.values()) for (const key of session.assetProjection?.keys || []) add(key);
     return roots;
   }
   function collectUnusedDefaults() {
@@ -2454,83 +2264,6 @@
     }
     return closure;
   }
-  function captureSheafComplexLayout(session) {
-    if (!session?.assetProjection) return;
-    let activeRef = null;
-    for (const entry of session.editor.captureAssetLayout?.() || []) {
-      if (!session.assetProjection.keys.has(entry.key)) continue;
-      if (entry.active) activeRef = assetRefFromKey(entry.key);
-      if (!Number.isFinite(entry.point?.x) || !Number.isFinite(entry.point?.y)) continue;
-      session.assetProjection.layout.set(entry.key, { ...entry.point, x: entry.point.x, y: entry.point.y });
-    }
-    session.assetProjection.activeRef = activeRef;
-  }
-  function projectAssetsToSheafComplex(session, activeRef = undefined) {
-    if (!session?.assetProjection) return false;
-    const projectedActiveRef = activeRef === undefined ? session.assetProjection.activeRef : activeRef;
-    if (activeRef !== undefined) session.assetProjection.activeRef = activeRef ? { kind: activeRef.kind, id: activeRef.id } : null;
-    const present = new Set(assetState.snapshot.assets.map(assetKey));
-    session.assetProjection.keys = new Set([...assetDependencyClosure(session.assetProjection.keys)].filter((key) => present.has(key)));
-    const diagnostics=assetDiagnostics();
-    const assets = assetState.snapshot.assets.filter((asset) => session.assetProjection.keys.has(assetKey(asset))&&diagnostics[assetKey(asset)]?.valid!==false);
-    const messages=[...new Set([...session.assetProjection.keys].flatMap(key=>window.MathWorkspaceDiagnostics?.messages(diagnostics[key],assetState.snapshot.assets)||[]))];
-    if(!session.projectionWarning&&session.editor.shadow){
-      session.projectionWarning=document.createElement('p');session.projectionWarning.className='err';session.projectionWarning.setAttribute('role','status');session.projectionWarning.style.padding='8px';
-      (session.editor.shadow.querySelector('.editor-body')||session.editor.shadow).prepend(session.projectionWarning);
-    }
-    if(session.projectionWarning){session.projectionWarning.hidden=!messages.length;session.projectionWarning.textContent='⚠ Some inputs need repair: '+messages.join(' ');}
-    const snapshot = { ...localAssetSnapshot(), assets: assets.map((asset) => ({ ...asset, viewPosition: session.assetProjection.layout.get(assetKey(asset)) || presentation.layout(viewDefaultsFor(asset).sheaf) })) };
-    session.applyingAssets = true;
-    try {
-      session.editor.applyAssets?.(snapshot, projectedActiveRef&&diagnostics[assetKey(projectedActiveRef)]?.valid!==false?projectedActiveRef:null, null);
-      if (activeRef !== undefined) session.editor.setCanvasAppearanceTarget?.(activeRef, { source: 'canvas' });
-      // These cards are meaningful only with an Asset ref.  Leave their UI
-      // session intact, but never display an unbound calculator copy.
-      ASSET_PROPERTY_CARDS.forEach((cardKey) => session.editor.setCardVisible?.(cardKey, false));
-    } finally { session.applyingAssets = false; }
-    captureSheafComplexLayout(session);
-    return true;
-  }
-  function syncAssetProjectionSessions() {
-    sessions.forEach((session) => { if (session.assetProjection) projectAssetsToSheafComplex(session); });
-  }
-  function collectSheafComplexAssets(session) {
-    if (!session?.assetProjection) { status('This Sheaf Complex session cannot receive Assets yet.', 'error'); return; }
-    const roots = assetState.snapshot.assets.map(assetKey);
-    if (!roots.length) { status('There are no Assets to show on this canvas.', 'error'); return; }
-    session.assetProjection.keys = assetDependencyClosure(roots);
-    projectAssetsToSheafComplex(session);
-    const displayed = session.assetProjection.keys.size;
-    selectCanvasTab('sheaf-complexes');
-    status(`Displayed ${displayed} Asset object${displayed === 1 ? '' : 's'} on the Sheaf Complex canvas.`, 'success');
-  }
-  function sheafComplexDropAllowed(session, key) {
-    return !!(splitView && session?.assetProjection && visibleCanvasIds().includes('assets') && visibleCanvasIds().includes('sheaf-complexes') && assetByKey(key));
-  }
-  function bindSheafComplexAssetDrop(session) {
-    const host = session?.host; if (!host || host.dataset.workspaceAssetDropReady) return;
-    host.dataset.workspaceAssetDropReady = 'true';
-    const dropKey = (event) => referenceDragKey(event.dataTransfer);
-    const setState = (state = '') => { if (state) host.dataset.assetDrop = state; else delete host.dataset.assetDrop; };
-    host.addEventListener('dragenter', (event) => { setState(sheafComplexDropAllowed(session, dropKey(event)) ? 'valid' : 'invalid'); });
-    host.addEventListener('dragover', (event) => {
-      const valid = sheafComplexDropAllowed(session, dropKey(event)); setState(valid ? 'valid' : 'invalid');
-      if (valid) { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'; }
-    });
-    host.addEventListener('dragleave', (event) => { if (!host.contains(event.relatedTarget)) setState(); });
-    host.addEventListener('drop', (event) => {
-      const key = dropKey(event); if (!sheafComplexDropAllowed(session, key)) { setState('invalid'); return; }
-      event.preventDefault(); setState();
-      const [kind, id] = key.split(':'), rect = host.getBoundingClientRect();
-      const point = session.editor.assetPositionFromClient?.(event.clientX, event.clientY) || { x: Math.max(.08, Math.min(.92, (event.clientX - rect.left) / Math.max(1, rect.width))), y: Math.max(.08, Math.min(.92, (event.clientY - rect.top) / Math.max(1, rect.height))) };
-      assetDependencyClosure([key]).forEach((dependency) => session.assetProjection.keys.add(dependency));
-      session.assetProjection.layout.set(key, point);
-      projectAssetsToSheafComplex(session, { kind, id });
-      status(`Added ${assetByKey(key)?.plainName || assetByKey(key)?.name || 'asset'} to the Sheaf Complex canvas.`, 'success');
-    });
-    host.addEventListener('dragend', () => setState());
-  }
-
   function orderedAssets() {
     const entries = assetState.snapshot.assets.filter(asset => assetState.showDefaults || !asset.isDefault), direction = assetState.direction === 'desc' ? -1 : 1;
     const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -2658,10 +2391,9 @@
 
   function revealAssetsEditor() {
     assetState.cards.input = true;
-    selectInspectorSource('assets');
     const record = ensureAssetsEditor(true);
     promoteInspectorCard(record.card);
-    renderInspector();
+    renderInspector(); updateImportExport(); renderCardPicker();
     record.card.scrollIntoView?.({ block: 'nearest' });
     return record;
   }
@@ -3264,12 +2996,10 @@
     entries.forEach((asset) => list.appendChild(Object.assign(document.createElement('li'), { textContent: `${asset.plainName || asset.name} — ${asset.typeLabel}` }))); host.appendChild(list);
   }
 
-  function toggleImportExportCard() { const card = $('#workspace-io-card'), collapsed = card.classList.toggle('collapsed'); $('#workspace-io-head').setAttribute('aria-expanded', String(!collapsed)); }
   function inspectorNodeKey(node) {
-    return node.dataset.objectPanel || (node.dataset.assetCardSlot ? 'asset-card:' + node.dataset.assetCardSlot : node.dataset.nativeInspector ? 'calculator:' + node.dataset.nativeInspector : node.dataset.workspaceCard || node.id);
+    return node.dataset.objectPanel || (node.dataset.assetCardSlot ? 'asset-card:' + node.dataset.assetCardSlot : node.dataset.workspaceCard || node.id);
   }
   function captureWorkspace() {
-    sessions.forEach(session => { if (session.assetProjection) captureSheafComplexLayout(session); });
     const slots = [...assetsCardState.slots.values()].map(slot => ({
       cardType: slot.cardType, visible: slot.visible, activeInstanceKey: slot.activeInstanceKey, recentInstanceKeys: slot.recentInstanceKeys,
       collapsed: slot.collapsed, pinned: slot.pinned, displayMode: slot.displayMode,
@@ -3287,13 +3017,12 @@
     return window.MathWorkspaceIO.clone({
       schema: window.MathWorkspaceIO.schema, version: 1, assets: localAssetSnapshot().assets,
       panels: objectWorkspace.capturePanels(),
-      calculators: [...sessions.entries()].map(([id, session]) => ({ id, canvasHeight: session.canvasHeight, canvasHeightMode: session.canvasHeightMode, snapshot: session.editor.capture(),
-        assetProjection: session.assetProjection ? { keys: [...session.assetProjection.keys], layout: [...session.assetProjection.layout], activeRef: session.assetProjection.activeRef } : null })),
+      calculators: legacyCalculatorSnapshots,
       assetCards: { slots, instances, activeInputInstanceKey: assetState.activeInputInstanceKey, editorMode: assetState.editorMode,
         importExport: { visible: importExportSlot.visible, collapsed: importExportSlot.collapsed, pinned: importExportSlot.pinned, displayMode: importExportSlot.displayMode } },
-      workspace: { tabs, panes, split: savedSplit, focusedPane: savedSplit ? focusedPane : 'primary', inspectorSourceId: inspectorSourceId === DESIGN_LAB_ID ? '' : inspectorSourceId,
+      workspace: { tabs, panes, split: savedSplit, focusedPane: savedSplit ? focusedPane : 'primary', inspectorSourceId: 'assets',
         viewDefaults:[...viewDefaults].filter(([key])=>assetByKey(key)),
-        dockedPanels:[...dockedPanels.values()].filter(record => record.id !== DESIGN_LAB_ID).map(({id,source,key,sessionId,location,canvasHeight,canvasHeightMode})=>({id,source,key,sessionId,location,canvasHeight,canvasHeightMode})),
+        dockedPanels:[...dockedPanels.values()].filter(record => record.id !== DESIGN_LAB_ID).map(({id,source,key,location,canvasHeight,canvasHeightMode})=>({id,source,key,location,canvasHeight,canvasHeightMode})),
         inspectorOrder: [...$('#workspace-cards').children].filter(node => node.id !== 'workspace-design-lab').map(inspectorNodeKey),
         settings: window.MathWorkspaceSettings?.capture(),
         assets: { layout: assetState.layout, sort: assetState.sort, direction: assetState.direction, showDefaults: assetState.showDefaults, selected: [...assetState.selected], anchor: assetState.anchor, canvasHeight: assetState.canvasHeight, canvasHeightMode: assetState.canvasHeightMode, metadata: [...assetState.metadata] } }
@@ -3313,7 +3042,7 @@
       }
     }
     const prepared = io.validate(raw, {
-      subtypes: ASSET_SUBTYPES, definitions: window.MathWorkspaceObjects.definitions, calculatorIds: calculators.map(c => c.id),
+      subtypes: ASSET_SUBTYPES, definitions: window.MathWorkspaceObjects.definitions,
       nameKey: canonicalAssetName, validName: name => typeof name === 'string' && !!name.trim() && balancedLatex(name),
       normalize: (kind, type, data) => OBJECT_INPUT_KINDS.includes(kind) || slicing.isAsset({kind,type}) ? window.MathWorkspaceObjects.normalize(kind,type,data) : window.MathWorkspaceNumbers.normalizeInputs(kind,type,io.clone(data)),
       references: asset => ['complex','filtration','field-extension'].includes(asset.kind)
@@ -3332,7 +3061,7 @@
       if (instance.cardType === 'input') instance.draft = cloneInputDraft(instance.draft);
       if(instance.cardType!=='input'&&!cardSupportsAsset(instance.cardType,instance.targetRef.kind))throw new Error('Incompatible saved Assets property target.');
     }
-    return prepared;
+    return io.retireCalculatorLayout(prepared);
   }
   function applyWorkspaceBackup(saved) {
     const io = window.MathWorkspaceIO;
@@ -3342,13 +3071,12 @@
     for (const instance of assetsCardState.instances.values()) if (instance.cardType === 'input') { instance.deleted = true; cancelAssetInputAutosave(instance); }
     clearDockedPanels();
     objectWorkspace.clearPanels();
-    sessions.forEach(session => session.editor.dispose()); sessions.clear();
     for (const slot of assetsCardState.slots.values()) slot.rendererSession?.editor.dispose();
     assetsCardState.instances.clear(); assetsCardState.inputTaskQueue.length = 0;
     Object.keys(ASSET_CARD_REGISTRY).forEach(type => assetsCardState.slots.set(type, createAssetCardSlot(type)));
     for (const [id, definition] of byId) if (definition.kind === 'object-panel') byId.delete(id);
     if (assetState.view) { $('#workspace-canvas-parking').append(assetState.view); assetState.view.hidden = true; }
-    canvases.clear(); paneCanvases.primary = ''; paneCanvases.secondary = ''; splitView = false; focusedPane = 'primary'; activeCanvasId = ''; inspectorSourceId = '';
+    canvases.clear(); paneCanvases.primary = ''; paneCanvases.secondary = ''; splitView = false; focusedPane = 'primary'; activeCanvasId = '';
     assetState.activeInputInstanceKey = null; assetState.propertyRef = null; assetState.propertySession = null;
     const revision = assetState.snapshot.revision + 1;
     const assets = saved.assets.map(asset => {
@@ -3398,11 +3126,7 @@
     }
     assetState.activeInputInstanceKey = saved.assetCards.activeInputInstanceKey; assetState.editorMode = saved.assetCards.editorMode;
     Object.assign(importExportSlot,saved.assetCards.importExport); applyWorkspaceOwnedSlotPresentation($('#workspace-io-card'),'importExport');
-    for (const item of saved.calculators) {
-      const session = ensureCalculatorSession(byId.get(item.id)); session.canvasHeight = clampCanvasHeight(item.canvasHeight); session.canvasHeightMode = item.canvasHeightMode==='manual'?'manual':'auto'; session.applyingAssets = true;
-      try { session.editor.restore(item.snapshot); } finally { session.applyingAssets = false; }
-      if (session.assetProjection && item.assetProjection) { session.assetProjection = {keys:new Set(item.assetProjection.keys),layout:new Map(item.assetProjection.layout),activeRef:item.assetProjection.activeRef}; projectAssetsToSheafComplex(session); }
-    }
+    legacyCalculatorSnapshots = saved.calculators;
     objectWorkspace.restorePanels(saved.panels);
     for(const spec of saved.workspace.dockedPanels||[])placeDockedPanel(createDockedPanel(spec),spec.location);
     // Rebuild tab order after all panels exist, including tabs parked behind the active one.
@@ -3410,9 +3134,8 @@
     for (const id of saved.workspace.tabs) {
       if (mainPanels.has(id)) canvases.set(id,mainPanels.get(id));
       else if (id === 'assets') canvases.set(id,{kind:'assets',definition:assetsDefinition,node:ensureAssetsView()});
-      else { const session = sessions.get(id); canvases.set(id,{kind:'calculator',definition:session.definition,node:session.host,editor:session.editor,ready:true}); }
     }
-    Object.assign(paneCanvases,saved.workspace.panes); splitView = !!saved.workspace.split; focusedPane = saved.workspace.focusedPane; activeCanvasId = paneCanvases[focusedPane] || ''; inspectorSourceId = saved.workspace.inspectorSourceId;
+    Object.assign(paneCanvases,saved.workspace.panes); splitView = !!saved.workspace.split; focusedPane = saved.workspace.focusedPane; activeCanvasId = paneCanvases[focusedPane] || '';
     const nodes = new Map([...$('#workspace-cards').children].map(node => [inspectorNodeKey(node),node]));
     for (const key of saved.workspace.inspectorOrder) if (nodes.has(key||'assets::input')) $('#workspace-cards').append(nodes.get(key||'assets::input'));
     renderAssets(); renderAssetsEditor(); renderCanvasView(); renderInspector();
@@ -3422,7 +3145,6 @@
     const resources=[...new Set([
       ...saved.assets.flatMap(objects.assetResources),
       ...saved.panels.flatMap(panel=>objects.panelResources(panel.type)),
-      ...saved.calculators.flatMap(calculator=>loader?.editorResources(byId.get(calculator.id).nativeId)||[]),
       ...(saved.assetCards.slots.some(slot=>slot.cardType!=='input'&&slot.activeInstanceKey)?['complex']:[])
     ])];
     const restore=()=>{
@@ -3503,11 +3225,7 @@
     window.MathWorkspacePrincipalAssets.init({catalog:panelCatalog,changed:()=>{closeAssetsContextMenu();renderCardPicker();}});
     initialiseObjectPanels();
     initialiseImportExport();
-    const picker = $('#workspace-open-canvas'); picker.appendChild(new Option('Open view…', '', true, true));
-    const views = document.createElement('optgroup'); views.label = 'Workspace views'; views.appendChild(new Option('Assets', 'assets')); picker.appendChild(views);
-    const calculatorGroup = document.createElement('optgroup'); calculatorGroup.label = 'Calculator views';
-    calculators.forEach((calculator) => calculatorGroup.appendChild(new Option(calculator.label, calculator.id))); picker.appendChild(calculatorGroup);
-    picker.addEventListener('change', () => { if (picker.value) openCanvas(picker.value); picker.value = ''; }); $('#workspace-split-view').addEventListener('click', () => setSplitView(!splitView));
+    $('#workspace-split-view').addEventListener('click', () => setSplitView(!splitView));
     $('#workspace-io-card').classList.add('workspace-assets-inspector-card'); installWorkspaceOwnedCardChrome($('#workspace-io-card'), 'importExport'); enableWorkspaceOwnedCardDragging();
     $('#workspace-add-card').addEventListener('click', () => $('#workspace-card-picker').hidden ? openCardPicker() : closeCardPicker());
     document.querySelectorAll('[data-pane]').forEach((pane) => pane.addEventListener('pointerdown', () => focusCanvasPane(pane.dataset.pane)));
@@ -3537,7 +3255,7 @@
     });
   }
 
-  window.MathWorkspaceAssetsTest = { assetKey, layouts: ASSET_LAYOUTS.slice(), selectAssetKey, orderedAssets, state: assetState, assetRequest, renderAssetsEditor, canonicalAssetName, normalizedAssetData, validateAssetData, referenceFieldSpecs, referenceEligibility, referenceWouldCreateCycle, referenceDragKey, isDirectSheafType, inferredSheafBase, assetMathSignature, invalidateDerivedAssetProperties, createAssetPropertyCommand, commitAssetPropertyCommand, captureAndCommitAssetPropertyCommand, captureSheafComplexLayout, cardSupportsAsset, assetCardInstanceKey, ASSET_CARD_REGISTRY, NATIVE_ASSET_CARD_TYPES, assetsCardState, assetsUtilitySlots, assetInputCardTitleState, createAssetsCardCoordinator, planAssetPropertySlotBinding, bindAssetPropertySlot, handleAssetPropertySessionChange, createAssetInputInstance, bindAssetInputInstance, activeAssetInputInstance, assetInputInstanceForRef, validateAssetInputDraft, createAssetInputCommitCommand, commitAssetInputCommand, resolveAssetInputConflict, updateAssetInputDraft, scheduleAssetInputAutosave, flushAssetInputInstance, cancelAssetInputAutosave, queueAssetInputAutosave, drainAssetInputQueue, removeAssetInputInstances, acceptAssetInputAsyncResult, markAffectedAssetPropertyInstances, reprojectActiveAssetPropertySlots, INPUT_AUTOSAVE_DEBOUNCE_MS, INPUT_AUTOSAVE_MAX_WAIT_MS, DEFAULT_CANVAS_HEIGHT, MIN_CANVAS_HEIGHT, MAX_CANVAS_HEIGHT, canvasHeightFor, sessions };
+  window.MathWorkspaceAssetsTest = { assetKey, layouts: ASSET_LAYOUTS.slice(), selectAssetKey, orderedAssets, state: assetState, assetRequest, renderAssetsEditor, canonicalAssetName, normalizedAssetData, validateAssetData, referenceFieldSpecs, referenceEligibility, referenceWouldCreateCycle, referenceDragKey, isDirectSheafType, inferredSheafBase, assetMathSignature, invalidateDerivedAssetProperties, createAssetPropertyCommand, commitAssetPropertyCommand, captureAndCommitAssetPropertyCommand, cardSupportsAsset, assetCardInstanceKey, ASSET_CARD_REGISTRY, NATIVE_ASSET_CARD_TYPES, assetsCardState, assetsUtilitySlots, assetInputCardTitleState, createAssetsCardCoordinator, planAssetPropertySlotBinding, bindAssetPropertySlot, handleAssetPropertySessionChange, createAssetInputInstance, bindAssetInputInstance, activeAssetInputInstance, assetInputInstanceForRef, validateAssetInputDraft, createAssetInputCommitCommand, commitAssetInputCommand, resolveAssetInputConflict, updateAssetInputDraft, scheduleAssetInputAutosave, flushAssetInputInstance, cancelAssetInputAutosave, queueAssetInputAutosave, drainAssetInputQueue, removeAssetInputInstances, acceptAssetInputAsyncResult, markAffectedAssetPropertyInstances, reprojectActiveAssetPropertySlots, INPUT_AUTOSAVE_DEBOUNCE_MS, INPUT_AUTOSAVE_MAX_WAIT_MS, DEFAULT_CANVAS_HEIGHT, MIN_CANVAS_HEIGHT, MAX_CANVAS_HEIGHT, canvasHeightFor };
   Object.assign(window.MathWorkspaceAssetsTest, { createObjectAsset, updateObjectAsset, localAssetSnapshot, applyAssetSnapshot, openCanvas, closeCanvas, setSplitView, selectCanvasTab });
   function typesetWorkspaceWhenReady() {
     if (!window.MathJax?.typesetPromise) return;

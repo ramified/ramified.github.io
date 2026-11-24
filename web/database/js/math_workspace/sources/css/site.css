@@ -16,8 +16,8 @@
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'EB Garamond', Georgia, serif;
-    font-size: 17px;
+    font-family: var(--ws-font-ui, 'EB Garamond', Georgia, serif);
+    font-size: var(--ws-text-md, 17px);
     line-height: 1.6;
     min-height: 100vh;
   }
@@ -32,13 +32,13 @@
     border-bottom: 3px solid var(--accent);
   }
   header h1 {
-    font-size: 1.7rem;
+    font-size: var(--ws-text-xl, 1.7rem);
     font-weight: 500;
     letter-spacing: 0.01em;
   }
   header span {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.75rem);
     color: #9a9080;
     letter-spacing: 0.05em;
   }
@@ -79,8 +79,8 @@
     border-bottom: 1px solid var(--border);
     border-top: none;
     padding: 10px 16px;
-    font-size: 0.78rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-size: var(--ws-text-sm, 0.78rem);
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     letter-spacing: 0.08em;
     color: var(--muted);
     display: flex;
@@ -92,7 +92,7 @@
   .panel-title-text {
     color: var(--muted);
     flex-shrink: 0;
-    text-transform: uppercase;
+    text-transform: var(--ws-label-transform, uppercase);
   }
   .canvas-toolbar {
     display: flex;
@@ -118,10 +118,10 @@
     display: none;
   }
   .generalized-canvas-badge {
-    font-size: 0.68rem;
+    font-size: var(--ws-text-xs, 0.68rem);
     color: var(--accent2);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    text-transform: var(--ws-label-transform, uppercase);
+    letter-spacing: var(--ws-label-tracking, 0.05em);
     white-space: nowrap;
   }
   .canvas-view-row {
@@ -136,8 +136,8 @@
     background: var(--bg);
     color: var(--muted);
     padding: 2px 7px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.68rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-xs, 0.68rem);
     line-height: 1.2;
     cursor: pointer;
   }
@@ -157,10 +157,12 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding-left: 12px;
-    border-left: 1px solid var(--border);
+    padding-left: var(--ws-inline-indent, 12px);
+    border-left: var(--ws-inline-rule, 1px solid var(--border));
     color: var(--muted);
     white-space: nowrap;
+    font-family: var(--ws-font-ui, inherit);
+    font-size: var(--ws-text-sm, inherit);
   }
   .canvas-size-inline label {
     display: inline-flex;
@@ -176,8 +178,8 @@
     padding: 2px 5px;
     border: 1px solid var(--border);
     border-radius: 3px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
     background: var(--bg);
     color: var(--text);
     text-align: center;
@@ -226,8 +228,8 @@
     border-radius: 3px;
     color: var(--text);
     background: rgba(255,255,255,0.55);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-xs, 0.7rem);
     white-space: nowrap;
   }
 
@@ -237,8 +239,8 @@
     align-items: center;
     gap: 12px;
     padding: 0 16px 14px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
     color: var(--muted);
     flex-wrap: wrap;
   }
@@ -330,8 +332,8 @@
   }
   .calculator-input-settings-header h2 {
     margin: 0;
-    font-family: 'EB Garamond', Georgia, serif;
-    font-size: 1.25rem;
+    font-family: var(--ws-font-display, 'EB Garamond', Georgia, serif);
+    font-size: var(--ws-text-lg, 1.25rem);
     font-weight: 600;
     line-height: 1.2;
   }
@@ -353,12 +355,12 @@
     color: var(--accent);
     outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
   }
-  .calculator-input-settings-content { padding: 4px 18px 18px; }
+  .calculator-input-settings-content { padding: 4px 18px 18px; font-family: var(--ws-font-ui, inherit); }
   .calculator-input-profile,
   .calculator-input-help {
     margin: 6px 0 10px;
     color: var(--muted);
-    font-size: 0.82rem;
+    font-size: var(--ws-text-sm, 0.82rem);
   }
   .calculator-input-section { padding-top: 12px; }
   .calculator-input-section + .calculator-input-section {
@@ -370,15 +372,15 @@
     margin: 0;
     color: var(--text);
   }
-  .calculator-input-section h3 { font-size: 1rem; }
+  .calculator-input-section h3 { font-size: var(--ws-text-md, 1rem); }
   .calculator-input-group h4 {
     margin: 12px 0 5px;
     color: var(--muted);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
     font-weight: 500;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    letter-spacing: var(--ws-label-tracking, 0.04em);
+    text-transform: var(--ws-label-transform, uppercase);
   }
   .calculator-input-action {
     display: grid;
@@ -392,11 +394,11 @@
   .calculator-input-action-copy { min-width: 0; }
   .calculator-input-action-copy strong,
   .calculator-input-action-copy span { display: block; }
-  .calculator-input-action-copy strong { font-size: 0.9rem; }
+  .calculator-input-action-copy strong { font-size: var(--ws-text-md, 0.9rem); }
   .calculator-input-action-copy span {
     margin-top: 1px;
     color: var(--muted);
-    font-size: 0.78rem;
+    font-size: var(--ws-text-sm, 0.78rem);
     line-height: 1.35;
   }
   .calculator-input-bindings {
@@ -413,8 +415,8 @@
     border-radius: 4px;
     background: var(--surface);
     color: var(--text);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--ws-font-code, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
     cursor: pointer;
   }
   .calculator-input-binding:hover,
@@ -435,7 +437,7 @@
   .calculator-input-unbound {
     align-self: center;
     color: var(--muted);
-    font-size: 0.76rem;
+    font-size: var(--ws-text-sm, 0.76rem);
     font-style: italic;
   }
   .calculator-pointer-list { display: grid; gap: 4px; }
@@ -448,7 +450,7 @@
     padding: 8px 0;
     border-top: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
     cursor: pointer;
-    font-size: 0.88rem;
+    font-size: var(--ws-text-md, 0.88rem);
   }
   .calculator-card-settings-row input { accent-color: var(--accent); }
   .calculator-card-settings-row em {
@@ -456,10 +458,10 @@
     border: 1px solid var(--border);
     border-radius: 999px;
     color: var(--muted);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.66rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-xs, 0.66rem);
     font-style: normal;
-    text-transform: uppercase;
+    text-transform: var(--ws-label-transform, uppercase);
   }
   .calculator-pointer-hint {
     display: grid;
@@ -468,9 +470,9 @@
     align-items: baseline;
     padding: 7px 0;
     border-top: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
-    font-size: 0.84rem;
+    font-size: var(--ws-text-sm, 0.84rem);
   }
-  .calculator-pointer-lock { font-size: 0.72rem; filter: grayscale(1); }
+  .calculator-pointer-lock { font-size: var(--ws-text-sm, 0.72rem); filter: grayscale(1); }
   .calculator-pointer-hint span:last-child { color: var(--muted); }
   .calculator-input-conflict {
     margin-top: 14px;
@@ -494,7 +496,7 @@
     min-height: 1.2em;
     margin: 0;
     color: var(--muted);
-    font-size: 0.78rem;
+    font-size: var(--ws-text-sm, 0.78rem);
     text-align: right;
   }
 
@@ -569,8 +571,8 @@
     border-radius: 3px;
     color: var(--accent2);
     padding: 1px 4px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.62rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-xs, 0.62rem);
     letter-spacing: 0;
     line-height: 1.25;
     text-transform: lowercase;
@@ -619,8 +621,8 @@
     color: var(--muted);
     border-radius: 3px;
     padding: 1px 5px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.62rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-xs, 0.62rem);
     line-height: 1.2;
     cursor: pointer;
     letter-spacing: 0;
@@ -654,10 +656,10 @@
   .card-head {
     padding: 9px 16px;
     border-bottom: 1px solid var(--border);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
+    letter-spacing: var(--ws-label-tracking, 0.1em);
+    text-transform: var(--ws-label-transform, uppercase);
     color: var(--muted);
     display: flex;
     justify-content: space-between;
@@ -701,13 +703,13 @@
   }
   .stat-row:last-child { border-bottom: none; }
   .stat-label {
-    font-size: 0.88rem;
+    font-size: var(--ws-text-md, 0.88rem);
     color: var(--muted);
     flex-shrink: 0;
   }
   .stat-value {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.82rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.82rem);
     color: var(--text);
     text-align: right;
     word-break: break-all;
@@ -728,11 +730,11 @@
   .dominant-rep[hidden] { display: none; }
   .dominant-rep-label {
     grid-column: 1 / -1;
-    font-size: 0.78rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-size: var(--ws-text-sm, 0.78rem);
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
+    text-transform: var(--ws-label-transform, uppercase);
+    letter-spacing: var(--ws-label-tracking, 0.03em);
   }
   .dominant-rep-diagram {
     display: inline-flex;
@@ -747,8 +749,8 @@
     height: auto;
   }
   .dominant-rep-text {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.78rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.78rem);
     color: var(--text);
     overflow-wrap: anywhere;
   }
@@ -762,8 +764,8 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.76rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.76rem);
     color: var(--muted);
     white-space: nowrap;
   }
@@ -782,14 +784,14 @@
     padding: 6px 0 2px;
     border-bottom: 1px dotted var(--border);
   }
-  .ssrow label { font-size: 0.88rem; color: var(--muted); flex: 1; }
+  .ssrow label { font-size: var(--ws-text-md, 0.88rem); color: var(--muted); flex: 1; }
   .ssrow input[type=number] {
     width: 56px;
     padding: 3px 6px;
     border: 1px solid var(--border);
     border-radius: 3px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.82rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.82rem);
     background: var(--bg);
     color: var(--text);
     text-align: center;
@@ -802,7 +804,8 @@
     align-items: center;
     gap: 10px;
     padding: 5px 0;
-    font-size: 0.9rem;
+    font-family: var(--ws-font-ui, inherit);
+    font-size: var(--ws-text-md, 0.9rem);
     cursor: pointer;
     user-select: none;
   }
@@ -820,11 +823,11 @@
   .input-label {
     display: block;
     margin-bottom: 4px;
-    font-size: 0.78rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-size: var(--ws-text-sm, 0.78rem);
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
+    text-transform: var(--ws-label-transform, uppercase);
+    letter-spacing: var(--ws-label-tracking, 0.03em);
   }
   .input-row {
     display: flex;
@@ -836,8 +839,8 @@
     padding: 5px 10px;
     border: 1px solid var(--border);
     border-radius: 3px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.82rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.82rem);
     background: var(--bg);
     color: var(--text);
   }
@@ -848,8 +851,8 @@
     border-radius: 3px;
     background: var(--accent);
     color: #fff;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.78rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.78rem);
     cursor: pointer;
     letter-spacing: 0.04em;
     transition: background 0.15s, transform 0.1s;
@@ -875,8 +878,8 @@
     background: var(--bg);
     color: var(--muted);
     padding: 4px 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
     line-height: 1.2;
     cursor: pointer;
   }
@@ -920,8 +923,8 @@
   }
   .orbit-diagram-item:last-child { border-bottom: none; }
   .orbit-diagram-index {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.68rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-xs, 0.68rem);
     color: var(--muted);
     text-align: right;
     white-space: nowrap;
@@ -970,8 +973,8 @@
     flex-direction: column;
     gap: 2px;
     min-width: 0;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.68rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-xs, 0.68rem);
     line-height: 1.25;
     overflow-wrap: anywhere;
   }
@@ -979,7 +982,7 @@
   .orbit-dyn-coords { color: var(--muted); }
 
   .hint {
-    font-size: 0.78rem;
+    font-size: var(--ws-text-sm, 0.78rem);
     color: var(--muted);
     margin-top: 5px;
     font-style: italic;
@@ -987,8 +990,8 @@
   .complexity-preview,
   .result-meta,
   .limit-details {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.68rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-xs, 0.68rem);
     line-height: 1.45;
     color: var(--muted);
     border-top: 1px dotted var(--border);
@@ -1015,8 +1018,8 @@
   #export-out {
     width: 100%;
     height: 60px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
+    font-family: var(--ws-font-code, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.75rem);
     border: 1px solid var(--border);
     border-radius: 3px;
     background: var(--bg);
@@ -1029,7 +1032,7 @@
   footer {
     text-align: center;
     padding: 28px;
-    font-size: 0.8rem;
+    font-size: var(--ws-text-sm, 0.8rem);
     color: var(--muted);
     border-top: 1px solid var(--border);
     margin-top: 20px;
@@ -1037,7 +1040,7 @@
   footer a { color: var(--accent); text-decoration: none; }
 
   /* error flash */
-  .err { color: var(--accent2); font-size: 0.8rem; margin-top: 4px; font-style: italic; }
+  .err { color: var(--accent2); font-size: var(--ws-text-sm, 0.8rem); margin-top: 4px; font-style: italic; }
 
 
   /* Lie algebra decomposition rows */
@@ -1047,10 +1050,10 @@
     border-top: 1px dotted var(--border);
   }
   .lie-subsection-title {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
+    letter-spacing: var(--ws-label-tracking, 0.08em);
+    text-transform: var(--ws-label-transform, uppercase);
     color: var(--muted);
     margin-bottom: 3px;
   }
@@ -1116,8 +1119,8 @@
   }
   .decomp-row:last-child { border-bottom: none; }
   .decomp-mult {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.78rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.78rem);
     color: var(--accent);
     min-width: 24px;
     text-align: right;
@@ -1139,8 +1142,8 @@
   }
   .decomp-label {
     min-width: 0;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
     color: var(--muted);
     line-height: 1.25;
     word-break: break-word;
@@ -1186,8 +1189,8 @@
     border-bottom: 1px dotted var(--border);
   }
   .symfun-control-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
     color: var(--muted);
     min-width: 46px;
   }
@@ -1207,8 +1210,8 @@
     border-radius: 3px;
     background: var(--bg);
     color: var(--text);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.74rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.74rem);
     text-align: center;
   }
   .symfun-control-row input[type=text][readonly] {
@@ -1224,8 +1227,8 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
     color: var(--muted);
     cursor: pointer;
     user-select: none;
@@ -1241,8 +1244,8 @@
     border-radius: 3px;
     background: var(--bg);
     color: var(--text);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
     padding: 2px 5px;
     min-width: 64px;
   }
@@ -1263,8 +1266,8 @@
     border-radius: 3px;
     background: var(--bg);
     color: var(--text);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
     padding: 1px 5px;
     max-width: 74px;
   }
@@ -1282,8 +1285,8 @@
     border-radius: 3px;
     background: transparent;
     color: var(--accent);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
     padding: 2px 7px;
     cursor: pointer;
     margin-left: auto;
@@ -1322,15 +1325,15 @@
     column-gap: 10px;
     padding: 4px 0;
     border-bottom: 1px dotted var(--border);
-    font-size: 0.82rem;
+    font-size: var(--ws-text-sm, 0.82rem);
     line-height: 1.5;
   }
   .symfun-row:last-child {
     border-bottom: none;
   }
   .symfun-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.74rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.74rem);
     color: var(--muted);
     min-width: 46px;
     white-space: nowrap;
@@ -1340,8 +1343,8 @@
     font-size: 0.72em;
   }
   .symfun-value {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
     line-height: 1.45;
     color: var(--text);
     overflow-wrap: anywhere;
@@ -1356,8 +1359,8 @@
     color: var(--accent2);
   }
   .symfun-too-large {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.74rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.74rem);
     color: var(--accent2);
     line-height: 1.45;
   }
@@ -1378,8 +1381,8 @@
     background: var(--surface);
     color: var(--text);
     box-shadow: 0 6px 22px rgba(0,0,0,0.16);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
+    font-size: var(--ws-text-sm, 0.72rem);
     line-height: 1.45;
     letter-spacing: 0;
     text-transform: none;

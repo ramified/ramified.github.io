@@ -1337,7 +1337,7 @@ function partitionsOfSize(size, maxRows, maxPart) {
 // --- Draw a small Young diagram as inline SVG ---
 function miniDiagram(mu, hue) {
   if (!mu.length) {
-    return '<span style="font-family:\'JetBrains Mono\',monospace;font-size:0.78rem;color:var(--muted);">∅ (trivial)</span>';
+    return '<span style="font-family:var(--ws-font-ui,\'JetBrains Mono\',monospace);font-size:var(--ws-text-sm,0.78rem);color:var(--muted);">∅ (trivial)</span>';
   }
   const bs = 14;
   const W = mu[0] * bs;
@@ -1354,7 +1354,7 @@ function miniDiagram(mu, hue) {
 
 function miniDiagramPlain(mu) {
   if (!mu.length) {
-    return `<span style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--muted);">∅</span>`;
+    return `<span style="font-family:var(--ws-font-ui,'JetBrains Mono',monospace);font-size:var(--ws-text-sm,0.72rem);color:var(--muted);">∅</span>`;
   }
   const bs = 12;
   const W = mu[0] * bs;
@@ -1371,7 +1371,7 @@ function miniDiagramPlain(mu) {
 
 function miniDiagramDecomp(mu, hue = 200) {
   if (!mu.length) {
-    return `<span style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--muted);">∅</span>`;
+    return `<span style="font-family:var(--ws-font-ui,'JetBrains Mono',monospace);font-size:var(--ws-text-sm,0.72rem);color:var(--muted);">∅</span>`;
   }
   const maxWidth = 112;
   const bs = Math.max(7, Math.min(14, Math.floor(maxWidth / Math.max(mu[0], 1))));
@@ -2955,7 +2955,7 @@ function computeBranching() {
     return `${mult > 1 ? mult+'·' : ''}V<sup>${muStr}</sup><sub>${subLabel}</sub>`;
   }).join(' ⊕ ');
   const formulaDiv = document.createElement('div');
-  formulaDiv.style.cssText = 'font-size:0.82rem;line-height:1.7;word-break:break-word;padding:6px 0 4px;border-bottom:1px dotted var(--border);';
+  formulaDiv.style.cssText = 'font-size:var(--ws-text-sm,0.82rem);line-height:1.7;word-break:break-word;padding:6px 0 4px;border-bottom:1px dotted var(--border);';
   formulaDiv.innerHTML = formula;
   out.appendChild(formulaDiv);
   const meta = document.createElement('div');
@@ -2968,12 +2968,12 @@ function computeBranching() {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:3px 0;border-bottom:1px dotted var(--border);';
     const multSpan = document.createElement('span');
-    multSpan.style.cssText = 'font-family:"JetBrains Mono",monospace;font-size:0.78rem;color:var(--accent);min-width:24px;text-align:right;flex-shrink:0;';
+    multSpan.style.cssText = 'font-family:var(--ws-font-ui,"JetBrains Mono",monospace);font-size:var(--ws-text-sm,0.78rem);color:var(--accent);min-width:24px;text-align:right;flex-shrink:0;';
     multSpan.textContent = mult > 1 ? `×${mult}` : '×1';
     const diag = document.createElement('span');
     diag.innerHTML = miniDiagram(mu, hue);
     const label = document.createElement('span');
-    label.style.cssText = 'font-family:"JetBrains Mono",monospace;font-size:0.72rem;color:var(--muted);';
+    label.style.cssText = 'font-family:var(--ws-font-ui,"JetBrains Mono",monospace);font-size:var(--ws-text-sm,0.72rem);color:var(--muted);';
     label.textContent = mu.length ? '(' + mu.join(', ') + ')' : '( )';
     row.appendChild(multSpan);
     row.appendChild(diag);
@@ -4570,7 +4570,7 @@ function renderBranchingResult(result) {
   out.innerHTML = '';
   warn.textContent = result.warning || '';
   const formulaDiv = document.createElement('div');
-  formulaDiv.style.cssText = 'font-size:0.82rem;line-height:1.7;word-break:break-word;padding:6px 0 4px;border-bottom:1px dotted var(--border);';
+  formulaDiv.style.cssText = 'font-size:var(--ws-text-sm,0.82rem);line-height:1.7;word-break:break-word;padding:6px 0 4px;border-bottom:1px dotted var(--border);';
   const rhs = result.entries.length
     ? result.entries.map(entry => `${entry.mult === 1 ? '' : entry.mult + '*'}${escapeHtml(branchingEntryDisplayLabel(entry, result))}`).join(' + ')
     : '0';
@@ -4596,14 +4596,14 @@ function renderBranchingResult(result) {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px dotted var(--border);min-width:max-content;';
     const multSpan = document.createElement('span');
-    multSpan.style.cssText = 'font-family:"JetBrains Mono",monospace;font-size:0.78rem;color:var(--accent);min-width:28px;text-align:right;flex-shrink:0;';
+    multSpan.style.cssText = 'font-family:var(--ws-font-ui,"JetBrains Mono",monospace);font-size:var(--ws-text-sm,0.78rem);color:var(--accent);min-width:28px;text-align:right;flex-shrink:0;';
     multSpan.textContent = `x${entry.mult}`;
     const diagrams = document.createElement('span');
     diagrams.style.cssText = 'display:inline-flex;align-items:center;gap:6px;flex-shrink:0;';
     entry.factors.forEach((factor, idx) => {
       if (idx) {
         const times = document.createElement('span');
-        times.style.cssText = 'font-family:"JetBrains Mono",monospace;color:var(--muted);font-size:0.72rem;';
+        times.style.cssText = 'font-family:var(--ws-font-ui,"JetBrains Mono",monospace);color:var(--muted);font-size:var(--ws-text-sm,0.72rem);';
         times.textContent = 'x';
         diagrams.appendChild(times);
       }
@@ -4613,7 +4613,7 @@ function renderBranchingResult(result) {
       diagrams.appendChild(art);
     });
     const label = document.createElement('span');
-    label.style.cssText = 'font-family:"JetBrains Mono",monospace;font-size:0.72rem;color:var(--muted);overflow-wrap:anywhere;';
+    label.style.cssText = 'font-family:var(--ws-font-ui,"JetBrains Mono",monospace);font-size:var(--ws-text-sm,0.72rem);color:var(--muted);overflow-wrap:anywhere;';
     label.textContent = branchingEntryDisplayLabel(entry, result);
     row.appendChild(multSpan);
     row.appendChild(diagrams);
@@ -6059,7 +6059,7 @@ function orbitRowsForEntry(entry) {
 function buildOrbitTable() {
   const container = document.getElementById('lie-orbit-table');
   if (!_lieOrbit.length) { container.innerHTML = ''; return; }
-  let html = `<table style="border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:0.72rem;width:100%;margin-top:4px;">`;
+  let html = `<table style="border-collapse:collapse;font-family:var(--ws-font-ui,'JetBrains Mono',monospace);font-size:var(--ws-text-sm,0.72rem);width:100%;margin-top:4px;">`;
   html += `<thead><tr style="background:var(--bg);">`;
   orbitTableHeaderLabels().forEach(label => {
     html += `<th style="padding:3px 5px;border:1px solid var(--border);color:var(--muted);">${label}</th>`;

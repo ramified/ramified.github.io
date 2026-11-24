@@ -1,0 +1,57 @@
+/* Math Workspace typography.
+   Three roles, following implement_plan/ramified_visual_design_principles.md:
+   display = headings and math-like glyphs, ui = all interface text,
+   code = text the user types or reads as raw data (TeX names, JSON, matrix cells).
+   css/site.css stays frozen for the classic calculator pages, so the shared rules
+   the workspace uses are mapped here. Editors in shadow DOM inherit these tokens
+   through var(--ws-*, original) wrappers in js/math_workspace/sources. */
+body.ramified-theme {
+  --ws-font-display: "STIX Two Text", "Noto Serif SC", "Songti SC", Georgia, serif;
+  --ws-font-ui: "Source Sans 3", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ws-font-code: "JetBrains Mono", Consolas, "Noto Sans SC", "Microsoft YaHei", monospace;
+  --ws-text-xs: 12px; /* captions, badges, section headings in menus */
+  --ws-text-sm: 13px; /* labels, buttons, tabs, panel titles, help text */
+  --ws-text-md: 15px; /* control values and body text */
+  --ws-text-lg: 20px; /* dialog titles */
+  --ws-text-xl: 24px; /* page title */
+  --ws-label-transform: none;
+  --ws-label-tracking: normal;
+  /* One label column for every inline form row, light DOM and editors alike. */
+  --ws-label-col: 96px;
+  --ws-inline-gap: 8px;
+  --ws-inline-columns: var(--ws-label-col) minmax(0, 1fr);
+  --ws-inline-label-wrap: normal; /* the few labels wider than the column wrap instead of overlapping */
+  /* Matrix presets: an even 4 x 2 grid instead of a ragged 3-line wrap. */
+  --ws-preset-display: grid;
+  --ws-preset-min: 48px;
+  --ws-preset-btn-padding: 4px 4px;
+  font-family: var(--ws-font-ui);
+  font-size: var(--ws-text-md);
+}
+
+/* Form controls do not inherit fonts by default; zero specificity keeps every
+   role rule (for example .workspace-code-control) in charge. */
+:where(body.ramified-theme) :where(button, input, select, textarea) { font-family: inherit; }
+
+/* Shared site.css rules that reach the workspace's light DOM. */
+body.ramified-theme .canvas-panel header.panel-title,
+body.ramified-theme .card-head {
+  font-family: var(--ws-font-ui);
+  font-size: var(--ws-text-sm);
+  letter-spacing: var(--ws-label-tracking);
+  text-transform: var(--ws-label-transform);
+}
+body.ramified-theme .input-label {
+  font-family: var(--ws-font-ui);
+  font-size: var(--ws-text-sm);
+  letter-spacing: var(--ws-label-tracking);
+  text-transform: var(--ws-label-transform);
+}
+body.ramified-theme .btn { font-family: var(--ws-font-ui); font-size: var(--ws-text-sm); letter-spacing: normal; }
+body.ramified-theme .card-stale-badge { font-family: var(--ws-font-ui); font-size: var(--ws-text-xs); }
+body.ramified-theme footer { font-size: var(--ws-text-sm); }
+
+/* Shared import_export_panel.css rules. */
+body.ramified-theme .import-export-tab { font-size: var(--ws-text-sm); }
+body.ramified-theme .import-export-panel :is(select, input[type="text"], input[type="search"]) { font-family: var(--ws-font-ui); font-size: var(--ws-text-md); }
+body.ramified-theme :is(.workspace-io-output, .workspace-io-input) { font: var(--ws-text-sm)/1.5 var(--ws-font-code); }

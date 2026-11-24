@@ -12,8 +12,14 @@ async function run() {
     await client.send('Runtime.enable'); await client.send('Page.enable');
     client.socket.addEventListener('message',event=>{const msg=JSON.parse(String(event.data));if(msg.method==='Runtime.exceptionThrown')errors.push(msg.params.exceptionDetails.exception?.description||msg.params.exceptionDetails.text);});
     await waitFor(()=>read(()=>!!window.MathWorkspacePanelRegistry && !!window.MathWorkspaceObjectPanels),20000);
-    assert.equal(await read(()=>[...document.querySelector('#workspace-open-canvas').options].some(o=>o.value.startsWith('object:'))),false);
+    await read(() => MathWorkspaceLoader.ensure(["complex","matrix","slice","double-young","dynkin","strand"]));
+    assert.equal(await read(() => document.getElementById('workspace-open-canvas')), null);
     assert.equal(await read(()=>document.querySelector('#workspace-card-source')),null);
+    await read(()=>document.querySelector('[aria-label="Close Assets"]').click());
+    await read(()=>document.querySelector('#workspace-add-card').click());
+    await read(()=>document.querySelector('#workspace-card-options [data-card-key="assets"]').click());
+    assert(await read(()=>document.querySelector('[data-canvas-tab="assets"]').getAttribute('aria-selected')==='true'));
+    await read(()=>document.querySelector('#workspace-add-card').click());
     await read(()=>document.querySelector('#workspace-add-card').click());
     assert.deepEqual(await read(()=>[...document.querySelectorAll('#workspace-card-options input')].map(i=>i.dataset.cardKey)),['importExport']);
     await read(()=>{
@@ -32,7 +38,7 @@ async function run() {
       // Start with a real asset click, as users enter the contextual picker.
       document.querySelector('#workspace-add-card').click();
     });
-    const point = await read(()=>{const r=document.querySelector('[data-asset-key="'+key(a)+'"]').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};});
+    const point = await read(()=>{const item=document.querySelector('[data-asset-key="'+key(a)+'"]');item.scrollIntoView({block:'center'});const r=item.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};});
     await mouse(client,'mousePressed',point.x,point.y,1);await mouse(client,'mouseReleased',point.x,point.y,0);
     await read(()=>document.querySelector('#workspace-add-card').click());
     assert.equal(await read(()=>document.querySelector('#workspace-card-context').textContent),'Selected: alpha');

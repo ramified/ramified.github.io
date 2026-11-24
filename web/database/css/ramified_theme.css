@@ -18,8 +18,8 @@ body.ramified-theme > header {
 }
 
 body.ramified-theme > header h1 {
-  font-size: 1.4rem;
-  font-family: inherit;
+  font-size: var(--ws-text-xl);
+  font-family: var(--ws-font-display);
 }
 
 body.ramified-theme > header .wordmark {
@@ -29,7 +29,7 @@ body.ramified-theme > header .wordmark {
 }
 
 body.ramified-theme > header span {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--ws-font-ui);
   color: var(--muted);
   letter-spacing: 0;
 }
@@ -56,13 +56,13 @@ body.ramified-theme .input-label,
 body.ramified-theme .workspace-assets-content .workspace-asset-type {
   text-transform: none;
   letter-spacing: normal;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--ws-font-ui);
   font-weight: 600;
   color: var(--muted);
 }
 
 body.ramified-theme button:not(:has(.workspace-asset-icon)) {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--ws-font-ui);
   font-weight: 600;
   letter-spacing: normal;
 }

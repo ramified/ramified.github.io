@@ -169,7 +169,7 @@
     shell = true; shellAt = performance.now();
     const canvas = new URLSearchParams(root.location.search).get('canvas');
     if (canvas) {
-      if (['assets', 'mosaic', 'places', 'sheaf-complexes'].includes(canvas)) callbacks.open(canvas);
+      if (canvas === 'assets') callbacks.open(canvas);
       else linkFailure = t('link');
     }
     notify();
