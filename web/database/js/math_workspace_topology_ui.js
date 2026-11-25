@@ -3,13 +3,16 @@
   const model=root.MathWorkspaceTopology,keyOf=a=>a?a.kind+':'+a.id:'';
   const el=(tag,text='',className='')=>Object.assign(document.createElement(tag),{textContent:text,className});
   const button=(text,action)=>{const b=el('button',text,'btn btn-ghost');b.type='button';b.addEventListener('click',action);return b;};
-  const field=(text,input)=>{const label=el('label','','workspace-field');label.append(el('span',text,'input-label'),input);return label;};
+  const field=(text,input,layout='')=>{const label=el('label','',('workspace-field '+layout).trim());label.append(el('span',text,'input-label'),input);return label;};
+  // Definitions stay readable: nested structure is indented, but arrays of plain values stay on one line
+  // ("pd": [[1, 5, 2, 4], ...] instead of one number per line). JSON strings cannot contain raw newlines.
+  const compactJson=value=>JSON.stringify(value,null,2).replace(/\[\s*\n\s*([^\[\]{}]*?)\s*\n\s*\]/g,(_,inner)=>'['+inner.replace(/\s*\n\s*/g,' ')+']');
   function mountInput(host,{read,assets,update,feedback,open,generatePreset}){
     const source=el('select','','workspace-control'),preset=el('select','','workspace-control'),code=el('textarea','','workspace-control workspace-code-control'),hint=el('p','','workspace-card-context');
     source.setAttribute('aria-label','Mosaic Diagram source');source.dataset.topologySource='';preset.setAttribute('aria-label','Topology preset');preset.dataset.topologyPreset='';
     code.rows=9;code.spellcheck=false;code.setAttribute('aria-label','Independent topology definition');code.dataset.topologyDefinition='';
     let dirty=false,lastKey='',lastSource='',baseline='';
-    const text=asset=>JSON.stringify(model.definition(asset.kind,asset.data),null,2);
+    const text=asset=>compactJson(model.definition(asset.kind,asset.data));
     const save=data=>{try{update(data);dirty=false;refresh(true);feedback('');}catch(error){feedback(error.message,true);}};
     const apply=button('Apply definition',()=>{try{const a=read();if(!a||a.data.source)return;save(model.normalize(a.kind,JSON.parse(code.value)));}catch(error){feedback(error.message,true);}});apply.dataset.topologyApply='';
     const reset=button('Reset draft',()=>{dirty=false;refresh(true);feedback('');});reset.dataset.topologyReset='';
@@ -35,7 +38,9 @@
     preset.addEventListener('change',()=>{const a=read(),choice=preset.value!==''&&model.presets[a?.kind]?.[Number(preset.value)];parameters.hidden=choice?.generator!=='moduli';load.disabled=!choice||!!a?.data.source;if(choice&&!choice.generator){loadPreset();preset.value='';load.disabled=true;}});
     root.CalculatorInputSettings.listenEditable(code,'input',()=>{dirty=true;},{commitHandled:true});
     const actions=el('div','','workspace-object-reference');actions.append(load,apply,reset,detach,edit);
-    host.append(field('Source',source),hint,field('Preset',preset),parameters,field('Definition',code),actions);
+    // Same left label column as Name, so the whole panel reads in one direction.
+    hint.classList.add('workspace-field-aligned');
+    host.append(field('Source',source,'workspace-field-inline'),hint,field('Preset',preset,'workspace-field-inline'),parameters,field('Definition',code,'workspace-field-inline workspace-field-top'),actions);
     function refresh(force=false){
       const a=read();if(!a)return;
       const key=keyOf(a),linked=!!a.data.source,changedTarget=key!==lastKey||a.data.source!==lastSource;

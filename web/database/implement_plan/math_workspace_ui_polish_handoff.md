@@ -6,19 +6,17 @@
 
 已完成：1–3（字体加载、三种字体角色、5 级字号）、4（Matrix 预设 4×2）、5（rows × cols 行）、6（Matrix Display：单元格仍为 42–72px，测试要求不小于 41px；列间距在 7px 放不下时才缩到 4px，由 CSS 按列数和容器宽度计算；标题行可换行。1024px 窗口分屏下 5 × 5 不再横向滚动；窗格比 42px 单元格的下限还窄时仍会滚动）、7（环下拉框改为 “R = ℂ”；`js/math_workspace.js` 的 `assetDefinitionFor` 里，mosaic-diagram 的 “on …” 和 knot/dual-graph 的 “follows …” 改用被引用资产的显示名，不再显示 “mosaic-space:M8” 这样的内部键；新增 `synchronizeReferenceDefinitions()`，被引用资产改名后同步刷新这些描述）、11（统一 96px 标签列）、13（去掉嵌套卡片内边距）、16（统一配色）、17（棕红只留给映射和删除）、18（按钮只剩主/次两种）、19（按钮首字母大写）。
 
-还没做：
-
-| 项 | 问题 |
-| --- | --- |
-| 8 | Assets 网格名称截断（“Marked Dynkin diagr…”） |
-| 9 | Complexes & Filtrations 工具栏按钮右对齐换行，参差不齐 |
-| 10 | Knot 载入预设后 JSON 每个数字一行 |
-| 12 | 同一面板标签位置混用（Knot：Name 在左，Source/Preset/Definition 在上）。Complex 的 Term/Link 是有意设计，不改 |
-| 14 | 卡片头部图标拥挤、点击区域小 |
-| 15 | Import / Export 卡片底部多余空白 |
-| 20 | 面板标题显示原始 TeX 名（“Delta · Modify”），Assets 里显示 Δ |
-| 21 | 打开 New object 对话框时滚动条出现导致横向跳动（可用 `scrollbar-gutter: stable`） |
-| 22 | Add panel 弹出层按 Esc / 点空白处关不掉 |
+第二批（2026-11-25）也已完成：
+- 8：图标视图的类型标签最多换两行，不再截断；卡片内容顶对齐（`css/math_workspace.css`）。
+- 9：Complexes & Filtrations 工具栏改为左对齐。原来写的 `flex-start` 被运行时 `[data-surface-role="view"]` 的 `flex-end` 规则压过，已提高选择器优先级（`diagram_display_panel.mjs`，已重建）。
+- 10：Knot/拓扑定义 JSON 改为紧凑格式，纯数值数组保持在一行；Trefoil 从 23 行变为 8 行（`js/math_workspace_topology_ui.js` 的 `compactJson`）。
+- 12：Source / Preset / Definition 改用与 Name 相同的 96px 左侧标签列，说明文字与控件左缘对齐。
+- 14：卡片头部按钮的点击区域改为 28×28，间距 4px。
+- 15：Import / Export 的空状态行（`#workspace-status:empty`）不再占位，可见空白从 46px 降到 16px。
+- 20：`plainAssetName` 把 TeX 希腊字母命令转换成字形（“Δ · Modify”、“λ · Modify”）。名称唯一性仍按原 TeX 拼写比较（`texPlainName`）。
+- 21：在 headless 和带经典滚动条的浏览器中都没复现（页面宽度前后都不变）。仍加了 `html { scrollbar-gutter: stable; }` 作为预防。
+- 22：Add panel 弹出层现在按 Esc 或在外部按下鼠标即可关闭，Esc 关闭后焦点回到按钮。
+截图与指标：`C:\Users\bbh8149\AppData\Local\Temp\claude\5eff3bb36e3487ea\6493a29d-77b2-496e-8aa5-5e726bae60d0\scratchpad\shots\compare_ui\`（compare_*.png、metrics_diff.md）。脚本是 `shoot_ui.mjs` / `compose_ui.mjs`。headless 下 MathJax CDN 没有加载，所以截图里的公式显示为原始 TeX。
 
 其他遗留：只有 Matrix、Mosaic 和工作区自己的面板用上了 96px 标签列，Sheaf、Strand 等编辑器未检查；窄屏未验证；画布里由 JS 画出的颜色（如 Mosaic 六边形底色）仍偏暖。
 

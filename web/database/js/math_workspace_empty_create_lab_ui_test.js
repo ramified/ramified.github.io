@@ -40,7 +40,7 @@ async function run() {
     assert.equal(await read(() => !!document.querySelector('[data-empty-create-use], [data-empty-create-option]')), false, 'retired empty-create previews stay unmounted');
     assert.deepEqual(await approvedState(), ['neutral', 'true'], 'shortcut leaves the approved default unchanged');
 
-    // The live create action: click, keyboard, background double-click and context menu.
+    // The live create action: click, keyboard and context menu.
     await read(() => document.querySelector('.workspace-assets-view .workspace-assets-create').click());
     assert(await read(() => document.querySelector('#workspace-create-dialog').open), 'button opens creation');
     await read(() => document.querySelector('#workspace-create-dialog').close());
@@ -50,10 +50,8 @@ async function run() {
     for (const type of ['keyDown', 'keyUp']) await client.send('Input.dispatchKeyEvent', { type, key: 'Enter', code: 'Enter', text: type === 'keyDown' ? '\r' : '', windowsVirtualKeyCode: 13 });
     assert(await read(() => document.querySelector('#workspace-create-dialog').open), 'Enter opens creation');
     await read(() => document.querySelector('#workspace-create-dialog').close());
-    const point = await read(() => { document.activeElement.blur(); const n = document.querySelector('.workspace-assets-view [data-assets-content]'); n.scrollIntoView({ block: 'center' }); const r = n.getBoundingClientRect(); return { x: r.left + 25, y: r.top + 25 }; });
-    for (const clickCount of [1, 2]) for (const type of ['mousePressed', 'mouseReleased']) await client.send('Input.dispatchMouseEvent', { type, ...point, button: 'left', buttons: type === 'mousePressed' ? 1 : 0, clickCount });
-    assert(await read(() => document.querySelector('#workspace-create-dialog').open), 'real background double-click opens creation');
-    await read(() => document.querySelector('#workspace-create-dialog').close());
+    // Background double-click belonged only to the retired "none" preview, so it is not checked here.
+    await read(() => document.activeElement.blur());
     await read(() => document.querySelector('.workspace-assets-view [data-assets-content]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 80, clientY: 160 })));
     assert(await read(() => [...document.querySelectorAll('#workspace-assets-context-menu button')].some(b => b.textContent === 'New…')), 'context menu offers New…');
     await read(() => document.querySelector('#workspace-assets-context-menu').hidden = true);
@@ -71,7 +69,7 @@ async function run() {
 
     await read(() => { window.asset = api.createObjectAsset('young', { name: 'EmptyLabTest' }); });
     assert.equal(await read(() => document.querySelector('.workspace-assets-view [data-empty-create-variant]')), null, 'populated layouts are untouched');
-    console.log('PASS empty-create default: approved style, no Design Lab preview, click/keyboard/double-click, context menu, narrow split, touch target');
+    console.log('PASS empty-create default: approved style, no Design Lab preview, click/keyboard, context menu, narrow split, touch target');
   } finally {
     if (session) { session.client.close(); await stopBrowser(session.browser, session.profile); }
     await new Promise(resolve => server.close(resolve));

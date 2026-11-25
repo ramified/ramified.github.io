@@ -1,5 +1,7 @@
 /* Workspace-only layout. Core colors, cards, controls, and typography come from site.css. */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+/* Reserve the scrollbar lane so opening a modal on a short page cannot shift the layout sideways. */
+html { scrollbar-gutter: stable; }
 
 .math-workspace-layout {
   display: grid;
@@ -166,6 +168,9 @@
 .workspace-field { display: grid; min-width: 0; gap: 4px; }
 .workspace-field > .input-label { margin: 0; }
 .workspace-field-inline { grid-template-columns: var(--ws-inline-columns); align-items: center; column-gap: var(--ws-inline-gap); row-gap: 0; }
+.workspace-field-inline.workspace-field-top { align-items: start; }
+.workspace-field-inline.workspace-field-top > .input-label { padding-top: 6px; }
+.workspace-field-aligned { margin-left: calc(var(--ws-label-col) + var(--ws-inline-gap)); }
 .workspace-field-inline > .input-label { white-space: normal; overflow-wrap: anywhere; }
 .workspace-ci-slider { display: grid; grid-template-columns: minmax(0, 1fr) 3ch; align-items: center; gap: 8px; min-width: 0; }
 .workspace-ci-slider input[type='range'] { padding: 0; accent-color: var(--accent); }
@@ -207,8 +212,13 @@
 .workspace-tensor-factor { border: 1px solid var(--border); border-radius: 7px; padding: 10px; }
 .workspace-tensor-factor > button { justify-self: end; }
 .workspace-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.workspace-assets-inspector-card .workspace-card-tools { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
-.workspace-assets-inspector-card .workspace-card-tool { border: 0; border-radius: 3px; background: transparent; color: inherit; cursor: pointer; padding: 3px 5px; font: 14px var(--ws-font-ui); }
+.workspace-assets-inspector-card .workspace-card-tools { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.workspace-assets-inspector-card .workspace-card-tool { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; min-height: 28px; border: 0; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; padding: 0 4px; font: 14px var(--ws-font-ui); }
+/* Card-head controls: 28px hit areas with clear spacing (pin, menu caret, move, hide). */
+.card-head .card-pin-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; min-height: 28px; padding: 0 4px; }
+.card-head .toggle-icon { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; min-height: 28px; margin-right: 4px; }
+/* Import / Export: the status line takes no space until it has a message. */
+#workspace-io-card .workspace-status:empty { display: none !important; }
 .workspace-assets-inspector-card .workspace-card-tool:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .workspace-assets-inspector-card .workspace-card-tool:focus-visible { outline: 2px solid var(--accent); }
 .workspace-assets-inspector-card .workspace-card-tool:disabled { cursor: not-allowed; opacity: .35; background: transparent; }
@@ -393,10 +403,11 @@
 .workspace-asset-rename { width: 100%; min-width: 74px; padding: 3px 5px; border: 1px solid var(--accent); border-radius: 2px; background: var(--surface); color: var(--text); font: var(--ws-text-sm) var(--ws-font-code); user-select: text; }
 
 .workspace-assets-content[data-layout='icons'] { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); align-content: start; gap: 10px; }
-.workspace-assets-content[data-layout='icons'] .workspace-asset-item { display: grid; grid-template-rows: 58px auto auto; justify-items: center; gap: 3px; min-height: 112px; padding: 10px 7px 8px; text-align: center; }
+.workspace-assets-content[data-layout='icons'] .workspace-asset-item { display: grid; grid-template-rows: 58px auto auto; align-content: start; justify-items: center; gap: 3px; min-height: 112px; padding: 10px 7px 8px; text-align: center; }
 .workspace-assets-content[data-layout='icons'] .workspace-asset-icon { font-size: 2.7rem; }
 .workspace-assets-content[data-layout='icons'] .workspace-asset-name { width: 100%; font-size: var(--ws-text-md); }
-.workspace-assets-content[data-layout='icons'] .workspace-asset-type { max-width: 100%; font: var(--ws-text-xs) var(--ws-font-ui); white-space: nowrap; }
+/* Icon grid: type labels wrap onto at most two lines instead of being cut off ("Marked Dynkin diagram"). */
+.workspace-assets-content[data-layout='icons'] .workspace-asset-type { display: -webkit-box; max-width: 100%; font: var(--ws-text-xs) var(--ws-font-ui); line-height: 1.25; white-space: normal; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .workspace-assets-content[data-layout='icons'] .workspace-asset-definition,
 .workspace-assets-content[data-layout='icons'] .workspace-asset-modified { display: none; }
 

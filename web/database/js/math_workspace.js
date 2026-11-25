@@ -903,8 +903,12 @@
     sheaf: [['abstract', 'Abstract sheaf'], ['locally-free', 'Locally free sheaf'], ['structure', 'Structure sheaf'], ['tangent', 'Tangent sheaf'], ['cotangent', 'Cotangent sheaf'], ['canonical', 'Canonical sheaf'], ['twist', 'Twist'], ['divisor-line', 'Divisor line bundle'], ['universal-bundle', 'Universal bundle'], ['direct-sum', 'Direct sum'], ['self-direct-sum', 'Self direct sum'], ['self-tensor-product', 'Self tensor product'], ['dual', 'Dual sheaf'], ['internal-hom', 'Internal Hom'], ['ideal-sheaf', 'Ideal sheaf'], ['normal-bundle', 'Normal bundle'], ['conormal-bundle', 'Conormal bundle'], ['relative-tangent', 'Relative tangent'], ['relative-cotangent', 'Relative cotangent'], ['tensor', 'Tensor product'], ['schur', 'Schur functor'], ['map-operation', 'Pullback / pushforward']],
     map: [['ordinary', 'Map of varieties'], ['sheaf', 'Map of sheaves'], ['abel-jacobi', 'Abel–Jacobi map'], ['composition', 'Composition of maps']]
   };
-  const plainAssetName = (value) => String(value || '').replace(/\\(?:mathcal|mathfrak|mathbf|mathrm|operatorname)\s*\{([^}]*)\}/g, '$1').replace(/[{}$\\]/g, '').replace(/[_^]/g, ' ').replace(/\s+/g, ' ').trim();
-  const canonicalAssetName = (value) => plainAssetName(value).toLocaleLowerCase().replace(/\s+/g, '');
+  const texPlainName = (value) => String(value || '').replace(/\\(?:mathcal|mathfrak|mathbf|mathrm|operatorname)\s*\{([^}]*)\}/g, '$1').replace(/[{}$\\]/g, '').replace(/[_^]/g, ' ').replace(/\s+/g, ' ').trim();
+  // Display text for titles and menus: TeX Greek letters become the glyphs MathJax shows in Assets ("\Delta" → "Δ").
+  const TEX_GREEK = { alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ϵ', varepsilon: 'ε', zeta: 'ζ', eta: 'η', theta: 'θ', vartheta: 'ϑ', iota: 'ι', kappa: 'κ', lambda: 'λ', mu: 'μ', nu: 'ν', xi: 'ξ', pi: 'π', varpi: 'ϖ', rho: 'ρ', varrho: 'ϱ', sigma: 'σ', varsigma: 'ς', tau: 'τ', upsilon: 'υ', phi: 'ϕ', varphi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω', Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Xi: 'Ξ', Pi: 'Π', Sigma: 'Σ', Upsilon: 'Υ', Phi: 'Φ', Psi: 'Ψ', Omega: 'Ω', ell: 'ℓ' };
+  const plainAssetName = (value) => texPlainName(String(value || '').replace(/\\([A-Za-z]+)(?![A-Za-z])/g, (match, command) => TEX_GREEK[command] || match));
+  // Uniqueness keeps comparing the TeX spelling, so existing names do not start colliding or splitting.
+  const canonicalAssetName = (value) => texPlainName(value).toLocaleLowerCase().replace(/\s+/g, '');
   const cloneAssetProperties = (properties) => properties ? JSON.parse(JSON.stringify(properties)) : {};
   const cloneAssetPropertyValue = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
   const ASSET_PROPERTY_FIELDS_BY_KIND = Object.freeze({
@@ -3325,6 +3329,9 @@
     $('#workspace-split-view').addEventListener('click', () => setSplitView(!splitView));
     $('#workspace-io-card').classList.add('workspace-assets-inspector-card'); installWorkspaceOwnedCardChrome($('#workspace-io-card'), 'importExport'); enableWorkspaceOwnedCardDragging();
     $('#workspace-add-card').addEventListener('click', () => $('#workspace-card-picker').hidden ? openCardPicker() : closeCardPicker());
+    // Add panel behaves like the other popovers: Escape or a press outside it (and outside its button) closes it.
+    document.addEventListener('pointerdown', (event) => { if (!$('#workspace-card-picker').hidden && !$('#workspace-card-picker').contains(event.target) && !$('#workspace-add-card').contains(event.target)) closeCardPicker(); }, true);
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !event.defaultPrevented && !document.querySelector('dialog[open]') && closeCardPicker()) { event.preventDefault(); $('#workspace-add-card').focus(); } });
     document.querySelectorAll('[data-pane]').forEach((pane) => pane.addEventListener('pointerdown', () => focusCanvasPane(pane.dataset.pane)));
     $('#workspace-canvas-resizer').addEventListener('pointerdown', beginCanvasResize);
     $('#workspace-canvas-resizer').addEventListener('keydown', handleCanvasResizeKeydown);
