@@ -4,10 +4,10 @@ const {startServer,launchBrowser,stopBrowser,waitFor,evaluate}=require('./math_w
 const {catalog,fixture,multiFixture}=require('./math_workspace_knot_operations_test.js');
 async function run(){const server=await startServer();let session;
   try{
-    session=await launchBrowser('http://127.0.0.1:'+server.address().port+'/math_workspace.html?designLab=1');const {client}=session;
+    session=await launchBrowser('http://127.0.0.1:'+server.address().port+'/math_workspace.html');const {client}=session;
     const read=(fn,...args)=>evaluate(client,'('+fn.toString()+')(...'+JSON.stringify(args)+')');
     const english=async selector=>assert.equal(await read(selector=>[...document.querySelectorAll(selector)].some(node=>/\p{Script=Han}/u.test(node.textContent+' '+[...node.querySelectorAll('[aria-label],[title]')].map(child=>(child.getAttribute('aria-label')||'')+' '+(child.getAttribute('title')||'')).join(' '))),selector),false,'normal editor text and accessibility labels remain English: '+selector);
-    await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels&&!!document.querySelector('[data-knot-hover-choice]')),20000);
+    await waitFor(()=>read(()=>!!window.MathWorkspaceObjectPanels&&!!window.MathWorkspaceKnotEditing),20000);
     await read(()=>{
       window.api=MathWorkspaceAssetsTest;window.panels=MathWorkspaceObjectPanels;window.key=a=>a.kind+':'+a.id;window.get=a=>api.localAssetSnapshot().assets.find(item=>key(item)===key(a));
       window.linked=f=>{
@@ -107,21 +107,14 @@ async function run(){const server=await startServer();let session;
     // Restoring a backup discards in-memory previews and histories.
     await read(()=>{const backup=panels.exportText('workspace');panels.importText('workspace',backup);window.synced.view=[...panels.panels.values()].find(p=>p.definition.id==='knot-view'&&p.computation.refs.asset===key(synced.knot));});
     assert.equal(await read(()=>!!synced.view.renderArea.querySelector('[data-knot-preview]')),false);
-    await read(()=>{const picker=document.querySelector('[data-design-picker]');picker.value='knot-hover';picker.dispatchEvent(new Event('change'));});
-    for(const id of ['halo','ticks','ring']){
-      await read(id=>document.querySelector('[data-knot-hover-choice="'+id+'"]').click(),id);assert.equal(await read(()=>synced.view.renderArea.querySelector('[data-knot-drawing]').dataset.knotHover),id);
-      if(id!=='ticks')assert.equal(await read(()=>synced.view.renderArea.querySelector('.workspace-knot-crossing-highlight circle').getAttribute('r')),'12','ring and halo circle sizes match');
-    }
-    await read(()=>document.querySelector('#workspace-design-lab button[aria-label="Move to main area"]').click());
+    // The approved crossing highlight (halo) is the product default; the Design Lab picker for it was retired.
+    assert.equal(await read(()=>MathWorkspaceKnotEditing.hover()),'halo');
+    assert.equal(await read(()=>synced.view.renderArea.querySelector('[data-knot-drawing]').dataset.knotHover),'halo');
+    assert.equal(await read(()=>!!document.querySelector('[data-knot-hover-choice],[data-design-experiment="knot-hover"]')),false,'no hover-style picker remains');
+    await read(()=>synced.view.node.scrollIntoView({block:'start'}));
     const shot=await client.send('Page.captureScreenshot',{format:'png'});const filename=path.join(os.tmpdir(),'math-workspace-knot-hover.png');fs.writeFileSync(filename,Buffer.from(shot.data,'base64'));console.log('Screenshot: '+filename);
-    await read(()=>{
-      Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.hoverSettings=JSON.parse(text);}}});
-      document.querySelector('[data-knot-hover-choice="halo"]').click();document.querySelector('[data-design-copy="knot-hover"]').click();
-    });await waitFor(()=>read(()=>!!window.hoverSettings));
-    assert.deepEqual(await read(()=>hoverSettings),{knotInteraction:{hover:'halo'}});
-    await read(()=>{document.querySelector('[data-knot-hover-choice="ticks"]').click();document.querySelector('[data-design-exit]').click();});assert.equal(await read(()=>MathWorkspaceKnotEditing.hover()),'halo');
     await english('[data-panel-type="knot-view"]');
-    console.log('PASS actual crossing clicks, synchronized followers, R1/R2 previews, cancel/preview/detach, undo, backups and hover designs');
+    console.log('PASS actual crossing clicks, synchronized followers, R1/R2 previews, cancel/preview/detach, undo, backups and the default halo hover');
   }finally{if(session){session.client.close();await stopBrowser(session.browser,session.profile);}await new Promise(resolve=>server.close(resolve));}
 }
 if(require.main===module)run().catch(error=>{console.error(error.stack||error);process.exitCode=1;});

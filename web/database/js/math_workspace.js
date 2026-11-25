@@ -936,11 +936,24 @@
   function assetDiagnostics() {
     synchronizeTopologyAssets();
     synchronizeVarietyAssets();
+    synchronizeReferenceDefinitions();
     const loaderRevision=window.MathWorkspaceLoader?.revision;
     if(diagnosticCache.revision!==assetState.snapshot.revision||diagnosticCache.assets!==assetState.snapshot.assets||diagnosticCache.loaderRevision!==loaderRevision){
       diagnosticCache={revision:assetState.snapshot.revision,assets:assetState.snapshot.assets,loaderRevision,value:window.MathWorkspaceDiagnostics?.analyze(assetState.snapshot.assets)||{}};
     }
     return diagnosticCache.value;
+  }
+  // Definitions name the assets they reference (e.g. "Knot / link on S"); refresh them after a referenced asset is renamed.
+  // Definitions are not part of fingerprints, so this never invalidates computed properties.
+  const NAMED_REFERENCE_DEFINITION_KINDS=new Set(['mosaic-diagram','knot','dual-graph','field-extension','number','matrix']);
+  function synchronizeReferenceDefinitions(){
+    let changed=false;
+    for(const asset of assetState.snapshot.assets){
+      if(!NAMED_REFERENCE_DEFINITION_KINDS.has(asset.kind))continue;
+      let definition;try{definition=assetDefinitionFor(asset.kind,asset.type,asset.data);}catch(_){continue;}
+      if(definition!==asset.definition){asset.definition=definition;changed=true;}
+    }
+    if(changed)assetState.snapshot.revision++;
   }
   function synchronizeTopologyAssets(){
     const changed=window.MathWorkspaceTopology?.synchronize(assetState.snapshot.assets)||[];
@@ -1905,9 +1918,10 @@
     if(kind==='complex')return 'Complex · '+data.objects.length+' terms · '+data.direction+' from '+data.startDegree;
     if(kind==='field-extension')return (assetByKey(data.target)?.plainName||data.generator)+' / '+(assetByKey(data.base)?.plainName||'Choose base field')+' · '+data.polynomial;
     if(kind==='mosaic-space')return data.rows+' × '+data.cols+' · '+data.lattice+' · '+data.boundary;
-    if(kind==='mosaic-diagram')return (data.diagramType==='dual'?'Dual graph':'Knot / link')+' on '+data.space;
-    if(kind==='knot')return data.pd.length+' crossings · '+data.circles+' crossing-free circles'+(data.source?' · follows '+data.source:' · independent');
-    if(kind==='dual-graph')return data.genera.length+' vertices · '+data.edges.length+' edges'+(data.source?' · follows '+data.source:' · independent');
+    // Show referenced assets by their display names, never by internal keys such as "mosaic-space:M8".
+    if(kind==='mosaic-diagram')return (data.diagramType==='dual'?'Dual graph':'Knot / link')+' on '+(assetByKey(data.space)?.plainName||'Choose mosaic space');
+    if(kind==='knot')return data.pd.length+' crossings · '+data.circles+' crossing-free circles'+(data.source?' · follows '+(assetByKey(data.source)?.plainName||'a removed source'):' · independent');
+    if(kind==='dual-graph')return data.genera.length+' vertices · '+data.edges.length+' edges'+(data.source?' · follows '+(assetByKey(data.source)?.plainName||'a removed source'):' · independent');
     if (kind === 'number') return (data.hasValue?data.value:'Symbolic number')+' · '+(assetByKey(data.field)?.plainName||'Ring');
     if (kind === 'field') return window.MathWorkspaceObjects.fieldLabel(data);
     if (slicing?.isAsset({kind,type})) return kind === 'frame' ? 'Point and full basis in R^'+data.ambientDimension : kind === 'variety' ? 'Toric variety · '+(data.fan?'fan':'affine cone') : (slicing.labels[kind]||kind)+' in R^'+data.ambientDimension;
@@ -3306,7 +3320,6 @@
       }
     });
     window.MathWorkspacePanelRegistry = panelCatalog;
-    window.MathWorkspacePrincipalAssets.init({catalog:panelCatalog,changed:()=>{closeAssetsContextMenu();renderCardPicker();}});
     initialiseObjectPanels();
     initialiseImportExport();
     $('#workspace-split-view').addEventListener('click', () => setSplitView(!splitView));
@@ -3323,8 +3336,6 @@
     openCanvas('assets');
     const creationEntries=window.MathWorkspaceCreation.catalog(ASSET_SUBTYPES,window.MathWorkspaceObjects.kindLabels);
     creationPicker = window.MathWorkspaceCreation.init({entries:creationEntries,create:createAsset,prepare:prepareAssetCreation,dependencies:creationDependencies,capabilities:()=>assetState.snapshot.capabilities,returnFocus:()=>assetState.view});
-    window.MathWorkspaceEmptyCreateLab?.init(openAssetsCreationPicker);
-    window.MathWorkspaceSubjectAssignments.init({entries:creationEntries,assignments:creationPicker.assignments});
     designLab = window.MathWorkspaceDesignLab.init({
       render: renderAssets,
       mount(node) {

@@ -1,0 +1,52 @@
+/* Math Workspace palette: one set of colours for the page and the embedded editors.
+   The editors' copied CSS (js/math_workspace/sources) wraps its old warm palette as
+   var(--ws-*, original), so these values reach every shadow root while the classic
+   calculator pages keep their own colours. Values follow css/ramified_theme.css and
+   implement_plan/ramified_visual_design_principles.md (teal is the only accent; the
+   brown accent2 stays reserved for maps and destructive actions). */
+body.ramified-theme {
+  --ws-bg: var(--bg);
+  --ws-surface: #FAFBF8;          /* canvases, stages, cells: the design's panel paper */
+  --ws-surface-strong: #FFFFFF;
+  --ws-border: var(--border);
+  --ws-text: var(--text);
+  --ws-muted: var(--muted);
+  --ws-accent: var(--accent);
+  --ws-accent2: var(--accent2);
+  --ws-accent-hover: color-mix(in srgb, var(--accent) 82%, #000);
+  --ws-accent-tint: color-mix(in srgb, var(--accent) 6%, transparent);
+  --ws-accent-tint-08: color-mix(in srgb, var(--accent) 8%, transparent);
+  --ws-accent-tint-12: color-mix(in srgb, var(--accent) 12%, transparent);
+  --ws-accent-tint-13: color-mix(in srgb, var(--accent) 13%, transparent);
+  --ws-danger: var(--accent2);
+  --ws-danger-tint: color-mix(in srgb, var(--accent2) 6%, #FFFFFF);
+  /* Ghost buttons match the workspace's own: ink text, quiet border, teal on hover. */
+  --ws-ghost-color: var(--text);
+  --ws-ghost-border: var(--design-lab-interface-secondary-border, #C9D0CA);
+  --ws-ghost-hover-bg: transparent;
+  --ws-ghost-hover-color: var(--accent);
+  --ws-ghost-hover-border: var(--accent);
+  --ws-ghost-bg: transparent;
+  /* One button system (items 18/19): primary = teal fill, secondary = quiet outline,
+     danger = brown fill (delete only). All buttons: UI font, semibold, no letter
+     spacing, Sentence case via ::first-letter (labels themselves are unchanged). */
+  --ws-btn-font: var(--ws-font-ui);
+  --ws-btn-weight: 600;
+  --ws-btn-tracking: normal;
+  --ws-btn-case: uppercase;
+}
+
+body.ramified-theme .btn::first-letter { text-transform: var(--ws-btn-case); }
+/* site.css's own primary hover (#2e5239, the old green) never matched here; give primary
+   buttons the same darker-teal hover the editors use. */
+body.ramified-theme .btn:not(.btn-ghost):not(.workspace-assets-delete-confirm):hover {
+  background: var(--ws-accent-hover);
+  border-color: var(--ws-accent-hover);
+}
+
+/* Asset icons (user choice, 2026-11-25): in the Assets view, type ("generic") icons use
+   the grey ink and data-drawn ("exact") icons use teal; in the New object picker every
+   icon is teal. The grey default lives in js/math_workspace_asset_icons.js. */
+body.ramified-theme .workspace-create-dialog {
+  --workspace-icon-generic: var(--workspace-icon-exact, var(--accent));
+}

@@ -2,7 +2,7 @@
   "bundler": "esbuild@0.25.12",
   "minified": true,
   "keepNames": true,
-  "sha256": "9c8a41a644fdff3696046cc468247910d9bdcddcd6f9314159269a53c4797d9e",
+  "sha256": "ad54bfbd06289697b53c392ce261a2f83e62971ed3722496db710a3f079c56f6",
   "editors": [
     {
       "id": "slice",

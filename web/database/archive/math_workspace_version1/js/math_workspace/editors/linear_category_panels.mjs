@@ -69,7 +69,7 @@ __editor.setAssetAdapter({
       __matrixDisplay=document.createElement('div');__matrixDisplay.className='card-body matrix-display-output';
       const surface=document.createElement('div');surface.className='matrix-editor';surface.append(refs.grid);__matrixDisplay.append(surface);
       card.append(__matrixDisplay);__editor.inspectorShadow.querySelector('.workspace-card-inspector').append(card);__panelCard=card;
-      __panelStyle(':host,.editor-document,.editor-body,.editor-body>.layout{height:auto!important;min-height:0!important;overflow:visible!important}.workspace-editor-inspector-layout>.workspace-card-inspector{display:block!important}.matrix-display-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 4px;color:var(--muted);font:var(--ws-text-sm,0.74rem) var(--ws-font-ui,"JetBrains Mono",monospace)}.matrix-display-name{color:var(--text)}.matrix-display-output .matrix-editor{display:block;min-height:0;padding:16px 4px;overflow:auto;scrollbar-gutter:auto}.matrix-display-output .matrix-grid{width:min(100%,var(--matrix-preferred-width));min-width:var(--matrix-min-width);max-width:none;grid-template-columns:repeat(var(--matrix-columns),minmax(0,1fr))!important;gap:7px;margin-inline:auto}.matrix-display-output .matrix-cell{box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%;height:36px;padding:5px 4px;font-size:.72rem}');
+      __panelStyle(':host,.editor-document,.editor-body,.editor-body>.layout{height:auto!important;min-height:0!important;overflow:visible!important}.workspace-editor-inspector-layout>.workspace-card-inspector{display:block!important}.matrix-display-header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 12px;padding:8px 4px;color:var(--muted);font:var(--ws-text-sm,0.74rem) var(--ws-font-ui,"JetBrains Mono",monospace)}.matrix-display-name{color:var(--text)}.matrix-display-name,.matrix-display-meta{min-width:0;overflow-wrap:anywhere}.matrix-display-output .matrix-editor{display:block;min-height:0;padding:16px 4px;overflow:auto;scrollbar-gutter:auto;container-type:inline-size}.matrix-display-output .matrix-grid{--matrix-gap:clamp(4px,calc((100cqi - var(--matrix-columns) * 42px) / max(1,var(--matrix-columns) - 1)),7px);width:min(100%,calc(var(--matrix-columns) * 72px + (var(--matrix-columns) - 1) * var(--matrix-gap)));min-width:calc(var(--matrix-columns) * 42px + (var(--matrix-columns) - 1) * var(--matrix-gap));max-width:none;grid-template-columns:repeat(var(--matrix-columns),minmax(0,1fr))!important;gap:var(--matrix-gap);margin-inline:auto}.matrix-display-output .matrix-cell{box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%;height:36px;padding:5px 4px;font-size:.72rem}');
     } else if (config.mode === 'property') {
       __showCard(document.getElementById(config.marker).closest('.card'));
       __panelCard.addEventListener('click', event => {
@@ -86,16 +86,15 @@ __editor.setAssetAdapter({
     const projected = window.MathWorkspaceSlicing.materialize(asset,snapshot.assets);
     __matrixProject(projected.data);
     if (__matrixDisplay) {
+      /* Column widths are derived in CSS from this count: 42-72px cells; the gap gives up its 7px (down to 4px) only when 42px cells would not fit. */
       refs.grid.style.setProperty('--matrix-columns',state.cols);
-      refs.grid.style.setProperty('--matrix-preferred-width',(state.cols*72+(state.cols-1)*7)+'px');
-      refs.grid.style.setProperty('--matrix-min-width',(state.cols*42+(state.cols-1)*7)+'px');
       const result=readMatrix(false);
       let warning=__matrixDisplay.querySelector('.matrix-display-error');
       if(!warning){warning=document.createElement('p');warning.className='err matrix-display-error';warning.setAttribute('role','status');__matrixDisplay.append(warning);}
       warning.textContent=result.errors.length?matrixDataErrorMessage(result.errors[0]):'';warning.hidden=!result.errors.length;
       const heading=document.createElement('div');heading.className='matrix-display-header';
       const name=document.createElement('span');name.className='matrix-display-name';name.textContent=asset.plainName||asset.name;
-      const metadata=document.createElement('span');metadata.textContent=state.rows+' × '+state.cols+' · '+window.MathWorkspaceObjects.fieldLabel(projected.data);heading.append(name,metadata);
+      const metadata=document.createElement('span');metadata.className='matrix-display-meta';metadata.textContent=state.rows+' × '+state.cols+' · '+window.MathWorkspaceObjects.fieldLabel(projected.data);heading.append(name,metadata);
       const previous=__matrixDisplay.querySelector('.matrix-display-header');if(previous)previous.replaceWith(heading);else __matrixDisplay.prepend(heading);
       refs.grid.querySelectorAll('input').forEach(control=>{control.disabled=__matrixConstructed;control.setAttribute('aria-label','Entry '+(Number(control.dataset.row)+1)+', '+(Number(control.dataset.col)+1));});
     }

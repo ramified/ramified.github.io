@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   const generic = { 'mosaic-space':'⬡','mosaic-diagram':'⋈', filtration:'⊏',complex:'•→•','field-extension':'L/K', number: '𝑎', young: '▦', lie: '𝔤', field: '𝑅', dynkin: '●—●', strands: '⋈', matrix: '▦', category: '𝒞', functor: '⇒', variety: 'X', sheaf: 'ℱ', map: '→', frame:'⊞', point:'•', vector:'↗', polytope:'⬡', sphere:'◯', roots:'✳', lattice:'▦', voronoi:'⬡', formula:'ƒ', tropical:'⊕', weyl:'◈', cone:'△', fan:'⋔' };
-  const defaults = Object.freeze({ exactColor: '', genericColor: '#a8510b', stroke: 0.7, strandStroke:19, hatch: true,
+  const defaults = Object.freeze({ exactColor: '', genericColor: '#4f5a64', stroke: 0.7, strandStroke:19, hatch: true,
     matrixStroke: 2.1, matrixEntryStroke: 0.7, matrixFontSize: 20, matrixFontFamily: '"Times New Roman", serif',
     matrixRowGap: 0, matrixColumnGap: 0, matrixBracketGap: 1, matrixBracketCurve: 3, matrixPadding: 0,
     fanNegativeLength:0.7,coneNegativeLength:0.7 });
@@ -285,14 +285,14 @@
     }
     return svg;
   }
-  function genericFallback(host) {
+  function genericFallback(host, keepName = false) {
     const model=representatives[host.dataset.iconKind];
-    host.querySelector('.workspace-icon-formula')?.remove();
     if(model?.variant){
-      host.querySelector('.workspace-icon-fallback')?.replaceWith(objectTypeIcon(model));
+      host.replaceChildren(objectTypeIcon(model));
       host.dataset.iconVariant=model.variant;
-    }
-    host.dataset.iconSource='generic';delete host.dataset.iconName;
+    } else host.querySelector('.workspace-icon-formula')?.remove();
+    host.dataset.iconSource='generic';
+    if (!keepName) delete host.dataset.iconName;
   }
   function render(asset, resolve) {
     const description = describe(asset, resolve), model=description.representative || description, host = document.createElement('span');
@@ -315,6 +315,10 @@
     } else if (description.source==='generic' && !model.name) host.textContent=description.symbol;
     else {
       host.dataset.iconName = model.name; host.dataset.iconFallback = model.fallback || generic[asset.kind] || '◇';
+      if (representatives[asset.kind]?.variant && typeof root.MathJax?.typesetPromise !== 'function') {
+        genericFallback(host, !!root.MathJax);
+        return host;
+      }
       const fallback = document.createElement('span');
       fallback.className = 'workspace-icon-fallback';
       const label = host.dataset.iconFallback;
@@ -344,9 +348,17 @@
   async function typeset(container) {
     const hosts = [...container.querySelectorAll('[data-icon-name]')];
     if (!hosts.length) return;
-    try {
-      if (!root.MathJax?.typesetPromise) { if (!root.MathJax?.startup?.promise) return; await root.MathJax.startup.promise; }
-    } catch (_) { return; }
+    let mathJax = root.MathJax;
+    if (typeof mathJax?.typesetPromise !== 'function' && mathJax?.startup?.promise) {
+      try { await mathJax.startup.promise; } catch (_) { /* Check the current renderer after startup. */ }
+      mathJax = root.MathJax;
+    }
+    if (typeof mathJax?.typesetPromise !== 'function') {
+      for (const host of hosts) {
+        if (representatives[host.dataset.iconKind]?.variant) genericFallback(host);
+      }
+      return;
+    }
     const pending = [];
     for (const host of hosts) {
       if (!host.isConnected || !host.dataset.iconName || host.querySelector('.workspace-icon-formula')) continue;
@@ -359,11 +371,13 @@
     }
     if (!pending.length) return;
     try {
-      await root.MathJax.typesetPromise(pending.map(({ formula }) => formula));
+      await mathJax.typesetPromise(pending.map(({ formula }) => formula));
       for (const { host, formula } of pending) {
         if (!host.isConnected) continue;
         if (formula.querySelector('mjx-merror,[data-mjx-error]') || !formula.querySelector('mjx-container')) { genericFallback(host); continue; }
-        host.querySelector('.workspace-icon-fallback').remove();
+        host.querySelectorAll(':scope > .workspace-icon-fallback, :scope > svg').forEach(node => node.remove());
+        delete host.dataset.iconVariant;
+        host.dataset.iconSource = 'name';
         formula.hidden = false;
         watch(host);
       }

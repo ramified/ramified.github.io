@@ -736,7 +736,7 @@
     .slice-mode-btn.active {
       border-color: var(--accent);
       color: var(--accent);
-      background: rgba(61,107,79,0.08);
+      background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
     }
 
     .dual-graph-view-inputs {
@@ -823,7 +823,7 @@
       min-width: 0;
       border: 1px solid var(--border);
       border-radius: 3px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       padding: 5px;
       cursor: pointer;
     }
@@ -831,7 +831,7 @@
     .dual-graph-degeneration-tile:hover,
     .dual-graph-degeneration-tile:focus-visible {
       border-color: var(--accent);
-      box-shadow: 0 0 0 2px rgba(61,107,79,0.12);
+      box-shadow: 0 0 0 2px var(--ws-accent-tint-12, rgba(61,107,79,0.12));
       outline: none;
     }
 
@@ -839,7 +839,7 @@
       width: 100%;
       aspect-ratio: 1 / 1;
       display: block;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
     }
 
     .dual-graph-degeneration-caption {
@@ -904,7 +904,7 @@
       box-sizing: border-box;
       border: 1px solid var(--border);
       border-radius: 3px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       cursor: pointer;
       touch-action: none;
       display: block;
@@ -1006,7 +1006,7 @@
       box-sizing: border-box;
       border: 1px solid var(--border);
       border-radius: 3px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       cursor: crosshair;
       touch-action: none;
     }
@@ -1125,7 +1125,7 @@
       min-width: 0;
       border: 1px solid var(--border);
       border-radius: 3px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       cursor: grab;
       touch-action: none;
       user-select: none;
@@ -1206,7 +1206,7 @@
     }
 
     .tessellated-palette-grid .tile-swatch canvas {
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       clip-path: inherit;
     }
 
@@ -1226,7 +1226,7 @@
       height: 58px;
       border: 1px solid var(--accent);
       border-radius: 3px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       box-shadow: 0 8px 32px rgba(0,0,0,0.18);
       opacity: 0.86;
       padding: 4px;

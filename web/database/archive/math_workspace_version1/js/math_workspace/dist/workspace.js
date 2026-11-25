@@ -14382,13 +14382,13 @@ self.addEventListener('message', (event) => {
 `,css:`/* Web fonts were removed from the blocking CSS path so the canvases initialise reliably on slow/mobile networks. */
 
   :host {
-    --bg:       #f7f4ef;
-    --surface:  #ffffff;
-    --border:   #d8d0c4;
-    --text:     #1a1612;
-    --muted:    #7a6f65;
-    --accent:   #3d6b4f;
-    --accent2:  #8b3a2a;
+    --bg:       var(--ws-bg, #f7f4ef);
+    --surface:  var(--ws-surface-strong, #ffffff);
+    --border:   var(--ws-border, #d8d0c4);
+    --text:     var(--ws-text, #1a1612);
+    --muted:    var(--ws-muted, #7a6f65);
+    --accent:   var(--ws-accent, #3d6b4f);
+    --accent2:  var(--ws-accent2, #8b3a2a);
     --shadow:   0 2px 12px rgba(0,0,0,0.08);
   }
 
@@ -14595,7 +14595,7 @@ self.addEventListener('message', (event) => {
     height: auto !important;
     cursor: crosshair;
     border-radius: 2px;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
   }
 
   /* Shared calculator primitives. Page-specific classes may remain alongside
@@ -14694,7 +14694,7 @@ self.addEventListener('message', (event) => {
     overflow: auto;
     border: 1px solid rgba(26,22,18,0.22);
     border-radius: 7px;
-    background: rgba(255,253,248,0.99);
+    background: var(--ws-surface, rgba(255,253,248,0.99));
     color: var(--text);
     box-shadow: 0 18px 52px rgba(0,0,0,0.34);
   }
@@ -14813,7 +14813,7 @@ self.addEventListener('message', (event) => {
     border-color: var(--accent2);
     color: var(--accent2);
   }
-  .calculator-input-add { background: var(--bg); color: var(--muted); }
+  .calculator-input-add { background: var(--ws-ghost-bg, var(--bg)); color: var(--ws-ghost-color, var(--muted)); border-color: var(--ws-ghost-border, var(--border)); font-family: var(--ws-btn-font, var(--ws-font-code, 'JetBrains Mono', monospace)); font-weight: var(--ws-btn-weight, normal); }
   .calculator-input-add:disabled { cursor: not-allowed; opacity: 0.45; }
   .calculator-input-unbound {
     align-self: center;
@@ -14994,7 +14994,7 @@ self.addEventListener('message', (event) => {
   .card.is-pinned .card-pin-btn {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn {
     border: 1px solid var(--border);
@@ -15015,7 +15015,7 @@ self.addEventListener('message', (event) => {
   .calculator-card-wide-btn[aria-pressed="true"] {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn:disabled {
     cursor: not-allowed;
@@ -15235,17 +15235,19 @@ self.addEventListener('message', (event) => {
     font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     font-size: var(--ws-text-sm, 0.78rem);
     cursor: pointer;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--ws-btn-tracking, 0.04em);
+    font-weight: var(--ws-btn-weight, normal);
     transition: background 0.15s, transform 0.1s;
   }
-  .btn:hover { background: #2e5239; }
+  .btn:hover { background: var(--ws-accent-hover, #2e5239); }
   .btn:active { transform: scale(0.97); }
   .btn-ghost {
     background: transparent;
-    color: var(--accent2);
-    border-color: var(--accent2);
+    color: var(--ws-ghost-color, var(--accent2));
+    border-color: var(--ws-ghost-border, var(--accent2));
   }
-  .btn-ghost:hover { background: var(--accent2); color: #fff; }
+  .btn-ghost:hover { background: var(--ws-ghost-hover-bg, var(--accent2)); color: var(--ws-ghost-hover-color, #fff); border-color: var(--ws-ghost-hover-border, var(--accent2)); }
+  .btn::first-letter { text-transform: var(--ws-btn-case, none); }
 
   .orbit-view-row {
     display: inline-flex;
@@ -15673,7 +15675,7 @@ self.addEventListener('message', (event) => {
     margin-left: auto;
   }
   .symfun-export-btn:hover {
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .symfun-expansions {
     max-height: min(460px, 58vh);
@@ -16058,7 +16060,7 @@ self.addEventListener('message', (event) => {
     .slice-stage-wrap {
       position: relative;
       min-height: 440px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       overflow: hidden;
     }
 
@@ -16067,7 +16069,7 @@ self.addEventListener('message', (event) => {
       height: var(--slice-viewport-height, min(68vh, 720px)) !important;
       min-height: 440px;
       display: block;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       cursor: default;
       touch-action: none;
       -webkit-user-select: none;
@@ -17455,13 +17457,13 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
 `,css:`/* Web fonts were removed from the blocking CSS path so the canvases initialise reliably on slow/mobile networks. */
 
   :host {
-    --bg:       #f7f4ef;
-    --surface:  #ffffff;
-    --border:   #d8d0c4;
-    --text:     #1a1612;
-    --muted:    #7a6f65;
-    --accent:   #3d6b4f;
-    --accent2:  #8b3a2a;
+    --bg:       var(--ws-bg, #f7f4ef);
+    --surface:  var(--ws-surface-strong, #ffffff);
+    --border:   var(--ws-border, #d8d0c4);
+    --text:     var(--ws-text, #1a1612);
+    --muted:    var(--ws-muted, #7a6f65);
+    --accent:   var(--ws-accent, #3d6b4f);
+    --accent2:  var(--ws-accent2, #8b3a2a);
     --shadow:   0 2px 12px rgba(0,0,0,0.08);
   }
 
@@ -17668,7 +17670,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
     height: auto !important;
     cursor: crosshair;
     border-radius: 2px;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
   }
 
   /* Shared calculator primitives. Page-specific classes may remain alongside
@@ -17767,7 +17769,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
     overflow: auto;
     border: 1px solid rgba(26,22,18,0.22);
     border-radius: 7px;
-    background: rgba(255,253,248,0.99);
+    background: var(--ws-surface, rgba(255,253,248,0.99));
     color: var(--text);
     box-shadow: 0 18px 52px rgba(0,0,0,0.34);
   }
@@ -17886,7 +17888,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
     border-color: var(--accent2);
     color: var(--accent2);
   }
-  .calculator-input-add { background: var(--bg); color: var(--muted); }
+  .calculator-input-add { background: var(--ws-ghost-bg, var(--bg)); color: var(--ws-ghost-color, var(--muted)); border-color: var(--ws-ghost-border, var(--border)); font-family: var(--ws-btn-font, var(--ws-font-code, 'JetBrains Mono', monospace)); font-weight: var(--ws-btn-weight, normal); }
   .calculator-input-add:disabled { cursor: not-allowed; opacity: 0.45; }
   .calculator-input-unbound {
     align-self: center;
@@ -18067,7 +18069,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
   .card.is-pinned .card-pin-btn {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn {
     border: 1px solid var(--border);
@@ -18088,7 +18090,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
   .calculator-card-wide-btn[aria-pressed="true"] {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn:disabled {
     cursor: not-allowed;
@@ -18308,17 +18310,19 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
     font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     font-size: var(--ws-text-sm, 0.78rem);
     cursor: pointer;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--ws-btn-tracking, 0.04em);
+    font-weight: var(--ws-btn-weight, normal);
     transition: background 0.15s, transform 0.1s;
   }
-  .btn:hover { background: #2e5239; }
+  .btn:hover { background: var(--ws-accent-hover, #2e5239); }
   .btn:active { transform: scale(0.97); }
   .btn-ghost {
     background: transparent;
-    color: var(--accent2);
-    border-color: var(--accent2);
+    color: var(--ws-ghost-color, var(--accent2));
+    border-color: var(--ws-ghost-border, var(--accent2));
   }
-  .btn-ghost:hover { background: var(--accent2); color: #fff; }
+  .btn-ghost:hover { background: var(--ws-ghost-hover-bg, var(--accent2)); color: var(--ws-ghost-hover-color, #fff); border-color: var(--ws-ghost-hover-border, var(--accent2)); }
+  .btn::first-letter { text-transform: var(--ws-btn-case, none); }
 
   .orbit-view-row {
     display: inline-flex;
@@ -18746,7 +18750,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
     margin-left: auto;
   }
   .symfun-export-btn:hover {
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .symfun-expansions {
     max-height: min(460px, 58vh);
@@ -19513,13 +19517,13 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
 `,css:`/* Web fonts were removed from the blocking CSS path so the canvases initialise reliably on slow/mobile networks. */
 
   :host {
-    --bg:       #f7f4ef;
-    --surface:  #ffffff;
-    --border:   #d8d0c4;
-    --text:     #1a1612;
-    --muted:    #7a6f65;
-    --accent:   #3d6b4f;
-    --accent2:  #8b3a2a;
+    --bg:       var(--ws-bg, #f7f4ef);
+    --surface:  var(--ws-surface-strong, #ffffff);
+    --border:   var(--ws-border, #d8d0c4);
+    --text:     var(--ws-text, #1a1612);
+    --muted:    var(--ws-muted, #7a6f65);
+    --accent:   var(--ws-accent, #3d6b4f);
+    --accent2:  var(--ws-accent2, #8b3a2a);
     --shadow:   0 2px 12px rgba(0,0,0,0.08);
   }
 
@@ -19726,7 +19730,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
     height: auto !important;
     cursor: crosshair;
     border-radius: 2px;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
   }
 
   /* Shared calculator primitives. Page-specific classes may remain alongside
@@ -19825,7 +19829,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
     overflow: auto;
     border: 1px solid rgba(26,22,18,0.22);
     border-radius: 7px;
-    background: rgba(255,253,248,0.99);
+    background: var(--ws-surface, rgba(255,253,248,0.99));
     color: var(--text);
     box-shadow: 0 18px 52px rgba(0,0,0,0.34);
   }
@@ -19944,7 +19948,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
     border-color: var(--accent2);
     color: var(--accent2);
   }
-  .calculator-input-add { background: var(--bg); color: var(--muted); }
+  .calculator-input-add { background: var(--ws-ghost-bg, var(--bg)); color: var(--ws-ghost-color, var(--muted)); border-color: var(--ws-ghost-border, var(--border)); font-family: var(--ws-btn-font, var(--ws-font-code, 'JetBrains Mono', monospace)); font-weight: var(--ws-btn-weight, normal); }
   .calculator-input-add:disabled { cursor: not-allowed; opacity: 0.45; }
   .calculator-input-unbound {
     align-self: center;
@@ -20125,7 +20129,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
   .card.is-pinned .card-pin-btn {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn {
     border: 1px solid var(--border);
@@ -20146,7 +20150,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
   .calculator-card-wide-btn[aria-pressed="true"] {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn:disabled {
     cursor: not-allowed;
@@ -20366,17 +20370,19 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
     font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     font-size: var(--ws-text-sm, 0.78rem);
     cursor: pointer;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--ws-btn-tracking, 0.04em);
+    font-weight: var(--ws-btn-weight, normal);
     transition: background 0.15s, transform 0.1s;
   }
-  .btn:hover { background: #2e5239; }
+  .btn:hover { background: var(--ws-accent-hover, #2e5239); }
   .btn:active { transform: scale(0.97); }
   .btn-ghost {
     background: transparent;
-    color: var(--accent2);
-    border-color: var(--accent2);
+    color: var(--ws-ghost-color, var(--accent2));
+    border-color: var(--ws-ghost-border, var(--accent2));
   }
-  .btn-ghost:hover { background: var(--accent2); color: #fff; }
+  .btn-ghost:hover { background: var(--ws-ghost-hover-bg, var(--accent2)); color: var(--ws-ghost-hover-color, #fff); border-color: var(--ws-ghost-hover-border, var(--accent2)); }
+  .btn::first-letter { text-transform: var(--ws-btn-case, none); }
 
   .orbit-view-row {
     display: inline-flex;
@@ -20804,7 +20810,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
     margin-left: auto;
   }
   .symfun-export-btn:hover {
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .symfun-expansions {
     max-height: min(460px, 58vh);
@@ -21239,7 +21245,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
     .diagram-canvas {
       width: 100%;
       height: auto;
-      background: #fbfaf7;
+      background: var(--ws-surface, #fbfaf7);
       border: 1px solid var(--border);
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
     }
@@ -21345,7 +21351,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
       text-align: center;
       vertical-align: middle;
       border: 1px solid rgba(30,24,18,0.72);
-      background: #fbfaf7;
+      background: var(--ws-surface, #fbfaf7);
       color: var(--text);
       padding: 0;
     }
@@ -21464,7 +21470,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
       display: block;
       width: 100%;
       height: auto;
-      background: #fbfaf7;
+      background: var(--ws-surface, #fbfaf7);
       cursor: default;
       touch-action: none;
       overscroll-behavior: contain;
@@ -21531,7 +21537,7 @@ B=`+qy(Nt(_.frame)):JSON.stringify(GA(),null,2):Cp.mode==="property"?ub().text:J
     .slice-mode-btn.active {
       border-color: var(--accent);
       color: var(--accent);
-      background: rgba(61,107,79,0.08);
+      background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
     }
     .slice-gamma-control {
       display: flex;
@@ -22271,13 +22277,13 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
 `,css:`/* Web fonts were removed from the blocking CSS path so the canvases initialise reliably on slow/mobile networks. */
 
   :host {
-    --bg:       #f7f4ef;
-    --surface:  #ffffff;
-    --border:   #d8d0c4;
-    --text:     #1a1612;
-    --muted:    #7a6f65;
-    --accent:   #3d6b4f;
-    --accent2:  #8b3a2a;
+    --bg:       var(--ws-bg, #f7f4ef);
+    --surface:  var(--ws-surface-strong, #ffffff);
+    --border:   var(--ws-border, #d8d0c4);
+    --text:     var(--ws-text, #1a1612);
+    --muted:    var(--ws-muted, #7a6f65);
+    --accent:   var(--ws-accent, #3d6b4f);
+    --accent2:  var(--ws-accent2, #8b3a2a);
     --shadow:   0 2px 12px rgba(0,0,0,0.08);
   }
 
@@ -22484,7 +22490,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
     height: auto !important;
     cursor: crosshair;
     border-radius: 2px;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
   }
 
   /* Shared calculator primitives. Page-specific classes may remain alongside
@@ -22583,7 +22589,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
     overflow: auto;
     border: 1px solid rgba(26,22,18,0.22);
     border-radius: 7px;
-    background: rgba(255,253,248,0.99);
+    background: var(--ws-surface, rgba(255,253,248,0.99));
     color: var(--text);
     box-shadow: 0 18px 52px rgba(0,0,0,0.34);
   }
@@ -22702,7 +22708,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
     border-color: var(--accent2);
     color: var(--accent2);
   }
-  .calculator-input-add { background: var(--bg); color: var(--muted); }
+  .calculator-input-add { background: var(--ws-ghost-bg, var(--bg)); color: var(--ws-ghost-color, var(--muted)); border-color: var(--ws-ghost-border, var(--border)); font-family: var(--ws-btn-font, var(--ws-font-code, 'JetBrains Mono', monospace)); font-weight: var(--ws-btn-weight, normal); }
   .calculator-input-add:disabled { cursor: not-allowed; opacity: 0.45; }
   .calculator-input-unbound {
     align-self: center;
@@ -22883,7 +22889,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
   .card.is-pinned .card-pin-btn {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn {
     border: 1px solid var(--border);
@@ -22904,7 +22910,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
   .calculator-card-wide-btn[aria-pressed="true"] {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn:disabled {
     cursor: not-allowed;
@@ -23124,17 +23130,19 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
     font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     font-size: var(--ws-text-sm, 0.78rem);
     cursor: pointer;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--ws-btn-tracking, 0.04em);
+    font-weight: var(--ws-btn-weight, normal);
     transition: background 0.15s, transform 0.1s;
   }
-  .btn:hover { background: #2e5239; }
+  .btn:hover { background: var(--ws-accent-hover, #2e5239); }
   .btn:active { transform: scale(0.97); }
   .btn-ghost {
     background: transparent;
-    color: var(--accent2);
-    border-color: var(--accent2);
+    color: var(--ws-ghost-color, var(--accent2));
+    border-color: var(--ws-ghost-border, var(--accent2));
   }
-  .btn-ghost:hover { background: var(--accent2); color: #fff; }
+  .btn-ghost:hover { background: var(--ws-ghost-hover-bg, var(--accent2)); color: var(--ws-ghost-hover-color, #fff); border-color: var(--ws-ghost-hover-border, var(--accent2)); }
+  .btn::first-letter { text-transform: var(--ws-btn-case, none); }
 
   .orbit-view-row {
     display: inline-flex;
@@ -23562,7 +23570,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
     margin-left: auto;
   }
   .symfun-export-btn:hover {
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .symfun-expansions {
     max-height: min(460px, 58vh);
@@ -23958,7 +23966,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
       width: 100%;
       height: auto;
       border: 1px solid var(--border);
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
     }
 
@@ -24312,7 +24320,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
 
     .starting-vertex-lines line,
     .starting-vertex-lines path {
-      stroke: #1a1612;
+      stroke: var(--ws-text, #1a1612);
       stroke-width: 1.25px;
       stroke-linecap: round;
       stroke-linejoin: round;
@@ -24331,10 +24339,10 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
       width: 20px;
       height: 20px;
       padding: 0;
-      border: 1.4px solid #1a1612;
+      border: 1.4px solid var(--ws-text, #1a1612);
       border-radius: 50%;
-      background: #fffdf8;
-      color: #1a1612;
+      background: var(--ws-surface, #fffdf8);
+      color: var(--ws-text, #1a1612);
       font: 700 var(--ws-text-sm, 0.76rem) var(--ws-font-ui, 'JetBrains Mono', monospace);
       line-height: 1;
       cursor: grab;
@@ -24343,9 +24351,9 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
     }
 
     .starting-vertex-label.is-selected {
-      background: #3d6b4f;
+      background: var(--ws-accent, #3d6b4f);
       border-color: #263f31;
-      color: #fffdf8;
+      color: var(--ws-surface, #fffdf8);
     }
 
     .starting-vertex-label.is-dragging {
@@ -24479,7 +24487,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
       place-items: center;
       padding: 2px 5px;
       background: transparent;
-      color: #1a1612;
+      color: var(--ws-text, #1a1612);
       line-height: 1.05;
     }
 
@@ -24517,7 +24525,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
 
     .ar-arrow-lines path {
       fill: none;
-      stroke: #7a6f65;
+      stroke: var(--ws-muted, #7a6f65);
       stroke-width: 1.15px;
       stroke-linecap: round;
       stroke-linejoin: round;
@@ -24828,13 +24836,13 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
 `,css:`/* Web fonts were removed from the blocking CSS path so the canvases initialise reliably on slow/mobile networks. */
 
   :host {
-    --bg:       #f7f4ef;
-    --surface:  #ffffff;
-    --border:   #d8d0c4;
-    --text:     #1a1612;
-    --muted:    #7a6f65;
-    --accent:   #3d6b4f;
-    --accent2:  #8b3a2a;
+    --bg:       var(--ws-bg, #f7f4ef);
+    --surface:  var(--ws-surface-strong, #ffffff);
+    --border:   var(--ws-border, #d8d0c4);
+    --text:     var(--ws-text, #1a1612);
+    --muted:    var(--ws-muted, #7a6f65);
+    --accent:   var(--ws-accent, #3d6b4f);
+    --accent2:  var(--ws-accent2, #8b3a2a);
     --shadow:   0 2px 12px rgba(0,0,0,0.08);
   }
 
@@ -25041,7 +25049,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
     height: auto !important;
     cursor: crosshair;
     border-radius: 2px;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
   }
 
   /* Shared calculator primitives. Page-specific classes may remain alongside
@@ -25140,7 +25148,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
     overflow: auto;
     border: 1px solid rgba(26,22,18,0.22);
     border-radius: 7px;
-    background: rgba(255,253,248,0.99);
+    background: var(--ws-surface, rgba(255,253,248,0.99));
     color: var(--text);
     box-shadow: 0 18px 52px rgba(0,0,0,0.34);
   }
@@ -25259,7 +25267,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
     border-color: var(--accent2);
     color: var(--accent2);
   }
-  .calculator-input-add { background: var(--bg); color: var(--muted); }
+  .calculator-input-add { background: var(--ws-ghost-bg, var(--bg)); color: var(--ws-ghost-color, var(--muted)); border-color: var(--ws-ghost-border, var(--border)); font-family: var(--ws-btn-font, var(--ws-font-code, 'JetBrains Mono', monospace)); font-weight: var(--ws-btn-weight, normal); }
   .calculator-input-add:disabled { cursor: not-allowed; opacity: 0.45; }
   .calculator-input-unbound {
     align-self: center;
@@ -25440,7 +25448,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
   .card.is-pinned .card-pin-btn {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn {
     border: 1px solid var(--border);
@@ -25461,7 +25469,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
   .calculator-card-wide-btn[aria-pressed="true"] {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn:disabled {
     cursor: not-allowed;
@@ -25681,17 +25689,19 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
     font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     font-size: var(--ws-text-sm, 0.78rem);
     cursor: pointer;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--ws-btn-tracking, 0.04em);
+    font-weight: var(--ws-btn-weight, normal);
     transition: background 0.15s, transform 0.1s;
   }
-  .btn:hover { background: #2e5239; }
+  .btn:hover { background: var(--ws-accent-hover, #2e5239); }
   .btn:active { transform: scale(0.97); }
   .btn-ghost {
     background: transparent;
-    color: var(--accent2);
-    border-color: var(--accent2);
+    color: var(--ws-ghost-color, var(--accent2));
+    border-color: var(--ws-ghost-border, var(--accent2));
   }
-  .btn-ghost:hover { background: var(--accent2); color: #fff; }
+  .btn-ghost:hover { background: var(--ws-ghost-hover-bg, var(--accent2)); color: var(--ws-ghost-hover-color, #fff); border-color: var(--ws-ghost-hover-border, var(--accent2)); }
+  .btn::first-letter { text-transform: var(--ws-btn-case, none); }
 
   .orbit-view-row {
     display: inline-flex;
@@ -26119,7 +26129,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
     margin-left: auto;
   }
   .symfun-export-btn:hover {
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .symfun-expansions {
     max-height: min(460px, 58vh);
@@ -26546,7 +26556,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
       min-height: 420px;
       border: 1px solid var(--border);
       border-radius: 3px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       cursor: default;
       display: block;
       touch-action: none;
@@ -27488,7 +27498,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
       overflow: visible;
       border: 1px solid rgba(216, 208, 196, 0.72);
       border-radius: 3px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
     }
 
     .strand-inline-diagram .strand-diagram-path {
@@ -27519,7 +27529,7 @@ check: \u03A3 coefficient(\u03B3) dim(V^\u03B3) = dim(V^\u03BB) dim(V^\u03BC)</c
     }
 
     .strand-inline-diagram .strand-diagram-over-gap {
-      stroke: #fffdf8;
+      stroke: var(--ws-surface, #fffdf8);
       stroke-width: 5;
       stroke-linecap: round;
     }
@@ -27919,13 +27929,13 @@ ${yr.join(`\\\\
 `,css:`/* Web fonts were removed from the blocking CSS path so the canvases initialise reliably on slow/mobile networks. */
 
   :host {
-    --bg:       #f7f4ef;
-    --surface:  #ffffff;
-    --border:   #d8d0c4;
-    --text:     #1a1612;
-    --muted:    #7a6f65;
-    --accent:   #3d6b4f;
-    --accent2:  #8b3a2a;
+    --bg:       var(--ws-bg, #f7f4ef);
+    --surface:  var(--ws-surface-strong, #ffffff);
+    --border:   var(--ws-border, #d8d0c4);
+    --text:     var(--ws-text, #1a1612);
+    --muted:    var(--ws-muted, #7a6f65);
+    --accent:   var(--ws-accent, #3d6b4f);
+    --accent2:  var(--ws-accent2, #8b3a2a);
     --shadow:   0 2px 12px rgba(0,0,0,0.08);
   }
 
@@ -28132,7 +28142,7 @@ ${yr.join(`\\\\
     height: auto !important;
     cursor: crosshair;
     border-radius: 2px;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
   }
 
   /* Shared calculator primitives. Page-specific classes may remain alongside
@@ -28231,7 +28241,7 @@ ${yr.join(`\\\\
     overflow: auto;
     border: 1px solid rgba(26,22,18,0.22);
     border-radius: 7px;
-    background: rgba(255,253,248,0.99);
+    background: var(--ws-surface, rgba(255,253,248,0.99));
     color: var(--text);
     box-shadow: 0 18px 52px rgba(0,0,0,0.34);
   }
@@ -28350,7 +28360,7 @@ ${yr.join(`\\\\
     border-color: var(--accent2);
     color: var(--accent2);
   }
-  .calculator-input-add { background: var(--bg); color: var(--muted); }
+  .calculator-input-add { background: var(--ws-ghost-bg, var(--bg)); color: var(--ws-ghost-color, var(--muted)); border-color: var(--ws-ghost-border, var(--border)); font-family: var(--ws-btn-font, var(--ws-font-code, 'JetBrains Mono', monospace)); font-weight: var(--ws-btn-weight, normal); }
   .calculator-input-add:disabled { cursor: not-allowed; opacity: 0.45; }
   .calculator-input-unbound {
     align-self: center;
@@ -28531,7 +28541,7 @@ ${yr.join(`\\\\
   .card.is-pinned .card-pin-btn {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn {
     border: 1px solid var(--border);
@@ -28552,7 +28562,7 @@ ${yr.join(`\\\\
   .calculator-card-wide-btn[aria-pressed="true"] {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn:disabled {
     cursor: not-allowed;
@@ -28772,17 +28782,19 @@ ${yr.join(`\\\\
     font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     font-size: var(--ws-text-sm, 0.78rem);
     cursor: pointer;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--ws-btn-tracking, 0.04em);
+    font-weight: var(--ws-btn-weight, normal);
     transition: background 0.15s, transform 0.1s;
   }
-  .btn:hover { background: #2e5239; }
+  .btn:hover { background: var(--ws-accent-hover, #2e5239); }
   .btn:active { transform: scale(0.97); }
   .btn-ghost {
     background: transparent;
-    color: var(--accent2);
-    border-color: var(--accent2);
+    color: var(--ws-ghost-color, var(--accent2));
+    border-color: var(--ws-ghost-border, var(--accent2));
   }
-  .btn-ghost:hover { background: var(--accent2); color: #fff; }
+  .btn-ghost:hover { background: var(--ws-ghost-hover-bg, var(--accent2)); color: var(--ws-ghost-hover-color, #fff); border-color: var(--ws-ghost-hover-border, var(--accent2)); }
+  .btn::first-letter { text-transform: var(--ws-btn-case, none); }
 
   .orbit-view-row {
     display: inline-flex;
@@ -29210,7 +29222,7 @@ ${yr.join(`\\\\
     margin-left: auto;
   }
   .symfun-export-btn:hover {
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .symfun-expansions {
     max-height: min(460px, 58vh);
@@ -30047,7 +30059,7 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
 };`}e(sy,"exportMathematica");function Zg(F){return`A = [${F.map(fe=>fe.map(ke=>wp(ke,"matlab")).join(", ")).join(`;
      `)}];`}e(Zg,"exportMatlab");function Tb(F){return F.map(z=>z.map(fe=>fe.raw&&fe.raw.trim()?fe.raw.trim():"0").join(", ")).join(`
 `)}e(Tb,"exportRows");function dx(F,z=!1){return F.map(fe=>fe.map(ke=>z?Rs(ke):Nm(ke,12)).join(", ")).join(`
-`)}e(dx,"matrixRowsValue");function wp(F,z){let fe=Math.abs(F.value.re)<1e-12;if(Math.abs(F.value.im)<1e-12)return $c(F.real,z);if(z==="python")return`complex(${$c(F.real,z)}, ${$c(F.imag,z)})`;let Xe=_p(z);if(fe)return ly(F.imag,z,Xe,!1);let T=F.imag.value<0?" - ":" + ";return`${$c(F.real,z)}${T}${ly(Uh(F.imag),z,Xe,!0)}`}e(wp,"sourceComplex");function ly(F,z,fe,ke){let Xe=$c(ke?Uh(F):F,z),T=Math.abs(F.value);return Math.abs(T-1)<1e-12?z==="latex"?F.value<0&&!ke?`-${fe}`:fe:F.value<0&&!ke?`-${fe}`:fe:z==="latex"?`${Xe}${fe}`:z==="matlab"?`${Xe}*${fe}`:`${Xe}*${fe}`}e(ly,"sourceImag");function $c(F,z){if(F.rational){let ke=Number(F.rational.numText),Xe=Number(F.rational.denText);return z==="latex"?Sh(ke,Xe):z==="python"?`Fraction(${Xp(ke,14)}, ${Xp(Xe,14)})`:`${Xp(ke,14)}/${Xp(Xe,14)}`}let fe=Xd(F.raw);return fe}e($c,"sourcePart");function Sh(F,z){return`${F*z<0?"-":""}\\frac{${Xp(Math.abs(F),14)}}{${Xp(Math.abs(z),14)}}`}e(Sh,"latexFraction");function Uh(F){return F.value>=0?{value:F.value,raw:Xd(F.raw),rational:F.rational?{numText:Xd(F.rational.numText),denText:Xd(F.rational.denText)}:null}:F.rational?Cu(Math.abs(F.value),String(Math.abs(Number(F.rational.numText)))+"/"+String(Math.abs(Number(F.rational.denText))),{numText:String(Math.abs(Number(F.rational.numText))),denText:String(Math.abs(Number(F.rational.denText)))}):Cu(Math.abs(F.value),String(Math.abs(F.value)))}e(Uh,"absPart");function Xd(F){let z=String(F??"").trim();return z.startsWith("+")?z.slice(1):z}e(Xd,"stripLeadingPlus");function _p(F){return F==="latex"?"i":F==="mathematica"?"I":F==="macaulay2"?"ii":F==="matlab"?"1i":"I"}e(_p,"imagUnit");function kh(){he.exportOut.value||gm();let F=he.exportOut.value;navigator.clipboard&&J.isSecureContext?navigator.clipboard.writeText(F).then(()=>{he.matrixStatus.textContent="export copied"}).catch(Hu):Hu()}e(kh,"copyExport");function Hu(){he.exportOut.focus(),he.exportOut.select();try{C.execCommand("copy"),he.matrixStatus.textContent="export copied"}catch{he.matrixStatus.textContent="copy unavailable"}}e(Hu,"fallbackCopyExport"),J.SiteImportExportPageAdapter={exportDefault(){gm();let F=he.exportFormat.value,z=F==="latex"?"tex":"txt";return{text:he.exportOut.value,filename:`matrix-export.${z}`,mimeType:F==="latex"?"application/x-tex":"text/plain"}},exporters:{operation(){if(!Me.lastOperationResult)throw new Error("Compute an operation before exporting it.");Rf();let F=he.exportFormat.value;return{text:he.exportOut.value,filename:`matrix-operation.${F==="latex"?"tex":"txt"}`,mimeType:F==="latex"?"application/x-tex":"text/plain"}},"polynomial-action"(){if(!Me.lastPolynomialAction)throw new Error("Compute a polynomial action before exporting it.");ha();let F=he.exportFormat.value;return{text:he.exportOut.value,filename:`matrix-polynomial-action.${F==="latex"?"tex":"txt"}`,mimeType:F==="latex"?"application/x-tex":"text/plain"}}},validateImport(F,z){let fe=String(z?.text||"").trim();return{text:fe,parsed:Xh(fe)}},applyImport(F,z){let fe=z.parsed.rows,ke=fe.length,Xe=fe[0]?.length||0;if(ke>8||Xe>8)throw new Error("The browser editor is capped at 8 x 8.");Me.rows=ke,Me.cols=Xe,Me.entries=fe,he.rows.value=String(ke),he.cols.value=String(Xe),$d(),Zt(),kt(),Wn(),he.bulkMessage.textContent=`Imported ${z.parsed.style}.`},hasMeaningfulState(){return Me.entries.some(F=>F.some(z=>String(z||"").trim()&&String(z).trim()!=="0"))},filename(F){let z=he.exportFormat?.value||"rows";return`${F==="operation"?"matrix-operation":"matrix-export"}.${z==="latex"?"tex":"txt"}`}},tt.registerState({get:e(()=>({state:Me,mathJaxTypesetQueue:vt}),"get"),restore:e(F=>{if(tt.applyState(Me,F.state),vt=tt.applyState(vt,F.mathJaxTypesetQueue),kt(),Wn(),Me.lastOperationResult&&Ib(Me.lastOperationResult),Me.lastPolynomialAction){let z=w(Me.lastPolynomialAction.polynomial,"latex");he.polynomialActionOutput.innerHTML='<div class="matrix-polynomial">'+xf(z)+"</div>"}},"restore"),classes:{Complex:xt,Fraction:Wt,ExactScalar:hn,ModScalar:Mn,RationalFunctionScalar:In,NumberFieldScalar:xn,SymbolicExpScalar:wt,ExpressionParser:na}});let Uf={},ah=null,Db=e(F=>F?F.kind+":"+F.id:"","__key"),Jf=e((F,z)=>J.CalculatorInputSettings.syncEditableValue(F,String(z??"")),"__sync");function wg(F){ah=F,F.classList.add("workspace-object-content"),F.classList.remove("collapsed"),tt.setCardVisible(F.dataset.workspaceCardId,!0)}e(wg,"__showCard");function Ch(F=""){let z=C.createElement("style");z.textContent=".workspace-object-content>.card-head{display:none!important}.workspace-object-content{border:0!important;margin:0!important;max-height:none!important;box-shadow:none!important}.workspace-object-content>.card-body{padding:4px!important;max-height:none!important}.workspace-card-inspector{display:block!important}.workspace-object-content [data-import-export-trigger]{display:none!important}"+(Uf.mode==="input"?".workspace-view-card{border:0!important;box-shadow:none!important}.workspace-view-card>.panel-title>.panel-title-text{display:none!important}.workspace-view-card>.panel-title{border:0!important}":"")+F,C.head.append(z),tt.inspectorShadow?.append(z.cloneNode(!0))}e(Ch,"__panelStyle");let ev=e(()=>ah?[...ah.querySelectorAll("input[id],select[id],textarea[id]")].filter(F=>!F.readOnly&&F.type!=="hidden").map(F=>({id:F.id,value:F.value,checked:F.type==="checkbox"?F.checked:void 0})):[],"__captureControls"),Yf=!1,cu=null,Np="",Qg=Ib;Ib=e(function(F){let z=he.operation.value;if(Se()==="integer"&&["transpose","inverse","power","bruhat","rcf"].includes(z)){let fe=Er(!1);if(!fe.errors.length){F=ry(fe,z);let ke=F.blocks.some(T=>T.matrix.some(q=>q.some(Y=>!/^-?\d+$/.test(Xf(Y,"text")))));F.inputRing="integer",F.resultRing=ke?"rational":"integer",F.computationRing=ke||["bruhat","rcf"].includes(z)?"rational":"integer",F.field={kind:F.resultRing};let Xe="Input coefficient ring: \u2124. Result entries lie in "+(ke?"\u211A, the fraction field of \u2124.":"\u2124.");z==="inverse"&&(Xe+=ke?" This is an inverse over \u211A; the matrix is not invertible over \u2124.":" The matrix is invertible over \u2124."),["bruhat","rcf"].includes(z)&&(Xe+=" This decomposition is computed over \u211A."),F.note=[F.note,Xe].filter(Boolean).join(" ")}}return Qg(F)},"renderOperationResult");function Lb(){return{rows:Me.rows,cols:Me.cols,entries:Me.entries.map(F=>F.slice()),dataType:Se(),finiteFieldPrime:Me.finiteFieldPrime,rationalFunctionVariables:Me.rationalFunctionVariables.slice(),numberFieldSymbol:Me.numberFieldSymbol,numberFieldPolynomial:Me.numberFieldPolynomial,...Np?{field:Np}:{}}}e(Lb,"__matrixData");function Jh(F){let z=Me.rows!==F.rows||Me.cols!==F.cols,fe=_t(Me.cols).join(", ");(!he.polynomialActionVariables.value.trim()||he.polynomialActionVariables.value.trim()===fe)&&Jf(he.polynomialActionVariables,_t(F.cols).join(", ")),Me.rows=F.rows,Me.cols=F.cols,Me.entries=F.entries.map(ke=>ke.slice()),Me.finiteFieldPrime=F.finiteFieldPrime,Me.rationalFunctionVariables=F.rationalFunctionVariables.slice(),Me.numberFieldSymbol=F.numberFieldSymbol,Me.numberFieldPolynomial=F.numberFieldPolynomial,Jf(he.rows,F.rows),Jf(he.cols,F.cols),Jf(he.dataType,F.dataType),Jf(he.finiteFieldPrime,F.finiteFieldPrime),Jf(he.rationalFunctionVariable,F.rationalFunctionVariables.join(", ")),Jf(he.numberFieldGenerator,F.numberFieldSymbol),Jf(he.numberFieldPolynomial,F.numberFieldPolynomial),z?kt():he.grid.querySelectorAll("input").forEach(ke=>Jf(ke,F.entries[ke.dataset.row][ke.dataset.col])),et(),$d(),Zt(),Wn()}e(Jh,"__matrixProject"),tt.setAssetAdapter({panel(F){if(Uf=F,Ch("#apply-bulk,#bulk-message,#export-operation,#export-polynomial-action{display:none!important}.matrix-toolbar{flex-wrap:wrap!important}.matrix-grid-wrap{overflow:auto!important}.matrix-cell{min-width:0!important}"),F.mode==="input"&&(wg(he.applyBulk.closest(".card")),Ch(".calculator-input-settings-trigger,.matrix-toolbar-group,.matrix-editor{display:none!important}"),Ch(":host,.editor-document,.editor-body,.editor-body>.workspace-editor-layout{height:auto!important;overflow:visible!important}.workspace-editor-layout .workspace-view-card{height:auto!important;min-height:0!important;border:0!important;box-shadow:none!important}.panel-title>.panel-title-text,.panel-title>.panel-settings-btn,#matrix-summary,.matrix-action-row:has(#apply-bulk){display:none!important}.panel-title{padding:4px 0!important;border:0!important;min-height:0!important}.matrix-editor{min-height:0!important;padding:12px 0!important;justify-content:flex-start!important;--matrix-cell-size:72px}.matrix-underbar{border:0!important;padding:4px 0!important}.matrix-toolbar-group{padding-left:0!important;border:0!important}"),tt.mountObjectSurfaces({modify:[C.querySelector(".canvas-size-inline"),C.getElementById("clear-matrix"),ah.querySelector(".card-body")]})),F.operation==="matrix-view"){let z=C.createElement("section");z.className="card workspace-object-content",cu=C.createElement("div"),cu.className="card-body matrix-display-output";let fe=C.createElement("div");fe.className="matrix-editor",fe.append(he.grid),cu.append(fe),z.append(cu),tt.inspectorShadow.querySelector(".workspace-card-inspector").append(z),ah=z,Ch(':host,.editor-document,.editor-body,.editor-body>.layout{height:auto!important;min-height:0!important;overflow:visible!important}.workspace-editor-inspector-layout>.workspace-card-inspector{display:block!important}.matrix-display-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 4px;color:var(--muted);font:var(--ws-text-sm,0.74rem) var(--ws-font-ui,"JetBrains Mono",monospace)}.matrix-display-name{color:var(--text)}.matrix-display-output .matrix-editor{display:block;min-height:0;padding:16px 4px;overflow:auto;scrollbar-gutter:auto}.matrix-display-output .matrix-grid{width:min(100%,var(--matrix-preferred-width));min-width:var(--matrix-min-width);max-width:none;grid-template-columns:repeat(var(--matrix-columns),minmax(0,1fr))!important;gap:7px;margin-inline:auto}.matrix-display-output .matrix-cell{box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%;height:36px;padding:5px 4px;font-size:.72rem}')}else F.mode==="property"&&(wg(C.getElementById(F.marker).closest(".card")),ah.addEventListener("click",z=>{z.target.closest("#compute-operation,#compute-polynomial-action,#charpoly-factor")&&queueMicrotask(()=>tt.notifyChange({interaction:"object-compute"}))}));return!0},apply(F,z,fe,ke){let Xe=Db(ke?.refs?.matrix||z),T=F.assets.find(Y=>Db(Y)===Xe);if(!T)return!1;Yf=!!T.data.construction,Np=T.data.field||"";let q=J.MathWorkspaceSlicing.materialize(T,F.assets);if(Jh(q.data),cu){he.grid.style.setProperty("--matrix-columns",Me.cols),he.grid.style.setProperty("--matrix-preferred-width",Me.cols*72+(Me.cols-1)*7+"px"),he.grid.style.setProperty("--matrix-min-width",Me.cols*42+(Me.cols-1)*7+"px");let Y=Er(!1),ue=cu.querySelector(".matrix-display-error");ue||(ue=C.createElement("p"),ue.className="err matrix-display-error",ue.setAttribute("role","status"),cu.append(ue)),ue.textContent=Y.errors.length?qd(Y.errors[0]):"",ue.hidden=!Y.errors.length;let we=C.createElement("div");we.className="matrix-display-header";let Qe=C.createElement("span");Qe.className="matrix-display-name",Qe.textContent=T.plainName||T.name;let ct=C.createElement("span");ct.textContent=Me.rows+" \xD7 "+Me.cols+" \xB7 "+J.MathWorkspaceObjects.fieldLabel(q.data),we.append(Qe,ct);let St=cu.querySelector(".matrix-display-header");St?St.replaceWith(we):cu.prepend(we),he.grid.querySelectorAll("input").forEach(dn=>{dn.disabled=Yf,dn.setAttribute("aria-label","Entry "+(Number(dn.dataset.row)+1)+", "+(Number(dn.dataset.col)+1))})}return Uf.mode==="input"&&ah.querySelectorAll("input,select,textarea,button").forEach(Y=>{Y.disabled=Yf}),!0},collect(){if(Yf||Er(!1).errors.length)return null;let F=he.grid.getRootNode().activeElement;if(F?.classList.contains("matrix-cell")&&!F.value.trim())return null;let z=Lb();return z.entries=z.entries.map(fe=>fe.map(ke=>String(ke).trim()?ke:"0")),{type:"matrix",data:z}},capture:ev,result:e(()=>({text:(ah?.querySelector(".card-body")?.innerText||"")+(cu?`
+`)}e(dx,"matrixRowsValue");function wp(F,z){let fe=Math.abs(F.value.re)<1e-12;if(Math.abs(F.value.im)<1e-12)return $c(F.real,z);if(z==="python")return`complex(${$c(F.real,z)}, ${$c(F.imag,z)})`;let Xe=_p(z);if(fe)return ly(F.imag,z,Xe,!1);let T=F.imag.value<0?" - ":" + ";return`${$c(F.real,z)}${T}${ly(Uh(F.imag),z,Xe,!0)}`}e(wp,"sourceComplex");function ly(F,z,fe,ke){let Xe=$c(ke?Uh(F):F,z),T=Math.abs(F.value);return Math.abs(T-1)<1e-12?z==="latex"?F.value<0&&!ke?`-${fe}`:fe:F.value<0&&!ke?`-${fe}`:fe:z==="latex"?`${Xe}${fe}`:z==="matlab"?`${Xe}*${fe}`:`${Xe}*${fe}`}e(ly,"sourceImag");function $c(F,z){if(F.rational){let ke=Number(F.rational.numText),Xe=Number(F.rational.denText);return z==="latex"?Sh(ke,Xe):z==="python"?`Fraction(${Xp(ke,14)}, ${Xp(Xe,14)})`:`${Xp(ke,14)}/${Xp(Xe,14)}`}let fe=Xd(F.raw);return fe}e($c,"sourcePart");function Sh(F,z){return`${F*z<0?"-":""}\\frac{${Xp(Math.abs(F),14)}}{${Xp(Math.abs(z),14)}}`}e(Sh,"latexFraction");function Uh(F){return F.value>=0?{value:F.value,raw:Xd(F.raw),rational:F.rational?{numText:Xd(F.rational.numText),denText:Xd(F.rational.denText)}:null}:F.rational?Cu(Math.abs(F.value),String(Math.abs(Number(F.rational.numText)))+"/"+String(Math.abs(Number(F.rational.denText))),{numText:String(Math.abs(Number(F.rational.numText))),denText:String(Math.abs(Number(F.rational.denText)))}):Cu(Math.abs(F.value),String(Math.abs(F.value)))}e(Uh,"absPart");function Xd(F){let z=String(F??"").trim();return z.startsWith("+")?z.slice(1):z}e(Xd,"stripLeadingPlus");function _p(F){return F==="latex"?"i":F==="mathematica"?"I":F==="macaulay2"?"ii":F==="matlab"?"1i":"I"}e(_p,"imagUnit");function kh(){he.exportOut.value||gm();let F=he.exportOut.value;navigator.clipboard&&J.isSecureContext?navigator.clipboard.writeText(F).then(()=>{he.matrixStatus.textContent="export copied"}).catch(Hu):Hu()}e(kh,"copyExport");function Hu(){he.exportOut.focus(),he.exportOut.select();try{C.execCommand("copy"),he.matrixStatus.textContent="export copied"}catch{he.matrixStatus.textContent="copy unavailable"}}e(Hu,"fallbackCopyExport"),J.SiteImportExportPageAdapter={exportDefault(){gm();let F=he.exportFormat.value,z=F==="latex"?"tex":"txt";return{text:he.exportOut.value,filename:`matrix-export.${z}`,mimeType:F==="latex"?"application/x-tex":"text/plain"}},exporters:{operation(){if(!Me.lastOperationResult)throw new Error("Compute an operation before exporting it.");Rf();let F=he.exportFormat.value;return{text:he.exportOut.value,filename:`matrix-operation.${F==="latex"?"tex":"txt"}`,mimeType:F==="latex"?"application/x-tex":"text/plain"}},"polynomial-action"(){if(!Me.lastPolynomialAction)throw new Error("Compute a polynomial action before exporting it.");ha();let F=he.exportFormat.value;return{text:he.exportOut.value,filename:`matrix-polynomial-action.${F==="latex"?"tex":"txt"}`,mimeType:F==="latex"?"application/x-tex":"text/plain"}}},validateImport(F,z){let fe=String(z?.text||"").trim();return{text:fe,parsed:Xh(fe)}},applyImport(F,z){let fe=z.parsed.rows,ke=fe.length,Xe=fe[0]?.length||0;if(ke>8||Xe>8)throw new Error("The browser editor is capped at 8 x 8.");Me.rows=ke,Me.cols=Xe,Me.entries=fe,he.rows.value=String(ke),he.cols.value=String(Xe),$d(),Zt(),kt(),Wn(),he.bulkMessage.textContent=`Imported ${z.parsed.style}.`},hasMeaningfulState(){return Me.entries.some(F=>F.some(z=>String(z||"").trim()&&String(z).trim()!=="0"))},filename(F){let z=he.exportFormat?.value||"rows";return`${F==="operation"?"matrix-operation":"matrix-export"}.${z==="latex"?"tex":"txt"}`}},tt.registerState({get:e(()=>({state:Me,mathJaxTypesetQueue:vt}),"get"),restore:e(F=>{if(tt.applyState(Me,F.state),vt=tt.applyState(vt,F.mathJaxTypesetQueue),kt(),Wn(),Me.lastOperationResult&&Ib(Me.lastOperationResult),Me.lastPolynomialAction){let z=w(Me.lastPolynomialAction.polynomial,"latex");he.polynomialActionOutput.innerHTML='<div class="matrix-polynomial">'+xf(z)+"</div>"}},"restore"),classes:{Complex:xt,Fraction:Wt,ExactScalar:hn,ModScalar:Mn,RationalFunctionScalar:In,NumberFieldScalar:xn,SymbolicExpScalar:wt,ExpressionParser:na}});let Uf={},ah=null,Db=e(F=>F?F.kind+":"+F.id:"","__key"),Jf=e((F,z)=>J.CalculatorInputSettings.syncEditableValue(F,String(z??"")),"__sync");function wg(F){ah=F,F.classList.add("workspace-object-content"),F.classList.remove("collapsed"),tt.setCardVisible(F.dataset.workspaceCardId,!0)}e(wg,"__showCard");function Ch(F=""){let z=C.createElement("style");z.textContent=".workspace-object-content>.card-head{display:none!important}.workspace-object-content{border:0!important;margin:0!important;max-height:none!important;box-shadow:none!important}.workspace-object-content>.card-body{padding:4px!important;max-height:none!important}.workspace-card-inspector{display:block!important}.workspace-object-content [data-import-export-trigger]{display:none!important}"+(Uf.mode==="input"?".workspace-view-card{border:0!important;box-shadow:none!important}.workspace-view-card>.panel-title>.panel-title-text{display:none!important}.workspace-view-card>.panel-title{border:0!important}":"")+F,C.head.append(z),tt.inspectorShadow?.append(z.cloneNode(!0))}e(Ch,"__panelStyle");let ev=e(()=>ah?[...ah.querySelectorAll("input[id],select[id],textarea[id]")].filter(F=>!F.readOnly&&F.type!=="hidden").map(F=>({id:F.id,value:F.value,checked:F.type==="checkbox"?F.checked:void 0})):[],"__captureControls"),Yf=!1,cu=null,Np="",Qg=Ib;Ib=e(function(F){let z=he.operation.value;if(Se()==="integer"&&["transpose","inverse","power","bruhat","rcf"].includes(z)){let fe=Er(!1);if(!fe.errors.length){F=ry(fe,z);let ke=F.blocks.some(T=>T.matrix.some(q=>q.some(Y=>!/^-?\d+$/.test(Xf(Y,"text")))));F.inputRing="integer",F.resultRing=ke?"rational":"integer",F.computationRing=ke||["bruhat","rcf"].includes(z)?"rational":"integer",F.field={kind:F.resultRing};let Xe="Input coefficient ring: \u2124. Result entries lie in "+(ke?"\u211A, the fraction field of \u2124.":"\u2124.");z==="inverse"&&(Xe+=ke?" This is an inverse over \u211A; the matrix is not invertible over \u2124.":" The matrix is invertible over \u2124."),["bruhat","rcf"].includes(z)&&(Xe+=" This decomposition is computed over \u211A."),F.note=[F.note,Xe].filter(Boolean).join(" ")}}return Qg(F)},"renderOperationResult");function Lb(){return{rows:Me.rows,cols:Me.cols,entries:Me.entries.map(F=>F.slice()),dataType:Se(),finiteFieldPrime:Me.finiteFieldPrime,rationalFunctionVariables:Me.rationalFunctionVariables.slice(),numberFieldSymbol:Me.numberFieldSymbol,numberFieldPolynomial:Me.numberFieldPolynomial,...Np?{field:Np}:{}}}e(Lb,"__matrixData");function Jh(F){let z=Me.rows!==F.rows||Me.cols!==F.cols,fe=_t(Me.cols).join(", ");(!he.polynomialActionVariables.value.trim()||he.polynomialActionVariables.value.trim()===fe)&&Jf(he.polynomialActionVariables,_t(F.cols).join(", ")),Me.rows=F.rows,Me.cols=F.cols,Me.entries=F.entries.map(ke=>ke.slice()),Me.finiteFieldPrime=F.finiteFieldPrime,Me.rationalFunctionVariables=F.rationalFunctionVariables.slice(),Me.numberFieldSymbol=F.numberFieldSymbol,Me.numberFieldPolynomial=F.numberFieldPolynomial,Jf(he.rows,F.rows),Jf(he.cols,F.cols),Jf(he.dataType,F.dataType),Jf(he.finiteFieldPrime,F.finiteFieldPrime),Jf(he.rationalFunctionVariable,F.rationalFunctionVariables.join(", ")),Jf(he.numberFieldGenerator,F.numberFieldSymbol),Jf(he.numberFieldPolynomial,F.numberFieldPolynomial),z?kt():he.grid.querySelectorAll("input").forEach(ke=>Jf(ke,F.entries[ke.dataset.row][ke.dataset.col])),et(),$d(),Zt(),Wn()}e(Jh,"__matrixProject"),tt.setAssetAdapter({panel(F){if(Uf=F,Ch("#apply-bulk,#bulk-message,#export-operation,#export-polynomial-action{display:none!important}.matrix-toolbar{flex-wrap:wrap!important}.matrix-grid-wrap{overflow:auto!important}.matrix-cell{min-width:0!important}"),F.mode==="input"&&(wg(he.applyBulk.closest(".card")),Ch(".calculator-input-settings-trigger,.matrix-toolbar-group,.matrix-editor{display:none!important}"),Ch(":host,.editor-document,.editor-body,.editor-body>.workspace-editor-layout{height:auto!important;overflow:visible!important}.workspace-editor-layout .workspace-view-card{height:auto!important;min-height:0!important;border:0!important;box-shadow:none!important}.panel-title>.panel-title-text,.panel-title>.panel-settings-btn,#matrix-summary,.matrix-action-row:has(#apply-bulk){display:none!important}.panel-title{padding:4px 0!important;border:0!important;min-height:0!important}.matrix-editor{min-height:0!important;padding:12px 0!important;justify-content:flex-start!important;--matrix-cell-size:72px}.matrix-underbar{border:0!important;padding:4px 0!important}.matrix-toolbar-group{padding-left:0!important;border:0!important}"),tt.mountObjectSurfaces({modify:[C.querySelector(".canvas-size-inline"),C.getElementById("clear-matrix"),ah.querySelector(".card-body")]})),F.operation==="matrix-view"){let z=C.createElement("section");z.className="card workspace-object-content",cu=C.createElement("div"),cu.className="card-body matrix-display-output";let fe=C.createElement("div");fe.className="matrix-editor",fe.append(he.grid),cu.append(fe),z.append(cu),tt.inspectorShadow.querySelector(".workspace-card-inspector").append(z),ah=z,Ch(':host,.editor-document,.editor-body,.editor-body>.layout{height:auto!important;min-height:0!important;overflow:visible!important}.workspace-editor-inspector-layout>.workspace-card-inspector{display:block!important}.matrix-display-header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 12px;padding:8px 4px;color:var(--muted);font:var(--ws-text-sm,0.74rem) var(--ws-font-ui,"JetBrains Mono",monospace)}.matrix-display-name{color:var(--text)}.matrix-display-name,.matrix-display-meta{min-width:0;overflow-wrap:anywhere}.matrix-display-output .matrix-editor{display:block;min-height:0;padding:16px 4px;overflow:auto;scrollbar-gutter:auto;container-type:inline-size}.matrix-display-output .matrix-grid{--matrix-gap:clamp(4px,calc((100cqi - var(--matrix-columns) * 42px) / max(1,var(--matrix-columns) - 1)),7px);width:min(100%,calc(var(--matrix-columns) * 72px + (var(--matrix-columns) - 1) * var(--matrix-gap)));min-width:calc(var(--matrix-columns) * 42px + (var(--matrix-columns) - 1) * var(--matrix-gap));max-width:none;grid-template-columns:repeat(var(--matrix-columns),minmax(0,1fr))!important;gap:var(--matrix-gap);margin-inline:auto}.matrix-display-output .matrix-cell{box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%;height:36px;padding:5px 4px;font-size:.72rem}')}else F.mode==="property"&&(wg(C.getElementById(F.marker).closest(".card")),ah.addEventListener("click",z=>{z.target.closest("#compute-operation,#compute-polynomial-action,#charpoly-factor")&&queueMicrotask(()=>tt.notifyChange({interaction:"object-compute"}))}));return!0},apply(F,z,fe,ke){let Xe=Db(ke?.refs?.matrix||z),T=F.assets.find(Y=>Db(Y)===Xe);if(!T)return!1;Yf=!!T.data.construction,Np=T.data.field||"";let q=J.MathWorkspaceSlicing.materialize(T,F.assets);if(Jh(q.data),cu){he.grid.style.setProperty("--matrix-columns",Me.cols);let Y=Er(!1),ue=cu.querySelector(".matrix-display-error");ue||(ue=C.createElement("p"),ue.className="err matrix-display-error",ue.setAttribute("role","status"),cu.append(ue)),ue.textContent=Y.errors.length?qd(Y.errors[0]):"",ue.hidden=!Y.errors.length;let we=C.createElement("div");we.className="matrix-display-header";let Qe=C.createElement("span");Qe.className="matrix-display-name",Qe.textContent=T.plainName||T.name;let ct=C.createElement("span");ct.className="matrix-display-meta",ct.textContent=Me.rows+" \xD7 "+Me.cols+" \xB7 "+J.MathWorkspaceObjects.fieldLabel(q.data),we.append(Qe,ct);let St=cu.querySelector(".matrix-display-header");St?St.replaceWith(we):cu.prepend(we),he.grid.querySelectorAll("input").forEach(dn=>{dn.disabled=Yf,dn.setAttribute("aria-label","Entry "+(Number(dn.dataset.row)+1)+", "+(Number(dn.dataset.col)+1))})}return Uf.mode==="input"&&ah.querySelectorAll("input,select,textarea,button").forEach(Y=>{Y.disabled=Yf}),!0},collect(){if(Yf||Er(!1).errors.length)return null;let F=he.grid.getRootNode().activeElement;if(F?.classList.contains("matrix-cell")&&!F.value.trim())return null;let z=Lb();return z.entries=z.entries.map(fe=>fe.map(ke=>String(ke).trim()?ke:"0")),{type:"matrix",data:z}},capture:ev,result:e(()=>({text:(ah?.querySelector(".card-body")?.innerText||"")+(cu?`
 `+Me.entries.map(F=>F.join(" ")).join(`
 `):""),hasResult:Uf.operation==="matrix-computation"?!!Me.lastOperationResult:Uf.operation==="matrix-polynomial"?!!Me.lastPolynomialAction:!0}),"result"),io(F,z){if(F==="number"){let fe=z.field,ke=String(z.value).trim();if(!ke||ke.length>1024||/[+*/^(-]$/.test(ke)||/(?:^|[^A-Za-z])\d+(?:\.\d*)?[eE][+-]?$/.test(ke))throw new Error("Enter a complete number.");let Xe=fe.dataType,T={kind:Xe};if(Xe==="finite-field"&&(T.p=fe.finiteFieldPrime),Xe==="rational-function"&&(T.variables=fe.rationalFunctionVariables),Xe==="number-field"){let we=fe.numberFieldSymbol,Qe;try{Qe=Gn(fe.numberFieldPolynomial,we)}catch(St){if(we==="x")throw St;Qe=Gn(fe.numberFieldPolynomial,"x")}let ct=nr(Qe);if(ye(ct)<1)throw new Error("Number field polynomial must have positive degree.");T={kind:Xe,symbol:we,modulus:ct,key:we+":"+Cn(ct)}}let q=za(ke,T),Y=q.scalar;if(!Y){if(Y=Xl(q),Xe!=="complex"&&!Y.im.isZero())throw new Error("This coefficient ring requires a real value.");if(Xe==="integer"&&Y.re.den!==1n)throw new Error("This coefficient ring requires an integer.");if(Xe==="finite-field"){let we=BigInt(T.p),Qe=Number(Y.re.num%we),ct=Number(Y.re.den%we);Y=new Mn(Qe,T.p).div(new Mn(ct,T.p))}}let ue=Xf(Y,"text");return{text:ue,latex:Xf(Y,"latex"),integer:/^-?\d+$/.test(ue)?ue:null}}if(F==="validate"){let fe=Er(!1);if(fe.errors.length)throw new Error(qd(fe.errors[0]));return Lb()}if(F==="parse"){let fe=Xh(z).rows;if(!fe.length||fe.length>8||!fe[0]?.length||fe[0].length>8)throw new Error("Matrix dimensions must be from 1 to 8.");return{...Lb(),rows:fe.length,cols:fe[0].length,entries:fe}}if(F==="export"){if(Uf.operation==="matrix-computation"){if(!Me.lastOperationResult)throw new Error("Compute the result first.");return Kf(Me.lastOperationResult,z)}if(Uf.operation==="matrix-polynomial"){if(!Me.lastPolynomialAction)throw new Error("Compute the result first.");return Xi(Me.lastPolynomialAction,z)}let fe=Er(!1);if(fe.errors.length)throw new Error(qd(fe.errors[0]));return vg(fe.details,z,fe.fieldInfo)}}})})(),(()=>{"use strict";function Us(We){C.readyState==="loading"?C.addEventListener("DOMContentLoaded",We,{once:!0}):We()}e(Us,"ready");function Yr(We){return()=>{let it=C.querySelector(We);return!it||it.disabled||it.hidden||it.closest("[hidden]")?!1:(it.click(),!0)}}e(Yr,"clickAction");function qn(We){return()=>{let it=C.querySelector(We);return!!(it&&!it.disabled&&!it.hidden&&!it.closest("[hidden]"))}}e(qn,"enabledSelector");function Zn(We,it){return{input:We,description:it}}e(Zn,"pointer");function fn(We,it,xt="Run / apply current panel"){return{id:"primary",group:"Current task",label:xt,description:"Runs the primary action in the focused or most recently used panel.",defaultBindings:["Mod+Enter"],allowInEditable:!0,trigger:e(()=>We.current&&We.current.triggerPrimary(it),"trigger")}}e(fn,"primaryAction");function Ze(We){let it=J.CalculatorInputSettings;if(!it||it.getSession(We.pageId))return null;let xt={current:null},Wt=[];return We.primary&&Wt.push(fn(xt,We.primary,We.primaryLabel)),(We.actions||[]).forEach(hn=>Wt.push(hn)),xt.current=it.register({pageId:We.pageId,triggerHost:We.triggerHost||".canvas-panel .panel-title",actions:Wt,pointerHints:We.pointerHints||[]}),xt.current}e(Ze,"registerSimple");let An={"young_diagrams.html":{pageId:"young-diagram",primary:["[data-shortcut-primary]"],actions:[{id:"clear-diagram",group:"Diagram",label:"Clear diagram",description:"Removes every box from the current Young diagram.",defaultBindings:[],enabled:e(()=>typeof J.drawPartitionRows=="function","enabled"),trigger:e(()=>typeof J.drawPartitionRows!="function"?!1:(J.drawPartitionRows([]),!0),"trigger")}],pointerHints:[Zn("Primary click","Set the selected row length; click the same boundary again to erase."),Zn("Card drag handle","Drag a card to reorder the dashboard.")]},"double_young_diagram.html":{pageId:"double-young-diagram",primary:["[data-shortcut-primary]"],actions:[{id:"swap",group:"Diagrams",label:"Swap \u03BB and \u03BC",description:"Exchanges the two input diagrams.",defaultBindings:[],trigger:Yr("#swap-diagrams"),enabled:qn("#swap-diagrams")},{id:"clear-lambda",group:"Diagrams",label:"Clear \u03BB",description:"Clears the \u03BB diagram.",defaultBindings:[],trigger:Yr("#clear-lambda"),enabled:qn("#clear-lambda")},{id:"clear-mu",group:"Diagrams",label:"Clear \u03BC",description:"Clears the \u03BC diagram.",defaultBindings:[],trigger:Yr("#clear-mu"),enabled:qn("#clear-mu")}],pointerHints:[Zn("Primary click","Set a row length on the \u03BB or \u03BC canvas."),Zn("Card drag handle","Drag a card to reorder the dashboard.")]},"matrix_calculator.html":{pageId:"matrix",actions:[{id:"primary",group:"Current task",label:"Compute / import matrix",description:"Imports the bulk matrix when its dialog is open; otherwise computes the selected operation.",defaultBindings:["Mod+Enter"],allowInEditable:!0,trigger:e(()=>{let We=C.getElementById("import-dialog"),it=We&&!We.hidden?C.getElementById("confirm-import"):C.getElementById("compute-operation");return!it||it.disabled?!1:(it.click(),!0)},"trigger")},{id:"clear-matrix",group:"Matrix",label:"Clear matrix",description:"Clears all matrix entries.",defaultBindings:[],trigger:Yr("#clear-matrix"),enabled:qn("#clear-matrix")},{id:"clear-output",group:"Matrix",label:"Clear output",description:"Clears the current result.",defaultBindings:[],trigger:Yr("#clear-output"),enabled:qn("#clear-output")}],pointerHints:[Zn("Primary click","Focus and edit a matrix entry or activate a control."),Zn("Card drag handle","Drag a card to reorder the dashboard.")]},"dynkin_diagram_calculator.html":{pageId:"dynkin-diagram",actions:[{id:"export-selection",group:"Selection",label:"Send selection to export",description:"Copies the selected vertices into the export panel.",defaultBindings:[],trigger:Yr("#dynkin-select-export"),enabled:qn("#dynkin-select-export")},{id:"clear-selection",group:"Selection",label:"Clear multi-selection",description:"Turns off multi-vertex selection and keeps one active vertex.",defaultBindings:[],enabled:e(()=>!!C.getElementById("dynkin-multi-select")?.checked,"enabled"),trigger:e(()=>{let We=C.getElementById("dynkin-multi-select");return!We||!We.checked?!1:(We.click(),!0)},"trigger")}],pointerHints:[Zn("Primary click","Select a vertex; with multi-select enabled, toggle vertices."),Zn("Drag","Move diagram labels and supported canvas controls."),Zn("Canvas size handle","Drag vertically to resize the diagram canvas.")]},"category_calculator.html":{pageId:"category",primary:["[data-shortcut-primary]"],primaryLabel:"Add / update current category object",actions:[{id:"delete-object",group:"Category",label:"Delete selected object",description:"Deletes the active category object.",defaultBindings:[],trigger:Yr("#category-delete-object"),enabled:qn("#category-delete-object")},{id:"clear-category",group:"Category",label:"Clear category canvas",description:"Clears all category objects.",defaultBindings:[],trigger:Yr("#clear-category-canvas"),enabled:qn("#clear-category-canvas")},{id:"reset-functor-pick",group:"Category",label:"Reset functor selection",description:"Clears the current functor domain and codomain selection.",defaultBindings:[],trigger:Yr("#reset-functor-pick"),enabled:qn("#reset-functor-pick")}],pointerHints:[Zn("Primary click","Select a category object or activate a formula token."),Zn("Card drag handle","Drag a card to reorder the dashboard.")]},"sheaf_complex_calculator.html":{pageId:"sheaf-complex",primary:["[data-shortcut-primary]"],primaryLabel:"Run / apply current Sheaf Complex panel",actions:[{id:"formula-undo",group:"Formula",label:"Undo formula token",description:"Uses the formula builder undo action when available.",defaultBindings:["Mod+z"],trigger:Yr("#class-formula-undo"),enabled:qn("#class-formula-undo")},{id:"delete-object",group:"Canvas",label:"Delete active object",description:"Deletes the currently active object.",defaultBindings:[],trigger:Yr("#delete-object"),enabled:qn("#delete-object")},{id:"clear-canvas",group:"Canvas",label:"Clear canvas",description:"Clears the Sheaf Complex canvas.",defaultBindings:[],trigger:Yr("#clear-canvas"),enabled:qn("#clear-canvas")},{id:"restart-step",group:"Formula",label:"Restart step calculation",description:"Restarts the current step-by-step calculation.",defaultBindings:[],trigger:Yr("#class-step-restart"),enabled:qn("#class-step-restart")}],pointerHints:[Zn("Primary click","Select a variety, sheaf, map, formula token, or chart object."),Zn("Drag","Move labels, map controls, sequence tails, and dashboard cards."),Zn("Enter / Space","Activate a focused canvas label or sequence control."),Zn("Arrow keys","Move focused map and sequence controls; Shift moves farther."),Zn("Home / End / Insert","Navigate or change insertion mode in the formula builder.")]},"sheaf_calculator.html":{pageId:"sheaf",actions:[{id:"formula-undo",group:"Formula",label:"Undo formula token",description:"Uses the formula builder undo action when available.",defaultBindings:["Mod+z"],trigger:Yr("#class-formula-undo"),enabled:qn("#class-formula-undo")},{id:"delete-object",group:"Canvas",label:"Delete active object",description:"Deletes the currently active object.",defaultBindings:[],trigger:Yr("#delete-object"),enabled:qn("#delete-object")},{id:"clear-canvas",group:"Canvas",label:"Clear canvas",description:"Clears the Sheaf canvas.",defaultBindings:[],trigger:Yr("#clear-canvas"),enabled:qn("#clear-canvas")},{id:"restart-step",group:"Formula",label:"Restart step calculation",description:"Restarts the current step-by-step calculation.",defaultBindings:[],trigger:Yr("#class-step-restart"),enabled:qn("#class-step-restart")}],pointerHints:[Zn("Primary click","Select a variety, sheaf, map, formula token, or chart object."),Zn("Drag","Move labels, map controls, sequence tails, and dashboard cards."),Zn("Enter / Space","Activate a focused canvas label or sequence control."),Zn("Arrow keys","Move focused map and sequence controls; Shift moves farther.")]},"place_ramification_calculator.html":{pageId:"place-ramification",primary:["[data-shortcut-primary]"],primaryLabel:"Compute / update current ramification panel",actions:[{id:"add-place",group:"Places",label:"Add place",description:"Adds the place entered in the extra-prime field.",defaultBindings:[],trigger:Yr("#add-extra-prime"),enabled:qn("#add-extra-prime")}],pointerHints:[Zn("Primary click","Choose a field, place, or ramification result."),Zn("Card drag handle","Drag a card to reorder the dashboard.")]},"strand_diagram_calculator.html":{pageId:"strand-diagram",primary:["[data-shortcut-primary]"],primaryLabel:"Calculate strand expression",actions:[{id:"clear-strands",group:"Diagram",label:"Clear strand diagram",description:"Clears all generators from the strand expression.",defaultBindings:[],trigger:Yr("#strand-clear"),enabled:qn("#strand-clear")}],pointerHints:[Zn("Primary click","Select a generator or insertion point."),Zn("Drag","Drag generators between the input chart and canvas, or reorder them."),Zn("Range drag","Adjust generator spacing and fixed generator size.")]}};Us(()=>{let We=Kt.pathname.split("/").pop()||"index.html",it=An[We];it&&Ze(it)})})(),(()=>{"use strict";let Us={"io.panelReady":"Choose an import or export action.","io.exportRefreshed":"Export preview refreshed.","io.exportCopied":"Export copied to the clipboard.","io.exportDownloaded":"Export downloaded.","io.nothingToCopy":"Generate an export before copying.","io.nothingToDownload":"Generate an export before downloading.","io.clipboardUnavailable":"Clipboard access is unavailable.","io.fileReading":"Reading {{filename}}\u2026","io.fileReady":"{{filename}} is ready to import.","io.fileRequired":"Choose a local file first.","io.importRequired":"Paste data to import.","io.importComplete":"Import complete.","io.importCancelled":"Import cancelled; the current game was not changed.","io.importCleared":"Import input cleared.","io.autoDetect":"Automatically detect","io.detectedFormat":"{{format}} detected","io.detectedContent":"{{content}} detected","io.importDetected":"{{content}} \xB7 {{format}} is ready to import.","io.builtInPreset":"Built-in preset","io.operationFailed":"{{message}}"};function Yr(xn,wt){return String(xn||"").replace(/\{\{\s*([\w.-]+)\s*\}\}/g,(Me,he)=>{let vt=wt&&Object.prototype.hasOwnProperty.call(wt,he)?wt[he]:"";return String(vt??"")})}e(Yr,"interpolate");function qn(xn,wt,Me){if(wt&&typeof wt=="object")return wt;let he=typeof wt=="string"?wt:Me;return he&&xn&&xn.querySelector?xn.querySelector(he):null}e(qn,"resolveElement");function Zn(xn,wt){return xn&&xn.querySelectorAll?Array.from(xn.querySelectorAll(wt)):[]}e(Zn,"elements");function fn(xn){return typeof xn=="string"?{text:xn}:xn&&typeof xn=="object"?{...xn,text:String(xn.text??"")}:{text:""}}e(fn,"normalizeResult");function Ze(xn){return String(xn||"").replace(/[-_]+/g," ").replace(/\b\w/g,wt=>wt.toUpperCase()).trim()}e(Ze,"humanize");function An(xn){return(Array.isArray(xn)?xn:[]).map(wt=>{if(typeof wt=="string")return{id:wt,label:Ze(wt)};if(!wt||typeof wt!="object")return null;let Me=String(wt.id||wt.value||"").trim();return Me?{...wt,id:Me,label:String(wt.label||Ze(Me))}:null}).filter(Boolean)}e(An,"normalizeFormats");function We(xn,wt,Me={}){let he=String(xn||"").trim(),vt=typeof wt=="function"?{...Me,produce:wt}:{...wt&&typeof wt=="object"?wt:{},...Me},Dt=vt.produce||vt.producer;if(!he||typeof Dt!="function")return null;let cn=An(vt.formats);return{...vt,name:he,label:String(vt.label||Ze(he||"export")),formats:cn,defaultFormat:String(vt.defaultFormat||cn[0]?.id||""),produce:Dt}}e(We,"normalizeExporter");function it(xn){return(String(xn||"export.json").trim()||"export.json").replace(/[\\/:*?"<>|]+/g,"-")}e(it,"safeFilename");function xt(xn){return xn?typeof xn.text=="function"?Promise.resolve(xn.text()).then(String):typeof FileReader>"u"?Promise.reject(new Error("File reading is unavailable.")):new Promise((wt,Me)=>{let he=new FileReader;he.addEventListener("load",()=>wt(String(he.result??""))),he.addEventListener("error",()=>Me(he.error||new Error("Could not read the selected file."))),he.readAsText(xn)}):Promise.reject(new Error(Us["io.fileRequired"]))}e(xt,"readFileText");function Wt(xn,wt){return typeof navigator<"u"&&navigator.clipboard&&navigator.clipboard.writeText?Promise.resolve(navigator.clipboard.writeText(xn)):new Promise((Me,he)=>{if(typeof C>"u"||!wt){he(new Error(Us["io.clipboardUnavailable"]));return}let vt=C.activeElement;wt.focus&&wt.focus(),wt.select&&wt.select();try{C.execCommand&&C.execCommand("copy")?Me():he(new Error(Us["io.clipboardUnavailable"]))}catch(Dt){he(Dt)}finally{vt&&vt.focus&&vt.focus()}})}e(Wt,"copyText");function hn(xn,wt,Me="application/json"){if(typeof C>"u"||typeof Blob>"u"||typeof URL>"u")throw new Error("Downloads are unavailable.");let he=String(Me||"application/json").split(";")[0]||"application/json",vt=URL.createObjectURL(new Blob([xn],{type:`${he};charset=utf-8`})),Dt=C.createElement("a");Dt.href=vt,Dt.download=it(wt),Dt.hidden=!0;let cn=C.body||C.documentElement;cn&&cn.appendChild&&cn.appendChild(Dt),Dt.click(),Dt.remove&&Dt.remove(),URL.revokeObjectURL(vt)}e(hn,"downloadText");function Mn(xn,wt={}){if(!xn||typeof xn.querySelector!="function")return null;xn.setAttribute("data-import-export-mounted","true");let Me=wt.exportOptions||{},he=wt.importOptions||{},vt=new Map;Object.entries(wt.exporters||{}).forEach(([ye,Z])=>{let U=We(ye,Z);U&&vt.set(ye,U)});let Dt=new Map(Object.entries(wt.importers||{})),cn=wt.eventRoot||(typeof C<"u"?C:xn);wt.id&&xn.setAttribute("data-import-export-id",String(wt.id));let Ge={tabs:Zn(xn,"[data-import-export-tab]"),panels:Zn(xn,"[data-import-export-panel]"),sourcePanels:Zn(xn,"[data-import-source-panel]"),status:qn(xn,wt.status,"[data-import-export-status]"),exportContent:qn(xn,Me.content,"[data-export-content]"),exportContentValue:qn(xn,Me.contentValue,"[data-export-content-value]"),exportKind:qn(xn,Me.kind,"[data-export-kind]"),exportFormat:qn(xn,Me.format,"[data-export-format]"),exportFormatValue:qn(xn,Me.formatValue,"[data-export-format-value]"),exportFormatRow:qn(xn,Me.formatRow,"[data-export-format-row]"),exportOutput:qn(xn,Me.output,"[data-export-output]"),exportRefresh:qn(xn,Me.refresh,'[data-export-action="refresh"]'),exportCopy:qn(xn,Me.copy,'[data-export-action="copy"]'),exportDownload:qn(xn,Me.download,'[data-export-action="download"]'),importSource:qn(xn,he.source,"[data-import-source]"),importKind:qn(xn,he.kind,"[data-import-kind]"),importContentValue:qn(xn,he.contentValue,"[data-import-content-value]"),importFormatValue:qn(xn,he.formatValue,"[data-import-format-value]"),importCatalog:qn(xn,he.catalog,"[data-import-catalog]"),importInput:qn(xn,he.input,"[data-import-input]"),importFile:qn(xn,he.file,"[data-import-file]"),importFilename:qn(xn,he.filename,"[data-import-filename]"),importApply:qn(xn,he.apply,'[data-import-action="apply"]'),importClear:qn(xn,he.clear,'[data-import-action="clear"]')},xe={activeTab:"export",previousSource:Ge.importSource?String(Ge.importSource.value||"catalog"):"catalog",pasteText:Ge.importInput?String(Ge.importInput.value||""):"",fileText:"",fileName:"",file:null,busy:!1,activeExporter:String(wt.defaultExporter||""),artifact:{text:"",filename:"",mimeType:"application/json"},validationRevision:0,validationTimer:null,validationCache:null,detectedImport:null,selectingExporter:!1,disabledBeforeBusy:new Map,status:{key:"io.panelReady",parameters:{},type:"idle"},listeners:[]};function Se(ye,Z){let U="";if(typeof wt.translate=="function")try{U=wt.translate(ye,Z)||""}catch{U=""}return Yr(U||Us[ye]||"",Z)}e(Se,"translate");function ze(ye,Z={},U="info",te={}){xe.status={key:ye,parameters:Z,type:U},Ge.status&&(Ge.status.textContent=Se(ye,Z),Ge.status.setAttribute("data-state",U)),typeof wt.onStatus=="function"&&wt.onStatus({key:ye,parameters:Z,type:U,message:Se(ye,Z),...te})}e(ze,"notify");function _e(){let ye=xe.status.key==="io.importDetected"?Ot():xe.status.parameters;ze(xe.status.key,ye,xe.status.type,{languageChange:!0}),qe(),Et()}e(_e,"renderStatus");function ht(ye,Z=""){return ye?ye.labelKey&&Se(ye.labelKey)||String(ye.label||Z||""):String(Z||"")}e(ht,"metadataLabel");function $t(ye,Z){ye&&(ye.textContent=String(Z||""))}e($t,"setValueText");function et(ye,Z){return!!(ye&&Array.from(ye.options||[]).some(U=>String(U.value)===String(Z)))}e(et,"selectHasOption");function Be(ye,Z,U){if(!ye||et(ye,Z)||typeof C>"u"||!C.createElement)return;let te=C.createElement("option");te.value=Z,te.textContent=U,ye.appendChild&&ye.appendChild(te)}e(Be,"appendSelectOption");function Te(ye,Z,U){if(!ye||!ye.options||typeof C>"u"||!C.createElement)return;let te=String(U||ye.value||"");for(;ye.options.length;)ye.remove(0);Z.forEach(ie=>Be(ye,ie.id,ht(ie,ie.id))),ye.value=et(ye,te)?te:String(Z[0]?.id||"")}e(Te,"replaceSelectOptions");function Le(ye=xe.activeExporter){return vt.get(String(ye||""))||null}e(Le,"exporterDescriptor");function Ee(ye){if(!ye||typeof ye.isAvailable!="function")return!0;try{return ye.isAvailable(dt())!==!1}catch{return!1}}e(Ee,"exporterAvailable");function Fe(){Ge.exportContent&&(vt.forEach((ye,Z)=>{Be(Ge.exportContent,Z,ht(ye,Ze(Z)))}),Array.from(Ge.exportContent.options||[]).forEach(ye=>{let Z=Le(ye.value);Z&&(ye.textContent=ht(Z,Ze(ye.value)),ye.disabled=!Ee(Z))}),vt.has(xe.activeExporter)||(xe.activeExporter=String(wt.defaultExporter||vt.keys().next().value||"")),et(Ge.exportContent,xe.activeExporter)&&(Ge.exportContent.value=xe.activeExporter))}e(Fe,"syncExporterOptions");function qe(){Fe();let ye=Le(),Z=vt.size>1;if(Ge.exportContent&&(Ge.exportContent.hidden=!Z),Ge.exportContentValue&&(Ge.exportContentValue.hidden=Z,$t(Ge.exportContentValue,ht(ye,Ze(xe.activeExporter||"export")))),!ye)return;let U=ye?.formats||[];if(Ge.exportFormat&&U.length>1?(Ge.exportFormat.hidden=!1,Te(Ge.exportFormat,U,Ge.exportFormat.value||ye.defaultFormat)):Ge.exportFormat&&(Ge.exportFormat.hidden=!0),Ge.exportFormatValue){Ge.exportFormatValue.hidden=U.length>1;let te=U.find(ie=>ie.id===ye?.defaultFormat)||U[0];$t(Ge.exportFormatValue,ht(te,te?.id||""))}Ge.exportFormatRow&&(Ge.exportFormatRow.hidden=!1)}e(qe,"syncExporterPresentation");function ot(){let ye=Ge.importKind?String(Ge.importKind.value||""):"";return Dt.get(ye)||(wt.importMetadata&&typeof wt.importMetadata=="object"?wt.importMetadata:null)}e(ot,"selectedImporter");function ut(ye){let Z=ye?.format;return typeof Z=="string"?{mode:"fixed",label:Z}:Z&&typeof Z=="object"?Z:{mode:"fixed",label:"JSON"}}e(ut,"importFormatMetadata");function Et(){let ye=ot(),Z=vn(),U=xe.detectedImport||{},te=U.contentKey?Se(U.contentKey):U.content,ie=U.formatKey?Se(U.formatKey):U.format;if(Ge.importContentValue){let Pe=Z==="catalog"&&(ye?.catalogLabel||ye?.catalogLabelKey)?ht({label:ye.catalogLabel,labelKey:ye.catalogLabelKey}):ht(ye,"Imported data");Z!=="catalog"&&ye?.detectContent&&!te&&(Pe=`${Se("io.autoDetect")} (${Pe})`),te&&ye?.detectContent&&(Pe=Se("io.detectedContent",{content:te})),$t(Ge.importContentValue,Pe),Ge.importContentValue.setAttribute("data-state",te&&ye?.detectContent?"detected":ye?.detectContent?"automatic":"fixed")}if(Ge.importFormatValue){let Pe=ut(ye),rt=Z==="catalog"?Se("io.builtInPreset"):Pe.mode==="detect"?Se("io.autoDetect"):ht(Pe,Pe.label||"JSON");ie&&Z!=="catalog"&&(rt=Se("io.detectedFormat",{format:ie})),$t(Ge.importFormatValue,rt),Ge.importFormatValue.setAttribute("data-state",ie&&Z!=="catalog"?"detected":Pe.mode==="detect"?"automatic":"fixed")}}e(Et,"syncImportPresentation");function tn(ye,Z,U,te){!ye||!ye.addEventListener||(ye.addEventListener(Z,U,te),xe.listeners.push([ye,Z,U,te]))}e(tn,"listen");function en(ye){return ye&&ye.getAttribute?ye.getAttribute("data-import-export-tab"):""}e(en,"tabName");function Ye(ye){return ye&&ye.getAttribute?ye.getAttribute("data-import-export-panel"):""}e(Ye,"panelName");function zn(ye,Z={}){let U=Ge.tabs.some(te=>en(te)===ye)?ye:"export";return xe.activeTab=U,Ge.tabs.forEach(te=>{let ie=en(te)===U;te.setAttribute("aria-selected",ie?"true":"false"),te.tabIndex=ie?0:-1,ie&&Z.focus&&te.focus&&te.focus()}),Ge.panels.forEach(te=>{te.hidden=Ye(te)!==U}),U}e(zn,"activateTab");function bt(ye){return ye&&ye.closest?ye.closest(".card"):null}e(bt,"sourceCard");function Fn(){return xn.closest?xn.closest(".card"):null}e(Fn,"panelCard");function Lt(ye,Z={}){zn("export");let U=Fn();if(U)if(typeof J<"u"&&J.CalculatorCards&&typeof J.CalculatorCards.openCard=="function"){let te=bt(ye);J.CalculatorCards.openCard(U,{reason:Z.reason||"import-export-action",protectedCard:te&&te!==U?te:null})}else{U.classList?.remove?.("collapsed");let te=U.querySelector?.(".card-head");te&&te.setAttribute("aria-expanded","true")}Z.focus!==!1&&Ge.exportOutput&&Ge.exportOutput.focus&&Ge.exportOutput.focus()}e(Lt,"openForExport");function Ht(ye){let Z=Ge.tabs.indexOf(ye.currentTarget||ye.target);if(Z<0||!Ge.tabs.length)return;let U=Z;if(ye.key==="ArrowRight")U=(Z+1)%Ge.tabs.length;else if(ye.key==="ArrowLeft")U=(Z-1+Ge.tabs.length)%Ge.tabs.length;else if(ye.key==="Home")U=0;else if(ye.key==="End")U=Ge.tabs.length-1;else return;ye.preventDefault&&ye.preventDefault(),zn(en(Ge.tabs[U]),{focus:!0})}e(Ht,"handleTabKeydown");function vn(){let ye=Ge.importSource?String(Ge.importSource.value||""):"paste";return["catalog","paste","file"].includes(ye)?ye:"paste"}e(vn,"importSource");function bn(){Ge.importInput&&(xe.previousSource==="paste"&&(xe.pasteText=String(Ge.importInput.value||"")),xe.previousSource==="file"&&(xe.fileText=String(Ge.importInput.value||"")))}e(bn,"saveCurrentDraft");function kn(ye={}){ye.initial||bn();let Z=vn();Ge.sourcePanels.forEach(U=>{let te=U.getAttribute?U.getAttribute("data-import-source-panel"):"";U.hidden=te!==Z}),Ge.importInput&&(Ge.importInput.hidden=Z==="catalog",Ge.importInput.readOnly=Z==="file",Ge.importInput.value=Z==="file"?xe.fileText:xe.pasteText),Ge.importClear&&(Ge.importClear.hidden=Z==="catalog"),xe.previousSource=Z,ye.keepValidation||pn(),Et(),ae()}e(kn,"syncImportSource");function Xt(){let ye=Le();if(ye&&ye.formats.length){qe();return}Ge.exportFormatRow&&(Ge.exportFormatRow.hidden=!Ge.exportKind||Ge.exportKind.value!=="background")}e(Xt,"syncExportFormat");function kt(){let ye=Le(),Z=ye?.formats||[];return Z.length>1&&Ge.exportFormat?String(Ge.exportFormat.value||ye.defaultFormat||""):String(ye?.defaultFormat||Z[0]?.id||(Ge.exportFormat?Ge.exportFormat.value:""))}e(kt,"selectedExportFormat");function dt(ye={}){return{tab:xe.activeTab,exportKind:Ge.exportKind?Ge.exportKind.value:"",exportFormat:kt(),exporter:xe.activeExporter,importKind:Ge.importKind?String(Ge.importKind.value||""):"",importSource:vn(),catalogId:Ge.importCatalog?Ge.importCatalog.value:"",importText:Ge.importInput?String(Ge.importInput.value||""):"",importFile:xe.file,importFileName:xe.fileName,...ye}}e(dt,"context");function be(ye){xe.busy=!!ye,xn.setAttribute("aria-busy",xe.busy?"true":"false");let Z=[Ge.exportRefresh,Ge.exportCopy,Ge.exportDownload,Ge.importApply,Ge.importClear].filter(Boolean);if(xe.busy){xe.disabledBeforeBusy.clear(),Z.forEach(U=>{xe.disabledBeforeBusy.set(U,!!U.disabled),U.disabled=!0});return}Z.forEach(U=>{U.disabled=xe.disabledBeforeBusy.get(U)||!1}),xe.disabledBeforeBusy.clear(),ae()}e(be,"setBusy");function ae(){if(xe.busy)return;let ye=Ge.exportOutput?String(Ge.exportOutput.value||""):"";if(Ge.exportCopy&&(Ge.exportCopy.disabled=!ye),Ge.exportDownload&&(Ge.exportDownload.disabled=!ye),Ge.importApply){let U=vn()==="catalog"?!!(Ge.importCatalog&&!Ge.importCatalog.disabled&&Ge.importCatalog.value):!!(Ge.importInput&&String(Ge.importInput.value||"").trim());Ge.importApply.disabled=!U}}e(ae,"updateActionAvailability");function oe(ye,Z={}){let U=fn(ye);return xe.artifact={text:U.text,filename:String(U.filename||""),mimeType:String(U.mimeType||"application/json")},Ge.exportOutput&&(Ge.exportOutput.value=U.text),ae(),Lt(Z.trigger,{focus:Z.focus!==!1,reason:Z.reason}),U.statusKey?ze(U.statusKey,U.statusParameters||{},U.statusType||"success"):Z.announce!==!1&&ze("io.exportRefreshed",{},"success"),U.text}e(oe,"presentExport");function ne(ye,Z,U={}){let te=String(ye||"").trim(),ie=We(te,Z,U);return ie?(vt.set(te,ie),xe.activeExporter||(xe.activeExporter=te),qe(),!0):!1}e(ne,"registerExporter");async function ge(ye,Z={}){let U=String(ye||xe.activeExporter||"").trim(),te=Le(U);if(!te||!Ee(te)){let ie=new Error(te?`${ht(te,Ze(U))} is not available yet.`:`Unknown export action: ${U||"default"}`);return Ge.exportOutput&&(Ge.exportOutput.value=""),xe.artifact={text:"",filename:"",mimeType:"application/json"},Lt(Z.trigger,{focus:!1}),ze("io.operationFailed",{message:ie.message},"error",{error:ie}),""}if(xe.activeExporter=U,Ge.exportContent&&et(Ge.exportContent,U)&&Ge.exportContent.value!==U&&(Ge.exportContent.value=U,Ge.exportContent.dispatchEvent&&typeof Event<"u")){xe.selectingExporter=!0;try{Ge.exportContent.dispatchEvent(new Event("change",{bubbles:!0}))}finally{xe.selectingExporter=!1}}qe(),be(!0);try{let ie=await te.produce(dt({action:"export",trigger:Z.trigger||null}));return oe(ie,Z)}catch(ie){return Ge.exportOutput&&(Ge.exportOutput.value=""),xe.artifact={text:"",filename:"",mimeType:"application/json"},ae(),Lt(Z.trigger,{focus:!1}),ze("io.operationFailed",{message:ie&&ie.message?ie.message:"Export failed."},"error",{error:ie}),""}finally{be(!1)}}e(ge,"runExport");async function Ve(ye={}){if(xe.activeExporter&&vt.has(xe.activeExporter))return ge(xe.activeExporter,{...ye,focus:!!ye.focus});if(typeof wt.exportState!="function")return"";be(!0);try{let Z=fn(await wt.exportState(dt({action:"refresh"})));return xe.artifact={text:Z.text,filename:String(Z.filename||""),mimeType:String(Z.mimeType||"application/json")},Ge.exportOutput&&(Ge.exportOutput.value=Z.text),ae(),ye.focus&&Ge.exportOutput&&Ge.exportOutput.focus&&Ge.exportOutput.focus(),Z.statusKey?ze(Z.statusKey,Z.statusParameters||{},Z.statusType||"success"):ye.announce!==!1&&ze("io.exportRefreshed",{},"success"),Z.text}catch(Z){return Ge.exportOutput&&(Ge.exportOutput.value=""),ze("io.operationFailed",{message:Z&&Z.message?Z.message:"Export failed."},"error",{error:Z}),""}finally{be(!1)}}e(Ve,"refreshExport");async function Ke(){return(Ge.exportOutput?String(Ge.exportOutput.value||""):"")||Ve({announce:!1})}e(Ke,"exportText");async function mt(){let ye=await Ke();if(!ye)return ze("io.nothingToCopy",{},"error"),!1;be(!0);try{return await Wt(ye,Ge.exportOutput),ze("io.exportCopied",{},"success"),!0}catch(Z){return ze("io.operationFailed",{message:Z&&Z.message?Z.message:Se("io.clipboardUnavailable")},"error",{error:Z}),!1}finally{be(!1)}}e(mt,"copyExport");async function Ct(){let ye=await Ke();if(!ye)return ze("io.nothingToDownload",{},"error"),!1;be(!0);try{let Z=xe.artifact.filename||(typeof wt.getFilename=="function"?wt.getFilename(dt({text:ye})):"export.json");return hn(ye,Z,xe.artifact.mimeType),ze("io.exportDownloaded",{},"success"),!0}catch(Z){return ze("io.operationFailed",{message:Z&&Z.message?Z.message:"Download failed."},"error",{error:Z}),!1}finally{be(!1)}}e(Ct,"downloadExport");function Jt(){return JSON.stringify({kind:Ge.importKind?String(Ge.importKind.value||""):"",source:vn(),catalog:Ge.importCatalog?String(Ge.importCatalog.value||""):"",text:Ge.importInput?String(Ge.importInput.value||""):"",fileName:xe.fileName})}e(Jt,"importFingerprint");function pn(){xe.validationRevision+=1,xe.validationTimer!=null&&typeof ii=="function"&&ii(xe.validationTimer),xe.validationTimer=null,xe.validationCache=null,xe.detectedImport=null,Et()}e(pn,"invalidateImportValidation");async function Tn(ye,Z){let U=null;return Z&&typeof Z.describe=="function"?U=await Z.describe(ye,dt({action:"describe-import"})):typeof wt.describeImport=="function"&&(U=await wt.describeImport(ye,dt({action:"describe-import"}))),!U||typeof U!="object"?{}:{content:U.content?String(U.content):"",contentKey:U.contentKey?String(U.contentKey):"",format:U.format?String(U.format):"",formatKey:U.formatKey?String(U.formatKey):""}}e(Tn,"describePreparedImport");async function Sn(ye={}){let Z=Jt();if(!ye.force&&xe.validationCache&&xe.validationCache.fingerprint===Z)return xe.validationCache.request;let U=vn(),te=Ge.importInput?String(Ge.importInput.value||"").trim():"";if(U==="file"&&!te)throw new Error(Se("io.fileRequired"));if(U==="paste"&&!te)throw new Error(Se("io.importRequired"));let ie=Dt.get(Ge.importKind?String(Ge.importKind.value||""):"")||null,Pe=ie&&typeof ie.read=="function"?await ie.read(dt(ye)):typeof wt.readImport=="function"?await wt.readImport(dt(ye)):dt(ye),rt=ie&&typeof ie.validate=="function"?await ie.validate(Pe,dt(ye)):typeof wt.validateImport=="function"?await wt.validateImport(Pe,dt(ye)):Pe;if(Z!==Jt()){let _=new Error("Import input changed while it was being validated.");throw _.code="STALE_IMPORT_VALIDATION",_}let pt=await Tn(rt,ie||ot()),Pt={prepared:rt,importer:ie,description:pt};return xe.validationCache={fingerprint:Z,request:Pt},xe.detectedImport=pt,Et(),Pt}e(Sn,"prepareImport");function Ot(){let ye=ot(),Z=ut(ye);return{content:xe.detectedImport?.contentKey?Se(xe.detectedImport.contentKey):xe.detectedImport?.content||ht(ye,"Imported data"),format:xe.detectedImport?.formatKey?Se(xe.detectedImport.formatKey):xe.detectedImport?.format||(vn()==="catalog"?Se("io.builtInPreset"):ht(Z,Z.label||Se("io.autoDetect")))}}e(Ot,"detectionSummary");async function rn(ye={}){let Z=xe.validationRevision;try{return await Sn({action:ye.action||"validate-preview"}),Z!==xe.validationRevision?!1:(ye.announce!==!1&&ze("io.importDetected",Ot(),"success"),!0)}catch(U){return Z!==xe.validationRevision||U?.code==="STALE_IMPORT_VALIDATION"||ye.silentErrors||ze("io.operationFailed",{message:U&&U.message?U.message:"Import validation failed."},"error",{error:U}),!1}}e(rn,"validateImportPreview");function un(){pn(),!(vn()!=="paste"||!Ge.importInput||!String(Ge.importInput.value||"").trim())&&typeof Co=="function"&&(xe.validationTimer=Co(()=>{xe.validationTimer=null,rn({action:"detect-paste",silentErrors:!0})},Number(wt.importDetectionDelay??350)))}e(un,"scheduleImportDetection");async function je(){let ye=Dt.get(Ge.importKind?String(Ge.importKind.value||""):"")||null;if(typeof wt.applyImport!="function"&&!(ye&&typeof ye.apply=="function"))return!1;xe.validationTimer!=null&&typeof ii=="function"&&ii(xe.validationTimer),xe.validationTimer=null,be(!0);try{let Z=await Sn({action:"import"}),U=Z.importer,te=U?U.replacesState!==!1:!0,ie=U&&typeof U.hasMeaningfulState=="function"?await U.hasMeaningfulState(dt({action:"import"})):!0;if((te&&ie&&typeof wt.confirmReplace=="function"?await wt.confirmReplace(Z.prepared,dt({action:"import"})):!0)===!1)return ze("io.importCancelled",{},"info"),!1;let rt=U&&typeof U.apply=="function"?U.apply:wt.applyImport;if(typeof rt!="function")throw new Error("No import action is configured.");let pt=await rt(Z.prepared,dt({action:"import"}));return pt&&pt.statusKey?ze(pt.statusKey,pt.statusParameters||{},pt.statusType||"success"):ze("io.importComplete",{},"success"),!0}catch(Z){return ze("io.operationFailed",{message:Z&&Z.message?Z.message:"Import failed."},"error",{error:Z}),!1}finally{be(!1)}}e(je,"applyImport");async function V(){let ye=Ge.importFile&&Ge.importFile.files&&Ge.importFile.files[0];if(xe.file=ye||null,xe.fileName=ye?String(ye.name||""):"",xe.fileText="",Ge.importFilename&&(Ge.importFilename.textContent=xe.fileName),!ye){Ge.importInput&&vn()==="file"&&(Ge.importInput.value=""),ae();return}ze("io.fileReading",{filename:xe.fileName},"info"),be(!0);try{xe.fileText=await xt(ye),Ge.importInput&&vn()==="file"&&(Ge.importInput.value=xe.fileText),ae(),pn(),await Sn({action:"validate-file"}),ze("io.fileReady",{filename:xe.fileName},"success")}catch(Z){ze("io.operationFailed",{message:Z&&Z.message?Z.message:"File validation failed."},"error",{error:Z})}finally{be(!1)}}e(V,"handleFileChange");function L(){vn()==="file"?(xe.file=null,xe.fileName="",xe.fileText="",Ge.importFile&&(Ge.importFile.value=""),Ge.importFilename&&(Ge.importFilename.textContent="")):xe.pasteText="",Ge.importInput&&(Ge.importInput.value=""),pn(),ae(),ze("io.importCleared",{},"info")}e(L,"clearImport");function B(ye={}){Xt(),qe(),Et(),ye.clearExport&&(Ge.exportOutput&&(Ge.exportOutput.value=""),xe.artifact={text:"",filename:"",mimeType:"application/json"}),ae(),typeof wt.onContextChange=="function"&&wt.onContextChange(dt())}e(B,"handleContextChange");function D(ye){let Z=ye&&ye.target&&ye.target.closest?ye.target.closest("[data-import-export-trigger]"):null;if(!Z||cn.contains&&!cn.contains(Z)||Z.getAttribute("data-import-export-running")==="true")return null;let U=Z.getAttribute("data-import-export-target");if(U&&wt.id&&U!==String(wt.id))return null;let te=Z.getAttribute("data-import-export-trigger");return vt.has(te)?{trigger:Z,name:te}:null}e(D,"delegatedTrigger");function K(ye){D(ye)&&(Ge.exportOutput&&(Ge.exportOutput.value=""),xe.artifact={text:"",filename:"",mimeType:"application/json"},ae())}e(K,"prepareDelegatedExport");function pe(ye){let Z=D(ye);if(!Z)return;let{trigger:U,name:te}=Z;Promise.resolve().then(()=>ge(te,{trigger:U,focus:!0}))}e(pe,"handleDelegatedExport"),Ge.tabs.forEach(ye=>{tn(ye,"click",()=>zn(en(ye))),tn(ye,"keydown",Ht)}),tn(Ge.importSource,"change",()=>{kn(),B()}),tn(Ge.importKind,"change",()=>{pn(),B()}),tn(Ge.importCatalog,"change",()=>{pn(),B()}),tn(Ge.importInput,"input",()=>{vn()==="paste"&&(xe.pasteText=String(Ge.importInput.value||"")),un(),ae()}),tn(Ge.importInput,"blur",()=>{vn()==="paste"&&Ge.importInput&&String(Ge.importInput.value||"").trim()&&rn({action:"validate-paste",silentErrors:!1})}),tn(Ge.importFile,"change",V),tn(Ge.importApply,"click",je),tn(Ge.importClear,"click",L),tn(Ge.exportRefresh,"click",()=>Ve({focus:!1})),tn(Ge.exportCopy,"click",mt),tn(Ge.exportDownload,"click",Ct),tn(Ge.exportContent,"change",()=>{xe.activeExporter=String(Ge.exportContent.value||xe.activeExporter||""),B({clearExport:!xe.selectingExporter})}),tn(Ge.exportKind,"change",()=>B({clearExport:!0})),tn(Ge.exportFormat,"change",()=>B({clearExport:!0})),tn(cn,"click",K,!0),tn(cn,"click",pe),typeof C<"u"&&tn(C,"site-language-change",_e);let se=Ge.tabs.find(ye=>ye.getAttribute("aria-selected")==="true");return zn(en(se)||"export"),kn({initial:!0}),qe(),Xt(),ae(),_e(),{activateTab:zn,applyImport:je,clearImport:L,context:dt,downloadExport:Ct,copyExport:mt,notify:ze,presentExport:oe,registerExporter:ne,refreshExport:Ve,runExport:ge,sync(){kn({initial:!0,keepValidation:!0}),Xt(),ae()},destroy(){xe.validationTimer!=null&&typeof ii=="function"&&ii(xe.validationTimer),xe.listeners.forEach(([ye,Z,U,te])=>{ye.removeEventListener&&ye.removeEventListener(Z,U,te)}),xe.listeners=[]}}}e(Mn,"mount");let In={mount:Mn};typeof Oi<"u"&&(Oi.ImportExportPanel=In),typeof J<"u"&&(J.ImportExportPanel=In),typeof $r<"u"&&$r.exports&&($r.exports=In)})(),(()=>{"use strict";let Us=(Kt.pathname.split("/").pop()||"").toLowerCase(),Yr={"young_diagrams.html":{id:"young-diagrams",output:"#export-out",controls:[".action-row"],exportLabel:"Calculator state",defaultFormat:"json",accept:".json,.txt,.tex,application/json,text/plain",importKinds:[{value:"state",label:"Young diagram",format:{mode:"detect",label:"Automatically detect",acceptedFormats:["JSON state","Partition text","ytableau LaTeX"]}}]},"double_young_diagram.html":{id:"double-young-diagram",output:"#export-out",refresh:"#refresh-export",copy:"#copy-export",exportLabel:"Calculator state",defaultFormat:"json",importKinds:[{value:"state",label:"Calculator state"}]},"higher_dimensional_slice_calculator.html":{id:"higher-dimensional-slice",cardFrom:"#import-state",outputId:"slice-export-out",exportLabel:"Full calculator state",defaultFormat:"json",accept:".json,.txt,application/json,text/plain",legacyInputs:{state:"#import-state","object-new":"#import-state","object-replace":"#import-state",frame:"#direct-frame-import"},importKinds:[{value:"state",label:"Full calculator state"},{value:"object-new",label:"Object as new"},{value:"object-replace",label:"Replace active object"},{value:"frame",label:"Frame matrix",format:{mode:"fixed",label:"Matrix rows"}}]},"mosaic_calculator.html":{id:"mosaic",card:"#export-card",output:"#export-out",refresh:"#refresh-export",copy:"#copy-export",input:"#import-input",accept:".json,.txt,application/json,text/plain",exportContent:"#export-type",exportFormat:"#export-format",controls:["#export-preset-meta-row","#export-precomputed-game-data-row","#export-test-link-row"],importKinds:[{value:"chart",label:"Mosaic chart or preset"}],catalog:"#import-preset-select",catalogContainer:"#mosaic-import-catalog-controls"},"matrix_calculator.html":{id:"matrix",output:"#export-out",refresh:"#refresh-export",copy:"#copy-export",exportLabel:"Matrices",exportFormat:"#export-format",inheritFormats:["operation"],accept:".txt,.tex,text/plain",legacyInputs:{matrix:"#import-text"},importKinds:[{value:"matrix",label:"Matrix",format:{mode:"detect",label:"Automatically detect",acceptedFormats:["Matrix rows","LaTeX matrix"]}}]},"sheaf_calculator.html":{id:"sheaf",card:"#export-card",output:"#export-out",refresh:"#refresh-export",copy:"#copy-export",exportLabel:"Calculator report",exportFormat:"#export-format",legacyInputs:{preset:"#import-preset-input","saved-formulas":"#class-step-import-input"},importKinds:[{value:"preset",label:"Calculator preset"},{value:"saved-formulas",label:"Saved formulas",replacesState:!1}]},"sheaf_complex_calculator.html":{id:"sheaf-complex",card:"#export-card",output:"#export-out",refresh:"#refresh-export",copy:"#copy-export",exportLabel:"Calculator report",exportFormat:"#export-format",legacyInputs:{preset:"#import-preset-input","saved-formulas":"#class-step-import-input","complex-chart":"#complex-chart-import-input"},importKinds:[{value:"preset",label:"Calculator preset"},{value:"saved-formulas",label:"Saved formulas",replacesState:!1},{value:"complex-chart",label:"Complex chart",replacesState:!1}]},"dynkin_diagram_calculator.html":{id:"dynkin",output:"#dynkin-export-out",refresh:"#dynkin-refresh-export",copy:"#dynkin-select-export",exportLabel:"Calculator state",defaultFormat:"json",importKinds:[{value:"state",label:"Dynkin calculator state"}]},"category_calculator.html":{id:"category",card:"#export-card",output:"#category-export-out",refresh:"#refresh-category-export",copy:"#copy-category-export",exportLabel:"Category data",exportFormat:"#category-export-format",input:"#category-import-input",legacyImport:"#category-import-input",legacyApply:"#load-category-import",importKinds:[{value:"state",label:"Category preset"}]},"theorem_graph_calculator.html":{id:"theorem-graph",card:"#export-card",output:"#theorem-export-out",refresh:"#refresh-export",copy:"#copy-export",exportLabel:"Theorem graph",defaultFormat:"json",input:"#theorem-import-input",importKinds:[{value:"preset",label:"Preset catalog"},{value:"json-current",label:"Current tab"},{value:"json-whole",label:"Whole graph"},{value:"json-node",label:"Current node",replacesState:!1}],catalog:"#preset-select"},"place_ramification_calculator.html":{id:"place-ramification",output:"#ramification-export-out",refresh:"#ramification-refresh-export",copy:"#ramification-select-export",exportLabel:"Calculator state",defaultFormat:"json",importKinds:[{value:"state",label:"Place ramification state"}]},"strand_diagram_calculator.html":{id:"strand",card:"#strand-export-card",output:"#strand-export-out",refresh:"#strand-refresh-export",copy:"#strand-copy-export",exportLabel:"Strand diagram data",exportFormat:"#strand-export-format",input:"#strand-import-input",legacyImport:"#strand-import-input",legacyApply:"#strand-load-import",importKinds:[{value:"state",label:"Strand preset"}]}},qn={"active-object":"Active object","borel-weil-bott":"Borel\u2013Weil\u2013Bott result",branching:"Branching decomposition",classes:"Class report","complex-chart":"Complex chart","current-node":"Current theorem node",degenerations:"Dual-graph degenerations","dual-graph":"Dual graph",frame:"Frame matrix","frame-json":"Frame data",grassmannian:"Grassmannian cup product",hodge:"Hodge report",kostka:"Kostka tableaux",kronecker:"Kronecker decomposition",latex:"Young diagram",operation:"Operation result",plethysm:"Plethysm decomposition",position:"Slice position","saved-formulas":"Saved formulas",schur:"Littlewood\u2013Richardson decomposition","schur-functor":"Schur functor decomposition","selected-references":"Selected references",shape:"Partition shape","step-classes":"Step-class report",svg:"Young diagram","symmetric-functions":"Symmetric-function result","symmetric-polynomials":"Symmetric-polynomial result","weight-spaces":"Weight-space decomposition","weyl-orbit":"Weyl orbit"};function Zn(et,Be,Te){let Le=C.createElement(et);return Be&&(Le.className=Be),Te!=null&&(Le.textContent=Te),Le}e(Zn,"element");function fn(et,Be,Te=!1){let Le=Zn("button",Te?"btn":"btn btn-ghost",et);return Le.type="button",Le.setAttribute(`data-${Be.split(":")[0]}-action`,Be.split(":")[1]),Le}e(fn,"button");function Ze(et,Be){let Te=Zn("div","import-export-field-row"),Le=Zn("span","input-label",et);return Te.append(Le,Be),Te}e(Ze,"row");function An(et,Be){let Te=C.createElement("option");return Te.value=et,Te.textContent=Be,Te}e(An,"option");function We(et,Be){let Te=Zn("div","import-export-field-control"),Le=Zn("span","import-export-field-value");return Le.setAttribute(Be,""),Le.setAttribute("aria-live","polite"),Te.append(et,Le),{wrap:Te,value:Le}}e(We,"metadataControl");function it(et,Be){let Te=String(et||"").toLowerCase();return Te==="json"||Te==="verbose"||Te==="dsl"||Te.includes("json")?{id:String(et),label:String(Be||"JSON"),mimeType:"application/json",extension:"json"}:Te==="latex"||Te==="tikzcd"?{id:String(et),label:String(Be||"LaTeX"),mimeType:"application/x-tex",extension:"tex"}:Te==="svg"?{id:String(et),label:String(Be||"SVG"),mimeType:"image/svg+xml",extension:"svg"}:{id:String(et),label:String(Be||"Plain text"),mimeType:"text/plain",extension:"txt"}}e(it,"formatDescriptor");function xt(et){return Array.from(et?.options||[]).map(Be=>it(Be.value,Be.textContent))}e(xt,"formatsFromSelect");function Wt(et){let Be=String(et||"").split(".").pop().toLowerCase();return Be==="json"?it("json","JSON"):Be==="tex"?it("latex","LaTeX"):Be==="svg"?it("svg","SVG"):it("plain","Plain text")}e(Wt,"fixedFormatFromFilename");function hn(et,Be,Te){let Le=J.SiteImportExportPageAdapter;if(Le&&typeof Le.describeImport=="function")return Le.describeImport(Be,Te);if(et.id==="young-diagrams")return{content:"Young diagram",format:{state:"JSON state",shape:"Partition text",ytableau:"ytableau LaTeX"}[Te?.kind]||"Automatically detect"};if(et.id==="matrix")return{content:"Matrix",format:(Te?.parsed?.style==="bulk input"?"Matrix rows":Te?.parsed?.style)||"Automatically detect"};let Ee=(et.importKinds||[]).find(Fe=>Fe.value===Be);return{content:Ee?.label||"Imported data",format:Ee?.format?.label||"JSON"}}e(hn,"importDescription");function Mn(et,Be){return C.querySelector(et.card)||C.querySelector(et.cardFrom)?.closest(".card")||Be?.closest(".card")||null}e(Mn,"cardFor");function In(et,Be,Te){let Le=Te.querySelector(et)||C.querySelector(et);if(!Le||!Te.contains(Le))return;let Ee=Le.closest(".mosaic-inline-row, .matrix-inline-row, .sheaf-inline-row, .category-field-row, .strand-field-row")||Le;Ee&&Te.contains(Ee)&&Be.appendChild(Ee)}e(In,"moveControl");function xn(et,Be){if(!et||!Be)return;let Te=Be.value;Be.innerHTML="",Array.from(et.options||[]).forEach(Le=>Be.appendChild(An(Le.value,Le.textContent))),Array.from(Be.options).some(Le=>Le.value===Te)?Be.value=Te:Be.value=et.value||"",Be.disabled=!!et.disabled}e(xn,"copyCatalogOptions");function wt(et,Be=""){let Te=J.SiteImportExportPageAdapter;if(Te&&typeof Te.filename=="function")return Te.filename(Be);let Le=C.querySelector("#export-format, #category-export-format, #strand-export-format")?.value||"",Ee=Le==="json"||Le.includes("json")||!Le?"json":Le==="latex"?"tex":"txt";return`${et.id}-${Be||"export"}.${Ee}`}e(wt,"makeFilename");function Me(et){return/\.json$/i.test(et)?"application/json":/\.svg$/i.test(et)?"image/svg+xml":/\.tex$/i.test(et)?"application/x-tex":"text/plain"}e(Me,"mimeForFilename");function he(et){if(!et||et.disabled)return!1;et.setAttribute("data-import-export-running","true");try{et.click()}finally{et.removeAttribute("data-import-export-running")}return!0}e(he,"clickLegacy");function vt(et){let Be=String(et?.text??et??"").trim();if(!Be)throw new Error("Paste or choose data to import.");return{text:Be,data:JSON.parse(Be),source:et?.source||"paste",value:et?.value||""}}e(vt,"jsonPayload");function Dt(et,Be,Te){let Le=J.SiteImportExportPageAdapter;return Le&&typeof Le.validateImport=="function"?Le.validateImport(Be,Te):Te?.source==="catalog"?Te:vt(Te)}e(Dt,"genericValidate");function cn(et){let Be=et==="preset",Te=C.getElementById("import-mode-preset"),Le=C.getElementById("import-mode-json");Te&&(Te.checked=Be),Le&&(Le.checked=!Be);let Ee=et.endsWith("whole")?"whole":et.endsWith("node")?"node":"current",Fe=C.getElementById(`import-scope-${Ee}`);Fe&&(Fe.checked=!0),(Be?Te:Le)?.dispatchEvent(new Event("change",{bubbles:!0})),Fe?.dispatchEvent(new Event("change",{bubbles:!0}))}e(cn,"setTheoremImportMode");function Ge(et,Be){let Te=et.id==="category"?"#category-export-message":et.id==="strand"?"#strand-export-message":et.id==="theorem-graph"?"#export-message":et.id==="mosaic"?"#status-line":et.id==="sheaf"||et.id==="sheaf-complex"?Be==="preset"?"#import-preset-message":Be==="saved-formulas"?"#class-step-import-message":"#complex-chart-import-message":"",Le=Te?C.querySelector(Te):null;return Le&&(Le.classList.contains("is-error")||Le.classList.contains("theorem-danger")||Le.classList.contains("mosaic-status-bad"))?String(Le.textContent||"Import failed.").trim()||"Import failed.":""}e(Ge,"legacyImportError");function xe(et,Be){let Te=Ge(et,Be);if(Te)throw new Error(Te)}e(xe,"assertLegacyImportSucceeded");async function Se(et,Be,Te){let Le=J.SiteImportExportPageAdapter;if(Le&&typeof Le.applyImport=="function")return Le.applyImport(Be,Te);if(et.id==="theorem-graph"){if(cn(Be),Be==="preset"){let Fe=C.getElementById("preset-select");Fe&&(Fe.value=Te.value||"")}else C.getElementById("theorem-import-input").value=Te.text;if(!he(C.getElementById("load-import")))throw new Error("The theorem graph import action is unavailable.");await new Promise(Fe=>J.setTimeout(Fe,0)),xe(et,Be);return}if(et.id==="mosaic"){if(Te.source==="catalog"){let Fe=C.getElementById("import-preset-select");Fe&&(Fe.value=Te.value||""),J.MosaicCalculator&&typeof J.MosaicCalculator.loadCatalogPreset=="function"?await J.MosaicCalculator.loadCatalogPreset():he(C.getElementById("load-import-preset"))}else{let Fe=C.getElementById("import-input");Fe&&(Fe.value=Te.text),he(C.getElementById("generate-import"))}xe(et,Be);return}if(et.id==="sheaf"||et.id==="sheaf-complex"){let qe={preset:["import-preset-input","import-preset-apply"],"saved-formulas":["class-step-import-input","class-step-import-apply"],"complex-chart":["complex-chart-import-input","complex-chart-import-apply"]}[Be];if(!qe)throw new Error("This import kind is unavailable.");C.getElementById(qe[0]).value=Te.text,he(C.getElementById(qe[1])),xe(et,Be);return}let Ee=C.querySelector(et.legacyImport);if(!Ee)throw new Error("This calculator has no import adapter.");Ee.value=Te.text,he(C.querySelector(et.legacyApply)),xe(et,Be)}e(Se,"genericApply");function ze(et){let Be=J.SiteImportExportPageAdapter;return Be&&typeof Be.hasMeaningfulState=="function"?Be.hasMeaningfulState():et.id==="category"?Number(C.getElementById("category-count-badge")?.textContent||0)>0:et.id==="matrix"?Array.from(C.querySelectorAll("#matrix-grid input")).some(Te=>String(Te.value||"").trim()&&String(Te.value).trim()!=="0"):!0}e(ze,"meaningfulState");function _e(){return typeof J.confirm!="function"||J.confirm("Importing will replace current work. Continue?")}e(_e,"confirmReplace");function ht(et){if(!J.ImportExportPanel||C.querySelector(`[data-import-export-id="${et.id}"]`))return null;let Be=J.SiteImportExportPageAdapter||{},Te=C.querySelector(et.output),Le=et.input?C.querySelector(et.input):null,Ee=Mn(et,Te),Fe=Ee?.querySelector(".card-body");if(!Ee||!Fe)return null;let qe=Ee.querySelector(".card-head-label");qe&&(qe.textContent="Import / Export");let ot=Zn("div","import-export-legacy-host");for(ot.hidden=!0;Fe.firstChild;)ot.appendChild(Fe.firstChild);let ut=Zn("div","import-export-panel");ut.id=`${et.id}-import-export-panel`;let Et=Zn("div","import-export-tabs");Et.setAttribute("role","tablist"),Et.setAttribute("aria-label","Import and export");let tn=Zn("button","import-export-tab","Export");tn.type="button",tn.id=`${et.id}-export-tab`,tn.setAttribute("role","tab"),tn.setAttribute("aria-selected","true"),tn.setAttribute("aria-controls",`${et.id}-export-panel`),tn.setAttribute("data-import-export-tab","export");let en=Zn("button","import-export-tab","Import");en.type="button",en.id=`${et.id}-import-tab`,en.tabIndex=-1,en.setAttribute("role","tab"),en.setAttribute("aria-selected","false"),en.setAttribute("aria-controls",`${et.id}-import-panel`),en.setAttribute("data-import-export-tab","import"),Et.append(tn,en);let Ye=Zn("div","import-export-tabpanel");Ye.id=`${et.id}-export-panel`,Ye.setAttribute("role","tabpanel"),Ye.setAttribute("aria-labelledby",tn.id),Ye.setAttribute("data-import-export-panel","export");let zn=et.exportContent?ot.querySelector(et.exportContent):null,bt=zn||C.createElement("select");bt.setAttribute("data-export-content",""),bt.setAttribute("aria-label","Export content");let Fn=We(bt,"data-export-content-value");Ye.appendChild(Ze("Export content",Fn.wrap));let Lt=et.exportFormat?ot.querySelector(et.exportFormat):null,Ht=Lt||C.createElement("select");Ht.setAttribute("data-export-format",""),Ht.setAttribute("aria-label","Export format");let vn=We(Ht,"data-export-format-value"),bn=Ze("Format",vn.wrap);bn.setAttribute("data-export-format-row",""),Ye.appendChild(bn),(et.controls||[]).forEach(Pt=>In(Pt,Ye,ot)),Te||(Te=C.createElement("textarea"),Te.id=et.outputId||`${et.id}-export-out`),Te.readOnly=!0,Te.value="",Te.setAttribute("data-export-output",""),Te.setAttribute("aria-label","Export preview"),Te.classList.add("import-export-textarea"),Ye.appendChild(Te);let kn=Zn("div","import-export-actions"),Xt=fn("refresh","export:refresh",!0),kt=fn("copy","export:copy"),dt=fn("download","export:download");kn.append(Xt,kt,dt),Ye.appendChild(kn);let be=Zn("div","import-export-tabpanel");be.id=`${et.id}-import-panel`,be.hidden=!0,be.setAttribute("role","tabpanel"),be.setAttribute("aria-labelledby",en.id),be.setAttribute("data-import-export-panel","import");let ae=et.importKinds||[{value:"state",label:"Imported data"}],oe=(Be.importKinds||ae).map(Pt=>({...ae.find(_=>_.value===Pt.value)||{},...Pt})),ne=C.createElement("select");ne.setAttribute("data-import-kind",""),ne.setAttribute("aria-label","Import content"),oe.forEach(Pt=>ne.appendChild(An(Pt.value,Pt.label)));let ge=We(ne,"data-import-content-value");ne.hidden=oe.length<=1,ge.value.hidden=oe.length>1,be.appendChild(Ze("Import content",ge.wrap));let Ve=Zn("span","import-export-field-value");Ve.setAttribute("data-import-format-value",""),Ve.setAttribute("aria-live","polite"),be.appendChild(Ze("Format",Ve));let Ke=et.catalog?ot.querySelector(et.catalog)||C.querySelector(et.catalog):null,mt=C.createElement("select");mt.setAttribute("data-import-source",""),mt.setAttribute("aria-label","Import source"),Ke&&mt.appendChild(An("catalog","Catalog")),mt.append(An("paste","Paste text"),An("file","Local file")),mt.value=Ke?"catalog":"paste",be.appendChild(Ze("Source",mt));let Ct=null,Jt=et.catalogContainer?ot.querySelector(et.catalogContainer)||C.querySelector(et.catalogContainer):null;if(Ke&&Jt)Ct=Ke,Ct.setAttribute("data-import-catalog",""),Jt.setAttribute("data-import-source-panel","catalog"),be.appendChild(Jt);else if(Ke){Ct=C.createElement("select"),Ct.setAttribute("data-import-catalog",""),Ct.setAttribute("aria-label","Import catalog"),xn(Ke,Ct);let Pt=Ze("Catalog",Ct);Pt.setAttribute("data-import-source-panel","catalog"),be.appendChild(Pt),typeof wa<"u"&&new wa(()=>xn(Ke,Ct)).observe(Ke,{childList:!0,subtree:!0,attributes:!0})}let pn=Zn("div","import-export-file-row");pn.hidden=!0,pn.setAttribute("data-import-source-panel","file");let Tn=Zn("label","import-export-file-picker");Tn.appendChild(Zn("span","","Choose local file"));let Sn=C.createElement("input");Sn.type="file",Sn.accept=et.accept||".json,application/json",Sn.setAttribute("data-import-file",""),Tn.appendChild(Sn);let Ot=Zn("span","import-export-filename");Ot.setAttribute("data-import-filename",""),Ot.setAttribute("aria-live","polite"),pn.append(Tn,Ot),be.appendChild(pn);let rn=Le||C.createElement("textarea");rn.classList.add("import-export-textarea"),rn.placeholder||(rn.placeholder="Paste exported data"),rn.spellcheck=!1,rn.setAttribute("data-import-input",""),rn.getAttribute("aria-label")||rn.setAttribute("aria-label","Imported data"),Ke&&(rn.hidden=!0),be.appendChild(rn);let un=Zn("div","import-export-actions import-export-import-actions"),je=fn("clear","import:clear"),V=fn("import","import:apply",!0);if(Ke&&(je.hidden=!0),un.append(je,V),be.appendChild(un),et.id==="theorem-graph"){let Pt=ot.querySelector("#personal-account");Pt&&be.appendChild(Pt)}let L=Zn("p","import-export-status");L.setAttribute("role","status"),L.setAttribute("aria-live","polite"),L.setAttribute("data-import-export-status",""),ut.append(Et,Ye,be,L),Fe.append(ut,ot);let B={};oe.forEach(Pt=>{B[Pt.value]={label:Pt.label,labelKey:Pt.labelKey,format:Pt.format||{mode:"fixed",label:"JSON"},detectContent:!!Pt.detectContent,read(_){return _.importSource==="catalog"?{source:"catalog",value:_.catalogId}:{source:_.importSource,text:_.importText}},validate(_){return Dt(et,Pt.value,_)},describe(_){return hn(et,Pt.value,_)},apply(_){return Se(et,Pt.value,_)},replacesState:Pt.replacesState!==!1,hasMeaningfulState(){return ze(et)}}});let D=C.querySelector(et.refresh),K=e(async Pt=>{if(zn&&zn.value!==Pt&&(zn.value=Pt,zn.dispatchEvent(new Event("change",{bubbles:!0}))),Be&&typeof Be.exportDefault=="function")return Be.exportDefault();Te.value="",he(D);let _=String(Te.value||"");if(!_)throw new Error("No export is available yet.");let x=wt(et,"state");return{text:_,filename:x,mimeType:Me(x)}},"runDefaultExporter"),pe=Lt?xt(Lt):[it(et.defaultFormat||"json",et.defaultFormat==="plain"?"Plain text":"JSON")],se=zn?Array.from(zn.options).map(Pt=>({value:Pt.value,label:Pt.textContent})):[{value:"default",label:et.exportLabel||"Calculator data"}],ye={};se.forEach(Pt=>{ye[Pt.value]={label:Pt.label,formats:pe,defaultFormat:Lt?.value||pe[0]?.id,produce:e(()=>K(Pt.value),"produce")}});let Z=Be.exporters||{},U=Array.from(C.querySelectorAll("[data-import-export-trigger]"));U.forEach(Pt=>{let _=Pt.getAttribute("data-import-export-trigger");if(!_)return;let x=Z[_],g=Pt.getAttribute("data-export-filename")||wt(et,_),nr=(et.inheritFormats||[]).includes(_),Kr=nr?pe:[Wt(g)];ye[_]={label:Pt.getAttribute("data-export-label")||qn[_]||_.replace(/[-_]+/g," "),formats:Kr,defaultFormat:nr&&Lt?.value||Kr[0]?.id,isAvailable:e(()=>!Pt.disabled&&!Pt.hidden,"isAvailable"),async produce(Xr){if(typeof x=="function")return x(Xr);Xr.trigger||(Te.value="",he(Pt));let ta=String(Te.value||"");if(!ta)throw new Error("This export is not available yet.");let Cn=Pt.getAttribute("data-export-filename")||wt(et,_);return{text:ta,filename:Cn,mimeType:Me(Cn)}}}}),zn||se.forEach(Pt=>bt.appendChild(An(Pt.value,Pt.label))),U.forEach(Pt=>{let _=Pt.getAttribute("data-import-export-trigger");!_||Array.from(bt.options).some(x=>x.value===_)||bt.appendChild(An(_,ye[_].label))});let te=zn?.value||se[0].value,ie=J.ImportExportPanel.mount(ut,{id:et.id,eventRoot:C,defaultExporter:te,exporters:ye,exportOptions:{content:bt,contentValue:Fn.value,format:Ht,formatValue:vn.value,formatRow:bn,output:Te,refresh:Xt,copy:kt,download:dt},importOptions:{kind:ne,contentValue:ge.value,formatValue:Ve,source:mt,catalog:Ct,input:rn,file:Sn,filename:Ot,apply:V,clear:je},importers:B,confirmReplace:_e,onContextChange:Be.onContextChange}),Pe={...et.legacyInputs||{},...Be.legacyInputs||{}},rt=e(()=>{let Pt=Pe[ne.value];return Pt?C.querySelector(Pt):null},"legacyInputForKind"),pt=e(()=>{let Pt=rt();Pt&&Pt!==rn&&(Pt.value=rn.value)},"syncLegacyInput");if(rn.addEventListener("input",pt),Object.entries(Pe).forEach(([Pt,_])=>{let x=C.querySelector(_);!x||x===rn||x.addEventListener("input",()=>{ne.value!==Pt||mt.value!=="paste"||(rn.value=x.value,rn.dispatchEvent(new Event("input",{bubbles:!0})))})}),ne.addEventListener("change",()=>{let Pt=rt();!Pt||Pt===rn||mt.value!=="paste"||(rn.value=Pt.value,rn.dispatchEvent(new Event("input",{bubbles:!0})))}),et.id==="theorem-graph"&&(ne.addEventListener("change",()=>{ne.value==="preset"?mt.value="catalog":mt.value==="catalog"&&(mt.value="paste"),mt.dispatchEvent(new Event("change",{bubbles:!0}))}),mt.addEventListener("change",()=>{let Pt=mt.value==="catalog"?"preset":ne.value==="preset"?"json-current":ne.value;Pt!==ne.value&&(ne.value=Pt,ne.dispatchEvent(new Event("change",{bubbles:!0})))})),typeof wa<"u"&&U.length){let Pt=new wa(()=>ie.sync());U.forEach(_=>Pt.observe(_,{attributes:!0,attributeFilter:["disabled","hidden"]}))}return J.SiteImportExportPanel=ie,ie}e(ht,"upgrade");function $t(){let et=Yr[Us];if(et){C.documentElement.setAttribute("data-import-export-adapter-page",et.id);try{let Be=ht(et);C.documentElement.setAttribute("data-import-export-adapter-ready",Be?"true":"false")}catch(Be){C.documentElement.setAttribute("data-import-export-adapter-error",Be?.message||String(Be)),console.error("Import/export adapter failed",Be)}}}e($t,"start"),C.readyState==="loading"?C.addEventListener("DOMContentLoaded",$t,{once:!0}):J.setTimeout($t,0)})(),tt.registerHandlers({}),tt.start()}e(iJ,"mount");var B7={};DE(B7,{metadata:()=>oJ,mount:()=>sJ});var oJ={id:"sheaf",page:"sheaf_calculator.html",script:"js/sheaf_calculator.js",en:"Varieties and Sheaves",zh:"\u7C07\u4E0E\u5C42"};function sJ(O,Ae){let tt=qg(O,{page:"sheaf_calculator.html",html:`
 
@@ -31191,13 +31203,13 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
 `,css:`/* Web fonts were removed from the blocking CSS path so the canvases initialise reliably on slow/mobile networks. */
 
   :host {
-    --bg:       #f7f4ef;
-    --surface:  #ffffff;
-    --border:   #d8d0c4;
-    --text:     #1a1612;
-    --muted:    #7a6f65;
-    --accent:   #3d6b4f;
-    --accent2:  #8b3a2a;
+    --bg:       var(--ws-bg, #f7f4ef);
+    --surface:  var(--ws-surface-strong, #ffffff);
+    --border:   var(--ws-border, #d8d0c4);
+    --text:     var(--ws-text, #1a1612);
+    --muted:    var(--ws-muted, #7a6f65);
+    --accent:   var(--ws-accent, #3d6b4f);
+    --accent2:  var(--ws-accent2, #8b3a2a);
     --shadow:   0 2px 12px rgba(0,0,0,0.08);
   }
 
@@ -31404,7 +31416,7 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
     height: auto !important;
     cursor: crosshair;
     border-radius: 2px;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
   }
 
   /* Shared calculator primitives. Page-specific classes may remain alongside
@@ -31503,7 +31515,7 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
     overflow: auto;
     border: 1px solid rgba(26,22,18,0.22);
     border-radius: 7px;
-    background: rgba(255,253,248,0.99);
+    background: var(--ws-surface, rgba(255,253,248,0.99));
     color: var(--text);
     box-shadow: 0 18px 52px rgba(0,0,0,0.34);
   }
@@ -31622,7 +31634,7 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
     border-color: var(--accent2);
     color: var(--accent2);
   }
-  .calculator-input-add { background: var(--bg); color: var(--muted); }
+  .calculator-input-add { background: var(--ws-ghost-bg, var(--bg)); color: var(--ws-ghost-color, var(--muted)); border-color: var(--ws-ghost-border, var(--border)); font-family: var(--ws-btn-font, var(--ws-font-code, 'JetBrains Mono', monospace)); font-weight: var(--ws-btn-weight, normal); }
   .calculator-input-add:disabled { cursor: not-allowed; opacity: 0.45; }
   .calculator-input-unbound {
     align-self: center;
@@ -31803,7 +31815,7 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
   .card.is-pinned .card-pin-btn {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn {
     border: 1px solid var(--border);
@@ -31824,7 +31836,7 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
   .calculator-card-wide-btn[aria-pressed="true"] {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn:disabled {
     cursor: not-allowed;
@@ -32044,17 +32056,19 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
     font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     font-size: var(--ws-text-sm, 0.78rem);
     cursor: pointer;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--ws-btn-tracking, 0.04em);
+    font-weight: var(--ws-btn-weight, normal);
     transition: background 0.15s, transform 0.1s;
   }
-  .btn:hover { background: #2e5239; }
+  .btn:hover { background: var(--ws-accent-hover, #2e5239); }
   .btn:active { transform: scale(0.97); }
   .btn-ghost {
     background: transparent;
-    color: var(--accent2);
-    border-color: var(--accent2);
+    color: var(--ws-ghost-color, var(--accent2));
+    border-color: var(--ws-ghost-border, var(--accent2));
   }
-  .btn-ghost:hover { background: var(--accent2); color: #fff; }
+  .btn-ghost:hover { background: var(--ws-ghost-hover-bg, var(--accent2)); color: var(--ws-ghost-hover-color, #fff); border-color: var(--ws-ghost-hover-border, var(--accent2)); }
+  .btn::first-letter { text-transform: var(--ws-btn-case, none); }
 
   .orbit-view-row {
     display: inline-flex;
@@ -32482,7 +32496,7 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
     margin-left: auto;
   }
   .symfun-export-btn:hover {
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .symfun-expansions {
     max-height: min(460px, 58vh);
@@ -33114,7 +33128,7 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
       position: relative;
       border: 1px solid var(--border);
       border-radius: 4px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       min-height: 248px;
       overflow: hidden;
     }
@@ -33198,7 +33212,7 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
     transform: translate(-50%, -50%);
     border: 2px solid #8b3a2a;
     border-radius: 50%;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
     box-shadow: 0 1px 5px rgba(40, 34, 20, 0.18);
     pointer-events: auto;
     cursor: grab;
@@ -33216,7 +33230,7 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
     width: 14px;
     height: 14px;
     border-radius: 2px;
-    background: #fff7f3;
+    background: var(--ws-danger-tint, #fff7f3);
   }
 
   .sheaf-map-control.is-endpoint {
@@ -33232,7 +33246,7 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
   .sheaf-map-control:focus-visible,
   .sheaf-map-control.is-dragging {
     outline: none;
-    background: #fff7f3;
+    background: var(--ws-danger-tint, #fff7f3);
     box-shadow: 0 0 0 3px rgba(139,58,42,0.18);
   }
 
@@ -33296,7 +33310,7 @@ ${F.map(fe=>fe.map(ke=>wp(ke,"latex")).join(" & ")).join(` \\\\
     .sheaf-canvas-label.is-pick-candidate,
     .sheaf-canvas-label.is-map-codomain-candidate {
       border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
-      box-shadow: 0 0 0 2px rgba(61,107,79,0.13);
+      box-shadow: 0 0 0 2px var(--ws-accent-tint-13, rgba(61,107,79,0.13));
       background: rgba(247,244,239,0.92);
     }
 
@@ -36894,13 +36908,13 @@ ${P.join(`
 `,css:`/* Web fonts were removed from the blocking CSS path so the canvases initialise reliably on slow/mobile networks. */
 
   :host {
-    --bg:       #f7f4ef;
-    --surface:  #ffffff;
-    --border:   #d8d0c4;
-    --text:     #1a1612;
-    --muted:    #7a6f65;
-    --accent:   #3d6b4f;
-    --accent2:  #8b3a2a;
+    --bg:       var(--ws-bg, #f7f4ef);
+    --surface:  var(--ws-surface-strong, #ffffff);
+    --border:   var(--ws-border, #d8d0c4);
+    --text:     var(--ws-text, #1a1612);
+    --muted:    var(--ws-muted, #7a6f65);
+    --accent:   var(--ws-accent, #3d6b4f);
+    --accent2:  var(--ws-accent2, #8b3a2a);
     --shadow:   0 2px 12px rgba(0,0,0,0.08);
   }
 
@@ -37107,7 +37121,7 @@ ${P.join(`
     height: auto !important;
     cursor: crosshair;
     border-radius: 2px;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
   }
 
   /* Shared calculator primitives. Page-specific classes may remain alongside
@@ -37206,7 +37220,7 @@ ${P.join(`
     overflow: auto;
     border: 1px solid rgba(26,22,18,0.22);
     border-radius: 7px;
-    background: rgba(255,253,248,0.99);
+    background: var(--ws-surface, rgba(255,253,248,0.99));
     color: var(--text);
     box-shadow: 0 18px 52px rgba(0,0,0,0.34);
   }
@@ -37325,7 +37339,7 @@ ${P.join(`
     border-color: var(--accent2);
     color: var(--accent2);
   }
-  .calculator-input-add { background: var(--bg); color: var(--muted); }
+  .calculator-input-add { background: var(--ws-ghost-bg, var(--bg)); color: var(--ws-ghost-color, var(--muted)); border-color: var(--ws-ghost-border, var(--border)); font-family: var(--ws-btn-font, var(--ws-font-code, 'JetBrains Mono', monospace)); font-weight: var(--ws-btn-weight, normal); }
   .calculator-input-add:disabled { cursor: not-allowed; opacity: 0.45; }
   .calculator-input-unbound {
     align-self: center;
@@ -37506,7 +37520,7 @@ ${P.join(`
   .card.is-pinned .card-pin-btn {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn {
     border: 1px solid var(--border);
@@ -37527,7 +37541,7 @@ ${P.join(`
   .calculator-card-wide-btn[aria-pressed="true"] {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn:disabled {
     cursor: not-allowed;
@@ -37747,17 +37761,19 @@ ${P.join(`
     font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     font-size: var(--ws-text-sm, 0.78rem);
     cursor: pointer;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--ws-btn-tracking, 0.04em);
+    font-weight: var(--ws-btn-weight, normal);
     transition: background 0.15s, transform 0.1s;
   }
-  .btn:hover { background: #2e5239; }
+  .btn:hover { background: var(--ws-accent-hover, #2e5239); }
   .btn:active { transform: scale(0.97); }
   .btn-ghost {
     background: transparent;
-    color: var(--accent2);
-    border-color: var(--accent2);
+    color: var(--ws-ghost-color, var(--accent2));
+    border-color: var(--ws-ghost-border, var(--accent2));
   }
-  .btn-ghost:hover { background: var(--accent2); color: #fff; }
+  .btn-ghost:hover { background: var(--ws-ghost-hover-bg, var(--accent2)); color: var(--ws-ghost-hover-color, #fff); border-color: var(--ws-ghost-hover-border, var(--accent2)); }
+  .btn::first-letter { text-transform: var(--ws-btn-case, none); }
 
   .orbit-view-row {
     display: inline-flex;
@@ -38185,7 +38201,7 @@ ${P.join(`
     margin-left: auto;
   }
   .symfun-export-btn:hover {
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .symfun-expansions {
     max-height: min(460px, 58vh);
@@ -38811,7 +38827,7 @@ ${P.join(`
       position: relative;
       border: 1px solid var(--border);
       border-radius: 4px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       min-height: 248px;
       overflow: hidden;
     }
@@ -38895,7 +38911,7 @@ ${P.join(`
     transform: translate(-50%, -50%);
     border: 2px solid #8b3a2a;
     border-radius: 50%;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
     box-shadow: 0 1px 5px rgba(40, 34, 20, 0.18);
     pointer-events: auto;
     cursor: grab;
@@ -38913,7 +38929,7 @@ ${P.join(`
     width: 14px;
     height: 14px;
     border-radius: 2px;
-    background: #fff7f3;
+    background: var(--ws-danger-tint, #fff7f3);
   }
 
   .sheaf-map-control.is-endpoint {
@@ -38929,7 +38945,7 @@ ${P.join(`
   .sheaf-map-control:focus-visible,
   .sheaf-map-control.is-dragging {
     outline: none;
-    background: #fff7f3;
+    background: var(--ws-danger-tint, #fff7f3);
     box-shadow: 0 0 0 3px rgba(139,58,42,0.18);
   }
 
@@ -38993,7 +39009,7 @@ ${P.join(`
     .sheaf-canvas-label.is-pick-candidate,
     .sheaf-canvas-label.is-map-codomain-candidate {
       border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
-      box-shadow: 0 0 0 2px rgba(61,107,79,0.13);
+      box-shadow: 0 0 0 2px var(--ws-accent-tint-13, rgba(61,107,79,0.13));
       background: rgba(247,244,239,0.92);
     }
 
@@ -40032,7 +40048,7 @@ ${P.join(`
     .sheaf-complex-map-button:hover,
     .sheaf-complex-map-button.is-selected {
       border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-      background: rgba(61,107,79,0.08);
+      background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
       color: var(--accent);
     }
 
@@ -40155,7 +40171,7 @@ ${P.join(`
 
     .sheaf-complex-les-switch .is-selected {
       border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-      background: rgba(61,107,79,0.08);
+      background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
       color: var(--accent);
     }
 
@@ -43108,13 +43124,13 @@ ${I.join(`
 `,css:`/* Web fonts were removed from the blocking CSS path so the canvases initialise reliably on slow/mobile networks. */
 
   :host {
-    --bg:       #f7f4ef;
-    --surface:  #ffffff;
-    --border:   #d8d0c4;
-    --text:     #1a1612;
-    --muted:    #7a6f65;
-    --accent:   #3d6b4f;
-    --accent2:  #8b3a2a;
+    --bg:       var(--ws-bg, #f7f4ef);
+    --surface:  var(--ws-surface-strong, #ffffff);
+    --border:   var(--ws-border, #d8d0c4);
+    --text:     var(--ws-text, #1a1612);
+    --muted:    var(--ws-muted, #7a6f65);
+    --accent:   var(--ws-accent, #3d6b4f);
+    --accent2:  var(--ws-accent2, #8b3a2a);
     --shadow:   0 2px 12px rgba(0,0,0,0.08);
   }
 
@@ -43321,7 +43337,7 @@ ${I.join(`
     height: auto !important;
     cursor: crosshair;
     border-radius: 2px;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
   }
 
   /* Shared calculator primitives. Page-specific classes may remain alongside
@@ -43420,7 +43436,7 @@ ${I.join(`
     overflow: auto;
     border: 1px solid rgba(26,22,18,0.22);
     border-radius: 7px;
-    background: rgba(255,253,248,0.99);
+    background: var(--ws-surface, rgba(255,253,248,0.99));
     color: var(--text);
     box-shadow: 0 18px 52px rgba(0,0,0,0.34);
   }
@@ -43539,7 +43555,7 @@ ${I.join(`
     border-color: var(--accent2);
     color: var(--accent2);
   }
-  .calculator-input-add { background: var(--bg); color: var(--muted); }
+  .calculator-input-add { background: var(--ws-ghost-bg, var(--bg)); color: var(--ws-ghost-color, var(--muted)); border-color: var(--ws-ghost-border, var(--border)); font-family: var(--ws-btn-font, var(--ws-font-code, 'JetBrains Mono', monospace)); font-weight: var(--ws-btn-weight, normal); }
   .calculator-input-add:disabled { cursor: not-allowed; opacity: 0.45; }
   .calculator-input-unbound {
     align-self: center;
@@ -43720,7 +43736,7 @@ ${I.join(`
   .card.is-pinned .card-pin-btn {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn {
     border: 1px solid var(--border);
@@ -43741,7 +43757,7 @@ ${I.join(`
   .calculator-card-wide-btn[aria-pressed="true"] {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn:disabled {
     cursor: not-allowed;
@@ -43961,17 +43977,19 @@ ${I.join(`
     font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     font-size: var(--ws-text-sm, 0.78rem);
     cursor: pointer;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--ws-btn-tracking, 0.04em);
+    font-weight: var(--ws-btn-weight, normal);
     transition: background 0.15s, transform 0.1s;
   }
-  .btn:hover { background: #2e5239; }
+  .btn:hover { background: var(--ws-accent-hover, #2e5239); }
   .btn:active { transform: scale(0.97); }
   .btn-ghost {
     background: transparent;
-    color: var(--accent2);
-    border-color: var(--accent2);
+    color: var(--ws-ghost-color, var(--accent2));
+    border-color: var(--ws-ghost-border, var(--accent2));
   }
-  .btn-ghost:hover { background: var(--accent2); color: #fff; }
+  .btn-ghost:hover { background: var(--ws-ghost-hover-bg, var(--accent2)); color: var(--ws-ghost-hover-color, #fff); border-color: var(--ws-ghost-hover-border, var(--accent2)); }
+  .btn::first-letter { text-transform: var(--ws-btn-case, none); }
 
   .orbit-view-row {
     display: inline-flex;
@@ -44399,7 +44417,7 @@ ${I.join(`
     margin-left: auto;
   }
   .symfun-export-btn:hover {
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .symfun-expansions {
     max-height: min(460px, 58vh);
@@ -45505,7 +45523,7 @@ ${I.join(`
     .slice-mode-btn.active {
       border-color: var(--accent);
       color: var(--accent);
-      background: rgba(61,107,79,0.08);
+      background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
     }
 
     .dual-graph-view-inputs {
@@ -45592,7 +45610,7 @@ ${I.join(`
       min-width: 0;
       border: 1px solid var(--border);
       border-radius: 3px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       padding: 5px;
       cursor: pointer;
     }
@@ -45600,7 +45618,7 @@ ${I.join(`
     .dual-graph-degeneration-tile:hover,
     .dual-graph-degeneration-tile:focus-visible {
       border-color: var(--accent);
-      box-shadow: 0 0 0 2px rgba(61,107,79,0.12);
+      box-shadow: 0 0 0 2px var(--ws-accent-tint-12, rgba(61,107,79,0.12));
       outline: none;
     }
 
@@ -45608,7 +45626,7 @@ ${I.join(`
       width: 100%;
       aspect-ratio: 1 / 1;
       display: block;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
     }
 
     .dual-graph-degeneration-caption {
@@ -45673,7 +45691,7 @@ ${I.join(`
       box-sizing: border-box;
       border: 1px solid var(--border);
       border-radius: 3px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       cursor: pointer;
       touch-action: none;
       display: block;
@@ -45775,7 +45793,7 @@ ${I.join(`
       box-sizing: border-box;
       border: 1px solid var(--border);
       border-radius: 3px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       cursor: crosshair;
       touch-action: none;
     }
@@ -45894,7 +45912,7 @@ ${I.join(`
       min-width: 0;
       border: 1px solid var(--border);
       border-radius: 3px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       cursor: grab;
       touch-action: none;
       user-select: none;
@@ -45975,7 +45993,7 @@ ${I.join(`
     }
 
     .tessellated-palette-grid .tile-swatch canvas {
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       clip-path: inherit;
     }
 
@@ -45995,7 +46013,7 @@ ${I.join(`
       height: 58px;
       border: 1px solid var(--accent);
       border-radius: 3px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       box-shadow: 0 8px 32px rgba(0,0,0,0.18);
       opacity: 0.86;
       padding: 4px;
@@ -46250,13 +46268,13 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
 `,css:`/* Web fonts were removed from the blocking CSS path so the canvases initialise reliably on slow/mobile networks. */
 
   :host {
-    --bg:       #f7f4ef;
-    --surface:  #ffffff;
-    --border:   #d8d0c4;
-    --text:     #1a1612;
-    --muted:    #7a6f65;
-    --accent:   #3d6b4f;
-    --accent2:  #8b3a2a;
+    --bg:       var(--ws-bg, #f7f4ef);
+    --surface:  var(--ws-surface-strong, #ffffff);
+    --border:   var(--ws-border, #d8d0c4);
+    --text:     var(--ws-text, #1a1612);
+    --muted:    var(--ws-muted, #7a6f65);
+    --accent:   var(--ws-accent, #3d6b4f);
+    --accent2:  var(--ws-accent2, #8b3a2a);
     --shadow:   0 2px 12px rgba(0,0,0,0.08);
   }
 
@@ -46463,7 +46481,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
     height: auto !important;
     cursor: crosshair;
     border-radius: 2px;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
   }
 
   /* Shared calculator primitives. Page-specific classes may remain alongside
@@ -46562,7 +46580,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
     overflow: auto;
     border: 1px solid rgba(26,22,18,0.22);
     border-radius: 7px;
-    background: rgba(255,253,248,0.99);
+    background: var(--ws-surface, rgba(255,253,248,0.99));
     color: var(--text);
     box-shadow: 0 18px 52px rgba(0,0,0,0.34);
   }
@@ -46681,7 +46699,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
     border-color: var(--accent2);
     color: var(--accent2);
   }
-  .calculator-input-add { background: var(--bg); color: var(--muted); }
+  .calculator-input-add { background: var(--ws-ghost-bg, var(--bg)); color: var(--ws-ghost-color, var(--muted)); border-color: var(--ws-ghost-border, var(--border)); font-family: var(--ws-btn-font, var(--ws-font-code, 'JetBrains Mono', monospace)); font-weight: var(--ws-btn-weight, normal); }
   .calculator-input-add:disabled { cursor: not-allowed; opacity: 0.45; }
   .calculator-input-unbound {
     align-self: center;
@@ -46862,7 +46880,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
   .card.is-pinned .card-pin-btn {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn {
     border: 1px solid var(--border);
@@ -46883,7 +46901,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
   .calculator-card-wide-btn[aria-pressed="true"] {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn:disabled {
     cursor: not-allowed;
@@ -47103,17 +47121,19 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
     font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     font-size: var(--ws-text-sm, 0.78rem);
     cursor: pointer;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--ws-btn-tracking, 0.04em);
+    font-weight: var(--ws-btn-weight, normal);
     transition: background 0.15s, transform 0.1s;
   }
-  .btn:hover { background: #2e5239; }
+  .btn:hover { background: var(--ws-accent-hover, #2e5239); }
   .btn:active { transform: scale(0.97); }
   .btn-ghost {
     background: transparent;
-    color: var(--accent2);
-    border-color: var(--accent2);
+    color: var(--ws-ghost-color, var(--accent2));
+    border-color: var(--ws-ghost-border, var(--accent2));
   }
-  .btn-ghost:hover { background: var(--accent2); color: #fff; }
+  .btn-ghost:hover { background: var(--ws-ghost-hover-bg, var(--accent2)); color: var(--ws-ghost-hover-color, #fff); border-color: var(--ws-ghost-hover-border, var(--accent2)); }
+  .btn::first-letter { text-transform: var(--ws-btn-case, none); }
 
   .orbit-view-row {
     display: inline-flex;
@@ -47541,7 +47561,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
     margin-left: auto;
   }
   .symfun-export-btn:hover {
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .symfun-expansions {
     max-height: min(460px, 58vh);
@@ -47948,7 +47968,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
       height: 280px !important;
       min-height: 248px;
       display: block;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       cursor: default;
       touch-action: none;
     }
@@ -48018,7 +48038,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
 
     .category-node-label.is-pick-candidate {
       border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
-      box-shadow: 0 0 0 2px rgba(61, 107, 79, 0.13);
+      box-shadow: 0 0 0 2px var(--ws-accent-tint-13, rgba(61, 107, 79, 0.13));
       background: rgba(247, 244, 239, 0.92);
     }
 
@@ -48602,13 +48622,13 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
 `,css:`/* Web fonts were removed from the blocking CSS path so the canvases initialise reliably on slow/mobile networks. */
 
   :host {
-    --bg:       #f7f4ef;
-    --surface:  #ffffff;
-    --border:   #d8d0c4;
-    --text:     #1a1612;
-    --muted:    #7a6f65;
-    --accent:   #3d6b4f;
-    --accent2:  #8b3a2a;
+    --bg:       var(--ws-bg, #f7f4ef);
+    --surface:  var(--ws-surface-strong, #ffffff);
+    --border:   var(--ws-border, #d8d0c4);
+    --text:     var(--ws-text, #1a1612);
+    --muted:    var(--ws-muted, #7a6f65);
+    --accent:   var(--ws-accent, #3d6b4f);
+    --accent2:  var(--ws-accent2, #8b3a2a);
     --shadow:   0 2px 12px rgba(0,0,0,0.08);
   }
 
@@ -48815,7 +48835,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
     height: auto !important;
     cursor: crosshair;
     border-radius: 2px;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
   }
 
   /* Shared calculator primitives. Page-specific classes may remain alongside
@@ -48914,7 +48934,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
     overflow: auto;
     border: 1px solid rgba(26,22,18,0.22);
     border-radius: 7px;
-    background: rgba(255,253,248,0.99);
+    background: var(--ws-surface, rgba(255,253,248,0.99));
     color: var(--text);
     box-shadow: 0 18px 52px rgba(0,0,0,0.34);
   }
@@ -49033,7 +49053,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
     border-color: var(--accent2);
     color: var(--accent2);
   }
-  .calculator-input-add { background: var(--bg); color: var(--muted); }
+  .calculator-input-add { background: var(--ws-ghost-bg, var(--bg)); color: var(--ws-ghost-color, var(--muted)); border-color: var(--ws-ghost-border, var(--border)); font-family: var(--ws-btn-font, var(--ws-font-code, 'JetBrains Mono', monospace)); font-weight: var(--ws-btn-weight, normal); }
   .calculator-input-add:disabled { cursor: not-allowed; opacity: 0.45; }
   .calculator-input-unbound {
     align-self: center;
@@ -49214,7 +49234,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
   .card.is-pinned .card-pin-btn {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn {
     border: 1px solid var(--border);
@@ -49235,7 +49255,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
   .calculator-card-wide-btn[aria-pressed="true"] {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn:disabled {
     cursor: not-allowed;
@@ -49455,17 +49475,19 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
     font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     font-size: var(--ws-text-sm, 0.78rem);
     cursor: pointer;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--ws-btn-tracking, 0.04em);
+    font-weight: var(--ws-btn-weight, normal);
     transition: background 0.15s, transform 0.1s;
   }
-  .btn:hover { background: #2e5239; }
+  .btn:hover { background: var(--ws-accent-hover, #2e5239); }
   .btn:active { transform: scale(0.97); }
   .btn-ghost {
     background: transparent;
-    color: var(--accent2);
-    border-color: var(--accent2);
+    color: var(--ws-ghost-color, var(--accent2));
+    border-color: var(--ws-ghost-border, var(--accent2));
   }
-  .btn-ghost:hover { background: var(--accent2); color: #fff; }
+  .btn-ghost:hover { background: var(--ws-ghost-hover-bg, var(--accent2)); color: var(--ws-ghost-hover-color, #fff); border-color: var(--ws-ghost-hover-border, var(--accent2)); }
+  .btn::first-letter { text-transform: var(--ws-btn-case, none); }
 
   .orbit-view-row {
     display: inline-flex;
@@ -49893,7 +49915,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
     margin-left: auto;
   }
   .symfun-export-btn:hover {
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .symfun-expansions {
     max-height: min(460px, 58vh);
@@ -50292,7 +50314,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
       width: 100%;
       height: 100%;
       border: 1px solid var(--border);
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
     }
 
@@ -50435,7 +50457,7 @@ area: ${p.area.toFixed(6)}, \u22122\u03C0\u03C7: ${p.expectedArea.toFixed(6)}, e
     .ramification-query-shortcuts .btn[aria-expanded="true"] {
       border-color: var(--accent);
       color: var(--accent);
-      background: rgba(61,107,79,0.08);
+      background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
     }
 
     .ramification-shortcut-panel {

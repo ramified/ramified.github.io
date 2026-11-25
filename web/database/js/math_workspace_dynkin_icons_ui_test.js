@@ -34,6 +34,7 @@ async function run(){
       assert.equal(await read(()=>icon(q).querySelector('svg').outerHTML),unorientedIcon,'quiver changes, including directions needing repair, leave the icon stable');
     }
     await read(()=>{api.state.layout='icons';api.applyAssetSnapshot(api.localAssetSnapshot());window.native=panels.open('dynkin-view',key(d),'side');});
+    await waitFor(()=>read(()=>native.propertyRenderer?.editor?.objectIO('geometry')?.vertices?.length),20000,'native Dynkin geometry');
     assert.deepEqual(await read(()=>shape(d).nodes.map(n=>[n.x,n.y])),await read(()=>native.propertyRenderer.editor.objectIO('geometry').vertices.map(n=>[n.x,n.y])),'icon uses the native display geometry');
     await read(()=>api.updateObjectAsset({kind:'dynkin',id:d.id},{data:{lie:key(g),vertices:[1,4],quiver:null}}));
     assert.deepEqual(await read(()=>shape(d).nodes.map(n=>n.marked)),[true,false,false,true,false]);

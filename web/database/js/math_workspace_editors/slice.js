@@ -1984,13 +1984,13 @@ self.addEventListener("message", (event) => {
 `,css:`/* Web fonts were removed from the blocking CSS path so the canvases initialise reliably on slow/mobile networks. */
 
   :host {
-    --bg:       #f7f4ef;
-    --surface:  #ffffff;
-    --border:   #d8d0c4;
-    --text:     #1a1612;
-    --muted:    #7a6f65;
-    --accent:   #3d6b4f;
-    --accent2:  #8b3a2a;
+    --bg:       var(--ws-bg, #f7f4ef);
+    --surface:  var(--ws-surface-strong, #ffffff);
+    --border:   var(--ws-border, #d8d0c4);
+    --text:     var(--ws-text, #1a1612);
+    --muted:    var(--ws-muted, #7a6f65);
+    --accent:   var(--ws-accent, #3d6b4f);
+    --accent2:  var(--ws-accent2, #8b3a2a);
     --shadow:   0 2px 12px rgba(0,0,0,0.08);
   }
 
@@ -2197,7 +2197,7 @@ self.addEventListener("message", (event) => {
     height: auto !important;
     cursor: crosshair;
     border-radius: 2px;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
   }
 
   /* Shared calculator primitives. Page-specific classes may remain alongside
@@ -2296,7 +2296,7 @@ self.addEventListener("message", (event) => {
     overflow: auto;
     border: 1px solid rgba(26,22,18,0.22);
     border-radius: 7px;
-    background: rgba(255,253,248,0.99);
+    background: var(--ws-surface, rgba(255,253,248,0.99));
     color: var(--text);
     box-shadow: 0 18px 52px rgba(0,0,0,0.34);
   }
@@ -2415,7 +2415,7 @@ self.addEventListener("message", (event) => {
     border-color: var(--accent2);
     color: var(--accent2);
   }
-  .calculator-input-add { background: var(--bg); color: var(--muted); }
+  .calculator-input-add { background: var(--ws-ghost-bg, var(--bg)); color: var(--ws-ghost-color, var(--muted)); border-color: var(--ws-ghost-border, var(--border)); font-family: var(--ws-btn-font, var(--ws-font-code, 'JetBrains Mono', monospace)); font-weight: var(--ws-btn-weight, normal); }
   .calculator-input-add:disabled { cursor: not-allowed; opacity: 0.45; }
   .calculator-input-unbound {
     align-self: center;
@@ -2596,7 +2596,7 @@ self.addEventListener("message", (event) => {
   .card.is-pinned .card-pin-btn {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn {
     border: 1px solid var(--border);
@@ -2617,7 +2617,7 @@ self.addEventListener("message", (event) => {
   .calculator-card-wide-btn[aria-pressed="true"] {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .calculator-card-wide-btn:disabled {
     cursor: not-allowed;
@@ -2837,17 +2837,19 @@ self.addEventListener("message", (event) => {
     font-family: var(--ws-font-ui, 'JetBrains Mono', monospace);
     font-size: var(--ws-text-sm, 0.78rem);
     cursor: pointer;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--ws-btn-tracking, 0.04em);
+    font-weight: var(--ws-btn-weight, normal);
     transition: background 0.15s, transform 0.1s;
   }
-  .btn:hover { background: #2e5239; }
+  .btn:hover { background: var(--ws-accent-hover, #2e5239); }
   .btn:active { transform: scale(0.97); }
   .btn-ghost {
     background: transparent;
-    color: var(--accent2);
-    border-color: var(--accent2);
+    color: var(--ws-ghost-color, var(--accent2));
+    border-color: var(--ws-ghost-border, var(--accent2));
   }
-  .btn-ghost:hover { background: var(--accent2); color: #fff; }
+  .btn-ghost:hover { background: var(--ws-ghost-hover-bg, var(--accent2)); color: var(--ws-ghost-hover-color, #fff); border-color: var(--ws-ghost-hover-border, var(--accent2)); }
+  .btn::first-letter { text-transform: var(--ws-btn-case, none); }
 
   .orbit-view-row {
     display: inline-flex;
@@ -3275,7 +3277,7 @@ self.addEventListener("message", (event) => {
     margin-left: auto;
   }
   .symfun-export-btn:hover {
-    background: rgba(61,107,79,0.08);
+    background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
   }
   .symfun-expansions {
     max-height: min(460px, 58vh);
@@ -3660,7 +3662,7 @@ self.addEventListener("message", (event) => {
     .slice-stage-wrap {
       position: relative;
       min-height: 440px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       overflow: hidden;
     }
 
@@ -3669,7 +3671,7 @@ self.addEventListener("message", (event) => {
       height: var(--slice-viewport-height, min(68vh, 720px)) !important;
       min-height: 440px;
       display: block;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       cursor: default;
       touch-action: none;
       -webkit-user-select: none;

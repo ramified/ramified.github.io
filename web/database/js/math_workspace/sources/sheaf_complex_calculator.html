@@ -256,7 +256,7 @@
       position: relative;
       border: 1px solid var(--border);
       border-radius: 4px;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       min-height: 248px;
       overflow: hidden;
     }
@@ -340,7 +340,7 @@
     transform: translate(-50%, -50%);
     border: 2px solid #8b3a2a;
     border-radius: 50%;
-    background: #fffdf8;
+    background: var(--ws-surface, #fffdf8);
     box-shadow: 0 1px 5px rgba(40, 34, 20, 0.18);
     pointer-events: auto;
     cursor: grab;
@@ -358,7 +358,7 @@
     width: 14px;
     height: 14px;
     border-radius: 2px;
-    background: #fff7f3;
+    background: var(--ws-danger-tint, #fff7f3);
   }
 
   .sheaf-map-control.is-endpoint {
@@ -374,7 +374,7 @@
   .sheaf-map-control:focus-visible,
   .sheaf-map-control.is-dragging {
     outline: none;
-    background: #fff7f3;
+    background: var(--ws-danger-tint, #fff7f3);
     box-shadow: 0 0 0 3px rgba(139,58,42,0.18);
   }
 
@@ -438,7 +438,7 @@
     .sheaf-canvas-label.is-pick-candidate,
     .sheaf-canvas-label.is-map-codomain-candidate {
       border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
-      box-shadow: 0 0 0 2px rgba(61,107,79,0.13);
+      box-shadow: 0 0 0 2px var(--ws-accent-tint-13, rgba(61,107,79,0.13));
       background: rgba(247,244,239,0.92);
     }
 
@@ -1477,7 +1477,7 @@
     .sheaf-complex-map-button:hover,
     .sheaf-complex-map-button.is-selected {
       border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-      background: rgba(61,107,79,0.08);
+      background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
       color: var(--accent);
     }
 
@@ -1600,7 +1600,7 @@
 
     .sheaf-complex-les-switch .is-selected {
       border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-      background: rgba(61,107,79,0.08);
+      background: var(--ws-accent-tint-08, rgba(61,107,79,0.08));
       color: var(--accent);
     }
 

@@ -132,3 +132,25 @@ entry in `window.__dbg`. In copied `js/mosaic_calculator.js`, keep one
 `normalizeBackgroundMetric` and one `setTestGeometry` entry in `api.__test`.
 Each removed entry referred to the same function as its retained entry;
 function definitions and calculator algorithms are unchanged.
+
+### 2026-11-25 · Palette tokens with unchanged fallbacks
+
+Each hard-coded warm palette literal in the private calculator copies' CSS (`#fffdf8`, `#fbfaf7`, `#fff7f3`, `#3d6b4f`, `#1a1612`, `#7a6f65`, and `rgba(61,107,79,0.08|0.12|0.13)`) is wrapped as `var(--ws-TOKEN, <original literal>)` so standalone pages render unchanged; deliberate danger/map colours (`#8b3a2a`, `rgba(139,58,42,…)`), shadows (`rgba(26,22,18,…)`), and existing `var(--ws-…)` values are left alone.
+
+| File | surface | accent/accent-tint | text/muted | danger-tint |
+| --- | ---: | ---: | ---: | ---: |
+| category_calculator.html | 1 | 1 | 0 | 0 |
+| double_young_diagram.html | 3 | 1 | 0 | 0 |
+| dynkin_diagram_calculator.html | 3 | 1 | 5 | 0 |
+| higher_dimensional_slice_calculator.html | 2 | 0 | 0 | 0 |
+| matrix_calculator.html | 0 | 0 | 0 | 0 |
+| mosaic_calculator.html | 7 | 2 | 0 | 0 |
+| place_ramification_calculator.html | 1 | 1 | 0 | 0 |
+| sheaf_calculator.html | 2 | 1 | 0 | 2 |
+| sheaf_complex_calculator.html | 2 | 3 | 0 | 2 |
+| strand_diagram_calculator.html | 3 | 0 | 0 | 0 |
+| **Total** | **24** | **10** | **5** | **4** |
+
+- `css/site.css`: the `:root` palette (`--bg`, `--surface`, `--border`, `--text`, `--muted`, `--accent`, `--accent2`) reads `--ws-bg`, `--ws-surface-strong`, `--ws-border`, `--ws-text`, `--ws-muted`, `--ws-accent`, `--ws-accent2`; `canvas` background and the settings dialog's `rgba(255,253,248,0.99)` background read `--ws-surface`; three `rgba(61,107,79,0.08)` tints read `--ws-accent-tint-08`; `.btn:hover` reads `--ws-accent-hover`; `.btn-ghost` colour/border and its hover background/colour/border read `--ws-ghost-*` (fallbacks reproduce the brown accent2 ghost button exactly).
+- Buttons (items 18/19): `.btn` letter-spacing reads `--ws-btn-tracking` (fallback `0.04em`) and gains `font-weight: var(--ws-btn-weight, normal)`; a new `.btn::first-letter { text-transform: var(--ws-btn-case, none) }` gives Sentence case without changing label text; `.calculator-input-add` ("Add key") reads `--ws-ghost-bg`, `--ws-ghost-color`, `--ws-ghost-border`, `--ws-btn-font`, `--ws-btn-weight`, each falling back to the value the original cascade produced.
+- Values are defined only on the live page in `css/math_workspace_palette.css`. Canvas drawing colours set in JavaScript (for example Mosaic tile fills) are unchanged.

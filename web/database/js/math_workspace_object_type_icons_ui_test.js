@@ -31,7 +31,7 @@ async function run(){
         return {kind:asset.kind,variant:host.dataset.iconVariant,source:host.dataset.iconSource,color:getComputedStyle(host).color,fits:!!image&&image.width>5&&image.height>5&&image.width<=box.width+1&&image.height<=box.height+1&&ink.x>=0&&ink.y>=0&&ink.x+ink.width<=40.5&&ink.y+ink.height<=40.5};
       }));
       assert.deepEqual(Object.fromEntries(icons.map(icon=>[icon.kind,icon.variant])),approved,layout+' uses the approved defaults');
-      assert(icons.every(icon=>icon.source==='generic'&&icon.fits&&icon.color==='rgb(168, 81, 11)'),layout+' icons fit and use the generic ink: '+JSON.stringify(icons));
+      assert(icons.every(icon=>icon.source==='generic'&&icon.fits&&icon.color==='rgb(79, 90, 100)'),layout+' icons fit and use the generic ink: '+JSON.stringify(icons));
       assert(await read(()=>namedExamples.every(asset=>icon(asset).dataset.iconSource==='name'&&!icon(asset).dataset.iconVariant)),layout+' keeps name icons');
     }
     assert.equal(await read(()=>JSON.stringify(api.localAssetSnapshot().assets)),await read(()=>definitionsBefore),'rendering never changes asset definitions');
@@ -41,9 +41,11 @@ async function run(){
     for(const [kind,variant] of Object.entries(approved)){
       const result=await read(kind=>{
         const picker=document.querySelector('[data-create-kind="'+kind+'"] .workspace-asset-icon'),asset=examples.find(asset=>asset.kind===kind);
-        return {variant:picker.dataset.iconVariant,sameGeometry:picker.querySelector('svg').outerHTML===icon(asset).querySelector('svg').outerHTML,sameColor:getComputedStyle(picker).color===getComputedStyle(icon(asset)).color};
+        return {variant:picker.dataset.iconVariant,sameGeometry:picker.querySelector('svg').outerHTML===icon(asset).querySelector('svg').outerHTML,pickerColor:getComputedStyle(picker).color};
       },kind);
-      assert.deepEqual(result,{variant,sameGeometry:true,sameColor:true},kind+' agrees between picker and Assets');
+      // Same geometry everywhere; colour differs by design (2026-11-25): the picker shows every
+      // type icon in teal, while Assets keeps generic icons in the grey ink checked above.
+      assert.deepEqual(result,{variant,sameGeometry:true,pickerColor:'rgb(14, 107, 99)'},kind+' agrees between picker and Assets (teal in the picker)');
     }
     const pickerShot=await client.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),'math-workspace-approved-object-icons-picker.png'),Buffer.from(pickerShot.data,'base64'));
     await client.send('Emulation.setDeviceMetricsOverride',{width:375,height:812,deviceScaleFactor:1,mobile:false});
@@ -74,7 +76,7 @@ async function run(){
     await read(()=>examples.forEach(asset=>api.updateObjectAsset({kind:asset.kind,id:asset.id},{name:'Renamed '+asset.kind})));
     assert.deepEqual(await read(()=>Object.fromEntries(examples.map(asset=>[asset.kind,icon(asset).dataset.iconVariant]))),approved,'renaming to descriptive labels selects generic icons');
     await read(()=>{window.beforeLab=JSON.stringify(api.localAssetSnapshot().assets);document.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,ctrlKey:true,altKey:true,shiftKey:true,code:'KeyD'}));});
-    assert.deepEqual(await read(()=>[...document.querySelector('[data-design-picker]').options].map(option=>option.value)),['principal-assets','asset-subjects'],'the completed experiment is retired');
+    assert.deepEqual(await read(()=>[...document.querySelector('[data-design-picker]').options].map(option=>option.value)),[],'Design Lab has no active experiments');
     await read(()=>document.querySelector('[data-design-exit]').click());
     assert.deepEqual(await read(()=>Object.fromEntries(examples.map(asset=>[asset.kind,icon(asset).dataset.iconVariant]))),approved,'leaving Design Lab retains approved defaults');
     assert.equal(await read(()=>JSON.stringify(api.localAssetSnapshot().assets)),await read(()=>beforeLab),'Design Lab changes no asset data');

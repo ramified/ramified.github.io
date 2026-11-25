@@ -53,5 +53,6 @@ body.ramified-theme footer { font-size: var(--ws-text-sm); }
 
 /* Shared import_export_panel.css rules. */
 body.ramified-theme .import-export-tab { font-size: var(--ws-text-sm); }
-body.ramified-theme .import-export-panel :is(select, input[type="text"], input[type="search"]) { font-family: var(--ws-font-ui); font-size: var(--ws-text-md); }
+/* import_export_panel.css sets these with !important, so the workspace role must too. */
+body.ramified-theme .import-export-panel :is(select, input[type="text"], input[type="search"], input[type="number"]) { font-family: var(--ws-font-ui) !important; font-size: var(--ws-text-md) !important; }
 body.ramified-theme :is(.workspace-io-output, .workspace-io-input) { font: var(--ws-text-sm)/1.5 var(--ws-font-code); }

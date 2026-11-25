@@ -34,7 +34,7 @@ async function run(){
       assert.equal(await read(()=>icon(tall).dataset.iconSource),'generic',layout+' uses the fallback for five rows');
       const exactInk=await read(()=>ink(icon(exact).querySelector('canvas'))),genericInk=await read(()=>ink(icon(large).querySelector('canvas')));
       assert.equal(exactInk.colors.length,1);assert.equal(genericInk.colors.length,1);assert.notDeepEqual(exactInk.colors,genericInk.colors,'exact and generic colors differ');
-      assert.deepEqual(genericInk.colors,['168,81,11'],'committed generic ink is #a8510b');
+      assert.deepEqual(genericInk.colors,['79,90,100'],'committed generic ink is #4f5a64');
       const base=exactInk.colors[0].split(',').map(Number);
       for(const colors of await read(()=>families.map(asset=>ink(icon(asset).querySelector('canvas')).colors)))assert(colors.length&&colors.every(color=>color.split(',').map(Number).every((channel,i)=>Math.abs(channel-base[i])<=2)),'KL/TL glyphs use the same ink, allowing raster rounding at overlapping edges');
       assert(await read(()=>{const a=icon(exact).querySelector('canvas').getContext('2d').getImageData(0,0,256,256).data,b=icon(large).querySelector('canvas').getContext('2d').getImageData(0,0,256,256).data;for(let i=3;i<a.length;i+=4)if(a[i]!==b[i])return false;return true;}),'fallback depicts the exact representative word');

@@ -37,7 +37,7 @@
       height: 280px !important;
       min-height: 248px;
       display: block;
-      background: #fffdf8;
+      background: var(--ws-surface, #fffdf8);
       cursor: default;
       touch-action: none;
     }
@@ -107,7 +107,7 @@
 
     .category-node-label.is-pick-candidate {
       border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
-      box-shadow: 0 0 0 2px rgba(61, 107, 79, 0.13);
+      box-shadow: 0 0 0 2px var(--ws-accent-tint-13, rgba(61, 107, 79, 0.13));
       background: rgba(247, 244, 239, 0.92);
     }
 

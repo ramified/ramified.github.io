@@ -9,7 +9,7 @@ icons.previewTopology({knot:'trefoil','dual-graph':'theta'});assert.deepEqual(ic
 assert.throws(()=>icons.previewTopology({knot:'missing'}),/Unknown/);assert.equal(icons.topologyPreview().knot,'trefoil');icons.previewTopology(icons.topologyDefaults);
 assert.deepEqual(icons.describe({kind:'variety',name:'Variety',data:{}}),{source:'generic',symbol:'X'});
 assert.deepEqual(icons.describe({kind:'variety',name:'Y_2',data:{}}),{source:'name',name:'Y_2'},'variety names retain precedence over the default X');
-assert.deepEqual(icons.settings(),{exactColor:'',genericColor:'#a8510b',stroke:0.7,strandStroke:19,hatch:true,matrixStroke:2.1,matrixEntryStroke:0.7,matrixFontSize:20,matrixFontFamily:'"Times New Roman", serif',matrixRowGap:0,matrixColumnGap:0,matrixBracketGap:1,matrixBracketCurve:3,matrixPadding:0,fanNegativeLength:0.7,coneNegativeLength:0.7});
+assert.deepEqual(icons.settings(),{exactColor:'',genericColor:'#4f5a64',stroke:0.7,strandStroke:19,hatch:true,matrixStroke:2.1,matrixEntryStroke:0.7,matrixFontSize:20,matrixFontFamily:'"Times New Roman", serif',matrixRowGap:0,matrixColumnGap:0,matrixBracketGap:1,matrixBracketCurve:3,matrixPadding:0,fanNegativeLength:0.7,coneNegativeLength:0.7});
 assert.equal(icons.describe({kind:'mosaic-space',name:'S',data:{}}).kind,'mosaic-space');
 assert.equal(icons.describe({kind:'mosaic-diagram',name:'D',data:{}}).kind,'mosaic-diagram');
 for(const [kind,variant,name] of [['filtration','flag','F'],['complex','differentials','C'],['field-extension','quotient','L'],['polytope','simplex','P'],['voronoi','cell-patch','V'],['sphere','sphere','S^{2}']]){
